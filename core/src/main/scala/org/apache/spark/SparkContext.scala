@@ -1524,7 +1524,11 @@ class SparkContext(config: SparkConf) extends Logging {
   def addFile(path: String, recursive: Boolean): Unit = {
     val uri = new Path(path).toUri
     val schemeCorrectedPath = uri.getScheme match {
-      case null | "local" => new File(path).getCanonicalFile.toURI.toString
+      case null => new File(path).getCanonicalFile.toURI.toString
+      case "local" =>
+        logWarning("File with 'local' scheme is not supported to add to file server, since " +
+          "it is already available on every node.")
+        return
       case _ => path
     }
 

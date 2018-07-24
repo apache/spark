@@ -687,46 +687,43 @@ class TypeCoercionSuite extends AnalysisTest {
 
     ruleTest(rule,
       Coalesce(Seq(doubleLit, intLit, floatLit)),
-      Coalesce(Seq(Cast(doubleLit, DoubleType),
-        Cast(intLit, DoubleType), Cast(floatLit, DoubleType))))
+      Coalesce(Seq(doubleLit, Cast(intLit, DoubleType), Cast(floatLit, DoubleType))))
 
     ruleTest(rule,
       Coalesce(Seq(longLit, intLit, decimalLit)),
       Coalesce(Seq(Cast(longLit, DecimalType(22, 0)),
-        Cast(intLit, DecimalType(22, 0)), Cast(decimalLit, DecimalType(22, 0)))))
+        Cast(intLit, DecimalType(22, 0)), decimalLit)))
 
     ruleTest(rule,
       Coalesce(Seq(nullLit, intLit)),
-      Coalesce(Seq(Cast(nullLit, IntegerType), Cast(intLit, IntegerType))))
+      Coalesce(Seq(Cast(nullLit, IntegerType), intLit)))
 
     ruleTest(rule,
       Coalesce(Seq(timestampLit, stringLit)),
-      Coalesce(Seq(Cast(timestampLit, StringType), Cast(stringLit, StringType))))
+      Coalesce(Seq(Cast(timestampLit, StringType), stringLit)))
 
     ruleTest(rule,
       Coalesce(Seq(nullLit, floatNullLit, intLit)),
-      Coalesce(Seq(Cast(nullLit, FloatType), Cast(floatNullLit, FloatType),
-        Cast(intLit, FloatType))))
+      Coalesce(Seq(Cast(nullLit, FloatType), floatNullLit, Cast(intLit, FloatType))))
 
     ruleTest(rule,
       Coalesce(Seq(nullLit, intLit, decimalLit, doubleLit)),
       Coalesce(Seq(Cast(nullLit, DoubleType), Cast(intLit, DoubleType),
-        Cast(decimalLit, DoubleType), Cast(doubleLit, DoubleType))))
+        Cast(decimalLit, DoubleType), doubleLit)))
 
     ruleTest(rule,
       Coalesce(Seq(nullLit, floatNullLit, doubleLit, stringLit)),
       Coalesce(Seq(Cast(nullLit, StringType), Cast(floatNullLit, StringType),
-        Cast(doubleLit, StringType), Cast(stringLit, StringType))))
+        Cast(doubleLit, StringType), stringLit)))
 
     ruleTest(rule,
       Coalesce(Seq(timestampLit, intLit, stringLit)),
-      Coalesce(Seq(Cast(timestampLit, StringType), Cast(intLit, StringType),
-        Cast(stringLit, StringType))))
+      Coalesce(Seq(Cast(timestampLit, StringType), Cast(intLit, StringType), stringLit)))
 
     ruleTest(rule,
       Coalesce(Seq(tsArrayLit, intArrayLit, strArrayLit)),
       Coalesce(Seq(Cast(tsArrayLit, ArrayType(StringType)),
-        Cast(intArrayLit, ArrayType(StringType)), Cast(strArrayLit, ArrayType(StringType)))))
+        Cast(intArrayLit, ArrayType(StringType)), strArrayLit)))
   }
 
   test("CreateArray casts") {
@@ -735,7 +732,7 @@ class TypeCoercionSuite extends AnalysisTest {
         :: Literal(1)
         :: Literal.create(1.0, FloatType)
         :: Nil),
-      CreateArray(Cast(Literal(1.0), DoubleType)
+      CreateArray(Literal(1.0)
         :: Cast(Literal(1), DoubleType)
         :: Cast(Literal.create(1.0, FloatType), DoubleType)
         :: Nil))
@@ -747,7 +744,7 @@ class TypeCoercionSuite extends AnalysisTest {
         :: Nil),
       CreateArray(Cast(Literal(1.0), StringType)
         :: Cast(Literal(1), StringType)
-        :: Cast(Literal("a"), StringType)
+        :: Literal("a")
         :: Nil))
 
     ruleTest(TypeCoercion.FunctionArgumentConversion,
@@ -765,7 +762,7 @@ class TypeCoercionSuite extends AnalysisTest {
         :: Nil),
       CreateArray(Literal.create(null, DecimalType(5, 3)).cast(DecimalType(38, 38))
         :: Literal.create(null, DecimalType(22, 10)).cast(DecimalType(38, 38))
-        :: Literal.create(null, DecimalType(38, 38)).cast(DecimalType(38, 38))
+        :: Literal.create(null, DecimalType(38, 38))
         :: Nil))
   }
 
@@ -779,7 +776,7 @@ class TypeCoercionSuite extends AnalysisTest {
         :: Nil),
       CreateMap(Cast(Literal(1), FloatType)
         :: Literal("a")
-        :: Cast(Literal.create(2.0, FloatType), FloatType)
+        :: Literal.create(2.0, FloatType)
         :: Literal("b")
         :: Nil))
     ruleTest(TypeCoercion.FunctionArgumentConversion,
@@ -801,7 +798,7 @@ class TypeCoercionSuite extends AnalysisTest {
         :: Literal(3.0)
         :: Nil),
       CreateMap(Literal(1)
-        :: Cast(Literal("a"), StringType)
+        :: Literal("a")
         :: Literal(2)
         :: Cast(Literal(3.0), StringType)
         :: Nil))
@@ -814,7 +811,7 @@ class TypeCoercionSuite extends AnalysisTest {
       CreateMap(Literal(1)
         :: Literal.create(null, DecimalType(38, 0)).cast(DecimalType(38, 38))
         :: Literal(2)
-        :: Literal.create(null, DecimalType(38, 38)).cast(DecimalType(38, 38))
+        :: Literal.create(null, DecimalType(38, 38))
         :: Nil))
     // type coercion for both map keys and values
     ruleTest(TypeCoercion.FunctionArgumentConversion,
@@ -824,8 +821,8 @@ class TypeCoercionSuite extends AnalysisTest {
         :: Literal(3.0)
         :: Nil),
       CreateMap(Cast(Literal(1), DoubleType)
-        :: Cast(Literal("a"), StringType)
-        :: Cast(Literal(2.0), DoubleType)
+        :: Literal("a")
+        :: Literal(2.0)
         :: Cast(Literal(3.0), StringType)
         :: Nil))
   }
@@ -837,7 +834,7 @@ class TypeCoercionSuite extends AnalysisTest {
           :: Literal(1)
           :: Literal.create(1.0, FloatType)
           :: Nil),
-        operator(Cast(Literal(1.0), DoubleType)
+        operator(Literal(1.0)
           :: Cast(Literal(1), DoubleType)
           :: Cast(Literal.create(1.0, FloatType), DoubleType)
           :: Nil))
@@ -848,14 +845,14 @@ class TypeCoercionSuite extends AnalysisTest {
           :: Nil),
         operator(Cast(Literal(1L), DecimalType(22, 0))
           :: Cast(Literal(1), DecimalType(22, 0))
-          :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType(22, 0))
+          :: Literal(new java.math.BigDecimal("1000000000000000000000"))
           :: Nil))
       ruleTest(TypeCoercion.FunctionArgumentConversion,
         operator(Literal(1.0)
           :: Literal.create(null, DecimalType(10, 5))
           :: Literal(1)
           :: Nil),
-        operator(Literal(1.0).cast(DoubleType)
+        operator(Literal(1.0)
           :: Literal.create(null, DecimalType(10, 5)).cast(DoubleType)
           :: Literal(1).cast(DoubleType)
           :: Nil))
