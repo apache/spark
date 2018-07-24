@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{DataType, LongType}
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_() - Returns monotonically increasing 64-bit integers. The generated ID is guaranteed
+    _FUNC_() - Returns monotonically increasing 64-bit integers. The generated IDs are guaranteed
       to be monotonically increasing and unique, but not consecutive. The current implementation
       puts the partition ID in the upper 31 bits, and the lower 33 bits represent the record number
       within each partition. The assumption is that the data frame has less than 1 billion
@@ -79,8 +79,6 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Stateful {
   }
 
   override def prettyName: String = "monotonically_increasing_id"
-
-  override def sql: String = s"$prettyName()"
 
   override def freshCopy(): MonotonicallyIncreasingID = MonotonicallyIncreasingID()
 }
