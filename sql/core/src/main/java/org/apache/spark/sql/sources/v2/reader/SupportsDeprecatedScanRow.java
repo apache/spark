@@ -17,30 +17,23 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
-import java.util.List;
-
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+import org.apache.spark.sql.catalyst.InternalRow;
+
+import java.util.List;
 
 /**
  * A mix-in interface for {@link DataSourceReader}. Data source readers can implement this
- * interface to output {@link UnsafeRow} directly and avoid the row copy at Spark side.
- * This is an experimental and unstable interface, as {@link UnsafeRow} is not public and may get
- * changed in the future Spark versions.
+ * interface to output {@link Row} instead of {@link InternalRow}.
+ * This is an experimental and unstable interface.
  */
 @InterfaceStability.Unstable
-public interface SupportsScanUnsafeRow extends DataSourceReader {
-
-  @Override
-  default List<InputPartition<Row>> planInputPartitions() {
+public interface SupportsDeprecatedScanRow extends DataSourceReader {
+  default List<InputPartition<InternalRow>> planInputPartitions() {
     throw new IllegalStateException(
-      "planInputPartitions not supported by default within SupportsScanUnsafeRow");
+        "planInputPartitions not supported by default within SupportsDeprecatedScanRow");
   }
 
-  /**
-   * Similar to {@link DataSourceReader#planInputPartitions()},
-   * but returns data in unsafe row format.
-   */
-  List<InputPartition<UnsafeRow>> planUnsafeInputPartitions();
+  List<InputPartition<Row>> planRowInputPartitions();
 }

@@ -30,7 +30,7 @@ import org.scalatest.mockito.MockitoSugar
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.TestForeachWriter
 import org.apache.spark.sql.functions._
@@ -227,10 +227,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       }
 
       // getBatch should take 100 ms the first time it is called
-      override def planUnsafeInputPartitions(): ju.List[InputPartition[UnsafeRow]] = {
+      override def planInputPartitions(): ju.List[InputPartition[InternalRow]] = {
         synchronized {
           clock.waitTillTime(1350)
-          super.planUnsafeInputPartitions()
+          super.planInputPartitions()
         }
       }
     }
