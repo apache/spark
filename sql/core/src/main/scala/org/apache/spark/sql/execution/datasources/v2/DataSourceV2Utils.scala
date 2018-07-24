@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.regex.Pattern
 
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.{DataSourceV2, SessionConfigSupport}
@@ -56,12 +54,5 @@ private[sql] object DataSourceV2Utils extends Logging {
       }
 
     case _ => Map.empty
-  }
-
-  // SPARK-15895: Metadata files (e.g. Parquet summary files) and temporary files should not be
-  // counted as data files, so that they shouldn't participate partition discovery.
-  private[sql] def isDataPath(path: Path): Boolean = {
-    val name = path.getName
-    !((name.startsWith("_") && !name.contains("=")) || name.startsWith("."))
   }
 }

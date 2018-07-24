@@ -27,7 +27,6 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.types.{StringType, StructType}
 
 /**
@@ -61,14 +60,14 @@ abstract class PartitioningAwareFileIndex(
       partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
     val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
       PartitionDirectory(InternalRow.empty,
-        allFiles().filter(f => DataSourceV2Utils.isDataPath(f.getPath))) :: Nil
+        allFiles().filter(f => DataSourceUtils.isDataPath(f.getPath))) :: Nil
     } else {
       prunePartitions(partitionFilters, partitionSpec()).map {
         case PartitionPath(values, path) =>
           val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
             case Some(existingDir) =>
               // Directory has children files in it, return them
-              existingDir.filter(f => DataSourceV2Utils.isDataPath(f.getPath))
+              existingDir.filter(f => DataSourceUtils.isDataPath(f.getPath))
 
             case None =>
               // Directory does not exist, or has no children files
@@ -122,7 +121,7 @@ abstract class PartitioningAwareFileIndex(
   protected def inferPartitioning(): PartitionSpec = {
     // We use leaf dirs containing data files to discover the schema.
     val leafDirs = leafDirToChildrenFiles.filter { case (_, files) =>
-      files.exists(f => DataSourceV2Utils.isDataPath(f.getPath))
+      files.exists(f => DataSourceUtils.isDataPath(f.getPath))
     }.keys.toSeq
 
     val caseInsensitiveOptions = CaseInsensitiveMap(parameters)
