@@ -295,10 +295,11 @@ class DataFrame(object):
 
     @since(2.4)
     def exceptAll(self, other):
-        """ Return a new :class:`DataFrame` containing rows in this :class:`DataFrame` but
-        not in another :class:`DataFrame while preserving duplicates.
+        """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame` but
+        not in another :class:`DataFrame` while preserving duplicates.
 
         This is equivalent to `EXCEPT ALL` in SQL.
+
         >>> df1 = spark.createDataFrame([("a", 1), ("a", 2), ("b",  3), ("c", 4)], ["C1", "C2"])
         >>> df2 = spark.createDataFrame([("a", 1), ("b", 3)], ["C1", "C2"])
 
