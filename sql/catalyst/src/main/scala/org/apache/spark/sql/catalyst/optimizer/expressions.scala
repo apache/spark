@@ -227,12 +227,12 @@ object OptimizeIn extends Rule[LogicalPlan] {
         if (newList.length == 1
           // TODO: `EqualTo` for structural types are not working. Until SPARK-24443 is addressed,
           // TODO: we exclude them in this rule.
-          && !v.isInstanceOf[CreateNamedStructLike]
+          && !expr.inValues.valueExpression.isInstanceOf[CreateNamedStructLike]
           && !newList.head.isInstanceOf[CreateNamedStructLike]) {
-          EqualTo(v, newList.head)
+          EqualTo(expr.inValues.valueExpression, newList.head)
         } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
-          InSet(v, HashSet() ++ hSet)
+          InSet(expr.inValues.valueExpression, HashSet() ++ hSet)
         } else if (newList.length < list.length) {
           expr.copy(list = newList)
         } else { // newList.length == list.length && newList.length > 1
