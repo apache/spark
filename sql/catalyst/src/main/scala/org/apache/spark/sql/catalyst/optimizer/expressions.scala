@@ -390,7 +390,8 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
       case If(Literal(null, _), _, falseValue) => falseValue
-      case If(_, trueValue, falseValue) if trueValue.semanticEquals(falseValue) => trueValue
+      case If(cond, trueValue, falseValue)
+        if cond.deterministic && trueValue.semanticEquals(falseValue) => trueValue
 
       case e @ CaseWhen(branches, elseValue) if branches.exists(x => falseOrNullLiteral(x._1)) =>
         // If there are branches that are always false, remove them.

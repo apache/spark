@@ -64,6 +64,8 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
   """)
 case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
+  override lazy val deterministic: Boolean = false
+
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType)

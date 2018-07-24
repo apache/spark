@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
@@ -30,7 +31,8 @@ import org.apache.spark.sql.types.{IntegerType, NullType}
 class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("SimplifyConditionals", FixedPoint(50), SimplifyConditionals) :: Nil
+    val batches = Batch("SimplifyConditionals", FixedPoint(50),
+      BooleanSimplification, ConstantFolding, SimplifyConditionals) :: Nil
   }
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
@@ -43,6 +45,8 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
   private val normalBranch = (NonFoldableLiteral(true), Literal(10))
   private val unreachableBranch = (FalseLiteral, Literal(20))
   private val nullBranch = (Literal.create(null, NullType), Literal(30))
+
+  private val testRelation = LocalRelation('a.int)
 
   test("simplify if") {
     assertEquivalent(
@@ -64,6 +68,34 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
         Subtract(Literal(10), Literal(1)),
         Add(Literal(6), Literal(3))),
       Literal(9))
+
+    // For non-deterministic condition, we don't remove the `If` statement.
+    assertEquivalent(
+      If(GreaterThan(Rand(0), Literal(0.5)),
+        Subtract(Literal(10), Literal(1)),
+        Add(Literal(6), Literal(3))),
+      If(GreaterThan(Rand(0), Literal(0.5)),
+        Literal(9),
+        Literal(9)))
+
+    // For non-deterministic condition, we don't remove the `If` statement.
+    val originalQuery =
+      testRelation
+        .select(If(AssertTrue(IsNull(UnresolvedAttribute("a"))),
+          Subtract(Literal(10), Literal(1)),
+          Add(Literal(6), Literal(3)))).analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze).canonicalized
+
+    val correctAnswer =
+      testRelation
+        .select(If(AssertTrue(IsNull(UnresolvedAttribute("a"))),
+          Literal(9),
+          Literal(9)))
+        .analyze
+        .canonicalized
+
+    comparePlans(optimized, correctAnswer)
   }
 
   test("remove unreachable branches") {
