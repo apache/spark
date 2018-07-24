@@ -155,6 +155,10 @@ class RangePartitioner[K : Ordering : ClassTag, V](
 
   private var ordering = implicitly[Ordering[K]]
 
+  var sampledArray: Array[K] = Array.empty
+
+  var hasSampledAll = false
+
   // An array of upper bounds for the first (partitions - 1) partitions
   private var rangeBounds: Array[K] = {
     if (partitions <= 1) {
@@ -166,7 +170,13 @@ class RangePartitioner[K : Ordering : ClassTag, V](
       // Assume the input partitions are roughly balanced and over-sample a little bit.
       val sampleSizePerPartition = math.ceil(3.0 * sampleSize / rdd.partitions.length).toInt
       val (numItems, sketched) = RangePartitioner.sketch(rdd.map(_._1), sampleSizePerPartition)
-      if (numItems == 0L) {
+      // get the sampled data
+      sampledArray = sketched.foldLeft(sampledArray)((total, sample) => {
+        total ++ sample._3
+      })
+      // already got the whole data
+      if (numItems == sampledArray.length) {
+        hasSampledAll = true
         Array.empty
       } else {
         // If a partition contains much more than the average number of items, we re-sample from it

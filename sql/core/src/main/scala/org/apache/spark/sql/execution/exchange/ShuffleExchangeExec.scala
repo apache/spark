@@ -89,7 +89,7 @@ case class ShuffleExchangeExec(
   private[exchange] def prepareShuffleDependency()
     : ShuffleDependency[Int, InternalRow, InternalRow] = {
     ShuffleExchangeExec.prepareShuffleDependency(
-      child.execute(), child.output, newPartitioning, serializer)
+      child.execute(), child.output, newPartitioning, serializer, sparkContext)
   }
 
   /**
@@ -203,7 +203,8 @@ object ShuffleExchangeExec {
       rdd: RDD[InternalRow],
       outputAttributes: Seq[Attribute],
       newPartitioning: Partitioning,
-      serializer: Serializer): ShuffleDependency[Int, InternalRow, InternalRow] = {
+      serializer: Serializer,
+      sparkContext: SparkContext = null): ShuffleDependency[Int, InternalRow, InternalRow] = {
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
       case HashPartitioning(_, n) =>
@@ -293,6 +294,10 @@ object ShuffleExchangeExec {
             canUseRadixSort)
           sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
         }
+      } else if (part.isInstanceOf[RangePartitioner[InternalRow, Null]] &&
+        part.asInstanceOf[RangePartitioner[InternalRow, Null]].hasSampledAll) {
+        sparkContext.
+          parallelize(part.asInstanceOf[RangePartitioner[InternalRow, Null]].sampledArray.toSeq)
       } else {
         rdd
       }
