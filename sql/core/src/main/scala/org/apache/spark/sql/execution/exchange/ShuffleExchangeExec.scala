@@ -236,7 +236,6 @@ object ShuffleExchangeExec {
           override def numPartitions: Int = l.numPartitions
           override def getPartition(key: Any): Int = key.asInstanceOf[Int]
         }
-
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
