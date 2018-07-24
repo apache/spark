@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
@@ -318,7 +317,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // only primitive parameter needs special null handling
     val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil)
     val expected2 =
-      If(IsNull(double), nullResult, udf2.copy(children = string :: AssertNotNull(double) :: Nil))
+      If(IsNull(double), nullResult, udf2.copy(children = string :: KnowNotNull(double) :: Nil))
     checkUDF(udf2, expected2)
 
     // special null handling should apply to all primitive parameters
@@ -326,7 +325,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val expected3 = If(
       IsNull(short) || IsNull(double),
       nullResult,
-      udf3.copy(children = AssertNotNull(short) :: AssertNotNull(double) :: Nil))
+      udf3.copy(children = KnowNotNull(short) :: KnowNotNull(double) :: Nil))
     checkUDF(udf3, expected3)
 
     // we can skip special null handling for primitive parameters that are not nullable
@@ -338,7 +337,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val expected4 = If(
       IsNull(short),
       nullResult,
-      udf4.copy(children = AssertNotNull(short) :: double.withNullability(false) :: Nil))
+      udf4.copy(children = KnowNotNull(short) :: double.withNullability(false) :: Nil))
     // checkUDF(udf4, expected4)
   }
 
