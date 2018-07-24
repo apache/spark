@@ -1343,12 +1343,9 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
   }
 
   test("ArrowBatchStreamWriter roundtrip") {
-    val inputRows = (0 until 9).map { i =>
-      InternalRow(i)
-    } :+ InternalRow(null)
+    val inputRows = (0 until 9).map(InternalRow(_)) :+ InternalRow(null)
 
     val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
-
     val ctx = TaskContext.empty()
     val batchIter = ArrowConverters.toBatchIterator(inputRows.toIterator, schema, 5, null, ctx)
 
