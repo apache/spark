@@ -149,7 +149,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("verify table size calculation is accurate") {
+  test("SPARK-24626 parallelize location size calculation in Analyze Table command") {
     withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "2") {
       val checkSizeTable = "checkSizeTable"
       withTable(checkSizeTable) {
