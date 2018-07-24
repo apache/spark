@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.StructType;
 public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
 
   public class Reader implements DataSourceReader, SupportsPushDownRequiredColumns,
-      SupportsPushDownFilters {
+      SupportsPushDownFilters, SupportsDeprecatedScanRow {
 
     // Exposed for testing.
     public StructType requiredSchema = new StructType().add("i", "int").add("j", "int");
@@ -79,7 +79,7 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<InputPartition<Row>> planInputPartitions() {
+    public List<InputPartition<Row>> planRowInputPartitions() {
       List<InputPartition<Row>> res = new ArrayList<>();
 
       Integer lowerBound = null;
