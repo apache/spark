@@ -150,8 +150,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   }
 
   test("verify table size calculation is accurate") {
-    val checkSizeTable = "checkSizeTable"
     withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "2") {
+      val checkSizeTable = "checkSizeTable"
       withTable(checkSizeTable) {
           sql(s"CREATE TABLE $checkSizeTable (key STRING, value STRING) PARTITIONED BY (ds STRING)")
           sql(s"INSERT INTO TABLE $checkSizeTable PARTITION (ds='2010-01-01') SELECT * FROM src")

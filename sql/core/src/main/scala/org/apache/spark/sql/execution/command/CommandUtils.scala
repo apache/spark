@@ -59,15 +59,12 @@ object CommandUtils extends Logging {
       val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
       val pathFilter = new PathFilter with Serializable {
         override def accept(path: Path): Boolean = {
-          val fileName = path.getName
-          (// Ignore metadata files starting with "_"
-            DataSourceUtils.isDataPath(path) && !fileName.startsWith(stagingDir))
+          DataSourceUtils.isDataPath(path) && !path.getName.startsWith(stagingDir)
         }
       }
-      val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(paths,
-        sessionState.newHadoopConf(), pathFilter,
-        spark).flatMap(_._2)
-      fileStatusSeq.map(_.getLen).sum
+      val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(
+        paths, sessionState.newHadoopConf(), pathFilter, spark)
+      fileStatusSeq.flatMap(_._2.map(_.getLen)).sum
     }
   }
 
