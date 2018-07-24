@@ -228,11 +228,6 @@ case class Stack(children: Seq[Expression]) extends Generator {
  * This is a internal function solely used by optimizer to rewrite EXCEPT ALL AND
  * INTERSECT ALL queries.
  */
-@ExpressionDescription(
-usage = "_FUNC_(n, expr1, ..., exprk) - Replicates `n`, `expr1`, ..., `exprk` into `n` rows.",
-examples = """ This is a internal function which is used for query rewrites only to support
-               EXCEPT ALL AND INTERSECT ALL.
-  """)
 case class ReplicateRows(children: Seq[Expression]) extends Generator with CodegenFallback {
   private lazy val numColumns = children.length - 1 // remove the multiplier value from output.
 
