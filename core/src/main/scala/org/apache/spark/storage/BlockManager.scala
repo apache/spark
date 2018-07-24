@@ -731,7 +731,14 @@ private[spark] class BlockManager(
       }
 
       if (data != null) {
-        return Some(ChunkedByteBuffer.fromManagedBuffer(data, chunkSize))
+        // SPARK-24307 undocumented "escape-hatch" in case there are any issues in converting to
+        // to ChunkedByteBuffer, to go back to old code-path.  Can be removed post Spark 2.4 if
+        // new path is stable.
+        if (conf.getBoolean("spark.fetchToNioBuffer", false)) {
+          return Some(new ChunkedByteBuffer(data.nioByteBuffer()))
+        } else {
+          return Some(ChunkedByteBuffer.fromManagedBuffer(data, chunkSize))
+        }
       }
       logDebug(s"The value of block $blockId is null")
     }
