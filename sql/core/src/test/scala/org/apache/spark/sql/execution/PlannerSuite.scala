@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range, Repartition, Sort, Union}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -707,8 +707,8 @@ class PlannerSuite extends SharedSQLContext {
   test("SPARK-24556: always rewrite output partitioning in ReusedExchangeExec " +
     "and InMemoryTableScanExec") {
     def checkOutputPartitioningRewrite(
-        plans: Seq[SparkPlan],
-        expectedPartitioningClass: Class[_]): Unit = {
+      plans: Seq[SparkPlan],
+      expectedPartitioningClass: Class[_]): Unit = {
       assert(plans.size == 1)
       val plan = plans.head
       val partitioning = plan.outputPartitioning
@@ -718,8 +718,8 @@ class PlannerSuite extends SharedSQLContext {
     }
 
     def checkReusedExchangeOutputPartitioningRewrite(
-        df: DataFrame,
-        expectedPartitioningClass: Class[_]): Unit = {
+      df: DataFrame,
+      expectedPartitioningClass: Class[_]): Unit = {
       val reusedExchange = df.queryExecution.executedPlan.collect {
         case r: ReusedExchangeExec => r
       }
@@ -727,8 +727,8 @@ class PlannerSuite extends SharedSQLContext {
     }
 
     def checkInMemoryTableScanOutputPartitioningRewrite(
-        df: DataFrame,
-        expectedPartitioningClass: Class[_]): Unit = {
+      df: DataFrame,
+      expectedPartitioningClass: Class[_]): Unit = {
       val inMemoryScan = df.queryExecution.executedPlan.collect {
         case m: InMemoryTableScanExec => m
       }
@@ -761,6 +761,54 @@ class PlannerSuite extends SharedSQLContext {
       checkInMemoryTableScanOutputPartitioningRewrite(
         Seq(1 -> "a").toDF("i", "j").join(Seq(1 -> "a").toDF("m", "n"), $"i" === $"m"),
         classOf[PartitioningCollection])
+    }
+  }
+
+  test("remove redundant exchanges") {
+    val distribution = ClusteredDistribution(Literal(1) :: Nil)
+    val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 5)
+    val childPartitioning = HashPartitioning(Literal(2) :: Nil, 5)
+    assert(!childPartitioning.satisfies(distribution))
+    val childSparkPlan = DummySparkPlan(
+      children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
+      requiredChildDistribution = Seq(distribution),
+      requiredChildOrdering = Seq(Seq.empty))
+
+    val redundantShuffle = ShuffleExchangeExec(childPartitioning, childSparkPlan, None)
+    val shuffle = ShuffleExchangeExec(finalPartitioning, redundantShuffle, None)
+
+    // redundant exchanges
+    val inputPlan = SortMergeJoinExec(
+      Literal(1) :: Nil,
+      Literal(1) :: Nil,
+      Inner,
+      None,
+      shuffle,
+      shuffle)
+    if (inputPlan.collect { case e: ShuffleExchangeExec => true }.size != 4) {
+      fail(s"Should have only one shuffle:\n$inputPlan")
+    }
+
+    val outputPlan = RemoveRedundantExchange(spark.sessionState.conf).apply(inputPlan)
+    if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size != 2) {
+      fail(s"Should have only one shuffle:\n$outputPlan")
+    }
+
+    // non-redundant exchanges
+    val inputPlan2 = SortMergeJoinExec(
+      Literal(1) :: Nil,
+      Literal(1) :: Nil,
+      Inner,
+      None,
+      ShuffleExchangeExec(finalPartitioning, childSparkPlan),
+      ShuffleExchangeExec(finalPartitioning, childSparkPlan))
+    if (inputPlan2.collect { case e: ShuffleExchangeExec => true }.size != 2) {
+      fail(s"Should have only one shuffle:\n$inputPlan")
+    }
+
+    val outputPlan2 = RemoveRedundantExchange(spark.sessionState.conf).apply(inputPlan2)
+    if (outputPlan2.collect { case e: ShuffleExchangeExec => true }.size != 2) {
+      fail(s"Should have only one shuffle:\n$outputPlan2")
     }
   }
 }

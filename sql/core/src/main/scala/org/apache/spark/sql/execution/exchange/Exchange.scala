@@ -109,3 +109,13 @@ case class ReuseExchange(conf: SQLConf) extends Rule[SparkPlan] {
     }
   }
 }
+
+/**
+ * Remove redundant [[ShuffleExchangeExec]] from a spark plan.
+ */
+case class RemoveRedundantExchange(conf: SQLConf) extends Rule[SparkPlan] {
+  def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
+    case s @ ShuffleExchangeExec(_, child, _) if child.isInstanceOf[ShuffleExchangeExec] =>
+      s.copy(child = child.children.head)
+  }
+}
