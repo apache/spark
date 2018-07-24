@@ -337,7 +337,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("SPARK-22499: Least and greatest should not generate codes beyond 64KB") {
-    val N = 3000
+    val N = 2000
     val strings = (1 to N).map(x => "s" * x)
     val inputsExpr = strings.map(Literal.create(_, StringType))
 
