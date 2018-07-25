@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.DataType
 
 case class KnowNotNull(child: Expression) extends UnaryExpression {
@@ -26,7 +26,7 @@ case class KnowNotNull(child: Expression) extends UnaryExpression {
   override def dataType: DataType = child.dataType
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    child.genCode(ctx).copy(isNull = FalseLiteral)
+    child.genCode(ctx).copy(isNull = "false")
   }
 
   override def eval(input: InternalRow): Any = {
