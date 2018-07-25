@@ -702,6 +702,23 @@ class JavaSparkContext(val sc: SparkContext)
   }
 
   /**
+   * Add a set of conda packages (identified by <a
+   * href="https://conda.io/docs/spec.html#build-version-spec">package match specification</a>
+   * for all tasks to be executed on this SparkContext in the future.
+   */
+  def addCondaPackages(packages: java.util.List[String]): Unit = {
+    sc.addCondaPackages(packages.asScala)
+  }
+
+  /**
+   * Replace the set of channels Conda uses with the given set of URLs.
+   * These are the only channels used going forward for all conda operations.
+   */
+  def setCondaChannels(urls: java.util.List[String]): Unit = {
+    sc.setCondaChannels(urls.asScala)
+  }
+
+  /**
    * Returns the Hadoop configuration used for the Hadoop code (e.g. file systems) we reuse.
    *
    * @note As it will be reused in all Hadoop RDDs, it's better not to modify it unless you

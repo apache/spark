@@ -33,6 +33,7 @@ import org.apache.hadoop.mapred.{InputFormat, JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, OutputFormat => NewOutputFormat}
 
 import org.apache.spark._
+import org.apache.spark.api.conda.CondaEnvironment.CondaSetupInstructions
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
@@ -73,7 +74,8 @@ private[spark] case class PythonFunction(
     command: Array[Byte],
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
-    pythonExec: String,
+    condaSetupInstructions: Option[CondaSetupInstructions],
+    pythonExec: Option[String],
     pythonVer: String,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: PythonAccumulatorV2)

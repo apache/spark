@@ -85,24 +85,14 @@
       <artifactId>guava</artifactId>
       <scope>${hadoop.deps.scope}</scope>
     </dependency>
+    <dependency>
+      <groupId>com.palantir.spark.influx</groupId>
+      <artifactId>spark-influx-sink</artifactId>
+    </dependency>
   </dependencies>
 
   <build>
     <plugins>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-deploy-plugin</artifactId>
-        <configuration>
-          <skip>true</skip>
-        </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-install-plugin</artifactId>
-        <configuration>
-          <skip>true</skip>
-        </configuration>
-      </plugin>
       <!-- zip pyspark archives to run python application on yarn mode -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -244,7 +234,7 @@
     </profile>
 
     <!--
-     Pull in spark-hadoop-cloud and its associated JARs,
+     Pull in hadoop-cloud and its associated JARs,
     -->
     <profile>
       <id>hadoop-cloud</id>

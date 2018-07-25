@@ -18,6 +18,14 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import static org.apache.parquet.filter2.compat.RowGroupFilter.filterRowGroups;
+import static org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER;
+import static org.apache.parquet.format.converter.ParquetMetadataConverter.range;
+import static org.apache.parquet.hadoop.ParquetFileReader.readFooter;
+import static org.apache.parquet.hadoop.ParquetInputFormat.DICTIONARY_FILTERING_ENABLED;
+import static org.apache.parquet.hadoop.ParquetInputFormat.getFilter;
+
+import com.google.common.collect.ImmutableList;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -29,15 +37,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import scala.Option;
-
-import static org.apache.parquet.filter2.compat.RowGroupFilter.filterRowGroups;
-import static org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER;
-import static org.apache.parquet.format.converter.ParquetMetadataConverter.range;
-import static org.apache.parquet.hadoop.ParquetFileReader.readFooter;
-import static org.apache.parquet.hadoop.ParquetInputFormat.getFilter;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.InputSplit;
@@ -49,6 +48,7 @@ import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.column.values.rle.RunLengthBitPackingHybridDecoder;
 import org.apache.parquet.filter2.compat.FilterCompat;
+import org.apache.parquet.filter2.compat.RowGroupFilter;
 import org.apache.parquet.hadoop.BadConfigurationException;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.ParquetInputFormat;
@@ -65,6 +65,7 @@ import org.apache.spark.TaskContext$;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.StructType$;
 import org.apache.spark.util.AccumulatorV2;
+import scala.Option;
 
 /**
  * Base class for custom RecordReaders for Parquet that directly materialize to `T`.
@@ -103,9 +104,20 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     if (rowGroupOffsets == null) {
       // then we need to apply the predicate push down filter
       footer = readFooter(configuration, file, range(split.getStart(), split.getEnd()));
-      MessageType fileSchema = footer.getFileMetaData().getSchema();
       FilterCompat.Filter filter = getFilter(configuration);
-      blocks = filterRowGroups(filter, footer.getBlocks(), fileSchema);
+      try (ParquetFileReader reader = ParquetFileReader.open(configuration, file, footer)) {
+        List<RowGroupFilter.FilterLevel> filterLevels =
+                ImmutableList.of(RowGroupFilter.FilterLevel.STATISTICS);
+        if (configuration.getBoolean(DICTIONARY_FILTERING_ENABLED, false)) {
+          filterLevels = ImmutableList.of(RowGroupFilter.FilterLevel.STATISTICS,
+                  RowGroupFilter.FilterLevel.DICTIONARY);
+        }
+        blocks = filterRowGroups(
+                filterLevels,
+                filter,
+                footer.getBlocks(),
+                reader);
+      }
     } else {
       // otherwise we find the row groups that were selected on the client
       footer = readFooter(configuration, file, NO_FILTER);
@@ -141,16 +153,13 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(
         taskAttemptContext.getConfiguration(), toSetMultiMap(fileMetadata), fileSchema));
     this.requestedSchema = readContext.getRequestedSchema();
+    this.reader = ParquetFileReader.open(
+            configuration, file, new ParquetMetadata(footer.getFileMetaData(), blocks));
+    this.reader.setRequestedSchema(requestedSchema);
     String sparkRequestedSchemaString =
         configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
     this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
-    this.reader = new ParquetFileReader(
-        configuration, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
-    // use the blocks from the reader in case some do not match filters and will not be read
-    for (BlockMetaData block : reader.getRowGroups()) {
-      this.totalRowCount += block.getRowCount();
-    }
-
+    this.totalRowCount = this.reader.getRecordCount();
     // For test purpose.
     // If the last external accumulator is `NumRowGroupsAccumulator`, the row group number to read
     // will be updated to the accumulator. So we can check if the row groups are filtered or not

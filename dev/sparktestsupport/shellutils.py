@@ -45,7 +45,7 @@ def rm_r(path):
         os.remove(path)
 
 
-def run_cmd(cmd, return_output=False):
+def run_cmd(cmd, return_output=False, env=None):
     """
     Given a command as a list of arguments will attempt to execute the command
     and, on failure, print an error message and exit.
@@ -55,9 +55,9 @@ def run_cmd(cmd, return_output=False):
         cmd = cmd.split()
     try:
         if return_output:
-            return subprocess_check_output(cmd)
+            return subprocess_check_output(cmd, env=env)
         else:
-            return subprocess_check_call(cmd)
+            return subprocess_check_call(cmd, env=env)
     except subprocess.CalledProcessError as e:
         exit_from_command_with_retcode(e.cmd, e.returncode)
 

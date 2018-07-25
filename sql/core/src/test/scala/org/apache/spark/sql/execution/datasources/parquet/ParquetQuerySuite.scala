@@ -18,9 +18,11 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
-import java.sql.Timestamp
+import java.net.URI
+import java.sql.{Date, Timestamp}
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import com.google.common.collect.{HashMultiset, Multiset}
+import org.apache.hadoop.fs.{FileSystem, FSDataInputStream, Path, RawLocalFileSystem}
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.{DebugFilesystem, SparkException}
@@ -152,7 +154,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   }
 
   test("SPARK-6917 DecimalType should work with non-native types") {
-    val data = (1 to 10).map(i => Row(Decimal(i, 18, 0), new java.sql.Timestamp(i)))
+    val data = (1 to 10).map(i => Row(Decimal(i, 18, 0), new Timestamp(i)))
     val schema = StructType(List(StructField("d", DecimalType(18, 0), false),
       StructField("time", TimestampType, false)).toArray)
     withTempPath { file =>
@@ -164,7 +166,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   }
 
   test("SPARK-10634 timestamp written and read as INT64 - TIMESTAMP_MILLIS") {
-    val data = (1 to 10).map(i => Row(i, new java.sql.Timestamp(i)))
+    val data = (1 to 10).map(i => Row(i, new Timestamp(i)))
     val schema = StructType(List(StructField("d", IntegerType, false),
       StructField("time", TimestampType, false)).toArray)
     withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "true") {
@@ -880,6 +882,136 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
   }
 
+  // In order to make intent more readable for partition pruning tests, we increase
+  // openCostInBytes to disable file merging.
+  test("SPARK-17059: Allow FileFormat to specify partition pruning strategy") {
+    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> (128 * 1024 * 1024).toString) {
+      withTempPath { path =>
+        spark.sparkContext.parallelize(Seq(1, 2, 3), 3)
+          .toDF("x").write.parquet(path.getCanonicalPath)
+
+        val zeroPartitions = spark.read.parquet(path.getCanonicalPath).where("x = 0")
+        assert(zeroPartitions.rdd.partitions.length == 0)
+
+        val onePartition = spark.read.parquet(path.getCanonicalPath).where("x = 1")
+        assert(onePartition.rdd.partitions.length == 1)
+      }
+    }
+  }
+
+  test("Do not filter out parquet file when missing in _metadata file") {
+    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> (128 * 1024 * 1024).toString) {
+      withTempPath { path =>
+        spark.sparkContext.parallelize(Seq(1, 2, 3), 3)
+          .toDF("x").write.parquet(path.getCanonicalPath)
+        withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "NONE") {
+          spark.sparkContext.parallelize(Seq(4), 1)
+            .toDF("x").write.mode(SaveMode.Append).parquet(path.getCanonicalPath)
+        }
+        val twoPartitions = spark.read.parquet(path.getCanonicalPath).where("x = 1")
+        assert(twoPartitions.rdd.partitions.length == 2)
+      }
+    }
+  }
+
+  test("Only read _metadata file once for a given root path") {
+    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
+      "fs.count.impl" -> classOf[CountingFileSystem].getName,
+      "fs.count.impl.disable.cache" -> "true") {
+      withTempPath { path =>
+        val mockedPath = s"count://some-bucket/${path.getCanonicalPath}"
+        val metadataPath: Path = new Path(s"$mockedPath/_metadata")
+        spark.sparkContext.parallelize(Seq(1, 2, 3), 3)
+          .toDF("x").write.parquet(mockedPath)
+        val onePartition = spark.read.parquet(mockedPath).where("x = 1")
+        assert(onePartition.rdd.partitions.length == 1)
+        assert(Counter.count(metadataPath) == 1)
+        Counter.reset()
+      }
+    }
+  }
+
+  test("Ensure proper rewriting of predicates") {
+    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> (128 * 1024 * 1024).toString) {
+      withTempPath { path =>
+        spark.sparkContext.parallelize(Seq(1, 2, 3), 3)
+          .toDF("x").write.parquet(path.getCanonicalPath)
+        val df = spark.read.parquet(path.getCanonicalPath)
+        val column: Column = !df.col("x").isNull
+        assert(df.filter(column).collect().length == 3)
+      }
+    }
+  }
+
+  test("Ensure file with multiple blocks splits properly with filters") {
+    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
+      SQLConf.FILES_MAX_PARTITION_BYTES.key -> "1024",
+      ParquetOutputFormat.BLOCK_SIZE -> "1") {
+      withTempPath { path =>
+        spark.sparkContext.parallelize((1 to 1000).map(x => x.toString), 1)
+          .toDF("x").write.parquet(path.getCanonicalPath)
+        val df = spark.read.parquet(path.getCanonicalPath)
+        val column: Column = df.col("x").isNotNull
+        assert(df.filter(column).count == df.count)
+      }
+    }
+  }
+
+  test("Ensure unconvertable filters don't break splitting") {
+    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
+      withTempPath { path =>
+        spark.sparkContext.parallelize((1 to 1000).map(x => x.toString), 1)
+          .toDF("x").write.parquet(path.getCanonicalPath)
+        val df = spark.read.parquet(path.getCanonicalPath)
+        val column: Column = df.col("x").startsWith("1000")
+        assert(df.filter(column).count == 1)
+      }
+    }
+  }
+
+  test("Ensure timestamps are filterable") {
+    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
+      SQLConf.PARQUET_INT96_AS_TIMESTAMP.key -> "false") {
+      withTempPath { path =>
+        val ts = new Timestamp(System.currentTimeMillis())
+        spark.createDataset(Seq(ts)).write.parquet(path.getCanonicalPath)
+
+        val df = spark.read.parquet(path.getCanonicalPath)
+        val columnHit: Column = df.col("value").eqNullSafe(ts)
+        val filterHit = df.filter(columnHit)
+        assert(filterHit.rdd.partitions.length == 1 && filterHit.count == 1)
+
+        val newTs = new Timestamp(System.currentTimeMillis())
+        val columnMiss: Column = df.col("value").eqNullSafe(newTs)
+        val filterMiss = df.filter(columnMiss)
+        assert(filterMiss.rdd.partitions.length == 0 && filterMiss.count == 0)
+      }
+    }
+  }
+
+  test("Ensure dates are filterable") {
+    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
+      SQLConf.PARQUET_INT96_AS_TIMESTAMP.key -> "false") {
+      withTempPath { path =>
+        val date = new Date(2016, 1, 1)
+        spark.createDataset(Seq(date)).write.parquet(path.getCanonicalPath)
+
+        val df = spark.read.parquet(path.getCanonicalPath)
+        val columnHit: Column = df.col("value").eqNullSafe(date)
+        val filterHit = df.filter(columnHit)
+        assert(filterHit.rdd.partitions.length == 1 && filterHit.count == 1)
+
+        val newDate = new Date(2015, 1, 1)
+        val columnMiss: Column = df.col("value").eqNullSafe(newDate)
+        val filterMiss = df.filter(columnMiss)
+        assert(filterMiss.rdd.partitions.length == 0 && filterMiss.count == 0)
+      }
+    }
+  }
+
   test("SPARK-24230: filter row group using dictionary") {
     withSQLConf(("parquet.filter.dictionary.enabled", "true")) {
       // create a table with values from 0, 2, ..., 18 that will be dictionary-encoded
@@ -891,6 +1023,36 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       }
     }
   }
+}
+
+class CountingFileSystem extends RawLocalFileSystem {
+  override def getScheme: String = "count"
+
+  override def getUri: URI = {
+    URI.create("count://some-bucket")
+  }
+
+  override def open(path: Path, bufferSize: Int): FSDataInputStream = {
+    Counter.increment(path)
+    super.open(path, bufferSize)
+  }
+}
+
+object Counter {
+  var counts: Multiset[Path] = HashMultiset.create()
+
+  def increment(path: Path): Unit = {
+    counts.add(path)
+  }
+
+  def count(path: Path): Int = {
+    counts.count(path)
+  }
+
+  def reset(): Unit = {
+    counts = HashMultiset.create()
+  }
+
 }
 
 object TestingUDT {

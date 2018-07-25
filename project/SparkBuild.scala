@@ -21,6 +21,7 @@ import java.nio.file.Files
 import scala.io.Source
 import scala.util.Properties
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.Stack
 
 import sbt._
@@ -29,11 +30,13 @@ import sbt.Keys._
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.etsy.sbt.checkstyle.CheckstylePlugin.autoImport._
 import com.simplytyped.Antlr4Plugin._
-import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
+import com.typesafe.sbt.pom.{MavenHelper, PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
 import org.scalastyle.sbt.ScalastylePlugin.autoImport._
 import org.scalastyle.sbt.Tasks
-
+import sbt.internals.DslEntry
+import sbt.plugins.JUnitXmlReportPlugin
+import sbt.plugins.JvmPlugin
 import spray.revolver.RevolverPlugin._
 
 object BuildCommons {
@@ -57,11 +60,12 @@ object BuildCommons {
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
     streamingFlumeSink, streamingFlume,
     streamingKafka, sparkGangliaLgpl, streamingKinesisAsl,
-    dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests) =
+    dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests, sparkDist) =
     Seq("kubernetes", "mesos", "yarn",
       "streaming-flume-sink", "streaming-flume",
       "streaming-kafka-0-8", "ganglia-lgpl", "streaming-kinesis-asl",
-      "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests").map(ProjectRef(buildLocation, _))
+      "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests",
+      "spark-dist-hadoop-palantir").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingKafka010Assembly, streamingKinesisAslAssembly) =
     Seq("network-yarn", "streaming-flume-assembly", "streaming-kafka-0-8-assembly", "streaming-kafka-0-10-assembly", "streaming-kinesis-asl-assembly")
@@ -89,7 +93,7 @@ object SparkBuild extends PomBuild {
   val projectsMap: Map[String, Seq[Setting[_]]] = Map.empty
 
   override val profiles = {
-    val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
+    val profiles = Properties.propOrNone("sbt.maven.profiles") orElse Properties.envOrNone("SBT_MAVEN_PROFILES") match {
       case None => Seq("sbt")
       case Some(v) =>
         v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
@@ -203,6 +207,7 @@ object SparkBuild extends PomBuild {
     }
   )
 
+
   lazy val sharedSettings = sparkGenjavadocSettings ++
       (if (sys.env.contains("NOLINT_ON_COMPILE")) Nil else enableScalaStyle) ++ Seq(
     exportJars in Compile := true,
@@ -306,7 +311,12 @@ object SparkBuild extends PomBuild {
         sys.error(s"$failed fatal warnings")
       }
       analysis
-    }
+    },
+    dependencyOverrides ++= MavenHelper.fromPom { pom =>
+      for {
+        dep <- pom.getDependencyManagement.getDependencies.asScala
+      } yield MavenHelper.convertDep(dep)
+    }.value.toSet
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {

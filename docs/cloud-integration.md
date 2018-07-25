@@ -50,9 +50,9 @@ Key differences are:
 * Changes to stored objects may not be immediately visible, both in directory listings and actual data access.
 * The means by which directories are emulated may make working with them slow.
 * Rename operations may be very slow and, on failure, leave the store in an unknown state.
-* Seeking within a file may require new HTTP calls, hurting performance. 
+* Seeking within a file may require new HTTP calls, hurting performance.
 
-How does this affect Spark? 
+How does this affect Spark?
 
 1. Reading and writing data can be significantly slower than working with a normal filesystem.
 1. Some directory structures may be very inefficient to scan during query split calculation.
@@ -74,7 +74,7 @@ objects can be read or written by using their URLs as the path to data.
 For example `sparkContext.textFile("s3a://landsat-pds/scene_list.gz")` will create
 an RDD of the file `scene_list.gz` stored in S3, using the s3a connector.
 
-To add the relevant libraries to an application's classpath, include the `hadoop-cloud` 
+To add the relevant libraries to an application's classpath, include the `spark-hadoop-cloud`
 module and its dependencies.
 
 In Maven, add the following to the `pom.xml` file, assuming `spark.version`
@@ -85,7 +85,7 @@ is set to the chosen version of Spark:
   ...
   <dependency>
     <groupId>org.apache.spark</groupId>
-    <artifactId>hadoop-cloud_2.11</artifactId>
+    <artifactId>spark-hadoop-cloud_2.11</artifactId>
     <version>${spark.version}</version>
   </dependency>
   ...
@@ -105,7 +105,7 @@ and `AWS_SESSION_TOKEN` environment variables and sets the associated authentica
 for the `s3n` and `s3a` connectors to Amazon S3.
 1. In a Hadoop cluster, settings may be set in the `core-site.xml` file.
 1. Authentication details may be manually added to the Spark configuration in `spark-default.conf`
-1. Alternatively, they can be programmatically set in the `SparkConf` instance used to configure 
+1. Alternatively, they can be programmatically set in the `SparkConf` instance used to configure
 the application's `SparkContext`.
 
 *Important: never check authentication secrets into source code repositories,
@@ -116,7 +116,7 @@ configuration and security options.
 
 ## Configuring
 
-Each cloud connector has its own set of configuration parameters, again, 
+Each cloud connector has its own set of configuration parameters, again,
 consult the relevant documentation.
 
 ### Recommended settings for writing to object stores
@@ -133,7 +133,7 @@ As it still uses `rename()` to commit files, it is unsafe to use
 when the object store does not have consistent metadata/listings.
 
 The committer can also be set to ignore failures when cleaning up temporary
-files; this reduces the risk that a transient network problem is escalated into a 
+files; this reduces the risk that a transient network problem is escalated into a
 job failure:
 
 ```
@@ -146,6 +146,7 @@ directories called `"_temporary"` on a regular basis to avoid this.
 ### Parquet I/O Settings
 
 For optimal performance when working with Parquet data use the following settings:
+>>>>>>> master
 
 ```
 spark.hadoop.parquet.enable.summary-metadata false

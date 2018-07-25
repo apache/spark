@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark._
+import org.apache.spark.api.conda.CondaEnvironment.CondaSetupInstructions
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.broadcast.Broadcast
@@ -39,11 +40,17 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     packageNames: Array[Byte],
     broadcastVars: Array[Broadcast[Object]])
   extends RDD[U](parent) with Logging {
+
+  /**
+   * Get the conda instructions eagerly - when the RDD is created.
+   */
+  val condaInstructions: Option[CondaSetupInstructions] = context.buildCondaInstructions()
+
   override def getPartitions: Array[Partition] = parent.partitions
 
   override def compute(partition: Partition, context: TaskContext): Iterator[U] = {
     val runner = new RRunner[U](
-      func, deserializer, serializer, packageNames, broadcastVars, numPartitions)
+      func, deserializer, serializer, packageNames, broadcastVars, condaInstructions, numPartitions)
 
     // The parent may be also an RRDD, so we should launch it first.
     val parentIterator = firstParent[T].iterator(partition, context)
@@ -79,6 +86,7 @@ private class RRDD[T: ClassTag](
     deserializer: String,
     serializer: String,
     packageNames: Array[Byte],
+    condaSetupInstructions: Option[CondaSetupInstructions],
     broadcastVars: Array[Object])
   extends BaseRRDD[T, Array[Byte]](
     parent, -1, func, deserializer, serializer, packageNames,
@@ -94,6 +102,7 @@ private class StringRRDD[T: ClassTag](
     func: Array[Byte],
     deserializer: String,
     packageNames: Array[Byte],
+    condaSetupInstructions: Option[CondaSetupInstructions],
     broadcastVars: Array[Object])
   extends BaseRRDD[T, String](
     parent, -1, func, deserializer, SerializationFormats.STRING, packageNames,

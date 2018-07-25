@@ -353,7 +353,13 @@ object SQLConf {
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(ParquetOutputTimestampType.values.map(_.toString))
-    .createWithDefault(ParquetOutputTimestampType.INT96.toString)
+    .createWithDefault(ParquetOutputTimestampType.TIMESTAMP_MICROS.toString)
+
+  val PARQUET_TIMESTAMP_AS_INT96 = buildConf("spark.sql.parquet.timestampAsInt96")
+    .doc(s"(Deprecated, please set ${PARQUET_OUTPUT_TIMESTAMP_TYPE.key} instead). Write " +
+      "timestamps as int96 to maintain legacy compatibility")
+    .booleanConf
+    .createWithDefault(false)
 
   val PARQUET_INT64_AS_TIMESTAMP_MILLIS = buildConf("spark.sql.parquet.int64AsTimestampMillis")
     .doc(s"(Deprecated since Spark 2.3, please set ${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}.) " +
@@ -448,6 +454,11 @@ object SQLConf {
   val PARQUET_VECTORIZED_READER_ENABLED =
     buildConf("spark.sql.parquet.enableVectorizedReader")
       .doc("Enables vectorized parquet decoding.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val PARQUET_PARTITION_PRUNING_ENABLED = buildConf("spark.sql.parquet.enablePartitionPruning")
+      .doc("Enables driver-side partition pruning for Parquet.")
       .booleanConf
       .createWithDefault(true)
 
@@ -1516,6 +1527,8 @@ class SQLConf extends Serializable with Logging {
 
   def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
 
+  def parquetPartitionPruningEnabled: Boolean = getConf(PARQUET_PARTITION_PRUNING_ENABLED)
+
   def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
@@ -1652,17 +1665,27 @@ class SQLConf extends Serializable with Logging {
 
   def parquetOutputTimestampType: ParquetOutputTimestampType.Value = {
     val isOutputTimestampTypeSet = settings.containsKey(PARQUET_OUTPUT_TIMESTAMP_TYPE.key)
-    if (!isOutputTimestampTypeSet && isParquetINT64AsTimestampMillis) {
+
+    if (isParquetINT64AsTimestampMillis && isParquetTimestampAsINT96) {
+      // conflicting configs for INT64 and INT96, tie-breaking with PARQUET_OUTPUT_TIMESTAMP_TYPE
+      ParquetOutputTimestampType.withName(getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE))
+    } else if (!isOutputTimestampTypeSet && isParquetINT64AsTimestampMillis) {
       // If PARQUET_OUTPUT_TIMESTAMP_TYPE is not set and PARQUET_INT64_AS_TIMESTAMP_MILLIS is set,
-      // respect PARQUET_INT64_AS_TIMESTAMP_MILLIS and use TIMESTAMP_MILLIS. Otherwise,
-      // PARQUET_OUTPUT_TIMESTAMP_TYPE has higher priority.
+      // respect PARQUET_INT64_AS_TIMESTAMP_MILLIS and use TIMESTAMP_MILLIS.
       ParquetOutputTimestampType.TIMESTAMP_MILLIS
+    } else if (!isOutputTimestampTypeSet && isParquetTimestampAsINT96) {
+      // If PARQUET_OUTPUT_TIMESTAMP_TYPE is not set and PARQUET_TIMESTAMP_AS_INT96 is set,
+      // respect PARQUET_TIMESTAMP_AS_INT96 and use INT96.
+      ParquetOutputTimestampType.INT96
     } else {
+      // Otherwise, PARQUET_OUTPUT_TIMESTAMP_TYPE has higher priority.
       ParquetOutputTimestampType.withName(getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE))
     }
   }
 
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
+
+  def isParquetTimestampAsINT96: Boolean = getConf(PARQUET_TIMESTAMP_AS_INT96)
 
   def parquetRecordFilterEnabled: Boolean = getConf(PARQUET_RECORD_FILTER_ENABLED)
 

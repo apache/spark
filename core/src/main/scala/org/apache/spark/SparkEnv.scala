@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.io.File
+import java.io.{DataOutputStream, File, IOException}
 import java.net.Socket
 import java.util.Locale
 
@@ -27,6 +27,7 @@ import scala.util.Properties
 import com.google.common.collect.MapMaker
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.api.conda.CondaEnvironment.CondaSetupInstructions
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.internal.Logging
@@ -71,7 +72,11 @@ class SparkEnv (
     val conf: SparkConf) extends Logging {
 
   private[spark] var isStopped = false
-  private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
+
+  case class PythonWorkerKey(pythonExec: Option[String], envVars: Map[String, String],
+                             condaInstructions: Option[CondaSetupInstructions])
+  private val pythonWorkers = mutable.HashMap[PythonWorkerKey, PythonWorkerFactory]()
+  private var rDaemonChannel: DataOutputStream = _
 
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
@@ -84,6 +89,7 @@ class SparkEnv (
     if (!isStopped) {
       isStopped = true
       pythonWorkers.values.foreach(_.stop())
+      destroyRDaemonChannel()
       mapOutputTracker.stop()
       shuffleManager.stop()
       broadcastManager.stop()
@@ -110,26 +116,58 @@ class SparkEnv (
     }
   }
 
-  private[spark]
-  def createPythonWorker(pythonExec: String, envVars: Map[String, String]): java.net.Socket = {
-    synchronized {
-      val key = (pythonExec, envVars)
-      pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(pythonExec, envVars)).create()
+  private[spark] def setRDaemonChannel(daemonChannel: DataOutputStream) {
+    rDaemonChannel = daemonChannel
+  }
+
+  private[spark] def rDaemonExists(): Boolean = {
+    rDaemonChannel != null
+  }
+
+  private[spark] def destroyRDaemonChannel(): Unit = {
+    if (rDaemonChannel != null) {
+      rDaemonChannel.close()
+      rDaemonChannel = null
+    }
+  }
+
+  private[spark] def createRWorkerFromDaemon(port: Int) {
+    try {
+      rDaemonChannel.writeInt(port)
+      rDaemonChannel.flush()
+    } catch {
+      case e: IOException =>
+        // daemon process died
+        destroyRDaemonChannel()
+        // fail the current task, retry by scheduler
+        throw e
     }
   }
 
   private[spark]
-  def destroyPythonWorker(pythonExec: String, envVars: Map[String, String], worker: Socket) {
+  def createPythonWorker(pythonExec: Option[String], envVars: Map[String, String],
+                         condaInstructions: Option[CondaSetupInstructions]): java.net.Socket = {
     synchronized {
-      val key = (pythonExec, envVars)
+      val key = PythonWorkerKey(pythonExec, envVars, condaInstructions)
+      pythonWorkers.getOrElseUpdate(key,
+        new PythonWorkerFactory(pythonExec, envVars, condaInstructions)).create()
+    }
+  }
+
+  private[spark]
+  def destroyPythonWorker(pythonExec: Option[String], envVars: Map[String, String],
+                          condaInstructions: Option[CondaSetupInstructions], worker: Socket) {
+    synchronized {
+      val key = PythonWorkerKey(pythonExec, envVars, condaInstructions)
       pythonWorkers.get(key).foreach(_.stopWorker(worker))
     }
   }
 
   private[spark]
-  def releasePythonWorker(pythonExec: String, envVars: Map[String, String], worker: Socket) {
+  def releasePythonWorker(pythonExec: Option[String], envVars: Map[String, String],
+                          condaInstructions: Option[CondaSetupInstructions], worker: Socket) {
     synchronized {
-      val key = (pythonExec, envVars)
+      val key = PythonWorkerKey(pythonExec, envVars, condaInstructions)
       pythonWorkers.get(key).foreach(_.releaseWorker(worker))
     }
   }

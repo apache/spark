@@ -25,10 +25,6 @@ pushd "$FWDIR" > /dev/null
 
 . "$FWDIR/find-r.sh"
 
-# Install the package (this is required for code in vignettes to run when building it later)
-# Build the latest docs, but not vignettes, which is built with the package next
-. "$FWDIR/install-dev.sh"
-
 # Build source package with vignettes
 SPARK_HOME="$(cd "${FWDIR}"/..; pwd)"
 . "${SPARK_HOME}/bin/load-spark-env.sh"

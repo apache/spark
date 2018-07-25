@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import scala.language.existentials
 
+import org.apache.spark.api.conda.CondaEnvironment.CondaSetupInstructions
 import org.apache.spark.api.java.function.MapFunction
 import org.apache.spark.api.r._
 import org.apache.spark.broadcast.Broadcast
@@ -383,6 +384,11 @@ case class FlatMapGroupsInRExec(
     outputObjAttr: Attribute,
     child: SparkPlan) extends UnaryExecNode with ObjectProducerExec {
 
+  /**
+   * Get the conda instructions eagerly - when the RDD is created.
+   */
+  val condaInstructions: Option[CondaSetupInstructions] = sparkContext.buildCondaInstructions()
+
   override def output: Seq[Attribute] = outputObjAttr :: Nil
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -415,7 +421,7 @@ case class FlatMapGroupsInRExec(
       val runner = new RRunner[Array[Byte]](
         func, SerializationFormats.ROW, serializerForR, packageNames, broadcastVars,
         isDataFrame = true, colNames = inputSchema.fieldNames,
-        mode = RRunnerModes.DATAFRAME_GAPPLY)
+        mode = RRunnerModes.DATAFRAME_GAPPLY, condaSetupInstructions = condaInstructions)
 
       val groupedRBytes = grouped.map { case (key, rowIter) =>
         val deserializedIter = rowIter.map(getValue)

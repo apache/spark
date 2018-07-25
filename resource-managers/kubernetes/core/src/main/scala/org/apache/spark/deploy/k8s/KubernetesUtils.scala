@@ -16,6 +16,16 @@
  */
 package org.apache.spark.deploy.k8s
 
+<<<<<<< HEAD
+import java.io.File
+
+import io.fabric8.kubernetes.api.model.LocalObjectReference
+
+||||||| merged common ancestors
+import io.fabric8.kubernetes.api.model.LocalObjectReference
+
+=======
+>>>>>>> upstream/master
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 
@@ -48,6 +58,17 @@ private[spark] object KubernetesUtils {
     fileUris.map { uri =>
       resolveFileUri(uri)
     }
+  }
+
+  def submitterLocalFiles(fileUris: Iterable[String]): Iterable[String] = {
+    fileUris
+      .map(Utils.resolveURI)
+      .filter { file =>
+        Option(file.getScheme).getOrElse("file") == "file"
+      }
+      .map(_.getPath)
+      .map(new File(_))
+      .map(_.getAbsolutePath)
   }
 
   def resolveFileUri(uri: String): String = {

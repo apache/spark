@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
+import org.apache.parquet.CorruptStatistics
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
@@ -117,9 +118,13 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
         "2006-06-06 06:06:06"
       ).map { s => java.sql.Timestamp.valueOf(s) }
       import testImplicits._
-      // match the column names of the file from impala
-      val df = spark.createDataset(ts).toDF().repartition(1).withColumnRenamed("value", "ts")
-      df.write.parquet(tableDir.getAbsolutePath)
+      withSQLConf(
+        (SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key,
+          SQLConf.ParquetOutputTimestampType.INT96.toString)) {
+        // match the column names of the file from impala
+        val df = spark.createDataset(ts).toDF().repartition(1).withColumnRenamed("value", "ts")
+        df.write.parquet(tableDir.getAbsolutePath)
+      }
       FileUtils.copyFile(new File(impalaPath), new File(tableDir, "part-00001.parq"))
 
       Seq(false, true).foreach { int96TimestampConversion =>
@@ -184,7 +189,11 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
                 // when the data is read back as mentioned above, b/c int96 is unsigned.  This
                 // assert makes sure this holds even if we change parquet versions (if eg. there
                 // were ever statistics even on unsigned columns).
-                assert(!columnStats.hasNonNullValue)
+
+                // Note: This is not true in palantir/parquet-mr and statistics are always returned
+                // and they are always unsigned.
+                assert(oneFooter.getFileMetaData.getCreatedBy.contains("impala") ^
+                  columnStats.hasNonNullValue)
               }
 
               // These queries should return the entire dataset with the conversion applied,

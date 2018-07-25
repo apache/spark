@@ -4,8 +4,8 @@ title: Accessing OpenStack Swift from Spark
 ---
 
 Spark's support for Hadoop InputFormat allows it to process data in OpenStack Swift using the
-same URI formats as in Hadoop. You can specify a path in Swift as input through a 
-URI of the form <code>swift://container.PROVIDER/path</code>. You will also need to set your 
+same URI formats as in Hadoop. You can specify a path in Swift as input through a
+URI of the form <code>swift://container.PROVIDER/path</code>. You will also need to set your
 Swift security credentials, through <code>core-site.xml</code> or via
 <code>SparkContext.hadoopConfiguration</code>.
 The current Swift driver requires Swift to use the Keystone authentication method, or
@@ -29,7 +29,7 @@ For example, for Maven support, add the following to the <code>pom.xml</code> fi
   ...
   <dependency>
     <groupId>org.apache.spark</groupId>
-    <artifactId>hadoop-cloud_2.11</artifactId>
+    <artifactId>spark-hadoop-cloud_2.11</artifactId>
     <version>${spark.version}</version>
   </dependency>
   ...
@@ -130,7 +130,7 @@ defined for tenant <code>test</code>. Then <code>core-site.xml</code> should inc
 
 Notice that
 <code>fs.swift.service.PROVIDER.tenant</code>,
-<code>fs.swift.service.PROVIDER.username</code>, 
+<code>fs.swift.service.PROVIDER.username</code>,
 <code>fs.swift.service.PROVIDER.password</code> contains sensitive information and keeping them in
 <code>core-site.xml</code> is not always a good approach.
 We suggest to keep those parameters in <code>core-site.xml</code> for testing purposes when running Spark

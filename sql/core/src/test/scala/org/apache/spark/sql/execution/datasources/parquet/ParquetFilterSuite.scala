@@ -21,9 +21,18 @@ import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
+<<<<<<< HEAD
+import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
+import org.apache.parquet.filter2.predicate.FilterApi.{and, gt, lt}
+||||||| merged common ancestors
+import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
+import org.apache.parquet.filter2.predicate.FilterApi._
+=======
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
+>>>>>>> upstream/master
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
+import org.apache.parquet.hadoop.ParquetInputFormat
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -57,10 +66,19 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
+<<<<<<< HEAD
+  import ParquetColumns._
+
+  private lazy val parquetFilters = new ParquetFilters(
+    conf.parquetFilterPushDownDate, conf.isParquetINT96AsTimestamp)
+||||||| merged common ancestors
+  private lazy val parquetFilters = new ParquetFilters(conf.parquetFilterPushDownDate)
+=======
   private lazy val parquetFilters =
     new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
       conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
       conf.parquetFilterPushDownInFilterThreshold)
+>>>>>>> upstream/master
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -87,9 +105,14 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     withSQLConf(
       SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
       SQLConf.PARQUET_FILTER_PUSHDOWN_DATE_ENABLED.key -> "true",
+<<<<<<< HEAD
+      ParquetInputFormat.RECORD_FILTERING_ENABLED -> "true",
+||||||| merged common ancestors
+=======
       SQLConf.PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED.key -> "true",
       SQLConf.PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED.key -> "true",
       SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED.key -> "true",
+>>>>>>> upstream/master
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         val query = df
           .select(output.map(e => Column(e)): _*)
@@ -713,19 +736,19 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   // The unsafe row RecordReader does not support row by row filtering so run it with it disabled.
   test("SPARK-11661 Still pushdown filters returned by unhandledFilters") {
     import testImplicits._
-    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-        withTempPath { dir =>
-          val path = s"${dir.getCanonicalPath}/part=1"
-          (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
-          val df = spark.read.parquet(path).filter("a = 2")
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
+      ParquetInputFormat.RECORD_FILTERING_ENABLED -> "true") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/part=1"
+        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
+        val df = spark.read.parquet(path).filter("a = 2")
 
-          // The result should be single row.
-          // When a filter is pushed to Parquet, Parquet can apply it to every row.
-          // So, we can check the number of rows returned from the Parquet
-          // to make sure our filter pushdown work.
-          assert(stripSparkFilter(df).count == 1)
-        }
+        // The result should be single row.
+        // When a filter is pushed to Parquet, Parquet can apply it to every row.
+        // So, we can check the number of rows returned from the Parquet
+        // to make sure our filter pushdown work.
+        assert(stripSparkFilter(df).count == 1)
       }
     }
   }
@@ -810,22 +833,29 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         val path = s"${dir.getCanonicalPath}/table"
         (1 to 1024).map(i => (101, i)).toDF("a", "b").write.parquet(path)
 
-        Seq(true, false).foreach { enablePushDown =>
-          withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> enablePushDown.toString) {
-            val accu = new NumRowGroupsAcc
-            sparkContext.register(accu)
+        Seq(("true", (x: Integer) => x == 0), ("false", (x: Integer) => x > 0))
+          .foreach { case (push, func) =>
+            withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> push) {
+              val accu = new NumRowGroupsAcc
+              sparkContext.register(accu)
 
+<<<<<<< HEAD
+              val df = spark.read.parquet(path).filter("a < 100")
+              df.foreachPartition(_.foreach(v => accu.add(0)))
+              df.collect
+||||||| merged common ancestors
             val df = spark.read.parquet(path).filter("a < 100")
             df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
+            df.collect
+=======
+            val df = spark.read.parquet(path).filter("a < 100")
+            df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
+>>>>>>> upstream/master
 
-            if (enablePushDown) {
-              assert(accu.value == 0)
-            } else {
-              assert(accu.value > 0)
+              assert(func(accu.value))
+              AccumulatorContext.remove(accu.id)
             }
-            AccumulatorContext.remove(accu.id)
           }
-        }
       }
     }
   }
@@ -853,7 +883,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("SPARK-20364: Disable Parquet predicate pushdown for fields having dots in the names") {
+  test("SPARK-20364: Predicate pushdown for columns with a '.' in them") {
     import testImplicits._
 
     Seq(true, false).foreach { vectorized =>
@@ -862,9 +892,44 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
         withTempPath { path =>
           Seq(Some(1), None).toDF("col.dots").write.parquet(path.getAbsolutePath)
-          val readBack = spark.read.parquet(path.getAbsolutePath).where("`col.dots` IS NOT NULL")
-          assert(readBack.count() == 1)
+          assert(spark.read.parquet(path.getAbsolutePath).where("`col.dots` > 0").count() == 1)
         }
+
+        withTempPath { path =>
+          Seq(Some(1L), None).toDF("col.dots").write.parquet(path.getAbsolutePath)
+          assert(spark.read.parquet(path.getAbsolutePath).where("`col.dots` >= 1L").count() == 1)
+        }
+
+        withTempPath { path =>
+          Seq(Some(1.0F), None).toDF("col.dots").write.parquet(path.getAbsolutePath)
+          assert(spark.read.parquet(path.getAbsolutePath).where("`col.dots` < 2.0").count() == 1)
+        }
+
+        withTempPath { path =>
+          Seq(Some(1.0D), None).toDF("col.dots").write.parquet(path.getAbsolutePath)
+          assert(spark.read.parquet(path.getAbsolutePath).where("`col.dots` <= 1.0D").count() == 1)
+        }
+
+        withTempPath { path =>
+          Seq(true, false).toDF("col.dots").write.parquet(path.getAbsolutePath)
+          assert(spark.read.parquet(path.getAbsolutePath).where("`col.dots` == true").count() == 1)
+        }
+
+        withTempPath { path =>
+          Seq("apple", null).toDF("col.dots").write.parquet(path.getAbsolutePath)
+          assert(
+            spark.read.parquet(path.getAbsolutePath).where("`col.dots` IS NOT NULL").count() == 1)
+        }
+      }
+    }
+
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> false.toString) {
+      withTempPath { path =>
+        Seq("apple", null).toDF("col.dots").write.parquet(path.getAbsolutePath)
+        // This checks record-by-record filtering in Parquet's filter2.
+        val num = stripSparkFilter(
+          spark.read.parquet(path.getAbsolutePath).where("`col.dots` IS NULL")).count()
+        assert(num == 1)
       }
     }
   }

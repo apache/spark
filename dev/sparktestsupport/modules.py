@@ -124,28 +124,28 @@ sql = Module(
 )
 
 
-hive = Module(
-    name="hive",
-    dependencies=[sql],
-    source_file_regexes=[
-        "sql/hive/",
-        "bin/spark-sql",
-    ],
-    build_profile_flags=[
-        "-Phive",
-    ],
-    sbt_test_goals=[
-        "hive/test",
-    ],
-    test_tags=[
-        "org.apache.spark.tags.ExtendedHiveTest"
-    ]
-)
+# hive = Module(
+#     name="hive",
+#     dependencies=[sql],
+#     source_file_regexes=[
+#         "sql/hive/",
+#         "bin/spark-sql",
+#     ],
+#     build_profile_flags=[
+#         "-Phive",
+#     ],
+#     sbt_test_goals=[
+#         "hive/test",
+#     ],
+#     test_tags=[
+#         "org.apache.spark.tags.ExtendedHiveTest"
+#     ]
+# )
 
 
 repl = Module(
     name="repl",
-    dependencies=[hive],
+    dependencies=[],
     source_file_regexes=[
         "repl/",
     ],
@@ -155,20 +155,20 @@ repl = Module(
 )
 
 
-hive_thriftserver = Module(
-    name="hive-thriftserver",
-    dependencies=[hive],
-    source_file_regexes=[
-        "sql/hive-thriftserver",
-        "sbin/start-thriftserver.sh",
-    ],
-    build_profile_flags=[
-        "-Phive-thriftserver",
-    ],
-    sbt_test_goals=[
-        "hive-thriftserver/test",
-    ]
-)
+# hive_thriftserver = Module(
+#     name="hive-thriftserver",
+#     dependencies=[hive],
+#     source_file_regexes=[
+#         "sql/hive-thriftserver",
+#         "sbin/start-thriftserver.sh",
+#     ],
+#     build_profile_flags=[
+#         "-Phive-thriftserver",
+#     ],
+#     sbt_test_goals=[
+#         "hive-thriftserver/test",
+#     ]
+# )
 
 avro = Module(
     name="avro",
@@ -361,7 +361,7 @@ mllib = Module(
 
 examples = Module(
     name="examples",
-    dependencies=[graphx, mllib, streaming, hive],
+    dependencies=[graphx, mllib, streaming],
     source_file_regexes=[
         "examples/",
     ],
@@ -394,7 +394,7 @@ pyspark_core = Module(
 
 pyspark_sql = Module(
     name="pyspark-sql",
-    dependencies=[pyspark_core, hive],
+    dependencies=[pyspark_core],
     source_file_regexes=[
         "python/pyspark/sql"
     ],
@@ -496,7 +496,7 @@ pyspark_ml = Module(
 
 sparkr = Module(
     name="sparkr",
-    dependencies=[hive, mllib],
+    dependencies=[mllib],
     source_file_regexes=[
         "R/",
     ],
@@ -550,9 +550,17 @@ mesos = Module(
 kubernetes = Module(
     name="kubernetes",
     dependencies=[],
-    source_file_regexes=["resource-managers/kubernetes"],
+    source_file_regexes=["resource-managers/kubernetes/core"],
     build_profile_flags=["-Pkubernetes"],
     sbt_test_goals=["kubernetes/test"]
+)
+
+cloud = Module(
+    name="hadoop-cloud",
+    dependencies=[],
+    source_file_regexes=["hadoop-cloud/"],
+    build_profile_flags=["-Phadoop-cloud"],
+    sbt_test_goals=["hadoop-cloud/test"]
 )
 
 # The root module is a dummy module which is used to run all of the tests.

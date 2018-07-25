@@ -21,6 +21,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.mapreduce.Job
+import org.apache.hadoop.mapreduce.lib.input.FileSplit
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -84,6 +85,18 @@ trait FileFormat {
       options: Map[String, String],
       path: Path): Boolean = {
     false
+  }
+
+  /**
+   * Allow a splittable FileFormat to produce a function to split individual files.
+   */
+  def buildSplitter(
+      sparkSession: SparkSession,
+      fileIndex: FileIndex,
+      filters: Seq[Filter],
+      schema: StructType,
+      hadoopConf: Configuration): (FileStatus => Seq[FileSplit]) = {
+    stat => Seq(new FileSplit(stat.getPath, 0, stat.getLen, Array.empty))
   }
 
   /**

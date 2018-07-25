@@ -60,6 +60,9 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
   // `ValueWriter`s for all fields of the schema
   private var rootFieldWriters: Array[ValueWriter] = _
 
+  // Reusable byte array used to write timestamps as Parquet INT96 values
+  private val timestampBuffer = new Array[Byte](12)
+
   // The Parquet `RecordConsumer` to which all `InternalRow`s are written
   private var recordConsumer: RecordConsumer = _
 
@@ -68,9 +71,6 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
 
   // Which parquet timestamp type to use when writing.
   private var outputTimestampType: SQLConf.ParquetOutputTimestampType.Value = _
-
-  // Reusable byte array used to write timestamps as Parquet INT96 values
-  private val timestampBuffer = new Array[Byte](12)
 
   // Reusable byte array used to write decimal values
   private val decimalBuffer = new Array[Byte](minBytesForPrecision(DecimalType.MAX_PRECISION))
@@ -83,7 +83,6 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
       assert(configuration.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key) != null)
       configuration.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key).toBoolean
     }
-
     this.outputTimestampType = {
       val key = SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key
       assert(configuration.get(key) != null)

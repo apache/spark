@@ -25,6 +25,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config.ConfigEntry
+import org.apache.spark.launcher.SparkLauncher
 
 
 private[spark] sealed trait KubernetesRoleSpecificConf
@@ -54,6 +55,7 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     roleSpecificConf: T,
     appResourceNamePrefix: String,
     appId: String,
+    mountLocalFilesSecretName: Option[String],
     roleLabels: Map[String, String],
     roleAnnotations: Map[String, String],
     roleSecretNamesToMountPaths: Map[String, String],
@@ -137,6 +139,26 @@ private[spark] object KubernetesConf {
           sparkConfWithMainAppJar.setIfMissing(MEMORY_OVERHEAD_FACTOR, 0.4)
     }
 
+    val trimmedJars = sparkConfWithMainAppJar.getOption("spark.jars")
+      .map(_.split(","))
+      .getOrElse(Array.empty)
+      .map(_.trim)
+      .filterNot(_.isEmpty)
+
+    if (trimmedJars.nonEmpty) {
+      sparkConfWithMainAppJar.setJars(trimmedJars)
+    }
+
+    val trimmedFiles = sparkConfWithMainAppJar.getOption("spark.files")
+      .map(_.split(","))
+      .getOrElse(Array.empty)
+      .map(_.trim)
+      .filterNot(_.isEmpty)
+
+    if (trimmedFiles.nonEmpty) {
+      sparkConfWithMainAppJar.set("spark.files", trimmedFiles.mkString(","))
+    }
+
     val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_DRIVER_LABEL_PREFIX)
     require(!driverCustomLabels.contains(SPARK_APP_ID_LABEL), "Label with key " +
@@ -173,6 +195,7 @@ private[spark] object KubernetesConf {
       KubernetesDriverSpecificConf(mainAppResource, mainClass, appName, appArgs),
       appResourceNamePrefix,
       appId,
+      Some(s"$appResourceNamePrefix-submitted-local-files"),
       driverLabels,
       driverAnnotations,
       driverSecretNamesToMountPaths,
@@ -219,6 +242,7 @@ private[spark] object KubernetesConf {
       KubernetesExecutorSpecificConf(executorId, driverPod),
       sparkConf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX),
       appId,
+      sparkConf.get(EXECUTOR_SUBMITTED_SMALL_FILES_SECRET),
       executorLabels,
       executorAnnotations,
       executorMountSecrets,

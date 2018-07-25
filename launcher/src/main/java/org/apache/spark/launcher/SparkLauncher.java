@@ -453,7 +453,7 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
   }
 
   @Override
-  SparkLauncher self() {
+  protected SparkLauncher self() {
     return this;
   }
 

@@ -136,6 +136,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       KubernetesDriverSpecificConf(None, MAIN_CLASS, APP_NAME, APP_ARGS),
       KUBERNETES_RESOURCE_PREFIX,
       APP_ID,
+      None,
       Map.empty,
       Map.empty,
       Map.empty,

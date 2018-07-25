@@ -17,13 +17,13 @@
 
 package org.apache.spark.util.kvstore;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
+import com.google.common.base.Preconditions;
 import java.lang.reflect.Array;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import static java.nio.charset.StandardCharsets.UTF_8;
-
-import com.google.common.base.Preconditions;
 import org.iq80.leveldb.WriteBatch;
 
 /**

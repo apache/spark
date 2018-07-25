@@ -18,7 +18,10 @@
 context("include R packages")
 
 # JavaSparkContext handle
-sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
+config <- list(spark.conda.channelUrls = "https://repo.continuum.io/pkgs/r/",
+  spark.conda.bootstrapPackages = "r,plyr")
+sparkSession <- sparkR.session(master = sparkRTestMaster,
+  enableHiveSupport = FALSE, sparkConfig = config)
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 # Partitioned data
@@ -27,18 +30,17 @@ rdd <- parallelize(sc, nums, 2L)
 
 test_that("include inside function", {
   # Only run the test if plyr is installed.
-  if ("plyr" %in% rownames(installed.packages())) {
-    suppressPackageStartupMessages(library(plyr))
-    generateData <- function(x) {
-      suppressPackageStartupMessages(library(plyr))
-      attach(airquality)
-      result <- transform(Ozone, logOzone = log(Ozone))
-      result
-    }
 
-    data <- lapplyPartition(rdd, generateData)
-    actual <- collectRDD(data)
+  suppressPackageStartupMessages(library(plyr))
+  generateData <- function(x) {
+    suppressPackageStartupMessages(library(plyr))
+    attach(airquality)
+    result <- transform(Ozone, logOzone = log(Ozone))
+    result
   }
+
+  data <- lapplyPartition(rdd, generateData)
+  actual <- collectRDD(data)
 })
 
 test_that("use include package", {

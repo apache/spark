@@ -254,6 +254,43 @@ package object config {
     .stringConf
     .createOptional
 
+  private[spark] val CONDA_BOOTSTRAP_PACKAGES = ConfigBuilder("spark.conda.bootstrapPackages")
+    .doc("The packages that will be added to the conda environment. "
+      + "Only relevant when main class is CondaRunner.")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val CONDA_CHANNEL_URLS = ConfigBuilder("spark.conda.channelUrls")
+    .doc("The URLs the Conda channels to use when resolving the conda packages. "
+      + "Only relevant when main class is CondaRunner.")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val CONDA_BINARY_PATH = ConfigBuilder("spark.conda.binaryPath")
+    .doc("The location of the conda binary. Only relevant when main class is CondaRunner.")
+    .stringConf
+    .createOptional
+
+  private[spark] val CONDA_VERBOSITY = ConfigBuilder("spark.conda.verbosity")
+    .doc("How many times to apply -v to conda. A number between 0 and 3, with 0 being default.")
+    .intConf
+    .createWithDefault(0)
+
+  private[spark] val CONDA_GLOBAL_PACKAGE_DIRS = ConfigBuilder("spark.conda.packageDirs")
+    .doc("Custom pkgs_dirs that should be prepended to the default set of pkgs_dirs that comes " +
+      "with conda")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val CONDA_EXTRA_ARGUMENTS = ConfigBuilder("spark.conda.extraArgs")
+    .doc("Custom conda arguments to add when running conda")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
   // To limit how many applications are shown in the History Server summary ui
   private[spark] val HISTORY_UI_MAX_APPS =
     ConfigBuilder("spark.history.ui.maxApplications").intConf.createWithDefault(Integer.MAX_VALUE)

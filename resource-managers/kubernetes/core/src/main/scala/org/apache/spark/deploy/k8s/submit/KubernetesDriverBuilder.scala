@@ -16,9 +16,20 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
+<<<<<<< HEAD
+import java.io.File
+
+import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.features._
+||||||| merged common ancestors
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf}
+import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, KubernetesFeatureConfigStep, LocalDirsFeatureStep, MountSecretsFeatureStep}
+=======
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf}
 import org.apache.spark.deploy.k8s.features._
+>>>>>>> upstream/master
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
+import org.apache.spark.util.Utils
 
 private[spark] class KubernetesDriverBuilder(
     provideBasicStep: (KubernetesConf[KubernetesDriverSpecificConf]) => BasicDriverFeatureStep =
@@ -33,21 +44,42 @@ private[spark] class KubernetesDriverBuilder(
       new MountSecretsFeatureStep(_),
     provideEnvSecretsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => EnvSecretsFeatureStep) =
+<<<<<<< HEAD
+      new EnvSecretsFeatureStep(_),
+    provideLocalDirsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+      => LocalDirsFeatureStep) =
+||||||| merged common ancestors
+    new EnvSecretsFeatureStep(_),
+    provideLocalDirsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+      => LocalDirsFeatureStep) =
+=======
       new EnvSecretsFeatureStep(_),
     provideLocalDirsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf])
       => LocalDirsFeatureStep =
+>>>>>>> upstream/master
       new LocalDirsFeatureStep(_),
+<<<<<<< HEAD
+    provideMountLocalFilesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+      => MountLocalFilesFeatureStep) =
+      new MountLocalFilesFeatureStep(_),
+    provideJavaStep: (KubernetesConf[KubernetesDriverSpecificConf] => JavaDriverFeatureStep) =
+||||||| merged common ancestors
+    provideJavaStep: (
+      KubernetesConf[KubernetesDriverSpecificConf]
+        => JavaDriverFeatureStep) =
+=======
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
       new MountVolumesFeatureStep(_),
     provideJavaStep: (
       KubernetesConf[KubernetesDriverSpecificConf]
         => JavaDriverFeatureStep) =
+>>>>>>> upstream/master
       new JavaDriverFeatureStep(_),
-    providePythonStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
-      => PythonDriverFeatureStep) =
+    providePythonStep: (KubernetesConf[KubernetesDriverSpecificConf] => PythonDriverFeatureStep) =
       new PythonDriverFeatureStep(_)) {
+
+  import KubernetesDriverBuilder._
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesDriverSpec = {
@@ -71,11 +103,45 @@ private[spark] class KubernetesDriverBuilder(
         case JavaMainAppResource(_) =>
           provideJavaStep(kubernetesConf)
         case PythonMainAppResource(_) =>
+<<<<<<< HEAD
           providePythonStep(kubernetesConf)}
       .getOrElse(provideJavaStep(kubernetesConf))
 
+    val localFiles = KubernetesUtils.submitterLocalFiles(kubernetesConf.sparkFiles)
+      .map(new File(_))
+    require(localFiles.forall(_.isFile), s"All submitted local files must be present and not" +
+      s" directories, Got got: ${localFiles.map(_.getAbsolutePath).mkString(",")}")
+
+    val totalFileSize = localFiles.map(_.length()).sum
+    val totalSizeBytesString = Utils.bytesToString(totalFileSize)
+    require(totalFileSize < MAX_SECRET_BUNDLE_SIZE_BYTES,
+      s"Total size of all files submitted must be less than $MAX_SECRET_BUNDLE_SIZE_BYTES_STRING." +
+        s" Total size for files ended up being $totalSizeBytesString")
+    val providedLocalFiles = if (localFiles.nonEmpty) {
+      Some(provideMountLocalFilesStep(kubernetesConf))
+    } else None
+||||||| merged common ancestors
+          providePythonStep(kubernetesConf)}.getOrElse(provideJavaStep(kubernetesConf))
+=======
+          providePythonStep(kubernetesConf)}
+      .getOrElse(provideJavaStep(kubernetesConf))
+>>>>>>> upstream/master
+
+<<<<<<< HEAD
+    val allFeatures: Seq[KubernetesFeatureConfigStep] =
+      (baseFeatures :+ bindingsStep) ++
+        maybeRoleSecretNamesStep.toSeq ++
+        maybeProvideSecretsStep.toSeq ++
+        providedLocalFiles.toSeq
+||||||| merged common ancestors
+    val allFeatures: Seq[KubernetesFeatureConfigStep] =
+      (baseFeatures :+ bindingsStep) ++
+        maybeRoleSecretNamesStep.toSeq ++
+        maybeProvideSecretsStep.toSeq
+=======
     val allFeatures = (baseFeatures :+ bindingsStep) ++
       secretFeature ++ envSecretFeature ++ volumesFeature
+>>>>>>> upstream/master
 
     var spec = KubernetesDriverSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
     for (feature <- allFeatures) {
@@ -89,4 +155,10 @@ private[spark] class KubernetesDriverBuilder(
     }
     spec
   }
+}
+
+private object KubernetesDriverBuilder {
+  val MAX_SECRET_BUNDLE_SIZE_BYTES = 20480
+  val MAX_SECRET_BUNDLE_SIZE_BYTES_STRING =
+    Utils.bytesToString(MAX_SECRET_BUNDLE_SIZE_BYTES)
 }

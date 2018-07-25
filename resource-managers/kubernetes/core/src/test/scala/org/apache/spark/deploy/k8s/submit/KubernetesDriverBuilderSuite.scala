@@ -16,11 +16,25 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
+import java.io.File
+
+import com.google.common.base.Charsets
+import com.google.common.io.Files
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
+<<<<<<< HEAD
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf}
+import org.apache.spark.deploy.k8s.features._
+||||||| merged common ancestors
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf}
+import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep}
+=======
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep}
+>>>>>>> upstream/master
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
+import org.apache.spark.util.Utils
 
 class KubernetesDriverBuilderSuite extends SparkFunSuite {
 
@@ -29,6 +43,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val SERVICE_STEP_TYPE = "service"
   private val LOCAL_DIRS_STEP_TYPE = "local-dirs"
   private val SECRETS_STEP_TYPE = "mount-secrets"
+  private val MOUNT_LOCAL_FILES_STEP_TYPE = "mount-local-files"
   private val JAVA_STEP_TYPE = "java-bindings"
   private val PYSPARK_STEP_TYPE = "pyspark-bindings"
   private val ENV_SECRETS_STEP_TYPE = "env-secrets"
@@ -48,6 +63,9 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
 
   private val secretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     SECRETS_STEP_TYPE, classOf[MountSecretsFeatureStep])
+
+  private val mountLocalFilesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    MOUNT_LOCAL_FILES_STEP_TYPE, classOf[MountLocalFilesFeatureStep])
 
   private val javaStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     JAVA_STEP_TYPE, classOf[JavaDriverFeatureStep])
@@ -69,7 +87,12 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       _ => secretsStep,
       _ => envSecretsStep,
       _ => localDirsStep,
+<<<<<<< HEAD
+      _ => mountLocalFilesStep,
+||||||| merged common ancestors
+=======
       _ => mountVolumesStep,
+>>>>>>> upstream/master
       _ => javaStep,
       _ => pythonStep)
 
@@ -83,6 +106,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
         Seq.empty),
       "prefix",
       "appId",
+      Some("secret"),
       Map.empty,
       Map.empty,
       Map.empty,
@@ -92,6 +116,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
+      Map.empty,
       BASIC_STEP_TYPE,
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
@@ -109,6 +134,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
         Seq.empty),
       "prefix",
       "appId",
+      Some("secret"),
       Map.empty,
       Map.empty,
       Map("secret" -> "secretMountPath"),
@@ -118,6 +144,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
+      Map.empty,
       BASIC_STEP_TYPE,
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
@@ -137,6 +164,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
         Seq.empty),
       "prefix",
       "appId",
+      None,
       Map.empty,
       Map.empty,
       Map.empty,
@@ -146,6 +174,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
+      Map.empty,
       BASIC_STEP_TYPE,
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
@@ -163,6 +192,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
         Seq.empty),
       "prefix",
       "appId",
+      None,
       Map.empty,
       Map.empty,
       Map.empty,
@@ -172,6 +202,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
+      Map.empty,
       BASIC_STEP_TYPE,
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
@@ -179,6 +210,51 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       PYSPARK_STEP_TYPE)
   }
 
+<<<<<<< HEAD
+  test("Apply mounting small local files when present..") {
+    val tempDir = Utils.createTempDir()
+    val tempFile1 = new File(tempDir, "file1.txt")
+    Files.write("a", tempFile1, Charsets.UTF_8)
+    val tempFile2 = new File(tempDir, "file2.txt")
+    Files.write("b", tempFile2, Charsets.UTF_8)
+    val allFiles = Seq(
+      tempFile1.getAbsolutePath,
+      s"file://${tempFile2.getAbsolutePath}",
+      "https://localhost:9000/file3.txt")
+    val conf = KubernetesConf(
+      new SparkConf(false),
+      KubernetesDriverSpecificConf(
+        None,
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      Some("secret"),
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      allFiles)
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf),
+      Map.empty,
+      BASIC_STEP_TYPE,
+      CREDENTIALS_STEP_TYPE,
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
+      MOUNT_LOCAL_FILES_STEP_TYPE,
+      JAVA_STEP_TYPE)
+  }
+
+  private def validateStepTypesApplied(
+      resolvedSpec: KubernetesDriverSpec,
+      additionalSystemProperties: Map[String, String],
+      stepTypes: String*)
+||||||| merged common ancestors
+  private def validateStepTypesApplied(resolvedSpec: KubernetesDriverSpec, stepTypes: String*)
+=======
   test("Apply volumes step if mounts are present.") {
     val volumeSpec = KubernetesVolumeSpec(
       "volume",
@@ -213,8 +289,10 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
 
 
   private def validateStepTypesApplied(resolvedSpec: KubernetesDriverSpec, stepTypes: String*)
+>>>>>>> upstream/master
     : Unit = {
-    assert(resolvedSpec.systemProperties.size === stepTypes.size)
+    assert(resolvedSpec.systemProperties.size === stepTypes.size + additionalSystemProperties.size)
+    assert(additionalSystemProperties.toSet.subsetOf(resolvedSpec.systemProperties.toSet))
     stepTypes.foreach { stepType =>
       assert(resolvedSpec.pod.pod.getMetadata.getLabels.get(stepType) === stepType)
       assert(resolvedSpec.driverKubernetesResources.containsSlice(

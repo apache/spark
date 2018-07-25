@@ -1,3 +1,5 @@
+addSbtPlugin("com.typesafe.sbt" % "sbt-git" % "0.8.5")
+
 addSbtPlugin("com.etsy" % "sbt-checkstyle-plugin" % "3.1.1")
 
 // sbt-checkstyle-plugin uses an old version of checkstyle. Match it to Maven's.

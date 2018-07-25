@@ -1,0 +1,506 @@
+version: 2
+
+defaults: &defaults
+  docker:
+    - image: palantirtechnologies/circle-spark-base
+  resource_class: xlarge
+  environment: &defaults-environment
+    TERM: dumb
+    BUILD_SBT_CACHE: "/home/circleci/build-sbt-cache"
+
+
+test-defaults: &test-defaults
+  <<: *defaults
+  environment:
+    <<: *defaults-environment
+    CIRCLE_TEST_REPORTS: /tmp/circle-test-reports
+    TEST_RESULTS_FILE: /tmp/test-results/results.json
+
+
+all-branches-and-tags: &all-branches-and-tags
+  filters:
+    # run on all branches and tags
+    tags:
+      only: /.*/
+
+deployable-branches-and-tags: &deployable-branches-and-tags
+  filters:
+    tags:
+      only: /[0-9]+(?:\.[0-9]+){2,}-palantir\.[0-9]+(?:\.[0-9]+)*/
+    branches:
+      only: master
+
+
+# Step templates
+
+step_templates:
+  restore-build-binaries-cache: &restore-build-binaries-cache
+    restore_cache:
+      key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+  restore-ivy-cache: &restore-ivy-cache
+    restore_cache:
+      keys:
+        - v7-ivy-dependency-cache-{{ .Branch }}-{{ checksum "pom.xml" }}
+        # if cache for exact version of `pom.xml` is not present then load any most recent one
+        - v7-ivy-dependency-cache-{{ .Branch }}-
+        - v7-ivy-dependency-cache-master-{{ checksum "pom.xml" }}
+        - v7-ivy-dependency-cache-master-
+  restore-home-sbt-cache: &restore-home-sbt-cache
+    restore_cache:
+      keys:
+        - v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/$global/update/$global/streams/update_cache_2.10/inputs" }}
+  restore-build-sbt-cache: &restore-build-sbt-cache
+    restore_cache:
+      key: v1-build-sbt-{{ .Branch }}-{{ .Revision }}
+  link-in-build-sbt-cache: &link-in-build-sbt-cache
+    run:
+      name: Hard link cache contents into current build directory
+      command: |
+        if [[ -d "$BUILD_SBT_CACHE" ]]; then
+          rsync --info=stats2,misc1,flist0 -a --link-dest="$BUILD_SBT_CACHE" "$BUILD_SBT_CACHE/" .
+        fi
+  checkout-code: &checkout-code
+    run:
+      name: Checkout code
+      command: |
+        # Copy of circle's checkout command with fix for fetching tags from
+        # https://discuss.circleci.com/t/fetching-circle-tag-doesnt-seem-to-work/19014/2
+
+        # Workaround old docker images with incorrect $HOME
+        # check https://github.com/docker/docker/issues/2968 for details
+        if [ "${HOME}" = "/" ]
+        then
+          export HOME=$(getent passwd $(id -un) | cut -d: -f6)
+        fi
+
+        mkdir -p ~/.ssh
+
+        echo 'github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==
+        bitbucket.org ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAubiN81eDcafrgMeLzaFPsw2kNvEcqTKl/VqLat/MaB33pZy0y3rJZtnqwR2qOOvbwKZYKiEO1O6VqNEBxKvJJelCq0dTXWT5pbO2gDXC6h6QDXCaHo6pOHGPUy+YBaGQRGuSusMEASYiWunYN0vCAI8QaXnWMXNMdFP3jHAJH0eDsoiGnLPBlBp4TNm6rYI74nMzgz3B9IikW4WVK+dc8KZJZWYjAuORU3jc1c/NPskD2ASinf8v3xnfXeukU0sJ5N6m5E8VLjObPEO+mN2t/FZTMZLiFqPWc/ALSqnMnnhwrNi2rbfg/rd/IpL8Le3pSBne8+seeFVBoGqzHM9yXw==
+        ' >> ~/.ssh/known_hosts
+
+        (umask 077; touch ~/.ssh/id_rsa)
+        chmod 0600 ~/.ssh/id_rsa
+        (cat <<EOF > ~/.ssh/id_rsa
+        $CHECKOUT_KEY
+        EOF
+        )
+
+        # use git+ssh instead of https
+        git config --global url."ssh://git@github.com".insteadOf "https://github.com" || true
+
+        if [ -e /home/circleci/project/.git ]
+        then
+          cd /home/circleci/project
+          git remote set-url origin "$CIRCLE_REPOSITORY_URL" || true
+        else
+          mkdir -p /home/circleci/project
+          cd /home/circleci/project
+          git clone "$CIRCLE_REPOSITORY_URL" .
+        fi
+
+        if [ -n "$CIRCLE_TAG" ]
+        then
+          git fetch origin "+refs/tags/${CIRCLE_TAG}:refs/tags/${CIRCLE_TAG}"
+        else
+          git fetch origin "+${CIRCLE_BRANCH}:remotes/origin/${CIRCLE_BRANCH}"
+        fi
+
+
+        if [ -n "$CIRCLE_TAG" ]
+        then
+          git reset --hard "$CIRCLE_SHA1"
+          git checkout -q "$CIRCLE_TAG"
+        elif [ -n "$CIRCLE_BRANCH" ]
+        then
+          git reset --hard "$CIRCLE_SHA1"
+          git checkout -q -B "$CIRCLE_BRANCH"
+        fi
+
+        git reset --hard "$CIRCLE_SHA1"
+
+jobs:
+  build-maven:
+    <<: *defaults
+    # Some part of the maven setup fails if there's no R, so we need to use the R image here
+    docker:
+      - image: palantirtechnologies/circle-spark-r
+    steps:
+      # Saves us from recompiling every time...
+      - restore_cache:
+          keys:
+            - build-maven-{{ .Branch }}-{{ .BuildNum }}
+            - build-maven-{{ .Branch }}-
+            - build-maven-master-
+      - *checkout-code
+      - restore_cache:
+          keys:
+            - maven-dependency-cache-{{ checksum "pom.xml" }}
+            # Fallback - see https://circleci.com/docs/2.0/configuration-reference/#example-2
+            - maven-dependency-cache-
+      # Given the build-maven cache, this is superfluous, but leave it in in case we will want to remove the former
+      - restore_cache:
+          keys:
+            - build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+            - build-binaries-
+      - run: |
+          ./build/mvn -T1C -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Psparkr install \
+            | tee -a "/tmp/mvn-install.log"
+      - store_artifacts:
+          path: /tmp/mvn-install.log
+          destination: mvn-install.log
+      # Get sbt to run trivially, ensures its launcher is downloaded under build/
+      - run: ./build/sbt -h || true
+      - save_cache:
+          key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+          paths:
+            - "build"
+      - save_cache:
+          key: maven-dependency-cache-{{ checksum "pom.xml" }}
+          paths:
+            - "~/.m2"
+      # And finally save the whole project directory
+      - save_cache:
+          key: build-maven-{{ .Branch }}-{{ .BuildNum }}
+          paths: .
+
+  run-style-tests:
+    # depends only on build-maven
+    <<: *test-defaults
+    resource_class: medium
+    steps:
+      - *checkout-code
+      # Need maven dependency cache, otherwise checkstyle tests fail as such:
+      # Failed to execute goal on project spark-assembly_2.11: Could not resolve dependencies for project org.apache.spark:spark-assembly_2.11:pom:2.4.0-SNAPSHOT
+      - restore_cache:
+          key: maven-dependency-cache-{{ checksum "pom.xml" }}
+      - *restore-build-binaries-cache
+      - run: dev/run-style-tests.py | tee /tmp/run-style-tests.log
+      - store_artifacts:
+          path: /tmp/run-style-tests.log
+          destination: run-style-tests.log
+
+  run-build-tests:
+    # depends only on build-maven
+    <<: *test-defaults
+    resource_class: small
+    steps:
+      - *checkout-code
+      - restore_cache:
+          key: build-maven-{{ .Branch }}-{{ .BuildNum }}
+      - restore_cache:
+          key: maven-dependency-cache-{{ checksum "pom.xml" }}
+      - *restore-build-binaries-cache
+      - run: |
+          dev/run-build-tests.py | tee /tmp/run-build-tests.log
+      - store_artifacts:
+          path: /tmp/run-build-tests.log
+          destination: run-build-tests.log
+
+  build-sbt:
+    <<: *defaults
+    steps:
+      # Saves us from recompiling every time...
+      #- restore_cache:
+          #keys:
+            #- v1-build-sbt-{{ .Branch }}-{{ .Revision }}
+            #- v1-build-sbt-{{ .Branch }}-
+            #- v1-build-sbt-master-
+      - *checkout-code
+      - run:
+          name: Hard link cache contents into current build directory
+          command: |
+            if [[ -d "$BUILD_SBT_CACHE" ]]; then
+              rsync --info=stats2,misc1,flist0 -a --link-dest="$BUILD_SBT_CACHE" "$BUILD_SBT_CACHE/" .
+            fi
+      - *restore-ivy-cache
+      - *restore-home-sbt-cache
+      - *restore-build-binaries-cache
+      - run:
+          name: Download all external dependencies for the test configuration (which extends compile) and ensure we update first
+          command: dev/sbt test:externalDependencyClasspath oldDeps/test:externalDependencyClasspath
+      - run: |
+          dev/build-apache-spark.py | tee /tmp/build-apache-spark.log
+      - store_artifacts:
+          path: /tmp/heap.bin
+      - save_cache:
+          key: v7-ivy-dependency-cache-{{ .Branch }}-{{ checksum "pom.xml" }}
+          paths:
+            - "~/.ivy2"
+      - store_artifacts:
+          path: /tmp/build-apache-spark.log
+          destination: build-apache-spark.log
+      - save_cache:
+          key: v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/$global/update/$global/streams/update_cache_2.10/inputs" }}
+          paths: ~/.sbt
+      # Also hard link all the things so we can save it as a cache and restore it in future builds
+      - run:
+          name: "Hard link all the files under ***/target directories to $BUILD_SBT_CACHE, excluding jars"
+          command: >
+            rsync --info=stats2,misc1,flist0 -a --link-dest=$PWD --delete-excluded --prune-empty-dirs
+            --exclude '***/*.jar' --include 'target/***'
+            --include '**/' --exclude '*' . "$BUILD_SBT_CACHE/"
+      - save_cache:
+          key: v1-build-sbt-{{ .Branch }}-{{ .Revision }}
+          paths:
+            - "~/build-sbt-cache"
+      # Also save all the assembly jars directories to the workspace - need them for spark submitting
+      - persist_to_workspace:
+          root: .
+          paths:
+            - 'assembly/target/scala-*/jars'
+            - 'examples/target/scala-*/jars'
+            - 'external/*/target/scala-*/*.jar'
+
+  run-backcompat-tests:
+    # depends on build-sbt
+    <<: *defaults
+    steps:
+      - *checkout-code
+      - attach_workspace:
+          at: .
+      - *restore-ivy-cache
+      - *restore-build-binaries-cache
+      - *restore-home-sbt-cache
+      - run: |
+          dev/run-backcompat-tests.py | tee /tmp/run-backcompat-tests.log
+      - store_artifacts:
+          path: /tmp/run-backcompat-tests.log
+          destination: run-backcompat-tests.log
+
+
+  run-python-tests:
+    # depends on build-sbt, but we only need the assembly jars
+    <<: *defaults
+    docker:
+      - image: palantirtechnologies/circle-spark-python
+    parallelism: 2
+    steps:
+      - *checkout-code
+      # These two steps restore all the target directories except jars
+      # Necessary because of SPARK_PREPEND_CLASSES being used in python tests, and some python tests
+      # accessing classes from the core/test configuration.
+      - *restore-build-sbt-cache
+      - *link-in-build-sbt-cache
+      # ---
+      # Python tests need assembly files build by the `build-sbt` job
+      # e.g. external/kafka-0-8-assembly/target/scala-2.11/spark-streaming-kafka-0-8-assembly-2.4.0-SNAPSHOT.jar
+      - attach_workspace:
+          at: .
+      - run: dev/run-python-tests.py
+      - store_test_results:
+          path: target/test-reports
+      - store_artifacts:
+          path: python/unit-tests.log
+
+
+  run-r-tests:
+    # depends on build-sbt, but we only need the assembly jars
+    <<: *defaults
+    docker:
+      - image: palantirtechnologies/circle-spark-r
+    steps:
+      - *checkout-code
+      - attach_workspace:
+          at: .
+      - run:
+          name: Install SparkR
+          command: R/install-dev.sh
+      - run: dev/run-r-tests.py
+      - store_test_results:
+          path: target/R
+
+
+  run-scala-tests:
+    <<: *test-defaults
+    # project/CirclePlugin.scala does its own test splitting in SBT based on CIRCLE_NODE_INDEX, CIRCLE_NODE_TOTAL
+    parallelism: 9
+    # Spark runs a lot of tests in parallel, we need 16 GB of RAM for this
+    resource_class: xlarge
+    steps:
+      - run:
+          name: Before running tests, ensure we created the CIRCLE_TEST_REPORTS directory
+          command: mkdir -p $CIRCLE_TEST_REPORTS
+      - *checkout-code
+      - attach_workspace:
+         at: .
+      # These two steps restore all the target directories except jars
+      - *restore-build-sbt-cache
+      - *link-in-build-sbt-cache
+      # ---
+      - *restore-ivy-cache
+      - *restore-build-binaries-cache
+      - *restore-home-sbt-cache
+      - restore_cache:
+          keys:
+            - v1-test-results-{{ .Branch }}-{{ .BuildNum }}
+            - v1-test-results-{{ .Branch }}-
+            - v1-test-results-master-
+      - run:
+          name: Merge cached test results with results provided by circle (if any)
+          command: |
+            CIRCLE_TEST_RESULTS_FILE="$CIRCLE_INTERNAL_TASK_DATA/circle-test-results/results.json"
+            # Using -s (file exists and has positive size) as this file might be empty
+            [[ -s "$CIRCLE_TEST_RESULTS_FILE" ]] && circle_exists=1
+            [[ -f "$TEST_RESULTS_FILE" ]] && cached_exists=1
+            if [[ -z "$circle_exists" ]] || [[ -z "$cached_exists" ]]; then
+              # Only one exists, CirclePlugin will try to look for both so we're good.
+              if [[ -n "$circle_exists" ]]; then
+                echo "Copying over circle test results file for caching"
+                mkdir -p "$(dirname "$TEST_RESULTS_FILE")"
+                cp "$CIRCLE_TEST_RESULTS_FILE" "$TEST_RESULTS_FILE"
+              fi
+              exit 0
+            fi
+
+            # Otherwise, combine the two, preferring newer results from circle test results
+            echo "Found both cached and circle test results, merging"
+            if jq -s 'def meld:
+               reduce .[] as $o
+                 ({}; reduce ($o|keys)[] as $key (.; .[$key] += [$o[$key]] ));
+              def grp: map([{key: "\(.source)~\(.classname)", value: .}] | from_entries) | meld;
+              ((.[0].tests | grp) * (.[1].tests | grp)) | map(values) | flatten | {tests: .}' \
+                "$TEST_RESULTS_FILE" \
+                "$CIRCLE_TEST_RESULTS_FILE" \
+                > /tmp/new-test-results.json
+            then
+              # Overwrite the previously cached results with the merged file
+              mv -f /tmp/new-test-results.json "$TEST_RESULTS_FILE"
+            else
+              echo "Failed to merge test results, probably $CIRCLE_TEST_RESULTS_FILE didn't have the expected structure - ignoring it"
+            fi
+      - save_cache:
+          key: v1-test-results-{{ .Branch }}-{{ .BuildNum }}
+          paths:
+            - "/tmp/test-results"
+      - run:
+          name: Run all tests
+          command: ./dev/run-scala-tests.py \
+              | tee -a "/tmp/run-scala-tests.log"
+          no_output_timeout: 15m
+
+      - store_artifacts:
+          path: /tmp/run-scala-tests.log
+          destination: run-scala-tests.log
+      - run:
+          name: Collect unit tests
+          command: mkdir -p /tmp/unit-tests && find . -name unit-tests.log -exec rsync -R {} /tmp/unit-tests/ \;
+          when: always
+      - store_artifacts:
+          path: /tmp/unit-tests
+      - store_artifacts:
+          path: target/tests-by-bucket.json
+          destination: tests-by-bucket.json
+      - store_test_results:
+          # TODO(dsanduleac): can we use $CIRCLE_TEST_RESULTS here?
+          path: /tmp/circle-test-reports
+      - run:
+          name: Collect yarn integration test logs
+          command: |
+            shopt -s nullglob
+            files=(resource-managers/yarn/target/./org.apache.spark.deploy.yarn.*/*-logDir-*)
+            mkdir -p /tmp/yarn-tests
+            if [[ ${#files[@]} != 0 ]]; then
+              rsync -Rrm "${files[@]}" /tmp/yarn-tests/
+            fi
+          when: always
+      - store_artifacts:
+          path: /tmp/yarn-tests
+
+  build-maven-versioned:
+    <<: *defaults
+    # Some part of the maven setup fails if there's no R, so we need to use the R image here
+    docker:
+      - image: palantirtechnologies/circle-spark-r
+    steps:
+      - *checkout-code
+      - restore_cache:
+          key: maven-dependency-cache-{{ checksum "pom.xml" }}
+      - *restore-build-binaries-cache
+      - run:
+          command: dev/set_version_and_package.sh
+      # This is potentially costly but we can't use the workspace as it would conflict with
+      # compilation results from build-sbt
+      - save_cache:
+          key: v1-maven-build-with-version-{{ .Branch }}-{{ .Revision }}
+          paths: .
+      - save_cache:
+          key: v1-maven-dependency-cache-versioned-{{ checksum "pom.xml" }}
+          paths: ~/.m2
+
+  deploy:
+    <<: *defaults
+    # Some part of the maven setup fails if there's no R, so we need to use the R image here
+    docker:
+      - image: palantirtechnologies/circle-spark-r
+    steps:
+      # This cache contains the whole project after version was set and mvn package was called
+      # Restoring first (and instead of checkout) as mvn versions:set mutates real source code...
+      - restore_cache:
+          key: v1-maven-build-with-version-{{ .Branch }}-{{ .Revision }}
+      - restore_cache:
+          key: v1-maven-dependency-cache-versioned-{{ checksum "pom.xml" }}
+      - *restore-build-binaries-cache
+
+      - run: echo "user=$BINTRAY_USERNAME" > .credentials
+      - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
+      - run: echo "realm=Bintray API Realm" >> .credentials
+      - run: echo "host=api.bintray.com" >> .credentials
+      - deploy:
+          command: dev/publish.sh
+      - store_artifacts:
+          path: /tmp/make-dist.log
+          destination: make-dist.log
+      - store_artifacts:
+          path: /tmp/publish_artifacts.log
+          destination: publish_artifacts.log
+
+workflows:
+  version: 2
+  build-test-deploy:
+    jobs:
+      - build-maven:
+          <<: *all-branches-and-tags
+      - run-style-tests:
+          requires:
+            - build-maven
+          <<: *all-branches-and-tags
+      - run-build-tests:
+          requires:
+            - build-maven
+          <<: *all-branches-and-tags
+      - build-sbt:
+          <<: *all-branches-and-tags
+      - run-backcompat-tests:
+          requires:
+            - build-sbt
+          <<: *all-branches-and-tags
+      - run-scala-tests:
+          requires:
+            - build-sbt
+          <<: *all-branches-and-tags
+      - run-python-tests:
+          requires:
+            - build-sbt
+          <<: *all-branches-and-tags
+      - run-r-tests:
+          requires:
+            - build-sbt
+          <<: *all-branches-and-tags
+      - build-maven-versioned:
+          requires:
+            - build-maven
+          <<: *all-branches-and-tags
+      - deploy:
+          requires:
+            - build-maven
+            - build-sbt
+            # Tests
+            - run-style-tests
+            - run-build-tests
+            - run-backcompat-tests
+            - run-scala-tests
+            - run-python-tests
+            - run-r-tests
+            - build-maven-versioned
+          <<: *deployable-branches-and-tags

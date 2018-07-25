@@ -26,26 +26,41 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkUserAppException}
+import org.apache.spark.api.conda.CondaEnvironment
 import org.apache.spark.api.python.PythonUtils
+import org.apache.spark.deploy.Common.Provenance
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.util.{RedirectThread, Utils}
+import org.apache.spark.util.RedirectThread
+import org.apache.spark.util.Utils
 
 /**
  * A main class used to launch Python applications. It executes python as a
  * subprocess and then has it connect back to the JVM to access system properties, etc.
  */
-object PythonRunner {
-  def main(args: Array[String]) {
+object PythonRunner extends CondaRunner with Logging {
+
+  override def run(args: Array[String], maybeConda: Option[CondaEnvironment]): Unit = {
     val pythonFile = args(0)
     val pyFiles = args(1)
     val otherArgs = args.slice(2, args.length)
     val sparkConf = new SparkConf()
     val secret = Utils.createSecret(sparkConf)
-    val pythonExec = sparkConf.get(PYSPARK_DRIVER_PYTHON)
-      .orElse(sparkConf.get(PYSPARK_PYTHON))
-      .orElse(sys.env.get("PYSPARK_DRIVER_PYTHON"))
-      .orElse(sys.env.get("PYSPARK_PYTHON"))
-      .getOrElse("python")
+    val presetPythonExec = Provenance.fromConf(sparkConf, PYSPARK_DRIVER_PYTHON)
+      .orElse(Provenance.fromConf(sparkConf, PYSPARK_PYTHON))
+      .orElse(Provenance.fromEnv("PYSPARK_DRIVER_PYTHON"))
+      .orElse(Provenance.fromEnv("PYSPARK_PYTHON"))
+
+    val pythonExec: String = maybeConda.map { conda =>
+      presetPythonExec.foreach { exec =>
+        sys.error(
+          s"It's forbidden to set the PYSPARK python path when using conda, but found: $exec")
+      }
+      conda.condaEnvDir + "/bin/python"
+    }.orElse(presetPythonExec.map(_.value))
+     .getOrElse("python")
+
+    logInfo(s"Python binary that will be called: $pythonExec")
 
     // Format python file paths before adding them to the PYTHONPATH
     val formattedPythonFile = formatPath(pythonFile)
@@ -86,6 +101,8 @@ object PythonRunner {
     // Launch Python process
     val builder = new ProcessBuilder((Seq(pythonExec, formattedPythonFile) ++ otherArgs).asJava)
     val env = builder.environment()
+    // If there is a CondaEnvironment set up, initialise our process' env from that
+    maybeConda.foreach(_.initializeJavaEnvironment(env))
     env.put("PYTHONPATH", pythonPath)
     // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
     env.put("PYTHONUNBUFFERED", "YES") // value is needed to be set to a non-empty string

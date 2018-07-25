@@ -40,11 +40,13 @@ class FlumeStreamSuite extends SparkFunSuite with BeforeAndAfter with Matchers w
   val conf = new SparkConf().setMaster("local[4]").setAppName("FlumeStreamSuite")
   var ssc: StreamingContext = null
 
-  test("flume input stream") {
+  // ignore palantir/spark
+  ignore("flume input stream") {
     testFlumeStream(testCompression = false)
   }
 
-  test("flume input compressed stream") {
+  // ignore palantir/spark
+  ignore("flume input compressed stream") {
     testFlumeStream(testCompression = true)
   }
 

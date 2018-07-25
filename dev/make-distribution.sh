@@ -35,6 +35,7 @@ DISTDIR="$SPARK_HOME/dist"
 MAKE_TGZ=false
 MAKE_PIP=false
 MAKE_R=false
+CLEAN=false
 NAME=none
 MVN="$SPARK_HOME/build/mvn"
 
@@ -42,7 +43,7 @@ function exit_with_usage {
   echo "make-distribution.sh - tool for making binary distributions of Spark"
   echo ""
   echo "usage:"
-  cl_options="[--name] [--tgz] [--pip] [--r] [--mvn <mvn-command>]"
+  cl_options="[--name] [--tgz] [--pip] [--r] [--clean] [--mvn <mvn-command>]"
   echo "make-distribution.sh $cl_options <maven build options>"
   echo "See Spark's \"Building Spark\" doc for correct Maven options."
   echo ""
@@ -60,6 +61,9 @@ while (( "$#" )); do
       ;;
     --r)
       MAKE_R=true
+      ;;
+    --clean)
+      CLEAN=true
       ;;
     --mvn)
       MVN="$2"
@@ -125,10 +129,7 @@ if [ ! "$(command -v "$MVN")" ] ; then
     exit -1;
 fi
 
-VERSION=$("$MVN" help:evaluate -Dexpression=project.version $@ 2>/dev/null\
-    | grep -v "INFO"\
-    | grep -v "WARNING"\
-    | tail -n 1)
+VERSION=$(git describe --tags --first-parent)
 SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version $@ 2>/dev/null\
     | grep -v "INFO"\
     | grep -v "WARNING"\
@@ -150,9 +151,9 @@ if [ "$NAME" == "none" ]; then
 fi
 
 echo "Spark version is $VERSION"
-
+VERSION_SET=$("$MVN" versions:set -DnewVersion=$VERSION | tail -n 1)
 if [ "$MAKE_TGZ" == "true" ]; then
-  echo "Making spark-$VERSION-bin-$NAME.tgz"
+  echo "Making spark-dist_2.11-$NAME-$VERSION.tgz"
 else
   echo "Making distribution for Spark $VERSION in '$DISTDIR'..."
 fi
@@ -162,16 +163,26 @@ cd "$SPARK_HOME"
 
 export MAVEN_OPTS="${MAVEN_OPTS:--Xmx2g -XX:ReservedCodeCacheSize=512m}"
 
+if [[ $CLEAN == true ]]; then
+  MAYBE_CLEAN="clean"
+else
+  MAYBE_CLEAN=""
+fi
+
 # Store the command as an array because $MVN variable might have spaces in it.
 # Normal quoting tricks don't work.
 # See: http://mywiki.wooledge.org/BashFAQ/050
-BUILD_COMMAND=("$MVN" -T 1C clean package -DskipTests $@)
+if [[ -z "$DONT_BUILD" ]]; then
+  BUILD_COMMAND=("$MVN" -T 1C $MAYBE_CLEAN package -DskipTests $@)
 
-# Actually build the jar
-echo -e "\nBuilding with..."
-echo -e "\$ ${BUILD_COMMAND[@]}\n"
+  # Actually build the jar
+  echo -e "\nBuilding with..."
+  echo -e "\$ ${BUILD_COMMAND[@]}\n"
 
-"${BUILD_COMMAND[@]}"
+  "${BUILD_COMMAND[@]}"
+else
+  echo -e "\nNot running mvn package because \$DONT_BUILD was set"
+fi
 
 # Make directories
 rm -rf "$DISTDIR"
@@ -278,10 +289,10 @@ if [ -d "$SPARK_HOME/R/lib/SparkR" ]; then
 fi
 
 if [ "$MAKE_TGZ" == "true" ]; then
-  TARDIR_NAME=spark-$VERSION-bin-$NAME
+  TARDIR_NAME=spark-dist-$VERSION-$NAME
   TARDIR="$SPARK_HOME/$TARDIR_NAME"
   rm -rf "$TARDIR"
   cp -r "$DISTDIR" "$TARDIR"
-  tar czf "spark-$VERSION-bin-$NAME.tgz" -C "$SPARK_HOME" "$TARDIR_NAME"
+  tar czf "$TARDIR_NAME.tgz" -C "$SPARK_HOME" "$TARDIR_NAME"
   rm -rf "$TARDIR"
 fi

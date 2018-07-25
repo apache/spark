@@ -18,7 +18,7 @@ Users can also download a "Hadoop free" binary and run Spark with any Hadoop ver
 Scala and Java users can include Spark in their projects using its Maven coordinates and in the future Python users can also install Spark from PyPI.
 
 
-If you'd like to build Spark from 
+If you'd like to build Spark from
 source, visit [Building Spark](building-spark.html).
 
 

@@ -121,6 +121,7 @@ def launch_gateway(conf=None):
 
     # Import the classes used by PySpark
     java_import(gateway.jvm, "org.apache.spark.SparkConf")
+    java_import(gateway.jvm, "org.apache.spark.api.conda.*")
     java_import(gateway.jvm, "org.apache.spark.api.java.*")
     java_import(gateway.jvm, "org.apache.spark.api.python.*")
     java_import(gateway.jvm, "org.apache.spark.ml.python.*")
