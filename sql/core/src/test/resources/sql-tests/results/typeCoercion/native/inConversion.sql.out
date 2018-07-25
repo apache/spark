@@ -3043,7 +3043,7 @@ SELECT * FROM t WHERE (cast(1 as float)) IN (SELECT cast(1 as string) FROM t)
 -- !query 344 schema
 struct<1:int>
 -- !query 344 output
-
+1
 
 
 -- !query 345
@@ -3175,7 +3175,7 @@ SELECT * FROM t WHERE (cast(1 as double)) IN (SELECT cast(1 as string) FROM t)
 -- !query 356 schema
 struct<1:int>
 -- !query 356 output
-
+1
 
 
 -- !query 357
@@ -3415,7 +3415,7 @@ SELECT * FROM t WHERE (cast(1 as string)) IN (SELECT cast(1 as float) FROM t)
 -- !query 377 schema
 struct<1:int>
 -- !query 377 output
-
+1
 
 
 -- !query 378
@@ -3423,7 +3423,7 @@ SELECT * FROM t WHERE (cast(1 as string)) IN (SELECT cast(1 as double) FROM t)
 -- !query 378 schema
 struct<1:int>
 -- !query 378 output
-
+1
 
 
 -- !query 379
@@ -3445,35 +3445,17 @@ struct<1:int>
 -- !query 381
 SELECT * FROM t WHERE (cast(1 as string)) IN (SELECT cast('1' as binary) FROM t)
 -- !query 381 schema
-struct<>
+struct<1:int>
 -- !query 381 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS STRING) IN (listquery()))' due to data type mismatch: 
-The data type of one or more elements in the left hand side of an IN subquery
-is not compatible with the data type of the output of the subquery
-Mismatched columns:
-[(CAST(1 AS STRING):string, `CAST(1 AS BINARY)`:binary)]
-Left side:
-[string].
-Right side:
-[binary].;
+1
 
 
 -- !query 382
 SELECT * FROM t WHERE (cast(1 as string)) IN (SELECT cast(1 as boolean) FROM t)
 -- !query 382 schema
-struct<>
+struct<1:int>
 -- !query 382 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS STRING) IN (listquery()))' due to data type mismatch: 
-The data type of one or more elements in the left hand side of an IN subquery
-is not compatible with the data type of the output of the subquery
-Mismatched columns:
-[(CAST(1 AS STRING):string, `CAST(1 AS BOOLEAN)`:boolean)]
-Left side:
-[string].
-Right side:
-[boolean].;
+1
 
 
 -- !query 383
@@ -3614,18 +3596,9 @@ Right side:
 -- !query 392
 SELECT * FROM t WHERE (cast('1' as binary)) IN (SELECT cast(1 as string) FROM t)
 -- !query 392 schema
-struct<>
+struct<1:int>
 -- !query 392 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (listquery()))' due to data type mismatch: 
-The data type of one or more elements in the left hand side of an IN subquery
-is not compatible with the data type of the output of the subquery
-Mismatched columns:
-[(CAST('1' AS BINARY):binary, `CAST(1 AS STRING)`:string)]
-Left side:
-[binary].
-Right side:
-[string].;
+1
 
 
 -- !query 393
@@ -3809,18 +3782,9 @@ Right side:
 -- !query 404
 SELECT * FROM t WHERE (cast(1 as boolean)) IN (SELECT cast(1 as string) FROM t)
 -- !query 404 schema
-struct<>
+struct<1:int>
 -- !query 404 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS BOOLEAN) IN (listquery()))' due to data type mismatch: 
-The data type of one or more elements in the left hand side of an IN subquery
-is not compatible with the data type of the output of the subquery
-Mismatched columns:
-[(CAST(1 AS BOOLEAN):boolean, `CAST(1 AS STRING)`:string)]
-Left side:
-[boolean].
-Right side:
-[string].;
+1
 
 
 -- !query 405
