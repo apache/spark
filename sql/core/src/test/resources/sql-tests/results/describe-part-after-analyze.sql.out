@@ -91,15 +91,9 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=10]	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-08-01/hr=10	                    
-<<<<<<< HEAD
-Partition Statistics	1195 bytes, 3 rows  	                    
-||||||| merged common ancestors
-Partition Statistics	1121 bytes, 3 rows  	                    
-=======
 Created Time [not included in comparison]
 Last Access [not included in comparison]
-Partition Statistics	1121 bytes, 3 rows  	                    
->>>>>>> upstream/master
+Partition Statistics	1195 bytes, 3 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t
@@ -132,15 +126,9 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=10]	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-08-01/hr=10	                    
-<<<<<<< HEAD
-Partition Statistics	1195 bytes, 3 rows  	                    
-||||||| merged common ancestors
-Partition Statistics	1121 bytes, 3 rows  	                    
-=======
 Created Time [not included in comparison]
 Last Access [not included in comparison]
-Partition Statistics	1121 bytes, 3 rows  	                    
->>>>>>> upstream/master
+Partition Statistics	1195 bytes, 3 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t
@@ -165,15 +153,9 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=11]	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-08-01/hr=11	                    
-<<<<<<< HEAD
-Partition Statistics	1208 bytes, 4 rows  	                    
-||||||| merged common ancestors
-Partition Statistics	1098 bytes, 4 rows  	                    
-=======
 Created Time [not included in comparison]
 Last Access [not included in comparison]
-Partition Statistics	1098 bytes, 4 rows  	                    
->>>>>>> upstream/master
+Partition Statistics	1208 bytes, 4 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t
@@ -206,15 +188,9 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=10]	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-08-01/hr=10	                    
-<<<<<<< HEAD
-Partition Statistics	1195 bytes, 3 rows  	                    
-||||||| merged common ancestors
-Partition Statistics	1121 bytes, 3 rows  	                    
-=======
 Created Time [not included in comparison]
 Last Access [not included in comparison]
-Partition Statistics	1121 bytes, 3 rows  	                    
->>>>>>> upstream/master
+Partition Statistics	1195 bytes, 3 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t
@@ -239,15 +215,9 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=11]	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-08-01/hr=11	                    
-<<<<<<< HEAD
-Partition Statistics	1208 bytes, 4 rows  	                    
-||||||| merged common ancestors
-Partition Statistics	1098 bytes, 4 rows  	                    
-=======
 Created Time [not included in comparison]
 Last Access [not included in comparison]
-Partition Statistics	1098 bytes, 4 rows  	                    
->>>>>>> upstream/master
+Partition Statistics	1208 bytes, 4 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t
@@ -272,15 +242,9 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-09-01, hr=5]	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/ds=2017-09-01/hr=5	                    
-<<<<<<< HEAD
-Partition Statistics	1182 bytes, 2 rows  	                    
-||||||| merged common ancestors
-Partition Statistics	1144 bytes, 2 rows  	                    
-=======
 Created Time [not included in comparison]
 Last Access [not included in comparison]
-Partition Statistics	1144 bytes, 2 rows  	                    
->>>>>>> upstream/master
+Partition Statistics	1182 bytes, 2 rows  	                    
                     	                    	                    
 # Storage Information	                    	                    
 Location [not included in comparison]sql/core/spark-warehouse/t

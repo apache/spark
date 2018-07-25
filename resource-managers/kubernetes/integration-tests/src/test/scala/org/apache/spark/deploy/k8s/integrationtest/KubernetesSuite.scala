@@ -31,13 +31,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.integrationtest.TestConfig._
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
-<<<<<<< HEAD
-import org.apache.spark.deploy.k8s.integrationtest.config._
 import org.apache.spark.launcher.SparkLauncher
-||||||| merged common ancestors
-import org.apache.spark.deploy.k8s.integrationtest.config._
-=======
->>>>>>> upstream/master
 
 private[spark] class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
@@ -110,139 +104,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     deleteDriverPod()
   }
 
-<<<<<<< HEAD
-  test("Run SparkPi with no resources") {
-    runSparkPiAndVerifyCompletion()
-  }
-
-  test("Run SparkPi with a very long application name.") {
-    sparkAppConf.set("spark.app.name", "long" * 40)
-    runSparkPiAndVerifyCompletion()
-  }
-
-  test("Use SparkLauncher.NO_RESOURCE") {
-    sparkAppConf.setJars(Seq(containerLocalSparkDistroExamplesJar))
-    runSparkPiAndVerifyCompletion(
-      appResource = SparkLauncher.NO_RESOURCE)
-  }
-
-  test("Run SparkPi with a master URL without a scheme.") {
-    val url = kubernetesTestComponents.kubernetesClient.getMasterUrl
-    val k8sMasterUrl = if (url.getPort < 0) {
-      s"k8s://${url.getHost}"
-    } else {
-      s"k8s://${url.getHost}:${url.getPort}"
-    }
-    sparkAppConf.set("spark.master", k8sMasterUrl)
-    runSparkPiAndVerifyCompletion()
-  }
-
-  test("Run SparkPi with an argument.") {
-    runSparkPiAndVerifyCompletion(appArgs = Array("5"))
-  }
-
-  test("Run SparkPi with custom labels, annotations, and environment variables.") {
-    sparkAppConf
-      .set("spark.kubernetes.driver.label.label1", "label1-value")
-      .set("spark.kubernetes.driver.label.label2", "label2-value")
-      .set("spark.kubernetes.driver.annotation.annotation1", "annotation1-value")
-      .set("spark.kubernetes.driver.annotation.annotation2", "annotation2-value")
-      .set("spark.kubernetes.driverEnv.ENV1", "VALUE1")
-      .set("spark.kubernetes.driverEnv.ENV2", "VALUE2")
-      .set("spark.kubernetes.executor.label.label1", "label1-value")
-      .set("spark.kubernetes.executor.label.label2", "label2-value")
-      .set("spark.kubernetes.executor.annotation.annotation1", "annotation1-value")
-      .set("spark.kubernetes.executor.annotation.annotation2", "annotation2-value")
-      .set("spark.executorEnv.ENV1", "VALUE1")
-      .set("spark.executorEnv.ENV2", "VALUE2")
-
-    runSparkPiAndVerifyCompletion(
-      driverPodChecker = (driverPod: Pod) => {
-        doBasicDriverPodCheck(driverPod)
-        checkCustomSettings(driverPod)
-      },
-      executorPodChecker = (executorPod: Pod) => {
-        doBasicExecutorPodCheck(executorPod)
-        checkCustomSettings(executorPod)
-      })
-  }
-
-  // TODO(ssuchter): Enable the below after debugging
-  // test("Run PageRank using remote data file") {
-  //   sparkAppConf
-  //     .set("spark.kubernetes.mountDependencies.filesDownloadDir",
-  //       CONTAINER_LOCAL_FILE_DOWNLOAD_PATH)
-  //     .set("spark.files", REMOTE_PAGE_RANK_DATA_FILE)
-  //   runSparkPageRankAndVerifyCompletion(
-  //     appArgs = Array(CONTAINER_LOCAL_DOWNLOADED_PAGE_RANK_DATA_FILE))
-  // }
-
-  private def runSparkPiAndVerifyCompletion(
-||||||| merged common ancestors
-  test("Run SparkPi with no resources") {
-    runSparkPiAndVerifyCompletion()
-  }
-
-  test("Run SparkPi with a very long application name.") {
-    sparkAppConf.set("spark.app.name", "long" * 40)
-    runSparkPiAndVerifyCompletion()
-  }
-
-  test("Run SparkPi with a master URL without a scheme.") {
-    val url = kubernetesTestComponents.kubernetesClient.getMasterUrl
-    val k8sMasterUrl = if (url.getPort < 0) {
-      s"k8s://${url.getHost}"
-    } else {
-      s"k8s://${url.getHost}:${url.getPort}"
-    }
-    sparkAppConf.set("spark.master", k8sMasterUrl)
-    runSparkPiAndVerifyCompletion()
-  }
-
-  test("Run SparkPi with an argument.") {
-    runSparkPiAndVerifyCompletion(appArgs = Array("5"))
-  }
-
-  test("Run SparkPi with custom labels, annotations, and environment variables.") {
-    sparkAppConf
-      .set("spark.kubernetes.driver.label.label1", "label1-value")
-      .set("spark.kubernetes.driver.label.label2", "label2-value")
-      .set("spark.kubernetes.driver.annotation.annotation1", "annotation1-value")
-      .set("spark.kubernetes.driver.annotation.annotation2", "annotation2-value")
-      .set("spark.kubernetes.driverEnv.ENV1", "VALUE1")
-      .set("spark.kubernetes.driverEnv.ENV2", "VALUE2")
-      .set("spark.kubernetes.executor.label.label1", "label1-value")
-      .set("spark.kubernetes.executor.label.label2", "label2-value")
-      .set("spark.kubernetes.executor.annotation.annotation1", "annotation1-value")
-      .set("spark.kubernetes.executor.annotation.annotation2", "annotation2-value")
-      .set("spark.executorEnv.ENV1", "VALUE1")
-      .set("spark.executorEnv.ENV2", "VALUE2")
-
-    runSparkPiAndVerifyCompletion(
-      driverPodChecker = (driverPod: Pod) => {
-        doBasicDriverPodCheck(driverPod)
-        checkCustomSettings(driverPod)
-      },
-      executorPodChecker = (executorPod: Pod) => {
-        doBasicExecutorPodCheck(executorPod)
-        checkCustomSettings(executorPod)
-      })
-  }
-
-  // TODO(ssuchter): Enable the below after debugging
-  // test("Run PageRank using remote data file") {
-  //   sparkAppConf
-  //     .set("spark.kubernetes.mountDependencies.filesDownloadDir",
-  //       CONTAINER_LOCAL_FILE_DOWNLOAD_PATH)
-  //     .set("spark.files", REMOTE_PAGE_RANK_DATA_FILE)
-  //   runSparkPageRankAndVerifyCompletion(
-  //     appArgs = Array(CONTAINER_LOCAL_DOWNLOADED_PAGE_RANK_DATA_FILE))
-  // }
-
-  private def runSparkPiAndVerifyCompletion(
-=======
   protected def runSparkPiAndVerifyCompletion(
->>>>>>> upstream/master
       appResource: String = containerLocalSparkDistroExamplesJar,
       driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
       executorPodChecker: Pod => Unit = doBasicExecutorPodCheck,

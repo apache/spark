@@ -21,16 +21,8 @@ import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
-<<<<<<< HEAD
-import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
-import org.apache.parquet.filter2.predicate.FilterApi.{and, gt, lt}
-||||||| merged common ancestors
-import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
-import org.apache.parquet.filter2.predicate.FilterApi._
-=======
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
->>>>>>> upstream/master
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
 import org.apache.parquet.hadoop.ParquetInputFormat
 
@@ -66,19 +58,12 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
-<<<<<<< HEAD
   import ParquetColumns._
 
-  private lazy val parquetFilters = new ParquetFilters(
-    conf.parquetFilterPushDownDate, conf.isParquetINT96AsTimestamp)
-||||||| merged common ancestors
-  private lazy val parquetFilters = new ParquetFilters(conf.parquetFilterPushDownDate)
-=======
   private lazy val parquetFilters =
     new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
       conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
       conf.parquetFilterPushDownInFilterThreshold)
->>>>>>> upstream/master
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -105,14 +90,10 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     withSQLConf(
       SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
       SQLConf.PARQUET_FILTER_PUSHDOWN_DATE_ENABLED.key -> "true",
-<<<<<<< HEAD
       ParquetInputFormat.RECORD_FILTERING_ENABLED -> "true",
-||||||| merged common ancestors
-=======
       SQLConf.PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED.key -> "true",
       SQLConf.PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED.key -> "true",
       SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED.key -> "true",
->>>>>>> upstream/master
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         val query = df
           .select(output.map(e => Column(e)): _*)
@@ -839,18 +820,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
               val accu = new NumRowGroupsAcc
               sparkContext.register(accu)
 
-<<<<<<< HEAD
-              val df = spark.read.parquet(path).filter("a < 100")
-              df.foreachPartition(_.foreach(v => accu.add(0)))
-              df.collect
-||||||| merged common ancestors
             val df = spark.read.parquet(path).filter("a < 100")
             df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
-            df.collect
-=======
-            val df = spark.read.parquet(path).filter("a < 100")
-            df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
->>>>>>> upstream/master
 
               assert(func(accu.value))
               AccumulatorContext.remove(accu.id)

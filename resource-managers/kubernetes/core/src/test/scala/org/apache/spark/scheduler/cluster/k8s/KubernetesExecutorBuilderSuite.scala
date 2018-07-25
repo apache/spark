@@ -19,16 +19,8 @@ package org.apache.spark.scheduler.cluster.k8s
 import io.fabric8.kubernetes.api.model.PodBuilder
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-<<<<<<< HEAD
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
-import org.apache.spark.deploy.k8s.features._
-||||||| merged common ancestors
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
-import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, EnvSecretsFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep}
-=======
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
->>>>>>> upstream/master
 
 class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   private val BASIC_STEP_TYPE = "basic"
@@ -101,7 +93,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       ENV_SECRETS_STEP_TYPE)
   }
 
-<<<<<<< HEAD
   test("Apply mount local files step if secret name is present.") {
     val conf = KubernetesConf(
       new SparkConf(false),
@@ -123,8 +114,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       MOUNT_LOCAL_FILES_STEP_TYPE)
   }
 
-||||||| merged common ancestors
-=======
   test("Apply volumes step if mounts are present.") {
     val volumeSpec = KubernetesVolumeSpec(
       "volume",
@@ -151,7 +140,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       MOUNT_VOLUMES_STEP_TYPE)
   }
 
->>>>>>> upstream/master
   private def validateStepTypesApplied(resolvedPod: SparkPod, stepTypes: String*): Unit = {
     assert(resolvedPod.pod.getMetadata.getLabels.size === stepTypes.size)
     stepTypes.foreach { stepType =>

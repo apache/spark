@@ -104,12 +104,8 @@
     <module>external/kafka-0-10</module>
     <module>external/kafka-0-10-assembly</module>
     <module>external/kafka-0-10-sql</module>
-<<<<<<< HEAD
-    <module>dists/hadoop-palantir</module>
-||||||| merged common ancestors
-=======
     <module>external/avro</module>
->>>>>>> upstream/master
+    <module>dists/hadoop-palantir</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
@@ -135,7 +131,6 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
     <derby.version>10.12.1.1</derby.version>
-<<<<<<< HEAD
     <parquet.version>1.10.1-palantir.1</parquet.version>
     <feign.version>8.18.0</feign.version>
     <okhttp3.version>3.9.1</okhttp3.version>
@@ -144,14 +139,7 @@
     <retrofit.version>2.3.0</retrofit.version>
     <bouncycastle.version>1.58</bouncycastle.version>
     <jetty.version>9.4.8.v20171121</jetty.version>
-    <orc.version>1.4.4</orc.version>
-||||||| merged common ancestors
-    <parquet.version>1.10.0</parquet.version>
-    <orc.version>1.4.4</orc.version>
-=======
-    <parquet.version>1.10.0</parquet.version>
     <orc.version>1.5.2</orc.version>
->>>>>>> upstream/master
     <orc.classifier>nohive</orc.classifier>
     <javaxservlet.version>3.1.0</javaxservlet.version>
     <chill.version>0.8.4</chill.version>
@@ -361,7 +349,6 @@
         <artifactId>chill-java</artifactId>
         <version>${chill.version}</version>
       </dependency>
-<<<<<<< HEAD
 
       <dependency>
         <groupId>com.squareup.okio</groupId>
@@ -438,15 +425,8 @@
         <!-- brought in by jets3t; see SPARK-22634 -->
         <version>${bouncycastle.version}</version>
       </dependency>
-      <!-- This artifact is a shaded version of ASM 5.0.4. The POM that was used to produce this
-           is at https://github.com/apache/geronimo-xbean/tree/xbean-4.4/xbean-asm5-shaded
-||||||| merged common ancestors
-      <!-- This artifact is a shaded version of ASM 5.0.4. The POM that was used to produce this
-           is at https://github.com/apache/geronimo-xbean/tree/xbean-4.4/xbean-asm5-shaded
-=======
       <!-- This artifact is a shaded version of ASM 6.x. The POM that was used to produce this
            is at https://github.com/apache/geronimo-xbean/tree/trunk/xbean-asm6-shaded
->>>>>>> upstream/master
            For context on why we shade ASM, see SPARK-782 and SPARK-6152. -->
       <dependency>
         <groupId>org.apache.xbean</groupId>
