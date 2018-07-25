@@ -102,7 +102,7 @@ class Analyzer(
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
-  def executeAndCheck(plan: LogicalPlan): LogicalPlan = {
+  def executeAndCheck(plan: LogicalPlan): LogicalPlan = AnalysisHelper.markInAnalyzer {
     val analyzed = execute(plan)
     try {
       checkAnalysis(analyzed)
@@ -2378,7 +2378,7 @@ object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   // This is actually called in the beginning of the optimization phase, and as a result
   // is using transformUp rather than resolveOperators. This is also often called in the
   //
-  def apply(plan: LogicalPlan): LogicalPlan = LogicalPlan.allowInvokingTransformsInAnalyzer {
+  def apply(plan: LogicalPlan): LogicalPlan = AnalysisHelper.allowInvokingTransformsInAnalyzer {
     plan transformUp {
       case SubqueryAlias(_, child) => child
     }

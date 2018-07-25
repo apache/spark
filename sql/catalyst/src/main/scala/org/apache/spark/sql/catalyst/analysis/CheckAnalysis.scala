@@ -371,7 +371,7 @@ trait CheckAnalysis extends PredicateHelper {
       case _ =>
     }
 
-    plan.foreach(_.setAnalyzed())
+    plan.setAnalyzed()
   }
 
   /**
@@ -536,7 +536,7 @@ trait CheckAnalysis extends PredicateHelper {
     var foundNonEqualCorrelatedPred: Boolean = false
 
     // Simplify the predicates before validating any unsupported correlation patterns in the plan.
-    LogicalPlan.allowInvokingTransformsInAnalyzer { BooleanSimplification(sub).foreachUp {
+    AnalysisHelper.allowInvokingTransformsInAnalyzer { BooleanSimplification(sub).foreachUp {
       // Whitelist operators allowed in a correlated subquery
       // There are 4 categories:
       // 1. Operators that are allowed anywhere in a correlated subquery, and,
