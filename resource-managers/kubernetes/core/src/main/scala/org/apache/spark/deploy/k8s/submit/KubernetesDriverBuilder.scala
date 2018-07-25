@@ -40,10 +40,6 @@ private[spark] class KubernetesDriverBuilder(
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
       new MountVolumesFeatureStep(_),
-    provideJavaStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
-        => JavaDriverFeatureStep) =
-      new JavaDriverFeatureStep(_),
     providePythonStep: (
       KubernetesConf[KubernetesDriverSpecificConf]
       => PythonDriverFeatureStep) =
@@ -51,7 +47,11 @@ private[spark] class KubernetesDriverBuilder(
     provideRStep: (
       KubernetesConf[KubernetesDriverSpecificConf]
         => RDriverFeatureStep) =
-    new RDriverFeatureStep(_)) {
+    new RDriverFeatureStep(_),
+    provideJavaStep: (
+      KubernetesConf[KubernetesDriverSpecificConf]
+        => JavaDriverFeatureStep) =
+    new JavaDriverFeatureStep(_)) {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesDriverSpec = {

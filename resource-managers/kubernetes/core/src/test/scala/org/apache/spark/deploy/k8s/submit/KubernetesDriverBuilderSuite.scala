@@ -74,9 +74,9 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       _ => envSecretsStep,
       _ => localDirsStep,
       _ => mountVolumesStep,
-      _ => javaStep,
       _ => pythonStep,
-      _ => rStep)
+      _ => rStep,
+      _ => javaStep)
 
   test("Apply fundamental steps all the time.") {
     val conf = KubernetesConf(
