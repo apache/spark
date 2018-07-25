@@ -25,7 +25,7 @@ import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, InsertIntoTable, LogicalPlan, ReplaceTableAsSelect}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
@@ -235,6 +235,51 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
 
     assertNotBucketed("save")
+
+    import DataSourceV2Implicits._
+
+    extraOptions.get("catalog") match {
+      case Some(catalogName) if extraOptions.get(DataSourceOptions.TABLE_KEY).isDefined =>
+        val catalog = df.sparkSession.catalog(catalogName).asTableCatalog
+        val options = extraOptions.toMap
+        val identifier = options.table.get
+        val exists = catalog.tableExists(identifier)
+
+        (exists, mode) match {
+          case (true, SaveMode.ErrorIfExists) =>
+            throw new AnalysisException(s"Table already exists: ${identifier.quotedString}")
+
+          case (true, SaveMode.Overwrite) =>
+            runCommand(df.sparkSession, "save") {
+              ReplaceTableAsSelect(catalog, identifier, Seq.empty, df.logicalPlan, options)
+            }
+
+          case (true, SaveMode.Append) =>
+            val relation = DataSourceV2Relation.create(
+              catalogName, identifier, catalog.loadTable(identifier), options)
+
+            runCommand(df.sparkSession, "save") {
+              AppendData.byName(relation, df.logicalPlan)
+            }
+
+          case (false, SaveMode.Append) =>
+            throw new AnalysisException(s"Table does not exist: ${identifier.quotedString}")
+
+          case (false, SaveMode.ErrorIfExists) |
+               (false, SaveMode.Ignore) |
+               (false, SaveMode.Overwrite) =>
+
+            runCommand(df.sparkSession, "save") {
+              CreateTableAsSelect(catalog, identifier, Seq.empty, df.logicalPlan, options,
+                ignoreIfExists = mode == SaveMode.Ignore)
+            }
+
+          case _ =>
+            return // table exists and mode is ignore
+        }
+
+      case _ =>
+    }
 
     val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {

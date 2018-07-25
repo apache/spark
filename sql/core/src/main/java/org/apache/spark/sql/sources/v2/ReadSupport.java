@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.StructType;
  * provide data reading ability and scan the data from the data source.
  */
 @InterfaceStability.Evolving
-public interface ReadSupport extends DataSourceV2 {
+public interface ReadSupport {
 
   /**
    * Creates a {@link DataSourceReader} to scan the data from this data source.

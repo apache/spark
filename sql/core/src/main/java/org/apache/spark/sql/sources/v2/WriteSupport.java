@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.StructType;
  * provide data writing ability and save the data to the data source.
  */
 @InterfaceStability.Evolving
-public interface WriteSupport extends DataSourceV2 {
+public interface WriteSupport {
 
   /**
    * Creates an optional {@link DataSourceWriter} to save the data to this data source. Data
