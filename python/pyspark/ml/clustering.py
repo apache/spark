@@ -16,6 +16,7 @@
 #
 
 import sys
+import warnings
 
 from pyspark import since, keyword_only
 from pyspark.ml.util import *
@@ -303,7 +304,15 @@ class KMeansSummary(ClusteringSummary):
 
     .. versionadded:: 2.1.0
     """
-    pass
+
+    @property
+    @since("2.4.0")
+    def trainingCost(self):
+        """
+        K-means cost (sum of squared distances to the nearest centroid for all points in the
+        training dataset). This is equivalent to sklearn's inertia.
+        """
+        return self._call_java("trainingCost")
 
 
 class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
@@ -323,7 +332,13 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         Return the K-means cost (sum of squared distances of points to their nearest center)
         for this model on the given data.
+
+        ..note:: Deprecated in 2.4.0. It will be removed in 3.0.0. Use ClusteringEvaluator instead.
+           You can also get the cost on the training dataset in the summary.
         """
+        warnings.warn("Deprecated in 2.4.0. It will be removed in 3.0.0. Use ClusteringEvaluator "
+                      "instead. You can also get the cost on the training dataset in the summary.",
+                      DeprecationWarning)
         return self._call_java("computeCost", dataset)
 
     @property
@@ -379,6 +394,8 @@ class KMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol
     2
     >>> summary.clusterSizes
     [2, 2]
+    >>> summary.trainingCost
+    2.000...
     >>> kmeans_path = temp_path + "/kmeans"
     >>> kmeans.save(kmeans_path)
     >>> kmeans2 = KMeans.load(kmeans_path)
@@ -1345,8 +1362,14 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
 
 if __name__ == "__main__":
     import doctest
+    import numpy
     import pyspark.ml.clustering
     from pyspark.sql import SparkSession
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = pyspark.ml.clustering.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:

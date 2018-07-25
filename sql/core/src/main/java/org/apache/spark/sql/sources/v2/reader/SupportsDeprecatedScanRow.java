@@ -14,25 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.integrationtest
 
-import java.io.File
+package org.apache.spark.sql.sources.v2.reader;
 
-import com.google.common.base.Charsets
-import com.google.common.io.Files
+import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.catalyst.InternalRow;
 
-package object config {
-  def getTestImageTag: String = {
-    val imageTagFileProp = System.getProperty("spark.kubernetes.test.imageTagFile")
-    require(imageTagFileProp != null, "Image tag file must be provided in system properties.")
-    val imageTagFile = new File(imageTagFileProp)
-    require(imageTagFile.isFile, s"No file found for image tag at ${imageTagFile.getAbsolutePath}.")
-    Files.toString(imageTagFile, Charsets.UTF_8).trim
+import java.util.List;
+
+/**
+ * A mix-in interface for {@link DataSourceReader}. Data source readers can implement this
+ * interface to output {@link Row} instead of {@link InternalRow}.
+ * This is an experimental and unstable interface.
+ */
+@InterfaceStability.Unstable
+public interface SupportsDeprecatedScanRow extends DataSourceReader {
+  default List<InputPartition<InternalRow>> planInputPartitions() {
+    throw new IllegalStateException(
+        "planInputPartitions not supported by default within SupportsDeprecatedScanRow");
   }
 
-  def getTestImageRepo: String = {
-    val imageRepo = System.getProperty("spark.kubernetes.test.imageRepo")
-    require(imageRepo != null, "Image repo must be provided in system properties.")
-    imageRepo
-  }
+  List<InputPartition<Row>> planRowInputPartitions();
 }

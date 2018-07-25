@@ -18,12 +18,14 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
-import java.nio.charset.UnsupportedCharsetException
+import java.nio.charset.{Charset, UnsupportedCharsetException}
+import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+import scala.util.Properties
 
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
@@ -59,10 +61,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   private val datesFile = "test-data/dates.csv"
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
   private val valueMalformedFile = "test-data/value-malformed.csv"
-
-  private def testFile(fileName: String): String = {
-    Thread.currentThread().getContextClassLoader.getResource(fileName).toString
-  }
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -516,6 +514,41 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
       checkAnswer(df1, df3)
     }
+  }
+
+  test("SPARK-19018: Save csv with custom charset") {
+
+    // scalastyle:off nonascii
+    val content = "µß áâä ÁÂÄ"
+    // scalastyle:on nonascii
+
+    Seq("iso-8859-1", "utf-8", "utf-16", "utf-32", "windows-1250").foreach { encoding =>
+      withTempPath { path =>
+        val csvDir = new File(path, "csv")
+        Seq(content).toDF().write
+          .option("encoding", encoding)
+          .csv(csvDir.getCanonicalPath)
+
+        csvDir.listFiles().filter(_.getName.endsWith("csv")).foreach({ csvFile =>
+          val readback = Files.readAllBytes(csvFile.toPath)
+          val expected = (content + Properties.lineSeparator).getBytes(Charset.forName(encoding))
+          assert(readback === expected)
+        })
+      }
+    }
+  }
+
+  test("SPARK-19018: error handling for unsupported charsets") {
+    val exception = intercept[SparkException] {
+      withTempPath { path =>
+        val csvDir = new File(path, "csv").getCanonicalPath
+        Seq("a,A,c,A,b,B").toDF().write
+          .option("encoding", "1-9588-osi")
+          .csv(csvDir)
+      }
+    }
+
+    assert(exception.getCause.getMessage.contains("1-9588-osi"))
   }
 
   test("commented lines in CSV data") {
@@ -1576,6 +1609,35 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         val dir = path.getAbsolutePath
         spark.range(10).selectExpr("id % 2 AS p", "id").write.partitionBy("p").csv(dir)
         checkAnswer(spark.read.csv(dir).selectExpr("sum(p)"), Row(5))
+      }
+    }
+  }
+
+  test("SPARK-24676 project required data from parsed data when columnPruning disabled") {
+    withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false") {
+      withTempPath { path =>
+        val dir = path.getAbsolutePath
+        spark.range(10).selectExpr("id % 2 AS p", "id AS c0", "id AS c1").write.partitionBy("p")
+          .option("header", "true").csv(dir)
+        val df1 = spark.read.option("header", true).csv(dir).selectExpr("sum(p)", "count(c0)")
+        checkAnswer(df1, Row(5, 10))
+
+        // empty required column case
+        val df2 = spark.read.option("header", true).csv(dir).selectExpr("sum(p)")
+        checkAnswer(df2, Row(5))
+      }
+
+      // the case where tokens length != parsedSchema length
+      withTempPath { path =>
+        val dir = path.getAbsolutePath
+        Seq("1,2").toDF().write.text(dir)
+        // more tokens
+        val df1 = spark.read.schema("c0 int").format("csv").option("mode", "permissive").load(dir)
+        checkAnswer(df1, Row(1))
+        // less tokens
+        val df2 = spark.read.schema("c0 int, c1 int, c2 int").format("csv")
+          .option("mode", "permissive").load(dir)
+        checkAnswer(df2, Row(1, 2, null))
       }
     }
   }

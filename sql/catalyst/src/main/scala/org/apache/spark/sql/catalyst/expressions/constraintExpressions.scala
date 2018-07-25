@@ -14,9 +14,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.integrationtest
 
-package object constants {
-  val MINIKUBE_TEST_BACKEND = "minikube"
-  val GCE_TEST_BACKEND = "gce"
+package org.apache.spark.sql.catalyst.expressions
+
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
+import org.apache.spark.sql.types.DataType
+
+case class KnowNotNull(child: Expression) extends UnaryExpression {
+  override def nullable: Boolean = false
+  override def dataType: DataType = child.dataType
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    child.genCode(ctx).copy(isNull = FalseLiteral)
+  }
+
+  override def eval(input: InternalRow): Any = {
+    child.eval(input)
+  }
 }

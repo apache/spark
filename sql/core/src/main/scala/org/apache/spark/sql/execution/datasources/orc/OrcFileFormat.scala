@@ -59,6 +59,19 @@ private[sql] object OrcFileFormat {
   def checkFieldNames(names: Seq[String]): Unit = {
     names.foreach(checkFieldName)
   }
+
+  def getQuotedSchemaString(dataType: DataType): String = dataType match {
+    case _: AtomicType => dataType.catalogString
+    case StructType(fields) =>
+      fields.map(f => s"`${f.name}`:${getQuotedSchemaString(f.dataType)}")
+        .mkString("struct<", ",", ">")
+    case ArrayType(elementType, _) =>
+      s"array<${getQuotedSchemaString(elementType)}>"
+    case MapType(keyType, valueType, _) =>
+      s"map<${getQuotedSchemaString(keyType)},${getQuotedSchemaString(valueType)}>"
+    case _ => // UDT and others
+      dataType.catalogString
+  }
 }
 
 /**
@@ -89,13 +102,11 @@ class OrcFileFormat
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    DataSourceUtils.verifyWriteSchema(this, dataSchema)
-
     val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
 
     val conf = job.getConfiguration
 
-    conf.set(MAPRED_OUTPUT_SCHEMA.getAttribute, dataSchema.catalogString)
+    conf.set(MAPRED_OUTPUT_SCHEMA.getAttribute, OrcFileFormat.getQuotedSchemaString(dataSchema))
 
     conf.set(COMPRESS.getAttribute, orcOptions.compressionCodec)
 
@@ -143,8 +154,6 @@ class OrcFileFormat
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    DataSourceUtils.verifyReadSchema(this, dataSchema)
-
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       OrcFilters.createFilter(dataSchema, filters).foreach { f =>
         OrcInputFormat.setSearchArgument(hadoopConf, f, dataSchema.fieldNames)
@@ -227,5 +236,22 @@ class OrcFileFormat
         }
       }
     }
+  }
+
+  override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = dataType match {
+    case _: AtomicType => true
+
+    case st: StructType => st.forall { f => supportDataType(f.dataType, isReadPath) }
+
+    case ArrayType(elementType, _) => supportDataType(elementType, isReadPath)
+
+    case MapType(keyType, valueType, _) =>
+      supportDataType(keyType, isReadPath) && supportDataType(valueType, isReadPath)
+
+    case udt: UserDefinedType[_] => supportDataType(udt.sqlType, isReadPath)
+
+    case _: NullType => isReadPath
+
+    case _ => false
   }
 }
