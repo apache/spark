@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.objects.{LambdaVariable, MapObjects, NewInstance, UnresolvedMapObjects}
+import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -2145,14 +2145,24 @@ class Analyzer(
           val parameterTypes = ScalaReflection.getParameterTypes(func)
           assert(parameterTypes.length == inputs.length)
 
+          // TODO: skip null handling for not-nullable primitive inputs after we can completely
+          // trust the `nullable` information.
+          // (cls, expr) => cls.isPrimitive && expr.nullable
+          val needsNullCheck = (cls: Class[_], expr: Expression) =>
+            cls.isPrimitive && !expr.isInstanceOf[KnowNotNull]
           val inputsNullCheck = parameterTypes.zip(inputs)
-            // TODO: skip null handling for not-nullable primitive inputs after we can completely
-            // trust the `nullable` information.
-            // .filter { case (cls, expr) => cls.isPrimitive && expr.nullable }
-            .filter { case (cls, _) => cls.isPrimitive }
+            .filter { case (cls, expr) => needsNullCheck(cls, expr) }
             .map { case (_, expr) => IsNull(expr) }
             .reduceLeftOption[Expression]((e1, e2) => Or(e1, e2))
-          inputsNullCheck.map(If(_, Literal.create(null, udf.dataType), udf)).getOrElse(udf)
+          // Once we add an `If` check above the udf, it is safe to mark those checked inputs
+          // as not nullable (i.e., wrap them with `KnownNotNull`), because the null-returning
+          // branch of `If` will be called if any of these checked inputs is null. Thus we can
+          // prevent this rule from being applied repeatedly.
+          val newInputs = parameterTypes.zip(inputs).map{ case (cls, expr) =>
+            if (needsNullCheck(cls, expr)) KnowNotNull(expr) else expr }
+          inputsNullCheck
+            .map(If(_, Literal.create(null, udf.dataType), udf.copy(children = newInputs)))
+            .getOrElse(udf)
       }
     }
   }
