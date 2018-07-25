@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.execution.datasources.jdbc.jdbcv2.JDBCOptionsV2
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -62,6 +63,10 @@ object JdbcUtils extends Logging {
       }
       driver.connect(options.url, options.asConnectionProperties)
     }
+  }
+
+  def createConnectionFactory(options: JDBCOptionsV2): () => Connection = {
+    createConnectionFactory(options.jdbcOptionsV1)
   }
 
   /**

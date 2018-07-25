@@ -25,6 +25,7 @@ import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskCon
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.datasources.jdbc.jdbcv2.JDBCOptionsV2
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -70,6 +71,10 @@ object JDBCRDD extends Logging {
     } finally {
       conn.close()
     }
+  }
+
+  def resolveTable(options: JDBCOptionsV2): StructType = {
+    resolveTable(options.jdbcOptionsV1)
   }
 
   /**

@@ -74,7 +74,7 @@ import org.apache.spark.annotation.InterfaceStability;
  * </table>
  */
 @InterfaceStability.Evolving
-public class DataSourceOptions {
+public class DataSourceOptions implements java.io.Serializable {
   private final Map<String, String> keyLowerCasedMap;
 
   private String toLowerCase(String key) {
