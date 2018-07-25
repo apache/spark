@@ -188,7 +188,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           {if (!stageJobIds.isEmpty) {
             <li>
               <strong>Associated Job Ids: </strong>
-              {for(jobId <- stageJobIds) yield {val detailUrl = "%s/jobs/job/?id=%s".format(
+              {for (jobId <- stageJobIds) yield {val detailUrl = "%s/jobs/job/?id=%s".format(
                 UIUtils.prependBaseUri(request, parent.basePath), jobId)
               <a href={s"${detailUrl}"}>{s"${jobId}"} &nbsp;&nbsp;</a>
               }}
