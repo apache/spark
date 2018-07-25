@@ -25,7 +25,7 @@ import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.DataSourceScanExec
@@ -39,7 +39,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends SparkFunSuite
+class JDBCSuite extends QueryTest
   with BeforeAndAfter with PrivateMethodTester with SharedSQLContext {
   import testImplicits._
 
@@ -861,19 +861,51 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("truncate table query by jdbc dialect") {
-    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
-    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val mysql = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
     val db2 = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
     val h2 = JdbcDialects.get(url)
     val derby = JdbcDialects.get("jdbc:derby:db")
+    val oracle = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    val teradata = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
+
     val table = "weblogs"
     val defaultQuery = s"TRUNCATE TABLE $table"
     val postgresQuery = s"TRUNCATE TABLE ONLY $table"
-    assert(MySQL.getTruncateQuery(table) == defaultQuery)
-    assert(Postgres.getTruncateQuery(table) == postgresQuery)
-    assert(db2.getTruncateQuery(table) == defaultQuery)
-    assert(h2.getTruncateQuery(table) == defaultQuery)
-    assert(derby.getTruncateQuery(table) == defaultQuery)
+    val teradataQuery = s"DELETE FROM $table ALL"
+
+    Seq(mysql, db2, h2, derby).foreach{ dialect =>
+      assert(dialect.getTruncateQuery(table, Some(true)) == defaultQuery)
+    }
+
+    assert(postgres.getTruncateQuery(table) == postgresQuery)
+    assert(oracle.getTruncateQuery(table) == defaultQuery)
+    assert(teradata.getTruncateQuery(table) == teradataQuery)
+  }
+
+  test("SPARK-22880: Truncate table with CASCADE by jdbc dialect") {
+    // cascade in a truncate should only be applied for databases that support this,
+    // even if the parameter is passed.
+    val mysql = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val db2 = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
+    val h2 = JdbcDialects.get(url)
+    val derby = JdbcDialects.get("jdbc:derby:db")
+    val oracle = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    val teradata = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
+
+    val table = "weblogs"
+    val defaultQuery = s"TRUNCATE TABLE $table"
+    val postgresQuery = s"TRUNCATE TABLE ONLY $table CASCADE"
+    val oracleQuery = s"TRUNCATE TABLE $table CASCADE"
+    val teradataQuery = s"DELETE FROM $table ALL"
+
+    Seq(mysql, db2, h2, derby).foreach{ dialect =>
+      assert(dialect.getTruncateQuery(table, Some(true)) == defaultQuery)
+    }
+    assert(postgres.getTruncateQuery(table, Some(true)) == postgresQuery)
+    assert(oracle.getTruncateQuery(table, Some(true)) == oracleQuery)
+    assert(teradata.getTruncateQuery(table, Some(true)) == teradataQuery)
   }
 
   test("Test DataFrame.where for Date and Timestamp") {
@@ -1099,7 +1131,7 @@ class JDBCSuite extends SparkFunSuite
   test("SPARK-19318: Connection properties keys should be case-sensitive.") {
     def testJdbcOptions(options: JDBCOptions): Unit = {
       // Spark JDBC data source options are case-insensitive
-      assert(options.table == "t1")
+      assert(options.tableOrQuery == "t1")
       // When we convert it to properties, it should be case-sensitive.
       assert(options.asProperties.size == 3)
       assert(options.asProperties.get("customkey") == null)
@@ -1254,5 +1286,93 @@ class JDBCSuite extends SparkFunSuite
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       testIncorrectJdbcPartitionColumn(testH2Dialect.quoteIdentifier("ThEiD"))
     }
+  }
+
+  test("query JDBC option - negative tests") {
+    val query = "SELECT * FROM  test.people WHERE theid = 1"
+    // load path
+    val e1 = intercept[RuntimeException] {
+      val df = spark.read.format("jdbc")
+        .option("Url", urlWithUserAndPass)
+        .option("query", query)
+        .option("dbtable", "test.people")
+        .load()
+    }.getMessage
+    assert(e1.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
+
+    // jdbc api path
+    val properties = new Properties()
+    properties.setProperty(JDBCOptions.JDBC_QUERY_STRING, query)
+    val e2 = intercept[RuntimeException] {
+      spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
+    }.getMessage
+    assert(e2.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
+
+    val e3 = intercept[RuntimeException] {
+      sql(
+        s"""
+         |CREATE OR REPLACE TEMPORARY VIEW queryOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', query '$query', dbtable 'TEST.PEOPLE',
+         |         user 'testUser', password 'testPass')
+       """.stripMargin.replaceAll("\n", " "))
+      }.getMessage
+    assert(e3.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
+
+    val e4 = intercept[RuntimeException] {
+      val df = spark.read.format("jdbc")
+        .option("Url", urlWithUserAndPass)
+        .option("query", "")
+        .load()
+    }.getMessage
+    assert(e4.contains("Option `query` can not be empty."))
+
+    // Option query and partitioncolumn are not allowed together.
+    val expectedErrorMsg =
+      s"""
+         |Options 'query' and 'partitionColumn' can not be specified together.
+         |Please define the query using `dbtable` option instead and make sure to qualify
+         |the partition columns using the supplied subquery alias to resolve any ambiguity.
+         |Example :
+         |spark.read.format("jdbc")
+         |        .option("dbtable", "(select c1, c2 from t1) as subq")
+         |        .option("partitionColumn", "subq.c1"
+         |        .load()
+     """.stripMargin
+    val e5 = intercept[RuntimeException] {
+      sql(
+        s"""
+           |CREATE OR REPLACE TEMPORARY VIEW queryOption
+           |USING org.apache.spark.sql.jdbc
+           |OPTIONS (url '$url', query '$query', user 'testUser', password 'testPass',
+           |         partitionColumn 'THEID', lowerBound '1', upperBound '4', numPartitions '3')
+       """.stripMargin.replaceAll("\n", " "))
+    }.getMessage
+    assert(e5.contains(expectedErrorMsg))
+  }
+
+  test("query JDBC option") {
+    val query = "SELECT name, theid FROM  test.people WHERE theid = 1"
+    // query option to pass on the query string.
+    val df = spark.read.format("jdbc")
+      .option("Url", urlWithUserAndPass)
+      .option("query", query)
+      .load()
+    checkAnswer(
+      df,
+      Row("fred", 1) :: Nil)
+
+    // query option in the create table path.
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW queryOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', query '$query', user 'testUser', password 'testPass')
+       """.stripMargin.replaceAll("\n", " "))
+
+    checkAnswer(
+      sql("select name, theid from queryOption"),
+      Row("fred", 1) :: Nil)
+
   }
 }

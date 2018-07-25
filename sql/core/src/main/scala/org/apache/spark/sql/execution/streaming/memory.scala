@@ -28,13 +28,13 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader, SupportsScanUnsafeRow}
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
@@ -80,8 +80,7 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Bas
  * available.
  */
 case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
-    extends MemoryStreamBase[A](sqlContext)
-      with MicroBatchReader with SupportsScanUnsafeRow with Logging {
+    extends MemoryStreamBase[A](sqlContext) with MicroBatchReader with Logging {
 
   protected val logicalPlan: LogicalPlan =
     StreamingExecutionRelation(this, attributes)(sqlContext.sparkSession)
@@ -140,7 +139,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     if (endOffset.offset == -1) null else endOffset
   }
 
-  override def planUnsafeInputPartitions(): ju.List[InputPartition[UnsafeRow]] = {
+  override def planInputPartitions(): ju.List[InputPartition[InternalRow]] = {
     synchronized {
       // Compute the internal batch numbers to fetch: [startOrdinal, endOrdinal)
       val startOrdinal = startOffset.offset.toInt + 1
@@ -157,7 +156,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       logDebug(generateDebugString(newBlocks.flatten, startOrdinal, endOrdinal))
 
       newBlocks.map { block =>
-        new MemoryStreamInputPartition(block).asInstanceOf[InputPartition[UnsafeRow]]
+        new MemoryStreamInputPartition(block): InputPartition[InternalRow]
       }.asJava
     }
   }
@@ -203,9 +202,9 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
 
 class MemoryStreamInputPartition(records: Array[UnsafeRow])
-  extends InputPartition[UnsafeRow] {
-  override def createPartitionReader(): InputPartitionReader[UnsafeRow] = {
-    new InputPartitionReader[UnsafeRow] {
+  extends InputPartition[InternalRow] {
+  override def createPartitionReader(): InputPartitionReader[InternalRow] = {
+    new InputPartitionReader[InternalRow] {
       private var currentIndex = -1
 
       override def next(): Boolean = {
@@ -222,72 +221,25 @@ class MemoryStreamInputPartition(records: Array[UnsafeRow])
 }
 
 /** A common trait for MemorySinks with methods used for testing */
-trait MemorySinkBase extends BaseStreamingSink with Logging {
+trait MemorySinkBase extends BaseStreamingSink {
   def allData: Seq[Row]
   def latestBatchData: Seq[Row]
   def dataSinceBatch(sinceBatchId: Long): Seq[Row]
   def latestBatchId: Option[Long]
-
-  /**
-   * Truncates the given rows to return at most maxRows rows.
-   * @param rows The data that may need to be truncated.
-   * @param batchLimit Number of rows to keep in this batch; the rest will be truncated
-   * @param sinkLimit Total number of rows kept in this sink, for logging purposes.
-   * @param batchId The ID of the batch that sent these rows, for logging purposes.
-   * @return Truncated rows.
-   */
-  protected def truncateRowsIfNeeded(
-      rows: Array[Row],
-      batchLimit: Int,
-      sinkLimit: Int,
-      batchId: Long): Array[Row] = {
-    if (rows.length > batchLimit && batchLimit >= 0) {
-      logWarning(s"Truncating batch $batchId to $batchLimit rows because of sink limit $sinkLimit")
-      rows.take(batchLimit)
-    } else {
-      rows
-    }
-  }
-}
-
-/**
- * Companion object to MemorySinkBase.
- */
-object MemorySinkBase {
-  val MAX_MEMORY_SINK_ROWS = "maxRows"
-  val MAX_MEMORY_SINK_ROWS_DEFAULT = -1
-
-  /**
-   * Gets the max number of rows a MemorySink should store. This number is based on the memory
-   * sink row limit option if it is set. If not, we use a large value so that data truncates
-   * rather than causing out of memory errors.
-   * @param options Options for writing from which we get the max rows option
-   * @return The maximum number of rows a memorySink should store.
-   */
-  def getMemorySinkCapacity(options: DataSourceOptions): Int = {
-    val maxRows = options.getInt(MAX_MEMORY_SINK_ROWS, MAX_MEMORY_SINK_ROWS_DEFAULT)
-    if (maxRows >= 0) maxRows else Int.MaxValue - 10
-  }
 }
 
 /**
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
  * tests and does not provide durability.
  */
-class MemorySink(val schema: StructType, outputMode: OutputMode, options: DataSourceOptions)
-  extends Sink with MemorySinkBase with Logging {
+class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink
+  with MemorySinkBase with Logging {
 
   private case class AddedData(batchId: Long, data: Array[Row])
 
   /** An order list of batches that have been written to this [[Sink]]. */
   @GuardedBy("this")
   private val batches = new ArrayBuffer[AddedData]()
-
-  /** The number of rows in this MemorySink. */
-  private var numRows = 0
-
-  /** The capacity in rows of this sink. */
-  val sinkCapacity: Int = MemorySinkBase.getMemorySinkCapacity(options)
 
   /** Returns all rows that are stored in this [[Sink]]. */
   def allData: Seq[Row] = synchronized {
@@ -321,23 +273,14 @@ class MemorySink(val schema: StructType, outputMode: OutputMode, options: DataSo
       logDebug(s"Committing batch $batchId to $this")
       outputMode match {
         case Append | Update =>
-          var rowsToAdd = data.collect()
-          synchronized {
-            rowsToAdd =
-              truncateRowsIfNeeded(rowsToAdd, sinkCapacity - numRows, sinkCapacity, batchId)
-            val rows = AddedData(batchId, rowsToAdd)
-            batches += rows
-            numRows += rowsToAdd.length
-          }
+          val rows = AddedData(batchId, data.collect())
+          synchronized { batches += rows }
 
         case Complete =>
-          var rowsToAdd = data.collect()
+          val rows = AddedData(batchId, data.collect())
           synchronized {
-            rowsToAdd = truncateRowsIfNeeded(rowsToAdd, sinkCapacity, sinkCapacity, batchId)
-            val rows = AddedData(batchId, rowsToAdd)
             batches.clear()
             batches += rows
-            numRows = rowsToAdd.length
           }
 
         case _ =>
@@ -351,7 +294,6 @@ class MemorySink(val schema: StructType, outputMode: OutputMode, options: DataSo
 
   def clear(): Unit = synchronized {
     batches.clear()
-    numRows = 0
   }
 
   override def toString(): String = "MemorySink"

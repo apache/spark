@@ -56,14 +56,21 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   }
 
   private def tryDownloadSpark(version: String, path: String): Unit = {
-    // Try mirrors a few times until one succeeds
-    for (i <- 0 until 3) {
-      // we don't retry on a failure to get mirror url. If we can't get a mirror url,
-      // the test fails (getStringFromUrl will throw an exception)
-      val preferredMirror =
-        getStringFromUrl("https://www.apache.org/dyn/closer.lua?preferred=true")
+    // Try a few mirrors first; fall back to Apache archive
+    val mirrors =
+      (0 until 2).flatMap { _ =>
+        try {
+          Some(getStringFromUrl("https://www.apache.org/dyn/closer.lua?preferred=true"))
+        } catch {
+          // If we can't get a mirror URL, skip it. No retry.
+          case _: Exception => None
+        }
+      }
+    val sites = mirrors.distinct :+ "https://archive.apache.org/dist"
+    logInfo(s"Trying to download Spark $version from $sites")
+    for (site <- sites) {
       val filename = s"spark-$version-bin-hadoop2.7.tgz"
-      val url = s"$preferredMirror/spark/spark-$version/$filename"
+      val url = s"$site/spark/spark-$version/$filename"
       logInfo(s"Downloading Spark $version from $url")
       try {
         getFileFromUrl(url, path, filename)
@@ -83,7 +90,8 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
           Seq("rm", "-rf", targetDir).!
         }
       } catch {
-        case ex: Exception => logWarning(s"Failed to download Spark $version from $url", ex)
+        case ex: Exception =>
+          logWarning(s"Failed to download Spark $version from $url: ${ex.getMessage}")
       }
     }
     fail(s"Unable to download Spark $version")

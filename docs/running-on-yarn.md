@@ -218,9 +218,10 @@ To use a custom metrics.properties for the application master and executors, upd
   <td><code>spark.yarn.dist.forceDownloadSchemes</code></td>
   <td><code>(none)</code></td>
   <td>
-    Comma-separated list of schemes for which files will be downloaded to the local disk prior to
+    Comma-separated list of schemes for which resources will be downloaded to the local disk prior to
     being added to YARN's distributed cache. For use in cases where the YARN service does not
-    support schemes that are supported by Spark, like http, https and ftp.
+    support schemes that are supported by Spark, like http, https and ftp, or jars required to be in the
+    local YARN client's classpath. Wildcard '*' is denoted to download resources for all the schemes.
   </td>
 </tr>
 <tr>
@@ -420,7 +421,14 @@ To use a custom metrics.properties for the application master and executors, upd
   <code>spark.blacklist.application.maxFailedExecutorsPerNode</code>.
   </td>
 </tr>
-
+<tr>
+  <td><code>spark.yarn.metrics.namespace</code></td>
+  <td>(none)</td>
+  <td>
+  The root namespace for AM metrics reporting. 
+  If it is not set then the YARN application ID is used.
+  </td>
+</tr>
 </table>
 
 # Important notes

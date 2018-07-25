@@ -16,10 +16,16 @@
  */
 package org.apache.spark.deploy.k8s
 
+<<<<<<< HEAD
 import java.io.File
 
 import io.fabric8.kubernetes.api.model.LocalObjectReference
 
+||||||| merged common ancestors
+import io.fabric8.kubernetes.api.model.LocalObjectReference
+
+=======
+>>>>>>> upstream/master
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 

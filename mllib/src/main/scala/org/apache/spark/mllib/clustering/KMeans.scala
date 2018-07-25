@@ -235,7 +235,7 @@ class KMeans private (
 
   private[spark] def run(
       data: RDD[Vector],
-      instr: Option[Instrumentation[NewKMeans]]): KMeansModel = {
+      instr: Option[Instrumentation]): KMeansModel = {
 
     if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data is not directly cached, which may hurt performance if its"
@@ -264,7 +264,7 @@ class KMeans private (
    */
   private def runAlgorithm(
       data: RDD[VectorWithNorm],
-      instr: Option[Instrumentation[NewKMeans]]): KMeansModel = {
+      instr: Option[Instrumentation]): KMeansModel = {
 
     val sc = data.sparkContext
 
@@ -348,7 +348,7 @@ class KMeans private (
 
     logInfo(s"The cost is $cost.")
 
-    new KMeansModel(centers.map(_.vector), distanceMeasure)
+    new KMeansModel(centers.map(_.vector), distanceMeasure, cost, iteration)
   }
 
   /**
