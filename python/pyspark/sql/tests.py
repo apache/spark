@@ -5154,6 +5154,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     def test_mixed_udf_and_sql(self):
         import pandas as pd
+        from pyspark.sql import Column
         from pyspark.sql.functions import udf, pandas_udf
 
         df = self.spark.range(0, 1).toDF('v')
@@ -5166,7 +5167,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             return x + 1
 
         def f2(x):
-            assert type(x) == pyspark.sql.Column
+            assert type(x) == Column
             return x + 10
 
         @pandas_udf('int')
