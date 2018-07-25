@@ -183,6 +183,9 @@ class JDBCOptions(
     }
   // An option to execute custom SQL before fetching data from the remote DB
   val sessionInitStatement = parameters.get(JDBC_SESSION_INIT_STATEMENT)
+
+  // An option to allow/disallow pushing down predicate into JDBC data source
+  val pushDownPredicate = parameters.getOrElse(JDBC_PUSHDOWN_PREDICATE, "true").toBoolean
 }
 
 class JdbcOptionsInWrite(
@@ -234,4 +237,5 @@ object JDBCOptions {
   val JDBC_BATCH_INSERT_SIZE = newOption("batchsize")
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
   val JDBC_SESSION_INIT_STATEMENT = newOption("sessionInitStatement")
+  val JDBC_PUSHDOWN_PREDICATE = newOption("pushDownPredicate")
 }
