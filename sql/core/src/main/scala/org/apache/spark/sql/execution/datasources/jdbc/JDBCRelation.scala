@@ -143,7 +143,10 @@ private[sql] object JDBCRelation extends Logging {
       ans += JDBCPartition(whereClause, i)
       i = i + 1
     }
-    ans.toArray
+    val partitions = ans.toArray
+    logInfo(s"Number of partitions: $numPartitions, WHERE clauses of these partitions: " +
+      partitions.map(_.asInstanceOf[JDBCPartition].whereClause).mkString(", "))
+    partitions
   }
 
   // Verify column name and type based on the JDBC resolved schema
