@@ -6,7 +6,7 @@
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.catalog;
+package org.apache.spark.sql.catalog.v2;
 
 import org.apache.spark.sql.catalyst.TableIdentifier;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
@@ -28,7 +28,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-public interface TableCatalog {
+public interface TableCatalog extends CatalogProvider {
   /**
    * Load table metadata by {@link TableIdentifier identifier} from the catalog.
    *
@@ -37,6 +37,20 @@ public interface TableCatalog {
    * @throws NoSuchTableException If the table doesn't exist.
    */
   Table loadTable(TableIdentifier ident) throws NoSuchTableException;
+
+  /**
+   * Test whether a table exists using an {@link TableIdentifier identifier} from the catalog.
+   *
+   * @param ident a table identifier
+   * @return true if the table exists, false otherwise
+   */
+  default boolean tableExists(TableIdentifier ident) {
+    try {
+      return loadTable(ident) != null;
+    } catch (NoSuchTableException e) {
+      return false;
+    }
+  }
 
   /**
    * Create a table in the catalog.
