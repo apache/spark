@@ -20,9 +20,11 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable
 
 import org.apache.spark.sql.{sources, Strategy}
+import org.apache.spark.sql.catalog.v2.TableCatalog
+import org.apache.spark.sql.catalyst.analysis.NamedRelation
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, Repartition}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, Repartition, ReplaceTableAsSelect}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
@@ -30,6 +32,8 @@ import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, SupportsPushDow
 import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReader
 
 object DataSourceV2Strategy extends Strategy {
+
+  import org.apache.spark.sql.sources.v2.DataSourceV2Implicits._
 
   /**
    * Pushes down filters to the data source reader
@@ -81,7 +85,7 @@ object DataSourceV2Strategy extends Strategy {
   // TODO: nested column pruning.
   private def pruneColumns(
       reader: DataSourceReader,
-      relation: DataSourceV2Relation,
+      relation: NamedRelation,
       exprs: Seq[Expression]): Seq[AttributeReference] = {
     reader match {
       case r: SupportsPushDownRequiredColumns =>
@@ -102,10 +106,15 @@ object DataSourceV2Strategy extends Strategy {
     }
   }
 
-
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(project, filters, relation: DataSourceV2Relation) =>
-      val reader = relation.newReader()
+    case PhysicalOperation(project, filters, relation: NamedRelation)
+        if relation.isInstanceOf[DataSourceV2Relation] || relation.isInstanceOf[TableV2Relation] =>
+
+      val (reader, options, sourceName) = relation match {
+        case r: DataSourceV2Relation => (r.newReader(), r.options, r.sourceName)
+        case r: TableV2Relation => (r.newReader(), r.options, r.catalogName)
+      }
+
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
       // `postScanFilters` need to be evaluated after the scan.
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
@@ -113,14 +122,14 @@ object DataSourceV2Strategy extends Strategy {
       val output = pruneColumns(reader, relation, project ++ postScanFilters)
       logInfo(
         s"""
-           |Pushing operators to ${relation.source.getClass}
+           |Pushing operators to $sourceName
            |Pushed Filters: ${pushedFilters.mkString(", ")}
            |Post-Scan Filters: ${postScanFilters.mkString(",")}
            |Output: ${output.mkString(", ")}
          """.stripMargin)
 
       val scan = DataSourceV2ScanExec(
-        output, relation.source, relation.options, pushedFilters, reader)
+        output, sourceName, options, pushedFilters, reader)
 
       val filterCondition = postScanFilters.reduceLeftOption(And)
       val withFilter = filterCondition.map(FilterExec(_, scan)).getOrElse(scan)
@@ -131,13 +140,21 @@ object DataSourceV2Strategy extends Strategy {
     case r: StreamingDataSourceV2Relation =>
       // ensure there is a projection, which will produce unsafe rows required by some operators
       ProjectExec(r.output,
-        DataSourceV2ScanExec(r.output, r.source, r.options, r.pushedFilters, r.reader)) :: Nil
+        DataSourceV2ScanExec(r.output, r.source.name, r.options, r.pushedFilters, r.reader)) :: Nil
 
     case WriteToDataSourceV2(writer, query) =>
       WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
 
-    case AppendData(r: DataSourceV2Relation, query, _) =>
-      WriteToDataSourceV2Exec(r.newWriter(), planLater(query)) :: Nil
+    case AppendData(r: TableV2Relation, query, _) =>
+      AppendDataExec(r.table, r.options, planLater(query)) :: Nil
+
+    case CreateTableAsSelect(catalog, ident, partitioning, query, writeOptions, ignoreIfExists) =>
+      CreateTableAsSelectExec(catalog, ident, partitioning, Map.empty, writeOptions,
+        planLater(query), ignoreIfExists) :: Nil
+
+    case ReplaceTableAsSelect(catalog, ident, partitioning, query, writeOptions) =>
+      ReplaceTableAsSelectExec(catalog, ident, partitioning, Map.empty, writeOptions,
+        planLater(query)) :: Nil
 
     case WriteToContinuousDataSource(writer, query) =>
       WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil

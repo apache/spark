@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.StructType;
  * supports both schema inference and user-specified schema.
  */
 @InterfaceStability.Evolving
-public interface ReadSupportWithSchema extends DataSourceV2 {
+public interface ReadSupportWithSchema {
 
   /**
    * Create a {@link DataSourceReader} to scan the data from this data source.

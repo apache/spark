@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.catalog.v2.TableCatalog
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
@@ -371,6 +373,37 @@ object AppendData {
   def byPosition(table: NamedRelation, query: LogicalPlan): AppendData = {
     new AppendData(table, query, false)
   }
+}
+
+/**
+ * Create a new table from a select query.
+ */
+case class CreateTableAsSelect(
+    catalog: TableCatalog,
+    table: TableIdentifier,
+    partitioning: Seq[Expression],
+    query: LogicalPlan,
+    writeOptions: Map[String, String],
+    ignoreIfExists: Boolean) extends LogicalPlan {
+
+  override def children: Seq[LogicalPlan] = Seq(query)
+  override def output: Seq[Attribute] = Seq.empty
+  override lazy val resolved = true
+}
+
+/**
+ * Replace a table with the results of a select query.
+ */
+case class ReplaceTableAsSelect(
+    catalog: TableCatalog,
+    table: TableIdentifier,
+    partitioning: Seq[Expression],
+    query: LogicalPlan,
+    writeOptions: Map[String, String]) extends LogicalPlan {
+
+  override def children: Seq[LogicalPlan] = Seq(query)
+  override def output: Seq[Attribute] = Seq.empty
+  override lazy val resolved = true
 }
 
 /**

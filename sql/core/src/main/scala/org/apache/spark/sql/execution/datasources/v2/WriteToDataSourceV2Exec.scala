@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
@@ -24,9 +25,11 @@ import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalog.v2.{Table, TableCatalog}
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.MicroBatchExecution
@@ -44,14 +47,92 @@ case class WriteToDataSourceV2(writer: DataSourceWriter, query: LogicalPlan) ext
   override def output: Seq[Attribute] = Nil
 }
 
+case class AppendDataExec(
+    table: Table,
+    writeOptions: Map[String, String],
+    plan: SparkPlan) extends V2TableWriteExec(writeOptions, plan) {
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    appendToTable(table)
+  }
+}
+
+case class CreateTableAsSelectExec(
+    catalog: TableCatalog,
+    ident: TableIdentifier,
+    partitioning: Seq[Expression],
+    properties: Map[String, String],
+    writeOptions: Map[String, String],
+    plan: SparkPlan,
+    ifNotExists: Boolean) extends V2TableWriteExec(writeOptions, plan) {
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    if (catalog.tableExists(ident)) {
+      if (ifNotExists) {
+        return sparkContext.parallelize(Seq.empty, 1)
+      }
+
+      throw new TableAlreadyExistsException(ident.database.getOrElse("null"), ident.table)
+    }
+
+    Utils.tryWithSafeFinally({
+      val table = catalog.createTable(ident, plan.schema, partitioning.asJava, properties.asJava)
+      appendToTable(table)
+    })(finallyBlock = {
+      catalog.dropTable(ident)
+    })
+  }
+}
+
+case class ReplaceTableAsSelectExec(
+    catalog: TableCatalog,
+    ident: TableIdentifier,
+    partitioning: Seq[Expression],
+    properties: Map[String, String],
+    writeOptions: Map[String, String],
+    plan: SparkPlan) extends V2TableWriteExec(writeOptions, plan) {
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    if (!catalog.tableExists(ident)) {
+      throw new NoSuchTableException(ident.database.getOrElse("null"), ident.table)
+    }
+
+    catalog.dropTable(ident)
+
+    Utils.tryWithSafeFinally({
+      val table = catalog.createTable(ident, plan.schema, partitioning.asJava, properties.asJava)
+      appendToTable(table)
+    })(finallyBlock = {
+      catalog.dropTable(ident)
+    })
+  }
+}
+
+case class WriteToDataSourceV2Exec(
+    writer: DataSourceWriter,
+    plan: SparkPlan) extends V2TableWriteExec(Map.empty, plan) {
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    doAppend(writer)
+  }
+}
+
 /**
- * The physical plan for writing data into data source v2.
+ * The base physical plan for writing data into data source v2.
  */
-case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) extends SparkPlan {
+abstract class V2TableWriteExec(
+    options: Map[String, String],
+    query: SparkPlan) extends SparkPlan {
+  import org.apache.spark.sql.sources.v2.DataSourceV2Implicits._
+
   override def children: Seq[SparkPlan] = Seq(query)
   override def output: Seq[Attribute] = Nil
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  protected def appendToTable(table: Table): RDD[InternalRow] = {
+    doAppend(table.createWriter(options, query.schema))
+  }
+
+  protected def doAppend(writer: DataSourceWriter): RDD[InternalRow] = {
     val writeTask = writer match {
       case w: SupportsWriteInternalRow => w.createInternalRowWriterFactory()
       case _ => new InternalRowDataWriterFactory(writer.createWriterFactory(), query.schema)

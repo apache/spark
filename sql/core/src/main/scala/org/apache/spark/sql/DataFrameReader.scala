@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, ReadSupport, ReadSupportWithSchema}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, DataSourceV2Implicits, ReadSupport, ReadSupportWithSchema}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -189,6 +189,21 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "read files of Hive data source directly.")
+    }
+
+    import DataSourceV2Implicits._
+
+    extraOptions.get("catalog") match {
+      case Some(catalogName) if extraOptions.get(DataSourceOptions.TABLE_KEY).isDefined =>
+        val catalog = sparkSession.catalog(catalogName).asTableCatalog
+        val options = extraOptions.toMap
+        val identifier = options.table.get
+
+        return Dataset.ofRows(sparkSession,
+          DataSourceV2Relation.create(
+            catalogName, identifier, catalog.loadTable(identifier), options))
+
+      case _ =>
     }
 
     val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
