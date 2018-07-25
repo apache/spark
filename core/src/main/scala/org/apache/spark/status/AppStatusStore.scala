@@ -94,12 +94,6 @@ private[spark] class AppStatusStore(
       }.toSeq
   }
 
-  def getJobIdsAssociatedWithStage(stageId: Int, stageAttemptId: Int): Seq[Int] = {
-    val stageKey = Array(stageId, stageAttemptId)
-    val jobIds = store.read(classOf[StageDataWrapper], stageKey).jobIds.toSeq
-    jobIds
-  }
-
   def lastStageAttempt(stageId: Int): v1.StageData = {
     val it = store.view(classOf[StageDataWrapper])
       .index("stageId")
@@ -118,10 +112,13 @@ private[spark] class AppStatusStore(
     }
   }
 
-  def stageAttempt(stageId: Int, stageAttemptId: Int, details: Boolean = false): v1.StageData = {
+  def stageAttempt(stageId: Int, stageAttemptId: Int, details: Boolean = false): StageDataWrapper = {
     val stageKey = Array(stageId, stageAttemptId)
-    val stage = store.read(classOf[StageDataWrapper], stageKey).info
-    if (details) stageWithDetails(stage) else stage
+    val stageDataWrapper: StageDataWrapper = store.read(classOf[StageDataWrapper], stageKey)
+    val stage = if (details) stageWithDetails(stageDataWrapper.info) else stageDataWrapper.info
+    val jobIds = stageDataWrapper.jobIds
+    val returnStageDataWrapper: StageDataWrapper = new StageDataWrapper(stage, jobIds, null)
+    returnStageDataWrapper
   }
 
   def taskCount(stageId: Int, stageAttemptId: Int): Long = {
