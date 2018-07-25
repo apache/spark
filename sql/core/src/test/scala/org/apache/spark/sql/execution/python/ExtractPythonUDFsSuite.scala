@@ -90,4 +90,3 @@ class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSQLContext {
   }
 }
 
-

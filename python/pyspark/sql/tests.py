@@ -5055,7 +5055,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         df = self.spark.range(0, 1).toDF('v')
 
-        # Test mixture of multiple UDFs and Pandas UDFs
+        # Test mixture of multiple UDFs and Pandas UDFs.
 
         @udf('int')
         def f1(x):
@@ -5077,8 +5077,27 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             assert type(x) == pd.Series
             return x + 1000
 
-        # Test mixed udfs in a single projection
-        df1 = df \
+        # Test single expression with chained UDFs
+        df_chained_1 = df.withColumn('f2_f1', f2(f1(df['v'])))
+        df_chained_2 = df.withColumn('f3_f2_f1', f3(f2(f1(df['v']))))
+        df_chained_3 = df.withColumn('f4_f3_f2_f1', f4(f3(f2(f1(df['v'])))))
+        df_chained_4 = df.withColumn('f4_f2_f1', f4(f2(f1(df['v']))))
+        df_chained_5 = df.withColumn('f4_f3_f1', f4(f3(f1(df['v']))))
+
+        expected_chained_1 = df.withColumn('f2_f1', df['v'] + 11)
+        expected_chained_2 = df.withColumn('f3_f2_f1', df['v'] + 111)
+        expected_chained_3 = df.withColumn('f4_f3_f2_f1', df['v'] + 1111)
+        expected_chained_4 = df.withColumn('f4_f2_f1', df['v'] + 1011)
+        expected_chained_5 = df.withColumn('f4_f3_f1', df['v'] + 1101)
+
+        self.assertEquals(expected_chained_1.collect(), df_chained_1.collect())
+        self.assertEquals(expected_chained_2.collect(), df_chained_2.collect())
+        self.assertEquals(expected_chained_3.collect(), df_chained_3.collect())
+        self.assertEquals(expected_chained_4.collect(), df_chained_4.collect())
+        self.assertEquals(expected_chained_5.collect(), df_chained_5.collect())
+
+        # Test multiple mixed UDF expressions in a single projection
+        df_multi_1 = df \
             .withColumn('f1', f1(col('v'))) \
             .withColumn('f2', f2(col('v'))) \
             .withColumn('f3', f3(col('v'))) \
@@ -5096,7 +5115,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             .withColumn('f4_f3_f2_f1', f4(col('f3_f2_f1')))
 
         # Test mixed udfs in a single expression
-        df2 = df \
+        df_multi_2 = df \
             .withColumn('f1', f1(col('v'))) \
             .withColumn('f2', f2(col('v'))) \
             .withColumn('f3', f3(col('v'))) \
@@ -5113,8 +5132,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             .withColumn('f4_f3_f2', f4(f3(f2(col('v'))))) \
             .withColumn('f4_f3_f2_f1', f4(f3(f2(f1(col('v'))))))
 
-        # expected result
-        df3 = df \
+        expected = df \
             .withColumn('f1', df['v'] + 1) \
             .withColumn('f2', df['v'] + 10) \
             .withColumn('f3', df['v'] + 100) \
@@ -5131,8 +5149,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             .withColumn('f4_f3_f2', df['v'] + 1110) \
             .withColumn('f4_f3_f2_f1', df['v'] + 1111)
 
-        self.assertEquals(df3.collect(), df1.collect())
-        self.assertEquals(df3.collect(), df2.collect())
+        self.assertEquals(expected.collect(), df_multi_1.collect())
+        self.assertEquals(expected.collect(), df_multi_2.collect())
 
     def test_mixed_udf_and_sql(self):
         import pandas as pd
@@ -5148,6 +5166,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             return x + 1
 
         def f2(x):
+            assert type(x) == pyspark.sql.Column
             return x + 10
 
         @pandas_udf('int')
@@ -5171,8 +5190,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             .withColumn('f3_f1_f2', f3(f1(f2(df['v'])))) \
             .withColumn('f3_f2_f1', f3(f2(f1(df['v']))))
 
-        # expected result
-        df2 = df.withColumn('f1', df['v'] + 1) \
+        expected = df.withColumn('f1', df['v'] + 1) \
             .withColumn('f2', df['v'] + 10) \
             .withColumn('f3', df['v'] + 100) \
             .withColumn('f1_f2', df['v'] + 11) \
@@ -5188,7 +5206,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             .withColumn('f3_f1_f2', df['v'] + 111) \
             .withColumn('f3_f2_f1', df['v'] + 111)
 
-        self.assertEquals(df2.collect(), df1.collect())
+        self.assertEquals(expected.collect(), df1.collect())
 
 
 @unittest.skipIf(
@@ -5618,9 +5636,8 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(res.count(), 5)
 
     def test_mixed_scalar_udfs_followed_by_grouby_apply(self):
-        # Test Pandas UDF and scalar Python UDF followed by groupby apply
-        from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
         import pandas as pd
+        from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
 
         df = self.spark.range(0, 10).toDF('v1')
         df = df.withColumn('v2', udf(lambda x: x + 1, 'int')(df['v1'])) \

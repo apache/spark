@@ -95,47 +95,81 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
  */
 object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
 
-  private def hasScalarPythonUDF(e: Expression): Boolean = {
-    e.find(PythonUDF.isScalarPythonUDF).isDefined
-  }
+  private case class LazyEvalType(var evalType: Int = -1) {
 
-  private def canEvaluateInPython(e: PythonUDF, evalType: Int): Boolean = {
-    if (e.evalType != evalType) {
-      false
-    } else {
-      e.children match {
-        // single PythonUDF child could be chained and evaluated in Python
-        case Seq(u: PythonUDF) => canEvaluateInPython(u, evalType)
-        // Python UDF can't be evaluated directly in JVM
-        case children => !children.exists(hasScalarPythonUDF)
+    def isSet: Boolean = evalType >= 0
+
+    def set(evalType: Int): Unit = {
+      if (isSet) {
+        throw new IllegalStateException("Eval type has already been set")
+      } else {
+        this.evalType = evalType
+      }
+    }
+
+    def get(): Int = {
+      if (!isSet) {
+        throw new IllegalStateException("Eval type is not set")
+      } else {
+        evalType
       }
     }
   }
 
-  private def collectEvaluableUDF(expr: Expression, evalType: Int): Seq[PythonUDF] = expr match {
-    case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) && canEvaluateInPython(udf, evalType) =>
-      Seq(udf)
-    case e => e.children.flatMap(collectEvaluableUDF(_, evalType))
+  private def hasScalarPythonUDF(e: Expression): Boolean = {
+    e.find(PythonUDF.isScalarPythonUDF).isDefined
   }
 
   /**
-   * Collect evaluable UDFs from the current node.
+   * Check whether a PythonUDF expression can be evaluated in Python.
    *
-   * This function collects Python UDFs or Scalar Python UDFs from expressions of the input node,
-   * and returns a list of UDFs of the same eval type.
+   * If the lazy eval type is not set, this method checks for either Batched Python UDF and Scalar
+   * Pandas UDF. If the lazy eval type is set, this method checks for the expression of the
+   * specified eval type.
    *
-   * If expressions contain both UDFs eval types, this function will only return Python UDFs.
+   * This method will also set the lazy eval type to be the type of the first evaluable expression,
+   * i.e., if lazy eval type is not set and we find a evaluable Python UDF expression, lazy eval
+   * type will be set to the eval type of the expression.
    *
-   * The caller should call this function multiple times until all evaluable UDFs are collected.
    */
-  private def collectEvaluableUDFs(plan: SparkPlan): Seq[PythonUDF] = {
-    val pythonUDFs =
-      plan.expressions.flatMap(collectEvaluableUDF(_, PythonEvalType.SQL_BATCHED_UDF))
-
-    if (pythonUDFs.isEmpty) {
-      plan.expressions.flatMap(collectEvaluableUDF(_, PythonEvalType.SQL_SCALAR_PANDAS_UDF))
+  private def canEvaluateInPython(e: PythonUDF, lazyEvalType: LazyEvalType): Boolean = {
+    if (!lazyEvalType.isSet) {
+      e.children match {
+        // single PythonUDF child could be chained and evaluated in Python if eval type is the same
+        case Seq(u: PythonUDF) =>
+          // Need to recheck the eval type because lazy eval type will be set if child Python UDF is
+          // evaluable
+          canEvaluateInPython(u, lazyEvalType) && lazyEvalType.get == e.evalType
+        // Python UDF can't be evaluated directly in JVM
+        case children => if (!children.exists(hasScalarPythonUDF)) {
+          // We found the first evaluable expression, set lazy eval type to its eval type.
+          lazyEvalType.set(e.evalType)
+          true
+        } else {
+          false
+        }
+      }
     } else {
-      pythonUDFs
+      if (e.evalType != lazyEvalType.get) {
+        false
+      } else {
+        e.children match {
+          case Seq(u: PythonUDF) => canEvaluateInPython(u, lazyEvalType)
+          case children => !children.exists(hasScalarPythonUDF)
+        }
+      }
+    }
+  }
+
+  private def collectEvaluableUDFs(
+      expr: Expression,
+      evalType: LazyEvalType
+  ): Seq[PythonUDF] = {
+    expr match {
+      case udf: PythonUDF if
+      PythonUDF.isScalarPythonUDF(udf) && canEvaluateInPython(udf, evalType) =>
+        Seq(udf)
+      case e => e.children.flatMap(collectEvaluableUDFs(_, evalType))
     }
   }
 
@@ -147,7 +181,8 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
    * Extract all the PythonUDFs from the current operator and evaluate them before the operator.
    */
   private def extract(plan: SparkPlan): SparkPlan = {
-    val udfs = collectEvaluableUDFs(plan)
+    val lazyEvalType = new LazyEvalType
+    val udfs = plan.expressions.flatMap(collectEvaluableUDFs(_, lazyEvalType))
       // ignore the PythonUDF that come from second/third aggregate, which is not used
       .filter(udf => udf.references.subsetOf(plan.inputSet))
     if (udfs.isEmpty) {
