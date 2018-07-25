@@ -40,7 +40,16 @@ object NamedExpression {
  *
  * The `id` field is unique within a given JVM, while the `uuid` is used to uniquely identify JVMs.
  */
-case class ExprId(id: Long, jvmId: UUID)
+case class ExprId(id: Long, jvmId: UUID) {
+
+  override def equals(other: Any): Boolean = other match {
+    case ExprId(id, jvmId) => this.id == id && this.jvmId == jvmId
+    case _ => false
+  }
+
+  override def hashCode(): Int = id.hashCode()
+
+}
 
 object ExprId {
   def apply(id: Long): ExprId = ExprId(id, NamedExpression.jvmId)

@@ -127,6 +127,14 @@ object SQLConf {
     }
   }
 
+  val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
+    .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
+      "specified by their rule names and separated by comma. It is not guaranteed that all the " +
+      "rules in this configuration will eventually be excluded, as some rules are necessary " +
+      "for correctness. The optimizer will log the rules that have indeed been excluded.")
+    .stringConf
+    .createOptional
+
   val OPTIMIZER_MAX_ITERATIONS = buildConf("spark.sql.optimizer.maxIterations")
     .internal()
     .doc("The max number of iterations the optimizer and analyzer runs.")
@@ -377,6 +385,43 @@ object SQLConf {
     .internal()
     .booleanConf
     .createWithDefault(true)
+
+  val PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED =
+    buildConf("spark.sql.parquet.filterPushdown.timestamp")
+      .doc("If true, enables Parquet filter push-down optimization for Timestamp. " +
+        "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is " +
+        "enabled and Timestamp stored as TIMESTAMP_MICROS or TIMESTAMP_MILLIS type.")
+    .internal()
+    .booleanConf
+    .createWithDefault(true)
+
+  val PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED =
+    buildConf("spark.sql.parquet.filterPushdown.decimal")
+      .doc("If true, enables Parquet filter push-down optimization for Decimal. " +
+        "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
+  val PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED =
+    buildConf("spark.sql.parquet.filterPushdown.string.startsWith")
+    .doc("If true, enables Parquet filter push-down optimization for string startsWith function. " +
+      "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
+    .internal()
+    .booleanConf
+    .createWithDefault(true)
+
+  val PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD =
+    buildConf("spark.sql.parquet.pushdown.inFilterThreshold")
+      .doc("The maximum number of values to filter push-down optimization for IN predicate. " +
+        "Large threshold won't necessarily provide much better performance. " +
+        "The experiment argued that 300 is the limit threshold. " +
+        "By setting this value to 0 this feature can be disabled. " +
+        "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
+      .internal()
+      .intConf
+      .checkValue(threshold => threshold >= 0, "The threshold must not be negative.")
+      .createWithDefault(10)
 
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
     .doc("Whether to be compatible with the legacy Parquet format adopted by Spark 1.4 and prior " +
@@ -806,6 +851,14 @@ object SQLConf {
       .intConf
       .createWithDefault(10)
 
+  val FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION =
+    buildConf("spark.sql.streaming.flatMapGroupsWithState.stateFormatVersion")
+      .internal()
+      .doc("State format version used by flatMapGroupsWithState operation in a streaming query")
+      .intConf
+      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
+      .createWithDefault(2)
+
   val CHECKPOINT_LOCATION = buildConf("spark.sql.streaming.checkpointLocation")
     .doc("The default location for storing checkpoint data for streaming queries.")
     .stringConf
@@ -816,6 +869,15 @@ object SQLConf {
     .doc("The minimum number of batches that must be retained and made recoverable.")
     .intConf
     .createWithDefault(100)
+
+  val MAX_BATCHES_TO_RETAIN_IN_MEMORY = buildConf("spark.sql.streaming.maxBatchesToRetainInMemory")
+    .internal()
+    .doc("The maximum number of batches which will be retained in memory to avoid " +
+      "loading from files. The value adjusts a trade-off between memory usage vs cache miss: " +
+      "'2' covers both success and direct failure cases, '1' covers only success case, " +
+      "and '0' covers extreme case - disable cache to maximize memory size of executors.")
+    .intConf
+    .createWithDefault(2)
 
   val UNSUPPORTED_OPERATION_CHECK_ENABLED =
     buildConf("spark.sql.streaming.unsupportedOperationCheck")
@@ -866,6 +928,21 @@ object SQLConf {
       .internal()
       .stringConf
       .createWithDefault("org.apache.spark.sql.execution.streaming.ManifestFileCommitProtocol")
+
+  val STREAMING_MULTIPLE_WATERMARK_POLICY =
+    buildConf("spark.sql.streaming.multipleWatermarkPolicy")
+      .doc("Policy to calculate the global watermark value when there are multiple watermark " +
+        "operators in a streaming query. The default value is 'min' which chooses " +
+        "the minimum watermark reported across multiple operators. Other alternative value is" +
+        "'max' which chooses the maximum across multiple operators." +
+        "Note: This configuration cannot be changed between query restarts from the same " +
+        "checkpoint location.")
+      .stringConf
+      .checkValue(
+        str => Set("min", "max").contains(str.toLowerCase),
+        "Invalid value for 'spark.sql.streaming.multipleWatermarkPolicy'. " +
+          "Valid values are 'min' and 'max'")
+      .createWithDefault("min") // must be same as MultipleWatermarkPolicy.DEFAULT_POLICY_NAME
 
   val OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD =
     buildConf("spark.sql.objectHashAggregate.sortBased.fallbackThreshold")
@@ -1161,6 +1238,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_POSITION =
+    buildConf("spark.sql.execution.pandas.groupedMap.assignColumnsByPosition")
+      .internal()
+      .doc("When true, a grouped map Pandas UDF will assign columns from the returned " +
+        "Pandas DataFrame based on position, regardless of column label type. When false, " +
+        "columns will be looked up by name if labeled with a string and fallback to use " +
+        "position if not. This configuration will be deprecated in future releases.")
+      .booleanConf
+      .createWithDefault(false)
+
   val REPLACE_EXCEPT_WITH_FILTER = buildConf("spark.sql.optimizer.replaceExceptWithFilter")
     .internal()
     .doc("When true, the apply function of the rule verifies whether the right node of the" +
@@ -1314,6 +1401,35 @@ object SQLConf {
       "Other column values can be ignored during parsing even if they are malformed.")
     .booleanConf
     .createWithDefault(true)
+
+  val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
+    .doc("If it is set to true, size of null returns -1. This behavior was inherited from Hive. " +
+      "The size function returns null for null input if the flag is disabled.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val REPL_EAGER_EVAL_ENABLED = buildConf("spark.sql.repl.eagerEval.enabled")
+    .doc("Enables eager evaluation or not. When true, the top K rows of Dataset will be " +
+      "displayed if and only if the REPL supports the eager evaluation. Currently, the " +
+      "eager evaluation is only supported in PySpark. For the notebooks like Jupyter, " +
+      "the HTML table (generated by _repr_html_) will be returned. For plain Python REPL, " +
+      "the returned outputs are formatted like dataframe.show().")
+    .booleanConf
+    .createWithDefault(false)
+
+  val REPL_EAGER_EVAL_MAX_NUM_ROWS = buildConf("spark.sql.repl.eagerEval.maxNumRows")
+    .doc("The max number of rows that are returned by eager evaluation. This only takes " +
+      "effect when spark.sql.repl.eagerEval.enabled is set to true. The valid range of this " +
+      "config is from 0 to (Int.MaxValue - 1), so the invalid config like negative and " +
+      "greater than (Int.MaxValue - 1) will be normalized to 0 and (Int.MaxValue - 1).")
+    .intConf
+    .createWithDefault(20)
+
+  val REPL_EAGER_EVAL_TRUNCATE = buildConf("spark.sql.repl.eagerEval.truncate")
+    .doc("The max number of characters for each cell that is returned by eager evaluation. " +
+      "This only takes effect when spark.sql.repl.eagerEval.enabled is set to true.")
+    .intConf
+    .createWithDefault(20)
 }
 
 /**
@@ -1335,6 +1451,8 @@ class SQLConf extends Serializable with Logging {
   @transient protected val reader = new ConfigReader(settings)
 
   /** ************************ Spark SQL Params/Hints ******************* */
+
+  def optimizerExcludedRules: Option[String] = getConf(OPTIMIZER_EXCLUDED_RULES)
 
   def optimizerMaxIterations: Int = getConf(OPTIMIZER_MAX_ITERATIONS)
 
@@ -1416,9 +1534,21 @@ class SQLConf extends Serializable with Logging {
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 
+  def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
+
   def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
 
   def parquetFilterPushDownDate: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_DATE_ENABLED)
+
+  def parquetFilterPushDownTimestamp: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED)
+
+  def parquetFilterPushDownDecimal: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED)
+
+  def parquetFilterPushDownStringStartWith: Boolean =
+    getConf(PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED)
+
+  def parquetFilterPushDownInFilterThreshold: Int =
+    getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
 
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
 
@@ -1457,6 +1587,8 @@ class SQLConf extends Serializable with Logging {
 
   def tableRelationCacheSize: Int =
     getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
+
+  def codegenCacheMaxEntries: Int = getConf(StaticSQLConf.CODEGEN_CACHE_MAX_ENTRIES)
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
@@ -1647,6 +1779,9 @@ class SQLConf extends Serializable with Logging {
 
   def pandasRespectSessionTimeZone: Boolean = getConf(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE)
 
+  def pandasGroupedMapAssignColumnssByPosition: Boolean =
+    getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_POSITION)
+
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
@@ -1672,6 +1807,14 @@ class SQLConf extends Serializable with Logging {
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
 
   def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
+
+  def legacySizeOfNull: Boolean = getConf(SQLConf.LEGACY_SIZE_OF_NULL)
+
+  def isReplEagerEvalEnabled: Boolean = getConf(SQLConf.REPL_EAGER_EVAL_ENABLED)
+
+  def replEagerEvalMaxNumRows: Int = getConf(SQLConf.REPL_EAGER_EVAL_MAX_NUM_ROWS)
+
+  def replEagerEvalTruncate: Int = getConf(SQLConf.REPL_EAGER_EVAL_TRUNCATE)
 
   /** ********************** SQLConf functionality methods ************ */
 
@@ -1828,5 +1971,9 @@ class SQLConf extends Serializable with Logging {
       case (entry, value) => cloned.setConfString(entry.key, value.toString)
     }
     cloned
+  }
+
+  def isModifiable(key: String): Boolean = {
+    sqlConfEntries.containsKey(key) && !staticConfKeys.contains(key)
   }
 }

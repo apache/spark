@@ -581,9 +581,9 @@ class TaskContextTests(PySparkTestCase):
         self.sc.setLocalProperty(key, value)
         try:
             rdd = self.sc.parallelize(range(1), 1)
-            prop1 = rdd.map(lambda x: TaskContext.get().getLocalProperty(key)).collect()[0]
+            prop1 = rdd.map(lambda _: TaskContext.get().getLocalProperty(key)).collect()[0]
             self.assertEqual(prop1, value)
-            prop2 = rdd.map(lambda x: TaskContext.get().getLocalProperty("otherkey")).collect()[0]
+            prop2 = rdd.map(lambda _: TaskContext.get().getLocalProperty("otherkey")).collect()[0]
             self.assertTrue(prop2 is None)
         finally:
             self.sc.setLocalProperty(key, None)

@@ -177,7 +177,7 @@ class DataFrameReader(OptionUtils):
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
              multiLine=None, allowUnquotedControlChars=None, lineSep=None, samplingRatio=None,
-             encoding=None):
+             dropFieldIfAllNull=None, encoding=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
@@ -246,6 +246,9 @@ class DataFrameReader(OptionUtils):
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
         :param samplingRatio: defines fraction of input JSON objects used for schema inferring.
                               If None is set, it uses the default value, ``1.0``.
+        :param dropFieldIfAllNull: whether to ignore column of all null values or empty
+                                   array/struct during schema inference. If None is set, it
+                                   uses the default value, ``false``.
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -856,7 +859,7 @@ class DataFrameWriter(OptionUtils):
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
             header=None, nullValue=None, escapeQuotes=None, quoteAll=None, dateFormat=None,
             timestampFormat=None, ignoreLeadingWhiteSpace=None, ignoreTrailingWhiteSpace=None,
-            charToEscapeQuoteEscaping=None):
+            charToEscapeQuoteEscaping=None, encoding=None):
         """Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -906,6 +909,8 @@ class DataFrameWriter(OptionUtils):
                                           the quote character. If None is set, the default value is
                                           escape character when escape and quote characters are
                                           different, ``\0`` otherwise..
+        :param encoding: sets the encoding (charset) of saved csv files. If None is set,
+                         the default UTF-8 charset will be used.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -915,7 +920,8 @@ class DataFrameWriter(OptionUtils):
                        dateFormat=dateFormat, timestampFormat=timestampFormat,
                        ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
                        ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace,
-                       charToEscapeQuoteEscaping=charToEscapeQuoteEscaping)
+                       charToEscapeQuoteEscaping=charToEscapeQuoteEscaping,
+                       encoding=encoding)
         self._jwrite.csv(path)
 
     @since(1.5)

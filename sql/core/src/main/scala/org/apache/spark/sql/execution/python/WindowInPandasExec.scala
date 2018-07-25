@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.arrow.ArrowUtils
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -97,7 +98,7 @@ case class WindowInPandasExec(
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
-    val pandasRespectSessionTimeZone = conf.pandasRespectSessionTimeZone
+    val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
     // Extract window expressions and window functions
     val expressions = windowExpression.flatMap(_.collect { case e: WindowExpression => e })
@@ -154,11 +155,14 @@ case class WindowInPandasExec(
       }
 
       val windowFunctionResult = new ArrowPythonRunner(
-        pyFuncs, bufferSize, reuseWorker,
+        pyFuncs,
+        bufferSize,
+        reuseWorker,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
-        argOffsets, windowInputSchema,
-        sessionLocalTimeZone, pandasRespectSessionTimeZone)
-        .compute(pythonInput, context.partitionId(), context)
+        argOffsets,
+        windowInputSchema,
+        sessionLocalTimeZone,
+        pythonRunnerConf).compute(pythonInput, context.partitionId(), context)
 
       val joined = new JoinedRow
       val resultProj = createResultProjection(expressions)
