@@ -47,11 +47,13 @@ object ArrowUtils {
     case DateType => new ArrowType.Date(DateUnit.DAY)
     case TimestampType =>
       if (timeZoneId == null) {
-        throw new UnsupportedOperationException("TimestampType must supply timeZoneId parameter")
+        throw new UnsupportedOperationException(
+          s"${TimestampType.catalogString} must supply timeZoneId parameter")
       } else {
         new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
       }
-    case _ => throw new UnsupportedOperationException(s"Unsupported data type: ${dt.simpleString}")
+    case _ =>
+      throw new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
   }
 
   def fromArrowType(dt: ArrowType): DataType = dt match {

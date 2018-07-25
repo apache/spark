@@ -19,10 +19,14 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.plans.logical.Project
+<<<<<<< HEAD
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
+=======
+import org.apache.spark.sql.execution.command.ExplainCommand
+>>>>>>> upstream/master
 import org.apache.spark.sql.functions.{lit, udf}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
@@ -362,6 +366,35 @@ class UDFSuite extends QueryTest with SharedSQLContext {
         df.write.save(path.getCanonicalPath)
         assert(numTotalCachedHit == 3, "expected to be cached in save for native")
       }
+    }
+  }
+
+  test("SPARK-24891 Fix HandleNullInputsForUDF rule") {
+    val udf1 = udf({(x: Int, y: Int) => x + y})
+    val df = spark.range(0, 3).toDF("a")
+      .withColumn("b", udf1($"a", udf1($"a", lit(10))))
+      .withColumn("c", udf1($"a", lit(null)))
+    val plan = spark.sessionState.executePlan(df.logicalPlan).analyzed
+
+    comparePlans(df.logicalPlan, plan)
+    checkAnswer(
+      df,
+      Seq(
+        Row(0, 10, null),
+        Row(1, 12, null),
+        Row(2, 14, null)))
+  }
+
+  test("SPARK-24891 Fix HandleNullInputsForUDF rule - with table") {
+    withTable("x") {
+      Seq((1, "2"), (2, "4")).toDF("a", "b").write.format("json").saveAsTable("x")
+      sql("insert into table x values(3, null)")
+      sql("insert into table x values(null, '4')")
+      spark.udf.register("f", (a: Int, b: String) => a + b)
+      val df = spark.sql("SELECT f(a, b) FROM x")
+      val plan = spark.sessionState.executePlan(df.logicalPlan).analyzed
+      comparePlans(df.logicalPlan, plan)
+      checkAnswer(df, Seq(Row("12"), Row("24"), Row("3null"), Row(null)))
     }
   }
 }

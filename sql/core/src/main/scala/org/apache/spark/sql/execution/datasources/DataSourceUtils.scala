@@ -45,7 +45,7 @@ object DataSourceUtils {
     schema.foreach { field =>
       if (!format.supportDataType(field.dataType, isReadPath)) {
         throw new AnalysisException(
-          s"$format data source does not support ${field.dataType.simpleString} data type.")
+          s"$format data source does not support ${field.dataType.catalogString} data type.")
       }
     }
   }
