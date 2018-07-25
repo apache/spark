@@ -132,6 +132,8 @@ private[spark] class BlockManager(
     conf.getBoolean("spark.shuffle.service.enabled", false)
   private val chunkSize =
     conf.getSizeAsBytes("spark.storage.memoryMapLimitForTests", Int.MaxValue.toString).toInt
+  private val remoteReadNioBufferConversion =
+    conf.getBoolean("spark.network.remoteReadNioBufferConversion", false)
 
   val diskBlockManager = {
     // Only perform cleanup if an external service is not serving our shuffle files.
@@ -734,7 +736,7 @@ private[spark] class BlockManager(
         // SPARK-24307 undocumented "escape-hatch" in case there are any issues in converting to
         // to ChunkedByteBuffer, to go back to old code-path.  Can be removed post Spark 2.4 if
         // new path is stable.
-        if (conf.getBoolean("spark.fetchToNioBuffer", false)) {
+        if (remoteReadNioBufferConversion) {
           return Some(new ChunkedByteBuffer(data.nioByteBuffer()))
         } else {
           return Some(ChunkedByteBuffer.fromManagedBuffer(data, chunkSize))
