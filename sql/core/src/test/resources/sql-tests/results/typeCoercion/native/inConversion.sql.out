@@ -2901,18 +2901,9 @@ struct<1:int>
 -- !query 331
 SELECT * FROM t WHERE (cast(1 as bigint)) IN (SELECT cast(1 as decimal(10, 0)) FROM t)
 -- !query 331 schema
-struct<>
+struct<1:int>
 -- !query 331 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS BIGINT) IN (listquery()))' due to data type mismatch: 
-The data type of one or more elements in the left hand side of an IN subquery
-is not compatible with the data type of the output of the subquery
-Mismatched columns:
-[(CAST(1 AS BIGINT):bigint, `CAST(1 AS DECIMAL(10,0))`:decimal(10,0))]
-Left side:
-[bigint].
-Right side:
-[decimal(10,0)].;
+1
 
 
 -- !query 332
@@ -3042,18 +3033,9 @@ struct<1:int>
 -- !query 343
 SELECT * FROM t WHERE (cast(1 as float)) IN (SELECT cast(1 as decimal(10, 0)) FROM t)
 -- !query 343 schema
-struct<>
+struct<1:int>
 -- !query 343 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS FLOAT) IN (listquery()))' due to data type mismatch: 
-The data type of one or more elements in the left hand side of an IN subquery
-is not compatible with the data type of the output of the subquery
-Mismatched columns:
-[(CAST(1 AS FLOAT):float, `CAST(1 AS DECIMAL(10,0))`:decimal(10,0))]
-Left side:
-[float].
-Right side:
-[decimal(10,0)].;
+1
 
 
 -- !query 344
@@ -3183,18 +3165,9 @@ struct<1:int>
 -- !query 355
 SELECT * FROM t WHERE (cast(1 as double)) IN (SELECT cast(1 as decimal(10, 0)) FROM t)
 -- !query 355 schema
-struct<>
+struct<1:int>
 -- !query 355 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DOUBLE) IN (listquery()))' due to data type mismatch: 
-The data type of one or more elements in the left hand side of an IN subquery
-is not compatible with the data type of the output of the subquery
-Mismatched columns:
-[(CAST(1 AS DOUBLE):double, `CAST(1 AS DECIMAL(10,0))`:decimal(10,0))]
-Left side:
-[double].
-Right side:
-[decimal(10,0)].;
+1
 
 
 -- !query 356
@@ -3300,52 +3273,25 @@ struct<1:int>
 -- !query 364
 SELECT * FROM t WHERE (cast(1 as decimal(10, 0))) IN (SELECT cast(1 as bigint) FROM t)
 -- !query 364 schema
-struct<>
+struct<1:int>
 -- !query 364 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (listquery()))' due to data type mismatch: 
-The data type of one or more elements in the left hand side of an IN subquery
-is not compatible with the data type of the output of the subquery
-Mismatched columns:
-[(CAST(1 AS DECIMAL(10,0)):decimal(10,0), `CAST(1 AS BIGINT)`:bigint)]
-Left side:
-[decimal(10,0)].
-Right side:
-[bigint].;
+1
 
 
 -- !query 365
 SELECT * FROM t WHERE (cast(1 as decimal(10, 0))) IN (SELECT cast(1 as float) FROM t)
 -- !query 365 schema
-struct<>
+struct<1:int>
 -- !query 365 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (listquery()))' due to data type mismatch: 
-The data type of one or more elements in the left hand side of an IN subquery
-is not compatible with the data type of the output of the subquery
-Mismatched columns:
-[(CAST(1 AS DECIMAL(10,0)):decimal(10,0), `CAST(1 AS FLOAT)`:float)]
-Left side:
-[decimal(10,0)].
-Right side:
-[float].;
+1
 
 
 -- !query 366
 SELECT * FROM t WHERE (cast(1 as decimal(10, 0))) IN (SELECT cast(1 as double) FROM t)
 -- !query 366 schema
-struct<>
+struct<1:int>
 -- !query 366 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (listquery()))' due to data type mismatch: 
-The data type of one or more elements in the left hand side of an IN subquery
-is not compatible with the data type of the output of the subquery
-Mismatched columns:
-[(CAST(1 AS DECIMAL(10,0)):decimal(10,0), `CAST(1 AS DOUBLE)`:double)]
-Left side:
-[decimal(10,0)].
-Right side:
-[double].;
+1
 
 
 -- !query 367
