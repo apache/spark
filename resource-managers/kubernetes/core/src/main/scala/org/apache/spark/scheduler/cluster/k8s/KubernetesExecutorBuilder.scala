@@ -56,7 +56,8 @@ private[spark] class KubernetesExecutorBuilder(
       Seq(provideMountLocalFilesStep(kubernetesConf))
     } else Nil
 
-    val allFeatures = baseFeatures ++ secretFeature ++ secretEnvFeature ++ volumesFeature ++ localFilesFeature
+    val allFeatures = baseFeatures ++
+      secretFeature ++ secretEnvFeature ++ volumesFeature ++ localFilesFeature
 
     var executorPod = SparkPod.initialPod()
     for (feature <- allFeatures) {

@@ -106,6 +106,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Map.empty,
+      Seq.empty,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -126,6 +127,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
         "executor-id", new PodBuilder().build()),
       "prefix",
       "appId",
+      Some("secret"),
       Map.empty,
       Map.empty,
       Map.empty,
@@ -137,6 +139,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
+      MOUNT_LOCAL_FILES_STEP_TYPE,
       MOUNT_VOLUMES_STEP_TYPE)
   }
 

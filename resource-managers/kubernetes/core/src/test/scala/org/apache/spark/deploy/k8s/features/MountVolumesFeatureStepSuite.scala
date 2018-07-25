@@ -30,6 +30,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       Seq.empty),
     appResourceNamePrefix = "resource",
     appId = "app-id",
+    mountLocalFilesSecretName = None,
     roleLabels = Map.empty,
     roleAnnotations = Map.empty,
     roleSecretNamesToMountPaths = Map.empty,
