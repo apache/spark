@@ -56,7 +56,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
       spark: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val conf = spark.sparkContext.hadoopConfiguration
+    val conf = spark.sessionState.newHadoopConf()
     val parsedOptions = new AvroOptions(options, conf)
 
     // Schema evolution is not supported yet. Here we only pick a single random sample file to
