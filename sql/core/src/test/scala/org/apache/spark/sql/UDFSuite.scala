@@ -19,14 +19,10 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.plans.logical.Project
-<<<<<<< HEAD
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
-=======
-import org.apache.spark.sql.execution.command.ExplainCommand
->>>>>>> upstream/master
 import org.apache.spark.sql.functions.{lit, udf}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
