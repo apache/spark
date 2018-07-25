@@ -184,9 +184,9 @@ class KubernetesConfSuite extends SparkFunSuite {
       new SparkConf(false),
       EXECUTOR_ID,
       APP_ID,
-      DRIVER_POD)
+      Some(DRIVER_POD))
     assert(conf.roleSpecificConf.executorId === EXECUTOR_ID)
-    assert(conf.roleSpecificConf.driverPod === DRIVER_POD)
+    assert(conf.roleSpecificConf.driverPod.get === DRIVER_POD)
   }
 
   test("Image pull secrets.") {
@@ -195,7 +195,7 @@ class KubernetesConfSuite extends SparkFunSuite {
         .set(IMAGE_PULL_SECRETS, "my-secret-1,my-secret-2 "),
       EXECUTOR_ID,
       APP_ID,
-      DRIVER_POD)
+      Some(DRIVER_POD))
     assert(conf.imagePullSecrets() ===
       Seq(
         new LocalObjectReferenceBuilder().withName("my-secret-1").build(),
@@ -221,7 +221,7 @@ class KubernetesConfSuite extends SparkFunSuite {
       sparkConf,
       EXECUTOR_ID,
       APP_ID,
-      DRIVER_POD)
+      Some(DRIVER_POD))
     assert(conf.roleLabels === Map(
       SPARK_EXECUTOR_ID_LABEL -> EXECUTOR_ID,
       SPARK_APP_ID_LABEL -> APP_ID,

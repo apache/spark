@@ -46,13 +46,18 @@ private[spark] class ExecutorPodsAllocator(
 
   private val podCreationTimeout = math.max(podAllocationDelay * 5, 60000)
 
+  private val namespace = conf.get(KUBERNETES_NAMESPACE)
+
   private val kubernetesDriverPodName = conf
     .get(KUBERNETES_DRIVER_POD_NAME)
-    .getOrElse(throw new SparkException("Must specify the driver pod name"))
 
-  private val driverPod = kubernetesClient.pods()
-    .withName(kubernetesDriverPodName)
-    .get()
+  private val driverPod = kubernetesDriverPodName
+    .map(name => Option(kubernetesClient.pods()
+      .withName(name)
+      .get())
+      .getOrElse(throw new SparkException(
+        s"No pod was found named $kubernetesDriverPodName in the cluster in the " +
+          s"namespace $namespace (this was supposed to be the driver pod.).")))
 
   // Executor IDs that have been requested from Kubernetes but have not been detected in any
   // snapshot yet. Mapped to the timestamp when they were created.
