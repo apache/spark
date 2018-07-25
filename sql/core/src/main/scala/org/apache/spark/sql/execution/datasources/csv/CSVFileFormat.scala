@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
+import java.nio.charset.Charset
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce._
@@ -168,7 +170,9 @@ private[csv] class CsvOutputWriter(
     context: TaskAttemptContext,
     params: CSVOptions) extends OutputWriter with Logging {
 
-  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
+  private val charset = Charset.forName(params.charset)
+
+  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path), charset)
 
   private val gen = new UnivocityGenerator(dataSchema, writer, params)
 
