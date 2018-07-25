@@ -28,8 +28,8 @@ import scala.reflect.{classTag, ClassTag}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.metrics.MetricGetter
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
+import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster._
 import org.apache.spark.status.api.v1
@@ -1270,8 +1270,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     // expected peak values for each executor
     val expectedValues = Map(
-      "1" -> Array(7000L, 70L, 50L, 30L, 60L, 30L, 100L, 55L, 70L, 20L),
-      "2" -> Array(7000L, 80L, 50L, 40L, 10L, 30L, 50L, 60L, 80L, 40L))
+      "1" -> new ExecutorMetrics(Array(7000L, 70L, 50L, 30L, 60L, 30L, 100L, 55L, 70L, 20L)),
+      "2" -> new ExecutorMetrics(Array(7000L, 80L, 50L, 40L, 10L, 30L, 50L, 60L, 80L, 40L)))
 
     // check that the stored peak values match the expected values
     expectedValues.foreach { case (id, metrics) =>
@@ -1279,8 +1279,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
         assert(exec.info.id === id)
         exec.info.peakMemoryMetrics match {
           case Some(actual) =>
-            (0 until MetricGetter.values.length).foreach { idx =>
-              assert(actual(idx) === metrics(idx))
+            ExecutorMetricType.values.foreach { metricType =>
+              assert(actual.getMetricValue(metricType) === metrics.getMetricValue(metricType))
             }
           case _ =>
             assert(false)
@@ -1299,23 +1299,23 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     listener.onStageSubmitted(createStageSubmittedEvent(0))
     listener.onStageSubmitted(createStageSubmittedEvent(1))
     listener.onStageExecutorMetrics(SparkListenerStageExecutorMetrics("1", 0, 0,
-      Array(5000L, 50L, 50L, 20L, 50L, 10L, 100L, 30L, 70L, 20L)))
+      new ExecutorMetrics(Array(5000L, 50L, 50L, 20L, 50L, 10L, 100L, 30L, 70L, 20L))))
     listener.onStageExecutorMetrics(SparkListenerStageExecutorMetrics("2", 0, 0,
-      Array(7000L, 70L, 50L, 20L, 10L, 10L, 50L, 30L, 80L, 40L)))
+      new ExecutorMetrics(Array(7000L, 70L, 50L, 20L, 10L, 10L, 50L, 30L, 80L, 40L))))
      listener.onStageCompleted(createStageCompletedEvent(0))
     // executor 1 is removed before stage 1 has finished, the stage executor metrics
     // are logged afterwards and should still be used to update the executor metrics.
     listener.onExecutorRemoved(createExecutorRemovedEvent(1))
     listener.onStageExecutorMetrics(SparkListenerStageExecutorMetrics("1", 1, 0,
-      Array(7000L, 70L, 50L, 30L, 60L, 30L, 80L, 55L, 50L, 0L)))
+      new ExecutorMetrics(Array(7000L, 70L, 50L, 30L, 60L, 30L, 80L, 55L, 50L, 0L))))
     listener.onStageExecutorMetrics(SparkListenerStageExecutorMetrics("2", 1, 0,
-      Array(7000L, 80L, 50L, 40L, 10L, 30L, 50L, 60L, 40L, 40L)))
+      new ExecutorMetrics(Array(7000L, 80L, 50L, 40L, 10L, 30L, 50L, 60L, 40L, 40L))))
     listener.onStageCompleted(createStageCompletedEvent(1))
 
     // expected peak values for each executor
     val expectedValues = Map(
-      "1" -> Array(7000L, 70L, 50L, 30L, 60L, 30L, 100L, 55L, 70L, 20L),
-      "2" -> Array(7000L, 80L, 50L, 40L, 10L, 30L, 50L, 60L, 80L, 40L))
+      "1" -> new ExecutorMetrics(Array(7000L, 70L, 50L, 30L, 60L, 30L, 100L, 55L, 70L, 20L)),
+      "2" -> new ExecutorMetrics(Array(7000L, 80L, 50L, 40L, 10L, 30L, 50L, 60L, 80L, 40L)))
 
     // check that the stored peak values match the expected values
     for ((id, metrics) <- expectedValues) {
@@ -1323,8 +1323,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
         assert(exec.info.id === id)
         exec.info.peakMemoryMetrics match {
           case Some(actual) =>
-            (0 until MetricGetter.values.length).foreach { idx =>
-              assert(actual(idx) === metrics(idx))
+            ExecutorMetricType.values.foreach { metricType =>
+              assert(actual.getMetricValue(metricType) === metrics.getMetricValue(metricType))
             }
           case _ =>
             assert(false)
@@ -1400,6 +1400,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     taskMetrics.incDiskBytesSpilled(111)
     taskMetrics.incMemoryBytesSpilled(222)
     val accum = Array((333L, 1, 1, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
-    SparkListenerExecutorMetricsUpdate(executorId.toString, accum, Some(executorMetrics))
+    SparkListenerExecutorMetricsUpdate(executorId.toString, accum,
+      Some(new ExecutorMetrics(executorMetrics)))
   }
 }

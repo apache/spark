@@ -19,9 +19,10 @@ package org.apache.spark
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.MemoryManager
-import org.apache.spark.metrics.MetricGetter
+import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -62,8 +63,9 @@ private[spark] class Heartbeater(
    * Get the current executor level metrics. These are returned as an array, with the index
    * determined by MetricGetter.values
    */
-  def getCurrentMetrics(): Array[Long] = {
-      MetricGetter.values.map(_.getMetricValue(memoryManager)).toArray
+  def getCurrentMetrics(): ExecutorMetrics = {
+    val metrics = ExecutorMetricType.values.map(_.getMetricValue(memoryManager)).toArray
+    new ExecutorMetrics(metrics)
   }
 }
 

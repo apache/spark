@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.status.api.v1
@@ -690,9 +690,9 @@ private[spark] class AppStatusListener(
     // check if there is a new peak value for any of the executor level memory metrics
     // for the live UI. SparkListenerExecutorMetricsUpdate events are only processed
     // for the live UI.
-    event.executorUpdates.foreach { updates: Array[Long] =>
+    event.executorUpdates.foreach { updates: ExecutorMetrics =>
       liveExecutors.get(event.execId).foreach { exec: LiveExecutor =>
-        if (exec.peakExecutorMetrics.compareAndUpdate(updates)) {
+        if (exec.peakExecutorMetrics.compareAndUpdatePeakValues(updates)) {
           maybeUpdate(exec, now)
         }
       }
@@ -708,7 +708,7 @@ private[spark] class AppStatusListener(
     liveExecutors.get(executorMetrics.execId)
       .orElse(deadExecutors.get(executorMetrics.execId)) match {
       case Some(exec) =>
-         if (exec.peakExecutorMetrics.compareAndUpdate(executorMetrics.executorMetrics)) {
+         if (exec.peakExecutorMetrics.compareAndUpdatePeakValues(executorMetrics.executorMetrics)) {
           maybeUpdate(exec, now)
         }
       case None =>

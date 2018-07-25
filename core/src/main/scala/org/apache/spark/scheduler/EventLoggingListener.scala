@@ -23,7 +23,6 @@ import java.nio.charset.StandardCharsets
 import java.util.EnumSet
 import java.util.Locale
 
-import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.hadoop.conf.Configuration
@@ -36,6 +35,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SPARK_VERSION, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
@@ -96,7 +96,7 @@ private[spark] class EventLoggingListener(
   private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
 
   // map of (stageId, stageAttempt), to peak executor metrics for the stage
-  private val liveStageExecutorMetrics = HashMap[(Int, Int), HashMap[String, PeakExecutorMetrics]]()
+  private val liveStageExecutorMetrics = HashMap[(Int, Int), HashMap[String, ExecutorMetrics]]()
 
   /**
    * Creates the log file in the configured log directory.
@@ -165,7 +165,7 @@ private[spark] class EventLoggingListener(
     if (shouldLogStageExecutorMetrics) {
       // record the peak metrics for the new stage
       liveStageExecutorMetrics.put((event.stageInfo.stageId, event.stageInfo.attemptNumber()),
-        new HashMap[String, PeakExecutorMetrics]())
+        new HashMap[String, ExecutorMetrics]())
     }
   }
 
@@ -195,7 +195,7 @@ private[spark] class EventLoggingListener(
       executorOpt.foreach { execMap =>
         execMap.foreach { case (executorId, peakExecutorMetrics) =>
             logEvent(new SparkListenerStageExecutorMetrics(executorId, event.stageInfo.stageId,
-              event.stageInfo.attemptNumber(), peakExecutorMetrics.metrics))
+              event.stageInfo.attemptNumber(), peakExecutorMetrics))
         }
       }
     }
@@ -272,8 +272,8 @@ private[spark] class EventLoggingListener(
       event.executorUpdates.foreach { executorUpdates =>
         liveStageExecutorMetrics.values.foreach { peakExecutorMetrics =>
           val peakMetrics = peakExecutorMetrics.getOrElseUpdate(
-            event.execId, new PeakExecutorMetrics())
-          peakMetrics.compareAndUpdate(executorUpdates)
+            event.execId, new ExecutorMetrics())
+          peakMetrics.compareAndUpdatePeakValues(executorUpdates)
         }
       }
     }

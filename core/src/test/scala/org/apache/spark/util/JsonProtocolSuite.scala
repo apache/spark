@@ -30,7 +30,7 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark._
 import org.apache.spark.executor._
-import org.apache.spark.metrics.MetricGetter
+import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -95,7 +95,8 @@ class JsonProtocolSuite extends SparkFunSuite {
         makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true)
           .accumulators().map(AccumulatorSuite.makeInfo)
           .zipWithIndex.map { case (a, i) => a.copy(id = i) }
-      val executorUpdates = Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L, 321L, 654L, 765L)
+      val executorUpdates = new ExecutorMetrics(
+        Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L, 321L, 654L, 765L))
       SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)),
         Some(executorUpdates))
     }
@@ -104,7 +105,7 @@ class JsonProtocolSuite extends SparkFunSuite {
         "In your multitude...", 300), RDDBlockId(0, 0), StorageLevel.MEMORY_ONLY, 100L, 0L))
     val stageExecutorMetrics =
       SparkListenerStageExecutorMetrics("1", 2, 3,
-        Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L, 321L, 654L, 765L))
+        new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L, 321L, 654L, 765L)))
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -439,12 +440,14 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("executorMetricsFromJson backward compatibility: handle missing metrics") {
     // any missing metrics should be set to 0
-    val executorMetrics = Array(12L, 23L, 45L, 67L, 78L, 89L, 90L, 123L, 456L, 789L)
+    val executorMetrics = new ExecutorMetrics(
+      Array(12L, 23L, 45L, 67L, 78L, 89L, 90L, 123L, 456L, 789L))
     val oldExecutorMetricsJson =
       JsonProtocol.executorMetricsToJson(executorMetrics)
         .removeField( _._1 == "MappedPoolMemory")
-    val exepectedExecutorMetrics = Array(12L, 23L, 45L, 67L, 78L, 89L, 90L, 123L, 456L, 0L)
-    assertExecutorMetricsEquals(exepectedExecutorMetrics,
+    val expectedExecutorMetrics = new ExecutorMetrics(
+      Array(12L, 23L, 45L, 67L, 78L, 89L, 90L, 123L, 456L, 0L))
+    assertEquals(expectedExecutorMetrics,
       JsonProtocol.executorMetricsFromJson(oldExecutorMetricsJson))
   }
 
@@ -593,12 +596,13 @@ private[spark] object JsonProtocolSuite extends Assertions {
             assert(stageAttemptId1 === stageAttemptId2)
             assertSeqEquals[AccumulableInfo](updates1, updates2, (a, b) => a.equals(b))
           })
-        assertExecutorMetricsEquals(e1.executorUpdates, e2.executorUpdates)
+        assertOptionEquals(e1.executorUpdates, e2.executorUpdates,
+        (e1: ExecutorMetrics, e2: ExecutorMetrics) => assertEquals(e1, e2))
       case (e1: SparkListenerStageExecutorMetrics, e2: SparkListenerStageExecutorMetrics) =>
         assert(e1.execId === e2.execId)
         assert(e1.stageId === e2.stageId)
         assert(e1.stageAttemptId === e2.stageAttemptId)
-        assertExecutorMetricsEquals(e1.executorMetrics, e2.executorMetrics)
+        assertEquals(e1.executorMetrics, e2.executorMetrics)
       case (e1, e2) =>
         assert(e1 === e2)
       case _ => fail("Events don't match in types!")
@@ -749,6 +753,12 @@ private[spark] object JsonProtocolSuite extends Assertions {
       assertStackTraceElementEquals)
   }
 
+  private def assertEquals(metrics1: ExecutorMetrics, metrics2: ExecutorMetrics) {
+    ExecutorMetricType.values.foreach { metricType =>
+      assert(metrics1.getMetricValue(metricType) === metrics2.getMetricValue(metricType))
+    }
+  }
+
   private def assertJsonStringEquals(expected: String, actual: String, metadata: String) {
     val expectedJson = pretty(parse(expected))
     val actualJson = pretty(parse(actual))
@@ -797,26 +807,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   private def assertStackTraceElementEquals(ste1: StackTraceElement, ste2: StackTraceElement) {
     assert(ste1 === ste2)
-  }
-
-  private def assertExecutorMetricsEquals(
-      metrics1: Option[Array[Long]],
-      metrics2: Option[Array[Long]]) {
-    (metrics1, metrics2) match {
-      case (Some(m1), Some(m2)) =>
-        assertExecutorMetricsEquals(m1, m2)
-      case (None, None) =>
-      case _ =>
-        assert(false)
-    }
-  }
-
-  private def assertExecutorMetricsEquals(metrics1: Array[Long], metrics2: Array[Long]) {
-    assert(metrics1.length === MetricGetter.values.length)
-    assert(metrics2.length === MetricGetter.values.length)
-    (0 until MetricGetter.values.length).foreach { idx =>
-      assert(metrics1(idx) === metrics2(idx))
-    }
   }
 
   /** ----------------------------------- *
@@ -887,7 +877,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       }
     val executorMetricsUpdate =
       if (includeExecutorMetrics) {
-        Some(Array(123456L, 543L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L))
+        Some(new ExecutorMetrics(Array(123456L, 543L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L)))
        } else {
         None
       }

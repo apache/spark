@@ -31,7 +31,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark._
 import org.apache.spark.executor._
-import org.apache.spark.metrics.MetricGetter
+import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -392,11 +392,11 @@ private[spark] object JsonProtocol {
     ("Updated Blocks" -> updatedBlocks)
   }
 
-  /** Convert executor metrics (indexed by MetricGetter.values) to JSON. */
-  def executorMetricsToJson(executorMetrics: Array[Long]): JValue = {
-    val metrics = MetricGetter.idxAndValues.map { case (idx, metric) =>
-      JField(metric.name, executorMetrics(idx))
-    }
+  /** Convert executor metrics to JSON. */
+  def executorMetricsToJson(executorMetrics: ExecutorMetrics): JValue = {
+    val metrics = ExecutorMetricType.values.map{ metricType =>
+      JField(metricType.name, executorMetrics.getMetricValue(metricType))
+     }
     JObject(metrics: _*)
   }
 
@@ -608,13 +608,13 @@ private[spark] object JsonProtocol {
     SparkListenerTaskGettingResult(taskInfo)
   }
 
-  /** Extract the executor metrics (indexed by MetricGetter.values) from JSON. */
-  def executorMetricsFromJson(json: JValue): Array[Long] = {
+  /** Extract the executor metrics from JSON. */
+  def executorMetricsFromJson(json: JValue): ExecutorMetrics = {
     val metrics =
-      MetricGetter.values.map {metric =>
-        val metricVal = jsonOption(json \ metric.name).map(_.extract[Long]).getOrElse(0L)
-      metricVal}
-    metrics.toArray
+      ExecutorMetricType.values.map { metric =>
+        metric.name -> jsonOption(json \ metric.name).map(_.extract[Long]).getOrElse(0L)
+      }.toMap
+    new ExecutorMetrics(metrics)
   }
 
   def taskEndFromJson(json: JValue): SparkListenerTaskEnd = {

@@ -21,64 +21,70 @@ import javax.management.ObjectName
 
 import org.apache.spark.memory.MemoryManager
 
-private[spark] sealed trait MetricGetter {
-  def getMetricValue(memoryManager: MemoryManager): Long
-  val name = getClass().getName().stripSuffix("$").split("""\.""").last
+/**
+ * Executor metric types for executor-level metrics stored in ExecutorMetrics.
+ */
+sealed trait ExecutorMetricType {
+  private[spark] def getMetricValue(memoryManager: MemoryManager): Long
+  private[spark] val name = getClass().getName().stripSuffix("$").split("""\.""").last
 }
 
-private[spark] abstract class MemoryManagerMetricGetter(
-    f: MemoryManager => Long) extends MetricGetter {
-  override def getMetricValue(memoryManager: MemoryManager): Long = {
+private[spark] abstract class MemoryManagerExecutorMetricType(
+    f: MemoryManager => Long) extends ExecutorMetricType {
+  override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
     f(memoryManager)
   }
 }
 
-private[spark]abstract class MBeanMetricGetter(mBeanName: String)
-  extends MetricGetter {
-  val bean = ManagementFactory.newPlatformMXBeanProxy(ManagementFactory.getPlatformMBeanServer,
+private[spark]abstract class MBeanExecutorMetricType(mBeanName: String)
+  extends ExecutorMetricType {
+  private val bean = ManagementFactory.newPlatformMXBeanProxy(
+    ManagementFactory.getPlatformMBeanServer,
     new ObjectName(mBeanName).toString, classOf[BufferPoolMXBean])
 
-  override def getMetricValue(memoryManager: MemoryManager): Long = {
+  override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
     bean.getMemoryUsed
   }
 }
 
-private[spark] case object JVMHeapMemory extends MetricGetter {
-  override def getMetricValue(memoryManager: MemoryManager): Long = {
+case object JVMHeapMemory extends ExecutorMetricType {
+  override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
     ManagementFactory.getMemoryMXBean.getHeapMemoryUsage().getUsed()
   }
 }
 
-private[spark] case object JVMOffHeapMemory extends MetricGetter {
-  override def getMetricValue(memoryManager: MemoryManager): Long = {
+case object JVMOffHeapMemory extends ExecutorMetricType {
+  override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
     ManagementFactory.getMemoryMXBean.getNonHeapMemoryUsage().getUsed()
   }
 }
 
-private[spark] case object OnHeapExecutionMemory extends MemoryManagerMetricGetter(
+case object OnHeapExecutionMemory extends MemoryManagerExecutorMetricType(
   _.onHeapExecutionMemoryUsed)
 
-private[spark] case object OffHeapExecutionMemory extends MemoryManagerMetricGetter(
+case object OffHeapExecutionMemory extends MemoryManagerExecutorMetricType(
   _.offHeapExecutionMemoryUsed)
 
-private[spark] case object OnHeapStorageMemory extends MemoryManagerMetricGetter(
+case object OnHeapStorageMemory extends MemoryManagerExecutorMetricType(
   _.onHeapStorageMemoryUsed)
 
-private[spark] case object OffHeapStorageMemory extends MemoryManagerMetricGetter(
+case object OffHeapStorageMemory extends MemoryManagerExecutorMetricType(
   _.offHeapStorageMemoryUsed)
 
-private[spark] case object OnHeapUnifiedMemory extends MemoryManagerMetricGetter(
+case object OnHeapUnifiedMemory extends MemoryManagerExecutorMetricType(
   (m => m.onHeapExecutionMemoryUsed + m.onHeapStorageMemoryUsed))
 
-private[spark] case object OffHeapUnifiedMemory extends MemoryManagerMetricGetter(
+case object OffHeapUnifiedMemory extends MemoryManagerExecutorMetricType(
   (m => m.offHeapExecutionMemoryUsed + m.offHeapStorageMemoryUsed))
 
-private[spark] case object DirectPoolMemory extends MBeanMetricGetter(
+case object DirectPoolMemory extends MBeanExecutorMetricType(
   "java.nio:type=BufferPool,name=direct")
-private[spark] case object MappedPoolMemory extends MBeanMetricGetter(
+
+case object MappedPoolMemory extends MBeanExecutorMetricType(
   "java.nio:type=BufferPool,name=mapped")
 
-private[spark] object MetricGetter {
+private[spark] object ExecutorMetricType {
+  // List of all executor metric types
   val values = IndexedSeq(
     JVMHeapMemory,
     JVMOffHeapMemory,
@@ -92,5 +98,7 @@ private[spark] object MetricGetter {
     MappedPoolMemory
   )
 
-  val idxAndValues = values.zipWithIndex.map(_.swap)
+  // Map of executor metric type to its index in values.
+  val metricIdxMap =
+    Map[ExecutorMetricType, Int](ExecutorMetricType.values.zipWithIndex: _*)
 }
