@@ -734,7 +734,7 @@ private[spark] class BlockManager(
 
       if (data != null) {
         // SPARK-24307 undocumented "escape-hatch" in case there are any issues in converting to
-        // to ChunkedByteBuffer, to go back to old code-path.  Can be removed post Spark 2.4 if
+        // ChunkedByteBuffer, to go back to old code-path.  Can be removed post Spark 2.4 if
         // new path is stable.
         if (remoteReadNioBufferConversion) {
           return Some(new ChunkedByteBuffer(data.nioByteBuffer()))
