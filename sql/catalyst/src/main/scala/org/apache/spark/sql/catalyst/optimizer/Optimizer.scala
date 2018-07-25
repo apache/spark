@@ -1445,7 +1445,7 @@ object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
  *   FROM (
  *     SELECT replicate_rows(sum_val, c1) AS (sum_val, c1)
  *       FROM (
- *         SELECT c1, cnt, sum_val
+ *         SELECT c1, sum_val
  *           FROM (
  *             SELECT c1, sum(vcol) AS sum_val
  *               FROM (
