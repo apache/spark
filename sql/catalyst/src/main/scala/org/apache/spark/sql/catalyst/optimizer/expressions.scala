@@ -218,11 +218,11 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
 object OptimizeIn extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case In(v, list) if list.isEmpty =>
+      case expr @ In(_, list) if list.isEmpty =>
         // When v is not nullable, the following expression will be optimized
         // to FalseLiteral which is tested in OptimizeInSuite.scala
-        If(IsNotNull(v), FalseLiteral, Literal(null, BooleanType))
-      case expr @ In(v, list) if expr.inSetConvertible =>
+        If(IsNotNull(expr.inValues.valueExpression), FalseLiteral, Literal(null, BooleanType))
+      case expr @ In(_, list) if expr.inSetConvertible =>
         val newList = ExpressionSet(list).toSeq
         if (newList.length == 1
           // TODO: `EqualTo` for structural types are not working. Until SPARK-24443 is addressed,
