@@ -234,7 +234,6 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       // Lookup WindowSpecDefinitions. This rule works with unresolved children.
       case WithWindowDefinition(windowDefinitions, child) =>
-        // TODO(rxin): Check with Herman whether the next line is OK.
         child.resolveOperators {
           case p => p.transformExpressions {
             case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
