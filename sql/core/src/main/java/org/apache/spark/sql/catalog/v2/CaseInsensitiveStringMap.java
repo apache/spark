@@ -101,7 +101,7 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
   }
 
   @Override
-  public Set<Entry<String, String>> entrySet() {
+  public Set<Map.Entry<String, String>> entrySet() {
     return delegate.entrySet();
   }
 }
