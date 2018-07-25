@@ -38,7 +38,7 @@ private object RecursiveFlag {
    */
   def withRecursiveFlag[T](value: Boolean, spark: SparkSession)(f: => T): T = {
     val flagName = FileInputFormat.INPUT_DIR_RECURSIVE
-    val hadoopConf = spark.sparkContext.hadoopConfiguration
+    val hadoopConf = spark.sessionState.newHadoopConf()
     val old = Option(hadoopConf.get(flagName))
     hadoopConf.set(flagName, value.toString)
     try f finally {
@@ -98,7 +98,7 @@ private object SamplePathFilter {
     val sampleImages = sampleRatio < 1
     if (sampleImages) {
       val flagName = FileInputFormat.PATHFILTER_CLASS
-      val hadoopConf = spark.sparkContext.hadoopConfiguration
+      val hadoopConf = spark.sessionState.newHadoopConf()
       val old = Option(hadoopConf.getClass(flagName, null))
       hadoopConf.setDouble(SamplePathFilter.ratioParam, sampleRatio)
       hadoopConf.setLong(SamplePathFilter.seedParam, seed)

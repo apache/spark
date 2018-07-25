@@ -285,7 +285,7 @@ class LDASuite extends MLTest with DefaultReadWriteTest {
     // There should be 1 checkpoint remaining.
     assert(model.getCheckpointFiles.length === 1)
     val checkpointFile = new Path(model.getCheckpointFiles.head)
-    val fs = checkpointFile.getFileSystem(spark.sparkContext.hadoopConfiguration)
+    val fs = checkpointFile.getFileSystem(spark.sessionState.newHadoopConf())
     assert(fs.exists(checkpointFile))
     model.deleteCheckpointFiles()
     assert(model.getCheckpointFiles.isEmpty)

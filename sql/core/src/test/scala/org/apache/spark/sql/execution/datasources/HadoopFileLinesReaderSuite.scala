@@ -38,7 +38,7 @@ class HadoopFileLinesReaderSuite extends SharedSQLContext {
 
     val lines = ranges.map { case (start, length) =>
       val file = PartitionedFile(InternalRow.empty, path.getCanonicalPath, start, length)
-      val hadoopConf = conf.getOrElse(spark.sparkContext.hadoopConfiguration)
+      val hadoopConf = conf.getOrElse(spark.sessionState.newHadoopConf())
       val reader = new HadoopFileLinesReader(file, delimOpt, hadoopConf)
 
       reader.map(_.toString)
@@ -111,7 +111,7 @@ class HadoopFileLinesReaderSuite extends SharedSQLContext {
   }
 
   test("io.file.buffer.size is less than line length") {
-    val conf = spark.sparkContext.hadoopConfiguration
+    val conf = spark.sessionState.newHadoopConf()
     conf.set("io.file.buffer.size", "2")
     withTempPath { path =>
       val lines = getLines(path, text = "abcdef\n123456", ranges = Seq((4, 4), (8, 5)))
@@ -120,7 +120,7 @@ class HadoopFileLinesReaderSuite extends SharedSQLContext {
   }
 
   test("line cannot be longer than line.maxlength") {
-    val conf = spark.sparkContext.hadoopConfiguration
+    val conf = spark.sessionState.newHadoopConf()
     conf.set("mapreduce.input.linerecordreader.line.maxlength", "5")
     withTempPath { path =>
       val lines = getLines(path, text = "abcdef\n1234", ranges = Seq((0, 15)))
