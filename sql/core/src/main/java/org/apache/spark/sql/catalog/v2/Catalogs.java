@@ -72,7 +72,8 @@ public class Catalogs {
 
     } catch (IllegalAccessException e) {
       throw new SparkException(String.format(
-          "Failed to call provider constructor for catalog '%s': %s", name, providerClassName), e);
+          "Failed to call public no-arg constructor for catalog '%s': %s", name, providerClassName),
+          e);
 
     } catch (InstantiationException e) {
       throw new SparkException(String.format(

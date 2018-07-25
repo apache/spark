@@ -27,6 +27,9 @@ import java.util.Set;
  * Case-insensitive map of string keys to string values.
  * <p>
  * This is used to pass options to v2 implementations to ensure consistent case insensitivity.
+ * <p>
+ * Methods that return keys in this map, like {@link #entrySet()} and {@link #keySet()}, return
+ * keys converted to lower case.
  */
 public class CaseInsensitiveStringMap implements Map<String, String> {
 

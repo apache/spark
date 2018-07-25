@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf;
  * <p>
  * Catalog implementations must implement this marker interface to be loaded by
  * {@link Catalogs#load(String, SQLConf)}. The loader will instantiate catalog classes using the
- * required no-arg constructor. After creating an instance, it will be configured by calling
+ * required public no-arg constructor. After creating an instance, it will be configured by calling
  * {@link #initialize(CaseInsensitiveStringMap)}.
  * <p>
  * Catalog implementations are registered to a name by adding a configuration option to Spark:
