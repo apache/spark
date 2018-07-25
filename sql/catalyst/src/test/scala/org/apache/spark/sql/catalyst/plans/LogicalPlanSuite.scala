@@ -18,13 +18,12 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Coalesce, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.IntegerType
 
 /**
- * This suite is used to test [[LogicalPlan]]'s `transformUp/transformDown` plus analysis barrier
- * and make sure it can correctly skip sub-trees that have already been analyzed.
+ * This suite is used to test [[LogicalPlan]]'s `transformUp/transformDown`.
  */
 class LogicalPlanSuite extends SparkFunSuite {
   private var invocationCount = 0

@@ -121,9 +121,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
     if (Utils.isTesting &&
         AnalysisHelper.inAnalyzer.get > 0 &&
         AnalysisHelper.resolveOperatorDepth.get == 0) {
-      val e = new RuntimeException("This method should not be called in the analyzer")
-      e.printStackTrace()
-      throw e
+      throw new RuntimeException("This method should not be called in the analyzer")
     }
   }
 
@@ -166,7 +164,7 @@ object AnalysisHelper {
    * This is an int because resolve* calls might be be nested (e.g. a rule might trigger another
    * query compilation within the rule itself), so we are tracking the depth here.
    */
-  val resolveOperatorDepth: ThreadLocal[Int] = new ThreadLocal[Int] {
+  private val resolveOperatorDepth: ThreadLocal[Int] = new ThreadLocal[Int] {
     override def initialValue(): Int = 0
   }
 
@@ -174,7 +172,7 @@ object AnalysisHelper {
    * A thread local to track whether we are in the analysis phase of query compilation. This is an
    * int rather than a boolean in case our analyzer recursively calls itself.
    */
-  val inAnalyzer: ThreadLocal[Int] = new ThreadLocal[Int] {
+  private val inAnalyzer: ThreadLocal[Int] = new ThreadLocal[Int] {
     override def initialValue(): Int = 0
   }
 
