@@ -1364,7 +1364,7 @@ class JDBCSuite extends QueryTest
       Row(Date.valueOf(date), Timestamp.valueOf(timestamp))
     }
 
-    // DataType partition column
+    // DateType partition column
     val df1 = spark.read.format("jdbc")
       .option("url", urlWithUserAndPass)
       .option("dbtable", "TEST.DATETIME")
