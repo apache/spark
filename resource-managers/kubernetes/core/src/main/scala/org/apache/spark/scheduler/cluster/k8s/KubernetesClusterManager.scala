@@ -23,9 +23,9 @@ import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.client.Config
 
 import org.apache.spark.SparkContext
+import org.apache.spark.deploy.k8s.{KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.SparkKubernetesClientFactory
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 import org.apache.spark.util.{SystemClock, ThreadUtils}
@@ -56,7 +56,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
     } else {
       (KUBERNETES_AUTH_CLIENT_MODE_PREFIX,
-        masterURL.substring("k8s://".length()),
+        KubernetesUtils.parseMasterUrl(masterURL),
         None,
         None)
     }
