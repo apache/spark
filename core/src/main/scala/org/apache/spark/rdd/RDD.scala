@@ -452,6 +452,10 @@ abstract class RDD[T: ClassTag](
       /** Distributes elements evenly across output partitions, starting from a random partition. */
       val distributePartition = (index: Int, items: Iterator[T]) => {
         var position = new Random(hashing.byteswap32(index)).nextInt(numPartitions)
+        // TODO Enable insert a local sort before shuffle to make input data sequence
+        // deterministic, to avoid retry on all partitions on FetchFailure. However, performing
+        // a local sort before shuffle may increase the execution time of repartition()
+        // significantly (For some large input data can cost 3x ~ 5x time).
         items.map { t =>
           // Note that the hash code of the key will just be the key itself. The HashPartitioner
           // will mod it with the number of total partitions.
@@ -462,8 +466,11 @@ abstract class RDD[T: ClassTag](
 
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
-        new ShuffledRDD[Int, T, T](mapPartitionsWithIndex(distributePartition),
-        new HashPartitioner(numPartitions)),
+        new ShuffledRDD[Int, T, T](
+          mapPartitionsWithIndexInternal(
+            distributePartition,
+            retryOnAllPartitionsOnFailure = true),
+          new HashPartitioner(numPartitions)),
         numPartitions,
         partitionCoalescer).values
     } else {
@@ -809,14 +816,19 @@ abstract class RDD[T: ClassTag](
    * @param preservesPartitioning indicates whether the input function preserves the partitioner,
    * which should be `false` unless this is a pair RDD and the input function doesn't modify
    * the keys.
+   *
+   * @param retryOnAllPartitionsOnFailure indicates whether to recompute on all the partitions on
+   * failure recovery, which should be `false` unless the output is repartitioned.
    */
   private[spark] def mapPartitionsWithIndexInternal[U: ClassTag](
       f: (Int, Iterator[T]) => Iterator[U],
-      preservesPartitioning: Boolean = false): RDD[U] = withScope {
+      preservesPartitioning: Boolean = false,
+      retryOnAllPartitionsOnFailure: Boolean = false): RDD[U] = withScope {
     new MapPartitionsRDD(
       this,
       (context: TaskContext, index: Int, iter: Iterator[T]) => f(index, iter),
-      preservesPartitioning)
+      preservesPartitioning,
+      retryOnAllPartitionsOnFailure)
   }
 
   /**
@@ -1839,6 +1851,22 @@ abstract class RDD[T: ClassTag](
   def toJavaRDD() : JavaRDD[T] = {
     new JavaRDD(this)(elementClassTag)
   }
+
+  /**
+   * Whether or not the RDD is required to recompute all partitions on FetchFailure. Repartition on
+   * an RDD performs in a round-robin manner, thus there may be data correctness issue if only a
+   * sub-set of partitions are recomputed on FetchFailure and the input data sequence is not
+   * deterministic. Please refer to SPARK-23207 and SPARK-23243 for related discussion.
+   *
+   * Ideally we don't need to recompute all partitions on FetchFailure if the result sequence of an
+   * RDD is deterministic, but various sources (that out of control of Spark) may lead to
+   * non-determine result sequence(e.g. read from external data source / different spill and merge
+   * pattern under memory pressure), and we cannot bear the performance degradation by inserting a
+   * local sort before shuffle(can cost 3x ~ 5x time for repartition()), and the data type of an
+   * RDD may even be not sortable. Due to the above reason, we make a compromise to just require to
+   * recompute all partitions on FetchFailure if repartition operation is called on an RDD.
+   */
+  private[spark] def recomputeAllPartitionsOnFailure(): Boolean = false
 }
 
 
