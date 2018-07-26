@@ -262,9 +262,12 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       val avroFields = resolveNullableType(avroSchema, catalystType,
         avroSchema.getType == Type.UNION)
         .getFields
-      assert(avroFields.size() == catalystType.asInstanceOf[StructType].length)
-      catalystType.asInstanceOf[StructType].zip(avroFields.asScala).forall {
-        case (f1, f2) => typeMatchesSchema(f1.dataType, f2.schema)
+      if (avroFields.size() == catalystType.asInstanceOf[StructType].length) {
+        catalystType.asInstanceOf[StructType].zip(avroFields.asScala).forall {
+          case (f1, f2) => typeMatchesSchema(f1.dataType, f2.schema)
+        }
+      } else {
+        false
       }
     } else {
       val isTypeCompatible = (a: Schema, b: DataType, c: Type) =>
@@ -278,7 +281,10 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
         case LongType | TimestampType => isTypeCompatible(avroSchema, catalystType, Type.LONG)
         case FloatType => isTypeCompatible(avroSchema, catalystType, Type.FLOAT)
         case DoubleType => isTypeCompatible(avroSchema, catalystType, Type.DOUBLE)
-        case d: DecimalType => isTypeCompatible(avroSchema, catalystType, Type.STRING)
+        case d: DecimalType =>
+          // newConverter always returns a string representation for DecimalType, so we honor
+          // that here, since we don't yet support Avro's logical types
+          isTypeCompatible(avroSchema, catalystType, Type.STRING)
         case StringType => isTypeCompatible(avroSchema, catalystType, Type.STRING) ||
           isTypeCompatible(avroSchema, catalystType, Type.ENUM)
         case DateType => isTypeCompatible(avroSchema, catalystType, Type.INT) ||

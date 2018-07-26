@@ -79,7 +79,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     spark.conf.set("spark.sql.files.maxPartitionBytes", 1024)
   }
 
-  def forceSchemaCheck(spark: SparkSession, inputPath: String, schemaFile: String): Unit = {
+  def checkSpecifySchemaOnWrite(inputPath: String, schemaFile: String): Unit = {
     withTempPath { tempDir =>
       val df = spark.read.format("avro").load(inputPath)
 
@@ -1080,15 +1080,15 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   // Read an avro, write it with converted schema, read it, write it with original avroSchema
   test("read read-write, read-write w/ schema, read") {
-    forceSchemaCheck(spark, episodesAvro, episodesSchemaFile)
-    forceSchemaCheck(spark, testAvro, testSchemaFile)
-    forceSchemaCheck(spark, messyAvro, messySchemaFile)
+    checkSpecifySchemaOnWrite(episodesAvro, episodesSchemaFile)
+    checkSpecifySchemaOnWrite(testAvro, testSchemaFile)
+    checkSpecifySchemaOnWrite(messyAvro, messySchemaFile)
   }
 
   // TODO Make this work somehow
   test("multiunion force schema throws exception") {
     try {
-      forceSchemaCheck(spark, multiRecordTypeUnionAvro, multiRecordTypeUnionSchemaFile)
+      checkSpecifySchemaOnWrite(multiRecordTypeUnionAvro, multiRecordTypeUnionSchemaFile)
       assert(false)
     } catch {
       case ex => assert(true)
