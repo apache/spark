@@ -146,7 +146,7 @@ class SetOperationSuite extends PlanTest {
   }
 
   test("EXCEPT ALL rewrite") {
-    val input = Except(testRelation, testRelation2, true)
+    val input = Except(testRelation, testRelation2, isAll = true)
     val rewrittenPlan = RewriteExcepAll(input)
 
     val planFragment = testRelation.select(Literal(1L).as("vcol"), 'a, 'b, 'c)

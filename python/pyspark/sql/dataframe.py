@@ -300,13 +300,16 @@ class DataFrame(object):
 
         This is equivalent to `EXCEPT ALL` in SQL.
 
-        >>> df1 = spark.createDataFrame([("a", 1), ("a", 2), ("b",  3), ("c", 4)], ["C1", "C2"])
+        >>> df1 = spark.createDataFrame(
+        ...         [("a", 1), ("a", 1), ("a", 1), ("a", 2), ("b",  3), ("c", 4)], ["C1", "C2"])
         >>> df2 = spark.createDataFrame([("a", 1), ("b", 3)], ["C1", "C2"])
 
         >>> df1.exceptAll(df2).show()
         +---+---+
         | C1| C2|
         +---+---+
+        |  a|  1|
+        |  a|  1|
         |  a|  2|
         |  c|  4|
         +---+---+

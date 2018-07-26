@@ -1431,7 +1431,7 @@ object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
 }
 
 /**
- * Replaces logical [[ExceptAll]] operator using a combination of Union, Aggregate
+ * Replaces logical [[Except]] operator using a combination of Union, Aggregate
  * and Generate operator.
  *
  * Input Query :
@@ -1443,7 +1443,7 @@ object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
  * {{{
  *   SELECT c1
  *   FROM (
- *     SELECT replicate_rows(sum_val, c1) AS (sum_val, c1)
+ *     SELECT replicate_rows(sum_val, c1)
  *       FROM (
  *         SELECT c1, sum_val
  *           FROM (
@@ -1478,9 +1478,9 @@ object RewriteExcepAll extends Rule[LogicalPlan] {
       val filteredAggPlan = Filter(GreaterThan(aggSumCol.toAttribute, Literal(0L)), aggregatePlan)
       val genRowPlan = Generate(
         ReplicateRows(Seq(aggSumCol.toAttribute) ++ left.output),
-        Nil,
-        false,
-        None,
+        unrequiredChildIndex = Nil,
+        outer = false,
+        qualifier = None,
         left.output,
         filteredAggPlan
       )
