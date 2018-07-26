@@ -1512,10 +1512,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a04 = Literal.create(Seq(1, 2, null, 4, 5, 1), ArrayType(IntegerType, true))
     val a05 = Literal.create(Seq(-5, 4, null, 2, -1), ArrayType(IntegerType, true))
     val a06 = Literal.create(Seq.empty[Int], ArrayType(IntegerType, false))
-    val ab0 = Literal.create(Seq[Byte](1, 2, 3, 2), ArrayType(ByteType, false))
-    val ab1 = Literal.create(Seq[Byte](4, 2, 4), ArrayType(ByteType, false))
-    val as0 = Literal.create(Seq[Short](1, 2, 3, 2), ArrayType(ShortType, false))
-    val as1 = Literal.create(Seq[Short](4, 2, 4), ArrayType(ShortType, false))
 
     val a10 = Literal.create(Seq(1L, 2L, 4L, 3L), ArrayType(LongType, false))
     val a11 = Literal.create(Seq(4L, 2L), ArrayType(LongType, false))
@@ -1544,8 +1540,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayExcept(a04, a05), Seq(1, 5))
     checkEvaluation(ArrayExcept(a04, a06), Seq(1, 2, null, 4, 5))
     checkEvaluation(ArrayExcept(a06, a04), Seq.empty)
-    checkEvaluation(ArrayExcept(ab0, ab1), Seq[Byte](1, 3))
-    checkEvaluation(ArrayExcept(as0, as1), Seq[Short](1, 3))
 
     checkEvaluation(ArrayExcept(a10, a11), Seq(1L, 3L))
     checkEvaluation(ArrayExcept(a12, a11), Seq(1L))
