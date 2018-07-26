@@ -313,7 +313,7 @@ class ParquetFileFormat
         val splits = ParquetFileFormat.fileSplits.get(root,
           new Callable[ParquetFileSplitter] {
             override def call(): ParquetFileSplitter =
-              createParquetFileSplits(root, hadoopConf, schema, sparkSession)
+              createParquetFileSplits(root, hadoopConf, sparkSession)
           })
         root -> splits.buildSplitter(filters)
       }.toMap
@@ -331,11 +331,11 @@ class ParquetFileFormat
   private def createParquetFileSplits(
     root: Path,
     hadoopConf: Configuration,
-    schema: StructType,
     sparkSession: SparkSession): ParquetFileSplitter = {
     getMetadataForPath(root, hadoopConf)
       .map { meta =>
-        new ParquetMetadataFileSplitter(root, meta.getBlocks.asScala, schema, sparkSession)
+        new ParquetMetadataFileSplitter(
+          root, meta.getBlocks.asScala, meta.getFileMetaData.getSchema, sparkSession)
       }
       .getOrElse(ParquetDefaultFileSplitter)
   }
