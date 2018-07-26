@@ -118,12 +118,14 @@ case class BroadcastExchangeExec(
           // SparkFatalException, which is a subclass of Exception. ThreadUtils.awaitResult
           // will catch this exception and re-throw the wrapped fatal throwable.
           case oe: OutOfMemoryError =>
-            throw new SparkFatalException(
+            val oome =
               new OutOfMemoryError(s"Not enough memory to build and broadcast the table to " +
               s"all worker nodes. As a workaround, you can either disable broadcast by setting " +
               s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark driver " +
               s"memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value")
-              .initCause(oe.getCause))
+              .initCause(oe.getCause)
+            oome.setStackTrace(oe.getStackTrace)
+            throw new SparkFatalException(oome)
           case e if !NonFatal(e) =>
             throw new SparkFatalException(e)
         }
