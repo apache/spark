@@ -390,6 +390,8 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
       case If(Literal(null, _), _, falseValue) => falseValue
+      case If(cond, trueValue, falseValue)
+        if cond.deterministic && trueValue.semanticEquals(falseValue) => trueValue
 
       case e @ CaseWhen(branches, elseValue) if branches.exists(x => falseOrNullLiteral(x._1)) =>
         // If there are branches that are always false, remove them.
@@ -403,26 +405,33 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
           e.copy(branches = newBranches)
         }
 
-      case e @ CaseWhen(branches, _) if branches.headOption.map(_._1) == Some(TrueLiteral) =>
+      case CaseWhen(branches, _) if branches.headOption.map(_._1).contains(TrueLiteral) =>
         // If the first branch is a true literal, remove the entire CaseWhen and use the value
         // from that. Note that CaseWhen.branches should never be empty, and as a result the
         // headOption (rather than head) added above is just an extra (and unnecessary) safeguard.
         branches.head._2
 
       case CaseWhen(branches, _) if branches.exists(_._1 == TrueLiteral) =>
-        // a branc with a TRue condition eliminates all following branches,
+        // a branch with a true condition eliminates all following branches,
         // these branches can be pruned away
         val (h, t) = branches.span(_._1 != TrueLiteral)
         CaseWhen( h :+ t.head, None)
 
-      case CaseWhen(branches, Some(elseValue)) if {
-        // With previous rules, it's guaranteed that `branches.length >= 2`
+      case e @ CaseWhen(branches, Some(elseValue)) if {
+        // With previous rules, it's guaranteed that there must be one branch.
         val list = branches.map(_._2) :+ elseValue
         list.tail.forall(list.head.semanticEquals)
       } =>
-        // If all the values in the branches and elseValue are the same,
-        // `CaseWhen` condition can be removed.
-        elseValue
+        // For non-deterministic condition with side effect, we can not remove it.
+        // Since the output of all the branches are semantic equivalence, `elseValue`
+        // are picked for all the branches.
+        val newBranches = branches.map(_._1).filter(!_.deterministic).map(cond => (cond, elseValue))
+        if (newBranches.nonEmpty) {
+          e.copy(branches = newBranches)
+        }
+        else {
+          elseValue
+        }
     }
   }
 }
@@ -659,6 +668,7 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
     }
   }
 }
+
 
 /**
  * Combine nested [[Concat]] expressions.

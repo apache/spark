@@ -66,6 +66,23 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
       Literal(20))
   }
 
+  test("remove unnecessary if when the outputs are semantic equivalence") {
+    assertEquivalent(
+      If(IsNotNull(UnresolvedAttribute("a")),
+        Subtract(Literal(10), Literal(1)),
+        Add(Literal(6), Literal(3))),
+      Literal(9))
+
+    // For non-deterministic condition, we don't remove the `If` statement.
+    assertEquivalent(
+      If(GreaterThan(Rand(0), Literal(0.5)),
+        Subtract(Literal(10), Literal(1)),
+        Add(Literal(6), Literal(3))),
+      If(GreaterThan(Rand(0), Literal(0.5)),
+        Literal(9),
+        Literal(9)))
+  }
+
   test("remove unreachable branches") {
     // i.e. removing branches whose conditions are always false
     assertEquivalent(
