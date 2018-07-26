@@ -281,7 +281,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
     schema.filter(f => normalizedPartitionCols.contains(f.name)).map(_.dataType).foreach {
       case _: AtomicType => // OK
-      case other => failAnalysis(s"Cannot use ${other.simpleString} for partition column")
+      case other => failAnalysis(s"Cannot use ${other.catalogString} for partition column")
     }
 
     normalizedPartitionCols
@@ -307,7 +307,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
         normalizedBucketSpec.sortColumnNames.map(schema(_)).map(_.dataType).foreach {
           case dt if RowOrdering.isOrderable(dt) => // OK
-          case other => failAnalysis(s"Cannot use ${other.simpleString} for sorting column")
+          case other => failAnalysis(s"Cannot use ${other.catalogString} for sorting column")
         }
 
         Some(normalizedBucketSpec)

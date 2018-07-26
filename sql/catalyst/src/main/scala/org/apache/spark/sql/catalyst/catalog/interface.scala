@@ -114,7 +114,10 @@ case class CatalogTablePartition(
       map.put("Partition Parameters", s"{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
     }
     map.put("Created Time", new Date(createTime).toString)
-    map.put("Last Access", new Date(lastAccessTime).toString)
+    val lastAccess = {
+      if (-1 == lastAccessTime) "UNKNOWN" else new Date(lastAccessTime).toString
+    }
+    map.put("Last Access", lastAccess)
     stats.foreach(s => map.put("Partition Statistics", s.simpleString))
     map
   }
