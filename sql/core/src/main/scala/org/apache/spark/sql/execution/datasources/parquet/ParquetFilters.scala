@@ -411,7 +411,7 @@ private[parquet] class ParquetFilters(
     // filters for the column having dots in the names. Thus, we do not push down such filters.
     // See SPARK-20364.
     def canMakeFilterOn(name: String, value: Any): Boolean = {
-      nameToType.contains(name) && !name.contains(".") && valueCanMakeFilterOn(name, value)
+      nameToType.contains(name) && valueCanMakeFilterOn(name, value)
     }
 
     // NOTE:
