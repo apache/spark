@@ -146,7 +146,7 @@ class RateSourceSuite extends StreamTest {
       val startOffset = LongOffset(0L)
       val endOffset = LongOffset(1L)
       reader.setOffsetRange(Optional.of(startOffset), Optional.of(endOffset))
-      val tasks = reader.planInputPartitions()
+      val tasks = reader.planRowInputPartitions()
       assert(tasks.size == 1)
       val dataReader = tasks.get(0).createPartitionReader()
       val data = ArrayBuffer[Row]()
@@ -165,7 +165,7 @@ class RateSourceSuite extends StreamTest {
       val startOffset = LongOffset(0L)
       val endOffset = LongOffset(1L)
       reader.setOffsetRange(Optional.of(startOffset), Optional.of(endOffset))
-      val tasks = reader.planInputPartitions()
+      val tasks = reader.planRowInputPartitions()
       assert(tasks.size == 11)
 
       val readData = tasks.asScala
@@ -311,7 +311,7 @@ class RateSourceSuite extends StreamTest {
     val reader = new RateStreamContinuousReader(
       new DataSourceOptions(Map("numPartitions" -> "2", "rowsPerSecond" -> "20").asJava))
     reader.setStartOffset(Optional.empty())
-    val tasks = reader.planInputPartitions()
+    val tasks = reader.planRowInputPartitions()
     assert(tasks.size == 2)
 
     val data = scala.collection.mutable.ListBuffer[Row]()
