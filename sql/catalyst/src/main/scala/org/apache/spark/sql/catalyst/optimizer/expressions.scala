@@ -422,9 +422,9 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         val list = branches.map(_._2) :+ elseValue
         list.tail.forall(list.head.semanticEquals)
       } =>
-        // For non-deterministic condition with side effect, we can not remove it.
+        // For non-deterministic conditions with side effect, we can not remove it.
         // Since the output of all the branches are semantic equivalence, `elseValue`
-        // are picked for all the branches.
+        // is picked for all the branches.
         val newBranches = branches.map(_._1).filter(!_.deterministic).map(cond => (cond, elseValue))
         if (newBranches.nonEmpty) {
           e.copy(branches = newBranches)
