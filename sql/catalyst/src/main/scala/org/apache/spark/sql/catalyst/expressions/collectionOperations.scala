@@ -4097,11 +4097,11 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
           resultArray
         case _ =>
           val hs = new OpenHashSet[Any]
-          var exceptNullElement = true
+          var notFoundNullElement = true
           var i = 0
           while (i < array2.numElements()) {
             if (array2.isNullAt(i)) {
-              exceptNullElement = false
+              notFoundNullElement = false
             } else {
               val elem = array2.get(i, elementType)
               hs.add(elem)
@@ -4112,9 +4112,9 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
           i = 0
           while (i < array1.numElements()) {
             if (array1.isNullAt(i)) {
-              if (exceptNullElement) {
+              if (notFoundNullElement) {
                 arrayBuffer += null
-                exceptNullElement = false
+                notFoundNullElement = false
               }
             } else {
               val elem = array1.get(i, elementType)
@@ -4165,7 +4165,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
     nullSafeCodeGen(ctx, ev, (array1, array2) => {
       if (openHashElementType != "") {
         // Here, we ensure elementTypeSupportEquals is true
-        val exceptNullElement = ctx.freshName("exceptNullElement")
+        val notFoundNullElement = ctx.freshName("notFoundNullElement")
         val openHashSet = classOf[OpenHashSet[_]].getName
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$openHashElementType()"
         val hs = ctx.freshName("hs")
@@ -4175,20 +4175,20 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
         val arrayDataIdx = ctx.freshName("arrayDataIdx")
         s"""
            |$openHashSet $hs = new $openHashSet$postFix($classTag);
-           |boolean $exceptNullElement = true;
+           |boolean $notFoundNullElement = true;
            |int $size = 0;
            |for (int $i = 0; $i < $array2.numElements(); $i++) {
            |  if ($array2.isNullAt($i)) {
-           |    $exceptNullElement = false;
+           |    $notFoundNullElement = false;
            |  } else {
            |    $hs.add$postFix($array2.$getter);
            |  }
            |}
            |for (int $i = 0; $i < $array1.numElements(); $i++) {
            |  if ($array1.isNullAt($i)) {
-           |    if ($exceptNullElement) {
+           |    if ($notFoundNullElement) {
            |      $size++;
-           |      $exceptNullElement = false;
+           |      $notFoundNullElement = false;
            |    }
            |  } else {
            |    $javaTypeName $value = $array1.$getter;
@@ -4200,20 +4200,20 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
            |}
            |$arrayBuilder
            |$hs = new $openHashSet$postFix($classTag);
-           |$exceptNullElement = true;
+           |$notFoundNullElement = true;
            |int $pos = 0;
            |for (int $i = 0; $i < $array2.numElements(); $i++) {
            |  if ($array2.isNullAt($i)) {
-           |    $exceptNullElement = false;
+           |    $notFoundNullElement = false;
            |  } else {
            |    $hs.add$postFix($array2.$getter);
            |  }
            |}
            |for (int $i = 0; $i < $array1.numElements(); $i++) {
            |  if ($array1.isNullAt($i)) {
-           |    if ($exceptNullElement) {
+           |    if ($notFoundNullElement) {
            |      ${ev.value}.setNullAt($pos++);
-           |      $exceptNullElement = false;
+           |      $notFoundNullElement = false;
            |    }
            |  } else {
            |    $javaTypeName $value = $array1.$getter;
@@ -4245,20 +4245,20 @@ object ArrayExcept {
       elementType: DataType,
       ordering: Ordering[Any]): ArrayData = {
     val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-    var exceptNullElement = false
+    var scannedNullElements = false
     var i = 0
     while (i < array1.numElements()) {
       var found = false
       var elem1 = array1.get(i, elementType)
       if (array1.isNullAt(i)) {
-        if (!exceptNullElement) {
+        if (!scannedNullElements) {
           var j = 0
           while (!found && j < array2.numElements()) {
             found = array2.isNullAt(j)
             j += 1
           }
-          // array2 is scaned only once for null element
-          exceptNullElement = true
+          // array2 is scanned only once for null element
+          scannedNullElements = true
         } else {
           found = true
         }
