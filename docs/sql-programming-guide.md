@@ -1439,7 +1439,7 @@ the following case-insensitive options:
   <tr>
     <td><code>pushDownPredicate</code></td>
     <td>
-     The option to enable or disable predicate push-down into the JDBC data source. When set to true, Spark will push down filters to the JDBC data source as much as possible. Otherwise, when set to false, no filter will be pushed down to the JDBC data source and thus all filters will be handled by Spark. Predicate push-down is usually turned off when the predicate filtering is performed faster by Spark than by the JDBC data source.
+     The option to enable or disable predicate push-down into the JDBC data source. The default value is true, in which case Spark will push down filters to the JDBC data source as much as possible. Otherwise, if set to false, no filter will be pushed down to the JDBC data source and thus all filters will be handled by Spark. Predicate push-down is usually turned off when the predicate filtering is performed faster by Spark than by the JDBC data source.
     </td>
   </tr>
 </table>
