@@ -126,26 +126,26 @@ def grouped_agg_pandas_udf_example(spark):
     def mean_udf(v):
         return v.mean()
     df.groupby("id").agg(mean_udf(df['v'])).show()
-    #+---+-----------+
-    #| id|mean_udf(v)|
-    #+---+-----------+
-    #|  1|        1.5|
-    #|  2|        6.0|
-    #+---+-----------+
+    # +---+-----------+
+    # | id|mean_udf(v)|
+    # +---+-----------+
+    # |  1|        1.5|
+    # |  2|        6.0|
+    # +---+-----------+
 
     w = Window \
         .partitionBy('id') \
         .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
     df.withColumn('mean_v', mean_udf(df['v']).over(w)).show()
-    #+---+----+------+
-    #| id|   v|mean_v|
-    #+---+----+------+
-    #|  1| 1.0|   1.5|
-    #|  1| 2.0|   1.5|
-    #|  2| 3.0|   6.0|
-    #|  2| 5.0|   6.0|
-    #|  2|10.0|   6.0|
-    #+---+----+------+
+    # +---+----+------+
+    # | id|   v|mean_v|
+    # +---+----+------+
+    # |  1| 1.0|   1.5|
+    # |  1| 2.0|   1.5|
+    # |  2| 3.0|   6.0|
+    # |  2| 5.0|   6.0|
+    # |  2|10.0|   6.0|
+    # +---+----+------+
     # $example off:grouped_map_pandas_udf$
 
 
