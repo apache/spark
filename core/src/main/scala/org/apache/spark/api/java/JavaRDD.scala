@@ -34,6 +34,8 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
 
   // Common RDD functions
 
+  def barrier(): JavaRDD[T] = wrapRDD(rdd.barrier())
+
   /**
    * Persist this RDD with the default storage level (`MEMORY_ONLY`).
    */

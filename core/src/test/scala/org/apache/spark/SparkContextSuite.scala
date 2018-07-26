@@ -627,6 +627,52 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(exc.getCause() != null)
     stream.close()
   }
+
+  test("support barrier sync under local mode") {
+    val conf = new SparkConf().setAppName("test").setMaster("local[2]")
+    sc = new SparkContext(conf)
+    val rdd = sc.makeRDD(Seq(1, 2, 3, 4), 2).barrier()
+    val rdd2 = rdd.mapPartitions { it =>
+      val tc = TaskContext.get.asInstanceOf[org.apache.spark.barrier.BarrierTaskContext]
+      // If we don't get the expected taskInfos, the job shall abort due to stage failure.
+      if (tc.hosts().length != 2) {
+        throw new SparkException("Expected taksInfos length is 2, actual length is " +
+          s"${tc.hosts().length}.")
+      }
+      // println(tc.getTaskInfos().toList)
+      tc.barrier()
+      it
+    }
+    rdd2.collect
+
+    eventually(timeout(10.seconds)) {
+      assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+    }
+  }
+
+  test("support barrier sync under local-cluster mode") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[3, 1, 1024]")
+      .setAppName("test-cluster")
+    sc = new SparkContext(conf)
+    val rdd = sc.makeRDD(Seq(1, 2, 3, 4), 2).barrier()
+    val rdd2 = rdd.mapPartitions { it =>
+      val tc = TaskContext.get.asInstanceOf[org.apache.spark.barrier.BarrierTaskContext]
+      // If we don't get the expected taskInfos, the job shall abort due to stage failure.
+      if (tc.hosts().length != 2) {
+        throw new SparkException("Expected taksInfos length is 2, actual length is " +
+          s"${tc.hosts().length}.")
+      }
+      // println(tc.getTaskInfos().toList)
+      tc.barrier()
+      it
+    }
+    rdd2.collect
+
+    eventually(timeout(10.seconds)) {
+      assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+    }
+  }
 }
 
 object SparkContextSuite {

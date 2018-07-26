@@ -226,8 +226,9 @@ private[spark] class ClientApp extends SparkApplication {
   override def start(args: Array[String], conf: SparkConf): Unit = {
     val driverArgs = new ClientArguments(args)
 
+    // TODO remove this hack
     if (!conf.contains("spark.rpc.askTimeout")) {
-      conf.set("spark.rpc.askTimeout", "10s")
+      conf.set("spark.rpc.askTimeout", "900s")
     }
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
 
