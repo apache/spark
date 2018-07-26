@@ -851,12 +851,7 @@ object TypeCoercion {
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
           // If we cannot do the implicit cast, just use the original input.
-<<<<<<< 082189a57a8ac1775678ddfd465a196c25898237
           ImplicitTypeCasts.implicitCast(in, expected).getOrElse(in)
-=======
-          implicitCast(in, expected).getOrElse(in)
-
->>>>>>> Support implicit cast
         }
         e.withNewChildren(children)
 
@@ -866,10 +861,10 @@ object TypeCoercion {
         } else {
           val children: Seq[Expression] =
             if (NumericType.acceptsType(e.children.head.dataType)) {
-              e.children.map(child => implicitCast(child, DoubleType).
+              e.children.map(child => ImplicitTypeCasts.implicitCast(child, DoubleType).
                 getOrElse(Literal.create(null, DoubleType)))
             } else {
-              e.children.map(child => implicitCast(child, StringType).
+              e.children.map(child => ImplicitTypeCasts.implicitCast(child, StringType).
                 getOrElse(Literal.create(null, StringType)))
             }
           e.withNewChildren(children)
