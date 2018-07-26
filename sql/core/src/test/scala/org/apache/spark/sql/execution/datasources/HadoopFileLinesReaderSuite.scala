@@ -111,20 +111,20 @@ class HadoopFileLinesReaderSuite extends SharedSQLContext {
   }
 
   test("io.file.buffer.size is less than line length") {
-    val conf = spark.sessionState.newHadoopConf()
-    conf.set("io.file.buffer.size", "2")
-    withTempPath { path =>
-      val lines = getLines(path, text = "abcdef\n123456", ranges = Seq((4, 4), (8, 5)))
-      assert(lines == Seq("123456"))
+    withSQLConf("io.file.buffer.size" -> "2") {
+      withTempPath { path =>
+        val lines = getLines(path, text = "abcdef\n123456", ranges = Seq((4, 4), (8, 5)))
+        assert(lines == Seq("123456"))
+      }
     }
   }
 
   test("line cannot be longer than line.maxlength") {
-    val conf = spark.sessionState.newHadoopConf()
-    conf.set("mapreduce.input.linerecordreader.line.maxlength", "5")
-    withTempPath { path =>
-      val lines = getLines(path, text = "abcdef\n1234", ranges = Seq((0, 15)))
-      assert(lines == Seq("1234"))
+    withSQLConf("mapreduce.input.linerecordreader.line.maxlength" -> "5") {
+      withTempPath { path =>
+        val lines = getLines(path, text = "abcdef\n1234", ranges = Seq((0, 15)))
+        assert(lines == Seq("1234"))
+      }
     }
   }
 
