@@ -46,6 +46,13 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
 
+  /**
+   * Defines the default rule batches in the Optimizer.
+   *
+   * Implementations of this class should override this method, and [[nonExcludableRules]] if
+   * necessary, instead of [[batches]]. The rule batches that eventually run in the Optimizer,
+   * i.e., returned by [[batches]], will be (defaultBatches - (excludedRules - nonExcludableRules)).
+   */
   def defaultBatches: Seq[Batch] = {
     val operatorOptimizationRuleSet =
       Seq(
@@ -160,6 +167,14 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       UpdateNullabilityInAttributeReferences)
   }
 
+  /**
+   * Defines rules that cannot be excluded from the Optimizer even if they are specified in
+   * SQL config "excludedRules".
+   *
+   * Implementations of this class can override this method if necessary. The rule batches
+   * that eventually run in the Optimizer, i.e., returned by [[batches]], will be
+   * (defaultBatches - (excludedRules - nonExcludableRules)).
+   */
   def nonExcludableRules: Seq[String] =
     EliminateDistinct.ruleName ::
       EliminateSubqueryAliases.ruleName ::
@@ -202,7 +217,14 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
    */
   def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
 
-  override def batches: Seq[Batch] = {
+  /**
+   * Returns (defaultBatches - (excludedRules - nonExcludableRules)), the rule batches that
+   * eventually run in the Optimizer.
+   *
+   * Implementations of this class should override [[defaultBatches]], and [[nonExcludableRules]]
+   * if necessary, instead of this method.
+   */
+  final override def batches: Seq[Batch] = {
     val excludedRulesConf =
       SQLConf.get.optimizerExcludedRules.toSeq.flatMap(Utils.stringToSeq)
     val excludedRules = excludedRulesConf.filter { ruleName =>
