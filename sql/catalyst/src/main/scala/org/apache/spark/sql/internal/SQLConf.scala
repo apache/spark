@@ -1437,7 +1437,7 @@ object SQLConf {
     .createWithDefault(20)
 
   val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
-    .doc("Compression codec used in writing of AVRO files.")
+    .doc("Compression codec used in writing of AVRO files. Default codec is snappy.")
     .stringConf
     .checkValues(Set("uncompressed", "deflate", "snappy"))
     .createWithDefault("snappy")
