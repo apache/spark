@@ -18,7 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
-import java.util.Date
+import java.util.{Date, NoSuchElementException}
 import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletRequest
 
@@ -105,16 +105,29 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val stageAttemptId = parameterAttempt.toInt
 
     val stageHeader = s"Details for Stage $stageId (Attempt $stageAttemptId)"
-    val stageDataWrapper = parent.store.stageAttempt(stageId, stageAttemptId, details = false)
-    val stageData = parent.store
-      .asOption(stageDataWrapper.info)
-      .getOrElse {
+    var stageDataWrapper: StageDataWrapper = null
+    try {
+      stageDataWrapper = parent.store.stageAttempt(stageId, stageAttemptId, details = false)
+    } catch {
+      case e: NoSuchElementException => e.getMessage
+    }
+    var stageData: StageData = null
+    if (stageDataWrapper != null) {
+      stageData = parent.store
+        .asOption(stageDataWrapper.info)
+        .get
+    } else {
+      stageData = {
         val content =
           <div id="no-info">
-            <p>No information to display for Stage {stageId} (Attempt {stageAttemptId})</p>
+            <p>No information to display for Stage
+              {stageId}
+              (Attempt
+              {stageAttemptId})</p>
           </div>
         return UIUtils.headerSparkPage(request, stageHeader, content, parent)
       }
+    }
 
     val stageJobIds = stageDataWrapper.jobIds.toSeq
 
