@@ -418,7 +418,6 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         CaseWhen( h :+ t.head, None)
 
       case e @ CaseWhen(branches, Some(elseValue)) if {
-        // With previous rules, it's guaranteed that there must be one branch.
         val list = branches.map(_._2) :+ elseValue
         list.tail.forall(list.head.semanticEquals)
       } =>
