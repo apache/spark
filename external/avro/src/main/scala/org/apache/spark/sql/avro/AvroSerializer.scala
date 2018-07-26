@@ -89,7 +89,12 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       case d: DecimalType =>
         (getter, ordinal) => getter.getDecimal(ordinal, d.precision, d.scale).toString
       case StringType =>
-        (getter, ordinal) => new Utf8(getter.getUTF8String(ordinal).getBytes)
+        (getter, ordinal) =>
+          if (avroType.getType == Type.ENUM) {
+            new GenericData.EnumSymbol(avroType, getter.getUTF8String(ordinal).toString)
+          } else {
+            new Utf8(getter.getUTF8String(ordinal).getBytes)
+          }
       case BinaryType =>
         (getter, ordinal) =>
           val data = getter.getBinary(ordinal)
@@ -190,57 +195,64 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       result
   }
 
+  // Resolve an Avro union against a supplied DataType, i.e. a LongType compared against
+  // a ["null", "long"] should return a schema of type Schema.Type.LONG
+  // This function also handles resolving a DataType against unions of 2 or more types, i.e.
+  // an IntType resolves against a ["int", "long", "null"] will correctly return a schema of
+  // type Schema.Type.LONG
   private def resolveNullableType(avroType: Schema, catalystType: DataType,
                                   nullable: Boolean): Schema = {
-    if (nullable && avroType.getType == Type.UNION) {
-      // avro uses union to represent nullable type.
-      val fieldTypes = avroType.getTypes.asScala
+    (nullable, avroType.getType) match {
+      case (false, Type.UNION) | (true, Type.UNION) =>
+        // avro uses union to represent nullable type.
+        val fieldTypes = avroType.getTypes.asScala
 
-      // If we're nullable, we need to have at least two types.  Cases with more than two types are
-      // captured in test("read read-write, read-write w/ schema, read") w/ test.avro input
-      assert(fieldTypes.length >= 2)
+        // If we're nullable, we need to have at least two types.  Cases with more than two types
+        // are captured in test("read read-write, read-write w/ schema, read") w/ test.avro input
+        assert(fieldTypes.length >= 2)
 
-      val actualType = catalystType match {
-        case NullType => fieldTypes.filter(_.getType == Type.NULL)
-        case BooleanType => fieldTypes.filter(_.getType == Type.BOOLEAN)
-        case ByteType => fieldTypes.filter(_.getType == Type.INT)
-        case BinaryType =>
-          val at = fieldTypes.filter(x => x.getType == Type.BYTES || x.getType == Type.FIXED)
-          if (at.length > 1) {
-            throw new IncompatibleSchemaException (
-              s"Cannot resolve schema of ${catalystType} against union ${avroType.toString}")
-          } else {
-            at
-          }
-        case ShortType | IntegerType => fieldTypes.filter(_.getType == Type.INT)
-        case LongType => fieldTypes.filter(_.getType == Type.LONG)
-        case FloatType => fieldTypes.filter(_.getType == Type.FLOAT)
-        case DoubleType => fieldTypes.filter(_.getType == Type.DOUBLE)
-        case d: DecimalType => fieldTypes.filter(_.getType == Type.STRING)
-        case StringType => fieldTypes.filter(_.getType == Type.STRING)
-        case DateType => fieldTypes.filter(x => x.getType == Type.INT || x.getType == Type.LONG)
-        case TimestampType => fieldTypes.filter(_.getType == Type.LONG)
-        case ArrayType(et, containsNull) =>
-          // Find array that matches the type
-          fieldTypes.filter(x => x.getType == Type.ARRAY && typeMatchesSchema(et, x.getElementType))
-        case st: StructType => // Find the matching record!
-          val recordTypes = fieldTypes.filter(x => x.getType == Type.RECORD)
-          if (recordTypes.length > 1) {
-            throw new IncompatibleSchemaException(
-              "Unions of multiple record types are NOT supported with user-specified schema")
-          }
-          recordTypes
-        case MapType(kt, vt, valueContainsNull) =>
-          // Find the map that matches the type
-          fieldTypes.filter(x => x.getType == Type.MAP && typeMatchesSchema(vt, x.getValueType))
-        case other =>
-          throw new IncompatibleSchemaException(s"Unexpected type: $other")
-      }
+        val actualType = catalystType match {
+          case NullType => fieldTypes.filter(_.getType == Type.NULL)
+          case BooleanType => fieldTypes.filter(_.getType == Type.BOOLEAN)
+          case ByteType => fieldTypes.filter(_.getType == Type.INT)
+          case BinaryType =>
+            val at = fieldTypes.filter(x => x.getType == Type.BYTES || x.getType == Type.FIXED)
+            if (at.length > 1) {
+              throw new IncompatibleSchemaException(
+                s"Cannot resolve schema of ${catalystType} against union ${avroType.toString}")
+            } else {
+              at
+            }
+          case ShortType | IntegerType => fieldTypes.filter(_.getType == Type.INT)
+          case LongType => fieldTypes.filter(_.getType == Type.LONG)
+          case FloatType => fieldTypes.filter(_.getType == Type.FLOAT)
+          case DoubleType => fieldTypes.filter(_.getType == Type.DOUBLE)
+          case d: DecimalType => fieldTypes.filter(_.getType == Type.STRING)
+          case StringType => fieldTypes
+            .filter(x => x.getType == Type.STRING || x.getType == Type.ENUM)
+          case DateType => fieldTypes.filter(x => x.getType == Type.INT || x.getType == Type.LONG)
+          case TimestampType => fieldTypes.filter(_.getType == Type.LONG)
+          case ArrayType(et, containsNull) =>
+            // Find array that matches the element type specified
+            fieldTypes.filter(x => x.getType == Type.ARRAY
+              && typeMatchesSchema(et, x.getElementType))
+          case st: StructType => // Find the matching record!
+            val recordTypes = fieldTypes.filter(x => x.getType == Type.RECORD)
+            if (recordTypes.length > 1) {
+              throw new IncompatibleSchemaException(
+                "Unions of multiple record types are NOT supported with user-specified schema")
+            }
+            recordTypes
+          case MapType(kt, vt, valueContainsNull) =>
+            // Find the map that matches the value type.  Maps in Avro are always key type string
+            fieldTypes.filter(x => x.getType == Type.MAP && typeMatchesSchema(vt, x.getValueType))
+          case other =>
+            throw new IncompatibleSchemaException(s"Unexpected type: $other")
+        }
 
-      assert(actualType.length == 1)
-      actualType.head
-    } else {
-      avroType
+        assert(actualType.length == 1)
+        actualType.head
+      case (false, _) | (true, _) => avroType
     }
   }
 
@@ -251,9 +263,9 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
         avroSchema.getType == Type.UNION)
         .getFields
       assert(avroFields.size() == catalystType.asInstanceOf[StructType].length)
-      catalystType.asInstanceOf[StructType].zip(avroFields.asScala).map {
+      catalystType.asInstanceOf[StructType].zip(avroFields.asScala).forall {
         case (f1, f2) => typeMatchesSchema(f1.dataType, f2.schema)
-      }.foldLeft(true)(_ && _)
+      }
     } else {
       val isTypeCompatible = (a: Schema, b: DataType, c: Type) =>
         resolveNullableType(a, b, a.getType == Type.UNION).getType == c
@@ -267,7 +279,8 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
         case FloatType => isTypeCompatible(avroSchema, catalystType, Type.FLOAT)
         case DoubleType => isTypeCompatible(avroSchema, catalystType, Type.DOUBLE)
         case d: DecimalType => isTypeCompatible(avroSchema, catalystType, Type.STRING)
-        case StringType => isTypeCompatible(avroSchema, catalystType, Type.STRING)
+        case StringType => isTypeCompatible(avroSchema, catalystType, Type.STRING) ||
+          isTypeCompatible(avroSchema, catalystType, Type.ENUM)
         case DateType => isTypeCompatible(avroSchema, catalystType, Type.INT) ||
           isTypeCompatible(avroSchema, catalystType, Type.LONG)
         case ArrayType(et, containsNull) =>

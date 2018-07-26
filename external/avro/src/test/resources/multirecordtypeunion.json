@@ -1,6 +1,6 @@
 {
   "testField": {
-    "com.apple.siri.loggingSchemas.schemas.MulitpleRecordTypesUnionRecord1": {
+    "foo.schemas.MulitpleRecordTypesUnionRecord1": {
       "requiredField": "foo",
       "optionalField": { "string": "bar" }
     }
@@ -8,7 +8,7 @@
 }
 { 
   "testField": {
-    "com.apple.siri.loggingSchemas.schemas.MulitpleRecordTypesUnionRecord2": {
+    "foo.schemas.MulitpleRecordTypesUnionRecord2": {
       "requiredField": 100,
       "optionalField": { "long": 1000 }
     }
