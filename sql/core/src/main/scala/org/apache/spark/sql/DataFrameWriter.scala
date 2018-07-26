@@ -254,7 +254,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           val writer = ws.createWriter(jobId, df.logicalPlan.schema, mode, options)
           if (writer.isPresent) {
             runCommand(df.sparkSession, "save") {
-              WriteToDataSourceV2(writer.get(), df.logicalPlan)
+              WriteToDataSourceV2(writer.get(), df.planWithBarrier)
             }
           }
 
@@ -275,7 +275,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         sparkSession = df.sparkSession,
         className = source,
         partitionColumns = partitioningColumns.getOrElse(Nil),
-        options = extraOptions.toMap).planForWriting(mode, AnalysisBarrier(df.logicalPlan))
+        options = extraOptions.toMap).planForWriting(mode, df.planWithBarrier)
     }
   }
 
@@ -323,7 +323,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       InsertIntoTable(
         table = UnresolvedRelation(tableIdent),
         partition = Map.empty[String, Option[String]],
-        query = df.logicalPlan,
+        query = df.planWithBarrier,
         overwrite = mode == SaveMode.Overwrite,
         ifPartitionNotExists = false)
     }
@@ -455,7 +455,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       partitionColumnNames = partitioningColumns.getOrElse(Nil),
       bucketSpec = getBucketSpec)
 
-    runCommand(df.sparkSession, "saveAsTable")(CreateTable(tableDesc, mode, Some(df.logicalPlan)))
+    runCommand(df.sparkSession, "saveAsTable") {
+      CreateTable(tableDesc, mode, Some(df.planWithBarrier))
+    }
   }
 
   /**
