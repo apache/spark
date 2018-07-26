@@ -91,6 +91,59 @@ private[parquet] class ParquetFilters(
     Binary.fromConstantByteArray(fixedLengthBytes, 0, numBytes)
   }
 
+  private val makeInSet:
+    PartialFunction[ParquetSchemaType, (String, Set[Any]) => FilterPredicate] = {
+    case ParquetBooleanType =>
+      (n: String, v: Set[Any]) => FilterApi.userDefined(
+        booleanColumn(n), SetInFilter(v.asInstanceOf[Set[JBoolean]]))
+    case ParquetByteType | ParquetShortType | ParquetIntegerType =>
+      (n: String, v: Set[Any]) => FilterApi.userDefined(
+        intColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Integer]]))
+    case ParquetLongType =>
+      (n: String, v: Set[Any]) => FilterApi.userDefined(
+        longColumn(n), SetInFilter(v.asInstanceOf[Set[JLong]]))
+    case ParquetFloatType =>
+      (n: String, v: Set[Any]) => FilterApi.userDefined(
+        floatColumn(n), SetInFilter(v.asInstanceOf[Set[JFloat]]))
+    case ParquetDoubleType =>
+      (n: String, v: Set[Any]) => FilterApi.userDefined(
+        doubleColumn(n), SetInFilter(v.asInstanceOf[Set[JDouble]]))
+    // Binary.fromString and Binary.fromByteArray don't accept null values
+    case ParquetStringType =>
+      (n: String, v: Set[Any]) => FilterApi.userDefined(
+        binaryColumn(n),
+        SetInFilter(v.map(s => Binary.fromString(s.asInstanceOf[String]))))
+    case ParquetBinaryType =>
+      (n: String, v: Set[Any]) => FilterApi.userDefined(
+        binaryColumn(n),
+        SetInFilter(v.map(b => Binary.fromReusedByteArray(b.asInstanceOf[Array[Byte]]))))
+    case ParquetDateType if pushDownDate =>
+      (n: String, v: Set[Any]) => FilterApi.userDefined(
+        intColumn(n),
+        SetInFilter(v.map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer])))
+    case ParquetTimestampMicrosType if pushDownTimestamp =>
+      (n: String, v: Set[Any]) => FilterApi.userDefined(
+        longColumn(n),
+        SetInFilter(v.map(t => DateTimeUtils.fromJavaTimestamp(t.asInstanceOf[Timestamp])
+          .asInstanceOf[JLong])))
+    case ParquetTimestampMillisType if pushDownTimestamp =>
+      (n: String, v: Set[Any]) => FilterApi.userDefined(
+        longColumn(n),
+        SetInFilter(v.map(_.asInstanceOf[Timestamp].getTime.asInstanceOf[JLong])))
+    case ParquetSchemaType(DECIMAL, INT32, _, _) if pushDownDecimal =>
+      (n: String, v: Set[Any]) => FilterApi.userDefined(
+        intColumn(n),
+        SetInFilter(v.map(d => decimalToInt32(d.asInstanceOf[JBigDecimal]))))
+    case ParquetSchemaType(DECIMAL, INT64, _, _) if pushDownDecimal =>
+      (n: String, v: Set[Any]) => FilterApi.userDefined(
+        longColumn(n),
+        SetInFilter(v.map(d => decimalToInt64(d.asInstanceOf[JBigDecimal]))))
+    case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, length, _) if pushDownDecimal =>
+      (n: String, v: Set[Any]) => FilterApi.userDefined(
+        binaryColumn(n),
+        SetInFilter(v.map(d => decimalToByteArray(d.asInstanceOf[JBigDecimal], length))))
+  }
+
   private val makeEq: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
     case ParquetBooleanType =>
       (n: String, v: Any) => FilterApi.eq(booleanColumn(n), v.asInstanceOf[JBoolean])
@@ -376,6 +429,8 @@ private[parquet] class ParquetFilters(
     // Decimal type must make sure that filter value's scale matched the file.
     // If doesn't matched, which would cause data corruption.
     def isDecimalMatched(value: Any, decimalMeta: DecimalMetadata): Boolean = value match {
+      case decimalSet: Set[JBigDecimal] =>
+        decimalSet.iterator.next().scale == decimalMeta.getScale
       case decimal: JBigDecimal =>
         decimal.scale == decimalMeta.getScale
       case _ => false
@@ -385,16 +440,19 @@ private[parquet] class ParquetFilters(
     // in the pushed filter in order to push down the filter to Parquet.
     def valueCanMakeFilterOn(name: String, value: Any): Boolean = {
       value == null || (nameToType(name) match {
-        case ParquetBooleanType => value.isInstanceOf[JBoolean]
-        case ParquetByteType | ParquetShortType | ParquetIntegerType => value.isInstanceOf[Number]
-        case ParquetLongType => value.isInstanceOf[JLong]
-        case ParquetFloatType => value.isInstanceOf[JFloat]
-        case ParquetDoubleType => value.isInstanceOf[JDouble]
-        case ParquetStringType => value.isInstanceOf[String]
-        case ParquetBinaryType => value.isInstanceOf[Array[Byte]]
-        case ParquetDateType => value.isInstanceOf[Date]
+        case ParquetBooleanType => value.isInstanceOf[JBoolean] ||
+          value.isInstanceOf[Set[JBoolean]]
+        case ParquetByteType | ParquetShortType | ParquetIntegerType =>
+          value.isInstanceOf[Number] || value.isInstanceOf[Set[Number]]
+        case ParquetLongType => value.isInstanceOf[JLong] || value.isInstanceOf[Set[JLong]]
+        case ParquetFloatType => value.isInstanceOf[JFloat] || value.isInstanceOf[Set[JFloat]]
+        case ParquetDoubleType => value.isInstanceOf[JDouble] || value.isInstanceOf[Set[JDouble]]
+        case ParquetStringType => value.isInstanceOf[String] || value.isInstanceOf[Set[String]]
+        case ParquetBinaryType => value.isInstanceOf[Array[Byte]] ||
+          value.isInstanceOf[Set[Array[Byte]]]
+        case ParquetDateType => value.isInstanceOf[Date] || value.isInstanceOf[Set[Date]]
         case ParquetTimestampMicrosType | ParquetTimestampMillisType =>
-          value.isInstanceOf[Timestamp]
+          value.isInstanceOf[Timestamp] || value.isInstanceOf[Set[Timestamp]]
         case ParquetSchemaType(DECIMAL, INT32, _, decimalMeta) =>
           isDecimalMatched(value, decimalMeta)
         case ParquetSchemaType(DECIMAL, INT64, _, decimalMeta) =>
@@ -470,11 +528,8 @@ private[parquet] class ParquetFilters(
           .map(FilterApi.not)
           .map(LogicalInverseRewriter.rewrite)
 
-      case sources.In(name, values) if canMakeFilterOn(name, values.head)
-        && values.distinct.length <= pushDownInFilterThreshold =>
-        values.distinct.flatMap { v =>
-          makeEq.lift(nameToType(name)).map(_(name, v))
-        }.reduceLeftOption(FilterApi.or)
+      case sources.In(name, values) if canMakeFilterOn(name, values.head) =>
+        makeInSet.lift(nameToType(name)).map(_(name, values.toSet))
 
       case sources.StringStartsWith(name, prefix)
           if pushDownStartWith && canMakeFilterOn(name, prefix) =>
