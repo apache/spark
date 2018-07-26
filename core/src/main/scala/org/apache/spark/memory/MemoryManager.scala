@@ -20,6 +20,7 @@ package org.apache.spark.memory
 import javax.annotation.concurrent.GuardedBy
 
 import org.apache.spark.SparkConf
+import org.apache.spark.executor.{ProcessTreeMetrics, ProcfsBasedSystems}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.storage.BlockId
@@ -207,6 +208,12 @@ private[spark] abstract class MemoryManager(
   final def offHeapStorageMemoryUsed: Long = synchronized {
     offHeapStorageMemoryPool.memoryUsed
   }
+
+  /**
+   *  If the system isn't procfsBased the process tree metrics' values will be -1,
+   *  meaning not available
+   */
+  final val pTreeInfo: ProcessTreeMetrics = new ProcfsBasedSystems
 
   /**
    * Returns the execution memory consumption, in bytes, for the given task.

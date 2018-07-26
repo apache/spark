@@ -92,11 +92,12 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorMetricsUpdate = {
       // Use custom accum ID for determinism
       val accumUpdates =
-        makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true)
-          .accumulators().map(AccumulatorSuite.makeInfo)
-          .zipWithIndex.map { case (a, i) => a.copy(id = i) }
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true)
+        .accumulators().map(AccumulatorSuite.makeInfo)
+        .zipWithIndex.map { case (a, i) => a.copy(id = i) }
       val executorUpdates = new ExecutorMetrics(
-        Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L, 321L, 654L, 765L))
+        Array(543L, 123456L, 123456L, 256912L, 12345L, 1234L, 123L, 12L, 432L,
+          321L, 654L, 765L))
       SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)),
         Some(executorUpdates))
     }
@@ -105,8 +106,8 @@ class JsonProtocolSuite extends SparkFunSuite {
         "In your multitude...", 300), RDDBlockId(0, 0), StorageLevel.MEMORY_ONLY, 100L, 0L))
     val stageExecutorMetrics =
       SparkListenerStageExecutorMetrics("1", 2, 3,
-        new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L, 321L, 654L, 765L)))
-
+        new ExecutorMetrics(Array(543L, 123456L, 123456L, 256912L, 12345L, 1234L, 123L, 12L, 432L,
+          321L, 654L, 765L)))
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
     testEvent(taskStart, taskStartJsonString)
@@ -232,7 +233,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       hasHadoopInput = true, hasOutput = true, hasRecords = false)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Records Read" }
-                         .removeField { case (field, _) => field == "Records Written" }
+      .removeField { case (field, _) => field == "Records Written" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
     assert(newMetrics.inputMetrics.recordsRead == 0)
     assert(newMetrics.outputMetrics.recordsWritten == 0)
@@ -244,7 +245,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       hasHadoopInput = false, hasOutput = false, hasRecords = false)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Total Records Read" }
-                         .removeField { case (field, _) => field == "Shuffle Records Written" }
+      .removeField { case (field, _) => field == "Shuffle Records Written" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
     assert(newMetrics.shuffleReadMetrics.recordsRead == 0)
     assert(newMetrics.shuffleWriteMetrics.recordsWritten == 0)
@@ -440,14 +441,14 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("executorMetricsFromJson backward compatibility: handle missing metrics") {
     // any missing metrics should be set to 0
-    val executorMetrics = new ExecutorMetrics(
-      Array(12L, 23L, 45L, 67L, 78L, 89L, 90L, 123L, 456L, 789L))
+    val executorMetrics = new ExecutorMetrics(Array(12L, 23L, 20L, 40L, 45L, 67L, 78L, 89L,
+      90L, 123L, 456L, 789L))
     val oldExecutorMetricsJson =
       JsonProtocol.executorMetricsToJson(executorMetrics)
         .removeField( _._1 == "MappedPoolMemory")
-    val expectedExecutorMetrics = new ExecutorMetrics(
-      Array(12L, 23L, 45L, 67L, 78L, 89L, 90L, 123L, 456L, 0L))
-    assertEquals(expectedExecutorMetrics,
+    val exepectedExecutorMetrics = new ExecutorMetrics(Array(12L, 23L, 20L, 40L, 45L, 67L,
+      78L, 89L, 90L, 123L, 456L, 0L))
+    assertEquals(exepectedExecutorMetrics,
       JsonProtocol.executorMetricsFromJson(oldExecutorMetricsJson))
   }
 
@@ -458,7 +459,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       (TestBlockId("feebo"), BlockStatus(StorageLevel.DISK_ONLY, 3L, 4L)))
     val blocksJson = JArray(blocks.toList.map { case (id, status) =>
       ("Block ID" -> id.toString) ~
-      ("Status" -> JsonProtocol.blockStatusToJson(status))
+        ("Status" -> JsonProtocol.blockStatusToJson(status))
     })
     testAccumValue(Some(RESULT_SIZE), 3L, JInt(3))
     testAccumValue(Some(shuffleRead.REMOTE_BLOCKS_FETCHED), 2, JInt(2))
@@ -597,7 +598,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
             assertSeqEquals[AccumulableInfo](updates1, updates2, (a, b) => a.equals(b))
           })
         assertOptionEquals(e1.executorUpdates, e2.executorUpdates,
-        (e1: ExecutorMetrics, e2: ExecutorMetrics) => assertEquals(e1, e2))
+          (e1: ExecutorMetrics, e2: ExecutorMetrics) => assertEquals(e1, e2))
       case (e1: SparkListenerStageExecutorMetrics, e2: SparkListenerStageExecutorMetrics) =>
         assert(e1.execId === e2.execId)
         assert(e1.stageId === e2.stageId)
@@ -721,12 +722,12 @@ private[spark] object JsonProtocolSuite extends Assertions {
       case (r1: TaskKilled, r2: TaskKilled) =>
         assert(r1.reason == r2.reason)
       case (TaskCommitDenied(jobId1, partitionId1, attemptNumber1),
-          TaskCommitDenied(jobId2, partitionId2, attemptNumber2)) =>
+      TaskCommitDenied(jobId2, partitionId2, attemptNumber2)) =>
         assert(jobId1 === jobId2)
         assert(partitionId1 === partitionId2)
         assert(attemptNumber1 === attemptNumber2)
       case (ExecutorLostFailure(execId1, exit1CausedByApp, reason1),
-          ExecutorLostFailure(execId2, exit2CausedByApp, reason2)) =>
+      ExecutorLostFailure(execId2, exit2CausedByApp, reason2)) =>
         assert(execId1 === execId2)
         assert(exit1CausedByApp === exit2CausedByApp)
         assert(reason1 === reason2)
@@ -736,8 +737,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
   }
 
   private def assertEquals(
-      details1: Map[String, Seq[(String, String)]],
-      details2: Map[String, Seq[(String, String)]]) {
+                            details1: Map[String, Seq[(String, String)]],
+                            details2: Map[String, Seq[(String, String)]]) {
     details1.zip(details2).foreach {
       case ((key1, values1: Seq[(String, String)]), (key2, values2: Seq[(String, String)])) =>
         assert(key1 === key2)
@@ -779,8 +780,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
     }
   }
 
-  private def assertOptionEquals[T](
-      opt1: Option[T],
+  private def assertOptionEquals[T](opt1: Option[T],
       opt2: Option[T],
       assertEquals: (T, T) => Unit) {
     if (opt1.isDefined) {
@@ -795,8 +795,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
    * Use different names for methods we pass in to assertSeqEquals or assertOptionEquals
    */
 
-  private def assertBlocksEquals(
-      blocks1: Seq[(BlockId, BlockStatus)],
+  private def assertBlocksEquals(blocks1: Seq[(BlockId, BlockStatus)],
       blocks2: Seq[(BlockId, BlockStatus)]) = {
     assertSeqEquals(blocks1, blocks2, assertBlockEquals)
   }
@@ -855,8 +854,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
     taskInfo
   }
 
-  private def makeAccumulableInfo(
-      id: Int,
+  private def makeAccumulableInfo(id: Int,
       internal: Boolean = false,
       countFailedValues: Boolean = false,
       metadata: Option[String] = None): AccumulableInfo =
@@ -864,10 +862,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       internal, countFailedValues, metadata)
 
   /** Creates an SparkListenerExecutorMetricsUpdate event */
-  private def makeExecutorMetricsUpdate(
-      execId: String,
-      includeTaskMetrics: Boolean,
-      includeExecutorMetrics: Boolean): SparkListenerExecutorMetricsUpdate = {
+  private def makeExecutorMetricsUpdate(execId: String,
+        includeTaskMetrics: Boolean,
+        includeExecutorMetrics: Boolean): SparkListenerExecutorMetricsUpdate = {
     val taskMetrics =
       if (includeTaskMetrics) {
         Seq((1L, 1, 1, Seq(makeAccumulableInfo(1, false, false, None),
@@ -877,8 +874,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       }
     val executorMetricsUpdate =
       if (includeExecutorMetrics) {
-        Some(new ExecutorMetrics(Array(123456L, 543L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L)))
-       } else {
+        Some(new ExecutorMetrics(Array(123456L, 543L, 123456L, 256912L, 0L, 0L, 0L, 0L, 0L,
+          0L, 0L, 0L)))
+      } else {
         None
       }
     SparkListenerExecutorMetricsUpdate(execId, taskMetrics, executorMetricsUpdate)
@@ -888,8 +886,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is
    * set to true) or read data from a shuffle otherwise.
    */
-  private def makeTaskMetrics(
-      a: Long,
+  private def makeTaskMetrics(a: Long,
       b: Long,
       c: Long,
       d: Long,
@@ -946,44 +943,44 @@ private[spark] object JsonProtocolSuite extends Assertions {
    * ---------------------------------------- */
 
   private val stageSubmittedJsonString =
-    """
-      |{
-      |  "Event": "SparkListenerStageSubmitted",
-      |  "Stage Info": {
-      |    "Stage ID": 100,
-      |    "Stage Attempt ID": 0,
-      |    "Stage Name": "greetings",
-      |    "Number of Tasks": 200,
-      |    "RDD Info": [],
-      |    "Parent IDs" : [100, 200, 300],
-      |    "Details": "details",
-      |    "Accumulables": [
-      |      {
-      |        "ID": 2,
-      |        "Name": "Accumulable2",
-      |        "Update": "delta2",
-      |        "Value": "val2",
-      |        "Internal": false,
-      |        "Count Failed Values": false
-      |      },
-      |      {
-      |        "ID": 1,
-      |        "Name": "Accumulable1",
-      |        "Update": "delta1",
-      |        "Value": "val1",
-      |        "Internal": false,
-      |        "Count Failed Values": false
-      |      }
-      |    ]
-      |  },
-      |  "Properties": {
-      |    "France": "Paris",
-      |    "Germany": "Berlin",
-      |    "Russia": "Moscow",
-      |    "Ukraine": "Kiev"
-      |  }
-      |}
-    """.stripMargin
+  """
+    |{
+    |  "Event": "SparkListenerStageSubmitted",
+    |  "Stage Info": {
+    |    "Stage ID": 100,
+    |    "Stage Attempt ID": 0,
+    |    "Stage Name": "greetings",
+    |    "Number of Tasks": 200,
+    |    "RDD Info": [],
+    |    "Parent IDs" : [100, 200, 300],
+    |    "Details": "details",
+    |    "Accumulables": [
+    |      {
+    |        "ID": 2,
+    |        "Name": "Accumulable2",
+    |        "Update": "delta2",
+    |        "Value": "val2",
+    |        "Internal": false,
+    |        "Count Failed Values": false
+    |      },
+    |      {
+    |        "ID": 1,
+    |        "Name": "Accumulable1",
+    |        "Update": "delta1",
+    |        "Value": "val1",
+    |        "Internal": false,
+    |        "Count Failed Values": false
+    |      }
+    |    ]
+    |  },
+    |  "Properties": {
+    |    "France": "Paris",
+    |    "Germany": "Berlin",
+    |    "Russia": "Moscow",
+    |    "Ukraine": "Kiev"
+    |  }
+    |}
+  """.stripMargin
 
   private val stageCompletedJsonString =
     """
@@ -1836,255 +1833,257 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   private val executorAddedJsonString =
     s"""
-      |{
-      |  "Event": "SparkListenerExecutorAdded",
-      |  "Timestamp": ${executorAddedTime},
-      |  "Executor ID": "exec1",
-      |  "Executor Info": {
-      |    "Host": "Hostee.awesome.com",
-      |    "Total Cores": 11,
-      |    "Log Urls" : {
-      |      "stderr" : "mystderr",
-      |      "stdout" : "mystdout"
-      |    }
-      |  }
-      |}
+       |{
+       |  "Event": "SparkListenerExecutorAdded",
+       |  "Timestamp": ${executorAddedTime},
+       |  "Executor ID": "exec1",
+       |  "Executor Info": {
+       |    "Host": "Hostee.awesome.com",
+       |    "Total Cores": 11,
+       |    "Log Urls" : {
+       |      "stderr" : "mystderr",
+       |      "stdout" : "mystdout"
+       |    }
+       |  }
+       |}
     """.stripMargin
 
   private val executorRemovedJsonString =
     s"""
-      |{
-      |  "Event": "SparkListenerExecutorRemoved",
-      |  "Timestamp": ${executorRemovedTime},
-      |  "Executor ID": "exec2",
-      |  "Removed Reason": "test reason"
-      |}
+       |{
+       |  "Event": "SparkListenerExecutorRemoved",
+       |  "Timestamp": ${executorRemovedTime},
+       |  "Executor ID": "exec2",
+       |  "Removed Reason": "test reason"
+       |}
     """.stripMargin
 
   private val executorMetricsUpdateJsonString =
     s"""
-      |{
-      |  "Event": "SparkListenerExecutorMetricsUpdate",
-      |  "Executor ID": "exec3",
-      |  "Metrics Updated": [
-      |    {
-      |      "Task ID": 1,
-      |      "Stage ID": 2,
-      |      "Stage Attempt ID": 3,
-      |      "Accumulator Updates": [
+       |{
+       |  "Event": "SparkListenerExecutorMetricsUpdate",
+       |  "Executor ID": "exec3",
+       |  "Metrics Updated": [
+       |    {
+       |      "Task ID": 1,
+       |      "Stage ID": 2,
+       |      "Stage Attempt ID": 3,
+       |      "Accumulator Updates": [
+       |        {
+       |          "ID": 0,
+       |          "Name": "$EXECUTOR_DESERIALIZE_TIME",
+       |          "Update": 300,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 1,
+       |          "Name": "$EXECUTOR_DESERIALIZE_CPU_TIME",
+       |          "Update": 300,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |
       |        {
-      |          "ID": 0,
-      |          "Name": "$EXECUTOR_DESERIALIZE_TIME",
-      |          "Update": 300,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 1,
-      |          "Name": "$EXECUTOR_DESERIALIZE_CPU_TIME",
-      |          "Update": 300,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |
-      |        {
-      |          "ID": 2,
-      |          "Name": "$EXECUTOR_RUN_TIME",
-      |          "Update": 400,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 3,
-      |          "Name": "$EXECUTOR_CPU_TIME",
-      |          "Update": 400,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 4,
-      |          "Name": "$RESULT_SIZE",
-      |          "Update": 500,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 5,
-      |          "Name": "$JVM_GC_TIME",
-      |          "Update": 600,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 6,
-      |          "Name": "$RESULT_SERIALIZATION_TIME",
-      |          "Update": 700,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 7,
-      |          "Name": "$MEMORY_BYTES_SPILLED",
-      |          "Update": 800,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 8,
-      |          "Name": "$DISK_BYTES_SPILLED",
-      |          "Update": 0,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 9,
-      |          "Name": "$PEAK_EXECUTION_MEMORY",
-      |          "Update": 0,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 10,
-      |          "Name": "$UPDATED_BLOCK_STATUSES",
-      |          "Update": [
-      |            {
-      |              "Block ID": "rdd_0_0",
-      |              "Status": {
-      |                "Storage Level": {
-      |                  "Use Disk": true,
-      |                  "Use Memory": true,
-      |                  "Deserialized": false,
-      |                  "Replication": 2
-      |                },
-      |                "Memory Size": 0,
-      |                "Disk Size": 0
-      |              }
-      |            }
-      |          ],
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 11,
-      |          "Name": "${shuffleRead.REMOTE_BLOCKS_FETCHED}",
-      |          "Update": 0,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 12,
-      |          "Name": "${shuffleRead.LOCAL_BLOCKS_FETCHED}",
-      |          "Update": 0,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 13,
-      |          "Name": "${shuffleRead.REMOTE_BYTES_READ}",
-      |          "Update": 0,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 14,
-      |          "Name": "${shuffleRead.REMOTE_BYTES_READ_TO_DISK}",
-      |          "Update": 0,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 15,
-      |          "Name": "${shuffleRead.LOCAL_BYTES_READ}",
-      |          "Update": 0,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 16,
-      |          "Name": "${shuffleRead.FETCH_WAIT_TIME}",
-      |          "Update": 0,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 17,
-      |          "Name": "${shuffleRead.RECORDS_READ}",
-      |          "Update": 0,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 18,
-      |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
-      |          "Update": 0,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 19,
-      |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
-      |          "Update": 0,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 20,
-      |          "Name": "${shuffleWrite.WRITE_TIME}",
-      |          "Update": 0,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 21,
-      |          "Name": "${input.BYTES_READ}",
-      |          "Update": 2100,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 22,
-      |          "Name": "${input.RECORDS_READ}",
-      |          "Update": 21,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 23,
-      |          "Name": "${output.BYTES_WRITTEN}",
-      |          "Update": 1200,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 24,
-      |          "Name": "${output.RECORDS_WRITTEN}",
-      |          "Update": 12,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 25,
-      |          "Name": "$TEST_ACCUM",
-      |          "Update": 0,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        }
-      |      ]
-      |    }
-      |  ],
-      |  "Executor Metrics Updated" : {
-      |    "JVMHeapMemory" : 543,
-      |    "JVMOffHeapMemory" : 123456,
-      |    "OnHeapExecutionMemory" : 12345,
-      |    "OffHeapExecutionMemory" : 1234,
-      |    "OnHeapStorageMemory" : 123,
-      |    "OffHeapStorageMemory" : 12,
-      |    "OnHeapUnifiedMemory" : 432,
-      |    "OffHeapUnifiedMemory" : 321,
-      |    "DirectPoolMemory" : 654,
-      |    "MappedPoolMemory" : 765
-      |  }
-      |
+       |          "ID": 2,
+       |          "Name": "$EXECUTOR_RUN_TIME",
+       |          "Update": 400,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 3,
+       |          "Name": "$EXECUTOR_CPU_TIME",
+       |          "Update": 400,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 4,
+       |          "Name": "$RESULT_SIZE",
+       |          "Update": 500,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 5,
+       |          "Name": "$JVM_GC_TIME",
+       |          "Update": 600,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 6,
+       |          "Name": "$RESULT_SERIALIZATION_TIME",
+       |          "Update": 700,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 7,
+       |          "Name": "$MEMORY_BYTES_SPILLED",
+       |          "Update": 800,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 8,
+       |          "Name": "$DISK_BYTES_SPILLED",
+       |          "Update": 0,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 9,
+       |          "Name": "$PEAK_EXECUTION_MEMORY",
+       |          "Update": 0,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 10,
+       |          "Name": "$UPDATED_BLOCK_STATUSES",
+       |          "Update": [
+       |            {
+       |              "Block ID": "rdd_0_0",
+       |              "Status": {
+       |                "Storage Level": {
+       |                  "Use Disk": true,
+       |                  "Use Memory": true,
+       |                  "Deserialized": false,
+       |                  "Replication": 2
+       |                },
+       |                "Memory Size": 0,
+       |                "Disk Size": 0
+       |              }
+       |            }
+       |          ],
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 11,
+       |          "Name": "${shuffleRead.REMOTE_BLOCKS_FETCHED}",
+       |          "Update": 0,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 12,
+       |          "Name": "${shuffleRead.LOCAL_BLOCKS_FETCHED}",
+       |          "Update": 0,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 13,
+       |          "Name": "${shuffleRead.REMOTE_BYTES_READ}",
+       |          "Update": 0,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 14,
+       |          "Name": "${shuffleRead.REMOTE_BYTES_READ_TO_DISK}",
+       |          "Update": 0,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 15,
+       |          "Name": "${shuffleRead.LOCAL_BYTES_READ}",
+       |          "Update": 0,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 16,
+       |          "Name": "${shuffleRead.FETCH_WAIT_TIME}",
+       |          "Update": 0,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 17,
+       |          "Name": "${shuffleRead.RECORDS_READ}",
+       |          "Update": 0,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 18,
+       |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
+       |          "Update": 0,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 19,
+       |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
+       |          "Update": 0,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 20,
+       |          "Name": "${shuffleWrite.WRITE_TIME}",
+       |          "Update": 0,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 21,
+       |          "Name": "${input.BYTES_READ}",
+       |          "Update": 2100,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 22,
+       |          "Name": "${input.RECORDS_READ}",
+       |          "Update": 21,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 23,
+       |          "Name": "${output.BYTES_WRITTEN}",
+       |          "Update": 1200,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 24,
+       |          "Name": "${output.RECORDS_WRITTEN}",
+       |          "Update": 12,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        },
+       |        {
+       |          "ID": 25,
+       |          "Name": "$TEST_ACCUM",
+       |          "Update": 0,
+       |          "Internal": true,
+       |          "Count Failed Values": true
+       |        }
+       |      ]
+       |    }
+       |  ],
+       |  "Executor Metrics Updated" : {
+       |    "JVMHeapMemory" : 543,
+       |    "JVMOffHeapMemory" : 123456,
+       |    "ProcessTreeRSSMemory": 123456,
+       |    "ProcessTreeVMemory": 256912,
+       |    "OnHeapExecutionMemory" : 12345,
+       |    "OffHeapExecutionMemory" : 1234,
+       |    "OnHeapStorageMemory" : 123,
+       |    "OffHeapStorageMemory" : 12,
+       |    "OnHeapUnifiedMemory" : 432,
+       |    "OffHeapUnifiedMemory" : 321,
+       |    "DirectPoolMemory" : 654,
+       |    "MappedPoolMemory" : 765
+       |  }
+       |
       |}
     """.stripMargin
 
@@ -2098,6 +2097,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  "Executor Metrics" : {
       |    "JVMHeapMemory" : 543,
       |    "JVMOffHeapMemory" : 123456,
+      |    "ProcessTreeRSSMemory": 123456,
+      |    "ProcessTreeVMemory": 256912,
       |    "OnHeapExecutionMemory" : 12345,
       |    "OffHeapExecutionMemory" : 1234,
       |    "OnHeapStorageMemory" : 123,
@@ -2135,36 +2136,36 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   private val executorBlacklistedJsonString =
     s"""
-      |{
-      |  "Event" : "org.apache.spark.scheduler.SparkListenerExecutorBlacklisted",
-      |  "time" : ${executorBlacklistedTime},
-      |  "executorId" : "exec1",
-      |  "taskFailures" : 22
-      |}
+       |{
+       |  "Event" : "org.apache.spark.scheduler.SparkListenerExecutorBlacklisted",
+       |  "time" : ${executorBlacklistedTime},
+       |  "executorId" : "exec1",
+       |  "taskFailures" : 22
+       |}
     """.stripMargin
   private val executorUnblacklistedJsonString =
     s"""
-      |{
-      |  "Event" : "org.apache.spark.scheduler.SparkListenerExecutorUnblacklisted",
-      |  "time" : ${executorUnblacklistedTime},
-      |  "executorId" : "exec1"
-      |}
+       |{
+       |  "Event" : "org.apache.spark.scheduler.SparkListenerExecutorUnblacklisted",
+       |  "time" : ${executorUnblacklistedTime},
+       |  "executorId" : "exec1"
+       |}
     """.stripMargin
   private val nodeBlacklistedJsonString =
     s"""
-      |{
-      |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeBlacklisted",
-      |  "time" : ${nodeBlacklistedTime},
-      |  "hostId" : "node1",
-      |  "executorFailures" : 33
-      |}
+       |{
+       |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeBlacklisted",
+       |  "time" : ${nodeBlacklistedTime},
+       |  "hostId" : "node1",
+       |  "executorFailures" : 33
+       |}
     """.stripMargin
   private val nodeUnblacklistedJsonString =
     s"""
-      |{
-      |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeUnblacklisted",
-      |  "time" : ${nodeUnblacklistedTime},
-      |  "hostId" : "node1"
-      |}
+       |{
+       |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeUnblacklisted",
+       |  "time" : ${nodeUnblacklistedTime},
+       |  "hostId" : "node1"
+       |}
     """.stripMargin
 }

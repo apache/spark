@@ -59,6 +59,18 @@ case object JVMOffHeapMemory extends ExecutorMetricType {
   }
 }
 
+case object ProcessTreeRSSMemory extends ExecutorMetricType {
+  override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
+    memoryManager.pTreeInfo.getRSSInfo()
+  }
+}
+
+case object ProcessTreeVMemory extends ExecutorMetricType {
+  override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
+    memoryManager.pTreeInfo.getVirtualMemInfo()
+  }
+}
+
 case object OnHeapExecutionMemory extends MemoryManagerExecutorMetricType(
   _.onHeapExecutionMemoryUsed)
 
@@ -88,6 +100,8 @@ private[spark] object ExecutorMetricType {
   val values = IndexedSeq(
     JVMHeapMemory,
     JVMOffHeapMemory,
+    ProcessTreeRSSMemory,
+    ProcessTreeVMemory,
     OnHeapExecutionMemory,
     OffHeapExecutionMemory,
     OnHeapStorageMemory,
