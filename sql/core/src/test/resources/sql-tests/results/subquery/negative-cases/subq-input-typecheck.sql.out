@@ -92,7 +92,15 @@ t1a IN (SELECT t2a, t2b
 struct<>
 -- !query 7 output
 org.apache.spark.sql.AnalysisException
-(t1.`t1a` IN (listquery())) has 1 values, but the subquery has 2 output values.;
+Cannot analyze (t1.`t1a` IN (listquery(t1.`t1a`))).
+The number of columns in the left hand side of an IN subquery does not match the
+number of columns in the output of subquery.
+#columns in left hand side: 1.
+#columns in right hand side: 2.
+Left side columns:
+[t1.`t1a`].
+Right side columns:
+[t2.`t2a`, t2.`t2b`].;
 
 
 -- !query 8
@@ -105,7 +113,15 @@ WHERE
 struct<>
 -- !query 8 output
 org.apache.spark.sql.AnalysisException
-(named_struct('t1a', t1.`t1a`, 't1b', t1.`t1b`) IN (listquery())) has 2 values, but the subquery has 1 output values.;
+Cannot analyze (named_struct('t1a', t1.`t1a`, 't1b', t1.`t1b`) IN (listquery(t1.`t1a`))).
+The number of columns in the left hand side of an IN subquery does not match the
+number of columns in the output of subquery.
+#columns in left hand side: 2.
+#columns in right hand side: 1.
+Left side columns:
+[t1.`t1a`, t1.`t1b`].
+Right side columns:
+[t2.`t2a`].;
 
 
 -- !query 9
