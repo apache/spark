@@ -26,6 +26,7 @@ import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
 
@@ -454,5 +455,11 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     val interpreted = InterpretedPredicate.create(LessThan(Rand(7), Literal(1.0)))
     interpreted.initialize(0)
     assert(interpreted.eval(new UnsafeRow()))
+  }
+
+  test("[SPARK-24872] Replace the symbol '||' of Or operator with 'or'") {
+    val expression = CatalystSqlParser.parseExpression("id=1 or id=2").toString()
+    val expected = "(('id = 1) or ('id = 2))"
+    assert(expression == expected)
   }
 }

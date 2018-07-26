@@ -442,6 +442,8 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
   override def inputType: AbstractDataType = BooleanType
 
+  override def symbol: String = "or"
+
   override def sqlOperator: String = "OR"
 
   override def eval(input: InternalRow): Any = {
