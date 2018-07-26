@@ -538,7 +538,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Except(left, right, true) =>
         throw new IllegalStateException(
           "logical except operator should have been replaced by union, aggregate" +
-            "and generator operators in the optimizer")
+            "and generate operators in the optimizer")
 
       case logical.DeserializeToObject(deserializer, objAttr, child) =>
         execution.DeserializeToObjectExec(deserializer, objAttr, planLater(child)) :: Nil
