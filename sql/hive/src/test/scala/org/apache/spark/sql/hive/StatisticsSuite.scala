@@ -1381,4 +1381,50 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       assert(catalogStats.rowCount.isEmpty)
     }
   }
+
+  test("Test deserialization factor") {
+    val formats = Seq("parquet", "orc", "textfile")
+    val factor = 10
+    formats.foreach { format =>
+      val tableName = s"${format}SizeTest"
+      val tableNameAdj = s"${tableName}Adj"
+      withTable(tableName, tableNameAdj) {
+        sql(s"CREATE TABLE $tableName STORED AS $format AS SELECT * FROM SRC")
+        val relationStats = spark.table(tableName).queryExecution.optimizedPlan.stats
+        val sizeInBytes = relationStats.sizeInBytes
+
+        // test deserialization factor on non-partitioned table
+        withSQLConf(("spark.sql.statistics.deserialization.factor", factor.toString)) {
+          sql(s"CREATE TABLE $tableNameAdj STORED AS $format AS SELECT * FROM SRC")
+          val relationStats = spark.table(tableNameAdj).queryExecution.optimizedPlan.stats
+          val expectedSizeInBytes = if (format != "textfile") {
+            sizeInBytes * factor
+          } else {
+            sizeInBytes
+          }
+          assert(relationStats.sizeInBytes == expectedSizeInBytes)
+        }
+      }
+    }
+  }
+
+  test("test ignoreRawDataSize") {
+    val tableName = "rawData"
+    withTable(tableName) {
+      withSQLConf("spark.sql.statistics.ignoreRawDataSize" -> "true") {
+        sql(s"CREATE TABLE $tableName (c1 bigint)" +
+          "TBLPROPERTIES ('numRows'='0', 'rawDataSize'='200', 'totalSize'='0')")
+
+        val catalogTable = getCatalogTable(tableName)
+
+        val properties = catalogTable.ignoredProperties
+        assert(properties("totalSize").toLong == 0)
+        assert(properties("rawDataSize").toLong > 0)
+        assert(properties("numRows").toLong == 0)
+
+        val relationStats = spark.table(tableName).queryExecution.optimizedPlan.stats
+        assert(relationStats.sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
+      }
+    }
+  }
 }

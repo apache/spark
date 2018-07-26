@@ -91,4 +91,36 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
       assert(size2 < tableStats.get.sizeInBytes)
     }
   }
+
+  test("Test deserialization factor against partition") {
+    val factor = 10
+    val formats = Seq("parquet", "orc", "csv")
+    formats.foreach { format =>
+      withTable("tbl") {
+        spark.range(10).selectExpr("id", "id % 3 as p").write.format(format)
+          .partitionBy("p").saveAsTable("tbl")
+        sql(s"ANALYZE TABLE tbl COMPUTE STATISTICS")
+
+        val df1 = sql("SELECT * FROM tbl WHERE p = 1")
+
+        val sizes1 = df1.queryExecution.optimizedPlan.collect {
+          case relation: LogicalRelation => relation.catalogTable.get.stats.get.sizeInBytes
+        }
+
+        withSQLConf("spark.sql.statistics.deserialization.factor" -> factor.toString) {
+          val df2 = sql("SELECT * FROM tbl WHERE p = 1")
+
+          val sizes2 = df2.queryExecution.optimizedPlan.collect {
+            case relation: LogicalRelation => relation.catalogTable.get.stats.get.sizeInBytes
+          }
+
+          if (format == "csv") {
+            assert(sizes2(0) == sizes1(0))
+          } else {
+            assert(sizes2(0) == (sizes1(0) * factor))
+          }
+        }
+      }
+    }
+  }
 }

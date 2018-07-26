@@ -52,6 +52,7 @@ import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.HiveExternalCatalog.{DATASOURCE_SCHEMA, DATASOURCE_SCHEMA_NUMPARTS, DATASOURCE_SCHEMA_PART_PREFIX}
 import org.apache.spark.sql.hive.client.HiveClientImpl._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
 
@@ -465,7 +466,7 @@ private[hive] class HiveClientImpl(
         // For EXTERNAL_TABLE, the table properties has a particular field "EXTERNAL". This is added
         // in the function toHiveTable.
         properties = filteredProperties,
-        stats = readHiveStats(properties),
+        stats = readHiveStats(properties, Option(h.getSerializationLib)),
         comment = comment,
         // In older versions of Spark(before 2.2.0), we expand the view original text and
         // store that into `viewExpandedText`, that should be used in view resolution.
@@ -1034,14 +1035,17 @@ private[hive] object HiveClientImpl {
       createTime = apiPartition.getCreateTime.toLong * 1000,
       lastAccessTime = apiPartition.getLastAccessTime.toLong * 1000,
       parameters = properties,
-      stats = readHiveStats(properties))
+      stats = readHiveStats(properties,
+        Option(apiPartition.getSd.getSerdeInfo.getSerializationLib)))
   }
 
   /**
    * Reads statistics from Hive.
    * Note that this statistics could be overridden by Spark's statistics if that's available.
    */
-  private def readHiveStats(properties: Map[String, String]): Option[CatalogStatistics] = {
+  private def readHiveStats(
+          properties: Map[String, String],
+          serde: Option[String] = None): Option[CatalogStatistics] = {
     val totalSize = properties.get(StatsSetupConst.TOTAL_SIZE).map(BigInt(_))
     val rawDataSize = properties.get(StatsSetupConst.RAW_DATA_SIZE).map(BigInt(_))
     val rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_))
@@ -1056,9 +1060,21 @@ private[hive] object HiveClientImpl {
     // return None.
     // In Hive, when statistics gathering is disabled, `rawDataSize` and `numRows` is always
     // zero after INSERT command. So they are used here only if they are larger than zero.
-    if (totalSize.isDefined && totalSize.get > 0L) {
-      Some(CatalogStatistics(sizeInBytes = totalSize.get, rowCount = rowCount.filter(_ > 0)))
-    } else if (rawDataSize.isDefined && rawDataSize.get > 0) {
+    val sqlConf = SQLConf.get
+    val factor = sqlConf.sizeDeserializationFactor
+    val adjustedSize = if (totalSize.isDefined && serde.isDefined && factor != 1.0D) {
+      // TODO: The serde check should be in a utility function, since it is also checked elsewhere
+      if (serde.get.contains("Parquet") || serde.get.contains("Orc")) {
+        Some(BigInt((totalSize.get.toLong * factor).toLong))
+      } else {
+        totalSize
+      }
+    } else {
+      totalSize
+    }
+    if (adjustedSize.isDefined && adjustedSize.get > 0L) {
+      Some(CatalogStatistics(sizeInBytes = adjustedSize.get, rowCount = rowCount.filter(_ > 0)))
+    } else if (rawDataSize.isDefined && rawDataSize.get > 0 && !sqlConf.ignoreRawDataSize) {
       Some(CatalogStatistics(sizeInBytes = rawDataSize.get, rowCount = rowCount.filter(_ > 0)))
     } else {
       // TODO: still fill the rowCount even if sizeInBytes is empty. Might break anything?

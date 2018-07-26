@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 
 private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
@@ -65,7 +66,8 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
           fsRelation.copy(location = prunedFileIndex)(sparkSession)
         // Change table stats based on the sizeInBytes of pruned files
         val withStats = logicalRelation.catalogTable.map(_.copy(
-          stats = Some(CatalogStatistics(sizeInBytes = BigInt(prunedFileIndex.sizeInBytes)))))
+          stats = Some(CatalogStatistics(sizeInBytes =
+            BigInt(calcPartSize(logicalRelation.catalogTable, prunedFileIndex.sizeInBytes))))))
         val prunedLogicalRelation = logicalRelation.copy(
           relation = prunedFsRelation, catalogTable = withStats)
         // Keep partition-pruning predicates so that they are visible in physical planning
@@ -75,5 +77,17 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
       } else {
         op
       }
+  }
+
+  private def calcPartSize(catalogTable: Option[CatalogTable], sizeInBytes: Long): Long = {
+    val conf: SQLConf = SQLConf.get
+    val factor = conf.sizeDeserializationFactor
+    if (catalogTable.isDefined && factor != 1.0 &&
+      // TODO: The serde check should be in a utility function, since it is also checked elsewhere
+      catalogTable.get.storage.serde.exists(s => s.contains("Parquet") || s.contains("Orc"))) {
+      (sizeInBytes.toLong * factor).toLong
+    } else {
+      sizeInBytes
+    }
   }
 }
