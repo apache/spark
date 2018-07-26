@@ -284,6 +284,11 @@ object PartitioningUtils {
     }.mkString("/")
   }
 
+  def getPathFragment(partitions: TablePartitionSpec): String = partitions.map {
+    case (k, v) =>
+      escapePathName(k) + "=" + escapePathName(v)
+  }.mkString("/")
+
   /**
    * Normalize the column names in partition specification, w.r.t. the real partition column names
    * and case sensitivity. e.g., if the partition spec has a column named `monTh`, and there is a

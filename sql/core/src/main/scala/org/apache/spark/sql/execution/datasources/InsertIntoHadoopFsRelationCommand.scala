@@ -166,7 +166,12 @@ case class InsertIntoHadoopFsRelationCommand(
 
 
       // update metastore partition metadata
-      refreshUpdatedPartitions(updatedPartitionPaths)
+      if (staticPartitions.nonEmpty) {
+        // Avoid empty partition can't loaded.
+        refreshUpdatedPartitions(Set(PartitioningUtils.getPathFragment(staticPartitions)))
+      } else {
+        refreshUpdatedPartitions(updatedPartitionPaths)
+      }
 
       // refresh cached files in FileIndex
       fileIndex.foreach(_.refresh())
