@@ -77,18 +77,4 @@ class AvroOptions(
    * If the option is not set, the `snappy` compression is used by default.
    */
   val compression: String = parameters.get("compression").getOrElse(sqlConf.avroCompressionCodec)
-
-
-  /**
-   * Level of compression in the range of 1..9 inclusive. 1 - for fast, 9 - for best compression.
-   * If the compression level is not set for `deflate` compression, the current value of SQL
-   * config `spark.sql.avro.deflate.level` is used by default. For other compressions, the default
-   * value is `6`.
-   */
-  val compressionLevel: Int = {
-    val defaultLevel = 6
-    parameters.get("compressionLevel").map(_.toInt).getOrElse {
-      if (compression == "deflate") sqlConf.avroDeflateLevel else defaultLevel
-    }
-  }
 }

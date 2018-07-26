@@ -112,10 +112,8 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    val parsedOptions = new AvroOptions(
-      options,
-      spark.sessionState.newHadoopConf(),
-      spark.sessionState.conf)
+    val sqlConf = spark.sessionState.conf
+    val parsedOptions = new AvroOptions(options, spark.sessionState.newHadoopConf(), sqlConf)
     val outputAvroSchema = SchemaConverters.toAvroType(
       dataSchema, nullable = false, parsedOptions.recordName, parsedOptions.recordNamespace)
 
@@ -133,7 +131,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
         job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, DataFileConstants.SNAPPY_CODEC)
 
       case "deflate" =>
-        val deflateLevel = parsedOptions.compressionLevel
+        val deflateLevel = sqlConf.avroDeflateLevel
         log.info(s"compressing Avro output using deflate (level=$deflateLevel)")
         job.getConfiguration.setBoolean(COMPRESS_KEY, true)
         job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, DataFileConstants.DEFLATE_CODEC)
