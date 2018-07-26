@@ -915,7 +915,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         val reader = new DataFileReader(file, new GenericDatumReader[Any]())
         val r = reader.getMetaString("avro.codec")
         r
-      }.map(v => if (v == "null") "uncompress" else v).headOption
+      }.map(v => if (v == "null") "uncompressed" else v).headOption
     }
     def checkCodec(df: DataFrame, dir: String, codec: String): Unit = {
       val subdir = s"$dir/$codec"
@@ -926,7 +926,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val path = dir.toString
       val df = spark.read.format("avro").load(testAvro)
 
-      checkCodec(df, path, "uncompress")
+      checkCodec(df, path, "uncompressed")
       checkCodec(df, path, "deflate")
       checkCodec(df, path, "snappy")
     }

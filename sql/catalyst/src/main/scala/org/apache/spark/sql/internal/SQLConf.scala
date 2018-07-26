@@ -1439,13 +1439,15 @@ object SQLConf {
   val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
     .doc("Compression codec used in writing of AVRO files.")
     .stringConf
+    .checkValues(Set("uncompressed", "deflate", "snappy"))
     .createWithDefault("snappy")
 
   val AVRO_DEFLATE_LEVEL = buildConf("spark.sql.avro.deflate.level")
     .doc("Compression level for the deflate codec used in writing of AVRO files. " +
-      "Valid value must be in the range of from 1 to 9 inclusive. " +
+      "Valid value must be in the range of from 1 to 9 inclusive or -1. " +
       "The default value is -1 which corresponds to 6 level in the current implementation.")
     .intConf
+    .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
     .createWithDefault(Deflater.DEFAULT_COMPRESSION)
 }
 
