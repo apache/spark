@@ -27,8 +27,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.avro.Schema
 import org.apache.avro.Schema.{Field, Type}
-import org.apache.avro.file.DataFileWriter
-import org.apache.avro.generic.{GenericData, GenericDatumWriter, GenericRecord}
+import org.apache.avro.file.{DataFileReader, DataFileWriter}
+import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
 
@@ -906,31 +906,29 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("SPARK-24881: write with compression - avro options") {
+    def getCodec(dir: String): Option[String] = {
+      val jsonFiles = new File(dir)
+        .listFiles()
+        .filter(_.isFile)
+        .filter(_.getName.endsWith("avro"))
+      jsonFiles.map { file =>
+        val reader = new DataFileReader(file, new GenericDatumReader[Any]())
+        val r = reader.getMetaString("avro.codec")
+        r
+      }.map(v => if (v == "null") "uncompress" else v).headOption
+    }
+    def checkCodec(df: DataFrame, dir: String, codec: String): Unit = {
+      val subdir = s"$dir/$codec"
+      df.write.option("compression", codec).format("avro").save(subdir)
+      assert(getCodec(subdir) == Some(codec))
+    }
     withTempPath { dir =>
-      val uncompressDir = s"$dir/uncompress"
-      val deflateDir = s"$dir/deflate"
-      val snappyDir = s"$dir/snappy"
-
+      val path = dir.toString
       val df = spark.read.format("avro").load(testAvro)
-      df.write
-        .option("compression", "uncompressed")
-        .format("avro")
-        .save(uncompressDir)
-      df.write
-        .options(Map("compression" -> "deflate", "compressionLevel" -> "9"))
-        .format("avro")
-        .save(deflateDir)
-      df.write
-        .option("compression", "snappy")
-        .format("avro")
-        .save(snappyDir)
 
-      val uncompressSize = FileUtils.sizeOfDirectory(new File(uncompressDir))
-      val deflateSize = FileUtils.sizeOfDirectory(new File(deflateDir))
-      val snappySize = FileUtils.sizeOfDirectory(new File(snappyDir))
-
-      assert(uncompressSize > deflateSize)
-      assert(snappySize > deflateSize)
+      checkCodec(df, path, "uncompress")
+      checkCodec(df, path, "deflate")
+      checkCodec(df, path, "snappy")
     }
   }
 }
