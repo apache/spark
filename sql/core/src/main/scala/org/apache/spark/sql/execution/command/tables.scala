@@ -337,7 +337,11 @@ case class LoadDataCommand(
           new File(file.getAbsolutePath).exists()
         }
         if (!exists) {
-          throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
+          // If user have no permission to access the given input path, `File.exists()` return false
+          // , `LOAD DATA input path does not exist` can confuse users.
+          throw new AnalysisException(s"LOAD DATA input path does not exist: `$path` or current " +
+            s"user ${Utils.getCurrentUserName()} have no permission to access the input path: " +
+            s"`$path`, please check it.")
         }
         uri
       } else {
