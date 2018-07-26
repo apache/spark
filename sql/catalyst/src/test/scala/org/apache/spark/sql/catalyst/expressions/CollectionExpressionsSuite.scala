@@ -1434,4 +1434,48 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(ArrayUnion(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(ArrayUnion(a20, a22).dataType.asInstanceOf[ArrayType].containsNull === true)
   }
+
+  test("Shuffle") {
+    // Primitive-type elements
+    val ai0 = Literal.create(Seq(2, 1, 4, 5, 3), ArrayType(IntegerType))
+    val ai1 = Literal.create(Seq(2, 1, 3), ArrayType(IntegerType))
+    val ai2 = Literal.create(Seq(null, 1, null, 3), ArrayType(IntegerType))
+    val ai3 = Literal.create(Seq(2, null, 4, null), ArrayType(IntegerType))
+    val ai4 = Literal.create(Seq(null, null, null), ArrayType(IntegerType))
+    val ai5 = Literal.create(Seq(1), ArrayType(IntegerType))
+    val ai6 = Literal.create(Seq.empty, ArrayType(IntegerType))
+    val ai7 = Literal.create(null, ArrayType(IntegerType))
+
+    checkEvaluation(ArraySort(Shuffle(ai0)), Seq(1, 2, 3, 4, 5))
+    checkEvaluation(ArraySort(Shuffle(ai1)), Seq(1, 2, 3))
+    checkEvaluation(ArraySort(Shuffle(ai2)), Seq(1, 3, null, null))
+    checkEvaluation(ArraySort(Shuffle(ai3)), Seq(2, 4, null, null))
+    checkEvaluation(Shuffle(ai4), Seq(null, null, null))
+    checkEvaluation(Shuffle(ai5), Seq(1))
+    checkEvaluation(Shuffle(ai6), Seq.empty)
+    checkEvaluation(Shuffle(ai7), null)
+
+    // Non-primitive-type elements
+    val as0 = Literal.create(Seq("b", "a", "d", "c"), ArrayType(StringType))
+    val as1 = Literal.create(Seq("b", "a", "c"), ArrayType(StringType))
+    val as2 = Literal.create(Seq(null, "a", null, "c"), ArrayType(StringType))
+    val as3 = Literal.create(Seq("b", null, "d", null), ArrayType(StringType))
+    val as4 = Literal.create(Seq(null, null, null), ArrayType(StringType))
+    val as5 = Literal.create(Seq("a"), ArrayType(StringType))
+    val as6 = Literal.create(Seq.empty, ArrayType(StringType))
+    val as7 = Literal.create(null, ArrayType(StringType))
+    val aa = Literal.create(
+      Seq(Seq("a", "b"), Seq("c", "d"), Seq("e")),
+      ArrayType(ArrayType(StringType)))
+
+    checkEvaluation(ArraySort(Shuffle(as0)), Seq("a", "b", "c", "d"))
+    checkEvaluation(ArraySort(Shuffle(as1)), Seq("a", "b", "c"))
+    checkEvaluation(ArraySort(Shuffle(as2)), Seq("a", "c", null, null))
+    checkEvaluation(ArraySort(Shuffle(as3)), Seq("b", "d", null, null))
+    checkEvaluation(Shuffle(as4), Seq(null, null, null))
+    checkEvaluation(Shuffle(as5), Seq("a"))
+    checkEvaluation(Shuffle(as6), Seq.empty)
+    checkEvaluation(Shuffle(as7), null)
+    checkEvaluation(ArraySort(Shuffle(aa)), Seq(Seq("a", "b"), Seq("c", "d"), Seq("e")))
+  }
 }

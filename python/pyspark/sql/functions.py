@@ -2382,6 +2382,20 @@ def array_sort(col):
     return Column(sc._jvm.functions.array_sort(_to_java_column(col)))
 
 
+@since(2.4)
+def shuffle(col):
+    """
+    Collection function: Generates a random permutation of the given array.
+
+    .. note:: The function is non-deterministic because its results depends on order of rows which
+        may be non-deterministic after a shuffle.
+
+    :param col: name of column or expression
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.shuffle(_to_java_column(col)))
+
+
 @since(1.5)
 @ignore_unicode_prefix
 def reverse(col):
