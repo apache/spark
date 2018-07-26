@@ -916,9 +916,7 @@ class Analyzer(
         j.copy(right = dedupRight(left, right))
       case i @ Intersect(left, right) if !i.duplicateResolved =>
         i.copy(right = dedupRight(left, right))
-      case e @ Except(left, right) if !e.duplicateResolved =>
-        e.copy(right = dedupRight(left, right))
-      case e @ ExceptAll(left, right) if !e.duplicateResolved =>
+      case e @ Except(left, right, _) if !e.duplicateResolved =>
         e.copy(right = dedupRight(left, right))
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on its descendants

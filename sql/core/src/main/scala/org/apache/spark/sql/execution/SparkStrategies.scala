@@ -532,7 +532,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Intersect(left, right) =>
         throw new IllegalStateException(
           "logical intersect operator should have been replaced by semi-join in the optimizer")
-      case logical.Except(left, right) =>
+      case logical.Except(left, right, _) =>
         throw new IllegalStateException(
           "logical except operator should have been replaced by anti-join in the optimizer")
 

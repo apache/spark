@@ -53,7 +53,7 @@ trait CheckAnalysis extends PredicateHelper {
   }
 
   protected def mapColumnInSetOperation(plan: LogicalPlan): Option[Attribute] = plan match {
-    case _: Intersect | _: ExceptBase | _: Distinct =>
+    case _: Intersect | _: Except | _: Distinct =>
       plan.output.find(a => hasMapType(a.dataType))
     case d: Deduplicate =>
       d.keys.find(a => hasMapType(a.dataType))
@@ -330,7 +330,7 @@ trait CheckAnalysis extends PredicateHelper {
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                """.stripMargin)
 
-          case e: ExceptBase if !e.duplicateResolved =>
+          case e: Except if !e.duplicateResolved =>
             val conflictingAttributes = e.left.outputSet.intersect(e.right.outputSet)
             failAnalysis(
               s"""

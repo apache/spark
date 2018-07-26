@@ -1423,7 +1423,7 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
  */
 object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Except(left, right) =>
+    case Except(left, right, false) =>
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
       Distinct(Join(left, right, LeftAnti, joinCond.reduceLeftOption(And)))
@@ -1463,7 +1463,7 @@ object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
 
 object RewriteExcepAll extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case ExceptAll(left, right) =>
+    case Except(left, right, true) =>
       assert(left.output.size == right.output.size)
 
       val newColumnLeft = Alias(Literal(1L), "vcol")()

@@ -183,15 +183,16 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
   }
 }
 
-abstract class ExceptBase(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
+case class Except(
+    left: LogicalPlan,
+    right: LogicalPlan,
+    isAll: Boolean = false) extends SetOperation(left, right) {
+  override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
 
   override protected def validConstraints: Set[Expression] = leftConstraints
 }
-
-case class Except(left: LogicalPlan, right: LogicalPlan) extends ExceptBase(left, right)
-case class ExceptAll(left: LogicalPlan, right: LogicalPlan) extends ExceptBase(left, right)
 
 /** Factory for constructing new `Union` nodes. */
 object Union {

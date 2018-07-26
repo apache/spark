@@ -537,7 +537,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.INTERSECT =>
         Intersect(left, right)
       case SqlBaseParser.EXCEPT if all =>
-        ExceptAll(left, right)
+        Except(left, right, true)
       case SqlBaseParser.EXCEPT =>
         Except(left, right)
       case SqlBaseParser.SETMINUS if all =>

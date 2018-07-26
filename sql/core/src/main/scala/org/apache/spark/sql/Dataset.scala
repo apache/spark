@@ -1960,7 +1960,7 @@ class Dataset[T] private[sql](
    * @since 2.4.0
    */
   def exceptAll(other: Dataset[T]): Dataset[T] = withSetOperator {
-    ExceptAll(planWithBarrier, other.planWithBarrier)
+    Except(planWithBarrier, other.planWithBarrier, true)
   }
 
   /**
