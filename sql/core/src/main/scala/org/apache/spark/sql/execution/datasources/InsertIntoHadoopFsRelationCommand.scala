@@ -166,8 +166,8 @@ case class InsertIntoHadoopFsRelationCommand(
 
 
       // update metastore partition metadata
-      if (staticPartitions.nonEmpty) {
-        // Avoid empty partition can't loaded.
+      if (staticPartitions.nonEmpty && updatedPartitionPaths.isEmpty) {
+        // Avoid empty static partition can't loaded to datasource table.
         refreshUpdatedPartitions(Set(PartitioningUtils.getPathFragment(staticPartitions)))
       } else {
         refreshUpdatedPartitions(updatedPartitionPaths)
