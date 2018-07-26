@@ -104,7 +104,7 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   override def transformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[ArrayType],
-      s"The input column must be ArrayType, but got $inputType.")
+      s"The input column must be ${ArrayType.simpleString}, but got ${inputType.catalogString}.")
     val attrGroup = new AttributeGroup($(outputCol), $(numFeatures))
     SchemaUtils.appendColumn(schema, attrGroup.toStructField())
   }

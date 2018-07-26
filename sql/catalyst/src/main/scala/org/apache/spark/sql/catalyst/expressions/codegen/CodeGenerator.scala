@@ -596,7 +596,7 @@ class CodegenContext {
     case NullType => "false"
     case _ =>
       throw new IllegalArgumentException(
-        "cannot generate equality code for un-comparable type: " + dataType.simpleString)
+        "cannot generate equality code for un-comparable type: " + dataType.catalogString)
   }
 
   /**
@@ -683,7 +683,7 @@ class CodegenContext {
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
       throw new IllegalArgumentException(
-        "cannot generate compare code for un-comparable type: " + dataType.simpleString)
+        "cannot generate compare code for un-comparable type: " + dataType.catalogString)
   }
 
   /**

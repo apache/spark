@@ -17,16 +17,21 @@
 
 package org.apache.spark.sql.avro
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
 /**
  * Options for Avro Reader and Writer stored in case insensitive manner.
  */
-class AvroOptions(@transient val parameters: CaseInsensitiveMap[String])
-  extends Logging with Serializable {
+class AvroOptions(
+    @transient val parameters: CaseInsensitiveMap[String],
+    @transient val conf: Configuration) extends Logging with Serializable {
 
-  def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
+  def this(parameters: Map[String, String], conf: Configuration) = {
+    this(CaseInsensitiveMap(parameters), conf)
+  }
 
   /**
    * Optional schema provided by an user in JSON format.
@@ -45,4 +50,22 @@ class AvroOptions(@transient val parameters: CaseInsensitiveMap[String])
    * See Avro spec for details: https://avro.apache.org/docs/1.8.2/spec.html#schema_record .
    */
   val recordNamespace: String = parameters.getOrElse("recordNamespace", "")
+
+  /**
+   * The `ignoreExtension` option controls ignoring of files without `.avro` extensions in read.
+   * If the option is enabled, all files (with and without `.avro` extension) are loaded.
+   * If the option is not set, the Hadoop's config `avro.mapred.ignore.inputs.without.extension`
+   * is taken into account. If the former one is not set too, file extensions are ignored.
+   */
+  val ignoreExtension: Boolean = {
+    val ignoreFilesWithoutExtensionByDefault = false
+    val ignoreFilesWithoutExtension = conf.getBoolean(
+      AvroFileFormat.IgnoreFilesWithoutExtensionProperty,
+      ignoreFilesWithoutExtensionByDefault)
+
+    parameters
+      .get("ignoreExtension")
+      .map(_.toBoolean)
+      .getOrElse(!ignoreFilesWithoutExtension)
+  }
 }

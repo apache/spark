@@ -503,7 +503,7 @@ class LogisticRegression @Since("1.2.0") (
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(regParam, elasticNetParam, standardization, threshold,
+    instr.logParams(this, regParam, elasticNetParam, standardization, threshold,
       maxIter, tol, fitIntercept)
 
     val (summarizer, labelSummarizer) = {

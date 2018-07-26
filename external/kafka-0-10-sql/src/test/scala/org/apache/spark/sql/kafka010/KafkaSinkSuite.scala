@@ -303,7 +303,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
       writer.stop()
     }
     assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
-      "value attribute type must be a string or binarytype"))
+      "value attribute type must be a string or binary"))
 
     try {
       ex = intercept[StreamingQueryException] {
@@ -318,7 +318,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
       writer.stop()
     }
     assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
-      "key attribute type must be a string or binarytype"))
+      "key attribute type must be a string or binary"))
   }
 
   test("streaming - write to non-existing topic") {

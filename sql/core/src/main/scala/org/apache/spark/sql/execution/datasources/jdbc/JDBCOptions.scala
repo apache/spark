@@ -157,6 +157,8 @@ class JDBCOptions(
   // ------------------------------------------------------------
   // if to truncate the table from the JDBC database
   val isTruncate = parameters.getOrElse(JDBC_TRUNCATE, "false").toBoolean
+
+  val isCascadeTruncate: Option[Boolean] = parameters.get(JDBC_CASCADE_TRUNCATE).map(_.toBoolean)
   // the create table option , which can be table_options or partition_options.
   // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
   // TODO: to reuse the existing partition parameters for those partition specific options
@@ -225,6 +227,7 @@ object JDBCOptions {
   val JDBC_QUERY_TIMEOUT = newOption("queryTimeout")
   val JDBC_BATCH_FETCH_SIZE = newOption("fetchsize")
   val JDBC_TRUNCATE = newOption("truncate")
+  val JDBC_CASCADE_TRUNCATE = newOption("cascadeTruncate")
   val JDBC_CREATE_TABLE_OPTIONS = newOption("createTableOptions")
   val JDBC_CREATE_TABLE_COLUMN_TYPES = newOption("createTableColumnTypes")
   val JDBC_CUSTOM_DATAFRAME_COLUMN_TYPES = newOption("customSchema")
