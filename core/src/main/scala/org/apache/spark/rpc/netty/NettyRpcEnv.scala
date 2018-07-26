@@ -50,7 +50,7 @@ private[netty] class NettyRpcEnv(
   private[netty] val transportConf = SparkTransportConf.fromSparkConf(
     conf.clone.set("spark.rpc.io.numConnectionsPerPeer", "1"),
     "rpc",
-    conf.getInt("spark.rpc.io.threads", 0))
+    conf.getInt("spark.rpc.io.threads", numUsableCores))
 
   private val dispatcher: Dispatcher = new Dispatcher(this, numUsableCores)
 
