@@ -1244,46 +1244,50 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
   }
 
   private def arrayCodeGen(ctx: CodegenContext, ev: ExprCode, childName: String): String = {
-    val length = ctx.freshName("length")
-    val javaElementType = CodeGenerator.javaType(elementType)
+
     val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
 
+    val numElements = ctx.freshName("numElements")
+    val arrayData = ctx.freshName("arrayData")
+
     val initialization = if (isPrimitiveType) {
-      s"$childName.copy()"
+      ctx.createUnsafeArray(arrayData, numElements, elementType, s" $prettyName failed.")
     } else {
-      s"new ${classOf[GenericArrayData].getName()}(new Object[$length])"
+      val arrayDataClass = classOf[GenericArrayData].getName
+      s"$arrayDataClass $arrayData = new $arrayDataClass(new Object[$numElements]);"
     }
 
-    val numberOfIterations = if (isPrimitiveType) s"$length / 2" else length
+    val i = ctx.freshName("i")
+    val j = ctx.freshName("j")
 
-    val swapAssigments = if (isPrimitiveType) {
-      val setFunc = "set" + CodeGenerator.primitiveTypeName(elementType)
-      val getCall = (index: String) => CodeGenerator.getValue(ev.value, elementType, index)
-      s"""|boolean isNullAtK = ${ev.value}.isNullAt(k);
-          |boolean isNullAtL = ${ev.value}.isNullAt(l);
-          |if(!isNullAtK) {
-          |  $javaElementType el = ${getCall("k")};
-          |  if(!isNullAtL) {
-          |    ${ev.value}.$setFunc(k, ${getCall("l")});
-          |  } else {
-          |    ${ev.value}.setNullAt(k);
-          |  }
-          |  ${ev.value}.$setFunc(l, el);
-          |} else if (!isNullAtL) {
-          |  ${ev.value}.$setFunc(k, ${getCall("l")});
-          |  ${ev.value}.setNullAt(l);
-          |}""".stripMargin
+    val getValue = CodeGenerator.getValue(childName, elementType, i)
+
+    val setFunc = if (isPrimitiveType) {
+      s"set${CodeGenerator.primitiveTypeName(elementType)}"
     } else {
-      s"${ev.value}.update(k, ${CodeGenerator.getValue(childName, elementType, "l")});"
+      "update"
+    }
+
+    val assignment = if (isPrimitiveType && dataType.asInstanceOf[ArrayType].containsNull) {
+      s"""
+         |if ($childName.isNullAt($i)) {
+         |  $arrayData.setNullAt($j);
+         |} else {
+         |  $arrayData.$setFunc($j, $getValue);
+         |}
+       """.stripMargin
+    } else {
+      s"$arrayData.$setFunc($j, $getValue);"
     }
 
     s"""
-       |final int $length = $childName.numElements();
-       |${ev.value} = $initialization;
-       |for(int k = 0; k < $numberOfIterations; k++) {
-       |  int l = $length - k - 1;
-       |  $swapAssigments
+       |final int $numElements = $childName.numElements();
+       |$initialization
+       |for (int $i = 0; $i < $numElements; $i++) {
+       |  int $j = $numElements - $i - 1;
+       |  $assignment
        |}
+       |${ev.value} = $arrayData;
      """.stripMargin
   }
 
