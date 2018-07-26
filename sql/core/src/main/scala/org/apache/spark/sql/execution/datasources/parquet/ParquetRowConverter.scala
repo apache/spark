@@ -178,7 +178,8 @@ private[parquet] class ParquetRowConverter(
   /**
    * The [[UnsafeRow]] converted from an entire Parquet record.
    */
-  def currentRecord: UnsafeRow = unsafeProjection(currentRow)
+  def currentRecord: InternalRow = currentRow
+  // def currentRecord: InternalRow = unsafeProjection(currentRow)
 
   // Converters for each field.
   private val fieldConverters: Array[Converter with HasParentContainerUpdater] = {

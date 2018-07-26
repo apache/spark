@@ -250,8 +250,13 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
       val bos = new ByteArrayOutputStream()
       val out = new DataOutputStream(codec.compressedOutputStream(bos))
+      lazy val makeUnsafeRow = UnsafeProjection.create(schema)
       while (iter.hasNext && (n < 0 || count < n)) {
-        val row = iter.next().asInstanceOf[UnsafeRow]
+        val row = iter.next() match {
+          case unsafe: UnsafeRow => unsafe
+          case internal: InternalRow => makeUnsafeRow(internal)
+          case o => throw new UnsupportedOperationException(s"Cannot collect non-row object: $o")
+        }
         out.writeInt(row.getSizeInBytes)
         row.writeToStream(out, buffer)
         count += 1
