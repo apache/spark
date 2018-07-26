@@ -1853,8 +1853,11 @@ abstract class RDD[T: ClassTag](
    * barrier stage.
    *
    * An RDD is in a barrier stage, if at least one of its parent RDD(s), or itself, are mapped from
-   * a RDDBarrier. This function always returns false for a [[ShuffledRDD]], since a
+   * an [[RDDBarrier]]. This function always returns false for a [[ShuffledRDD]], since a
    * [[ShuffledRDD]] indicates start of a new stage.
+   *
+   * A [[MapPartitionsRDD]] can be transformed from an [[RDDBarrier]], under that case the
+   * [[MapPartitionsRDD]] shall be marked as barrier.
    */
   private[spark] def isBarrier(): Boolean = isBarrier_
 
