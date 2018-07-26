@@ -1804,6 +1804,25 @@ The following example shows how to use `groupby().apply()` to subtract the mean 
 For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/pyspark.sql.html#pyspark.sql.functions.pandas_udf) and
 [`pyspark.sql.GroupedData.apply`](api/python/pyspark.sql.html#pyspark.sql.GroupedData.apply).
 
+### Grouped Aggregate
+
+Grouped aggregate Pandas UDFs are similar to Spark aggregate functions. Grouped aggregate Pandas UDFs are used with groupBy and
+window operations. It defines an aggregation from one or more `pandas.Series`
+to a scalar value, where the `pandas.Series` represents values for a column within the same group or window.
+
+Note that this type of UDF doesn't not support partial aggregation and all data for a group or window will be loaded into memory. Also,
+only unbounded window are supported with Grouped aggregate Pandas UDfs currently.
+
+The following example shows how to use this type of UDF to compute weighted mean with group and window operations:
+
+<div class="codetabs">
+<div data-lang="python" markdown="1">
+{% include_example grouped_agg_pandas_udf python/sql/arrow.py %}
+</div>
+</div>
+
+For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/pyspark.sql.html#pyspark.sql.functions.pandas_udf)
+
 ## Usage Notes
 
 ### Supported SQL Types
