@@ -332,8 +332,7 @@ def choose_jira_assignee(issue, asf_jira):
                 asf_jira.assign_issue(issue.key, assignee.key)
                 return assignee
         except KeyboardInterrupt:
-            traceback.print_exc()
-            sys.exit(-1)
+            raise
         except:
             traceback.print_exc()
             print("Error assigning JIRA, try again (or leave blank and fix manually)")
