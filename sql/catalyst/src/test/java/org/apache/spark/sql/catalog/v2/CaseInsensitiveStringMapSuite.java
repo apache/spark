@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark.sql.catalog.v2;
+package org.apache.spark.sql.catalog.v2;
 
-import org.apache.spark.sql.catalog.v2.CaseInsensitiveStringMap;
 import org.junit.Assert;
 import org.junit.Test;
 

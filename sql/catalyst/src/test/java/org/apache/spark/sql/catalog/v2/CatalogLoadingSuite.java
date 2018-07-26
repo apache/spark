@@ -15,12 +15,9 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark.sql.catalog.v2;
+package org.apache.spark.sql.catalog.v2;
 
 import org.apache.spark.SparkException;
-import org.apache.spark.sql.catalog.v2.CaseInsensitiveStringMap;
-import org.apache.spark.sql.catalog.v2.CatalogProvider;
-import org.apache.spark.sql.catalog.v2.Catalogs;
 import org.apache.spark.sql.internal.SQLConf;
 import org.junit.Assert;
 import org.junit.Test;
@@ -150,7 +147,32 @@ public class CatalogLoadingSuite {
   }
 }
 
+class TestCatalogProvider implements CatalogProvider {
+  CaseInsensitiveStringMap options = null;
+
+  TestCatalogProvider() {
+  }
+
+  @Override
+  public void initialize(CaseInsensitiveStringMap options) {
+    this.options = options;
+  }
+}
+
+class ConstructorFailureCatalogProvider implements CatalogProvider { // fails in its constructor
+  ConstructorFailureCatalogProvider() {
+    throw new RuntimeException("Expected failure.");
+  }
+
+  @Override
+  public void initialize(CaseInsensitiveStringMap options) {
+  }
+}
+
 class AccessErrorCatalogProvider implements CatalogProvider { // no public constructor
+  private AccessErrorCatalogProvider() {
+  }
+
   @Override
   public void initialize(CaseInsensitiveStringMap options) {
   }
