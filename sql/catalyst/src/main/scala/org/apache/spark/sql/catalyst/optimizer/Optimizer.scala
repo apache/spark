@@ -1560,9 +1560,9 @@ object RewriteIntersectAll extends Rule[LogicalPlan] {
       // Apply the replicator to replicate rows based on min_count
       val genRowPlan = Generate(
         ReplicateRows(Seq(ifExpression.toAttribute) ++ left.output),
-        Nil,
-        false,
-        None,
+        unrequiredChildIndex = Nil,
+        outer = false,
+        qualifier = None,
         left.output,
         projectMinPlan
       )

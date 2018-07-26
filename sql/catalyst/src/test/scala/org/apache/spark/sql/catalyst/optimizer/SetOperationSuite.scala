@@ -169,7 +169,7 @@ class SetOperationSuite extends PlanTest {
   }
 
   test("INTERSECT ALL rewrite") {
-    val input = Intersect(testRelation, testRelation2, true)
+    val input = Intersect(testRelation, testRelation2, isAll = true)
     val rewrittenPlan = RewriteIntersectAll(input)
     val leftRelation = testRelation
       .select(Literal(true).as("vcol1"), Literal(null, BooleanType).as("vcol2"), 'a, 'b, 'c)
