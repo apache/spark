@@ -74,7 +74,8 @@ class AvroOptions(
   /**
    * The `compression` option allows to specify a compression codec used in write.
    * Currently supported codecs are `uncompressed`, `snappy` and `deflate`.
-   * If the option is not set, the `snappy` compression is used by default.
+   * If the option is not set, the `spark.sql.avro.compression.codec` config is taken into
+   * account. If the former one is not set too, the `snappy` codec is used by default.
    */
   val compression: String = parameters.get("compression").getOrElse(sqlConf.avroCompressionCodec)
 }
