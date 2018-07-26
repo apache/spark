@@ -1093,7 +1093,7 @@ object SQLConf {
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
   val SHUFFLED_JOIN_CHILDREN_PARTITIONING_DETECTION =
-    buildConf("spark.sql.sortMergeJoinExec.childrenPartitioningDetection")
+    buildConf("spark.sql.shuffledJoin.childrenPartitioningDetection")
       .internal()
       .doc("When true, sort merge join and shuffled hash join will detect children data " +
         "partitioning to avoid shuffle, it is helpful when join keys are a super-set of " +

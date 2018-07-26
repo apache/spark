@@ -33,16 +33,6 @@ object JoinUtils {
       HashClusteredDistribution(indices.map(rightKeys(_))) :: Nil
   }
 
-  private def checkBucketTable(plan: SparkPlan) = {
-    // plan has HashPartitioning already
-    if (plan.collect { case _: ShuffleExchangeExec => true }.nonEmpty) {
-      false
-    } else {
-      val leaves = plan.collectLeaves()
-      leaves.length == 1 && leaves.head.isInstanceOf[FileSourceScanExec]
-    }
-  }
-
   def requiredChildDistributionForShuffledJoin(
       partitioningDetection: Boolean,
       leftKeys: Seq[Expression],
@@ -57,14 +47,12 @@ object JoinUtils {
     val rightPartitioning = right.outputPartitioning
     leftPartitioning match {
       case HashPartitioning(leftExpressions, _)
-        if leftPartitioning.satisfies(ClusteredDistribution(leftKeys)) &&
-          checkBucketTable(left) =>
+        if leftPartitioning.satisfies(ClusteredDistribution(leftKeys)) =>
         avoidShuffleIfPossible(leftKeys, leftExpressions, leftKeys, rightKeys)
 
       case _ => rightPartitioning match {
         case HashPartitioning(rightExpressions, _)
-          if rightPartitioning.satisfies(ClusteredDistribution(rightKeys)) &&
-            checkBucketTable(right) =>
+          if rightPartitioning.satisfies(ClusteredDistribution(rightKeys)) =>
           avoidShuffleIfPossible(rightKeys, rightExpressions, leftKeys, rightKeys)
 
         case _ =>
