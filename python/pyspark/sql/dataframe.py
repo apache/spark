@@ -1502,8 +1502,8 @@ class DataFrame(object):
 
     @since(2.4)
     def intersectAll(self, other):
-        """ Return a new :class:`DataFrame` containing rows in bothe this frame and other frame
-        while preserving duplicates.
+        """ Return a new :class:`DataFrame` containing rows in both this dataframe and other
+        dataframe while preserving duplicates.
 
         This is equivalent to `INTERSECT ALL` in SQL.
         >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])

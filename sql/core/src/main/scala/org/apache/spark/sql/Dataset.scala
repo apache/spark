@@ -1940,7 +1940,8 @@ class Dataset[T] private[sql](
    * This is equivalent to `INTERSECT ALL` in SQL.
    *
    * @note Equality checking is performed directly on the encoded representation of the data
-   * and thus is not affected by a custom `equals` function defined on `T`.
+   * and thus is not affected by a custom `equals` function defined on `T`. Also as standard
+   * in SQL, this function resolves columns by position (not by name).
    *
    * @group typedrel
    * @since 2.4.0

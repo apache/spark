@@ -1502,18 +1502,15 @@ object RewriteExcepAll extends Rule[LogicalPlan] {
  * {{{
  *   SELECT c1
  *   FROM (
- *        SELECT replicate_row(min_count, c1) AS (min_count, c1)
+ *        SELECT replicate_row(min_count, c1)
  *        FROM (
- *             SELECT c1,
- *                    vcol1_cnt,
- *                    vcol2_cnt,
- *                    IF (vcol1_cnt > vcol1_cnt, vcol2_cnt, vcol1_cnt) AS min_count
+ *             SELECT c1, If (vcol1_cnt > vcol2_cnt, vcol2_cnt, vcol1_cnt) AS min_count
  *             FROM (
  *                  SELECT   c1, count(vcol1) as vcol1_cnt, count(vcol2) as vcol2_cnt
  *                  FROM (
- *                       SELECT c1, true as vcol1, null as vcol2 FROM ut1
+ *                       SELECT true as vcol1, null as , c1 FROM ut1
  *                       UNION ALL
- *                       SELECT c1, null as vcol1, true as vcol2 FROM ut2
+ *                       SELECT null as vcol1, true as vcol2, c1 FROM ut2
  *                       ) AS union_all
  *                  GROUP BY c1
  *                  HAVING vcol1_cnt >= 1 AND vcol2_cnt >= 1
