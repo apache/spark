@@ -907,11 +907,11 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   test("SPARK-24881: write with compression - avro options") {
     def getCodec(dir: String): Option[String] = {
-      val jsonFiles = new File(dir)
+      val files = new File(dir)
         .listFiles()
         .filter(_.isFile)
         .filter(_.getName.endsWith("avro"))
-      jsonFiles.map { file =>
+      files.map { file =>
         val reader = new DataFileReader(file, new GenericDatumReader[Any]())
         val r = reader.getMetaString("avro.codec")
         r
