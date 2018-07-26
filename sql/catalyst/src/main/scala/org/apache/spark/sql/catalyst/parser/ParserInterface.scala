@@ -46,6 +46,12 @@ trait ParserInterface {
   @throws[ParseException]("Text cannot be parsed to a TableIdentifier")
   def parseTableIdentifier(sqlText: String): TableIdentifier
 
+//  /**
+//   * Parse a string to a [[TableIdentifier]].
+//   */
+//  @throws[ParseException]("Text cannot be parsed to a TableIdentifier")
+//  def parseCatalogTableIdentifier(sqlText: String): TableIdentifier
+
   /**
    * Parse a string to a [[FunctionIdentifier]].
    */

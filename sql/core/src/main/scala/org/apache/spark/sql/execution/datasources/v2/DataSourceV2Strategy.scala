@@ -20,11 +20,10 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable
 
 import org.apache.spark.sql.{sources, Strategy}
-import org.apache.spark.sql.catalog.v2.TableCatalog
 import org.apache.spark.sql.catalyst.analysis.NamedRelation
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, Repartition, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, DeleteFrom, LogicalPlan, Repartition, ReplaceTableAsSelect}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
@@ -169,6 +168,9 @@ object DataSourceV2Strategy extends Strategy {
       } else {
         Nil
       }
+
+    case DeleteFrom(rel: TableV2Relation, expr) =>
+      DeleteFromV2Exec(rel, expr) :: Nil
 
     case _ => Nil
   }

@@ -167,7 +167,7 @@ object DataSourceV2Relation {
       catalogName: String,
       ident: TableIdentifier,
       table: Table,
-      options: Map[String, String]): NamedRelation = {
+      options: Map[String, String] = Map.empty): NamedRelation = {
     TableV2Relation(catalogName, ident, table, table.schema.toAttributes, options)
   }
 }

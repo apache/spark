@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.sources.v2;
 
+import org.apache.spark.sql.catalog.v2.Table;
 import org.apache.spark.sql.catalyst.expressions.Expression;
 
 /**
@@ -26,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression;
  * Data sources must implement this interface to support logical operations that combine writing
  * data with deleting data, like overwriting partitions.
  */
-public interface DeleteSupport extends DataSourceV2 {
+public interface DeleteSupport extends Table {
   /**
    * Delete data from a data source table that matches filter expressions.
    * <p>

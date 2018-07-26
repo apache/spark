@@ -167,7 +167,7 @@ statement
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
-    | DELETE FROM tableIdentifier WHERE expression                     #deleteFrom
+    | DELETE FROM catalogTableIdentifier WHERE expression              #deleteFrom
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
@@ -524,6 +524,10 @@ rowFormat
       (MAP KEYS TERMINATED BY keysTerminatedBy=STRING)?
       (LINES TERMINATED BY linesSeparatedBy=STRING)?
       (NULL DEFINED AS nullDefinedAs=STRING)?                                       #rowFormatDelimited
+    ;
+
+catalogTableIdentifier
+    : ((catalog=identifier '.')? db=identifier '.')? table=identifier
     ;
 
 tableIdentifier
