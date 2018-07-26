@@ -15,16 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark
+
+import org.apache.spark.annotation.{Experimental, Since}
+
 
 /**
- * Represents free resources available on an executor.
+ * :: Experimental ::
+ * Carries all task infos of a barrier task.
+ *
+ * @param address the IPv4 address(host:port) of the executor that a barrier task is running on
  */
-private[spark]
-case class WorkerOffer(
-    executorId: String,
-    host: String,
-    cores: Int,
-    // `address` is an optional hostPort string, it provide more useful information than `host`
-    // when multiple executors are launched on the same host.
-    address: Option[String] = None)
+@Experimental
+@Since("2.4.0")
+class BarrierTaskInfo(val address: String)

@@ -15,16 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark
 
-/**
- * Represents free resources available on an executor.
- */
-private[spark]
-case class WorkerOffer(
-    executorId: String,
-    host: String,
-    cores: Int,
-    // `address` is an optional hostPort string, it provide more useful information than `host`
-    // when multiple executors are launched on the same host.
-    address: Option[String] = None)
+import org.apache.spark.annotation.{Experimental, Since}
+
+/** A [[TaskContext]] with extra info and tooling for a barrier stage. */
+trait BarrierTaskContext extends TaskContext {
+
+  /**
+   * :: Experimental ::
+   * Sets a global barrier and waits until all tasks in this stage hit this barrier. Similar to
+   * MPI_Barrier function in MPI, the barrier() function call blocks until all tasks in the same
+   * stage have reached this routine.
+   */
+  @Experimental
+  @Since("2.4.0")
+  def barrier(): Unit
+
+  /**
+   * :: Experimental ::
+   * Returns the all task infos in this barrier stage, the task infos are ordered by partitionId.
+   */
+  @Experimental
+  @Since("2.4.0")
+  def getTaskInfos(): Array[BarrierTaskInfo]
+}
