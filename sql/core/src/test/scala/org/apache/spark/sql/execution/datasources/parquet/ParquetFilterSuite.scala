@@ -1036,7 +1036,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
             val filter = s"a in(${Range(0, count).mkString(",")})"
             assert(df.where(filter).count() === count)
             val actual = stripSparkFilter(df.where(filter)).collect().length
-            if (pushEnabled && count <= conf.parquetFilterPushDownInFilterThreshold) {
+            if (pushEnabled) {
               assert(actual > 1 && actual < data.length)
             } else {
               assert(actual === data.length)
