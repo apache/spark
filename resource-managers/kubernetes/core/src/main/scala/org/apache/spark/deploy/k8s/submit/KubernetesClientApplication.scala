@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkApplication
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkKubernetesClientFactory}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
@@ -39,11 +39,13 @@ import org.apache.spark.util.Utils
  * @param mainAppResource the main application resource if any
  * @param mainClass the main class of the application to run
  * @param driverArgs arguments to the driver
+ * @param maybePyFiles additional Python files via --py-files
  */
 private[spark] case class ClientArguments(
     mainAppResource: Option[MainAppResource],
     mainClass: String,
-    driverArgs: Array[String])
+    driverArgs: Array[String],
+    maybePyFiles: Option[String])
 
 private[spark] object ClientArguments {
 
@@ -51,10 +53,15 @@ private[spark] object ClientArguments {
     var mainAppResource: Option[MainAppResource] = None
     var mainClass: Option[String] = None
     val driverArgs = mutable.ArrayBuffer.empty[String]
+    var maybePyFiles : Option[String] = None
 
     args.sliding(2, 2).toList.foreach {
       case Array("--primary-java-resource", primaryJavaResource: String) =>
         mainAppResource = Some(JavaMainAppResource(primaryJavaResource))
+      case Array("--primary-py-file", primaryPythonResource: String) =>
+        mainAppResource = Some(PythonMainAppResource(primaryPythonResource))
+      case Array("--other-py-files", pyFiles: String) =>
+        maybePyFiles = Some(pyFiles)
       case Array("--main-class", clazz: String) =>
         mainClass = Some(clazz)
       case Array("--arg", arg: String) =>
@@ -69,7 +76,8 @@ private[spark] object ClientArguments {
     ClientArguments(
       mainAppResource,
       mainClass.get,
-      driverArgs.toArray)
+      driverArgs.toArray,
+      maybePyFiles)
   }
 }
 
@@ -206,6 +214,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
     val kubernetesResourceNamePrefix = {
       s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
     }
+    sparkConf.set(KUBERNETES_PYSPARK_PY_FILES, clientArguments.maybePyFiles.getOrElse(""))
     val kubernetesConf = KubernetesConf.createDriverConf(
       sparkConf,
       appName,
@@ -213,12 +222,13 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       kubernetesAppId,
       clientArguments.mainAppResource,
       clientArguments.mainClass,
-      clientArguments.driverArgs)
+      clientArguments.driverArgs,
+      clientArguments.maybePyFiles)
     val builder = new KubernetesDriverBuilder
     val namespace = kubernetesConf.namespace()
     // The master URL has been checked for validity already in SparkSubmit.
     // We just need to get rid of the "k8s://" prefix here.
-    val master = sparkConf.get("spark.master").substring("k8s://".length)
+    val master = KubernetesUtils.parseMasterUrl(sparkConf.get("spark.master"))
     val loggingInterval = if (waitForAppCompletion) Some(sparkConf.get(REPORT_INTERVAL)) else None
 
     val watcher = new LoggingPodStatusWatcherImpl(kubernetesAppId, loggingInterval)

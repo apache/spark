@@ -22,6 +22,7 @@ import java.net.Socket
 import java.sql.Timestamp
 import java.text.SimpleDateFormat
 import java.util.{Calendar, List => JList, Locale, Optional}
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -33,7 +34,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming.LongOffset
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, MicroBatchReadSupport}
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader}
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader, SupportsDeprecatedScanRow}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 
@@ -49,7 +50,8 @@ object TextSocketMicroBatchReader {
  * debugging. This MicroBatchReader will *not* work in production applications due to multiple
  * reasons, including no support for fault recovery.
  */
-class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchReader with Logging {
+class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchReader
+    with SupportsDeprecatedScanRow with Logging {
 
   private var startOffset: Offset = _
   private var endOffset: Offset = _
@@ -76,7 +78,7 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
   @GuardedBy("this")
   private var lastOffsetCommitted: LongOffset = LongOffset(-1L)
 
-  initialize()
+  private val initialized: AtomicBoolean = new AtomicBoolean(false)
 
   /** This method is only used for unit test */
   private[sources] def getCurrentOffset(): LongOffset = synchronized {
@@ -140,7 +142,7 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
     }
   }
 
-  override def planInputPartitions(): JList[InputPartition[Row]] = {
+  override def planRowInputPartitions(): JList[InputPartition[Row]] = {
     assert(startOffset != null && endOffset != null,
       "start offset and end offset should already be set before create read tasks.")
 
@@ -149,6 +151,10 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
 
     // Internal buffer only holds the batches after lastOffsetCommitted
     val rawList = synchronized {
+      if (initialized.compareAndSet(false, true)) {
+        initialize()
+      }
+
       val sliceStart = startOrdinal - lastOffsetCommitted.offset.toInt - 1
       val sliceEnd = endOrdinal - lastOffsetCommitted.offset.toInt - 1
       batches.slice(sliceStart, sliceEnd)

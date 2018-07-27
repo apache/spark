@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
@@ -82,7 +83,7 @@ case class Rand(child: Expression) extends RDG {
     val rngTerm = ctx.addMutableState(className, "rng")
     ctx.addPartitionInitializationStatement(
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
-    ev.copy(code = s"""
+    ev.copy(code = code"""
       final ${CodeGenerator.javaType(dataType)} ${ev.value} = $rngTerm.nextDouble();""",
       isNull = FalseLiteral)
   }
@@ -120,7 +121,7 @@ case class Randn(child: Expression) extends RDG {
     val rngTerm = ctx.addMutableState(className, "rng")
     ctx.addPartitionInitializationStatement(
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
-    ev.copy(code = s"""
+    ev.copy(code = code"""
       final ${CodeGenerator.javaType(dataType)} ${ev.value} = $rngTerm.nextGaussian();""",
       isNull = FalseLiteral)
   }

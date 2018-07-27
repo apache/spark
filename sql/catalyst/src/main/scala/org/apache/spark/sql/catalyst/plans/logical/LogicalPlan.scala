@@ -23,12 +23,12 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.types.StructType
 
 
 abstract class LogicalPlan
   extends QueryPlan[LogicalPlan]
+  with AnalysisHelper
   with LogicalPlanStats
   with QueryPlanConstraints
   with Logging {
@@ -78,7 +78,7 @@ abstract class LogicalPlan
     schema.map { field =>
       resolve(field.name :: Nil, resolver).map {
         case a: AttributeReference => a
-        case other => sys.error(s"can not handle nested schema yet...  plan $this")
+        case _ => sys.error(s"can not handle nested schema yet...  plan $this")
       }.getOrElse {
         throw new AnalysisException(
           s"Unable to resolve ${field.name} given [${output.map(_.name).mkString(", ")}]")

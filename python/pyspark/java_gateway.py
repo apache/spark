@@ -31,7 +31,7 @@ from subprocess import Popen, PIPE
 if sys.version >= '3':
     xrange = range
 
-from py4j.java_gateway import java_import, JavaGateway, GatewayParameters
+from py4j.java_gateway import java_import, JavaGateway, JavaObject, GatewayParameters
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.serializers import read_int, write_with_length, UTF8Deserializer
 
@@ -145,3 +145,26 @@ def do_server_auth(conn, auth_secret):
     if reply != "ok":
         conn.close()
         raise Exception("Unexpected reply from iterator server.")
+
+
+def ensure_callback_server_started(gw):
+    """
+    Start callback server if not already started. The callback server is needed if the Java
+    driver process needs to callback into the Python driver process to execute Python code.
+    """
+
+    # getattr will fallback to JVM, so we cannot test by hasattr()
+    if "_callback_server" not in gw.__dict__ or gw._callback_server is None:
+        gw.callback_server_parameters.eager_load = True
+        gw.callback_server_parameters.daemonize = True
+        gw.callback_server_parameters.daemonize_connections = True
+        gw.callback_server_parameters.port = 0
+        gw.start_callback_server(gw.callback_server_parameters)
+        cbport = gw._callback_server.server_socket.getsockname()[1]
+        gw._callback_server.port = cbport
+        # gateway with real port
+        gw._python_proxy_port = gw._callback_server.port
+        # get the GatewayServer object in JVM by ID
+        jgws = JavaObject("GATEWAY_SERVER", gw._gateway_client)
+        # update the port of CallbackClient with real port
+        jgws.resetCallbackClient(jgws.getCallbackClient().getAddress(), gw._python_proxy_port)

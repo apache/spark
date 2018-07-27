@@ -28,6 +28,7 @@ import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => 
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.util.Utils
 
 /**
@@ -231,7 +232,52 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
-  /////////////////////////////////////////////////////////////////////////////
+  test("runWithValidation stops early and performs better on a validation dataset") {
+    val validationIndicatorCol = "validationIndicator"
+    val trainDF = trainData.toDF().withColumn(validationIndicatorCol, lit(false))
+    val validationDF = validationData.toDF().withColumn(validationIndicatorCol, lit(true))
+
+    val numIter = 20
+    for (lossType <- GBTRegressor.supportedLossTypes) {
+      val gbt = new GBTRegressor()
+        .setSeed(123)
+        .setMaxDepth(2)
+        .setLossType(lossType)
+        .setMaxIter(numIter)
+      val modelWithoutValidation = gbt.fit(trainDF)
+
+      gbt.setValidationIndicatorCol(validationIndicatorCol)
+      val modelWithValidation = gbt.fit(trainDF.union(validationDF))
+
+      assert(modelWithoutValidation.numTrees === numIter)
+      // early stop
+      assert(modelWithValidation.numTrees < numIter)
+
+      val errorWithoutValidation = GradientBoostedTrees.computeError(validationData,
+        modelWithoutValidation.trees, modelWithoutValidation.treeWeights,
+        modelWithoutValidation.getOldLossType)
+      val errorWithValidation = GradientBoostedTrees.computeError(validationData,
+        modelWithValidation.trees, modelWithValidation.treeWeights,
+        modelWithValidation.getOldLossType)
+
+      assert(errorWithValidation < errorWithoutValidation)
+
+      val evaluationArray = GradientBoostedTrees
+        .evaluateEachIteration(validationData, modelWithoutValidation.trees,
+          modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType,
+          OldAlgo.Regression)
+      assert(evaluationArray.length === numIter)
+      assert(evaluationArray(modelWithValidation.numTrees) >
+        evaluationArray(modelWithValidation.numTrees - 1))
+      var i = 1
+      while (i < modelWithValidation.numTrees) {
+        assert(evaluationArray(i) <= evaluationArray(i - 1))
+        i += 1
+      }
+    }
+  }
+
+    /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 

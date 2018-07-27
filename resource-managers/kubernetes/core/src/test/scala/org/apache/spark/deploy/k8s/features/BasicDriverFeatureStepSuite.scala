@@ -24,6 +24,8 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
+import org.apache.spark.deploy.k8s.submit.PythonMainAppResource
 
 class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
@@ -33,6 +35,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   private val CONTAINER_IMAGE_PULL_POLICY = "IfNotPresent"
   private val APP_NAME = "spark-test"
   private val MAIN_CLASS = "org.apache.spark.examples.SparkPi"
+  private val PY_MAIN_CLASS = "org.apache.spark.deploy.PythonRunner"
   private val APP_ARGS = Array("arg1", "arg2", "\"arg 3\"")
   private val CUSTOM_ANNOTATION_KEY = "customAnnotation"
   private val CUSTOM_ANNOTATION_VALUE = "customAnnotationValue"
@@ -47,6 +50,12 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     TEST_IMAGE_PULL_SECRETS.map { secret =>
       new LocalObjectReferenceBuilder().withName(secret).build()
     }
+  private val emptyDriverSpecificConf = KubernetesDriverSpecificConf(
+    None,
+    APP_NAME,
+    MAIN_CLASS,
+    APP_ARGS)
+
 
   test("Check the pod respects all configurations from the user.") {
     val sparkConf = new SparkConf()
@@ -59,17 +68,16 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS.mkString(","))
     val kubernetesConf = KubernetesConf(
       sparkConf,
-      KubernetesDriverSpecificConf(
-        None,
-        APP_NAME,
-        MAIN_CLASS,
-        APP_ARGS),
+      emptyDriverSpecificConf,
       RESOURCE_NAME_PREFIX,
       APP_ID,
       DRIVER_LABELS,
       DRIVER_ANNOTATIONS,
       Map.empty,
-      DRIVER_ENVS)
+      Map.empty,
+      DRIVER_ENVS,
+      Nil,
+      Seq.empty[String])
 
     val featureStep = new BasicDriverFeatureStep(kubernetesConf)
     val basePod = SparkPod.initialPod()
@@ -109,13 +117,58 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(driverPodMetadata.getLabels.asScala === DRIVER_LABELS)
     assert(driverPodMetadata.getAnnotations.asScala === DRIVER_ANNOTATIONS)
     assert(configuredPod.pod.getSpec.getRestartPolicy === "Never")
-
     val expectedSparkConf = Map(
       KUBERNETES_DRIVER_POD_NAME.key -> "spark-driver-pod",
       "spark.app.id" -> APP_ID,
       KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> RESOURCE_NAME_PREFIX,
       "spark.kubernetes.submitInDriver" -> "true")
     assert(featureStep.getAdditionalPodSystemProperties() === expectedSparkConf)
+  }
+
+  test("Check appropriate entrypoint rerouting for various bindings") {
+    val javaSparkConf = new SparkConf()
+      .set(org.apache.spark.internal.config.DRIVER_MEMORY.key, "4g")
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+    val pythonSparkConf = new SparkConf()
+      .set(org.apache.spark.internal.config.DRIVER_MEMORY.key, "4g")
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+    val javaKubernetesConf = KubernetesConf(
+      javaSparkConf,
+      KubernetesDriverSpecificConf(
+        Some(JavaMainAppResource("")),
+        APP_NAME,
+        PY_MAIN_CLASS,
+        APP_ARGS),
+      RESOURCE_NAME_PREFIX,
+      APP_ID,
+      DRIVER_LABELS,
+      DRIVER_ANNOTATIONS,
+      Map.empty,
+      Map.empty,
+      DRIVER_ENVS,
+      Nil,
+      Seq.empty[String])
+    val pythonKubernetesConf = KubernetesConf(
+      pythonSparkConf,
+      KubernetesDriverSpecificConf(
+        Some(PythonMainAppResource("")),
+        APP_NAME,
+        PY_MAIN_CLASS,
+        APP_ARGS),
+      RESOURCE_NAME_PREFIX,
+      APP_ID,
+      DRIVER_LABELS,
+      DRIVER_ANNOTATIONS,
+      Map.empty,
+      Map.empty,
+      DRIVER_ENVS,
+      Nil,
+      Seq.empty[String])
+    val javaFeatureStep = new BasicDriverFeatureStep(javaKubernetesConf)
+    val pythonFeatureStep = new BasicDriverFeatureStep(pythonKubernetesConf)
+    val basePod = SparkPod.initialPod()
+    val configuredJavaPod = javaFeatureStep.configurePod(basePod)
+    val configuredPythonPod = pythonFeatureStep.configurePod(basePod)
   }
 
   test("Additional system properties resolve jars and set cluster-mode confs.") {
@@ -128,17 +181,17 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(CONTAINER_IMAGE, "spark-driver:latest")
     val kubernetesConf = KubernetesConf(
       sparkConf,
-      KubernetesDriverSpecificConf(
-        None,
-        APP_NAME,
-        MAIN_CLASS,
-        APP_ARGS),
+      emptyDriverSpecificConf,
       RESOURCE_NAME_PREFIX,
       APP_ID,
       DRIVER_LABELS,
       DRIVER_ANNOTATIONS,
       Map.empty,
-      Map.empty)
+      Map.empty,
+      DRIVER_ENVS,
+      Nil,
+      allFiles)
+
     val step = new BasicDriverFeatureStep(kubernetesConf)
     val additionalProperties = step.getAdditionalPodSystemProperties()
     val expectedSparkConf = Map(

@@ -19,6 +19,8 @@ package org.apache.spark.sql.types
 
 import java.util.Locale
 
+import scala.util.control.NonFatal
+
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
@@ -26,6 +28,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -81,7 +84,11 @@ abstract class DataType extends AbstractDataType {
    * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    */
   private[spark] def sameType(other: DataType): Boolean =
-    DataType.equalsIgnoreNullability(this, other)
+    if (SQLConf.get.caseSensitiveAnalysis) {
+      DataType.equalsIgnoreNullability(this, other)
+    } else {
+      DataType.equalsIgnoreCaseAndNullability(this, other)
+    }
 
   /**
    * Returns the same data type but set all nullability fields are true
@@ -105,6 +112,14 @@ abstract class DataType extends AbstractDataType {
  */
 @InterfaceStability.Stable
 object DataType {
+
+  def fromDDL(ddl: String): DataType = {
+    try {
+      CatalystSqlParser.parseDataType(ddl)
+    } catch {
+      case NonFatal(_) => CatalystSqlParser.parseTableSchema(ddl)
+    }
+  }
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
@@ -214,7 +229,7 @@ object DataType {
   /**
    * Compares two types, ignoring nullability of ArrayType, MapType, StructType.
    */
-  private[sql] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
+  private[types] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
     (left, right) match {
       case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
         equalsIgnoreNullability(leftElementType, rightElementType)

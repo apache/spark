@@ -17,17 +17,21 @@
 
 package org.apache.spark.util.io
 
-import java.io.InputStream
+import java.io.{File, FileInputStream, InputStream}
 import java.nio.ByteBuffer
-import java.nio.channels.WritableByteChannel
+import java.nio.channels.{FileChannel, WritableByteChannel}
+import java.nio.file.StandardOpenOption
+
+import scala.collection.mutable.ListBuffer
 
 import com.google.common.primitives.UnsignedBytes
-import io.netty.buffer.{ByteBuf, Unpooled}
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.config
+import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.util.ByteArrayWritableChannel
 import org.apache.spark.storage.StorageUtils
+import org.apache.spark.util.Utils
 
 /**
  * Read-only byte buffer which is physically stored as multiple chunks rather than a single
@@ -63,24 +67,28 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
    */
   def writeFully(channel: WritableByteChannel): Unit = {
     for (bytes <- getChunks()) {
-      val curChunkLimit = bytes.limit()
+      val originalLimit = bytes.limit()
       while (bytes.hasRemaining) {
-        try {
-          val ioSize = Math.min(bytes.remaining(), bufferWriteChunkSize)
-          bytes.limit(bytes.position() + ioSize)
-          channel.write(bytes)
-        } finally {
-          bytes.limit(curChunkLimit)
-        }
+        // If `bytes` is an on-heap ByteBuffer, the Java NIO API will copy it to a temporary direct
+        // ByteBuffer when writing it out. This temporary direct ByteBuffer is cached per thread.
+        // Its size has no limit and can keep growing if it sees a larger input ByteBuffer. This may
+        // cause significant native memory leak, if a large direct ByteBuffer is allocated and
+        // cached, as it's never released until thread exits. Here we write the `bytes` with
+        // fixed-size slices to limit the size of the cached direct ByteBuffer.
+        // Please refer to http://www.evanjones.ca/java-bytebuffer-leak.html for more details.
+        val ioSize = Math.min(bytes.remaining(), bufferWriteChunkSize)
+        bytes.limit(bytes.position() + ioSize)
+        channel.write(bytes)
+        bytes.limit(originalLimit)
       }
     }
   }
 
   /**
-   * Wrap this buffer to view it as a Netty ByteBuf.
+   * Wrap this in a custom "FileRegion" which allows us to transfer over 2 GB.
    */
-  def toNetty: ByteBuf = {
-    Unpooled.wrappedBuffer(chunks.length, getChunks(): _*)
+  def toNetty: ChunkedByteBufferFileRegion = {
+    new ChunkedByteBufferFileRegion(this, bufferWriteChunkSize)
   }
 
   /**
@@ -160,6 +168,34 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
     }
   }
 
+}
+
+object ChunkedByteBuffer {
+  // TODO eliminate this method if we switch BlockManager to getting InputStreams
+  def fromManagedBuffer(data: ManagedBuffer, maxChunkSize: Int): ChunkedByteBuffer = {
+    data match {
+      case f: FileSegmentManagedBuffer =>
+        map(f.getFile, maxChunkSize, f.getOffset, f.getLength)
+      case other =>
+        new ChunkedByteBuffer(other.nioByteBuffer())
+    }
+  }
+
+  def map(file: File, maxChunkSize: Int, offset: Long, length: Long): ChunkedByteBuffer = {
+    Utils.tryWithResource(FileChannel.open(file.toPath, StandardOpenOption.READ)) { channel =>
+      var remaining = length
+      var pos = offset
+      val chunks = new ListBuffer[ByteBuffer]()
+      while (remaining > 0) {
+        val chunkSize = math.min(remaining, maxChunkSize)
+        val chunk = channel.map(FileChannel.MapMode.READ_ONLY, pos, chunkSize)
+        pos += chunkSize
+        remaining -= chunkSize
+        chunks += chunk
+      }
+      new ChunkedByteBuffer(chunks.toArray)
+    }
+  }
 }
 
 /**

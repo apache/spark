@@ -1055,6 +1055,64 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(sparkListener.failedStages.size == 1)
   }
 
+  test("Retry all the tasks on a resubmitted attempt of a barrier stage caused by FetchFailure") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil).barrier().mapPartitions((it, context) => it)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1))
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", reduceRdd.partitions.length)),
+      (Success, makeMapStatus("hostB", reduceRdd.partitions.length))))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq.empty))
+
+    // The first result task fails, with a fetch failure for the output from the first mapper.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"),
+      null))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq(0, 1)))
+
+    scheduler.resubmitFailedStages()
+    // Complete the map stage.
+    completeShuffleMapStageSuccessfully(0, 1, numShufflePartitions = 2)
+
+    // Complete the result stage.
+    completeNextResultStageWithSuccess(1, 1)
+
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assertDataStructuresEmpty()
+  }
+
+  test("Retry all the tasks on a resubmitted attempt of a barrier stage caused by TaskKilled") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil).barrier().mapPartitions((it, context) => it)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1))
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", reduceRdd.partitions.length))))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq(1)))
+
+    // The second map task fails with TaskKilled.
+    runEvent(makeCompletionEvent(
+      taskSets(0).tasks(1),
+      TaskKilled("test"),
+      null))
+    assert(sparkListener.failedStages === Seq(0))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq(0, 1)))
+
+    scheduler.resubmitFailedStages()
+    // Complete the map stage.
+    completeShuffleMapStageSuccessfully(0, 1, numShufflePartitions = 2)
+
+    // Complete the result stage.
+    completeNextResultStageWithSuccess(1, 0)
+
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assertDataStructuresEmpty()
+  }
+
   /**
    * This tests the case where another FetchFailed comes in while the map stage is getting
    * re-run.
@@ -1852,7 +1910,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assertDataStructuresEmpty()
   }
 
-  test("accumulators are updated on exception failures") {
+  test("accumulators are updated on exception failures and task killed") {
     val acc1 = AccumulatorSuite.createLongAccum("ingenieur")
     val acc2 = AccumulatorSuite.createLongAccum("boulanger")
     val acc3 = AccumulatorSuite.createLongAccum("agriculteur")
@@ -1868,15 +1926,24 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val accUpdate3 = new LongAccumulator
     accUpdate3.metadata = acc3.metadata
     accUpdate3.setValue(18)
-    val accumUpdates = Seq(accUpdate1, accUpdate2, accUpdate3)
-    val accumInfo = accumUpdates.map(AccumulatorSuite.makeInfo)
+
+    val accumUpdates1 = Seq(accUpdate1, accUpdate2)
+    val accumInfo1 = accumUpdates1.map(AccumulatorSuite.makeInfo)
     val exceptionFailure = new ExceptionFailure(
       new SparkException("fondue?"),
-      accumInfo).copy(accums = accumUpdates)
+      accumInfo1).copy(accums = accumUpdates1)
     submit(new MyRDD(sc, 1, Nil), Array(0))
     runEvent(makeCompletionEvent(taskSets.head.tasks.head, exceptionFailure, "result"))
+
     assert(AccumulatorContext.get(acc1.id).get.value === 15L)
     assert(AccumulatorContext.get(acc2.id).get.value === 13L)
+
+    val accumUpdates2 = Seq(accUpdate3)
+    val accumInfo2 = accumUpdates2.map(AccumulatorSuite.makeInfo)
+
+    val taskKilled = new TaskKilled( "test", accumInfo2, accums = accumUpdates2)
+    runEvent(makeCompletionEvent(taskSets.head.tasks.head, taskKilled, "result"))
+
     assert(AccumulatorContext.get(acc3.id).get.value === 18L)
   }
 
@@ -2497,6 +2564,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val accumUpdates = reason match {
       case Success => task.metrics.accumulators()
       case ef: ExceptionFailure => ef.accums
+      case tk: TaskKilled => tk.accums
       case _ => Seq.empty
     }
     CompletionEvent(task, reason, result, accumUpdates ++ extraAccumUpdates, taskInfo)

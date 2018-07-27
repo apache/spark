@@ -18,10 +18,10 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, ContainerPortBuilder, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, PodBuilder, QuantityBuilder}
+import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.SparkException
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTIONS, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD}
@@ -54,7 +54,8 @@ private[spark] class BasicExecutorFeatureStep(
 
   private val memoryOverheadMiB = kubernetesConf
     .get(EXECUTOR_MEMORY_OVERHEAD)
-    .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * executorMemoryMiB).toInt,
+    .getOrElse(math.max(
+      (kubernetesConf.get(MEMORY_OVERHEAD_FACTOR) * executorMemoryMiB).toInt,
       MEMORY_OVERHEAD_MIN_MIB))
   private val executorMemoryWithOverhead = executorMemoryMiB + memoryOverheadMiB
 
@@ -151,19 +152,20 @@ private[spark] class BasicExecutorFeatureStep(
         .build()
     }.getOrElse(executorContainer)
     val driverPod = kubernetesConf.roleSpecificConf.driverPod
+    val ownerReference = driverPod.map(pod =>
+      new OwnerReferenceBuilder()
+        .withController(true)
+        .withApiVersion(pod.getApiVersion)
+        .withKind(pod.getKind)
+        .withName(pod.getMetadata.getName)
+        .withUid(pod.getMetadata.getUid)
+        .build())
     val executorPod = new PodBuilder(pod.pod)
       .editOrNewMetadata()
         .withName(name)
         .withLabels(kubernetesConf.roleLabels.asJava)
         .withAnnotations(kubernetesConf.roleAnnotations.asJava)
-        .withOwnerReferences()
-        .addNewOwnerReference()
-          .withController(true)
-          .withApiVersion(driverPod.getApiVersion)
-          .withKind(driverPod.getKind)
-          .withName(driverPod.getMetadata.getName)
-          .withUid(driverPod.getMetadata.getUid)
-          .endOwnerReference()
+        .addToOwnerReferences(ownerReference.toSeq: _*)
         .endMetadata()
       .editOrNewSpec()
         .withHostname(hostname)
@@ -172,6 +174,7 @@ private[spark] class BasicExecutorFeatureStep(
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets(): _*)
         .endSpec()
       .build()
+
     SparkPod(executorPod, containerWithLimitCores)
   }
 

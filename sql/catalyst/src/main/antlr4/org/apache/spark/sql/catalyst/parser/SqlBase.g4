@@ -398,7 +398,7 @@ hintStatement
     ;
 
 fromClause
-    : FROM relation (',' relation)* (pivotClause | lateralView*)?
+    : FROM relation (',' relation)* lateralView* pivotClause?
     ;
 
 aggregation
@@ -406,6 +406,7 @@ aggregation
       WITH kind=ROLLUP
     | WITH kind=CUBE
     | kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')')?
+    | GROUP BY kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')'
     ;
 
 groupingSet
@@ -414,7 +415,16 @@ groupingSet
     ;
 
 pivotClause
-    : PIVOT '(' aggregates=namedExpressionSeq FOR pivotColumn=identifier IN '(' pivotValues+=constant (',' pivotValues+=constant)* ')' ')'
+    : PIVOT '(' aggregates=namedExpressionSeq FOR pivotColumn IN '(' pivotValues+=pivotValue (',' pivotValues+=pivotValue)* ')' ')'
+    ;
+
+pivotColumn
+    : identifiers+=identifier
+    | '(' identifiers+=identifier (',' identifiers+=identifier)* ')'
+    ;
+
+pivotValue
+    : expression (AS? identifier)?
     ;
 
 lateralView
@@ -539,16 +549,9 @@ expression
 booleanExpression
     : NOT booleanExpression                                        #logicalNot
     | EXISTS '(' query ')'                                         #exists
-    | predicated                                                   #booleanDefault
+    | valueExpression predicate?                                   #predicated
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary
     | left=booleanExpression operator=OR right=booleanExpression   #logicalBinary
-    ;
-
-// workaround for:
-//  https://github.com/antlr/antlr4/issues/780
-//  https://github.com/antlr/antlr4/issues/781
-predicated
-    : valueExpression predicate?
     ;
 
 predicate
@@ -592,6 +595,7 @@ primaryExpression
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
     | '(' expression ')'                                                                       #parenthesizedExpression
+    | EXTRACT '(' field=identifier FROM source=valueExpression ')'                             #extract
     ;
 
 constant
@@ -739,6 +743,7 @@ nonReserved
     | VIEW | REPLACE
     | IF
     | POSITION
+    | EXTRACT
     | NO | DATA
     | START | TRANSACTION | COMMIT | ROLLBACK | IGNORE
     | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
@@ -878,6 +883,7 @@ TRAILING: 'TRAILING';
 
 IF: 'IF';
 POSITION: 'POSITION';
+EXTRACT: 'EXTRACT';
 
 EQ  : '=' | '==';
 NSEQ: '<=>';

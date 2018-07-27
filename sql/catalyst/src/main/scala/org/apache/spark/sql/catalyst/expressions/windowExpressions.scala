@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{DeclarativeAggregate, NoOp}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
 import org.apache.spark.sql.types._
 
 /**
@@ -70,9 +70,9 @@ case class WindowSpecDefinition(
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
           !isValidFrameType(f.valueBoundary.head.dataType) =>
         TypeCheckFailure(
-          s"The data type '${orderSpec.head.dataType.simpleString}' used in the order " +
+          s"The data type '${orderSpec.head.dataType.catalogString}' used in the order " +
             "specification does not match the data type " +
-            s"'${f.valueBoundary.head.dataType.simpleString}' which is used in the range frame.")
+            s"'${f.valueBoundary.head.dataType.catalogString}' which is used in the range frame.")
       case _ => TypeCheckSuccess
     }
   }
@@ -251,7 +251,7 @@ case class SpecifiedWindowFrame(
       TypeCheckFailure(s"Window frame $location bound '$e' is not a literal.")
     case e: Expression if !frameType.inputType.acceptsType(e.dataType) =>
       TypeCheckFailure(
-        s"The data type of the $location bound '${e.dataType.simpleString}' does not match " +
+        s"The data type of the $location bound '${e.dataType.catalogString}' does not match " +
           s"the expected data type '${frameType.inputType.simpleString}'.")
     case _ => TypeCheckSuccess
   }
@@ -296,6 +296,37 @@ trait WindowFunction extends Expression {
   /** Frame in which the window operator must be executed. */
   def frame: WindowFrame = UnspecifiedFrame
 }
+
+/**
+ * Case objects that describe whether a window function is a SQL window function or a Python
+ * user-defined window function.
+ */
+sealed trait WindowFunctionType
+
+object WindowFunctionType {
+  case object SQL extends WindowFunctionType
+  case object Python extends WindowFunctionType
+
+  def functionType(windowExpression: NamedExpression): WindowFunctionType = {
+    val t = windowExpression.collectFirst {
+      case _: WindowFunction | _: AggregateFunction => SQL
+      case udf: PythonUDF if PythonUDF.isWindowPandasUDF(udf) => Python
+    }
+
+    // Normally a window expression would either have a SQL window function, a SQL
+    // aggregate function or a python window UDF. However, sometimes the optimizer will replace
+    // the window function if the value of the window function can be predetermined.
+    // For example, for query:
+    //
+    // select count(NULL) over () from values 1.0, 2.0, 3.0 T(a)
+    //
+    // The window function will be replaced by expression literal(0)
+    // To handle this case, if a window expression doesn't have a regular window function, we
+    // consider its type to be SQL as literal(0) is also a SQL expression.
+    t.getOrElse(SQL)
+  }
+}
+
 
 /**
  * An offset window function is a window function that returns the value of the input column offset

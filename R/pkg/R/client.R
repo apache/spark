@@ -63,7 +63,7 @@ generateSparkSubmitArgs <- function(args, sparkHome, jars, sparkSubmitOpts, pack
 checkJavaVersion <- function() {
   javaBin <- "java"
   javaHome <- Sys.getenv("JAVA_HOME")
-  javaReqs <- utils::packageDescription(utils::packageName(), fields=c("SystemRequirements"))
+  javaReqs <- utils::packageDescription(utils::packageName(), fields = c("SystemRequirements"))
   sparkJavaVersion <- as.numeric(tail(strsplit(javaReqs, "[(=)]")[[1]], n = 1L))
   if (javaHome != "") {
     javaBin <- file.path(javaHome, "bin", javaBin)
@@ -71,18 +71,23 @@ checkJavaVersion <- function() {
 
   # If java is missing from PATH, we get an error in Unix and a warning in Windows
   javaVersionOut <- tryCatch(
-      launchScript(javaBin, "-version", wait = TRUE, stdout = TRUE, stderr = TRUE),
-                   error = function(e) {
-                     stop("Java version check failed. Please make sure Java is installed",
-                          " and set JAVA_HOME to point to the installation directory.", e)
-                   },
-                   warning = function(w) {
-                     stop("Java version check failed. Please make sure Java is installed",
-                          " and set JAVA_HOME to point to the installation directory.", w)
-                   })
+    if (is_windows()) {
+      # See SPARK-24535
+      system2(javaBin, "-version", wait = TRUE, stdout = TRUE, stderr = TRUE)
+    } else {
+      launchScript(javaBin, "-version", wait = TRUE, stdout = TRUE, stderr = TRUE)
+    },
+    error = function(e) {
+      stop("Java version check failed. Please make sure Java is installed",
+           " and set JAVA_HOME to point to the installation directory.", e)
+    },
+    warning = function(w) {
+      stop("Java version check failed. Please make sure Java is installed",
+          " and set JAVA_HOME to point to the installation directory.", w)
+    })
   javaVersionFilter <- Filter(
       function(x) {
-        grepl("java version", x)
+        grepl(" version", x)
       }, javaVersionOut)
 
   javaVersionStr <- strsplit(javaVersionFilter[[1]], "[\"]")[[1L]][2]
@@ -90,8 +95,10 @@ checkJavaVersion <- function() {
   # Extract 8 from it to compare to sparkJavaVersion
   javaVersionNum <- as.integer(strsplit(javaVersionStr, "[.]")[[1L]][2])
   if (javaVersionNum != sparkJavaVersion) {
-    stop(paste("Java version", sparkJavaVersion, "is required for this package; found version:", javaVersionStr))
+    stop(paste("Java version", sparkJavaVersion, "is required for this package; found version:",
+               javaVersionStr))
   }
+  return(javaVersionNum)
 }
 
 launchBackend <- function(args, sparkHome, jars, sparkSubmitOpts, packages) {
