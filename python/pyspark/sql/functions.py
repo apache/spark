@@ -2046,7 +2046,7 @@ def array_intersect(col1, col2):
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
     >>> df.select(array_intersect(df.c1, df.c2)).collect()
-    [Row(array_intersect(c1, c2)=[u'c', u'a'])]
+    [Row(array_intersect(c1, c2)=[u'a', u'c'])]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_intersect(_to_java_column(col1), _to_java_column(col2)))
