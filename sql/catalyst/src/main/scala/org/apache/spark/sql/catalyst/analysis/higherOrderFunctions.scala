@@ -32,20 +32,17 @@ import org.apache.spark.sql.types.DataType
  */
 case class ResolveHigherOrderFunctions(catalog: SessionCatalog) extends Rule[LogicalPlan] {
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
-    case q: LogicalPlan =>
-      q.transformExpressions {
-        case u @ UnresolvedFunction(fn, children, false)
-            if hasLambdaAndResolvedArguments(children) =>
-          withPosition(u) {
-            catalog.lookupFunction(fn, children) match {
-              case func: HigherOrderFunction => func
-              case other => other.failAnalysis(
-                "A lambda function should only be used in a higher order function. However, " +
-                  s"its class is ${other.getClass.getCanonicalName}, which is not a " +
-                  s"higher order function.")
-            }
-          }
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
+    case u @ UnresolvedFunction(fn, children, false)
+        if hasLambdaAndResolvedArguments(children) =>
+      withPosition(u) {
+        catalog.lookupFunction(fn, children) match {
+          case func: HigherOrderFunction => func
+          case other => other.failAnalysis(
+            "A lambda function should only be used in a higher order function. However, " +
+              s"its class is ${other.getClass.getCanonicalName}, which is not a " +
+              s"higher order function.")
+        }
       }
   }
 
