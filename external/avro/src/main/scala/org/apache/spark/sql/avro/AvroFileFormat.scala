@@ -136,6 +136,11 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
         job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, DataFileConstants.DEFLATE_CODEC)
         job.getConfiguration.setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, deflateLevel)
 
+      case "bzip2" =>
+        log.info("compressing Avro output using bzip2")
+        job.getConfiguration.setBoolean(COMPRESS_KEY, true)
+        job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, DataFileConstants.BZIP2_CODEC)
+
       case unknown: String =>
         log.error(s"unsupported compression codec $unknown")
     }

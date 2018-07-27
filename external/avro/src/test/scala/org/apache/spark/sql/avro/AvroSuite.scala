@@ -914,6 +914,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       checkCodec(df, path, "uncompressed")
       checkCodec(df, path, "deflate")
       checkCodec(df, path, "snappy")
+      checkCodec(df, path, "bzip2")
     }
   }
 }
