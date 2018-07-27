@@ -82,7 +82,7 @@ object DecimalPrecision extends TypeCoercionRule {
     PromotePrecision(Cast(e, dataType))
   }
 
-  override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // fix decimal precision for expressions
     case q => q.transformExpressionsUp(
       decimalAndDecimal.orElse(integralAndDecimalLiteral).orElse(nondecimalAndDecimal))

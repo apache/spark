@@ -33,6 +33,7 @@ import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
@@ -49,6 +50,13 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     val originalEntries = spark.read.format("avro").load(testAvro).collect()
     val newEntries = spark.read.format("avro").load(newFile)
     checkAnswer(newEntries, originalEntries)
+  }
+
+  test("resolve avro data source") {
+    Seq("avro", "com.databricks.spark.avro").foreach { provider =>
+      assert(DataSource.lookupDataSource(provider, spark.sessionState.conf) ===
+        classOf[org.apache.spark.sql.avro.AvroFileFormat])
+    }
   }
 
   test("reading from multiple paths") {
@@ -456,7 +464,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     // get the same values back.
     withTempPath { tempDir =>
       val name = "AvroTest"
-      val namespace = "com.databricks.spark.avro"
+      val namespace = "org.apache.spark.avro"
       val parameters = Map("recordName" -> name, "recordNamespace" -> namespace)
 
       val avroDir = tempDir + "/namedAvro"
@@ -630,12 +638,8 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     intercept[FileNotFoundException] {
       withTempPath { dir =>
         FileUtils.touch(new File(dir, "test"))
-        val hadoopConf = spark.sqlContext.sparkContext.hadoopConfiguration
-        try {
-          hadoopConf.set(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
+        withSQLConf(AvroFileFormat.IgnoreFilesWithoutExtensionProperty -> "true") {
           spark.read.format("avro").load(dir.toString)
-        } finally {
-          hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)
         }
       }
     }
@@ -709,15 +713,10 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       Files.createFile(new File(tempSaveDir, "non-avro").toPath)
 
-      val hadoopConf = spark.sqlContext.sparkContext.hadoopConfiguration
-      val count = try {
-        hadoopConf.set(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
+      withSQLConf(AvroFileFormat.IgnoreFilesWithoutExtensionProperty -> "true") {
         val newDf = spark.read.format("avro").load(tempSaveDir)
-        newDf.count()
-      } finally {
-        hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)
+        assert(newDf.count() == 8)
       }
-      assert(count == 8)
     }
   }
 
@@ -880,20 +879,15 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         Paths.get(new URL(episodesAvro).toURI),
         Paths.get(dir.getCanonicalPath, "episodes"))
 
-      val hadoopConf = spark.sqlContext.sparkContext.hadoopConfiguration
-      val count = try {
-        hadoopConf.set(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      withSQLConf(AvroFileFormat.IgnoreFilesWithoutExtensionProperty -> "true") {
         val newDf = spark
           .read
           .option("ignoreExtension", "true")
           .format("avro")
           .load(s"${dir.getCanonicalPath}/episodes")
-        newDf.count()
-      } finally {
-        hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)
+        assert(newDf.count() == 8)
       }
-
-      assert(count == 8)
     }
   }
 }
