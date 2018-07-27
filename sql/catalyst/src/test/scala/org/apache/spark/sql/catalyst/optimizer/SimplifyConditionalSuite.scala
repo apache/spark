@@ -46,7 +46,9 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
   private val unreachableBranch = (FalseLiteral, Literal(20))
   private val nullBranch = (Literal.create(null, NullType), Literal(30))
 
-  private val testRelation = LocalRelation('a.int)
+  val isNotNullCond = IsNotNull(UnresolvedAttribute("a"))
+  val isNullCond = IsNull(UnresolvedAttribute("a"))
+  val notCond = Not(UnresolvedAttribute("c"))
 
   test("simplify if") {
     assertEquivalent(
@@ -121,5 +123,55 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
         Nil,
         None),
       CaseWhen(normalBranch :: trueBranch :: Nil, None))
+  }
+
+  test("remove a branch in CaseWhen if a cond in this branch is previously seen") {
+    assertEquivalent(
+      CaseWhen((GreaterThan(Rand(0), Literal(0.5)), Literal(1)) ::
+        (GreaterThan(Rand(0), Literal(0.5)), Literal(2)) ::
+        (NonFoldableLiteral(true), Literal(3)) ::
+        (LessThan(Rand(1), Literal(0.5)), Literal(4)) ::
+        (NonFoldableLiteral(true), Literal(5)) ::
+        (NonFoldableLiteral(false), Literal(6)) ::
+        (NonFoldableLiteral(false), Literal(7)) ::
+        Nil,
+        None),
+      CaseWhen((GreaterThan(Rand(0), Literal(0.5)), Literal(1)) ::
+        (GreaterThan(Rand(0), Literal(0.5)), Literal(2)) ::
+        (NonFoldableLiteral(true), Literal(3)) ::
+        (LessThan(Rand(1), Literal(0.5)), Literal(4)) ::
+        (NonFoldableLiteral(false), Literal(6)) ::
+        Nil,
+        None)
+    )
+  }
+
+  test("combine two adjacent branches in CaseWhen if they have the same output values") {
+    assertEquivalent(
+      CaseWhen((GreaterThan(Rand(0), Literal(0.5)), Literal(1)) ::
+        (NonFoldableLiteral(true), Literal(1)) ::
+        (LessThan(Rand(1), Literal(0.5)), Literal(3)) ::
+        (NonFoldableLiteral(true), Literal(3)) ::
+        (NonFoldableLiteral(false), Literal(4)) ::
+        Nil,
+        None),
+      CaseWhen((Or(GreaterThan(Rand(0), Literal(0.5)), NonFoldableLiteral(true)), Literal(1)) ::
+        (Or(LessThan(Rand(1), Literal(0.5)), NonFoldableLiteral(true)), Literal(3)) ::
+        (NonFoldableLiteral(false), Literal(4)) ::
+        Nil,
+        None)
+    )
+
+    // The first two conditions can be combined, and then the optimizer uses rule in `Or`
+    // to be optimized into `TrueLiteral`. Thus, the entire `CaseWhen` can be removed.
+    assertEquivalent(
+      CaseWhen((UnresolvedAttribute("a"), Literal(1)) ::
+        (Not(UnresolvedAttribute("a")), Literal(1)) ::
+        (LessThan(Rand(1), Literal(0.5)), Literal(3)) ::
+        (NonFoldableLiteral(true), Literal(4)) ::
+        (NonFoldableLiteral(false), Literal(5)) ::
+        Nil,
+        None),
+      Literal(1))
   }
 }
