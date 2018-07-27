@@ -1811,9 +1811,9 @@ Grouped aggregate Pandas UDFs are similar to Spark aggregate functions. Grouped 
 to a scalar value, where the `pandas.Series` represents values for a column within the group or window.
 
 Note that this type of UDF does not support partial aggregation and all data for a group or window will be loaded into memory. Also,
-only unbounded window are supported with Grouped aggregate Pandas UDFs currently.
+only unbounded window is supported with Grouped aggregate Pandas UDFs currently.
 
-The following example shows how to use this type of UDF to compute weighted mean with group and window operations:
+The following example shows how to use this type of UDF to compute mean with groupBy and window operations:
 
 <div class="codetabs">
 <div data-lang="python" markdown="1">
