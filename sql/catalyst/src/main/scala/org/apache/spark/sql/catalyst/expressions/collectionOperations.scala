@@ -4182,7 +4182,8 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
               case FloatType => "$mcF$sp"
               case DoubleType => "$mcD$sp"
             }
-            (signature, CodeGenerator.boxedType(elementType), CodeGenerator.javaType(elementType), value,
+            (signature, CodeGenerator.boxedType(elementType),
+              CodeGenerator.javaType(elementType), value,
               s"get$ptName($i)", s"set$ptName($pos, $value)", CodeGenerator.javaType(elementType),
               s"""
                  |${ctx.createUnsafeArray(unsafeArray, size, elementType, s" $prettyName failed.")}
