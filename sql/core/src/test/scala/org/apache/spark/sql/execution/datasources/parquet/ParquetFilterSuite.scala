@@ -1004,31 +1004,23 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
     val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
 
-    assertResult(Some(FilterApi.eq(intColumn("a"), null: Integer))) {
+    assertResult(Some(FilterApi.userDefined(intColumn("a"), SetInFilter[Integer](Set(null))))) {
       parquetFilters.createFilter(parquetSchema, sources.In("a", Array(null)))
     }
 
-    assertResult(Some(FilterApi.eq(intColumn("a"), 10: Integer))) {
+    assertResult(Some(FilterApi.userDefined(intColumn("a"), SetInFilter[Integer](Set(10))))) {
       parquetFilters.createFilter(parquetSchema, sources.In("a", Array(10)))
     }
 
     // Remove duplicates
-    assertResult(Some(FilterApi.eq(intColumn("a"), 10: Integer))) {
+    assertResult(Some(FilterApi.userDefined(intColumn("a"), SetInFilter[Integer](Set(10))))) {
       parquetFilters.createFilter(parquetSchema, sources.In("a", Array(10, 10)))
     }
 
-    assertResult(Some(or(or(
-      FilterApi.eq(intColumn("a"), 10: Integer),
-      FilterApi.eq(intColumn("a"), 20: Integer)),
-      FilterApi.eq(intColumn("a"), 30: Integer)))
-    ) {
+    assertResult(Some(
+      FilterApi.userDefined(intColumn("a"), SetInFilter[Integer](Set(10, 20, 30))))) {
       parquetFilters.createFilter(parquetSchema, sources.In("a", Array(10, 20, 30)))
     }
-
-    assert(parquetFilters.createFilter(parquetSchema, sources.In("a",
-      Range(0, conf.parquetFilterPushDownInFilterThreshold).toArray)).isDefined)
-    assert(parquetFilters.createFilter(parquetSchema, sources.In("a",
-      Range(0, conf.parquetFilterPushDownInFilterThreshold + 1).toArray)).isEmpty)
 
     import testImplicits._
     withTempPath { path =>

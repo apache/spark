@@ -437,27 +437,28 @@ private[parquet] class ParquetFilters(
     // Parquet's type in the given file should be matched to the value's type
     // in the pushed filter in order to push down the filter to Parquet.
     def valueCanMakeFilterOn(name: String, value: Any): Boolean = {
-      value == null || (nameToType(name) match {
-        case ParquetBooleanType => value.isInstanceOf[JBoolean]
-        case ParquetByteType | ParquetShortType | ParquetIntegerType => value.isInstanceOf[Number]
-        case ParquetLongType => value.isInstanceOf[JLong]
-        case ParquetFloatType => value.isInstanceOf[JFloat]
-        case ParquetDoubleType => value.isInstanceOf[JDouble]
-        case ParquetStringType => value.isInstanceOf[String]
-        case ParquetBinaryType => value.isInstanceOf[Array[Byte]]
-        case ParquetDateType => value.isInstanceOf[Date]
-        case ParquetTimestampMicrosType | ParquetTimestampMillisType =>
-          value.isInstanceOf[Timestamp]
-        case ParquetSchemaType(DECIMAL, INT32, _, decimalMeta) =>
-          isDecimalMatched(value, decimalMeta)
-        case ParquetSchemaType(DECIMAL, INT64, _, decimalMeta) =>
-          isDecimalMatched(value, decimalMeta)
-        case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, _, decimalMeta) =>
-          isDecimalMatched(value, decimalMeta)
-        case set: Set[_] =>
-          valueCanMakeFilterOn(name, set.iterator.next())
-        case _ => false
-      })
+      value == null ||
+        (value.isInstanceOf[Array[_]]
+          && canMakeFilterOn(name, value.asInstanceOf[Array].apply(0))) ||
+        (nameToType(name) match {
+          case ParquetBooleanType => value.isInstanceOf[JBoolean]
+          case ParquetByteType | ParquetShortType | ParquetIntegerType => value.isInstanceOf[Number]
+          case ParquetLongType => value.isInstanceOf[JLong]
+          case ParquetFloatType => value.isInstanceOf[JFloat]
+          case ParquetDoubleType => value.isInstanceOf[JDouble]
+          case ParquetStringType => value.isInstanceOf[String]
+          case ParquetBinaryType => value.isInstanceOf[Array[Byte]]
+          case ParquetDateType => value.isInstanceOf[Date]
+          case ParquetTimestampMicrosType | ParquetTimestampMillisType =>
+            value.isInstanceOf[Timestamp]
+          case ParquetSchemaType(DECIMAL, INT32, _, decimalMeta) =>
+            isDecimalMatched(value, decimalMeta)
+          case ParquetSchemaType(DECIMAL, INT64, _, decimalMeta) =>
+            isDecimalMatched(value, decimalMeta)
+          case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, _, decimalMeta) =>
+            isDecimalMatched(value, decimalMeta)
+          case _ => false
+        })
     }
 
     // Parquet does not allow dots in the column name because dots are used as a column path
@@ -525,7 +526,7 @@ private[parquet] class ParquetFilters(
           .map(FilterApi.not)
           .map(LogicalInverseRewriter.rewrite)
 
-      case sources.In(name, values) if canMakeFilterOn(name, values.head) =>
+      case sources.In(name, values) if canMakeFilterOn(name, values) =>
         makeInSet.lift(nameToType(name)).map(_(name, values.toSet))
 
       case sources.StringStartsWith(name, prefix)
