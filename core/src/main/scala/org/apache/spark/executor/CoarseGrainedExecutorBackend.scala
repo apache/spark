@@ -32,7 +32,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
-import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
+import org.apache.spark.scheduler.{ExecutorExited, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -165,7 +165,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     }
 
     if (notifyDriver && driver.nonEmpty) {
-      driver.get.send(RemoveExecutor(executorId, new ExecutorLossReason(reason)))
+      driver.get.send(RemoveExecutor(executorId, new ExecutorExited(code, false, reason)))
     }
 
     System.exit(code)
