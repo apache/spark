@@ -29,7 +29,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateBarriers, NoSuchTableException, Resolver}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Resolver}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -891,7 +891,7 @@ object DDLUtils {
    * Throws exception if outputPath tries to overwrite inputpath.
    */
   def verifyNotReadPath(query: LogicalPlan, outputPath: Path) : Unit = {
-    val inputPaths = EliminateBarriers(query).collect {
+    val inputPaths = query.collect {
       case LogicalRelation(r: HadoopFsRelation, _, _, _) =>
         r.location.rootPaths
     }.flatten
