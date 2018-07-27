@@ -141,6 +141,13 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
         job.getConfiguration.setBoolean(COMPRESS_KEY, true)
         job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, DataFileConstants.BZIP2_CODEC)
 
+      case "xz" =>
+        val xzLevel = spark.sessionState.conf.avroXZLevel
+        log.info(s"compressing Avro output using xz (level=$xzLevel)")
+        job.getConfiguration.setBoolean(COMPRESS_KEY, true)
+        job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, DataFileConstants.XZ_CODEC)
+        job.getConfiguration.setInt(AvroOutputFormat.XZ_LEVEL_KEY, xzLevel)
+
       case unknown: String =>
         log.error(s"unsupported compression codec $unknown")
     }
