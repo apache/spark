@@ -96,12 +96,11 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
 object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
 
   private case class EvalTypeHolder(private var evalType: Int = -1) {
-
     def isSet: Boolean = evalType >= 0
 
     def set(evalType: Int): Unit = {
-      if (isSet) {
-        throw new IllegalStateException("Eval type has already been set")
+      if (isSet && evalType != this.evalType) {
+        throw new IllegalStateException("Cannot reset eval type to a different value")
       } else {
         this.evalType = evalType
       }
