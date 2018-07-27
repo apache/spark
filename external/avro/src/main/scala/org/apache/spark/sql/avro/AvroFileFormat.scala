@@ -117,11 +117,9 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
       dataSchema, nullable = false, parsedOptions.recordName, parsedOptions.recordNamespace)
 
     AvroJob.setOutputKeySchema(job, outputAvroSchema)
-    val AVRO_COMPRESSION_CODEC = "spark.sql.avro.compression.codec"
-    val AVRO_DEFLATE_LEVEL = "spark.sql.avro.deflate.level"
     val COMPRESS_KEY = "mapred.output.compress"
 
-    spark.conf.get(AVRO_COMPRESSION_CODEC, "snappy") match {
+    parsedOptions.compression match {
       case "uncompressed" =>
         log.info("writing uncompressed Avro records")
         job.getConfiguration.setBoolean(COMPRESS_KEY, false)
@@ -132,8 +130,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
         job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, DataFileConstants.SNAPPY_CODEC)
 
       case "deflate" =>
-        val deflateLevel = spark.conf.get(
-          AVRO_DEFLATE_LEVEL, Deflater.DEFAULT_COMPRESSION.toString).toInt
+        val deflateLevel = spark.sessionState.conf.avroDeflateLevel
         log.info(s"compressing Avro output using deflate (level=$deflateLevel)")
         job.getConfiguration.setBoolean(COMPRESS_KEY, true)
         job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, DataFileConstants.DEFLATE_CODEC)
