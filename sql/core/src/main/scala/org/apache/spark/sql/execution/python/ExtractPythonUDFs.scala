@@ -95,7 +95,7 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
  */
 object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
 
-  private case class EvalTypeHolder(var evalType: Int = -1) {
+  private case class EvalTypeHolder(private var evalType: Int = -1) {
 
     def isSet: Boolean = evalType >= 0
 
@@ -135,7 +135,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
     case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf)
       && (!firstEvalType.isSet || firstEvalType.get == udf.evalType)
       && canEvaluateInPython(udf) =>
-      firstEvalType.evalType = udf.evalType
+      firstEvalType.set(udf.evalType)
       Seq(udf)
     case e => e.children.flatMap(collectEvaluableUDFs(_, firstEvalType))
   }
