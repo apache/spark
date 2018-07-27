@@ -1806,12 +1806,12 @@ For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/p
 
 ### Grouped Aggregate
 
-Grouped aggregate Pandas UDFs are similar to Spark aggregate functions. Grouped aggregate Pandas UDFs are used with groupBy and
-window operations. It defines an aggregation from one or more `pandas.Series`
-to a scalar value, where the `pandas.Series` represents values for a column within the same group or window.
+Grouped aggregate Pandas UDFs are similar to Spark aggregate functions. Grouped aggregate Pandas UDFs are used with `groupBy().agg()` and
+[`pyspark.sql.Window`](api/python/pyspark.sql.html#pyspark.sql.Window). It defines an aggregation from one or more `pandas.Series`
+to a scalar value, where the `pandas.Series` represents values for a column within the group or window.
 
-Note that this type of UDF doesn't not support partial aggregation and all data for a group or window will be loaded into memory. Also,
-only unbounded window are supported with Grouped aggregate Pandas UDfs currently.
+Note that this type of UDF does not support partial aggregation and all data for a group or window will be loaded into memory. Also,
+only unbounded window are supported with Grouped aggregate Pandas UDFs currently.
 
 The following example shows how to use this type of UDF to compute weighted mean with group and window operations:
 
