@@ -38,13 +38,13 @@ private[spark] class KubernetesSuite extends SparkFunSuite
 
   import KubernetesSuite._
 
-  private var testBackend: IntegrationTestBackend = _
   private var sparkHomeDir: Path = _
-  private var image: String = _
   private var pyImage: String = _
   private var rImage: String = _
-  private var driverPodName: String = _
 
+  protected var image: String = _
+  protected var testBackend: IntegrationTestBackend = _
+  protected var driverPodName: String = _
   protected var kubernetesTestComponents: KubernetesTestComponents = _
   protected var sparkAppConf: SparkAppConf = _
   protected var containerLocalSparkDistroExamplesJar: String = _
