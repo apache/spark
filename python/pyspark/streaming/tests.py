@@ -210,7 +210,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
     def test_slice(self):
         """Basic operation test for DStream.slice."""
         eol_python2 = dt.datetime(2020, 1, 1)
-        five_secs = dt.timedelta(seconds=30)
+        five_secs = dt.timedelta(seconds=5)
         input = [eol_python2 - five_secs, eol_python2]
 
         def func(dstream):
