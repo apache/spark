@@ -41,7 +41,7 @@ import org.apache.spark.annotation.Private
  * to explore all spaces for each key (see http://en.wikipedia.org/wiki/Quadratic_probing).
  */
 @Private
-class OpenHashSet[@specialized(Long, Int) T: ClassTag](
+class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
     initialCapacity: Int,
     loadFactor: Double)
   extends Serializable {
