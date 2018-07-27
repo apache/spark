@@ -69,6 +69,7 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
   }
 }
 
+
 /**
  * Given an array or map, returns total number of elements in it.
  */
@@ -952,6 +953,7 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
 
   override def prettyName: String = "map_from_entries"
 }
+
 
 /**
  * Common base class for [[SortArray]] and [[ArraySort]].
@@ -2370,7 +2372,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
       ByteArray.concat(inputs: _*)
     case StringType =>
       val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
-      UTF8String.concat(inputs: _*)
+      UTF8String.concat(inputs : _*)
     case ArrayType(elementType, _) =>
       val inputs = children.toStream.map(_.eval(input))
       if (inputs.contains(null)) {
