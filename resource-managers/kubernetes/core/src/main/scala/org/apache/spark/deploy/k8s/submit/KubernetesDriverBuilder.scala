@@ -77,7 +77,8 @@ private[spark] class KubernetesDriverBuilder(
         case PythonMainAppResource(_) =>
           providePythonStep(kubernetesConf)
         case RMainAppResource(_) =>
-          provideRStep(kubernetesConf)}.getOrElse(provideJavaStep(kubernetesConf))
+          provideRStep(kubernetesConf)}
+      .getOrElse(provideJavaStep(kubernetesConf))
 
     val allFeatures = (baseFeatures :+ bindingsStep) ++
       secretFeature ++ envSecretFeature ++ volumesFeature

@@ -189,7 +189,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
           } else {
             val mismatchedColumns = valExprs.zip(childOutputs).flatMap {
               case (l, r) if l.dataType != r.dataType =>
-                s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
+                Seq(s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})")
               case _ => None
             }
             TypeCheckResult.TypeCheckFailure(
