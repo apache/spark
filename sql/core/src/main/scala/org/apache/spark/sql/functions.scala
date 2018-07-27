@@ -3546,6 +3546,16 @@ object functions {
   def array_max(e: Column): Column = withExpr { ArrayMax(e.expr) }
 
   /**
+   * Returns a random permutation of the given array.
+   *
+   * @note The function is non-deterministic.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def shuffle(e: Column): Column = withExpr { Shuffle(e.expr) }
+
+  /**
    * Returns a reversed string or an array with reverse order of elements.
    * @group collection_funcs
    * @since 1.5.0

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Alias, GreaterThan, Literal, ReplicateRows}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -143,5 +143,27 @@ class SetOperationSuite extends PlanTest {
       Union(Distinct(Union(query1 :: query2 :: Nil)),
             Distinct(Union(query3 :: query4 :: Nil))).analyze
     comparePlans(distinctUnionCorrectAnswer2, optimized2)
+  }
+
+  test("EXCEPT ALL rewrite") {
+    val input = Except(testRelation, testRelation2, isAll = true)
+    val rewrittenPlan = RewriteExcepAll(input)
+
+    val planFragment = testRelation.select(Literal(1L).as("vcol"), 'a, 'b, 'c)
+      .union(testRelation2.select(Literal(-1L).as("vcol"), 'd, 'e, 'f))
+      .groupBy('a, 'b, 'c)('a, 'b, 'c, sum('vcol).as("sum"))
+      .where(GreaterThan('sum, Literal(0L))).analyze
+    val multiplerAttr = planFragment.output.last
+    val output = planFragment.output.dropRight(1)
+    val expectedPlan = Project(output,
+      Generate(
+        ReplicateRows(Seq(multiplerAttr) ++ output),
+        Nil,
+        false,
+        None,
+        output,
+        planFragment
+      ))
+    comparePlans(expectedPlan, rewrittenPlan)
   }
 }
