@@ -439,7 +439,7 @@ private[parquet] class ParquetFilters(
     def valueCanMakeFilterOn(name: String, value: Any): Boolean = {
       value == null ||
         (value.isInstanceOf[Array[_]]
-          && canMakeFilterOn(name, value.asInstanceOf[Array].apply(0))) ||
+          && canMakeFilterOn(name, value.asInstanceOf[Array[_]].apply(0))) ||
         (nameToType(name) match {
           case ParquetBooleanType => value.isInstanceOf[JBoolean]
           case ParquetByteType | ParquetShortType | ParquetIntegerType => value.isInstanceOf[Number]
