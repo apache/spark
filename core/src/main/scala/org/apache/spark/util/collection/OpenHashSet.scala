@@ -28,9 +28,9 @@ import org.apache.spark.annotation.Private
  * removed.
  *
  * The underlying implementation uses Scala compiler's specialization to generate optimized
- * storage for two primitive types (Long and Int). It is much faster than Java's standard HashSet
- * while incurring much less memory overhead. This can serve as building blocks for higher level
- * data structures such as an optimized HashMap.
+ * storage for four primitive types (Long, Int, Double, and Float). It is much faster than Java's
+ * standard HashSet while incurring much less memory overhead. This can serve as building blocks
+ * for higher level data structures such as an optimized HashMap.
  *
  * This OpenHashSet is designed to serve as building blocks for higher level data structures
  * such as an optimized hash map. Compared with standard hash set implementations, this class
