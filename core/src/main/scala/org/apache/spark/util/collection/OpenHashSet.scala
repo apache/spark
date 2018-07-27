@@ -77,6 +77,10 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
       (new LongHasher).asInstanceOf[Hasher[T]]
     } else if (mt == ClassTag.Int) {
       (new IntHasher).asInstanceOf[Hasher[T]]
+    } else if (mt == ClassTag.Double) {
+      (new DoubleHasher).asInstanceOf[Hasher[T]]
+    } else if (mt == ClassTag.Float) {
+      (new FloatHasher).asInstanceOf[Hasher[T]]
     } else {
       new Hasher[T]
     }
@@ -293,7 +297,7 @@ object OpenHashSet {
    * A set of specialized hash function implementation to avoid boxing hash code computation
    * in the specialized implementation of OpenHashSet.
    */
-  sealed class Hasher[@specialized(Long, Int) T] extends Serializable {
+  sealed class Hasher[@specialized(Long, Int, Double, Float) T] extends Serializable {
     def hash(o: T): Int = o.hashCode()
   }
 
@@ -303,6 +307,17 @@ object OpenHashSet {
 
   class IntHasher extends Hasher[Int] {
     override def hash(o: Int): Int = o
+  }
+
+  class DoubleHasher extends Hasher[Double] {
+    override def hash(o: Double): Int = {
+      val bits = java.lang.Double.doubleToLongBits(o)
+      (bits ^ (bits >>> 32)).toInt
+    }
+  }
+
+  class FloatHasher extends Hasher[Float] {
+    override def hash(o: Float): Int = java.lang.Float.floatToIntBits(o)
   }
 
   private def grow1(newSize: Int) {}
