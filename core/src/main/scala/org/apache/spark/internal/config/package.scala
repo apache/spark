@@ -567,4 +567,14 @@ package object config {
       .intConf
       .checkValue(v => v > 0, "The value should be a positive integer.")
       .createWithDefault(2000)
+
+  private[spark] val BARRIER_SYNC_TIMEOUT =
+    ConfigBuilder("spark.barrier.sync.timeout")
+      .doc("The timeout in milliseconds for each barrier() call from a barrier task. If the " +
+        "coordinator didn't receive all the sync messages from barrier tasks within the " +
+        "configed time, throw a SparkException to fail all the tasks. The default value is set " +
+        "to Long.MaxValue so the barrier() call shall wait forever.")
+      .longConf
+      .checkValue(v => v > 0, "The value should be a positive long value.")
+      .createWithDefault(Long.MaxValue)
 }

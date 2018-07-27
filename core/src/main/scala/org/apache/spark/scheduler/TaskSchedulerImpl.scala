@@ -30,6 +30,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.rpc.RpcEndpoint
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.storage.BlockManagerId
@@ -137,6 +138,15 @@ private[spark] class TaskSchedulerImpl(
 
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
+
+  private lazy val barrierSyncTimeout = conf.get(config.BARRIER_SYNC_TIMEOUT)
+
+  private[scheduler] lazy val barrierCoordinator: RpcEndpoint = {
+    val coordinator = new BarrierCoordinator(barrierSyncTimeout, sc.env.rpcEnv)
+    sc.env.rpcEnv.setupEndpoint("barrierSync", coordinator)
+    logInfo("Registered BarrierCoordinator endpoint")
+    coordinator
+  }
 
   override def setDAGScheduler(dagScheduler: DAGScheduler) {
     this.dagScheduler = dagScheduler
@@ -419,7 +429,11 @@ private[spark] class TaskSchedulerImpl(
             .sortBy(_._2.partitionId)
             .map(_._1)
             .mkString(",")
-          addressesWithDescs.foreach(_._2.properties.setProperty("addresses", addressesStr))
+          addressesWithDescs.foreach { case (_, taskDesc) =>
+            taskDesc.properties.setProperty("addresses", addressesStr)
+            taskDesc.properties.setProperty("numTasks", taskSet.numTasks.toString)
+            taskDesc.properties.setProperty("barrierTimeout", barrierSyncTimeout.toString)
+          }
 
           logInfo(s"Successfully scheduled all the ${addressesWithDescs.size} tasks for barrier " +
             s"stage ${taskSet.stageId}.")
@@ -565,6 +579,9 @@ private[spark] class TaskSchedulerImpl(
     }
     if (taskResultGetter != null) {
       taskResultGetter.stop()
+    }
+    if (barrierCoordinator != null) {
+      barrierCoordinator.stop()
     }
     starvationTimer.cancel()
   }
