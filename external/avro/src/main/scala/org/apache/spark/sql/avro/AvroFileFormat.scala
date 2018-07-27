@@ -117,40 +117,24 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
       dataSchema, nullable = false, parsedOptions.recordName, parsedOptions.recordNamespace)
 
     AvroJob.setOutputKeySchema(job, outputAvroSchema)
-    val COMPRESS_KEY = "mapred.output.compress"
 
-    parsedOptions.compression match {
-      case "uncompressed" =>
-        log.info("writing uncompressed Avro records")
-        job.getConfiguration.setBoolean(COMPRESS_KEY, false)
-
-      case "snappy" =>
-        log.info("compressing Avro output using Snappy")
-        job.getConfiguration.setBoolean(COMPRESS_KEY, true)
-        job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, DataFileConstants.SNAPPY_CODEC)
-
-      case "deflate" =>
+    val compression = parsedOptions.compression
+    val level = compression match {
+      case "uncompressed" | DataFileConstants.SNAPPY_CODEC | DataFileConstants.BZIP2_CODEC => ""
+      case DataFileConstants.DEFLATE_CODEC =>
         val deflateLevel = spark.sessionState.conf.avroDeflateLevel
-        log.info(s"compressing Avro output using deflate (level=$deflateLevel)")
-        job.getConfiguration.setBoolean(COMPRESS_KEY, true)
-        job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, DataFileConstants.DEFLATE_CODEC)
         job.getConfiguration.setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, deflateLevel)
-
-      case "bzip2" =>
-        log.info("compressing Avro output using bzip2")
-        job.getConfiguration.setBoolean(COMPRESS_KEY, true)
-        job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, DataFileConstants.BZIP2_CODEC)
-
-      case "xz" =>
+        s"(level = $deflateLevel)"
+      case DataFileConstants.XZ_CODEC =>
         val xzLevel = spark.sessionState.conf.avroXZLevel
-        log.info(s"compressing Avro output using xz (level=$xzLevel)")
-        job.getConfiguration.setBoolean(COMPRESS_KEY, true)
-        job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, DataFileConstants.XZ_CODEC)
         job.getConfiguration.setInt(AvroOutputFormat.XZ_LEVEL_KEY, xzLevel)
-
+        s"(level = $xzLevel)"
       case unknown: String =>
-        log.error(s"unsupported compression codec $unknown")
+        throw new IllegalArgumentException(s"Invalid compression codec: $unknown")
     }
+    job.getConfiguration.setBoolean("mapred.output.compress", compression != "uncompressed")
+    job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, compression)
+    log.info(s"Compressing Avro output using $compression $level")
 
     new AvroOutputWriterFactory(dataSchema, outputAvroSchema.toString)
   }
