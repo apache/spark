@@ -437,6 +437,8 @@ private[hive] class HiveClientImpl(
             throw new AnalysisException("Hive index table is not supported.")
         },
         schema = schema,
+        hasMultiFormatPartitions =
+          shim.getAllPartitions(client, h).map(_.getInputFormatClass).distinct.size > 1,
         partitionColumnNames = partCols.map(_.name),
         // If the table is written by Spark, we will put bucketing information in table properties,
         // and will always overwrite the bucket spec in hive metastore by the bucketing information

@@ -182,7 +182,9 @@ case class RelationConversions(
     sessionCatalog: HiveSessionCatalog) extends Rule[LogicalPlan] {
   private def isConvertible(relation: HiveTableRelation): Boolean = {
     val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
-    serde.contains("parquet") && conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
+    val hasMultiFormatPartitions = relation.tableMeta.hasMultiFormatPartitions
+    serde.contains("parquet") && conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) &&
+      (!hasMultiFormatPartitions) ||
       serde.contains("orc") && conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
   }
 

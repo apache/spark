@@ -124,6 +124,219 @@ class MultiFormatTableSuite
     }
   }
 
+  test("create hive table with only parquet partitions - test plan") {
+    withTempDir { baseDir =>
+      val partitionedTable = "ext_parquet_partition_table"
+
+      val partitions = createParquetPartitionDefinitions(baseDir)
+
+      withTable(partitionedTable) {
+        assert(baseDir.listFiles.isEmpty)
+
+        createTableWithPartitions(partitionedTable, baseDir, partitions)
+
+        val selectQuery =
+          s"""
+             |SELECT key, value FROM ${partitionedTable}
+           """.stripMargin
+
+        val plan = parser.parsePlan(selectQuery)
+
+        plan.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]) shouldNot equal(None)
+
+      }
+    }
+  }
+
+  test("create hive table with only avro partitions - test plan") {
+    withTempDir { baseDir =>
+      val partitionedTable = "ext_avro_partition_table"
+
+      val partitions = createAvroPartitionDefinitions(baseDir)
+
+      withTable(partitionedTable) {
+        assert(baseDir.listFiles.isEmpty)
+
+        createTableWithPartitions(partitionedTable, baseDir, partitions, avro = true)
+
+        val selectQuery =
+          s"""
+             |SELECT key, value FROM ${partitionedTable}
+           """.stripMargin
+
+        val plan = parser.parsePlan(selectQuery)
+
+        plan.queryExecution.sparkPlan.find(_.isInstanceOf[HiveTableScanExec]) shouldNot equal(None)
+
+      }
+    }
+  }
+
+  test("create hive avro table with multi format partitions containing correct data") {
+    withTempDir { baseDir =>
+      val partitionedTable = "ext_multiformat_partition_table_with_data"
+      val avroPartitionTable = "ext_avro_partition_table"
+      val pqPartitionTable = "ext_pq_partition_table"
+
+      val partitions = createMultiformatPartitionDefinitions(baseDir)
+
+      withTable(partitionedTable, avroPartitionTable, pqPartitionTable) {
+        assert(baseDir.listFiles.isEmpty)
+
+        createTableWithPartitions(partitionedTable, baseDir, partitions, true)
+        createAvroCheckTable(avroPartitionTable, partitions.last)
+        createPqCheckTable(pqPartitionTable, partitions.head)
+
+        // INSERT OVERWRITE TABLE only works for the default table format.
+        // So we can use it here to insert data into the parquet partition
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE $pqPartitionTable
+             |SELECT 1 as id, 'a' as value
+                  """.stripMargin)
+
+        val parquetData = spark.read.parquet(partitions.head.location.toString)
+        checkAnswer(parquetData, Row(1, "a"))
+
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE $avroPartitionTable
+             |SELECT 2, 'b'
+           """.stripMargin
+        )
+
+        // Directly reading from the avro table should yield correct results
+        val avroData = spark.read.table(avroPartitionTable)
+        checkAnswer(avroData, Row(2, "b"))
+
+        val parquetPartitionSelectQuery =
+          s"""
+             |SELECT key, value FROM ${partitionedTable}
+             |WHERE ${partitionCol}='${partitionVal1}'
+           """.stripMargin
+
+        val avroPartitionSelectQuery =
+          s"""
+             |SELECT key, value FROM ${partitionedTable}
+             |WHERE ${partitionCol}='${partitionVal2}'
+           """.stripMargin
+
+        val selectQuery =
+          s"""
+             |SELECT key, value FROM ${partitionedTable}
+           """.stripMargin
+
+        val avroPartitionData = sql(avroPartitionSelectQuery)
+        checkAnswer(avroPartitionData, Row(2, "b"))
+
+        val parquetPartitionData = sql(parquetPartitionSelectQuery)
+        checkAnswer(parquetPartitionData, Row(1, "a"))
+
+        val allData = sql(selectQuery)
+        checkAnswer(allData, Seq(Row(1, "a"), Row(2, "b")))
+
+      }
+    }
+  }
+
+  test("create hive table with multi format partitions - test plan") {
+    withTempDir { baseDir =>
+      val partitionedTable = "ext_multiformat_partition_table"
+
+      val partitions = createMultiformatPartitionDefinitions(baseDir)
+
+      withTable(partitionedTable) {
+        assert(baseDir.listFiles.isEmpty)
+
+        createTableWithPartitions(partitionedTable, baseDir, partitions)
+
+        val selectQuery =
+          s"""
+             |SELECT key, value FROM ${partitionedTable}
+           """.stripMargin
+
+        val plan = parser.parsePlan(selectQuery)
+
+        plan.queryExecution.sparkPlan.find(_.isInstanceOf[HiveTableScanExec]) shouldNot equal(None)
+
+      }
+    }
+  }
+
+  test("create hive table with multi format partitions containing correct data") {
+    withTempDir { baseDir =>
+      //      withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+      val partitionedTable = "ext_multiformat_partition_table_with_data"
+      val avroPartitionTable = "ext_avro_partition_table"
+      val pqPartitionTable = "ext_pq_partition_table"
+
+      val partitions = createMultiformatPartitionDefinitions(baseDir)
+
+      withTable(partitionedTable, avroPartitionTable, pqPartitionTable) {
+        assert(baseDir.listFiles.isEmpty)
+
+        createTableWithPartitions(partitionedTable, baseDir, partitions)
+        createAvroCheckTable(avroPartitionTable, partitions.last)
+        createPqCheckTable(pqPartitionTable, partitions.head)
+
+        // INSERT OVERWRITE TABLE only works for the default table format.
+        // So we can use it here to insert data into the parquet partition
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE $pqPartitionTable
+             |SELECT 1 as id, 'a' as value
+                  """.stripMargin)
+
+        val parquetData = spark.read.parquet(partitions.head.location.toString)
+        checkAnswer(parquetData, Row(1, "a"))
+
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE $avroPartitionTable
+             |SELECT 2, 'b'
+           """.stripMargin
+        )
+
+        // Directly reading from the avro table should yield correct results
+        val avroData = spark.read.table(avroPartitionTable)
+        checkAnswer(avroData, Row(2, "b"))
+
+        val parquetPartitionSelectQuery =
+          s"""
+             |SELECT key, value FROM ${partitionedTable}
+             |WHERE ${partitionCol}='${partitionVal1}'
+           """.stripMargin
+
+        val parquetPartitionData = sql(parquetPartitionSelectQuery)
+        checkAnswer(parquetPartitionData, Row(1, "a"))
+
+        val avroPartitionSelectQuery =
+          s"""
+             |SELECT key, value FROM ${partitionedTable}
+             |WHERE ${partitionCol}='${partitionVal2}'
+           """.stripMargin
+
+        val avroCheckTableSelectQuery =
+          s"""
+             |SELECT key, value FROM ${avroPartitionTable}
+           """.stripMargin
+
+        val selectQuery =
+          s"""
+             |SELECT key, value FROM ${partitionedTable}
+           """.stripMargin
+
+        // Selecting data from the partition currently fails because it tries to
+        // read avro data with parquet reader
+        val avroPartitionData = sql(avroPartitionSelectQuery)
+        checkAnswer(avroPartitionData, Row(2, "b"))
+
+        val allData = sql(selectQuery)
+        checkAnswer(allData, Seq(Row(1, "a"), Row(2, "b")))
+      }
+      //      }
+    }
+  }
 
   private def createMultiformatPartitionDefinitions(baseDir: File): List[PartitionDefinition] = {
     val basePath = baseDir.getCanonicalPath
@@ -151,6 +364,21 @@ class MultiFormatTableSuite
       ),
       PartitionDefinition(
         partitionCol, partitionVal2, partitionPath_part2.toURI, format = Some("PARQUET")
+      )
+    )
+  }
+
+  private def createAvroPartitionDefinitions(baseDir: File): List[PartitionDefinition] = {
+    val basePath = baseDir.getCanonicalPath
+    val partitionPath_part1 = new File(basePath + s"/$partitionCol=$partitionVal1")
+    val partitionPath_part2 = new File(basePath + s"/$partitionCol=$partitionVal2")
+
+    List(
+      PartitionDefinition(
+        partitionCol, partitionVal1, partitionPath_part1.toURI, format = Some("AVRO")
+      ),
+      PartitionDefinition(
+        partitionCol, partitionVal2, partitionPath_part2.toURI, format = Some("AVRO")
       )
     )
   }
