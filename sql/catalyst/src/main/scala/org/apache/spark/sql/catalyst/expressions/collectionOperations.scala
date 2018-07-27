@@ -4055,7 +4055,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
     pos
   }
 
-  val exceptEquals: (ArrayData, ArrayData) => ArrayData = {
+  val evalExcept: (ArrayData, ArrayData) => ArrayData = {
     (array1: ArrayData, array2: ArrayData) =>
       if (elementTypeSupportEquals) {
         elementType match {
@@ -4176,7 +4176,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
     val array1 = input1.asInstanceOf[ArrayData]
     val array2 = input2.asInstanceOf[ArrayData]
 
-    exceptEquals(array1, array2)
+    evalExcept(array1, array2)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
