@@ -1513,6 +1513,71 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  // Shuffle expressions should produce same results at retries in the same DataFrame.
+  private def checkShuffleResult(df: DataFrame): Unit = {
+    checkAnswer(df, df.collect())
+  }
+
+  test("shuffle function - array for primitive type not containing null") {
+    val idfNotContainsNull = Seq(
+      Seq(1, 9, 8, 7),
+      Seq(5, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
+      checkShuffleResult(idfNotContainsNull.select(shuffle('i)))
+      checkShuffleResult(idfNotContainsNull.selectExpr("shuffle(i)"))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeNotContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    idfNotContainsNull.cache()
+    testArrayOfPrimitiveTypeNotContainsNull()
+  }
+
+  test("shuffle function - array for primitive type containing null") {
+    val idfContainsNull = Seq[Seq[Integer]](
+      Seq(1, 9, 8, null, 7),
+      Seq(null, 5, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeContainsNull(): Unit = {
+      checkShuffleResult(idfContainsNull.select(shuffle('i)))
+      checkShuffleResult(idfContainsNull.selectExpr("shuffle(i)"))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    idfContainsNull.cache()
+    testArrayOfPrimitiveTypeContainsNull()
+  }
+
+  test("shuffle function - array for non-primitive type") {
+    val sdf = Seq(
+      Seq("c", "a", "b"),
+      Seq("b", null, "c", null),
+      Seq.empty,
+      null
+    ).toDF("s")
+
+    def testNonPrimitiveType(): Unit = {
+      checkShuffleResult(sdf.select(shuffle('s)))
+      checkShuffleResult(sdf.selectExpr("shuffle(s)"))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testNonPrimitiveType()
+    // Test with cached relation, the Project will be evaluated with codegen
+    sdf.cache()
+    testNonPrimitiveType()
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {

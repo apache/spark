@@ -181,7 +181,7 @@ class Analyzer(
       TimeWindowing ::
       ResolveInlineTables(conf) ::
       ResolveTimeZone(conf) ::
-      ResolvedUuidExpressions ::
+      ResolveRandomSeed ::
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
@@ -2100,15 +2100,16 @@ class Analyzer(
   }
 
   /**
-   * Set the seed for random number generation in Uuid expressions.
+   * Set the seed for random number generation.
    */
-  object ResolvedUuidExpressions extends Rule[LogicalPlan] {
+  object ResolveRandomSeed extends Rule[LogicalPlan] {
     private lazy val random = new Random()
 
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case p if p.resolved => p
       case p => p transformExpressionsUp {
         case Uuid(None) => Uuid(Some(random.nextLong()))
+        case Shuffle(child, None) => Shuffle(child, Some(random.nextLong()))
       }
     }
   }
