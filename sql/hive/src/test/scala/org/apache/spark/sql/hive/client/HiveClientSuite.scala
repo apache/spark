@@ -74,12 +74,6 @@ class HiveClientSuite(version: String)
     }
   }
 
-  private def analyzeIn(expr: Expression): Expression = expr match {
-    case In(CreateNamedStruct(children), list) => In(InValues(children), list)
-    case In(v, list) => In(InValues(Seq(v)), list)
-    case other => other
-  }
-
   override def beforeAll() {
     super.beforeAll()
     client = init(true)
@@ -178,7 +172,7 @@ class HiveClientSuite(version: String)
 
   test("getPartitionsByFilter: ds in (20170102, 20170103) (using IN expression)") {
     testMetastorePartitionFiltering(
-      analyzeIn(attr("ds").in(20170102, 20170103)),
+      attr("ds").in(20170102, 20170103),
       20170102 to 20170103,
       0 to 23,
       "aa" :: "ab" :: "ba" :: "bb" :: Nil)
@@ -186,7 +180,7 @@ class HiveClientSuite(version: String)
 
   test("getPartitionsByFilter: cast(ds as long) in (20170102L, 20170103L) (using IN expression)") {
     testMetastorePartitionFiltering(
-      analyzeIn(attr("ds").cast(LongType).in(20170102L, 20170103L)),
+      attr("ds").cast(LongType).in(20170102L, 20170103L),
       20170102 to 20170103,
       0 to 23,
       "aa" :: "ab" :: "ba" :: "bb" :: Nil)
@@ -194,30 +188,30 @@ class HiveClientSuite(version: String)
 
   test("getPartitionsByFilter: ds in (20170102, 20170103) (using INSET expression)") {
     testMetastorePartitionFiltering(
-      analyzeIn(attr("ds").in(20170102, 20170103)),
+      attr("ds").in(20170102, 20170103),
       20170102 to 20170103,
       0 to 23,
       "aa" :: "ab" :: "ba" :: "bb" :: Nil, {
         case expr @ In(_, list) if expr.inSetConvertible =>
-          InSet(expr.inValues.valueExpression, list.map(_.eval(EmptyRow)).toSet)
+          InSet(expr.value, list.map(_.eval(EmptyRow)).toSet)
       })
   }
 
   test("getPartitionsByFilter: cast(ds as long) in (20170102L, 20170103L) (using INSET expression)")
   {
     testMetastorePartitionFiltering(
-      analyzeIn(attr("ds").cast(LongType).in(20170102L, 20170103L)),
+      attr("ds").cast(LongType).in(20170102L, 20170103L),
       20170102 to 20170103,
       0 to 23,
       "aa" :: "ab" :: "ba" :: "bb" :: Nil, {
         case expr @ In(_, list) if expr.inSetConvertible =>
-          InSet(expr.inValues.valueExpression, list.map(_.eval(EmptyRow)).toSet)
+          InSet(expr.value, list.map(_.eval(EmptyRow)).toSet)
       })
   }
 
   test("getPartitionsByFilter: chunk in ('ab', 'ba') (using IN expression)") {
     testMetastorePartitionFiltering(
-      analyzeIn(attr("chunk").in("ab", "ba")),
+      attr("chunk").in("ab", "ba"),
       20170101 to 20170103,
       0 to 23,
       "ab" :: "ba" :: Nil)
@@ -225,12 +219,12 @@ class HiveClientSuite(version: String)
 
   test("getPartitionsByFilter: chunk in ('ab', 'ba') (using INSET expression)") {
     testMetastorePartitionFiltering(
-      analyzeIn(attr("chunk").in("ab", "ba")),
+      attr("chunk").in("ab", "ba"),
       20170101 to 20170103,
       0 to 23,
       "ab" :: "ba" :: Nil, {
         case expr @ In(_, list) if expr.inSetConvertible =>
-          InSet(expr.inValues.valueExpression, list.map(_.eval(EmptyRow)).toSet)
+          InSet(expr.value, list.map(_.eval(EmptyRow)).toSet)
       })
   }
 
@@ -253,7 +247,7 @@ class HiveClientSuite(version: String)
       "chunk in ('ab', 'ba') and ((ds=20170101 and h>=8) or (ds=20170102 and h<8))") {
     val day1 = (20170101 to 20170101, 8 to 23, Seq("ab", "ba"))
     val day2 = (20170102 to 20170102, 0 to 7, Seq("ab", "ba"))
-    testMetastorePartitionFiltering(analyzeIn(attr("chunk").in("ab", "ba")) &&
+    testMetastorePartitionFiltering(attr("chunk").in("ab", "ba") &&
         ((attr("ds") === 20170101 && attr("h") >= 8) || (attr("ds") === 20170102 && attr("h") < 8)),
       day1 :: day2 :: Nil)
   }

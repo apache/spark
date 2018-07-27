@@ -148,8 +148,6 @@ class Analyzer(
       ResolveHints.RemoveAllHints),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
-    Batch("Resolve IN values", Once,
-      ResolveInValues),
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
@@ -246,20 +244,6 @@ class Analyzer(
               WindowExpression(c, windowSpecDefinition)
           }
         }
-    }
-  }
-
-  /**
-   * Substitutes In values with an instance of [[InValues]].
-   */
-  object ResolveInValues extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-      case q => q transformExpressions {
-        case In(value, list) if !value.isInstanceOf[InValues] => value match {
-          case c: CreateNamedStruct => In(InValues(c.valExprs), list)
-          case other => In(InValues(Seq(other)), list)
-        }
-      }
     }
   }
 
@@ -1451,21 +1435,22 @@ class Analyzer(
           resolveSubQuery(s, plans)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, _, exprId) if !sub.resolved =>
           resolveSubQuery(e, plans)(Exists(_, _, exprId))
-        case In(value, Seq(l @ ListQuery(_, _, exprId, _))) if value.resolved && !l.resolved =>
+        case In(values, Seq(l @ ListQuery(_, _, exprId, _)))
+            if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, plans)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output)
           })
           val subqueryOutput = expr.plan.output
-          val resolvedIn = In(value, Seq(expr))
-          if (resolvedIn.inValues.numValues != subqueryOutput.length) {
+          val resolvedIn = In(values, Seq(expr))
+          if (values.length != subqueryOutput.length) {
             throw new AnalysisException(
               s"""Cannot analyze ${resolvedIn.sql}.
                  |The number of columns in the left hand side of an IN subquery does not match the
                  |number of columns in the output of subquery.
-                 |#columns in left hand side: ${resolvedIn.inValues.numValues}.
+                 |#columns in left hand side: ${values.length}.
                  |#columns in right hand side: ${subqueryOutput.length}.
                  |Left side columns:
-                 |[${resolvedIn.inValues.children.map(_.sql).mkString(", ")}].
+                 |[${values.map(_.sql).mkString(", ")}].
                  |Right side columns:
                  |[${subqueryOutput.map(_.sql).mkString(", ")}].""".stripMargin)
           }

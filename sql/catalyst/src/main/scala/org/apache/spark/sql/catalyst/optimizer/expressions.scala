@@ -212,7 +212,7 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
  * 1. Converts the predicate to false when the list is empty and
  *    the value is not nullable.
  * 2. Removes literal repetitions.
- * 3. Replaces [[In (value, seq[Literal])]] with optimized version
+ * 3. Replaces [[In (values, seq[Literal])]] with optimized version
  *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
 object OptimizeIn extends Rule[LogicalPlan] {
@@ -221,18 +221,18 @@ object OptimizeIn extends Rule[LogicalPlan] {
       case expr @ In(_, list) if list.isEmpty =>
         // When v is not nullable, the following expression will be optimized
         // to FalseLiteral which is tested in OptimizeInSuite.scala
-        If(IsNotNull(expr.inValues.valueExpression), FalseLiteral, Literal(null, BooleanType))
+        If(IsNotNull(expr.value), FalseLiteral, Literal(null, BooleanType))
       case expr @ In(_, list) if expr.inSetConvertible =>
         val newList = ExpressionSet(list).toSeq
         if (newList.length == 1
           // TODO: `EqualTo` for structural types are not working. Until SPARK-24443 is addressed,
           // TODO: we exclude them in this rule.
-          && !expr.inValues.valueExpression.isInstanceOf[CreateNamedStructLike]
+          && !expr.value.isInstanceOf[CreateNamedStructLike]
           && !newList.head.isInstanceOf[CreateNamedStructLike]) {
-          EqualTo(expr.inValues.valueExpression, newList.head)
+          EqualTo(expr.value, newList.head)
         } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
-          InSet(expr.inValues.valueExpression, HashSet() ++ hSet)
+          InSet(expr.value, HashSet() ++ hSet)
         } else if (newList.length < list.length) {
           expr.copy(list = newList)
         } else { // newList.length == list.length && newList.length > 1
@@ -504,7 +504,7 @@ object NullPropagation extends Rule[LogicalPlan] {
         }
 
       // If the value expression is NULL then transform the In expression to null literal.
-      case In(InValues(Seq(Literal(null, _))), _) => Literal.create(null, BooleanType)
+      case In(Seq(Literal(null, _)), _) => Literal.create(null, BooleanType)
 
       // Non-leaf NullIntolerant expressions will return null, if at least one of its children is
       // a null literal.

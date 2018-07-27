@@ -138,30 +138,6 @@ case class Not(child: Expression)
   override def sql: String = s"(NOT ${child.sql})"
 }
 
-case class InValues(children: Seq[Expression]) extends Expression {
-  require(children.nonEmpty, "Value of IN expression cannot be empty")
-
-  @transient lazy val numValues: Int = children.length
-  @transient lazy val valueExpression: Expression = if (children.length > 1) {
-    CreateNamedStruct(children.zipWithIndex.flatMap {
-      case (v: NamedExpression, _) => Seq(Literal(v.name), v)
-      case (v, idx) => Seq(Literal(s"_$idx"), v)
-    })
-  } else {
-    children.head
-  }
-  override def nullable: Boolean = children.exists(_.nullable)
-  override def dataType: DataType = valueExpression.dataType
-  override def sql: String = valueExpression.sql
-  override def toString: String = valueExpression.toString
-
-  override def eval(input: InternalRow): Any =
-    throw new RuntimeException("InValues cannot be evaluated.")
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode) =
-    throw new RuntimeException("InValues cannot generate code.")
-}
-
 
 /**
  * Evaluates to `true` if `list` contains `value`.
@@ -185,13 +161,18 @@ case class InValues(children: Seq[Expression]) extends Expression {
        true
   """)
 // scalastyle:on line.size.limit
-case class In(value: Expression, list: Seq[Expression]) extends Predicate {
+case class In(values: Seq[Expression], list: Seq[Expression]) extends Predicate {
 
   require(list != null, "list should not be null")
 
-  // During analysis we replace any Expression set as value with a InValues expression so we are
-  // sure it is an instance of InValues
-  @transient lazy val inValues = value.asInstanceOf[InValues]
+  @transient lazy val value: Expression = if (values.length > 1) {
+    CreateNamedStruct(values.zipWithIndex.flatMap {
+      case (v: NamedExpression, _) => Seq(Literal(v.name), v)
+      case (v, idx) => Seq(Literal(s"_$idx"), v)
+    })
+  } else {
+    values.head
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val mismatchOpt = list.find(l => !DataType.equalsStructurally(l.dataType, value.dataType,
@@ -199,24 +180,19 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     if (mismatchOpt.isDefined) {
       list match {
         case ListQuery(_, _, _, childOutputs) :: Nil =>
-          val valExprs = value match {
-            case cns: CreateNamedStruct => cns.valExprs
-            case inValues: InValues => inValues.children
-            case expr => Seq(expr)
-          }
-          if (valExprs.length != childOutputs.length) {
+          if (values.length != childOutputs.length) {
             TypeCheckResult.TypeCheckFailure(
               s"""
                  |The number of columns in the left hand side of an IN subquery does not match the
                  |number of columns in the output of subquery.
-                 |#columns in left hand side: ${valExprs.length}.
+                 |#columns in left hand side: ${values.length}.
                  |#columns in right hand side: ${childOutputs.length}.
                  |Left side columns:
-                 |[${valExprs.map(_.sql).mkString(", ")}].
+                 |[${values.map(_.sql).mkString(", ")}].
                  |Right side columns:
                  |[${childOutputs.map(_.sql).mkString(", ")}].""".stripMargin)
           } else {
-            val mismatchedColumns = valExprs.zip(childOutputs).flatMap {
+            val mismatchedColumns = values.zip(childOutputs).flatMap {
               case (l, r) if l.dataType != r.dataType =>
                 Seq(s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})")
               case _ => None
@@ -228,7 +204,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
                  |Mismatched columns:
                  |[${mismatchedColumns.mkString(", ")}]
                  |Left side:
-                 |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
+                 |[${values.map(_.dataType.catalogString).mkString(", ")}].
                  |Right side:
                  |[${childOutputs.map(_.dataType.catalogString).mkString(", ")}].""".stripMargin)
           }
@@ -241,20 +217,17 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     }
   }
 
-  override def children: Seq[Expression] = value +: list
+  override def children: Seq[Expression] = values ++: list
   lazy val inSetConvertible = list.forall(_.isInstanceOf[Literal])
   private lazy val ordering = TypeUtils.getInterpretedOrdering(value.dataType)
 
   override def nullable: Boolean = children.exists(_.nullable)
-  override def foldable: Boolean = value match {
-    case i: InValues => i.valueExpression.foldable && list.forall(_.foldable)
-    case _ => children.forall(_.foldable)
-  }
+  override def foldable: Boolean = children.forall(_.foldable)
 
   override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
 
   override def eval(input: InternalRow): Any = {
-    val evaluatedValue = inValues.valueExpression.eval(input)
+    val evaluatedValue = value.eval(input)
     if (evaluatedValue == null) {
       null
     } else {
@@ -277,7 +250,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaDataType = CodeGenerator.javaType(value.dataType)
-    val valueGen = inValues.valueExpression.genCode(ctx)
+    val valueGen = value.genCode(ctx)
     val listGen = list.map(_.genCode(ctx))
     // inTmpResult has 3 possible values:
     // -1 means no matches found and there is at least one value in the list evaluated to null
@@ -339,9 +312,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   }
 
   override def sql: String = {
-    val childrenSQL = children.map(_.sql)
-    val valueSQL = childrenSQL.head
-    val listSQL = childrenSQL.tail.mkString(", ")
+    val valueSQL = value.sql
+    val listSQL = list.map(_.sql).mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }
 }
