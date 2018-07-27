@@ -25,8 +25,8 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.permission.{FsAction, FsPermission}
 import org.apache.hadoop.security.{AccessControlException, UserGroupInformation}
 import org.mockito
-import org.mockito.internal.stubbing.answers.DoesNothing
 import org.mockito.Mockito._
+import org.mockito.internal.stubbing.answers.DoesNothing
 import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
