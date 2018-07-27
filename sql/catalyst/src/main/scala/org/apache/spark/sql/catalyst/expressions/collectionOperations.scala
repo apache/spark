@@ -4055,11 +4055,11 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
     pos
   }
 
-  val evalExcept: (ArrayData, ArrayData) => ArrayData = {
-    (array1: ArrayData, array2: ArrayData) =>
-      if (elementTypeSupportEquals) {
-        elementType match {
-          case IntegerType =>
+  @transient lazy val evalExcept: (ArrayData, ArrayData) => ArrayData = {
+    if (elementTypeSupportEquals) {
+      elementType match {
+        case IntegerType =>
+          (array1, array2) =>
             // avoid boxing of primitive int array elements
             // calculate result array size
             hsInt = new OpenHashSet[Int]
@@ -4076,7 +4076,8 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
             // assign elements into the result array
             evalIntLongPrimitiveType(array1, array2, resultArray, false)
             resultArray
-          case LongType =>
+        case LongType =>
+          (array1, array2) =>
             // avoid boxing of primitive long array elements
             // calculate result array size
             hsLong = new OpenHashSet[Long]
@@ -4093,7 +4094,8 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
             // assign elements into the result array
             evalIntLongPrimitiveType(array1, array2, resultArray, true)
             resultArray
-          case _ =>
+        case _ =>
+          (array1, array2) =>
             val hs = new OpenHashSet[Any]
             var notFoundNullElement = true
             var i = 0
@@ -4124,8 +4126,9 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
               i += 1
             }
             new GenericArrayData(arrayBuffer)
-        }
-      } else {
+      }
+    } else {
+      (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
         var scannedNullElements = false
         var i = 0
