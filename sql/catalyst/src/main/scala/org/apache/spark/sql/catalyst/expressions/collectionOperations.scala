@@ -1204,6 +1204,112 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLi
 }
 
 /**
+ * Returns a random permutation of the given array.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(array) - Returns a random permutation of the given array.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 20, 3, 5));
+       [3, 1, 5, 20]
+      > SELECT _FUNC_(array(1, 20, null, 3));
+       [20, null, 3, 1]
+  """,
+  note = "The function is non-deterministic.",
+  since = "2.4.0")
+case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
+  extends UnaryExpression with ExpectsInputTypes with Stateful {
+
+  def this(child: Expression) = this(child, None)
+
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && randomSeed.isDefined
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
+  override def dataType: DataType = child.dataType
+
+  @transient lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+
+  @transient private[this] var random: RandomIndicesGenerator = _
+
+  override protected def initializeInternal(partitionIndex: Int): Unit = {
+    random = RandomIndicesGenerator(randomSeed.get + partitionIndex)
+  }
+
+  override protected def evalInternal(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      null
+    } else {
+      val source = value.asInstanceOf[ArrayData]
+      val numElements = source.numElements()
+      val indices = random.getNextIndices(numElements)
+      new GenericArrayData(indices.map(source.get(_, elementType)))
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => shuffleArrayCodeGen(ctx, ev, c))
+  }
+
+  private def shuffleArrayCodeGen(ctx: CodegenContext, ev: ExprCode, childName: String): String = {
+    val randomClass = classOf[RandomIndicesGenerator].getName
+
+    val rand = ctx.addMutableState(randomClass, "rand", forceInline = true)
+    ctx.addPartitionInitializationStatement(
+      s"$rand = new $randomClass(${randomSeed.get}L + partitionIndex);")
+
+    val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
+
+    val numElements = ctx.freshName("numElements")
+    val arrayData = ctx.freshName("arrayData")
+
+    val initialization = if (isPrimitiveType) {
+      ctx.createUnsafeArray(arrayData, numElements, elementType, s" $prettyName failed.")
+    } else {
+      val arrayDataClass = classOf[GenericArrayData].getName()
+      s"$arrayDataClass $arrayData = new $arrayDataClass(new Object[$numElements]);"
+    }
+
+    val indices = ctx.freshName("indices")
+    val i = ctx.freshName("i")
+
+    val getValue = CodeGenerator.getValue(childName, elementType, s"$indices[$i]")
+
+    val setFunc = if (isPrimitiveType) {
+      s"set${CodeGenerator.primitiveTypeName(elementType)}"
+    } else {
+      "update"
+    }
+
+    val assignment = if (isPrimitiveType && dataType.asInstanceOf[ArrayType].containsNull) {
+      s"""
+         |if ($childName.isNullAt($indices[$i])) {
+         |  $arrayData.setNullAt($i);
+         |} else {
+         |  $arrayData.$setFunc($i, $getValue);
+         |}
+       """.stripMargin
+    } else {
+      s"$arrayData.$setFunc($i, $getValue);"
+    }
+
+    s"""
+       |int $numElements = $childName.numElements();
+       |int[] $indices = $rand.getNextIndices($numElements);
+       |$initialization
+       |for (int $i = 0; $i < $numElements; $i++) {
+       |  $assignment
+       |}
+       |${ev.value} = $arrayData;
+     """.stripMargin
+  }
+
+  override def freshCopy(): Shuffle = Shuffle(child, randomSeed)
+}
+
+/**
  * Returns a reversed string or an array with reverse order of elements.
  */
 @ExpressionDescription(
