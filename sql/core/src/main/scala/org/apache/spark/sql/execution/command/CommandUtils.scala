@@ -55,16 +55,22 @@ object CommandUtils extends Logging {
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
-      val paths = partitions.map(x => new Path(x.storage.locationUri.get))
-      val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
-      val pathFilter = new PathFilter with Serializable {
-        override def accept(path: Path): Boolean = {
-          DataSourceUtils.isDataPath(path) && !path.getName.startsWith(stagingDir)
+      if (spark.sessionState.conf.computeStatsListFilesInParallel) {
+        val paths = partitions.map(x => new Path(x.storage.locationUri.get))
+        val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
+        val pathFilter = new PathFilter with Serializable {
+          override def accept(path: Path): Boolean = {
+            DataSourceUtils.isDataPath(path) && !path.getName.startsWith(stagingDir)
+          }
         }
+        val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(
+          paths, sessionState.newHadoopConf(), pathFilter, spark)
+        fileStatusSeq.flatMap(_._2.map(_.getLen)).sum
+      } else {
+        partitions.map { p =>
+          calculateLocationSize(sessionState, catalogTable.identifier, p.storage.locationUri)
+        }.sum
       }
-      val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(
-        paths, sessionState.newHadoopConf(), pathFilter, spark)
-      fileStatusSeq.flatMap(_._2.map(_.getLen)).sum
     }
   }
 
@@ -87,7 +93,8 @@ object CommandUtils extends Logging {
       val size = if (fileStatus.isDirectory) {
         fs.listStatus(path)
           .map { status =>
-            if (!status.getPath.getName.startsWith(stagingDir)) {
+            if (!status.getPath.getName.startsWith(stagingDir) &&
+              DataSourceUtils.isDataPath(path)) {
               getPathSize(fs, status.getPath)
             } else {
               0L

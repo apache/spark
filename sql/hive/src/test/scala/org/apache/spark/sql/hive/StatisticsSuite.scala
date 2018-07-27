@@ -22,9 +22,7 @@ import java.sql.Timestamp
 
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
-
 import org.apache.hadoop.hive.common.StatsSetupConst
-
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -39,6 +37,7 @@ import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.scalacheck.Prop.True
 
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
@@ -150,7 +149,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   }
 
   test("SPARK-24626 parallelize location size calculation in Analyze Table command") {
-    withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "2") {
+    withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "2",
+      SQLConf.COMPUTE_STATS_LIST_FILES_IN_PARALLEL.key -> "True") {
       val checkSizeTable = "checkSizeTable"
       withTable(checkSizeTable) {
           sql(s"CREATE TABLE $checkSizeTable (key STRING, value STRING) PARTITIONED BY (ds STRING)")

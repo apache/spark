@@ -1430,6 +1430,13 @@ object SQLConf {
       "This only takes effect when spark.sql.repl.eagerEval.enabled is set to true.")
     .intConf
     .createWithDefault(20)
+
+  val COMPUTE_STATS_LIST_FILES_IN_PARALLEL =
+    buildConf("spark.sql.execution.computeStatsListFilesInParallel")
+      .internal()
+      .doc("If True, File listing for compute statistics is done in parallel.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
@@ -1815,6 +1822,9 @@ class SQLConf extends Serializable with Logging {
   def replEagerEvalMaxNumRows: Int = getConf(SQLConf.REPL_EAGER_EVAL_MAX_NUM_ROWS)
 
   def replEagerEvalTruncate: Int = getConf(SQLConf.REPL_EAGER_EVAL_TRUNCATE)
+
+  def computeStatsListFilesInParallel: Boolean =
+    getConf(SQLConf.COMPUTE_STATS_LIST_FILES_IN_PARALLEL)
 
   /** ********************** SQLConf functionality methods ************ */
 
