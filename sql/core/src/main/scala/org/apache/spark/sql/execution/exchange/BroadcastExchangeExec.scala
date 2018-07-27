@@ -73,6 +73,7 @@ case class BroadcastExchangeExec(
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
       SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
+        var dataSize = -1L;
         try {
           val beforeCollect = System.nanoTime()
           // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
@@ -88,7 +89,7 @@ case class BroadcastExchangeExec(
           // Construct the relation.
           val relation = mode.transform(input, Some(numRows))
 
-          val dataSize = relation match {
+          dataSize = relation match {
             case map: HashedRelation =>
               map.estimatedSize
             case arr: Array[InternalRow] =>
@@ -118,11 +119,16 @@ case class BroadcastExchangeExec(
           // SparkFatalException, which is a subclass of Exception. ThreadUtils.awaitResult
           // will catch this exception and re-throw the wrapped fatal throwable.
           case oe: OutOfMemoryError =>
+            val sizeMessage = if (dataSize != -1) {
+              s"; Size of table is $dataSize"
+            } else {
+              ""
+            }
             val oome =
               new OutOfMemoryError(s"Not enough memory to build and broadcast the table to " +
               s"all worker nodes. As a workaround, you can either disable broadcast by setting " +
               s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark driver " +
-              s"memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value")
+              s"memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value$sizeMessage")
               .initCause(oe.getCause)
             oome.setStackTrace(oe.getStackTrace)
             throw new SparkFatalException(oome)
