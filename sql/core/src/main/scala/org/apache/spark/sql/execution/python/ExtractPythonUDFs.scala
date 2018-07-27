@@ -95,25 +95,8 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
  */
 object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
 
-  private case class EvalTypeHolder(private var evalType: Int = -1) {
-    def isSet: Boolean = evalType >= 0
-
-    def set(evalType: Int): Unit = {
-      if (isSet && evalType != this.evalType) {
-        throw new IllegalStateException("Cannot reset eval type to a different value")
-      } else {
-        this.evalType = evalType
-      }
-    }
-
-    def get(): Int = {
-      if (!isSet) {
-        throw new IllegalStateException("Eval type is not set")
-      } else {
-        evalType
-      }
-    }
-  }
+  private type EvalType = Int
+  private type EvalTypeChecker = EvalType => Boolean
 
   private def hasScalarPythonUDF(e: Expression): Boolean = {
     e.find(PythonUDF.isScalarPythonUDF).isDefined
@@ -128,15 +111,25 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
     }
   }
 
-  private def collectEvaluableUDFs(
-      expr: Expression,
-      firstEvalType: EvalTypeHolder): Seq[PythonUDF] = expr match {
-    case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf)
-      && (!firstEvalType.isSet || firstEvalType.get == udf.evalType)
-      && canEvaluateInPython(udf) =>
-      firstEvalType.set(udf.evalType)
-      Seq(udf)
-    case e => e.children.flatMap(collectEvaluableUDFs(_, firstEvalType))
+  private def collectEvaluableUDFsFromExpressions(expressions: Seq[Expression]): Seq[PythonUDF] = {
+    // Eval type checker is set once when we find the first evaluable UDF and its value
+    // shouldn't change later.
+    // Used to check if subsequent UDFs are of the same type as the first UDF. (since we can only
+    // extract UDFs of the same eval type)
+    var evalTypeChecker: Option[EvalTypeChecker] = None
+
+    def collectEvaluableUDFs(expr: Expression): Seq[PythonUDF] = expr match {
+      case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) && canEvaluateInPython(udf)
+        && evalTypeChecker.isEmpty =>
+        evalTypeChecker = Some((otherEvalType: EvalType) => otherEvalType == udf.evalType)
+        Seq(udf)
+      case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) && canEvaluateInPython(udf)
+        && evalTypeChecker.get(udf.evalType) =>
+        Seq(udf)
+      case e => e.children.flatMap(collectEvaluableUDFs)
+    }
+
+    expressions.flatMap(collectEvaluableUDFs)
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan transformUp {
@@ -147,8 +140,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
    * Extract all the PythonUDFs from the current operator and evaluate them before the operator.
    */
   private def extract(plan: SparkPlan): SparkPlan = {
-    val firstEvalType = new EvalTypeHolder
-    val udfs = plan.expressions.flatMap(collectEvaluableUDFs(_, firstEvalType))
+    val udfs = collectEvaluableUDFsFromExpressions(plan.expressions)
       // ignore the PythonUDF that come from second/third aggregate, which is not used
       .filter(udf => udf.references.subsetOf(plan.inputSet))
     if (udfs.isEmpty) {
