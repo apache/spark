@@ -261,21 +261,32 @@ class JDBCSuite extends QueryTest
       s"Expecting a JDBCRelation with $expectedNumPartitions partitions, but got:`$jdbcRelations`")
   }
 
+  private def checkPushdown(df: DataFrame): DataFrame = {
+    val parentPlan = df.queryExecution.executedPlan
+    // Check if SparkPlan Filter is removed in a physical plan and
+    // the plan only has PhysicalRDD to scan JDBCRelation.
+    assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
+    val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
+    assert(node.child.isInstanceOf[org.apache.spark.sql.execution.DataSourceScanExec])
+    assert(node.child.asInstanceOf[DataSourceScanExec].nodeName.contains("JDBCRelation"))
+    df
+  }
+
+  private def checkNotPushdown(df: DataFrame): DataFrame = {
+    val parentPlan = df.queryExecution.executedPlan
+    // Check if SparkPlan Filter is not removed in a physical plan because JDBCRDD
+    // cannot compile given predicates.
+    assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
+    val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
+    assert(node.child.isInstanceOf[org.apache.spark.sql.execution.FilterExec])
+    df
+  }
+
   test("SELECT *") {
     assert(sql("SELECT * FROM foobar").collect().size === 3)
   }
 
   test("SELECT * WHERE (simple predicates)") {
-    def checkPushdown(df: DataFrame): DataFrame = {
-      val parentPlan = df.queryExecution.executedPlan
-      // Check if SparkPlan Filter is removed in a physical plan and
-      // the plan only has PhysicalRDD to scan JDBCRelation.
-      assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
-      val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
-      assert(node.child.isInstanceOf[org.apache.spark.sql.execution.DataSourceScanExec])
-      assert(node.child.asInstanceOf[DataSourceScanExec].nodeName.contains("JDBCRelation"))
-      df
-    }
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
@@ -308,15 +319,6 @@ class JDBCSuite extends QueryTest
       "WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (NAME = 'fred')")
     assert(df2.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
 
-    def checkNotPushdown(df: DataFrame): DataFrame = {
-      val parentPlan = df.queryExecution.executedPlan
-      // Check if SparkPlan Filter is not removed in a physical plan because JDBCRDD
-      // cannot compile given predicates.
-      assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
-      val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
-      assert(node.child.isInstanceOf[org.apache.spark.sql.execution.FilterExec])
-      df
-    }
     assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).collect().size == 0)
     assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 2) != 4")).collect().size == 2)
   }
@@ -1374,5 +1376,31 @@ class JDBCSuite extends QueryTest
       sql("select name, theid from queryOption"),
       Row("fred", 1) :: Nil)
 
+  }
+
+  test("SPARK-24288: Enable preventing predicate pushdown") {
+    val table = "test.people"
+
+    val df = spark.read.format("jdbc")
+      .option("Url", urlWithUserAndPass)
+      .option("dbTable", table)
+      .option("pushDownPredicate", false)
+      .load()
+      .filter("theid = 1")
+      .select("name", "theid")
+    checkAnswer(
+      checkNotPushdown(df),
+      Row("fred", 1) :: Nil)
+
+    // pushDownPredicate option in the create table path.
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW predicateOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$urlWithUserAndPass', dbTable '$table', pushDownPredicate 'false')
+       """.stripMargin.replaceAll("\n", " "))
+    checkAnswer(
+      checkNotPushdown(sql("SELECT name, theid FROM predicateOption WHERE theid = 1")),
+      Row("fred", 1) :: Nil)
   }
 }
