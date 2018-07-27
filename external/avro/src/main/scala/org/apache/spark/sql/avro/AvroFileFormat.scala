@@ -57,7 +57,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     val conf = spark.sessionState.newHadoopConf()
-    val parsedOptions = new AvroOptions(options, conf, spark.sessionState.conf)
+    val parsedOptions = new AvroOptions(options, conf)
 
     // Schema evolution is not supported yet. Here we only pick a single random sample file to
     // figure out the schema of the whole dataset.
@@ -112,8 +112,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    val sqlConf = spark.sessionState.conf
-    val parsedOptions = new AvroOptions(options, spark.sessionState.newHadoopConf(), sqlConf)
+    val parsedOptions = new AvroOptions(options, spark.sessionState.newHadoopConf())
     val outputAvroSchema = SchemaConverters.toAvroType(
       dataSchema, nullable = false, parsedOptions.recordName, parsedOptions.recordNamespace)
 
@@ -131,7 +130,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
         job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, DataFileConstants.SNAPPY_CODEC)
 
       case "deflate" =>
-        val deflateLevel = sqlConf.avroDeflateLevel
+        val deflateLevel = spark.sessionState.conf.avroDeflateLevel
         log.info(s"compressing Avro output using deflate (level=$deflateLevel)")
         job.getConfiguration.setBoolean(COMPRESS_KEY, true)
         job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, DataFileConstants.DEFLATE_CODEC)
@@ -155,7 +154,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
 
     val broadcastedConf =
       spark.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
-    val parsedOptions = new AvroOptions(options, hadoopConf, spark.sessionState.conf)
+    val parsedOptions = new AvroOptions(options, hadoopConf)
 
     (file: PartitionedFile) => {
       val log = LoggerFactory.getLogger(classOf[AvroFileFormat])

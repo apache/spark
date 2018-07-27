@@ -28,11 +28,10 @@ import org.apache.spark.sql.internal.SQLConf
  */
 class AvroOptions(
     @transient val parameters: CaseInsensitiveMap[String],
-    @transient val conf: Configuration,
-    @transient val sqlConf: SQLConf) extends Logging with Serializable {
+    @transient val conf: Configuration) extends Logging with Serializable {
 
-  def this(parameters: Map[String, String], conf: Configuration, sqlConf: SQLConf) = {
-    this(CaseInsensitiveMap(parameters), conf, sqlConf)
+  def this(parameters: Map[String, String], conf: Configuration) = {
+    this(CaseInsensitiveMap(parameters), conf)
   }
 
   /**
@@ -77,5 +76,7 @@ class AvroOptions(
    * If the option is not set, the `spark.sql.avro.compression.codec` config is taken into
    * account. If the former one is not set too, the `snappy` codec is used by default.
    */
-  val compression: String = parameters.get("compression").getOrElse(sqlConf.avroCompressionCodec)
+  val compression: String = {
+    parameters.get("compression").getOrElse(SQLConf.get.avroCompressionCodec)
+  }
 }
