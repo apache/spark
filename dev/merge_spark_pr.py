@@ -319,7 +319,7 @@ def choose_jira_assignee(issue, asf_jira):
                     annotations.append("Commentor")
                 print("[%d] %s (%s)" % (idx, author.displayName, ",".join(annotations)))
             raw_assignee = input(
-                "Enter number of user, or userid,  to assign to (blank to leave unassigned):")
+                "Enter number of user, or userid, to assign to (blank to leave unassigned):")
             if raw_assignee == "":
                 return None
             else:
@@ -331,6 +331,8 @@ def choose_jira_assignee(issue, asf_jira):
                     assignee = asf_jira.user(raw_assignee)
                 asf_jira.assign_issue(issue.key, assignee.key)
                 return assignee
+        except KeyboardInterrupt:
+            raise
         except:
             traceback.print_exc()
             print("Error assigning JIRA, try again (or leave blank and fix manually)")
