@@ -319,11 +319,17 @@ object TypeCoercion {
   object WidenSetOperationTypes extends Rule[LogicalPlan] {
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case s @ SetOperation(left, right) if s.childrenResolved &&
-          left.output.length == right.output.length && !s.resolved =>
+      case s @ Except(left, right, isAll) if s.childrenResolved &&
+        left.output.length == right.output.length && !s.resolved =>
         val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
         assert(newChildren.length == 2)
-        s.makeCopy(Array(newChildren.head, newChildren.last))
+        Except(newChildren.head, newChildren.last, isAll)
+
+      case s @ Intersect(left, right) if s.childrenResolved &&
+        left.output.length == right.output.length && !s.resolved =>
+        val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
+        assert(newChildren.length == 2)
+        Intersect(newChildren.head, newChildren.last)
 
       case s: Union if s.childrenResolved &&
           s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
