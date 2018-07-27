@@ -858,6 +858,32 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
+   * Create an [[AlterTableFormatPropertiesCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table [PARTITION spec] SET FILEFORMAT format;
+   * }}}
+   */
+  override def visitSetTableFormat(ctx: SetTableFormatContext): LogicalPlan = withOrigin(ctx) {
+    val format = (ctx.fileFormat) match {
+      // Expected format: INPUTFORMAT input_format OUTPUTFORMAT output_format
+      case (c: TableFileFormatContext) =>
+        visitTableFileFormat(c)
+      // Expected format: SEQUENCEFILE | TEXTFILE | RCFILE | ORC | PARQUET | AVRO
+      case (c: GenericFileFormatContext) =>
+        visitGenericFileFormat(c)
+      case _ =>
+        throw new ParseException("Expected STORED AS ", ctx)
+    }
+    AlterTableFormatCommand(
+      visitTableIdentifier(ctx.tableIdentifier),
+      format,
+      // TODO a partition spec is allowed to have optional values. This is currently violated.
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
+  }
+
+  /**
    * Create an [[AlterTableAddPartitionCommand]] command.
    *
    * For example:

@@ -416,6 +416,51 @@ case class AlterTableSerDePropertiesCommand(
 }
 
 /**
+ * A command that sets the format of a table/view/partition .
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table [PARTITION spec] SET FILEFORMAT format;
+ * }}}
+ */
+case class AlterTableFormatCommand(
+                                    tableName: TableIdentifier,
+                                    format: CatalogStorageFormat,
+                                    partSpec: Option[TablePartitionSpec])
+  extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
+    // For datasource tables, disallow setting serde or specifying partition
+    if (partSpec.isDefined && DDLUtils.isDatasourceTable(table)) {
+      throw new AnalysisException("Operation not allowed: ALTER TABLE SET FILEFORMAT " +
+        "for a specific partition is not supported " +
+        "for tables created with the datasource API")
+    }
+    if (partSpec.isEmpty) {
+      val newTable = table.withNewStorage(
+        serde = format.serde.orElse(table.storage.serde),
+        inputFormat = format.inputFormat.orElse(table.storage.inputFormat),
+        outputFormat = format.outputFormat.orElse(table.storage.outputFormat),
+        properties = table.storage.properties ++ format.properties)
+      catalog.alterTable(newTable)
+    } else {
+      val spec = partSpec.get
+      val part = catalog.getPartition(table.identifier, spec)
+      val newPart = part.copy(storage = part.storage.copy(
+        serde = format.serde.orElse(part.storage.serde),
+        inputFormat = format.inputFormat.orElse(table.storage.inputFormat),
+        outputFormat = format.outputFormat.orElse(table.storage.outputFormat),
+        properties = part.storage.properties ++ format.properties))
+      catalog.alterPartitions(table.identifier, Seq(newPart))
+    }
+    Seq.empty[Row]
+  }
+}
+
+/**
  * Add Partition in ALTER TABLE: add the table partitions.
  *
  * An error message will be issued if the partition exists, unless 'ifNotExists' is true.
