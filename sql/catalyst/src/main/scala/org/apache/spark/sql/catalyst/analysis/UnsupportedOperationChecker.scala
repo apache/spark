@@ -235,9 +235,9 @@ object UnsupportedOperationChecker {
 
             case _: InnerLike =>
               if (left.isStreaming && right.isStreaming &&
-                outputMode != InternalOutputModes.Append) {
+                outputMode == InternalOutputModes.Complete) {
                 throwError("Inner join between two streaming DataFrames/Datasets is not supported" +
-                  s" in ${outputMode} output mode, only in Append output mode")
+                  s" in ${outputMode} output mode, only in Append or Update output mode")
               }
 
             case FullOuter =>

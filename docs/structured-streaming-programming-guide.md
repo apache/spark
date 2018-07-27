@@ -1687,9 +1687,9 @@ Here is the compatibility matrix.
   </tr>
   <tr>
       <td colspan="2" style="vertical-align: middle;">Queries with <code>joins</code></td>
-      <td style="vertical-align: middle;">Append</td>
+      <td style="vertical-align: middle;">Append, Update</td>
       <td style="vertical-align: middle;">
-        Update and Complete mode not supported yet. See the
+        Complete mode not supported yet. See the
         <a href="#support-matrix-for-joins-in-streaming-queries">support matrix in the Join Operations section</a>
          for more details on what types of joins are supported.
       </td>
