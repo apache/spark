@@ -137,7 +137,7 @@ FROM   (SELECT tab4.v AS k,
 -- Group by under ExceptAll
 SELECT v FROM tab3 GROUP BY v
 EXCEPT ALL
-SELECT k FROM tab4 GROUP BY k 
+SELECT k FROM tab4 GROUP BY k;
 
 -- Clean-up 
 DROP VIEW IF EXISTS tab1;
