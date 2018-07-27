@@ -22,7 +22,9 @@ import java.sql.Timestamp
 
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
+
 import org.apache.hadoop.hive.common.StatsSetupConst
+
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -37,7 +39,6 @@ import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.scalacheck.Prop.True
 
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {

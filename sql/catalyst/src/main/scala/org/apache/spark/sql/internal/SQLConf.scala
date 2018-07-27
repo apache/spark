@@ -1842,14 +1842,12 @@ class SQLConf extends Serializable with Logging {
 
   def replEagerEvalTruncate: Int = getConf(SQLConf.REPL_EAGER_EVAL_TRUNCATE)
 
-<<<<<<< HEAD
-  def computeStatsListFilesInParallel: Boolean =
-    getConf(SQLConf.COMPUTE_STATS_LIST_FILES_IN_PARALLEL)
-=======
   def avroCompressionCodec: String = getConf(SQLConf.AVRO_COMPRESSION_CODEC)
 
   def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
->>>>>>> master
+
+  def computeStatsListFilesInParallel: Boolean =
+    getConf(SQLConf.COMPUTE_STATS_LIST_FILES_IN_PARALLEL)
 
   /** ********************** SQLConf functionality methods ************ */
 
