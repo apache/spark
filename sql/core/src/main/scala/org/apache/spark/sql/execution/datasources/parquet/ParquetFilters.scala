@@ -429,8 +429,6 @@ private[parquet] class ParquetFilters(
     // Decimal type must make sure that filter value's scale matched the file.
     // If doesn't matched, which would cause data corruption.
     def isDecimalMatched(value: Any, decimalMeta: DecimalMetadata): Boolean = value match {
-      case decimalSet: Set[JBigDecimal] =>
-        decimalSet.iterator.next().scale == decimalMeta.getScale
       case decimal: JBigDecimal =>
         decimal.scale == decimalMeta.getScale
       case _ => false
@@ -440,25 +438,24 @@ private[parquet] class ParquetFilters(
     // in the pushed filter in order to push down the filter to Parquet.
     def valueCanMakeFilterOn(name: String, value: Any): Boolean = {
       value == null || (nameToType(name) match {
-        case ParquetBooleanType => value.isInstanceOf[JBoolean] ||
-          value.isInstanceOf[Set[JBoolean]]
-        case ParquetByteType | ParquetShortType | ParquetIntegerType =>
-          value.isInstanceOf[Number] || value.isInstanceOf[Set[Number]]
-        case ParquetLongType => value.isInstanceOf[JLong] || value.isInstanceOf[Set[JLong]]
-        case ParquetFloatType => value.isInstanceOf[JFloat] || value.isInstanceOf[Set[JFloat]]
-        case ParquetDoubleType => value.isInstanceOf[JDouble] || value.isInstanceOf[Set[JDouble]]
-        case ParquetStringType => value.isInstanceOf[String] || value.isInstanceOf[Set[String]]
-        case ParquetBinaryType => value.isInstanceOf[Array[Byte]] ||
-          value.isInstanceOf[Set[Array[Byte]]]
-        case ParquetDateType => value.isInstanceOf[Date] || value.isInstanceOf[Set[Date]]
+        case ParquetBooleanType => value.isInstanceOf[JBoolean]
+        case ParquetByteType | ParquetShortType | ParquetIntegerType => value.isInstanceOf[Number]
+        case ParquetLongType => value.isInstanceOf[JLong]
+        case ParquetFloatType => value.isInstanceOf[JFloat]
+        case ParquetDoubleType => value.isInstanceOf[JDouble]
+        case ParquetStringType => value.isInstanceOf[String]
+        case ParquetBinaryType => value.isInstanceOf[Array[Byte]]
+        case ParquetDateType => value.isInstanceOf[Date]
         case ParquetTimestampMicrosType | ParquetTimestampMillisType =>
-          value.isInstanceOf[Timestamp] || value.isInstanceOf[Set[Timestamp]]
+          value.isInstanceOf[Timestamp]
         case ParquetSchemaType(DECIMAL, INT32, _, decimalMeta) =>
           isDecimalMatched(value, decimalMeta)
         case ParquetSchemaType(DECIMAL, INT64, _, decimalMeta) =>
           isDecimalMatched(value, decimalMeta)
         case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, _, decimalMeta) =>
           isDecimalMatched(value, decimalMeta)
+        case set: Set[_] =>
+          valueCanMakeFilterOn(name, set.iterator.next())
         case _ => false
       })
     }
