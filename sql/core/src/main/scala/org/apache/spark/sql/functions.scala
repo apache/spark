@@ -3548,6 +3548,8 @@ object functions {
   /**
    * Returns a random permutation of the given array.
    *
+   * @note The function is non-deterministic.
+   *
    * @group collection_funcs
    * @since 2.4.0
    */

@@ -1195,7 +1195,9 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLi
        [3, 1, 5, 20]
       > SELECT _FUNC_(array(1, 20, null, 3));
        [20, null, 3, 1]
-  """, since = "2.4.0")
+  """,
+  note = "The function is non-deterministic.",
+  since = "2.4.0")
 case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
   extends UnaryExpression with ExpectsInputTypes with Stateful {
 

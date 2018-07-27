@@ -2387,10 +2387,13 @@ def shuffle(col):
     """
     Collection function: Generates a random permutation of the given array.
 
-    .. note:: The function is non-deterministic because its results depends on order of rows which
-        may be non-deterministic after a shuffle.
+    .. note:: The function is non-deterministic.
 
     :param col: name of column or expression
+
+    >>> df = spark.createDataFrame([([1, 20, 3, 5],), ([1, 20, None, 3],)], ['data'])
+    >>> df.select(shuffle(df.data).alias('s')).collect()  # doctest: +SKIP
+    [Row(s=[3, 1, 5, 20]), Row(s=[20, None, 3, 1])]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.shuffle(_to_java_column(col)))
