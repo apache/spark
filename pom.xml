@@ -510,7 +510,6 @@
         <groupId>org.xerial.snappy</groupId>
         <artifactId>snappy-java</artifactId>
         <version>${snappy.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>net.jpountz.lz4</groupId>
