@@ -26,6 +26,7 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
@@ -383,6 +384,10 @@ class SparkHadoopUtil extends Logging {
       return true
     }
 
+    // We may still be able to access the file as ACL may be enabled or spark may be an admin user
+    if (Try(status.getPath.getFileSystem(conf).access(status.getPath, mode)).isSuccess) {
+      return true
+    }
     logDebug(s"Permission denied: user=${ugi.getShortUserName}, " +
       s"path=${status.getPath}:${status.getOwner}:${status.getGroup}" +
       s"${if (status.isDirectory) "d" else "-"}$perm")

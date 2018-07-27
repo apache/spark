@@ -21,9 +21,12 @@ import java.security.PrivilegedExceptionAction
 
 import scala.util.Random
 
-import org.apache.hadoop.fs.FileStatus
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.permission.{FsAction, FsPermission}
-import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.security.{AccessControlException, UserGroupInformation}
+import org.mockito
+import org.mockito.internal.stubbing.answers.DoesNothing
+import org.mockito.Mockito._
 import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
@@ -72,6 +75,14 @@ class SparkHadoopUtilSuite extends SparkFunSuite with Matchers {
         sparkHadoopUtil.checkAccessPermission(status, READ) should be(false)
         sparkHadoopUtil.checkAccessPermission(status, WRITE) should be(false)
 
+        status = mockedStatus(otherUser, otherGroup, READ_WRITE, READ_WRITE, NONE, true)
+        sparkHadoopUtil.checkAccessPermission(status, READ) should be(true)
+        sparkHadoopUtil.checkAccessPermission(status, WRITE) should be(true)
+
+        status = mockedStatus(otherUser, otherGroup, READ_WRITE, READ_WRITE, NONE, false)
+        sparkHadoopUtil.checkAccessPermission(status, READ) should be(false)
+        sparkHadoopUtil.checkAccessPermission(status, WRITE) should be(false)
+
         null
       }
     })
@@ -93,5 +104,27 @@ class SparkHadoopUtilSuite extends SparkFunSuite with Matchers {
       owner,
       group,
       null)
+  }
+
+  private def mockedStatus(
+      owner: String,
+      group: String,
+      userAction: FsAction,
+      groupAction: FsAction,
+      otherAction: FsAction,
+      accessGranted: Boolean): FileStatus = {
+    val mockedFs = mock(classOf[FileSystem])
+    val stub = when(mockedFs.access(mockito.Matchers.any(), mockito.Matchers.any()))
+    if (accessGranted) {
+      stub.thenAnswer(new DoesNothing)
+    } else {
+      stub.thenThrow(new AccessControlException)
+    }
+    val mockedPath = mock(classOf[Path])
+    when(mockedPath.getFileSystem(mockito.Matchers.any())).thenReturn(mockedFs)
+    // This status has no access permission, here we modify only the Path it returns
+    val mockedStatus = spy(fileStatus(owner, group, userAction, groupAction, otherAction))
+    when(mockedStatus.getPath).thenReturn(mockedPath)
+    mockedStatus
   }
 }
