@@ -113,13 +113,12 @@ private[spark] class AppStatusStore(
   }
 
   def stageAttempt(stageId: Int, stageAttemptId: Int,
-    details: Boolean = false): StageDataWrapper = {
+    details: Boolean = false): (v1.StageData, Seq[Int]) = {
     val stageKey = Array(stageId, stageAttemptId)
     val stageDataWrapper: StageDataWrapper = store.read(classOf[StageDataWrapper], stageKey)
     val stage = if (details) stageWithDetails(stageDataWrapper.info) else stageDataWrapper.info
     val jobIds = stageDataWrapper.jobIds
-    val returnStageDataWrapper: StageDataWrapper = new StageDataWrapper(stage, jobIds, null)
-    returnStageDataWrapper
+    (stage, jobIds.toSeq)
   }
 
   def taskCount(stageId: Int, stageAttemptId: Int): Long = {

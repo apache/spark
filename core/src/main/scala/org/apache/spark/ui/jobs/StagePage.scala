@@ -105,18 +105,15 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val stageAttemptId = parameterAttempt.toInt
 
     val stageHeader = s"Details for Stage $stageId (Attempt $stageAttemptId)"
-    var stageDataWrapper: StageDataWrapper = null
+    var stageDataTuple: Tuple2[StageData, Seq[Int]] = null
     try {
-      stageDataWrapper = parent.store.stageAttempt(stageId, stageAttemptId, details = false)
+      stageDataTuple = parent.store.stageAttempt(stageId, stageAttemptId, details = false)
     } catch {
       case e: NoSuchElementException => e.getMessage
     }
     var stageData: StageData = null
-    if (stageDataWrapper != null) {
-      stageData = parent.store
-        .asOption(stageDataWrapper.info)
-        .get
-    } else {
+    var stageJobIds: Seq[Int] = null
+    if (stageDataTuple == null) {
       stageData = {
         val content =
           <div id="no-info">
@@ -127,9 +124,10 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           </div>
         return UIUtils.headerSparkPage(request, stageHeader, content, parent)
       }
+    } else {
+      stageData = stageDataTuple._1
+      stageJobIds = stageDataTuple._2
     }
-
-    val stageJobIds = stageDataWrapper.jobIds.toSeq
 
     val localitySummary = store.localitySummary(stageData.stageId, stageData.attemptId)
 
@@ -201,10 +199,10 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           {if (!stageJobIds.isEmpty) {
             <li>
               <strong>Associated Job Ids: </strong>
-              {for (jobId <- stageJobIds) yield {val detailUrl = "%s/jobs/job/?id=%s".format(
+              {stageJobIds.map(jobId => {val detailUrl = "%s/jobs/job/?id=%s".format(
                 UIUtils.prependBaseUri(request, parent.basePath), jobId)
               <a href={s"${detailUrl}"}>{s"${jobId}"} &nbsp;&nbsp;</a>
-              }}
+            })}
             </li>
           }}
         </ul>
@@ -1072,7 +1070,7 @@ private[ui] object ApiHelper {
   }
 
   def lastStageNameAndDescription(store: AppStatusStore, job: JobData): (String, String) = {
-    val stage = store.asOption(store.stageAttempt(job.stageIds.max, 0).info)
+    val stage = store.asOption(store.stageAttempt(job.stageIds.max, 0)._1)
     (stage.map(_.name).getOrElse(""), stage.flatMap(_.description).getOrElse(job.name))
   }
 
