@@ -33,7 +33,7 @@ import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.spark._
 import org.apache.spark.Partitioner._
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.BoundedDouble
@@ -1647,6 +1647,14 @@ abstract class RDD[T: ClassTag](
     }
   }
 
+  /**
+   * :: Experimental ::
+   * Indicates that Spark must launch the tasks together for the current stage.
+   */
+  @Experimental
+  @Since("2.4.0")
+  def barrier(): RDDBarrier[T] = withScope(new RDDBarrier[T](this))
+
   // =======================================================================
   // Other internal methods and fields
   // =======================================================================
@@ -1839,6 +1847,23 @@ abstract class RDD[T: ClassTag](
   def toJavaRDD() : JavaRDD[T] = {
     new JavaRDD(this)(elementClassTag)
   }
+
+  /**
+   * Whether the RDD is in a barrier stage. Spark must launch all the tasks at the same time for a
+   * barrier stage.
+   *
+   * An RDD is in a barrier stage, if at least one of its parent RDD(s), or itself, are mapped from
+   * an [[RDDBarrier]]. This function always returns false for a [[ShuffledRDD]], since a
+   * [[ShuffledRDD]] indicates start of a new stage.
+   *
+   * A [[MapPartitionsRDD]] can be transformed from an [[RDDBarrier]], under that case the
+   * [[MapPartitionsRDD]] shall be marked as barrier.
+   */
+  private[spark] def isBarrier(): Boolean = isBarrier_
+
+  // From performance concern, cache the value to avoid repeatedly compute `isBarrier()` on a long
+  // RDD chain.
+  @transient protected lazy val isBarrier_ : Boolean = dependencies.exists(_.rdd.isBarrier())
 }
 
 

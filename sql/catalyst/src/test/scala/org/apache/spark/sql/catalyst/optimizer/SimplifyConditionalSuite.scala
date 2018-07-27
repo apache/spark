@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
@@ -29,7 +31,8 @@ import org.apache.spark.sql.types.{IntegerType, NullType}
 class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("SimplifyConditionals", FixedPoint(50), SimplifyConditionals) :: Nil
+    val batches = Batch("SimplifyConditionals", FixedPoint(50),
+      BooleanSimplification, ConstantFolding, SimplifyConditionals) :: Nil
   }
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
@@ -43,6 +46,8 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
   private val unreachableBranch = (FalseLiteral, Literal(20))
   private val nullBranch = (Literal.create(null, NullType), Literal(30))
 
+  private val testRelation = LocalRelation('a.int)
+
   test("simplify if") {
     assertEquivalent(
       If(TrueLiteral, Literal(10), Literal(20)),
@@ -55,6 +60,23 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
     assertEquivalent(
       If(Literal.create(null, NullType), Literal(10), Literal(20)),
       Literal(20))
+  }
+
+  test("remove unnecessary if when the outputs are semantic equivalence") {
+    assertEquivalent(
+      If(IsNotNull(UnresolvedAttribute("a")),
+        Subtract(Literal(10), Literal(1)),
+        Add(Literal(6), Literal(3))),
+      Literal(9))
+
+    // For non-deterministic condition, we don't remove the `If` statement.
+    assertEquivalent(
+      If(GreaterThan(Rand(0), Literal(0.5)),
+        Subtract(Literal(10), Literal(1)),
+        Add(Literal(6), Literal(3))),
+      If(GreaterThan(Rand(0), Literal(0.5)),
+        Literal(9),
+        Literal(9)))
   }
 
   test("remove unreachable branches") {

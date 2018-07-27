@@ -261,21 +261,32 @@ class JDBCSuite extends QueryTest
       s"Expecting a JDBCRelation with $expectedNumPartitions partitions, but got:`$jdbcRelations`")
   }
 
+  private def checkPushdown(df: DataFrame): DataFrame = {
+    val parentPlan = df.queryExecution.executedPlan
+    // Check if SparkPlan Filter is removed in a physical plan and
+    // the plan only has PhysicalRDD to scan JDBCRelation.
+    assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
+    val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
+    assert(node.child.isInstanceOf[org.apache.spark.sql.execution.DataSourceScanExec])
+    assert(node.child.asInstanceOf[DataSourceScanExec].nodeName.contains("JDBCRelation"))
+    df
+  }
+
+  private def checkNotPushdown(df: DataFrame): DataFrame = {
+    val parentPlan = df.queryExecution.executedPlan
+    // Check if SparkPlan Filter is not removed in a physical plan because JDBCRDD
+    // cannot compile given predicates.
+    assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
+    val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
+    assert(node.child.isInstanceOf[org.apache.spark.sql.execution.FilterExec])
+    df
+  }
+
   test("SELECT *") {
     assert(sql("SELECT * FROM foobar").collect().size === 3)
   }
 
   test("SELECT * WHERE (simple predicates)") {
-    def checkPushdown(df: DataFrame): DataFrame = {
-      val parentPlan = df.queryExecution.executedPlan
-      // Check if SparkPlan Filter is removed in a physical plan and
-      // the plan only has PhysicalRDD to scan JDBCRelation.
-      assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
-      val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
-      assert(node.child.isInstanceOf[org.apache.spark.sql.execution.DataSourceScanExec])
-      assert(node.child.asInstanceOf[DataSourceScanExec].nodeName.contains("JDBCRelation"))
-      df
-    }
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
@@ -308,15 +319,6 @@ class JDBCSuite extends QueryTest
       "WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (NAME = 'fred')")
     assert(df2.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
 
-    def checkNotPushdown(df: DataFrame): DataFrame = {
-      val parentPlan = df.queryExecution.executedPlan
-      // Check if SparkPlan Filter is not removed in a physical plan because JDBCRDD
-      // cannot compile given predicates.
-      assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
-      val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
-      assert(node.child.isInstanceOf[org.apache.spark.sql.execution.FilterExec])
-      df
-    }
     assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).collect().size == 0)
     assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 2) != 4")).collect().size == 2)
   }
@@ -861,19 +863,51 @@ class JDBCSuite extends QueryTest
   }
 
   test("truncate table query by jdbc dialect") {
-    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
-    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val mysql = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
     val db2 = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
     val h2 = JdbcDialects.get(url)
     val derby = JdbcDialects.get("jdbc:derby:db")
+    val oracle = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    val teradata = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
+
     val table = "weblogs"
     val defaultQuery = s"TRUNCATE TABLE $table"
     val postgresQuery = s"TRUNCATE TABLE ONLY $table"
-    assert(MySQL.getTruncateQuery(table) == defaultQuery)
-    assert(Postgres.getTruncateQuery(table) == postgresQuery)
-    assert(db2.getTruncateQuery(table) == defaultQuery)
-    assert(h2.getTruncateQuery(table) == defaultQuery)
-    assert(derby.getTruncateQuery(table) == defaultQuery)
+    val teradataQuery = s"DELETE FROM $table ALL"
+
+    Seq(mysql, db2, h2, derby).foreach{ dialect =>
+      assert(dialect.getTruncateQuery(table, Some(true)) == defaultQuery)
+    }
+
+    assert(postgres.getTruncateQuery(table) == postgresQuery)
+    assert(oracle.getTruncateQuery(table) == defaultQuery)
+    assert(teradata.getTruncateQuery(table) == teradataQuery)
+  }
+
+  test("SPARK-22880: Truncate table with CASCADE by jdbc dialect") {
+    // cascade in a truncate should only be applied for databases that support this,
+    // even if the parameter is passed.
+    val mysql = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val db2 = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
+    val h2 = JdbcDialects.get(url)
+    val derby = JdbcDialects.get("jdbc:derby:db")
+    val oracle = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    val teradata = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
+
+    val table = "weblogs"
+    val defaultQuery = s"TRUNCATE TABLE $table"
+    val postgresQuery = s"TRUNCATE TABLE ONLY $table CASCADE"
+    val oracleQuery = s"TRUNCATE TABLE $table CASCADE"
+    val teradataQuery = s"DELETE FROM $table ALL"
+
+    Seq(mysql, db2, h2, derby).foreach{ dialect =>
+      assert(dialect.getTruncateQuery(table, Some(true)) == defaultQuery)
+    }
+    assert(postgres.getTruncateQuery(table, Some(true)) == postgresQuery)
+    assert(oracle.getTruncateQuery(table, Some(true)) == oracleQuery)
+    assert(teradata.getTruncateQuery(table, Some(true)) == teradataQuery)
   }
 
   test("Test DataFrame.where for Date and Timestamp") {
@@ -1342,5 +1376,31 @@ class JDBCSuite extends QueryTest
       sql("select name, theid from queryOption"),
       Row("fred", 1) :: Nil)
 
+  }
+
+  test("SPARK-24288: Enable preventing predicate pushdown") {
+    val table = "test.people"
+
+    val df = spark.read.format("jdbc")
+      .option("Url", urlWithUserAndPass)
+      .option("dbTable", table)
+      .option("pushDownPredicate", false)
+      .load()
+      .filter("theid = 1")
+      .select("name", "theid")
+    checkAnswer(
+      checkNotPushdown(df),
+      Row("fred", 1) :: Nil)
+
+    // pushDownPredicate option in the create table path.
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW predicateOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$urlWithUserAndPass', dbTable '$table', pushDownPredicate 'false')
+       """.stripMargin.replaceAll("\n", " "))
+    checkAnswer(
+      checkNotPushdown(sql("SELECT name, theid FROM predicateOption WHERE theid = 1")),
+      Row("fred", 1) :: Nil)
   }
 }

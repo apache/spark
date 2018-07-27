@@ -27,7 +27,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
 import org.apache.spark.util.Utils
 
 /**
@@ -360,6 +360,14 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     s"STRUCT<${fieldTypes.mkString(", ")}>"
   }
 
+  /**
+   * Returns a string containing a schema in DDL format. For example, the following value:
+   * `StructType(Seq(StructField("eventId", IntegerType), StructField("s", StringType)))`
+   * will be converted to `eventId` INT, `s` STRING.
+   * The returned DDL schema can be used in a table creation.
+   */
+  def toDDL: String = fields.map(_.toDDL).mkString(",")
+
   private[sql] override def simpleString(maxNumberFields: Int): String = {
     val builder = new StringBuilder
     val fieldTypes = fields.take(maxNumberFields).map {
@@ -426,7 +434,7 @@ object StructType extends AbstractDataType {
   private[sql] def fromString(raw: String): StructType = {
     Try(DataType.fromJson(raw)).getOrElse(LegacyTypeStringParser.parse(raw)) match {
       case t: StructType => t
-      case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
+      case _ => throw new RuntimeException(s"Failed parsing ${StructType.simpleString}: $raw")
     }
   }
 
@@ -528,7 +536,8 @@ object StructType extends AbstractDataType {
         leftType
 
       case _ =>
-        throw new SparkException(s"Failed to merge incompatible data types $left and $right")
+        throw new SparkException(s"Failed to merge incompatible data types ${left.catalogString}" +
+          s" and ${right.catalogString}")
     }
 
   private[sql] def fieldsMap(fields: Array[StructField]): Map[String, StructField] = {

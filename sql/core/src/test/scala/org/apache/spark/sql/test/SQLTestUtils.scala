@@ -393,7 +393,7 @@ private[sql] trait SQLTestUtilsBase
   }
 
   /**
-   * Returns full path to the given file in the resouce folder
+   * Returns full path to the given file in the resource folder
    */
   protected def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString

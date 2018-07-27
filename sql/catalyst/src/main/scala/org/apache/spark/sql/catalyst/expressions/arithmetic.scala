@@ -528,7 +528,7 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
-          s" got LEAST(${children.map(_.dataType.simpleString).mkString(", ")}).")
+          s" got LEAST(${children.map(_.dataType.catalogString).mkString(", ")}).")
     } else {
       TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
     }
@@ -601,7 +601,7 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
-          s" got GREATEST(${children.map(_.dataType.simpleString).mkString(", ")}).")
+          s" got GREATEST(${children.map(_.dataType.catalogString).mkString(", ")}).")
     } else {
       TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
     }

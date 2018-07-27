@@ -37,7 +37,7 @@ class EnvSecretsFeatureStepSuite extends SparkFunSuite{
     val sparkConf = new SparkConf(false)
     val kubernetesConf = KubernetesConf(
       sparkConf,
-      KubernetesExecutorSpecificConf("1", new PodBuilder().build()),
+      KubernetesExecutorSpecificConf("1", Some(new PodBuilder().build())),
       "resource-name-prefix",
       "app-id",
       Map.empty,

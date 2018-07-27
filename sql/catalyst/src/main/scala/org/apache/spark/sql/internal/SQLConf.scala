@@ -127,6 +127,14 @@ object SQLConf {
     }
   }
 
+  val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
+    .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
+      "specified by their rule names and separated by comma. It is not guaranteed that all the " +
+      "rules in this configuration will eventually be excluded, as some rules are necessary " +
+      "for correctness. The optimizer will log the rules that have indeed been excluded.")
+    .stringConf
+    .createOptional
+
   val OPTIMIZER_MAX_ITERATIONS = buildConf("spark.sql.optimizer.maxIterations")
     .internal()
     .doc("The max number of iterations the optimizer and analyzer runs.")
@@ -843,6 +851,14 @@ object SQLConf {
       .intConf
       .createWithDefault(10)
 
+  val FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION =
+    buildConf("spark.sql.streaming.flatMapGroupsWithState.stateFormatVersion")
+      .internal()
+      .doc("State format version used by flatMapGroupsWithState operation in a streaming query")
+      .intConf
+      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
+      .createWithDefault(2)
+
   val CHECKPOINT_LOCATION = buildConf("spark.sql.streaming.checkpointLocation")
     .doc("The default location for storing checkpoint data for streaming queries.")
     .stringConf
@@ -853,6 +869,15 @@ object SQLConf {
     .doc("The minimum number of batches that must be retained and made recoverable.")
     .intConf
     .createWithDefault(100)
+
+  val MAX_BATCHES_TO_RETAIN_IN_MEMORY = buildConf("spark.sql.streaming.maxBatchesToRetainInMemory")
+    .internal()
+    .doc("The maximum number of batches which will be retained in memory to avoid " +
+      "loading from files. The value adjusts a trade-off between memory usage vs cache miss: " +
+      "'2' covers both success and direct failure cases, '1' covers only success case, " +
+      "and '0' covers extreme case - disable cache to maximize memory size of executors.")
+    .intConf
+    .createWithDefault(2)
 
   val UNSUPPORTED_OPERATION_CHECK_ENABLED =
     buildConf("spark.sql.streaming.unsupportedOperationCheck")
@@ -1335,7 +1360,11 @@ object SQLConf {
         "overwriting. In dynamic mode, Spark doesn't delete partitions ahead, and only overwrite " +
         "those partitions that have data written into it at runtime. By default we use static " +
         "mode to keep the same behavior of Spark prior to 2.3. Note that this config doesn't " +
-        "affect Hive serde tables, as they are always overwritten with dynamic mode.")
+        "affect Hive serde tables, as they are always overwritten with dynamic mode. This can " +
+        "also be set as an output option for a data source using key partitionOverwriteMode " +
+        "(which takes precendence over this setting), e.g. " +
+        "dataframe.write.option(\"partitionOverwriteMode\", \"dynamic\").save(path)."
+      )
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(PartitionOverwriteMode.values.map(_.toString))
@@ -1427,6 +1456,8 @@ class SQLConf extends Serializable with Logging {
 
   /** ************************ Spark SQL Params/Hints ******************* */
 
+  def optimizerExcludedRules: Option[String] = getConf(OPTIMIZER_EXCLUDED_RULES)
+
   def optimizerMaxIterations: Int = getConf(OPTIMIZER_MAX_ITERATIONS)
 
   def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
@@ -1506,6 +1537,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
+
+  def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
 
   def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
 
