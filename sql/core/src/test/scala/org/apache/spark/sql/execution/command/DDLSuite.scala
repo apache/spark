@@ -2250,6 +2250,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("Datasource partition table should load empty partitions") {
+    // All static partitions
     withTable("t", "t1") {
       withTempPath { dir =>
         spark.sql("CREATE TABLE t(a int) USING parquet")
@@ -2259,11 +2260,35 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
         assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
+        assert(spark.sql("SHOW PARTITIONS t1").count() == 0)
+
         spark.sql("INSERT INTO TABLE t1 PARTITION(b='b', c='c') SELECT * FROM t WHERE 1 = 0")
 
         assert(spark.sql("SHOW PARTITIONS t1").count() == 1)
 
         assert(new File(dir, "b=b/c=c").exists())
+
+        checkAnswer(spark.table("t1"), Nil)
+      }
+    }
+
+    // Partial dynamic partitions
+    withTable("t", "t1") {
+      withTempPath { dir =>
+        spark.sql("CREATE TABLE t(a int) USING parquet")
+        spark.sql("CREATE TABLE t1(a int, b string, c string) " +
+          s"USING parquet PARTITIONED BY(b, c) LOCATION '${dir.toURI}'")
+
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+        assert(spark.sql("SHOW PARTITIONS t1").count() == 0)
+
+        spark.sql("INSERT INTO TABLE t1 PARTITION(b='b', c) SELECT *, 'c' FROM t WHERE 1 = 0")
+
+        assert(spark.sql("SHOW PARTITIONS t1").count() == 0)
+
+        assert(!new File(dir, "b=b/c=c").exists())
 
         checkAnswer(spark.table("t1"), Nil)
       }
