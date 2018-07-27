@@ -1439,9 +1439,9 @@ object SQLConf {
 
   val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
     .doc("Compression codec used in writing of AVRO files. Supported codecs: " +
-      "deflate, snappy, bzip2, uncompressed. Default codec is snappy.")
+      "uncompressed, deflate, snappy, bzip2 and xz. Default codec is snappy.")
     .stringConf
-    .checkValues(Set("uncompressed", "deflate", "snappy", "bzip2"))
+    .checkValues(Set("uncompressed", "deflate", "snappy", "bzip2", "xz"))
     .createWithDefault("snappy")
 
   val AVRO_DEFLATE_LEVEL = buildConf("spark.sql.avro.deflate.level")
