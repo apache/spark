@@ -368,32 +368,6 @@ class SparkHadoopUtil extends Logging {
     buffer.toString
   }
 
-  private[spark] def checkAccessPermission(status: FileStatus, mode: FsAction): Boolean = {
-    val perm = status.getPermission
-    val ugi = UserGroupInformation.getCurrentUser
-
-    if (ugi.getShortUserName == status.getOwner) {
-      if (perm.getUserAction.implies(mode)) {
-        return true
-      }
-    } else if (ugi.getGroupNames.contains(status.getGroup)) {
-      if (perm.getGroupAction.implies(mode)) {
-        return true
-      }
-    } else if (perm.getOtherAction.implies(mode)) {
-      return true
-    }
-
-    // We may still be able to access the file as ACL may be enabled or spark may be an admin user
-    if (Try(status.getPath.getFileSystem(conf).access(status.getPath, mode)).isSuccess) {
-      return true
-    }
-    logDebug(s"Permission denied: user=${ugi.getShortUserName}, " +
-      s"path=${status.getPath}:${status.getOwner}:${status.getGroup}" +
-      s"${if (status.isDirectory) "d" else "-"}$perm")
-    false
-  }
-
   def serialize(creds: Credentials): Array[Byte] = {
     val byteStream = new ByteArrayOutputStream
     val dataStream = new DataOutputStream(byteStream)

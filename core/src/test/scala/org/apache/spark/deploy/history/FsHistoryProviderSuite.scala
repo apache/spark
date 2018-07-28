@@ -27,11 +27,15 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.hdfs.DistributedFileSystem
+import org.apache.hadoop.security.AccessControlException
 import org.json4s.jackson.JsonMethods._
 import org.mockito.Matchers.any
-import org.mockito.Mockito.{mock, spy, verify}
+import org.mockito.Mockito.{mock, spy, verify, when}
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
@@ -816,6 +820,27 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       list.size should be (2)
       list.count(_.attempts.head.completed) should be (1)
     }
+  }
+
+  test("SPARK-24948: delegate permission check to the file system class") {
+    val helper = new CachedFileSystemHelper {
+      override protected val fs: FileSystem = mock(classOf[FileSystem])
+      when(fs.access(any[Path], any[FsAction])).thenAnswer(new Answer[Unit] {
+        override def answer(invocation: InvocationOnMock): Unit = {
+          invocation.getArgumentAt(0, classOf[Path]).getName match {
+            case "accessGranted" =>
+            case "accessDenied" => throw new AccessControlException("File not found.")
+            case _ => throw new FileNotFoundException("File not found.")
+          }
+        }
+      })
+    }
+    assert(helper.checkAccessPermission(new Path("accessGranted"), FsAction.READ))
+    assert(helper.cache("accessGranted"))
+    assert(!helper.checkAccessPermission(new Path("accessDenied"), FsAction.READ))
+    assert(!helper.cache("accessDenied"))
+    assert(!helper.checkAccessPermission(new Path("nonExisting"), FsAction.READ))
+    assert(!helper.cache.contains("nonExisting"))
   }
 
   /**

@@ -27,17 +27,17 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.io.Source
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 import scala.xml.Node
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.MoreExecutors
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
-import org.apache.hadoop.security.AccessControlException
+import org.apache.hadoop.security.{AccessControlException, UserGroupInformation}
 import org.fusesource.leveldbjni.internal.NativeDB
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
@@ -81,7 +81,7 @@ import org.apache.spark.util.kvstore._
  * maintains this invariant.
  */
 private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
-  extends ApplicationHistoryProvider with Logging {
+  extends ApplicationHistoryProvider with CachedFileSystemHelper with Logging {
 
   def this(conf: SparkConf) = {
     this(conf, new SystemClock())
@@ -114,7 +114,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     "; groups with admin permissions" + HISTORY_UI_ADMIN_ACLS_GROUPS.toString)
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-  private val fs = new Path(logDir).getFileSystem(hadoopConf)
+  protected val fs: FileSystem = new Path(logDir).getFileSystem(hadoopConf)
 
   // Used by check event thread and clean log thread.
   // Scheduled thread pool size must be one, otherwise it will have concurrent issues about fs
@@ -418,7 +418,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // reading a garbage file is safe, but we would log an error which can be scary to
             // the end-user.
             !entry.getPath().getName().startsWith(".") &&
-            SparkHadoopUtil.get.checkAccessPermission(entry, FsAction.READ)
+            checkAccessPermission(entry.getPath, FsAction.READ)
         }
         .filter { entry =>
           try {
@@ -971,6 +971,38 @@ private[history] object FsHistoryProvider {
    * all data and re-generate the listing data from the event logs.
    */
   private[history] val CURRENT_LISTING_VERSION = 1L
+}
+
+private[history] trait CachedFileSystemHelper extends Logging {
+  protected def fs: FileSystem
+
+  /**
+   * Cache containing the result for the already checked files.
+   */
+  // Visible for testing.
+  private[history] val cache = new mutable.HashMap[String, Boolean]
+
+  private val userName = UserGroupInformation.getCurrentUser.getShortUserName
+
+  private[history] def checkAccessPermission(path: Path, mode: FsAction): Boolean = {
+    cache.getOrElse(path.getName, doCheckAccessPermission(path, mode))
+  }
+
+  private def doCheckAccessPermission(path: Path, mode: FsAction): Boolean = {
+    Try(fs.access(path, mode)) match {
+      case Success(_) =>
+        cache(path.getName) = true
+        true
+      case Failure(e: AccessControlException) =>
+        logInfo(s"Permission denied for user '$userName' to access $path", e)
+        cache(path.getName) = false
+        false
+      case Failure(_) =>
+        // When we are unable to check whether we can access the file we don't cache the result
+        // so we can retry later
+        false
+    }
+  }
 }
 
 private[history] case class FsHistoryProviderMetadata(
