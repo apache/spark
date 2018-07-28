@@ -127,7 +127,7 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
         (DEFLATE_CODEC, s" (level = $deflateLevel)")
       case unknown => throw new IllegalArgumentException(s"Invalid compression codec: $unknown")
     }
-    job.getConfiguration.setBoolean("mapred.output.compress", compression != "uncompressed")
+    job.getConfiguration.setBoolean("mapred.output.compress", compression != NULL_CODEC)
     job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, compression)
     log.info(s"Compressing Avro output using the $compression codec$levelInfo")
 
