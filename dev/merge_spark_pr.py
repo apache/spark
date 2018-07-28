@@ -39,6 +39,9 @@ try:
 except ImportError:
     JIRA_IMPORTED = False
 
+if sys.version < '3':
+    input = raw_input
+
 # Location of your Spark git development area
 SPARK_HOME = os.environ.get("SPARK_HOME", os.getcwd())
 # Remote name which points to the Gihub site
@@ -95,7 +98,7 @@ def run_cmd(cmd):
 
 
 def continue_maybe(prompt):
-    result = raw_input("\n%s (y/n): " % prompt)
+    result = input("\n%s (y/n): " % prompt)
     if result.lower() != "y":
         fail("Okay, exiting")
 
@@ -134,7 +137,7 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
                              '--pretty=format:%an <%ae>']).split("\n")
     distinct_authors = sorted(set(commit_authors),
                               key=lambda x: commit_authors.count(x), reverse=True)
-    primary_author = raw_input(
+    primary_author = input(
         "Enter primary author in the format of \"name <email>\" [%s]: " %
         distinct_authors[0])
     if primary_author == "":
@@ -184,7 +187,7 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
 
 
 def cherry_pick(pr_num, merge_hash, default_branch):
-    pick_ref = raw_input("Enter a branch name [%s]: " % default_branch)
+    pick_ref = input("Enter a branch name [%s]: " % default_branch)
     if pick_ref == "":
         pick_ref = default_branch
 
@@ -231,7 +234,7 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     asf_jira = jira.client.JIRA({'server': JIRA_API_BASE},
                                 basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
 
-    jira_id = raw_input("Enter a JIRA id [%s]: " % default_jira_id)
+    jira_id = input("Enter a JIRA id [%s]: " % default_jira_id)
     if jira_id == "":
         jira_id = default_jira_id
 
@@ -276,7 +279,7 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
                 default_fix_versions = filter(lambda x: x != v, default_fix_versions)
     default_fix_versions = ",".join(default_fix_versions)
 
-    fix_versions = raw_input("Enter comma-separated fix version(s) [%s]: " % default_fix_versions)
+    fix_versions = input("Enter comma-separated fix version(s) [%s]: " % default_fix_versions)
     if fix_versions == "":
         fix_versions = default_fix_versions
     fix_versions = fix_versions.replace(" ", "").split(",")
@@ -315,8 +318,8 @@ def choose_jira_assignee(issue, asf_jira):
                 if author in commentors:
                     annotations.append("Commentor")
                 print("[%d] %s (%s)" % (idx, author.displayName, ",".join(annotations)))
-            raw_assignee = raw_input(
-                "Enter number of user, or userid,  to assign to (blank to leave unassigned):")
+            raw_assignee = input(
+                "Enter number of user, or userid, to assign to (blank to leave unassigned):")
             if raw_assignee == "":
                 return None
             else:
@@ -328,6 +331,8 @@ def choose_jira_assignee(issue, asf_jira):
                     assignee = asf_jira.user(raw_assignee)
                 asf_jira.assign_issue(issue.key, assignee.key)
                 return assignee
+        except KeyboardInterrupt:
+            raise
         except:
             traceback.print_exc()
             print("Error assigning JIRA, try again (or leave blank and fix manually)")
@@ -428,7 +433,7 @@ def main():
     # Assumes branch names can be sorted lexicographically
     latest_branch = sorted(branch_names, reverse=True)[0]
 
-    pr_num = raw_input("Which pull request would you like to merge? (e.g. 34): ")
+    pr_num = input("Which pull request would you like to merge? (e.g. 34): ")
     pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
     pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
 
@@ -440,7 +445,7 @@ def main():
         print("I've re-written the title as follows to match the standard format:")
         print("Original: %s" % pr["title"])
         print("Modified: %s" % modified_title)
-        result = raw_input("Would you like to use the modified title? (y/n): ")
+        result = input("Would you like to use the modified title? (y/n): ")
         if result.lower() == "y":
             title = modified_title
             print("Using modified title:")
@@ -491,7 +496,7 @@ def main():
     merge_hash = merge_pr(pr_num, target_ref, title, body, pr_repo_desc)
 
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
-    while raw_input("\n%s (y/n): " % pick_prompt).lower() == "y":
+    while input("\n%s (y/n): " % pick_prompt).lower() == "y":
         merged_refs = merged_refs + [cherry_pick(pr_num, merge_hash, latest_branch)]
 
     if JIRA_IMPORTED:

@@ -309,9 +309,12 @@ class ContinuousExecution(
   def commit(epoch: Long): Unit = {
     assert(continuousSources.length == 1, "only one continuous source supported currently")
     assert(offsetLog.get(epoch).isDefined, s"offset for epoch $epoch not reported before commit")
+
     synchronized {
+      // Record offsets before updating `committedOffsets`
+      recordTriggerOffsets(from = committedOffsets, to = availableOffsets)
       if (queryExecutionThread.isAlive) {
-        commitLog.add(epoch)
+        commitLog.add(epoch, CommitMetadata())
         val offset =
           continuousSources(0).deserializeOffset(offsetLog.get(epoch).get.offsets(0).get.json)
         committedOffsets ++= Seq(continuousSources(0) -> offset)

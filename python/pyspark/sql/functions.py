@@ -1285,11 +1285,21 @@ def from_utc_timestamp(timestamp, tz):
     that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
     '2017-07-14 03:40:00.0'.
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(from_utc_timestamp(df.t, "PST").alias('local_time')).collect()
+    :param timestamp: the column that contains timestamps
+    :param tz: a string that has the ID of timezone, e.g. "GMT", "America/Los_Angeles", etc
+
+    .. versionchanged:: 2.4
+       `tz` can take a :class:`Column` containing timezone ID strings.
+
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00', 'JST')], ['ts', 'tz'])
+    >>> df.select(from_utc_timestamp(df.ts, "PST").alias('local_time')).collect()
     [Row(local_time=datetime.datetime(1997, 2, 28, 2, 30))]
+    >>> df.select(from_utc_timestamp(df.ts, df.tz).alias('local_time')).collect()
+    [Row(local_time=datetime.datetime(1997, 2, 28, 19, 30))]
     """
     sc = SparkContext._active_spark_context
+    if isinstance(tz, Column):
+        tz = _to_java_column(tz)
     return Column(sc._jvm.functions.from_utc_timestamp(_to_java_column(timestamp), tz))
 
 
@@ -1300,11 +1310,21 @@ def to_utc_timestamp(timestamp, tz):
     zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
     '2017-07-14 01:40:00.0'.
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
+    :param timestamp: the column that contains timestamps
+    :param tz: a string that has the ID of timezone, e.g. "GMT", "America/Los_Angeles", etc
+
+    .. versionchanged:: 2.4
+       `tz` can take a :class:`Column` containing timezone ID strings.
+
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00', 'JST')], ['ts', 'tz'])
     >>> df.select(to_utc_timestamp(df.ts, "PST").alias('utc_time')).collect()
     [Row(utc_time=datetime.datetime(1997, 2, 28, 18, 30))]
+    >>> df.select(to_utc_timestamp(df.ts, df.tz).alias('utc_time')).collect()
+    [Row(utc_time=datetime.datetime(1997, 2, 28, 1, 30))]
     """
     sc = SparkContext._active_spark_context
+    if isinstance(tz, Column):
+        tz = _to_java_column(tz)
     return Column(sc._jvm.functions.to_utc_timestamp(_to_java_column(timestamp), tz))
 
 
@@ -2013,6 +2033,25 @@ def array_distinct(col):
     return Column(sc._jvm.functions.array_distinct(_to_java_column(col)))
 
 
+@ignore_unicode_prefix
+@since(2.4)
+def array_union(col1, col2):
+    """
+    Collection function: returns an array of the elements in the union of col1 and col2,
+    without duplicates.
+
+    :param col1: name of column containing array
+    :param col2: name of column containing array
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
+    >>> df.select(array_union(df.c1, df.c2)).collect()
+    [Row(array_union(c1, c2)=[u'b', u'a', u'c', u'd', u'f'])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_union(_to_java_column(col1), _to_java_column(col2)))
+
+
 @since(1.4)
 def explode(col):
     """Returns a new row for each element in the given array or map.
@@ -2189,11 +2228,16 @@ def from_json(col, schema, options={}):
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(from_json(df.value, schema).alias("json")).collect()
     [Row(json=[Row(a=1)])]
+    >>> schema = schema_of_json(lit('''{"a": 0}'''))
+    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=Row(a=1))]
     """
 
     sc = SparkContext._active_spark_context
     if isinstance(schema, DataType):
         schema = schema.json()
+    elif isinstance(schema, Column):
+        schema = _to_java_column(schema)
     jc = sc._jvm.functions.from_json(_to_java_column(col), schema, options)
     return Column(jc)
 
@@ -2232,6 +2276,28 @@ def to_json(col, options={}):
 
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.to_json(_to_java_column(col), options)
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(2.4)
+def schema_of_json(col):
+    """
+    Parses a column containing a JSON string and infers its schema in DDL format.
+
+    :param col: string column in json format
+
+    >>> from pyspark.sql.types import *
+    >>> data = [(1, '{"a": 1}')]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(schema_of_json(df.value).alias("json")).collect()
+    [Row(json=u'struct<a:bigint>')]
+    >>> df.select(schema_of_json(lit('{"a": 0}')).alias("json")).collect()
+    [Row(json=u'struct<a:bigint>')]
+    """
+
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.schema_of_json(_to_java_column(col))
     return Column(jc)
 
 
@@ -2314,6 +2380,23 @@ def array_sort(col):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_sort(_to_java_column(col)))
+
+
+@since(2.4)
+def shuffle(col):
+    """
+    Collection function: Generates a random permutation of the given array.
+
+    .. note:: The function is non-deterministic.
+
+    :param col: name of column or expression
+
+    >>> df = spark.createDataFrame([([1, 20, 3, 5],), ([1, 20, None, 3],)], ['data'])
+    >>> df.select(shuffle(df.data).alias('s')).collect()  # doctest: +SKIP
+    [Row(s=[3, 1, 5, 20]), Row(s=[20, None, 3, 1])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.shuffle(_to_java_column(col)))
 
 
 @since(1.5)
@@ -2461,6 +2544,50 @@ def arrays_zip(*cols):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.arrays_zip(_to_seq(sc, cols, _to_java_column)))
+
+
+@since(2.4)
+def map_concat(*cols):
+    """Returns the union of all the given maps.
+
+    :param cols: list of column names (string) or list of :class:`Column` expressions
+
+    >>> from pyspark.sql.functions import map_concat
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as map1, map(3, 'c', 1, 'd') as map2")
+    >>> df.select(map_concat("map1", "map2").alias("map3")).show(truncate=False)
+    +--------------------------------+
+    |map3                            |
+    +--------------------------------+
+    |[1 -> a, 2 -> b, 3 -> c, 1 -> d]|
+    +--------------------------------+
+    """
+    sc = SparkContext._active_spark_context
+    if len(cols) == 1 and isinstance(cols[0], (list, set)):
+        cols = cols[0]
+    jc = sc._jvm.functions.map_concat(_to_seq(sc, cols, _to_java_column))
+    return Column(jc)
+
+
+@since(2.4)
+def sequence(start, stop, step=None):
+    """
+    Generate a sequence of integers from `start` to `stop`, incrementing by `step`.
+    If `step` is not set, incrementing by 1 if `start` is less than or equal to `stop`,
+    otherwise -1.
+
+    >>> df1 = spark.createDataFrame([(-2, 2)], ('C1', 'C2'))
+    >>> df1.select(sequence('C1', 'C2').alias('r')).collect()
+    [Row(r=[-2, -1, 0, 1, 2])]
+    >>> df2 = spark.createDataFrame([(4, -4, -2)], ('C1', 'C2', 'C3'))
+    >>> df2.select(sequence('C1', 'C2', 'C3').alias('r')).collect()
+    [Row(r=[4, 2, 0, -2, -4])]
+    """
+    sc = SparkContext._active_spark_context
+    if step is None:
+        return Column(sc._jvm.functions.sequence(_to_java_column(start), _to_java_column(stop)))
+    else:
+        return Column(sc._jvm.functions.sequence(
+            _to_java_column(start), _to_java_column(stop), _to_java_column(step)))
 
 
 # ---------------------------- User Defined Function ----------------------------------

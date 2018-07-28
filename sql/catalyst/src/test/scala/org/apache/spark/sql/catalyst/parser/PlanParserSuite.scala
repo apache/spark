@@ -65,7 +65,6 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select * from a union distinct select * from b", Distinct(a.union(b)))
     assertEqual("select * from a union all select * from b", a.union(b))
     assertEqual("select * from a except select * from b", a.except(b))
-    intercept("select * from a except all select * from b", "EXCEPT ALL is not supported.")
     assertEqual("select * from a except distinct select * from b", a.except(b))
     assertEqual("select * from a minus select * from b", a.except(b))
     intercept("select * from a minus all select * from b", "MINUS ALL is not supported.")
