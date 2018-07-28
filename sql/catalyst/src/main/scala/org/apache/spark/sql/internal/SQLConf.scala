@@ -1451,17 +1451,6 @@ object SQLConf {
     .intConf
     .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
     .createWithDefault(Deflater.DEFAULT_COMPRESSION)
-
-  val AVRO_XZ_LEVEL = buildConf("spark.sql.avro.xz.level")
-    .doc("Compression level for the XZ codec used in writing of AVRO files. " +
-      "Valid value must be in the range of from 0 to 9 inclusive: " +
-      "0-3 for fast with medium compression, 4-6 are fairly slow levels with high compression. " +
-      "The levels 7-9 are like the level 6 but use bigger dictionaries and have higher " +
-      "compressor and decompressor memory requirements. " +
-      s"Default compression level of XZ is ${LZMA2Options.PRESET_DEFAULT}.")
-    .intConf
-    .checkValues((0 to 9).toSet)
-    .createWithDefault(LZMA2Options.PRESET_DEFAULT)
 }
 
 /**
@@ -1851,8 +1840,6 @@ class SQLConf extends Serializable with Logging {
   def avroCompressionCodec: String = getConf(SQLConf.AVRO_COMPRESSION_CODEC)
 
   def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
-
-  def avroXZLevel: Int = getConf(SQLConf.AVRO_XZ_LEVEL)
 
   /** ********************** SQLConf functionality methods ************ */
 

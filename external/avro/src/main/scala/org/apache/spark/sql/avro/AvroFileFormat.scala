@@ -19,12 +19,12 @@ package org.apache.spark.sql.avro
 
 import java.io._
 import java.net.URI
-import java.util.zip.Deflater
 
 import scala.util.control.NonFatal
 
 import org.apache.avro.Schema
-import org.apache.avro.file.{DataFileConstants, DataFileReader}
+import org.apache.avro.file.DataFileConstants._
+import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
 import org.apache.avro.mapreduce.AvroJob
@@ -118,23 +118,18 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
 
     AvroJob.setOutputKeySchema(job, outputAvroSchema)
 
-    val compression = parsedOptions.compression
-    val level = compression match {
-      case "uncompressed" | DataFileConstants.SNAPPY_CODEC | DataFileConstants.BZIP2_CODEC => ""
-      case DataFileConstants.DEFLATE_CODEC =>
+    val (compression, levelInfo) = parsedOptions.compression match {
+      case "uncompressed" => (NULL_CODEC, "")
+      case codec @ (SNAPPY_CODEC | BZIP2_CODEC | XZ_CODEC) => (codec, "")
+      case DEFLATE_CODEC =>
         val deflateLevel = spark.sessionState.conf.avroDeflateLevel
         job.getConfiguration.setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, deflateLevel)
-        s"(level = $deflateLevel)"
-      case DataFileConstants.XZ_CODEC =>
-        val xzLevel = spark.sessionState.conf.avroXZLevel
-        job.getConfiguration.setInt(AvroOutputFormat.XZ_LEVEL_KEY, xzLevel)
-        s"(level = $xzLevel)"
-      case unknown: String =>
-        throw new IllegalArgumentException(s"Invalid compression codec: $unknown")
+        (DEFLATE_CODEC, s" (level = $deflateLevel)")
+      case unknown => throw new IllegalArgumentException(s"Invalid compression codec: $unknown")
     }
     job.getConfiguration.setBoolean("mapred.output.compress", compression != "uncompressed")
     job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, compression)
-    log.info(s"Compressing Avro output using $compression $level")
+    log.info(s"Compressing Avro output using the $compression codec$levelInfo")
 
     new AvroOutputWriterFactory(dataSchema, outputAvroSchema.toString)
   }
