@@ -79,7 +79,7 @@ trait CheckAnalysis extends PredicateHelper {
           limitExpr.sql)
       case e if e.asInstanceOf[Int] < 0 => failAnalysis(
         "The limit expression must be equal to or greater than 0, but got " +
-          evalledExpression.asInstanceOf[Int])
+          e.asInstanceOf[Int])
       case _ => // OK
     }
   }
