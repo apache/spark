@@ -31,6 +31,7 @@ import scala.util.{Failure, Success, Try}
 import scala.xml.Node
 
 import com.fasterxml.jackson.annotation.JsonIgnore
+import com.google.common.cache.CacheBuilder
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.MoreExecutors
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
@@ -112,6 +113,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   logInfo(s"History server ui acls " + (if (HISTORY_UI_ACLS_ENABLE) "enabled" else "disabled") +
     "; users with admin permissions: " + HISTORY_UI_ADMIN_ACLS.toString +
     "; groups with admin permissions" + HISTORY_UI_ADMIN_ACLS_GROUPS.toString)
+
+  protected val expireTimeInSeconds = conf.get(MAX_LOG_AGE_S)
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
   protected val fs: FileSystem = new Path(logDir).getFileSystem(hadoopConf)
@@ -733,7 +736,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Delete event logs from the log directory according to the clean policy defined by the user.
    */
   private[history] def cleanLogs(): Unit = Utils.tryLog {
-    val maxTime = clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000
+    val maxTime = clock.getTimeMillis() - expireTimeInSeconds * 1000
 
     val expired = listing.view(classOf[ApplicationInfoWrapper])
       .index("oldestAttempt")
@@ -779,6 +782,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         listing.delete(classOf[LogInfo], log.logPath)
       }
     }
+    // Ensure the cache gets rid of the expired entries.
+    cache.cleanUp()
   }
 
   /**
@@ -975,27 +980,31 @@ private[history] object FsHistoryProvider {
 
 private[history] trait CachedFileSystemHelper extends Logging {
   protected def fs: FileSystem
+  protected def expireTimeInSeconds: Long
 
   /**
-   * Cache containing the result for the already checked files.
+   * LRU cache containing the result for the already checked files.
    */
   // Visible for testing.
-  private[history] val cache = new mutable.HashMap[String, Boolean]
+  private[history] val cache = CacheBuilder.newBuilder()
+    .expireAfterAccess(expireTimeInSeconds, TimeUnit.SECONDS)
+    .build[String, java.lang.Boolean]()
 
   private val userName = UserGroupInformation.getCurrentUser.getShortUserName
 
   private[history] def checkAccessPermission(path: Path, mode: FsAction): Boolean = {
-    cache.getOrElse(path.getName, doCheckAccessPermission(path, mode))
+    Option(cache.getIfPresent(path.getName)).map(_.booleanValue())
+      .getOrElse(doCheckAccessPermission(path, mode))
   }
 
   private def doCheckAccessPermission(path: Path, mode: FsAction): Boolean = {
     Try(fs.access(path, mode)) match {
       case Success(_) =>
-        cache(path.getName) = true
+        cache.put(path.getName, true)
         true
       case Failure(e: AccessControlException) =>
         logInfo(s"Permission denied for user '$userName' to access $path", e)
-        cache(path.getName) = false
+        cache.put(path.getName, false)
         false
       case Failure(_) =>
         // When we are unable to check whether we can access the file we don't cache the result

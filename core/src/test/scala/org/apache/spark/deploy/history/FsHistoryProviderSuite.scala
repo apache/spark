@@ -834,13 +834,19 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
           }
         }
       })
+
+      override protected def expireTimeInSeconds = 5L
     }
     assert(helper.checkAccessPermission(new Path("accessGranted"), FsAction.READ))
-    assert(helper.cache("accessGranted"))
+    assert(helper.cache.getIfPresent("accessGranted"))
     assert(!helper.checkAccessPermission(new Path("accessDenied"), FsAction.READ))
-    assert(!helper.cache("accessDenied"))
+    assert(!helper.cache.getIfPresent("accessDenied"))
     assert(!helper.checkAccessPermission(new Path("nonExisting"), FsAction.READ))
-    assert(!helper.cache.contains("nonExisting"))
+    assert(helper.cache.getIfPresent("nonExisting") == null)
+    Thread.sleep(5000) // wait for the cache entries to expire
+    helper.cache.cleanUp()
+    assert(helper.cache.getIfPresent("accessGranted") == null)
+    assert(helper.cache.getIfPresent("accessGranted") == null)
   }
 
   /**
