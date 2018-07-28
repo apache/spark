@@ -1455,7 +1455,7 @@ object SQLConf {
       .internal()
       .doc("If True, File listing for compute statistics is done in parallel.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 }
 
 /**
