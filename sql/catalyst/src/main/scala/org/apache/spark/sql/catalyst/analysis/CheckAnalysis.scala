@@ -62,19 +62,25 @@ trait CheckAnalysis extends PredicateHelper {
 
   private def checkLimitClause(limitExpr: Expression): Unit = {
     limitExpr match {
-      case e if e.nullable => failAnalysis(
-        "The limit expression must not be nullable, but got " +
-          limitExpr.sql)
       case e if !e.foldable => failAnalysis(
         "The limit expression must evaluate to a constant value, but got " +
           limitExpr.sql)
       case e if e.dataType != IntegerType => failAnalysis(
         s"The limit expression must be integer type, but got " +
           e.dataType.simpleString)
-      case e if e.eval().asInstanceOf[Int] < 0 => failAnalysis(
+      case _ => // OK
+    }
+
+    val evalledExpression = limitExpr.eval()
+
+    evalledExpression match {
+      case null => failAnalysis(
+        "The evaluated limit expression must not be null, but got " +
+          limitExpr.sql)
+      case e if e.asInstanceOf[Int] < 0 => failAnalysis(
         "The limit expression must be equal to or greater than 0, but got " +
-          e.eval().asInstanceOf[Int])
-      case e => // OK
+          evalledExpression.asInstanceOf[Int])
+      case _ => // OK
     }
   }
 

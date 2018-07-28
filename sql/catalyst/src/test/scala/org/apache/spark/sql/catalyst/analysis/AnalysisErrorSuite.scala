@@ -400,9 +400,9 @@ class AnalysisErrorSuite extends AnalysisTest {
   )
 
   errorTest(
-    "limit clause must not be nullable",
+    "an evaluated limit class must not be null",
     testRelation.limit(Literal(null, IntegerType)),
-    "The limit expression must not be nullable, but got " :: Nil
+    "The evaluated limit expression must not be null, but got " :: Nil
   )
 
   errorTest(
