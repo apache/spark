@@ -158,8 +158,8 @@ object CSVBenchmarks {
   }
 
   def main(args: Array[String]): Unit = {
-//    quotedValuesBenchmark(rowsNum = 50 * 1000, numIters = 3)
-//    multiColumnsBenchmark(rowsNum = 1000 * 1000)
+    quotedValuesBenchmark(rowsNum = 50 * 1000, numIters = 3)
+    multiColumnsBenchmark(rowsNum = 1000 * 1000)
     countBenchmark(10 * 1000 * 1000)
   }
 }
