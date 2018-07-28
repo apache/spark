@@ -538,19 +538,19 @@ class DateTimeUtilsSuite extends SparkFunSuite {
 
   test("daysToMillis and millisToDays") {
     // There are some days are skipped entirely in some timezone, skip them here.
-    val skipped_days = Map[String, Int](
-      "Kwajalein" -> 8632,
-      "Pacific/Apia" -> 15338,
-      "Pacific/Enderbury" -> 9131,
-      "Pacific/Fakaofo" -> 15338,
-      "Pacific/Kiritimati" -> 9131,
-      "Pacific/Kwajalein" -> 8632,
-      "MIT" -> 15338)
+    val skipped_days = Map[String, Set[Int]](
+      "Kwajalein" -> Set(8632),
+      "Pacific/Apia" -> Set(15338),
+      "Pacific/Enderbury" -> Set(9130, 9131),
+      "Pacific/Fakaofo" -> Set(15338),
+      "Pacific/Kiritimati" -> Set(9130, 9131),
+      "Pacific/Kwajalein" -> Set(8632),
+      "MIT" -> Set(15338))
     for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
       DateTimeTestUtils.withDefaultTimeZone(tz) {
-        val skipped = skipped_days.getOrElse(tz.getID, Int.MinValue)
+        val skipped = skipped_days.getOrElse(tz.getID, Set.empty)
         (-20000 to 20000).foreach { d =>
-          if (d != skipped) {
+          if (!skipped.contains(d)) {
             assert(millisToDays(daysToMillis(d)) === d,
               s"Round trip of ${d} did not work in tz ${tz}")
           }
