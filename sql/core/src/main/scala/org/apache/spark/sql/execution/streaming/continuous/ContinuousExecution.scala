@@ -314,7 +314,7 @@ class ContinuousExecution(
       // Record offsets before updating `committedOffsets`
       recordTriggerOffsets(from = committedOffsets, to = availableOffsets)
       if (queryExecutionThread.isAlive) {
-        commitLog.add(epoch)
+        commitLog.add(epoch, CommitMetadata())
         val offset =
           continuousSources(0).deserializeOffset(offsetLog.get(epoch).get.offsets(0).get.json)
         committedOffsets ++= Seq(continuousSources(0) -> offset)

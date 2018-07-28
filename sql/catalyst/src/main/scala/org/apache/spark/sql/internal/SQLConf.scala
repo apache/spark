@@ -20,6 +20,7 @@ package org.apache.spark.sql.internal
 import java.util.{Locale, NoSuchElementException, Properties, TimeZone}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import java.util.zip.Deflater
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
@@ -126,6 +127,14 @@ object SQLConf {
       confGetter.get()()
     }
   }
+
+  val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
+    .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
+      "specified by their rule names and separated by comma. It is not guaranteed that all the " +
+      "rules in this configuration will eventually be excluded, as some rules are necessary " +
+      "for correctness. The optimizer will log the rules that have indeed been excluded.")
+    .stringConf
+    .createOptional
 
   val OPTIMIZER_MAX_ITERATIONS = buildConf("spark.sql.optimizer.maxIterations")
     .internal()
@@ -1352,7 +1361,11 @@ object SQLConf {
         "overwriting. In dynamic mode, Spark doesn't delete partitions ahead, and only overwrite " +
         "those partitions that have data written into it at runtime. By default we use static " +
         "mode to keep the same behavior of Spark prior to 2.3. Note that this config doesn't " +
-        "affect Hive serde tables, as they are always overwritten with dynamic mode.")
+        "affect Hive serde tables, as they are always overwritten with dynamic mode. This can " +
+        "also be set as an output option for a data source using key partitionOverwriteMode " +
+        "(which takes precendence over this setting), e.g. " +
+        "dataframe.write.option(\"partitionOverwriteMode\", \"dynamic\").save(path)."
+      )
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(PartitionOverwriteMode.values.map(_.toString))
@@ -1422,6 +1435,20 @@ object SQLConf {
       "This only takes effect when spark.sql.repl.eagerEval.enabled is set to true.")
     .intConf
     .createWithDefault(20)
+
+  val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
+    .doc("Compression codec used in writing of AVRO files. Default codec is snappy.")
+    .stringConf
+    .checkValues(Set("uncompressed", "deflate", "snappy"))
+    .createWithDefault("snappy")
+
+  val AVRO_DEFLATE_LEVEL = buildConf("spark.sql.avro.deflate.level")
+    .doc("Compression level for the deflate codec used in writing of AVRO files. " +
+      "Valid value must be in the range of from 1 to 9 inclusive or -1. " +
+      "The default value is -1 which corresponds to 6 level in the current implementation.")
+    .intConf
+    .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
+    .createWithDefault(Deflater.DEFAULT_COMPRESSION)
 }
 
 /**
@@ -1443,6 +1470,8 @@ class SQLConf extends Serializable with Logging {
   @transient protected val reader = new ConfigReader(settings)
 
   /** ************************ Spark SQL Params/Hints ******************* */
+
+  def optimizerExcludedRules: Option[String] = getConf(OPTIMIZER_EXCLUDED_RULES)
 
   def optimizerMaxIterations: Int = getConf(OPTIMIZER_MAX_ITERATIONS)
 
@@ -1805,6 +1834,10 @@ class SQLConf extends Serializable with Logging {
   def replEagerEvalMaxNumRows: Int = getConf(SQLConf.REPL_EAGER_EVAL_MAX_NUM_ROWS)
 
   def replEagerEvalTruncate: Int = getConf(SQLConf.REPL_EAGER_EVAL_TRUNCATE)
+
+  def avroCompressionCodec: String = getConf(SQLConf.AVRO_COMPRESSION_CODEC)
+
+  def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
 
   /** ********************** SQLConf functionality methods ************ */
 

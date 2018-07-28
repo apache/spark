@@ -316,7 +316,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     // only primitive parameter needs special null handling
     val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil)
-    val expected2 = If(IsNull(double), nullResult, udf2)
+    val expected2 =
+      If(IsNull(double), nullResult, udf2.copy(children = string :: KnowNotNull(double) :: Nil))
     checkUDF(udf2, expected2)
 
     // special null handling should apply to all primitive parameters
@@ -324,7 +325,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val expected3 = If(
       IsNull(short) || IsNull(double),
       nullResult,
-      udf3)
+      udf3.copy(children = KnowNotNull(short) :: KnowNotNull(double) :: Nil))
     checkUDF(udf3, expected3)
 
     // we can skip special null handling for primitive parameters that are not nullable
@@ -336,8 +337,17 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val expected4 = If(
       IsNull(short),
       nullResult,
-      udf4)
+      udf4.copy(children = KnowNotNull(short) :: double.withNullability(false) :: Nil))
     // checkUDF(udf4, expected4)
+  }
+
+  test("SPARK-24891 Fix HandleNullInputsForUDF rule") {
+    val a = testRelation.output(0)
+    val func = (x: Int, y: Int) => x + y
+    val udf1 = ScalaUDF(func, IntegerType, a :: a :: Nil)
+    val udf2 = ScalaUDF(func, IntegerType, a :: udf1 :: Nil)
+    val plan = Project(Alias(udf2, "")() :: Nil, testRelation)
+    comparePlans(plan.analyze, plan.analyze.analyze)
   }
 
   test("SPARK-11863 mixture of aliases and real columns in order by clause - tpcds 19,55,71") {
@@ -543,20 +553,6 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     intercept[IllegalArgumentException] {
       checkPartitioning(numPartitions = 10, exprs = SortOrder('a.attr, Ascending), 'b.attr)
     }
-  }
-
-  test("SPARK-20392: analysis barrier") {
-    // [[AnalysisBarrier]] will be removed after analysis
-    checkAnalysis(
-      Project(Seq(UnresolvedAttribute("tbl.a")),
-        AnalysisBarrier(SubqueryAlias("tbl", testRelation))),
-      Project(testRelation.output, SubqueryAlias("tbl", testRelation)))
-
-    // Verify we won't go through a plan wrapped in a barrier.
-    // Since we wrap an unresolved plan and analyzer won't go through it. It remains unresolved.
-    val barrier = AnalysisBarrier(Project(Seq(UnresolvedAttribute("tbl.b")),
-      SubqueryAlias("tbl", testRelation)))
-    assertAnalysisError(barrier, Seq("cannot resolve '`tbl.b`'"))
   }
 
   test("SPARK-24208: analysis fails on self-join with FlatMapGroupsInPandas") {
