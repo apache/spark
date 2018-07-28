@@ -365,6 +365,7 @@ class RelationalGroupedDataset protected[sql](
 
   /**
    * Pivots a column of the current `DataFrame` and performs the specified aggregation.
+   * This is an overloaded version of the `pivot` method with `pivotColumn` of the `String` type.
    *
    * {{{
    *   // Or without specifying column values (less efficient)
@@ -399,6 +400,7 @@ class RelationalGroupedDataset protected[sql](
 
   /**
    * Pivots a column of the current `DataFrame` and performs the specified aggregation.
+   * This is an overloaded version of the `pivot` method with `pivotColumn` of the `String` type.
    *
    * {{{
    *   // Compute the sum of earnings for each year by course with each course as a separate column
@@ -424,8 +426,9 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * (Java-specific) Pivots a column of the current `DataFrame`
-   * and performs the specified aggregation.
+   * (Java-specific) Pivots a column of the current `DataFrame` and performs the specified
+   * aggregation. This is an overloaded version of the `pivot` method with `pivotColumn` of
+   * the `String` type.
    *
    * @param pivotColumn the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.
