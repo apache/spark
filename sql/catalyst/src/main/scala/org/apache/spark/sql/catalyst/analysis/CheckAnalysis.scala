@@ -650,4 +650,3 @@ trait CheckAnalysis extends PredicateHelper {
     }}
   }
 }
-
