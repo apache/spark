@@ -118,9 +118,7 @@ class PartitionBatchPruningSuite
     testArrayData.map(_._1))
   // Do not filter on binary type
   checkBatchPruning(
-    query = "SELECT _1 FROM pruningBinaryData WHERE _1 == binary(chr(1))",
-    expectedReadPartitions = 5,
-    expectedReadBatches = 10)(Seq(Array(1.toByte)))
+    "SELECT _1 FROM pruningBinaryData WHERE _1 == binary(chr(1))", 5, 10)(Seq(Array(1.toByte)))
 
   // IS NULL
   checkBatchPruning("SELECT key FROM pruningData WHERE value IS NULL", 5, 5) {
