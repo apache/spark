@@ -149,17 +149,17 @@ object CSVBenchmarks {
 
       Count a dataset with 10 columns:      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
       ---------------------------------------------------------------------------------------------
-      Select 10 columns + count()              12903 / 12934          0.8        1290.3       1.0X
-      Select 1 column + count()                  8056 / 8089          1.2         805.6       1.6X
-      count()                                    3309 / 3363          3.0         330.9       3.9X                              24344 / 24642          0.0       24343.8       3.3X
+      Select 10 columns + count()              12598 / 12740          0.8        1259.8       1.0X
+      Select 1 column + count()                  7960 / 8175          1.3         796.0       1.6X
+      count()                                    2332 / 2386          4.3         233.2       5.4X                              24344 / 24642          0.0       24343.8       3.3X
       */
       benchmark.run()
     }
   }
 
   def main(args: Array[String]): Unit = {
-    quotedValuesBenchmark(rowsNum = 50 * 1000, numIters = 3)
-    multiColumnsBenchmark(rowsNum = 1000 * 1000)
+//    quotedValuesBenchmark(rowsNum = 50 * 1000, numIters = 3)
+//    multiColumnsBenchmark(rowsNum = 1000 * 1000)
     countBenchmark(10 * 1000 * 1000)
   }
 }

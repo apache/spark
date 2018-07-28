@@ -203,9 +203,9 @@ object JSONBenchmarks {
 
       Count a dataset with 10 columns:      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
       ---------------------------------------------------------------------------------------------
-      Select 10 columns + count()                9809 / 9901          1.0         980.9       1.0X
-      Select 1 column + count()                  8275 / 8291          1.2         827.5       1.2X
-      count()                                    7676 / 7715          1.3         767.6       1.3X                              24344 / 24642          0.0       24343.8       3.3X
+      Select 10 columns + count()               9961 / 10006          1.0         996.1       1.0X
+      Select 1 column + count()                  8355 / 8470          1.2         835.5       1.2X
+      count()                                    2104 / 2156          4.8         210.4       4.7X                              24344 / 24642          0.0       24343.8       3.3X
       */
       benchmark.run()
     }
