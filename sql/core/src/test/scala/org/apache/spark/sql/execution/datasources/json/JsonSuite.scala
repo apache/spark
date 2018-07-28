@@ -2233,7 +2233,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .option("multiline", "true")
         .options(Map("encoding" -> "UTF-16BE"))
         .json(testFile(fileName))
-        .count()
+        .collect()
     }
     val errMsg = exception.getMessage
 

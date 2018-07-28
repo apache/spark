@@ -139,7 +139,8 @@ object TextInputJsonDataSource extends JsonDataSource {
       input => parser.parse(input, textParser, textToUTF8String),
       parser.options.parseMode,
       schema,
-      parser.options.columnNameOfCorruptRecord)
+      parser.options.columnNameOfCorruptRecord,
+      optimizeEmptySchema = true)
     linesReader.flatMap(safeParser.parse)
   }
 
@@ -223,7 +224,8 @@ object MultiLineJsonDataSource extends JsonDataSource {
       input => parser.parse[InputStream](input, streamParser, partitionedFileString),
       parser.options.parseMode,
       schema,
-      parser.options.columnNameOfCorruptRecord)
+      parser.options.columnNameOfCorruptRecord,
+      optimizeEmptySchema = false)
 
     safeParser.parse(
       CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))))
