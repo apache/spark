@@ -119,8 +119,47 @@ object CSVBenchmarks {
     }
   }
 
+  def countBenchmark(rowsNum: Int): Unit = {
+    val colsNum = 10
+    val benchmark = new Benchmark(s"Count a dataset with $colsNum columns", rowsNum)
+
+    withTempPath { path =>
+      val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", IntegerType))
+      val schema = StructType(fields)
+
+      spark.range(rowsNum)
+        .select(Seq.tabulate(colsNum)(i => lit(i).as(s"col$i")): _*)
+        .write
+        .csv(path.getAbsolutePath)
+
+      val ds = spark.read.schema(schema).csv(path.getAbsolutePath)
+
+      benchmark.addCase(s"Select $colsNum columns + count()", 3) { _ =>
+        ds.select("*").filter((_: Row) => true).count()
+      }
+      benchmark.addCase(s"Select 1 column + count()", 3) { _ =>
+        ds.select($"col1").filter((_: Row) => true).count()
+      }
+      benchmark.addCase(s"count()", 3) { _ =>
+        ds.count()
+      }
+
+      /*
+      Intel(R) Core(TM) i7-7700HQ CPU @ 2.80GHz
+
+      Count a dataset with 10 columns:      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      ---------------------------------------------------------------------------------------------
+      Select 10 columns + count()              12903 / 12934          0.8        1290.3       1.0X
+      Select 1 column + count()                  8056 / 8089          1.2         805.6       1.6X
+      count()                                    3309 / 3363          3.0         330.9       3.9X                              24344 / 24642          0.0       24343.8       3.3X
+      */
+      benchmark.run()
+    }
+  }
+
   def main(args: Array[String]): Unit = {
     quotedValuesBenchmark(rowsNum = 50 * 1000, numIters = 3)
     multiColumnsBenchmark(rowsNum = 1000 * 1000)
+    countBenchmark(10 * 1000 * 1000)
   }
 }
