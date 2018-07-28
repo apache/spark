@@ -17,14 +17,24 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 
 class ResolveHintsSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
+
+  private def intercept(plan: LogicalPlan, messages: String*): Unit = {
+    val analyzer = getAnalyzer(false)
+    val e = intercept[AnalysisException](analyzer.executeAndCheck(plan))
+    messages.foreach { message =>
+      assert(e.message.contains(message))
+    }
+  }
 
   test("invalid hints should be ignored") {
     checkAnalysis(
@@ -119,5 +129,31 @@ class ResolveHintsSuite extends AnalysisTest {
       ),
       testRelation.where('a > 1).select('a).select('a).analyze,
       caseSensitive = false)
+  }
+
+  test("coalesce hint") {
+    checkAnalysis(
+      UnresolvedHint("COALESCE", Seq(Literal(10)), table("TaBlE")),
+      Repartition(10, false, testRelation),  // Default shuffle is false for COALESCE
+      caseSensitive = true)
+    checkAnalysis(
+      UnresolvedHint("COALESCE", Seq(Literal(20), Literal(true)), table("TaBlE")),
+      Repartition(20, true, testRelation),
+      caseSensitive = true)
+    checkAnalysis(
+      UnresolvedHint("REPARTITION", Seq(Literal(100)), table("TaBlE")),
+      Repartition(100, true, testRelation),  // Default shuffle is true for REPARTITION
+      caseSensitive = true)
+    checkAnalysis(
+      UnresolvedHint("REPARTITION", Seq(Literal(200), Literal(false)), table("TaBlE")),
+      Repartition(200, false, testRelation),
+      caseSensitive = true)
+
+    val errMsg = "Coalesce hint expects a partition number and an optional boolean to indicate" +
+      " whether shuffle is allowed"
+    intercept(UnresolvedHint("COALESCE", Seq.empty, table("TaBlE")), errMsg)
+    intercept(UnresolvedHint("COALESCE", Seq(UnresolvedAttribute("a")), table("TaBlE")), errMsg)
+    intercept(UnresolvedHint("COALESCE", Seq(Literal(true)), table("TaBlE")), errMsg)
+    intercept(UnresolvedHint("COALESCE", Seq(Literal(10), Literal(33)), table("TaBlE")), errMsg)
   }
 }

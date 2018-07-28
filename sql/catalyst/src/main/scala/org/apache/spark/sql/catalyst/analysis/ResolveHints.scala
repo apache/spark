@@ -20,10 +20,12 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
 
 /**
@@ -98,6 +100,39 @@ object ResolveHints {
             case unsupported => throw new AnalysisException("Broadcast hint parameter should be " +
               s"an identifier or string but was $unsupported (${unsupported.getClass}")
           }.toSet)
+        }
+    }
+  }
+
+  /**
+   * For coalesce hint, we accept "COALESCE" and "REPARTITION".
+   * Its parameters include a partition number and an optional boolean to indicate
+   * whether shuffle is allowed.
+   */
+  class ResolveCoalesceHints(conf: SQLConf) extends Rule[LogicalPlan] {
+    private val COALESCE_HINT_NAMES = Set("COALESCE", "REPARTITION")
+
+    private def applyCoalesceHint(
+      plan: LogicalPlan,
+      numPartitions: Int,
+      shuffle: Boolean): LogicalPlan = {
+      Repartition(numPartitions, shuffle, plan)
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+      case h: UnresolvedHint if COALESCE_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
+        h.parameters match {
+          case Seq(Literal(i, IntegerType)) =>
+            val defaultShuffle = h.name.toUpperCase(Locale.ROOT) match {
+              case "REPARTITION" => true
+              case _ => false
+            }
+            applyCoalesceHint(h.child, i.asInstanceOf[Int], defaultShuffle)
+          case Seq(Literal(i, IntegerType), Literal(b, BooleanType)) =>
+            applyCoalesceHint(h.child, i.asInstanceOf[Int], b.asInstanceOf[Boolean])
+          case _ =>
+            throw new AnalysisException("Coalesce hint expects a partition number" +
+              " and an optional boolean to indicate whether shuffle is allowed")
         }
     }
   }

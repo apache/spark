@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.execution
 
+import java.net.URI
+
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Concat, SortOrder}
+import org.apache.spark.sql.catalyst.dsl.expressions.star
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Concat, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, RefreshResource}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -36,6 +39,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType
  * defined in the Catalyst module.
  */
 class SparkSqlParserSuite extends AnalysisTest {
+  import org.apache.spark.sql.catalyst.dsl.plans._
 
   val newConf = new SQLConf
   private lazy val parser = new SparkSqlParser(newConf)
@@ -365,5 +369,77 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual(
       "SELECT a || b || c FROM t",
       Project(UnresolvedAlias(concat) :: Nil, UnresolvedRelation(TableIdentifier("t"))))
+  }
+
+  test ("insert overwrite directory hint syntax") {
+    val dummyStorage = CatalogStorageFormat(
+      locationUri = Option(URI.create("/d")),
+      inputFormat = None,
+      outputFormat = None,
+      serde = None,
+      compressed = false,
+      properties = Map.empty)
+    assertEqual(
+      "INSERT OVERWRITE DIRECTORY '/d' USING orc /*+ COALESCE(10) */ SELECT * FROM t",
+      InsertIntoDir(false, dummyStorage, Some("orc"),
+        UnresolvedHint("COALESCE", Seq(Literal(10)),
+          table("t").select(star())), true))
+    assertEqual(
+      "INSERT OVERWRITE DIRECTORY '/d' USING orc /*+ COALESCE(50, true) */ SELECT * FROM t",
+      InsertIntoDir(false, dummyStorage, Some("orc"),
+        UnresolvedHint("COALESCE", Seq(Literal(50), Literal(true)),
+          table("t").select(star())), true))
+    assertEqual(
+      "INSERT OVERWRITE DIRECTORY '/d' USING orc /*+ REPARTITION(100) */ SELECT * FROM t",
+      InsertIntoDir(false, dummyStorage, Some("orc"),
+        UnresolvedHint("REPARTITION", Seq(Literal(100)),
+          table("t").select(star())), true))
+    assertEqual(
+      "INSERT OVERWRITE DIRECTORY '/d' USING orc /*+ REPARTITION(20, false) */ SELECT * FROM t",
+      InsertIntoDir(false, dummyStorage, Some("orc"),
+        UnresolvedHint("REPARTITION", Seq(Literal(20), Literal(false)),
+          table("t").select(star())), true))
+
+    val dummyHiveStorage = CatalogStorageFormat(
+      locationUri = Option(URI.create("/d")),
+      inputFormat = Some("org.apache.hadoop.mapred.TextInputFormat"),
+      outputFormat = Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"),
+      serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"),
+      compressed = false,
+      properties = Map.empty)
+    assertEqual(
+      "INSERT OVERWRITE DIRECTORY '/d' /*+ COALESCE(10) */ SELECT * FROM t",
+      InsertIntoDir(false, dummyHiveStorage, Some("hive"),
+        UnresolvedHint("COALESCE", Seq(Literal(10)),
+          table("t").select(star())), true))
+    assertEqual(
+      "INSERT OVERWRITE DIRECTORY '/d' /*+ COALESCE(50, true) */ SELECT * FROM t",
+      InsertIntoDir(false, dummyHiveStorage, Some("hive"),
+        UnresolvedHint("COALESCE", Seq(Literal(50), Literal(true)),
+          table("t").select(star())), true))
+    assertEqual(
+      "INSERT OVERWRITE DIRECTORY '/d' /*+ REPARTITION(100) */ SELECT * FROM t",
+      InsertIntoDir(false, dummyHiveStorage, Some("hive"),
+        UnresolvedHint("REPARTITION", Seq(Literal(100)),
+          table("t").select(star())), true))
+    assertEqual(
+      "INSERT OVERWRITE DIRECTORY '/d' /*+ REPARTITION(20, false) */ SELECT * FROM t",
+      InsertIntoDir(false, dummyHiveStorage, Some("hive"),
+        UnresolvedHint("REPARTITION", Seq(Literal(20), Literal(false)),
+          table("t").select(star())), true))
+
+    // Multiple hints
+    assertEqual(
+      "INSERT OVERWRITE DIRECTORY '/d' /*+ REPARTITION(100), COALESCE(50, true), COALESCE(10)" +
+        " */ SELECT * FROM t",
+      InsertIntoDir(false, dummyHiveStorage, Some("hive"),
+        UnresolvedHint("REPARTITION", Seq(Literal(100)),
+          UnresolvedHint("COALESCE", Seq(Literal(50), Literal(true)),
+            UnresolvedHint("COALESCE", Seq(Literal(10)),
+              table("t").select(star())))), true))
+
+    // Wrong hint location
+    intercept("INSERT OVERWRITE DIRECTORY /*+ COALESCE(10) */ '/d' SELECT * FROM t",
+      "no viable alternative at input")
   }
 }

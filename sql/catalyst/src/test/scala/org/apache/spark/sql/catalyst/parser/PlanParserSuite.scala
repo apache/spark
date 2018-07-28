@@ -662,6 +662,62 @@ class PlanParserSuite extends AnalysisTest {
     )
   }
 
+  test ("insert hint syntax") {
+    assertEqual(
+      "INSERT INTO s /*+ COALESCE(10) */ SELECT * FROM t",
+      InsertIntoTable(table("s"), Map.empty,
+        UnresolvedHint("COALESCE", Seq(Literal(10)),
+          table("t").select(star())), false, false))
+    assertEqual(
+      "INSERT INTO TABLE s /*+ COALESCE(50, true) */ SELECT * FROM t",
+      InsertIntoTable(table("s"), Map.empty,
+        UnresolvedHint("COALESCE", Seq(Literal(50), Literal(true)),
+          table("t").select(star())), false, false))
+    assertEqual(
+      "INSERT INTO s /*+ REPARTITION(100) */ SELECT * FROM t",
+      InsertIntoTable(table("s"), Map.empty,
+        UnresolvedHint("REPARTITION", Seq(Literal(100)),
+          table("t").select(star())), false, false))
+    assertEqual(
+      "INSERT INTO TABLE s /*+ REPARTITION(20, false) */ SELECT * FROM t",
+      InsertIntoTable(table("s"), Map.empty,
+        UnresolvedHint("REPARTITION", Seq(Literal(20), Literal(false)),
+          table("t").select(star())), false, false))
+    assertEqual(
+      "INSERT OVERWRITE TABLE s /*+ COALESCE(10) */ SELECT * FROM t",
+      InsertIntoTable(table("s"), Map.empty,
+        UnresolvedHint("COALESCE", Seq(Literal(10)),
+          table("t").select(star())), true, false))
+    assertEqual(
+      "INSERT OVERWRITE TABLE s /*+ COALESCE(50, true) */ SELECT * FROM t",
+      InsertIntoTable(table("s"), Map.empty,
+        UnresolvedHint("COALESCE", Seq(Literal(50), Literal(true)),
+          table("t").select(star())), true, false))
+    assertEqual(
+      "INSERT OVERWRITE TABLE s /*+ REPARTITION(100) */ SELECT * FROM t",
+      InsertIntoTable(table("s"), Map.empty,
+        UnresolvedHint("REPARTITION", Seq(Literal(100)),
+          table("t").select(star())), true, false))
+    assertEqual(
+      "INSERT OVERWRITE TABLE s /*+ REPARTITION(20, false) */ SELECT * FROM t",
+      InsertIntoTable(table("s"), Map.empty,
+        UnresolvedHint("REPARTITION", Seq(Literal(20), Literal(false)),
+          table("t").select(star())), true, false))
+
+    // Multiple hints
+    assertEqual(
+      "INSERT INTO s /*+ REPARTITION(100), COALESCE(50, true), COALESCE(10) */ SELECT * FROM t",
+      InsertIntoTable(table("s"), Map.empty,
+        UnresolvedHint("REPARTITION", Seq(Literal(100)),
+          UnresolvedHint("COALESCE", Seq(Literal(50), Literal(true)),
+            UnresolvedHint("COALESCE", Seq(Literal(10)),
+              table("t").select(star())))), false, false))
+
+    // Wrong hint location
+    intercept("INSERT INTO /*+ COALESCE(10) */ s SELECT * FROM t",
+      "extraneous input '/*+' expecting")
+  }
+
   test("TRIM function") {
     intercept("select ltrim(both 'S' from 'SS abc S'", "missing ')' at '<EOF>'")
     intercept("select rtrim(trailing 'S' from 'SS abc S'", "missing ')' at '<EOF>'")
