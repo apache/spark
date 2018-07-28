@@ -80,7 +80,7 @@ trait CheckAnalysis extends PredicateHelper {
       case e if e.asInstanceOf[Int] < 0 => failAnalysis(
         "The limit expression must be equal to or greater than 0, but got " +
           e.asInstanceOf[Int])
-      case _ => // OK
+      case e => // OK
     }
   }
 
@@ -647,6 +647,7 @@ trait CheckAnalysis extends PredicateHelper {
       // are not allowed to have any correlated expressions.
       case p =>
         failOnOuterReferenceInSubTree(p)
-    }
+    }}
   }
 }
+
