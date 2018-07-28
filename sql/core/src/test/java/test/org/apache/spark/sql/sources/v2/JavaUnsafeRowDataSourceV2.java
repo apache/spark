@@ -20,6 +20,7 @@ package test.org.apache.spark.sql.sources.v2;
 import java.io.IOException;
 import java.util.List;
 
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
@@ -29,7 +30,7 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
 
-  class Reader implements DataSourceReader, SupportsScanUnsafeRow {
+  class Reader implements DataSourceReader {
     private final StructType schema = new StructType().add("i", "int").add("j", "int");
 
     @Override
@@ -38,7 +39,7 @@ public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<InputPartition<UnsafeRow>> planUnsafeInputPartitions() {
+    public List<InputPartition<InternalRow>> planInputPartitions() {
       return java.util.Arrays.asList(
         new JavaUnsafeRowInputPartition(0, 5),
         new JavaUnsafeRowInputPartition(5, 10));
@@ -46,7 +47,7 @@ public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
   }
 
   static class JavaUnsafeRowInputPartition
-      implements InputPartition<UnsafeRow>, InputPartitionReader<UnsafeRow> {
+      implements InputPartition<InternalRow>, InputPartitionReader<InternalRow> {
     private int start;
     private int end;
     private UnsafeRow row;
@@ -59,7 +60,7 @@ public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public InputPartitionReader<UnsafeRow> createPartitionReader() {
+    public InputPartitionReader<InternalRow> createPartitionReader() {
       return new JavaUnsafeRowInputPartition(start - 1, end);
     }
 

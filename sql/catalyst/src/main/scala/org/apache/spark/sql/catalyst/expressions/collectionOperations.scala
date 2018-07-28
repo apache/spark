@@ -64,7 +64,7 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
         TypeCheckResult.TypeCheckSuccess
       case _ => TypeCheckResult.TypeCheckFailure(s"input to function $prettyName should have " +
         s"been two ${ArrayType.simpleString}s with same element type, but it's " +
-        s"[${left.dataType.simpleString}, ${right.dataType.simpleString}]")
+        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}]")
     }
   }
 }
@@ -509,7 +509,7 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     if (children.exists(!_.dataType.isInstanceOf[MapType])) {
       TypeCheckResult.TypeCheckFailure(
         s"input to $funcName should all be of type map, but it's " +
-          children.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+          children.map(_.dataType.catalogString).mkString("[", ", ", "]"))
     } else {
       TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), funcName)
     }
@@ -571,16 +571,25 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
         |$mapDataClass ${ev.value} = null;
       """.stripMargin
 
-    val assignments = mapCodes.zipWithIndex.map { case (m, i) =>
-      s"""
-         |if (!$hasNullName) {
-         |  ${m.code}
-         |  $argsName[$i] = ${m.value};
-         |  if (${m.isNull}) {
-         |    $hasNullName = true;
-         |  }
-         |}
-       """.stripMargin
+    val assignments = mapCodes.zip(children.map(_.nullable)).zipWithIndex.map {
+      case ((m, true), i) =>
+        s"""
+           |if (!$hasNullName) {
+           |  ${m.code}
+           |  if (!${m.isNull}) {
+           |    $argsName[$i] = ${m.value};
+           |  } else {
+           |    $hasNullName = true;
+           |  }
+           |}
+         """.stripMargin
+      case ((m, false), i) =>
+        s"""
+           |if (!$hasNullName) {
+           |  ${m.code}
+           |  $argsName[$i] = ${m.value};
+           |}
+         """.stripMargin
     }
 
     val codes = ctx.splitExpressionsWithCurrentInputs(
@@ -601,17 +610,21 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     val finKeysName = ctx.freshName("finalKeys")
     val finValsName = ctx.freshName("finalValues")
 
-    val keyConcatenator = if (CodeGenerator.isPrimitiveType(keyType)) {
+    val keyConcat = if (CodeGenerator.isPrimitiveType(keyType)) {
       genCodeForPrimitiveArrays(ctx, keyType, false)
     } else {
       genCodeForNonPrimitiveArrays(ctx, keyType)
     }
 
-    val valueConcatenator = if (CodeGenerator.isPrimitiveType(valueType)) {
-      genCodeForPrimitiveArrays(ctx, valueType, dataType.valueContainsNull)
-    } else {
-      genCodeForNonPrimitiveArrays(ctx, valueType)
-    }
+    val valueConcat =
+      if (valueType.sameType(keyType) &&
+          !(CodeGenerator.isPrimitiveType(valueType) && dataType.valueContainsNull)) {
+        keyConcat
+      } else if (CodeGenerator.isPrimitiveType(valueType)) {
+        genCodeForPrimitiveArrays(ctx, valueType, dataType.valueContainsNull)
+      } else {
+        genCodeForNonPrimitiveArrays(ctx, valueType)
+      }
 
     val keyArgsName = ctx.freshName("keyArgs")
     val valArgsName = ctx.freshName("valArgs")
@@ -633,9 +646,9 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
         |       $numElementsName + " elements due to exceeding the map size limit " +
         |       "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
         |  }
-        |  $arrayDataClass $finKeysName = $keyConcatenator.concat($keyArgsName,
+        |  $arrayDataClass $finKeysName = $keyConcat($keyArgsName,
         |    (int) $numElementsName);
-        |  $arrayDataClass $finValsName = $valueConcatenator.concat($valArgsName,
+        |  $arrayDataClass $finValsName = $valueConcat($valArgsName,
         |    (int) $numElementsName);
         |  ${ev.value} = new $arrayBasedMapDataClass($finKeysName, $finValsName);
         |}
@@ -677,20 +690,23 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
       setterCode1
     }
 
-    s"""
-       |new Object() {
-       |  public ArrayData concat(${classOf[ArrayData].getName}[] $argsName, int $numElemName) {
-       |    ${ctx.createUnsafeArray(arrayData, numElemName, elementType, s" $prettyName failed.")}
-       |    int $counter = 0;
-       |    for (int y = 0; y < ${children.length}; y++) {
-       |      for (int z = 0; z < $argsName[y].numElements(); z++) {
-       |        $setterCode
-       |        $counter++;
-       |      }
-       |    }
-       |    return $arrayData;
-       |  }
-       |}""".stripMargin.stripPrefix("\n")
+    val concat = ctx.freshName("concat")
+    val concatDef =
+      s"""
+         |private ArrayData $concat(ArrayData[] $argsName, int $numElemName) {
+         |  ${ctx.createUnsafeArray(arrayData, numElemName, elementType, s" $prettyName failed.")}
+         |  int $counter = 0;
+         |  for (int y = 0; y < ${children.length}; y++) {
+         |    for (int z = 0; z < $argsName[y].numElements(); z++) {
+         |      $setterCode
+         |      $counter++;
+         |    }
+         |  }
+         |  return $arrayData;
+         |}
+       """.stripMargin
+
+    ctx.addNewFunction(concat, concatDef)
   }
 
   private def genCodeForNonPrimitiveArrays(ctx: CodegenContext, elementType: DataType): String = {
@@ -700,20 +716,23 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     val argsName = ctx.freshName("args")
     val numElemName = ctx.freshName("numElements")
 
-    s"""
-       |new Object() {
-       |  public ArrayData concat(${classOf[ArrayData].getName}[] $argsName, int $numElemName) {;
-       |    Object[] $arrayData = new Object[$numElemName];
-       |    int $counter = 0;
-       |    for (int y = 0; y < ${children.length}; y++) {
-       |      for (int z = 0; z < $argsName[y].numElements(); z++) {
-       |        $arrayData[$counter] = ${CodeGenerator.getValue(s"$argsName[y]", elementType, "z")};
-       |        $counter++;
-       |      }
-       |    }
-       |    return new $genericArrayClass($arrayData);
-       |  }
-       |}""".stripMargin.stripPrefix("\n")
+    val concat = ctx.freshName("concat")
+    val concatDef =
+      s"""
+         |private ArrayData $concat(ArrayData[] $argsName, int $numElemName) {
+         |  Object[] $arrayData = new Object[$numElemName];
+         |  int $counter = 0;
+         |  for (int y = 0; y < ${children.length}; y++) {
+         |    for (int z = 0; z < $argsName[y].numElements(); z++) {
+         |      $arrayData[$counter] = ${CodeGenerator.getValue(s"$argsName[y]", elementType, "z")};
+         |      $counter++;
+         |    }
+         |  }
+         |  return new $genericArrayClass($arrayData);
+         |}
+       """.stripMargin
+
+    ctx.addNewFunction(concat, concatDef)
   }
 
   override def prettyName: String = "map_concat"
@@ -751,7 +770,7 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
   override def checkInputDataTypes(): TypeCheckResult = dataTypeDetails match {
     case Some(_) => TypeCheckResult.TypeCheckSuccess
     case None => TypeCheckResult.TypeCheckFailure(s"'${child.sql}' is of " +
-      s"${child.dataType.simpleString} type. $prettyName accepts only arrays of pair structs.")
+      s"${child.dataType.catalogString} type. $prettyName accepts only arrays of pair structs.")
   }
 
   override protected def nullSafeEval(input: Any): Any = {
@@ -1118,7 +1137,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
             "Sort order in second argument requires a boolean literal.")
       }
     case ArrayType(dt, _) =>
-      val dtSimple = dt.simpleString
+      val dtSimple = dt.catalogString
       TypeCheckResult.TypeCheckFailure(
         s"$prettyName does not support sorting array of type $dtSimple which is not orderable")
     case _ =>
@@ -1166,7 +1185,7 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLi
     case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
       TypeCheckResult.TypeCheckSuccess
     case ArrayType(dt, _) =>
-      val dtSimple = dt.simpleString
+      val dtSimple = dt.catalogString
       TypeCheckResult.TypeCheckFailure(
         s"$prettyName does not support sorting array of type $dtSimple which is not orderable")
     case _ =>
@@ -1182,6 +1201,112 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLi
   }
 
   override def prettyName: String = "array_sort"
+}
+
+/**
+ * Returns a random permutation of the given array.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(array) - Returns a random permutation of the given array.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 20, 3, 5));
+       [3, 1, 5, 20]
+      > SELECT _FUNC_(array(1, 20, null, 3));
+       [20, null, 3, 1]
+  """,
+  note = "The function is non-deterministic.",
+  since = "2.4.0")
+case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
+  extends UnaryExpression with ExpectsInputTypes with Stateful {
+
+  def this(child: Expression) = this(child, None)
+
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && randomSeed.isDefined
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
+  override def dataType: DataType = child.dataType
+
+  @transient lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+
+  @transient private[this] var random: RandomIndicesGenerator = _
+
+  override protected def initializeInternal(partitionIndex: Int): Unit = {
+    random = RandomIndicesGenerator(randomSeed.get + partitionIndex)
+  }
+
+  override protected def evalInternal(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      null
+    } else {
+      val source = value.asInstanceOf[ArrayData]
+      val numElements = source.numElements()
+      val indices = random.getNextIndices(numElements)
+      new GenericArrayData(indices.map(source.get(_, elementType)))
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => shuffleArrayCodeGen(ctx, ev, c))
+  }
+
+  private def shuffleArrayCodeGen(ctx: CodegenContext, ev: ExprCode, childName: String): String = {
+    val randomClass = classOf[RandomIndicesGenerator].getName
+
+    val rand = ctx.addMutableState(randomClass, "rand", forceInline = true)
+    ctx.addPartitionInitializationStatement(
+      s"$rand = new $randomClass(${randomSeed.get}L + partitionIndex);")
+
+    val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
+
+    val numElements = ctx.freshName("numElements")
+    val arrayData = ctx.freshName("arrayData")
+
+    val initialization = if (isPrimitiveType) {
+      ctx.createUnsafeArray(arrayData, numElements, elementType, s" $prettyName failed.")
+    } else {
+      val arrayDataClass = classOf[GenericArrayData].getName()
+      s"$arrayDataClass $arrayData = new $arrayDataClass(new Object[$numElements]);"
+    }
+
+    val indices = ctx.freshName("indices")
+    val i = ctx.freshName("i")
+
+    val getValue = CodeGenerator.getValue(childName, elementType, s"$indices[$i]")
+
+    val setFunc = if (isPrimitiveType) {
+      s"set${CodeGenerator.primitiveTypeName(elementType)}"
+    } else {
+      "update"
+    }
+
+    val assignment = if (isPrimitiveType && dataType.asInstanceOf[ArrayType].containsNull) {
+      s"""
+         |if ($childName.isNullAt($indices[$i])) {
+         |  $arrayData.setNullAt($i);
+         |} else {
+         |  $arrayData.$setFunc($i, $getValue);
+         |}
+       """.stripMargin
+    } else {
+      s"$arrayData.$setFunc($i, $getValue);"
+    }
+
+    s"""
+       |int $numElements = $childName.numElements();
+       |int[] $indices = $rand.getNextIndices($numElements);
+       |$initialization
+       |for (int $i = 0; $i < $numElements; $i++) {
+       |  $assignment
+       |}
+       |${ev.value} = $arrayData;
+     """.stripMargin
+  }
+
+  override def freshCopy(): Shuffle = Shuffle(child, randomSeed)
 }
 
 /**
@@ -1225,46 +1350,50 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
   }
 
   private def arrayCodeGen(ctx: CodegenContext, ev: ExprCode, childName: String): String = {
-    val length = ctx.freshName("length")
-    val javaElementType = CodeGenerator.javaType(elementType)
+
     val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
 
+    val numElements = ctx.freshName("numElements")
+    val arrayData = ctx.freshName("arrayData")
+
     val initialization = if (isPrimitiveType) {
-      s"$childName.copy()"
+      ctx.createUnsafeArray(arrayData, numElements, elementType, s" $prettyName failed.")
     } else {
-      s"new ${classOf[GenericArrayData].getName()}(new Object[$length])"
+      val arrayDataClass = classOf[GenericArrayData].getName
+      s"$arrayDataClass $arrayData = new $arrayDataClass(new Object[$numElements]);"
     }
 
-    val numberOfIterations = if (isPrimitiveType) s"$length / 2" else length
+    val i = ctx.freshName("i")
+    val j = ctx.freshName("j")
 
-    val swapAssigments = if (isPrimitiveType) {
-      val setFunc = "set" + CodeGenerator.primitiveTypeName(elementType)
-      val getCall = (index: String) => CodeGenerator.getValue(ev.value, elementType, index)
-      s"""|boolean isNullAtK = ${ev.value}.isNullAt(k);
-          |boolean isNullAtL = ${ev.value}.isNullAt(l);
-          |if(!isNullAtK) {
-          |  $javaElementType el = ${getCall("k")};
-          |  if(!isNullAtL) {
-          |    ${ev.value}.$setFunc(k, ${getCall("l")});
-          |  } else {
-          |    ${ev.value}.setNullAt(k);
-          |  }
-          |  ${ev.value}.$setFunc(l, el);
-          |} else if (!isNullAtL) {
-          |  ${ev.value}.$setFunc(k, ${getCall("l")});
-          |  ${ev.value}.setNullAt(l);
-          |}""".stripMargin
+    val getValue = CodeGenerator.getValue(childName, elementType, i)
+
+    val setFunc = if (isPrimitiveType) {
+      s"set${CodeGenerator.primitiveTypeName(elementType)}"
     } else {
-      s"${ev.value}.update(k, ${CodeGenerator.getValue(childName, elementType, "l")});"
+      "update"
+    }
+
+    val assignment = if (isPrimitiveType && dataType.asInstanceOf[ArrayType].containsNull) {
+      s"""
+         |if ($childName.isNullAt($i)) {
+         |  $arrayData.setNullAt($j);
+         |} else {
+         |  $arrayData.$setFunc($j, $getValue);
+         |}
+       """.stripMargin
+    } else {
+      s"$arrayData.$setFunc($j, $getValue);"
     }
 
     s"""
-       |final int $length = $childName.numElements();
-       |${ev.value} = $initialization;
-       |for(int k = 0; k < $numberOfIterations; k++) {
-       |  int l = $length - k - 1;
-       |  $swapAssigments
+       |final int $numElements = $childName.numElements();
+       |$initialization
+       |for (int $i = 0; $i < $numElements; $i++) {
+       |  int $j = $numElements - $i - 1;
+       |  $assignment
        |}
+       |${ev.value} = $arrayData;
      """.stripMargin
   }
 
@@ -2217,7 +2346,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
         return TypeCheckResult.TypeCheckFailure(
           s"input to function $prettyName should have been ${StringType.simpleString}," +
             s" ${BinaryType.simpleString} or ${ArrayType.simpleString}, but it's " +
-            childTypes.map(_.simpleString).mkString("[", ", ", "]"))
+            childTypes.map(_.catalogString).mkString("[", ", ", "]"))
       }
       TypeUtils.checkForSameTypeInputExpr(childTypes, s"function $prettyName")
     }
@@ -2270,39 +2399,67 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evals = children.map(_.genCode(ctx))
     val args = ctx.freshName("args")
+    val hasNull = ctx.freshName("hasNull")
 
-    val inputs = evals.zipWithIndex.map { case (eval, index) =>
-      s"""
-        ${eval.code}
-        if (!${eval.isNull}) {
-          $args[$index] = ${eval.value};
-        }
-      """
+    val inputs = evals.zip(children.map(_.nullable)).zipWithIndex.map {
+      case ((eval, true), index) =>
+        s"""
+           |if (!$hasNull) {
+           |  ${eval.code}
+           |  if (!${eval.isNull}) {
+           |    $args[$index] = ${eval.value};
+           |  } else {
+           |    $hasNull = true;
+           |  }
+           |}
+         """.stripMargin
+      case ((eval, false), index) =>
+        s"""
+           |if (!$hasNull) {
+           |  ${eval.code}
+           |  $args[$index] = ${eval.value};
+           |}
+         """.stripMargin
     }
 
-    val (concatenator, initCode) = dataType match {
-      case BinaryType =>
-        (classOf[ByteArray].getName, s"byte[][] $args = new byte[${evals.length}][];")
-      case StringType =>
-        ("UTF8String", s"UTF8String[] $args = new UTF8String[${evals.length}];")
-      case ArrayType(elementType, _) =>
-        val arrayConcatClass = if (CodeGenerator.isPrimitiveType(elementType)) {
-          genCodeForPrimitiveArrays(ctx, elementType)
-        } else {
-          genCodeForNonPrimitiveArrays(ctx, elementType)
-        }
-        (arrayConcatClass, s"ArrayData[] $args = new ArrayData[${evals.length}];")
-    }
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = inputs,
       funcName = "valueConcat",
-      extraArguments = (s"$javaType[]", args) :: Nil)
-    ev.copy(code"""
-      $initCode
-      $codes
-      $javaType ${ev.value} = $concatenator.concat($args);
-      boolean ${ev.isNull} = ${ev.value} == null;
-    """)
+      extraArguments = (s"$javaType[]", args) :: ("boolean", hasNull) :: Nil,
+      returnType = "boolean",
+      makeSplitFunction = body =>
+        s"""
+           |$body
+           |return $hasNull;
+         """.stripMargin,
+      foldFunctions = _.map(funcCall => s"$hasNull = $funcCall;").mkString("\n")
+    )
+
+    val (concat, initCode) = dataType match {
+      case BinaryType =>
+        (s"${classOf[ByteArray].getName}.concat", s"byte[][] $args = new byte[${evals.length}][];")
+      case StringType =>
+        ("UTF8String.concat", s"UTF8String[] $args = new UTF8String[${evals.length}];")
+      case ArrayType(elementType, containsNull) =>
+        val concat = if (CodeGenerator.isPrimitiveType(elementType)) {
+          genCodeForPrimitiveArrays(ctx, elementType, containsNull)
+        } else {
+          genCodeForNonPrimitiveArrays(ctx, elementType)
+        }
+        (concat, s"ArrayData[] $args = new ArrayData[${evals.length}];")
+    }
+
+    ev.copy(code =
+      code"""
+         |boolean $hasNull = false;
+         |$initCode
+         |$codes
+         |$javaType ${ev.value} = null;
+         |if (!$hasNull) {
+         |  ${ev.value} = $concat($args);
+         |}
+         |boolean ${ev.isNull} = ${ev.value} == null;
+       """.stripMargin)
   }
 
   private def genCodeForNumberOfElements(ctx: CodegenContext) : (String, String) = {
@@ -2322,19 +2479,10 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     (code, numElements)
   }
 
-  private def nullArgumentProtection() : String = {
-    if (nullable) {
-      s"""
-         |for (int z = 0; z < ${children.length}; z++) {
-         |  if (args[z] == null) return null;
-         |}
-       """.stripMargin
-    } else {
-      ""
-    }
-  }
-
-  private def genCodeForPrimitiveArrays(ctx: CodegenContext, elementType: DataType): String = {
+  private def genCodeForPrimitiveArrays(
+      ctx: CodegenContext,
+      elementType: DataType,
+      checkForNull: Boolean): String = {
     val counter = ctx.freshName("counter")
     val arrayData = ctx.freshName("arrayData")
 
@@ -2342,29 +2490,44 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
 
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
 
-    s"""
-       |new Object() {
-       |  public ArrayData concat($javaType[] args) {
-       |    ${nullArgumentProtection()}
-       |    $numElemCode
-       |    ${ctx.createUnsafeArray(arrayData, numElemName, elementType, s" $prettyName failed.")}
-       |    int $counter = 0;
-       |    for (int y = 0; y < ${children.length}; y++) {
-       |      for (int z = 0; z < args[y].numElements(); z++) {
-       |        if (args[y].isNullAt(z)) {
-       |          $arrayData.setNullAt($counter);
-       |        } else {
-       |          $arrayData.set$primitiveValueTypeName(
-       |            $counter,
-       |            ${CodeGenerator.getValue(s"args[y]", elementType, "z")}
-       |          );
-       |        }
-       |        $counter++;
-       |      }
-       |    }
-       |    return $arrayData;
-       |  }
-       |}""".stripMargin.stripPrefix("\n")
+    val setterCode =
+      s"""
+         |$arrayData.set$primitiveValueTypeName(
+         |  $counter,
+         |  ${CodeGenerator.getValue(s"args[y]", elementType, "z")}
+         |);
+       """.stripMargin
+
+    val nullSafeSetterCode = if (checkForNull) {
+      s"""
+         |if (args[y].isNullAt(z)) {
+         |  $arrayData.setNullAt($counter);
+         |} else {
+         |  $setterCode
+         |}
+       """.stripMargin
+    } else {
+      setterCode
+    }
+
+    val concat = ctx.freshName("concat")
+    val concatDef =
+      s"""
+         |private ArrayData $concat(ArrayData[] args) {
+         |  $numElemCode
+         |  ${ctx.createUnsafeArray(arrayData, numElemName, elementType, s" $prettyName failed.")}
+         |  int $counter = 0;
+         |  for (int y = 0; y < ${children.length}; y++) {
+         |    for (int z = 0; z < args[y].numElements(); z++) {
+         |      $nullSafeSetterCode
+         |      $counter++;
+         |    }
+         |  }
+         |  return $arrayData;
+         |}
+       """.stripMargin
+
+    ctx.addNewFunction(concat, concatDef)
   }
 
   private def genCodeForNonPrimitiveArrays(ctx: CodegenContext, elementType: DataType): String = {
@@ -2374,22 +2537,24 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx)
 
-    s"""
-       |new Object() {
-       |  public ArrayData concat($javaType[] args) {
-       |    ${nullArgumentProtection()}
-       |    $numElemCode
-       |    Object[] $arrayData = new Object[(int)$numElemName];
-       |    int $counter = 0;
-       |    for (int y = 0; y < ${children.length}; y++) {
-       |      for (int z = 0; z < args[y].numElements(); z++) {
-       |        $arrayData[$counter] = ${CodeGenerator.getValue(s"args[y]", elementType, "z")};
-       |        $counter++;
-       |      }
-       |    }
-       |    return new $genericArrayClass($arrayData);
-       |  }
-       |}""".stripMargin.stripPrefix("\n")
+    val concat = ctx.freshName("concat")
+    val concatDef =
+      s"""
+         |private ArrayData $concat(ArrayData[] args) {
+         |  $numElemCode
+         |  Object[] $arrayData = new Object[(int)$numElemName];
+         |  int $counter = 0;
+         |  for (int y = 0; y < ${children.length}; y++) {
+         |    for (int z = 0; z < args[y].numElements(); z++) {
+         |      $arrayData[$counter] = ${CodeGenerator.getValue(s"args[y]", elementType, "z")};
+         |      $counter++;
+         |    }
+         |  }
+         |  return new $genericArrayClass($arrayData);
+         |}
+       """.stripMargin
+
+    ctx.addNewFunction(concat, concatDef)
   }
 
   override def toString: String = s"concat(${children.mkString(", ")})"
@@ -2424,7 +2589,7 @@ case class Flatten(child: Expression) extends UnaryExpression {
     case _ =>
       TypeCheckResult.TypeCheckFailure(
         s"The argument should be an array of arrays, " +
-        s"but '${child.sql}' is of ${child.dataType.simpleString} type."
+        s"but '${child.sql}' is of ${child.dataType.catalogString} type."
       )
   }
 

@@ -67,7 +67,7 @@ trait CheckAnalysis extends PredicateHelper {
           limitExpr.sql)
       case e if e.dataType != IntegerType => failAnalysis(
         s"The limit expression must be integer type, but got " +
-          e.dataType.simpleString)
+          e.dataType.catalogString)
       case _ => // OK
     }
 
@@ -88,6 +88,9 @@ trait CheckAnalysis extends PredicateHelper {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
+
+      case p if p.analyzed => // Skip already analyzed sub-plans
+
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.tableIdentifier}")
 
@@ -105,8 +108,8 @@ trait CheckAnalysis extends PredicateHelper {
             }
 
           case c: Cast if !c.resolved =>
-            failAnalysis(
-              s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
+            failAnalysis(s"invalid cast from ${c.child.dataType.catalogString} to " +
+              c.dataType.catalogString)
 
           case g: Grouping =>
             failAnalysis("grouping() can only be used with GroupingSets/Cube/Rollup")
@@ -153,12 +156,12 @@ trait CheckAnalysis extends PredicateHelper {
               case _ =>
                 failAnalysis(
                   s"Event time must be defined on a window or a timestamp, but " +
-                  s"${etw.eventTime.name} is of type ${etw.eventTime.dataType.simpleString}")
+                  s"${etw.eventTime.name} is of type ${etw.eventTime.dataType.catalogString}")
             }
           case f: Filter if f.condition.dataType != BooleanType =>
             failAnalysis(
               s"filter expression '${f.condition.sql}' " +
-                s"of type ${f.condition.dataType.simpleString} is not a boolean.")
+                s"of type ${f.condition.dataType.catalogString} is not a boolean.")
 
           case Filter(condition, _) if hasNullAwarePredicateWithinNot(condition) =>
             failAnalysis("Null-aware predicate sub-queries cannot be used in nested " +
@@ -167,7 +170,7 @@ trait CheckAnalysis extends PredicateHelper {
           case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
             failAnalysis(
               s"join condition '${condition.sql}' " +
-                s"of type ${condition.dataType.simpleString} is not a boolean.")
+                s"of type ${condition.dataType.catalogString} is not a boolean.")
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def isAggregateExpression(expr: Expression) = {
@@ -228,7 +231,7 @@ trait CheckAnalysis extends PredicateHelper {
               if (!RowOrdering.isOrderable(expr.dataType)) {
                 failAnalysis(
                   s"expression ${expr.sql} cannot be used as a grouping expression " +
-                    s"because its data type ${expr.dataType.simpleString} is not an orderable " +
+                    s"because its data type ${expr.dataType.catalogString} is not an orderable " +
                     s"data type.")
               }
 
@@ -248,7 +251,7 @@ trait CheckAnalysis extends PredicateHelper {
             orders.foreach { order =>
               if (!RowOrdering.isOrderable(order.dataType)) {
                 failAnalysis(
-                  s"sorting is not supported for columns of type ${order.dataType.simpleString}")
+                  s"sorting is not supported for columns of type ${order.dataType.catalogString}")
               }
             }
 
@@ -351,7 +354,7 @@ trait CheckAnalysis extends PredicateHelper {
             val mapCol = mapColumnInSetOperation(o).get
             failAnalysis("Cannot have map type columns in DataFrame which calls " +
               s"set operations(intersect, except, etc.), but the type of column ${mapCol.name} " +
-              "is " + mapCol.dataType.simpleString)
+              "is " + mapCol.dataType.catalogString)
 
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
@@ -373,10 +376,11 @@ trait CheckAnalysis extends PredicateHelper {
     }
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
-      case AnalysisBarrier(child) if !child.resolved => checkAnalysis(child)
       case o if !o.resolved => failAnalysis(s"unresolved operator ${o.simpleString}")
       case _ =>
     }
+
+    plan.setAnalyzed()
   }
 
   /**
@@ -540,9 +544,8 @@ trait CheckAnalysis extends PredicateHelper {
 
     var foundNonEqualCorrelatedPred: Boolean = false
 
-    // Simplify the predicates before validating any unsupported correlation patterns
-    // in the plan.
-    BooleanSimplification(sub).foreachUp {
+    // Simplify the predicates before validating any unsupported correlation patterns in the plan.
+    AnalysisHelper.allowInvokingTransformsInAnalyzer { BooleanSimplification(sub).foreachUp {
       // Whitelist operators allowed in a correlated subquery
       // There are 4 categories:
       // 1. Operators that are allowed anywhere in a correlated subquery, and,

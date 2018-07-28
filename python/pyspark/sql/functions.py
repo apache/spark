@@ -2382,6 +2382,23 @@ def array_sort(col):
     return Column(sc._jvm.functions.array_sort(_to_java_column(col)))
 
 
+@since(2.4)
+def shuffle(col):
+    """
+    Collection function: Generates a random permutation of the given array.
+
+    .. note:: The function is non-deterministic.
+
+    :param col: name of column or expression
+
+    >>> df = spark.createDataFrame([([1, 20, 3, 5],), ([1, 20, None, 3],)], ['data'])
+    >>> df.select(shuffle(df.data).alias('s')).collect()  # doctest: +SKIP
+    [Row(s=[3, 1, 5, 20]), Row(s=[20, None, 3, 1])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.shuffle(_to_java_column(col)))
+
+
 @since(1.5)
 @ignore_unicode_prefix
 def reverse(col):
@@ -2549,6 +2566,28 @@ def map_concat(*cols):
         cols = cols[0]
     jc = sc._jvm.functions.map_concat(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
+
+
+@since(2.4)
+def sequence(start, stop, step=None):
+    """
+    Generate a sequence of integers from `start` to `stop`, incrementing by `step`.
+    If `step` is not set, incrementing by 1 if `start` is less than or equal to `stop`,
+    otherwise -1.
+
+    >>> df1 = spark.createDataFrame([(-2, 2)], ('C1', 'C2'))
+    >>> df1.select(sequence('C1', 'C2').alias('r')).collect()
+    [Row(r=[-2, -1, 0, 1, 2])]
+    >>> df2 = spark.createDataFrame([(4, -4, -2)], ('C1', 'C2', 'C3'))
+    >>> df2.select(sequence('C1', 'C2', 'C3').alias('r')).collect()
+    [Row(r=[4, 2, 0, -2, -4])]
+    """
+    sc = SparkContext._active_spark_context
+    if step is None:
+        return Column(sc._jvm.functions.sequence(_to_java_column(start), _to_java_column(stop)))
+    else:
+        return Column(sc._jvm.functions.sequence(
+            _to_java_column(start), _to_java_column(stop), _to_java_column(step)))
 
 
 # ---------------------------- User Defined Function ----------------------------------

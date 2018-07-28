@@ -189,7 +189,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
           } else {
             val mismatchedColumns = valExprs.zip(childOutputs).flatMap {
               case (l, r) if l.dataType != r.dataType =>
-                s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
+                Seq(s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})")
               case _ => None
             }
             TypeCheckResult.TypeCheckFailure(
@@ -205,7 +205,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
           }
         case _ =>
           TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
-            s"${value.dataType.simpleString} != ${mismatchOpt.get.dataType.simpleString}")
+            s"${value.dataType.catalogString} != ${mismatchOpt.get.dataType.catalogString}")
       }
     } else {
       TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
