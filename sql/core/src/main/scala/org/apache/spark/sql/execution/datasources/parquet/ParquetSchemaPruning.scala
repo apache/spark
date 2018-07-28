@@ -51,12 +51,19 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
         // If [[requestedRootFields]] includes a nested field, continue. Otherwise,
         // return [[op]]
         if (requestedRootFields.exists { case RootField(_, derivedFromAtt) => !derivedFromAtt }) {
-          val prunedSchema = requestedRootFields
+          // Merge the requested root fields into a single schema. Note the ordering of the fields
+          // in the resulting schema may differ from their ordering in the logical relation's
+          // original schema
+          val mergedSchema = requestedRootFields
             .map { case RootField(field, _) => StructType(Array(field)) }
             .reduceLeft(_ merge _)
           val dataSchemaFieldNames = dataSchema.fieldNames.toSet
+          val mergedDataSchema =
+            StructType(mergedSchema.filter(f => dataSchemaFieldNames.contains(f.name)))
+          // Sort the fields of [[mergedDataSchema]] according to their order in [[dataSchema]],
+          // recursively. This makes [[mergedDataSchema]] a pruned schema of [[dataSchema]]
           val prunedDataSchema =
-            StructType(prunedSchema.filter(f => dataSchemaFieldNames.contains(f.name)))
+            sortLeftFieldsByRight(mergedDataSchema, dataSchema).asInstanceOf[StructType]
 
           // If the data schema is different from the pruned data schema, continue. Otherwise,
           // return [[op]]. We effect this comparison by counting the number of "leaf" fields in
@@ -144,6 +151,36 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
       case _ => 1
     }
   }
+
+  /**
+  *  Sorts the fields and descendant fields of structs in [[left]] according to their order in
+  *  [[right]]. This function assumes that the fields of [[left]] are a subset of the fields of
+  *  [[right]], recursively. That is, [[left]] is a "subschema" of [[right]], ignoring order of
+  *  fields.
+  */
+  private def sortLeftFieldsByRight(left: DataType, right: DataType): DataType =
+    (left, right) match {
+      case (ArrayType(leftElementType, containsNull), ArrayType(rightElementType, _)) =>
+        ArrayType(
+          sortLeftFieldsByRight(leftElementType, rightElementType),
+          containsNull)
+      case (MapType(leftKeyType, leftValueType, containsNull),
+          MapType(rightKeyType, rightValueType, _)) =>
+        MapType(
+          sortLeftFieldsByRight(leftKeyType, rightKeyType),
+          sortLeftFieldsByRight(leftValueType, rightValueType),
+          containsNull)
+      case (leftStruct: StructType, rightStruct: StructType) =>
+        val filteredRightFieldNames = rightStruct.fieldNames.filter(leftStruct.fieldNames.contains)
+        val sortedLeftFields = filteredRightFieldNames.map { fieldName =>
+          val leftFieldType = leftStruct(fieldName).dataType
+          val rightFieldType = rightStruct(fieldName).dataType
+          val sortedLeftFieldType = sortLeftFieldsByRight(leftFieldType, rightFieldType)
+          StructField(fieldName, sortedLeftFieldType)
+        }
+        StructType(sortedLeftFields)
+      case (left, _) => left
+    }
 
   /**
    * A "root" schema field (aka top-level, no-parent) and whether it was derived from
