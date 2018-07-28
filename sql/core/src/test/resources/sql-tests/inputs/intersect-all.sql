@@ -2,11 +2,18 @@ CREATE TEMPORARY VIEW tab1 AS SELECT * FROM VALUES
     (1, 2), 
     (1, 2),
     (1, 3),
-    (2, 3)
+    (1, 3),
+    (2, 3),
+    (null, null),
+    (null, null)
     AS tab1(k, v);
 CREATE TEMPORARY VIEW tab2 AS SELECT * FROM VALUES
     (1, 2), 
-    (2, 3)
+    (1, 2), 
+    (2, 3),
+    (3, 4),
+    (null, null),
+    (null, null)
     AS tab2(k, v);
 
 -- Basic INTERSECT ALL
@@ -27,7 +34,7 @@ SELECT * FROM tab2;
 -- Empty right relation
 SELECT * FROM tab1
 INTERSECT ALL
-SELECT * FROM tab2 WHERE k > 2;
+SELECT * FROM tab2 WHERE k > 3;
 
 -- Type Coerced INTERSECT ALL
 SELECT * FROM tab1
@@ -40,9 +47,9 @@ INTERSECT ALL
 SELECT array(1), 2;
 
 -- Mismatch on number of columns across both branches
-SELECT c1 FROM tab1
+SELECT k FROM tab1
 INTERSECT ALL
-SELECT c1, c2 FROM tab2;
+SELECT k, v FROM tab2;
 
 -- Basic
 SELECT * FROM tab2
@@ -69,7 +76,7 @@ SELECT * FROM tab1
 INTERSECT ALL
 SELECT * FROM tab2;
 
--- Join under INTERSECT ALL
+-- Join under intersect all
 SELECT * 
 FROM   (SELECT tab1.k, 
                tab2.v 
@@ -84,7 +91,7 @@ FROM   (SELECT tab1.k,
                JOIN tab2 
                  ON tab1.k = tab2.k);
 
--- Join under except all (2)
+-- Join under intersect all (2)
 SELECT * 
 FROM   (SELECT tab1.k, 
                tab2.v 
@@ -99,7 +106,7 @@ FROM   (SELECT tab2.v AS k,
                JOIN tab2 
                  ON tab1.k = tab2.k);
 
--- Group by under ExceptAll
+-- Group by under intersect all
 SELECT v FROM tab1 GROUP BY v
 INTERSECT ALL
 SELECT k FROM tab2 GROUP BY k;

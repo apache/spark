@@ -1947,7 +1947,7 @@ class Dataset[T] private[sql](
    * @since 2.4.0
    */
   def intersectAll(other: Dataset[T]): Dataset[T] = withSetOperator {
-    Intersect(planWithBarrier, other.planWithBarrier, isAll = true)
+    Intersect(logicalPlan, other.logicalPlan, isAll = true)
   }
 
 
@@ -1978,7 +1978,7 @@ class Dataset[T] private[sql](
    * @since 2.4.0
    */
   def exceptAll(other: Dataset[T]): Dataset[T] = withSetOperator {
-    Except(planWithBarrier, other.planWithBarrier, isAll = true)
+    Except(logicalPlan, other.logicalPlan, isAll = true)
   }
 
   /**
