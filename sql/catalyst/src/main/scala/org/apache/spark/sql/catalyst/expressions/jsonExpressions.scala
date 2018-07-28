@@ -495,7 +495,7 @@ case class JsonTuple(children: Seq[Expression])
 }
 
 /**
- * Converts an json input string to a [[StructType]] or [[ArrayType]] of [[StructType]]s
+ * Converts an json input string to a [[StructType]], [[ArrayType]] or [[MapType]]
  * with the specified schema.
  */
 // scalastyle:off line.size.limit
@@ -547,7 +547,7 @@ case class JsonToStructs(
     case _: StructType | _: ArrayType | _: MapType =>
       super.checkInputDataTypes()
     case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input schema ${nullableSchema.catalogString} must be a struct or an array of structs.")
+      s"Input schema ${nullableSchema.catalogString} must be a struct, an array or a map.")
   }
 
   // This converts parsed rows to the desired output by the given schema.

@@ -133,14 +133,11 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null) :: Nil)
   }
 
-  test("from_json invalid schema") {
+  test("from_json - json doesn't conform to the array type") {
     val df = Seq("""{"a" 1}""").toDS()
     val schema = ArrayType(StringType)
 
-    checkAnswer(
-      df.select(from_json($"value", schema)),
-      Seq(Row(null))
-    )
+    checkAnswer(df.select(from_json($"value", schema)), Seq(Row(null)))
   }
 
   test("from_json array support") {
