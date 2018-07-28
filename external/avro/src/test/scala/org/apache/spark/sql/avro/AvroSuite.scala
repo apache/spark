@@ -394,6 +394,13 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(results.length === 8)
   }
 
+  test("old avro data source name works") {
+    val results =
+      spark.read.format("com.databricks.spark.avro")
+        .load(episodesAvro).select("title").collect()
+    assert(results.length === 8)
+  }
+
   test("support of various data types") {
     // This test uses data from test.avro. You can see the data and the schema of this file in
     // test.json and test.avsc
