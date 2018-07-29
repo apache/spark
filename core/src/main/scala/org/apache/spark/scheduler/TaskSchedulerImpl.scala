@@ -423,6 +423,9 @@ private[spark] class TaskSchedulerImpl(
               s"${taskSet.numTasks} tasks got resource offers. The resource offers may have " +
               "been blacklisted or cannot fulfill task locality requirements.")
 
+          // materialize the barrier coordinator.
+          barrierCoordinator
+
           // Update the taskInfos into all the barrier task properties.
           val addressesStr = addressesWithDescs
             // Addresses ordered by partitionId
@@ -432,7 +435,6 @@ private[spark] class TaskSchedulerImpl(
           addressesWithDescs.foreach { case (_, taskDesc) =>
             taskDesc.properties.setProperty("addresses", addressesStr)
             taskDesc.properties.setProperty("numTasks", taskSet.numTasks.toString)
-            taskDesc.properties.setProperty("barrierTimeout", barrierSyncTimeout.toString)
           }
 
           logInfo(s"Successfully scheduled all the ${addressesWithDescs.size} tasks for barrier " +

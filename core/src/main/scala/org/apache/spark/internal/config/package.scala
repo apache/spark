@@ -573,8 +573,8 @@ package object config {
       .doc("The timeout in milliseconds for each barrier() call from a barrier task. If the " +
         "coordinator didn't receive all the sync messages from barrier tasks within the " +
         "configed time, throw a SparkException to fail all the tasks. The default value is set " +
-        "to Long.MaxValue so the barrier() call shall wait forever.")
+        "to 31536000000(3600 * 24 * 365 * 1000) so the barrier() call shall wait for one year.")
       .longConf
       .checkValue(v => v > 0, "The value should be a positive long value.")
-      .createWithDefault(Long.MaxValue)
+      .createWithDefault(31536000000L)
 }
