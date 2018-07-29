@@ -297,6 +297,6 @@ private[spark] object ThreadUtils {
     val futures = in.map(i => Future(f(i)))
     val futureSeq = Future.sequence(futures)
 
-    awaitResult(futureSeq, Duration.Undefined)
+    awaitResult(futureSeq, Duration.Inf)
   }
 }
