@@ -4136,15 +4136,49 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
         val arrays = ctx.freshName("arrays")
         val array = ctx.freshName("array")
         val arrayDataIdx = ctx.freshName("arrayDataIdx")
+
+        val array2NullCheck = if (right.dataType.asInstanceOf[ArrayType].containsNull) {
+          s"""
+             |if ($array2.isNullAt($i)) {
+             |  $foundNullElement = true;
+             |} else
+           """.stripMargin
+        } else {
+          ""
+        }
+        val array1NullCheck = if (left.dataType.asInstanceOf[ArrayType].containsNull) {
+          s"""
+             |if ($array1.isNullAt($i)) {
+             |  if ($foundNullElementForSize) {
+             |    $size++;
+             |    $foundNullElementForSize = false;
+             |  }
+             |} else
+           """.stripMargin
+        } else {
+          ""
+        }
+        val array1NullAssignment = if (left.dataType.asInstanceOf[ArrayType].containsNull) {
+          s"""
+             |if ($array1.isNullAt($i)) {
+             |  if ($foundNullElement) {
+             |    ${ev.value}.setNullAt($pos++);
+             |    $foundNullElement = false;
+             |  }
+             |} else
+           """.stripMargin
+        } else {
+          ""
+        }
+
         s"""
            |$openHashSet $hs = new $openHashSet$postFix($classTag);
            |$openHashSet $hsResult = new $openHashSet$postFix($classTag);
            |boolean $foundNullElement = false;
            |int $size = 0;
            |for (int $i = 0; $i < $array2.numElements(); $i++) {
-           |  if ($array2.isNullAt($i)) {
-           |    $foundNullElement = true;
-           |  } else {
+           |  $array2NullCheck
+           |  {
            |    $javaTypeName $value = $array2.$getter;
            |    $hsJavaTypeName $hsValue = $genHsValue;
            |    $hs.add$postFix($hsValue);
@@ -4152,12 +4186,8 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
            |}
            |boolean $foundNullElementForSize = $foundNullElement;
            |for (int $i = 0; $i < $array1.numElements(); $i++) {
-           |  if ($array1.isNullAt($i)) {
-           |    if ($foundNullElementForSize) {
-           |      $size++;
-           |      $foundNullElementForSize = false;
-           |    }
-           |  } else {
+           |  $array1NullCheck
+           |  {
            |    $javaTypeName $value = $array1.$getter;
            |    $hsJavaTypeName $hsValue = $genHsValue;
            |    if ($hs.contains($hsValue) && !$hsResult.contains($hsValue)) {
@@ -4170,12 +4200,8 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
            |$hsResult = new $openHashSet$postFix($classTag);
            |int $pos = 0;
            |for (int $i = 0; $i < $array1.numElements(); $i++) {
-           |  if ($array1.isNullAt($i)) {
-           |    if ($foundNullElement) {
-           |      ${ev.value}.setNullAt($pos++);
-           |      $foundNullElement = false;
-           |    }
-           |  } else {
+           |  $array1NullAssignment
+           |  {
            |    $javaTypeName $value = $array1.$getter;
            |    $hsJavaTypeName $hsValue = $genHsValue;
            |    if ($hs.contains($hsValue) && !$hsResult.contains($hsValue)) {
