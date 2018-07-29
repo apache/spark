@@ -89,7 +89,7 @@ class CrossValidatorSuite
       .setNumFolds(3)
     val cvModel = cv.fit(dataset)
     val expected = lrParamMaps.zip(cvModel.avgMetrics).map { case (map, metric) =>
-      Row.fromSeq(map.toSeq.sortBy(_.param.toString).map(_.value.toString) ++ Seq(metric))
+      Row.fromSeq(map.toSeq.map(_.value.toString) ++ Seq(metric))
     }
     assert(cvModel.tuningSummary.collect().toSet === expected.toSet)
     assert(cvModel.tuningSummary.columns.last === eval.getMetricName)
@@ -114,7 +114,7 @@ class CrossValidatorSuite
       .setNumFolds(3)
     val cvModel = cv.fit(dataset)
     val expected = lrParamMaps.zip(cvModel.avgMetrics).map { case (map, metric) =>
-      Row.fromSeq(map.toSeq.sortBy(_.param.name).map(_.value.toString) ++ Seq(metric))
+      Row.fromSeq(map.toSeq.map(_.value.toString) ++ Seq(metric))
     }
     assert(cvModel.tuningSummary.collect().toSet === expected.toSet)
     assert(cvModel.tuningSummary.columns.last === eval.getMetricName)

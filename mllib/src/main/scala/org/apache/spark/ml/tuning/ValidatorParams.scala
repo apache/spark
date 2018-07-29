@@ -105,15 +105,18 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
     val spark = SparkSession.builder().getOrCreate()
     val sc = spark.sparkContext
 
+    // collect related params since paramMaps does not necessarily contain the same set of params.
     val tuningParamPairs = paramMaps.flatMap(map => map.toSeq)
     val tuningParams = tuningParamPairs.map(_.param.asInstanceOf[Param[Any]]).distinct
-      .sortBy(_.name)
     val schema = new StructType(tuningParams.map(p => StructField(p.toString, StringType))
          ++ Array(StructField(metricName, DoubleType)))
+
+    // get param values in paramMap, as well as the default values if not in paramMap.
     val rows = paramMaps.zip(metrics).map { case (pMap, metric) =>
       val est = $(estimator).copy(pMap)
       val values = tuningParams.map { param =>
         est match {
+          // get param value in stages if est is a Pipeline.
           case pipeline: Pipeline =>
             val candidates = pipeline.getStages.flatMap { stage =>
               stage.extractParamMap().get(param)

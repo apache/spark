@@ -88,7 +88,7 @@ class TrainValidationSplitSuite
       .setEvaluator(eval)
     val tvsModel = tvs.fit(dataset)
     val expected = lrParamMaps.zip(tvsModel.validationMetrics).map { case (map, metric) =>
-      Row.fromSeq(map.toSeq.sortBy(_.param.name).map(_.value.toString) ++ Seq(metric))
+      Row.fromSeq(map.toSeq.map(_.value.toString) ++ Seq(metric))
     }
     assert(tvsModel.tuningSummary.collect().toSet === expected.toSet)
     assert(tvsModel.tuningSummary.columns.last === eval.getMetricName)
