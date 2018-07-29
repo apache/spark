@@ -87,6 +87,8 @@ private[spark] class BarrierTaskContextImpl(
           s"${(System.currentTimeMillis() - startTime) / 1000} seconds, current barrier epoch " +
           s"is $barrierEpoch.")
         throw e
+    } finally {
+      timerTask.cancel()
     }
   }
 
