@@ -25,6 +25,7 @@ import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.forkjoin.{ForkJoinPool => SForkJoinPool, ForkJoinWorkerThread => SForkJoinWorkerThread}
 import scala.util.control.NonFatal
 
+import org.datanucleus
 import org.apache.spark.SparkException
 
 private[spark] object ThreadUtils {
@@ -259,8 +260,9 @@ private[spark] object ThreadUtils {
    * Transforms input collection by applying the given function to each element in parallel fashion.
    *
    * @param in - the input collection which should be transformed in parallel.
+   * @param prefix - the prefix assigned to the underlying thread pool.
+   * @param maxThreads - maximum number of thread can be created during execution.
    * @param f - the lambda function will be applied to each element of `in`.
-   * @param ec - the execution context on which the transformation should be performed.
    * @tparam I - the type of elements in the input collection.
    * @tparam O - the type of elements in resulted collection.
    * @return new collection in which each element was given from the input collection `in` by
@@ -268,8 +270,31 @@ private[spark] object ThreadUtils {
    */
   def parmap[I, O](
       in: TraversableOnce[I],
-      f: I => O)
-    (implicit ec: ExecutionContext): TraversableOnce[O] = {
+      prefix: String,
+      maxThreads: Int)(f: I => O): TraversableOnce[O] = {
+    val pool = newForkJoinPool(prefix, maxThreads)
+    try {
+      implicit val ec = ExecutionContext.fromExecutor(pool)
+      parmap(in)(f)
+    } finally {
+      pool.shutdown()
+    }
+  }
+
+  /**
+   * Transforms input collection by applying the given function to each element in parallel fashion.
+   *
+   * @param in - the input collection which should be transformed in parallel.
+   * @param f - the lambda function will be applied to each element of `in`.
+   * @param ec - an execution context for parallel applying of the given function `f`.
+   * @tparam I - the type of elements in the input collection.
+   * @tparam O - the type of elements in resulted collection.
+   * @return new collection in which each element was given from the input collection `in` by
+   *         applying the lambda function `f`.
+   */
+  def parmap[I, O](
+      in: TraversableOnce[I])
+      (f: I => O)(implicit ec: ExecutionContext): TraversableOnce[O] = {
     val futures = in.map(i => Future(f(i)))
     val futureSeq = Future.sequence(futures)
 
