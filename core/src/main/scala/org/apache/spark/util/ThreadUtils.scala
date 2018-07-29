@@ -20,7 +20,7 @@ package org.apache.spark.util
 import java.util.concurrent._
 
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
-import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor}
+import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.forkjoin.{ForkJoinPool => SForkJoinPool, ForkJoinWorkerThread => SForkJoinWorkerThread}
 import scala.util.control.NonFatal
@@ -253,5 +253,26 @@ private[spark] object ThreadUtils {
     if (!executor.isShutdown) {
       executor.shutdownNow()
     }
+  }
+
+  /**
+   * Transforms input collection by applying the given function to each element in parallel fashion.
+   *
+   * @param in - the input collection which should be transformed in parallel.
+   * @param f - the lambda function will be applied to each element of `in`.
+   * @param ec - the execution context on which the transformation should be performed.
+   * @tparam I - the type of elements in the input collection.
+   * @tparam O - the type of elements in resulted collection.
+   * @return new collection in which each element was given from the input collection `in` by
+   *         applying the lambda function `f`.
+   */
+  def parmap[I, O](
+      in: TraversableOnce[I],
+      f: I => O)
+    (implicit ec: ExecutionContext): TraversableOnce[O] = {
+    val futures = in.map(i => Future(f(i)))
+    val futureSeq = Future.sequence(futures)
+
+    awaitResult(futureSeq, Duration.Undefined)
   }
 }
