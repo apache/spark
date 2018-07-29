@@ -424,9 +424,9 @@ case class AlterTableSerDePropertiesCommand(
  * }}}
  */
 case class AlterTableFormatCommand(
-                                    tableName: TableIdentifier,
-                                    format: CatalogStorageFormat,
-                                    partSpec: Option[TablePartitionSpec])
+    tableName: TableIdentifier,
+    format: CatalogStorageFormat,
+    partSpec: Option[TablePartitionSpec])
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {

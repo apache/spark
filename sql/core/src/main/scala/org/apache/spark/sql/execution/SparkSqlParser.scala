@@ -874,12 +874,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       case (c: GenericFileFormatContext) =>
         visitGenericFileFormat(c)
       case _ =>
-        throw new ParseException("Expected STORED AS ", ctx)
+        throw new ParseException(
+          "SET table/partition format expects valid file format ",
+          ctx
+        )
     }
     AlterTableFormatCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       format,
-      // TODO a partition spec is allowed to have optional values. This is currently violated.
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
 

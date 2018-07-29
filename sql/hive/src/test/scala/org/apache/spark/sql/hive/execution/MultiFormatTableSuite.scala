@@ -50,12 +50,14 @@ class MultiFormatTableSuite
   val partitionCol = "dt"
   val partitionVal1 = "2018-01-26"
   val partitionVal2 = "2018-01-27"
+
   private case class PartitionDefinition(
-                                          column: String,
-                                          value: String,
-                                          location: URI,
-                                          format: Option[String] = None
-                                        ) {
+      column: String,
+      value: String,
+      location: URI,
+      format: Option[String] = None
+  ) {
+
     def toSpec: String = {
       s"($column='$value')"
     }
