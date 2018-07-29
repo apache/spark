@@ -4136,26 +4136,56 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
         val arrays = ctx.freshName("arrays")
         val array = ctx.freshName("array")
         val arrayDataIdx = ctx.freshName("arrayDataIdx")
+
+        val array2NullCheck = if (right.dataType.asInstanceOf[ArrayType].containsNull) {
+          s"""
+            |if ($array2.isNullAt($i)) {
+            |  $notFoundNullElement = false;
+            |} else
+           """.stripMargin
+        } else {
+          ""
+        }
+        val array1NullCheck = if (left.dataType.asInstanceOf[ArrayType].containsNull) {
+          s"""
+             |if ($array1.isNullAt($i)) {
+             |  if ($notFoundNullElement) {
+             |    $size++;
+             |    $notFoundNullElement = false;
+             |  }
+             |} else
+           """.stripMargin
+        } else {
+          ""
+        }
+        val array1NullAssignment = if (left.dataType.asInstanceOf[ArrayType].containsNull) {
+          s"""
+             |if ($array1.isNullAt($i)) {
+             |  if ($notFoundNullElement) {
+             |    ${ev.value}.setNullAt($pos++);
+             |    $notFoundNullElement = false;
+             |  }
+             |} else
+           """.stripMargin
+        } else {
+          ""
+        }
+
         s"""
            |$openHashSet $hs = new $openHashSet$postFix($classTag);
            |boolean $notFoundNullElement = true;
            |int $size = 0;
            |for (int $i = 0; $i < $array2.numElements(); $i++) {
-           |  if ($array2.isNullAt($i)) {
-           |    $notFoundNullElement = false;
-           |  } else {
+           |  $array2NullCheck
+           |  {
            |    $javaTypeName $value = $array2.$getter;
            |    $hsJavaTypeName $hsValue = $genHsValue;
            |    $hs.add$postFix($hsValue);
            |  }
            |}
            |for (int $i = 0; $i < $array1.numElements(); $i++) {
-           |  if ($array1.isNullAt($i)) {
-           |    if ($notFoundNullElement) {
-           |      $size++;
-           |      $notFoundNullElement = false;
-           |    }
-           |  } else {
+           |  $array1NullCheck
+           |  {
            |    $javaTypeName $value = $array1.$getter;
            |    $hsJavaTypeName $hsValue = $genHsValue;
            |    if (!$hs.contains($hsValue)) {
@@ -4169,21 +4199,16 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
            |$notFoundNullElement = true;
            |int $pos = 0;
            |for (int $i = 0; $i < $array2.numElements(); $i++) {
-           |  if ($array2.isNullAt($i)) {
-           |    $notFoundNullElement = false;
-           |  } else {
+           |  $array2NullCheck
+           |  {
            |    $javaTypeName $value = $array2.$getter;
            |    $hsJavaTypeName $hsValue = $genHsValue;
            |    $hs.add$postFix($hsValue);
            |  }
            |}
            |for (int $i = 0; $i < $array1.numElements(); $i++) {
-           |  if ($array1.isNullAt($i)) {
-           |    if ($notFoundNullElement) {
-           |      ${ev.value}.setNullAt($pos++);
-           |      $notFoundNullElement = false;
-           |    }
-           |  } else {
+           |  $array1NullAssignment
+           |  {
            |    $javaTypeName $value = $array1.$getter;
            |    $hsJavaTypeName $hsValue = $genHsValue;
            |    if (!$hs.contains($hsValue)) {
