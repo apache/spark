@@ -27,6 +27,7 @@ import scala.util.control.ControlThrowable
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -541,11 +542,11 @@ class StreamSuite extends StreamTest {
     try {
       // in continuous mode, the query will be run even there's no data
       // sleep a bit to ensure initialization
-      waitForLastExecution(q)
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        assert(q.lastExecution != null)
+      }
 
       val explainWithoutExtended = q.explainInternal(false)
-
-      print(explainWithoutExtended)
 
       // `extended = false` only displays the physical plan.
       assert("Streaming RelationV2 ContinuousMemoryStream".r
@@ -619,7 +620,9 @@ class StreamSuite extends StreamTest {
     try {
       // in continuous mode, the query will be run even there's no data
       // sleep a bit to ensure initialization
-      waitForLastExecution(q.asInstanceOf[StreamingQueryWrapper].streamingQuery)
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        assert(q.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution != null)
+      }
 
       // just ensure that it doesn't raise any error
       // it will provide the message that continuous mode doesn't support debug
@@ -955,18 +958,6 @@ class StreamSuite extends StreamTest {
       assert(query.exception.isEmpty)
     }
   }
-
-  private def waitForLastExecution(q: StreamExecution): Unit = {
-    var elapsed = 0
-    val timeout = 2000
-    while (q.lastExecution == null && elapsed < timeout) {
-      Thread.sleep(100)
-      elapsed += 100
-    }
-
-    assert(elapsed < timeout, "Exceeds max timeout")
-  }
-
 }
 
 abstract class FakeSource extends StreamSourceProvider {

@@ -107,17 +107,16 @@ package object debug {
    * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
    */
   def codegenString(query: StreamingQuery): String = {
-    val msg = unwrapStreamingQueryWrapper(query) match {
-      case w: StreamExecution =>
-        if (w.lastExecution != null) {
-          codegenString(w.lastExecution.executedPlan)
-        } else {
-          "No physical plan. Waiting for data."
-        }
-
-      case _ => "Only supported for StreamExecution."
+    try {
+      val w = asStreamExecution(query)
+      if (w.lastExecution != null) {
+        codegenString(w.lastExecution.executedPlan)
+      } else {
+        "No physical plan. Waiting for data."
+      }
+    } catch {
+      case _: IllegalArgumentException => "Only supported for StreamExecution."
     }
-    msg
   }
 
   /**
@@ -127,16 +126,19 @@ package object debug {
    * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
    */
   def codegenStringSeq(query: StreamingQuery): Seq[(String, String)] = {
-    val planAndCodes = unwrapStreamingQueryWrapper(query) match {
-      case w: StreamExecution if w.lastExecution != null =>
+    try {
+      val w = asStreamExecution(query)
+      if (w.lastExecution != null) {
         codegenStringSeq(w.lastExecution.executedPlan)
-
-      case _ => Seq.empty
+      } else {
+        Seq.empty
+      }
+    } catch {
+      case _: IllegalArgumentException => Seq.empty
     }
-    planAndCodes
   }
 
-  /* Helper function to reuse duplicated code block between batch and streaming. */
+  /** Visit and print out debug information in all physical plans for debugging purpose. */
   private def debugInternal(plan: SparkPlan): Unit = {
     val visited = new collection.mutable.HashSet[TreeNodeRef]()
     val debugPlan = plan transform {
@@ -151,11 +153,11 @@ package object debug {
     }
   }
 
-  private def unwrapStreamingQueryWrapper(query: StreamingQuery): StreamingQuery = {
-    query match {
-      case wrapper: StreamingQueryWrapper => wrapper.streamingQuery
-      case _ => query
-    }
+  private def asStreamExecution(query: StreamingQuery): StreamExecution = query match {
+    case wrapper: StreamingQueryWrapper => wrapper.streamingQuery
+    case q: StreamExecution => q
+    case _ => throw new IllegalArgumentException("Parameter should be an instance of " +
+      "StreamExecution!")
   }
 
   /**
@@ -177,20 +179,20 @@ package object debug {
 
   implicit class DebugStreamQuery(query: StreamingQuery) extends Logging {
     def debug(): Unit = {
-      unwrapStreamingQueryWrapper(query) match {
-        case w: StreamExecution =>
-          if (w.lastExecution == null) {
-            debugPrint("No physical plan. Waiting for data.")
+      try {
+        val w = asStreamExecution(query)
+        if (w.lastExecution == null) {
+          debugPrint("No physical plan. Waiting for data.")
+        } else {
+          val executedPlan = w.lastExecution.executedPlan
+          if (executedPlan.find(_.isInstanceOf[WriteToContinuousDataSourceExec]).isDefined) {
+            debugPrint("Debug on continuous mode is not supported.")
           } else {
-            val executedPlan = w.lastExecution.executedPlan
-            if (executedPlan.find(_.isInstanceOf[WriteToContinuousDataSourceExec]).isDefined) {
-              debugPrint("Debug on continuous mode is not supported.")
-            } else {
-              debugInternal(executedPlan)
-            }
+            debugInternal(executedPlan)
           }
-
-        case _ => debugPrint("Only supported for StreamExecution.")
+        }
+      } catch {
+        case _: IllegalArgumentException => debugPrint("Only supported for StreamExecution.")
       }
     }
 
