@@ -22,8 +22,6 @@ import java.net.URI
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.parallel.ForkJoinTaskSupport
-import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Try}
 
 import org.apache.hadoop.conf.Configuration
@@ -39,8 +37,8 @@ import org.apache.parquet.hadoop.ParquetOutputFormat.JobSummaryLevel
 import org.apache.parquet.hadoop.codec.CodecConfig
 import org.apache.parquet.hadoop.util.ContextUtil
 import org.apache.parquet.schema.MessageType
-import org.apache.spark.{SparkException, TaskContext}
 
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow

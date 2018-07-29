@@ -25,7 +25,6 @@ import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.forkjoin.{ForkJoinPool => SForkJoinPool, ForkJoinWorkerThread => SForkJoinWorkerThread}
 import scala.util.control.NonFatal
 
-import org.datanucleus
 import org.apache.spark.SparkException
 
 private[spark] object ThreadUtils {
