@@ -306,6 +306,6 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
         .agg(sum($"sales.earnings"))
     }
 
-    assert(exception.getMessage.contains("aggregate functions are not allowed"))
+    assert(exception.getMessage.contains("It is not allowed to use an aggregate function"))
   }
 }
