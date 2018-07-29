@@ -25,15 +25,15 @@ import scala.concurrent.{ExecutionContext, Future}
 import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
-import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate}
+import org.apache.parquet.filter2.predicate.FilterApi
 import org.apache.parquet.filter2.statisticslevel.StatisticsFilter
 import org.apache.parquet.hadoop.metadata.BlockMetaData
+import org.apache.parquet.schema.MessageType
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
 
 
@@ -54,14 +54,18 @@ object ParquetDefaultFileSplitter extends ParquetFileSplitter {
 class ParquetMetadataFileSplitter(
     val root: Path,
     val blocks: Seq[BlockMetaData],
-    val schema: StructType,
+    val parquetSchema: MessageType,
     val session: SparkSession)
   extends ParquetFileSplitter
   with Logging {
 
-  private val parquetFilters = new ParquetFilters(
-    session.sessionState.conf.parquetFilterPushDownDate,
-    session.sessionState.conf.isParquetINT96AsTimestamp)
+  val sqlConf = session.sessionState.conf
+  val parquetFilters = new ParquetFilters(
+    sqlConf.parquetFilterPushDownDate,
+    sqlConf.parquetFilterPushDownTimestamp,
+    sqlConf.parquetFilterPushDownDecimal,
+    sqlConf.parquetFilterPushDownStringStartWith,
+    sqlConf.parquetFilterPushDownInFilterThreshold)
 
   private val referencedFiles = blocks.map(bmd => new Path(root, bmd.getPath)).toSet
 
@@ -106,7 +110,7 @@ class ParquetMetadataFileSplitter(
   private def applyParquetFilter(
       filters: Seq[Filter],
       blocks: Seq[BlockMetaData]): Seq[BlockMetaData] = {
-    val predicates = filters.flatMap(parquetFilters.createFilter(schema, _))
+    val predicates = filters.flatMap(parquetFilters.createFilter(parquetSchema, _))
     if (predicates.nonEmpty) {
       // Asynchronously build bitmaps
       Future {
@@ -127,7 +131,7 @@ class ParquetMetadataFileSplitter(
         .filter(filterSets.getIfPresent(_) == null)
         .flatMap { filter =>
           val bitmap = new RoaringBitmap
-          parquetFilters.createFilter(schema, filter).map((filter, _, bitmap))
+          parquetFilters.createFilter(parquetSchema, filter).map((filter, _, bitmap))
         }
       var i = 0
       val blockLen = blocks.size

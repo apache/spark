@@ -66,7 +66,7 @@ class MinHashLSHModel private[ml](
       val elemsList = elems.toSparse.indices.toList
       val hashValues = randCoefficients.map { case (a, b) =>
         elemsList.map { elem: Int =>
-          ((1 + elem) * a + b) % MinHashLSH.HASH_PRIME
+          ((1L + elem) * a + b) % MinHashLSH.HASH_PRIME
         }.min.toDouble
       }
       // TODO: Output vectors of dimension numHashFunctions in SPARK-18450

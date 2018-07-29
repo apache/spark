@@ -11,6 +11,10 @@ cache
 .rat-excludes
 .*md
 derby.log
+licenses/*
+licenses-binary/*
+LICENSE
+NOTICE
 TAGS
 RELEASE
 control

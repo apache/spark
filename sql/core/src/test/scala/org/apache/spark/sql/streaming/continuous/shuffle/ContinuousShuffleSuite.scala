@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.continuous.shuffle
 
+import java.util.UUID
+
 import org.apache.spark.{HashPartitioner, Partition, TaskContext, TaskContextImpl}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
@@ -124,7 +126,10 @@ class ContinuousShuffleSuite extends StreamTest {
   }
 
   test("reader - multiple partitions") {
-    val rdd = new ContinuousShuffleReadRDD(sparkContext, numPartitions = 5)
+    val rdd = new ContinuousShuffleReadRDD(
+      sparkContext,
+      numPartitions = 5,
+      endpointNames = Seq.fill(5)(s"endpt-${UUID.randomUUID()}"))
     // Send all data before processing to ensure there's no crossover.
     for (p <- rdd.partitions) {
       val part = p.asInstanceOf[ContinuousShuffleReadPartition]

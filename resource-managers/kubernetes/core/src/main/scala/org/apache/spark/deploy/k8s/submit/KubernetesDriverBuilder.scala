@@ -37,13 +37,18 @@ private[spark] class KubernetesDriverBuilder(
     provideEnvSecretsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => EnvSecretsFeatureStep) =
       new EnvSecretsFeatureStep(_),
-    provideLocalDirsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
-      => LocalDirsFeatureStep) =
+    provideLocalDirsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf])
+      => LocalDirsFeatureStep =
       new LocalDirsFeatureStep(_),
     provideMountLocalFilesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountLocalFilesFeatureStep) =
       new MountLocalFilesFeatureStep(_),
-    provideJavaStep: (KubernetesConf[KubernetesDriverSpecificConf] => JavaDriverFeatureStep) =
+    provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+      => MountVolumesFeatureStep) =
+      new MountVolumesFeatureStep(_),
+    provideJavaStep: (
+      KubernetesConf[KubernetesDriverSpecificConf]
+        => JavaDriverFeatureStep) =
       new JavaDriverFeatureStep(_),
     providePythonStep: (KubernetesConf[KubernetesDriverSpecificConf] => PythonDriverFeatureStep) =
       new PythonDriverFeatureStep(_)) {
@@ -58,11 +63,15 @@ private[spark] class KubernetesDriverBuilder(
       provideServiceStep(kubernetesConf),
       provideLocalDirsStep(kubernetesConf))
 
-    val maybeRoleSecretNamesStep = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
-      Some(provideSecretsStep(kubernetesConf)) } else None
-
-    val maybeProvideSecretsStep = if (kubernetesConf.roleSecretEnvNamesToKeyRefs.nonEmpty) {
-      Some(provideEnvSecretsStep(kubernetesConf)) } else None
+    val secretFeature = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
+      Seq(provideSecretsStep(kubernetesConf))
+    } else Nil
+    val envSecretFeature = if (kubernetesConf.roleSecretEnvNamesToKeyRefs.nonEmpty) {
+      Seq(provideEnvSecretsStep(kubernetesConf))
+    } else Nil
+    val volumesFeature = if (kubernetesConf.roleVolumes.nonEmpty) {
+      Seq(provideVolumesStep(kubernetesConf))
+    } else Nil
 
     val bindingsStep = kubernetesConf.roleSpecificConf.mainAppResource.map {
         case JavaMainAppResource(_) =>
@@ -81,15 +90,12 @@ private[spark] class KubernetesDriverBuilder(
     require(totalFileSize < MAX_SECRET_BUNDLE_SIZE_BYTES,
       s"Total size of all files submitted must be less than $MAX_SECRET_BUNDLE_SIZE_BYTES_STRING." +
         s" Total size for files ended up being $totalSizeBytesString")
-    val providedLocalFiles = if (localFiles.nonEmpty) {
-      Some(provideMountLocalFilesStep(kubernetesConf))
-    } else None
+    val providedLocalFilesFeature = if (localFiles.nonEmpty) {
+      Seq(provideMountLocalFilesStep(kubernetesConf))
+    } else Nil
 
-    val allFeatures: Seq[KubernetesFeatureConfigStep] =
-      (baseFeatures :+ bindingsStep) ++
-        maybeRoleSecretNamesStep.toSeq ++
-        maybeProvideSecretsStep.toSeq ++
-        providedLocalFiles.toSeq
+    val allFeatures = (baseFeatures :+ bindingsStep) ++
+      secretFeature ++ envSecretFeature ++ volumesFeature ++ providedLocalFilesFeature
 
     var spec = KubernetesDriverSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
     for (feature <- allFeatures) {

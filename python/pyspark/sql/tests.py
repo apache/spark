@@ -3347,11 +3347,41 @@ class SQLTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(path)
 
-    def test_repr_html(self):
+    def test_repr_behaviors(self):
         import re
         pattern = re.compile(r'^ *\|', re.MULTILINE)
         df = self.spark.createDataFrame([(1, "1"), (22222, "22222")], ("key", "value"))
-        self.assertEquals(None, df._repr_html_())
+
+        # test when eager evaluation is enabled and _repr_html_ will not be called
+        with self.sql_conf({"spark.sql.repl.eagerEval.enabled": True}):
+            expected1 = """+-----+-----+
+                ||  key|value|
+                |+-----+-----+
+                ||    1|    1|
+                ||22222|22222|
+                |+-----+-----+
+                |"""
+            self.assertEquals(re.sub(pattern, '', expected1), df.__repr__())
+            with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
+                expected2 = """+---+-----+
+                ||key|value|
+                |+---+-----+
+                ||  1|    1|
+                ||222|  222|
+                |+---+-----+
+                |"""
+                self.assertEquals(re.sub(pattern, '', expected2), df.__repr__())
+                with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
+                    expected3 = """+---+-----+
+                    ||key|value|
+                    |+---+-----+
+                    ||  1|    1|
+                    |+---+-----+
+                    |only showing top 1 row
+                    |"""
+                    self.assertEquals(re.sub(pattern, '', expected3), df.__repr__())
+
+        # test when eager evaluation is enabled and _repr_html_ will be called
         with self.sql_conf({"spark.sql.repl.eagerEval.enabled": True}):
             expected1 = """<table border='1'>
                 |<tr><th>key</th><th>value</th></tr>
@@ -3376,6 +3406,18 @@ class SQLTests(ReusedSQLTestCase):
                         |only showing top 1 row
                         |"""
                     self.assertEquals(re.sub(pattern, '', expected3), df._repr_html_())
+
+        # test when eager evaluation is disabled and _repr_html_ will be called
+        with self.sql_conf({"spark.sql.repl.eagerEval.enabled": False}):
+            expected = "DataFrame[key: bigint, value: string]"
+            self.assertEquals(None, df._repr_html_())
+            self.assertEquals(expected, df.__repr__())
+            with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
+                self.assertEquals(None, df._repr_html_())
+                self.assertEquals(expected, df.__repr__())
+                with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
+                    self.assertEquals(None, df._repr_html_())
+                    self.assertEquals(expected, df.__repr__())
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
@@ -5432,6 +5474,22 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             for r in result:
                 self.assertEqual(r.a, 'hi')
                 self.assertEqual(r.b, 1)
+
+    def test_self_join_with_pandas(self):
+        import pyspark.sql.functions as F
+
+        @F.pandas_udf('key long, col string', F.PandasUDFType.GROUPED_MAP)
+        def dummy_pandas_udf(df):
+            return df[['key', 'col']]
+
+        df = self.spark.createDataFrame([Row(key=1, col='A'), Row(key=1, col='B'),
+                                         Row(key=2, col='C')])
+        df_with_pandas = df.groupBy('key').apply(dummy_pandas_udf)
+
+        # this was throwing an AnalysisException before SPARK-24208
+        res = df_with_pandas.alias('temp0').join(df_with_pandas.alias('temp1'),
+                                                 F.col('temp0.key') == F.col('temp1.key'))
+        self.assertEquals(res.count(), 5)
 
 
 @unittest.skipIf(

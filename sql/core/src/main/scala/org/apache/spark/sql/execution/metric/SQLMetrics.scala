@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.metric
 
 import java.text.NumberFormat
 import java.util.Locale
+import java.util.concurrent.atomic.LongAdder
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
@@ -32,40 +33,45 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
  * on the driver side must be explicitly posted using [[SQLMetrics.postDriverMetricUpdates()]].
  */
 class SQLMetric(val metricType: String, initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
+
   // This is a workaround for SPARK-11013.
   // We may use -1 as initial value of the accumulator, if the accumulator is valid, we will
   // update it at the end of task and the value will be at least 0. Then we can filter out the -1
   // values before calculate max, min, etc.
-  private[this] var _value = initValue
-  private var _zeroValue = initValue
+  private[this] val _value = new LongAdder
+  private val _zeroValue = initValue
+  _value.add(initValue)
 
   override def copy(): SQLMetric = {
-    val newAcc = new SQLMetric(metricType, _value)
-    newAcc._zeroValue = initValue
+    val newAcc = new SQLMetric(metricType, initValue)
+    newAcc.add(_value.sum())
     newAcc
   }
 
-  override def reset(): Unit = _value = _zeroValue
+  override def reset(): Unit = this.set(_zeroValue)
 
   override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
-    case o: SQLMetric => _value += o.value
+    case o: SQLMetric => _value.add(o.value)
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
-  override def isZero(): Boolean = _value == _zeroValue
+  override def isZero(): Boolean = _value.sum() == _zeroValue
 
-  override def add(v: Long): Unit = _value += v
+  override def add(v: Long): Unit = _value.add(v)
 
   // We can set a double value to `SQLMetric` which stores only long value, if it is
   // average metrics.
   def set(v: Double): Unit = SQLMetrics.setDoubleForAverageMetrics(this, v)
 
-  def set(v: Long): Unit = _value = v
+  def set(v: Long): Unit = {
+    _value.reset()
+    _value.add(v)
+  }
 
-  def +=(v: Long): Unit = _value += v
+  def +=(v: Long): Unit = _value.add(v)
 
-  override def value: Long = _value
+  override def value: Long = _value.sum()
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
@@ -153,7 +159,7 @@ object SQLMetrics {
           Seq.fill(3)(0L)
         } else {
           val sorted = validValues.sorted
-          Seq(sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
+          Seq(sorted.head, sorted(validValues.length / 2), sorted(validValues.length - 1))
         }
         metric.map(v => numberFormat.format(v.toDouble / baseForAvgMetric))
       }
@@ -173,7 +179,8 @@ object SQLMetrics {
           Seq.fill(4)(0L)
         } else {
           val sorted = validValues.sorted
-          Seq(sorted.sum, sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
+          Seq(sorted.sum, sorted.head, sorted(validValues.length / 2),
+            sorted(validValues.length - 1))
         }
         metric.map(strFormat)
       }

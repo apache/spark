@@ -464,7 +464,7 @@ private[ui] class JobDataSource(
 
     val jobDescription = UIUtils.makeDescription(lastStageDescription, basePath, plainText = false)
 
-    val detailUrl = "%s/jobs/job?id=%s".format(basePath, jobData.jobId)
+    val detailUrl = "%s/jobs/job/?id=%s".format(basePath, jobData.jobId)
 
     new JobTableRowData(
       jobData,
