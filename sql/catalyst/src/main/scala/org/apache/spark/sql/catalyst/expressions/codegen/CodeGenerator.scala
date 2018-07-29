@@ -39,7 +39,7 @@ import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -777,6 +777,62 @@ class CodegenContext {
        |Platform.putLong($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, $numElements);
        |$arrayName.pointTo($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, (int)$arraySize);
       """.stripMargin
+  }
+
+  /**
+   * Generates code and assignment creating a [[UnsafeArrayData]] or [[GenericArrayData]] based on
+   * given parameters.
+   *
+   * @param arrayName name of the array to create
+   * @param numElements code representing the number of elements the array should contain
+   * @param elementType data type of the elements in the array
+   * @param additionalErrorMessage string to include in the error message
+   */
+  def createArrayData(
+      arrayName: String,
+      dataType: DataType,
+      elementType: DataType,
+      numElements: String,
+      srcLoopIndex: String,
+      dstLoopIndex: String,
+      srcArray: String,
+      setValue: String,
+      additionalErrorMessage: String,
+      checkForNull: Option[Boolean] = None): (String, String) = {
+    val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
+
+    val setFunc = if (isPrimitiveType) {
+      s"set${CodeGenerator.primitiveTypeName(elementType)}"
+    } else {
+      "update"
+    }
+
+    val assignmentWithoutNull = if (checkForNull.isDefined) {
+      checkForNull.get
+    } else {
+      dataType.asInstanceOf[ArrayType].containsNull
+    }
+    val assignment = if (isPrimitiveType && assignmentWithoutNull) {
+      s"""
+         |if ($srcArray.isNullAt($srcLoopIndex)) {
+         |  $arrayName.setNullAt($dstLoopIndex);
+         |} else {
+         |  $arrayName.$setFunc($dstLoopIndex, $setValue);
+         |}
+       """.stripMargin
+    } else {
+      s"$arrayName.$setFunc($dstLoopIndex, $setValue);"
+    }
+
+    val codeGenerator = "org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator"
+    val elementSize = elementType.defaultSize
+    val allocation =
+      s"""
+         |ArrayData $arrayName = $codeGenerator$$.MODULE$$.allocateArrayData(
+         |  $elementSize, $numElements, $isPrimitiveType);
+       """.stripMargin
+
+    (allocation, assignment)
   }
 
   /**
@@ -1707,5 +1763,29 @@ object CodeGenerator extends Logging {
    */
   def isValidParamLength(paramLength: Int): Boolean = {
     paramLength <= MAX_JVM_METHOD_PARAMS_LENGTH
+  }
+
+  /**
+   * Allocate [[UnsafeArrayData]] or [[GenericArrayData]] based on given parameters.
+   */
+  def allocateArrayData(
+      elementSize: Int,
+      numElements : Long,
+      isPrimitiveType: Boolean) : ArrayData = {
+    val arraySize = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(numElements, elementSize)
+    if (isPrimitiveType && !UnsafeArrayData.shouldUseGenericArrayData(elementSize, numElements)) {
+      val arrayBytes = new Array[Byte](arraySize.toInt)
+      val arrayName = new UnsafeArrayData()
+      Platform.putLong(arrayBytes, Platform.BYTE_ARRAY_OFFSET, numElements)
+      arrayName.pointTo(arrayBytes, Platform.BYTE_ARRAY_OFFSET, arraySize.toInt)
+      arrayName
+    } else if (numElements <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toLong) {
+      new GenericArrayData(new Array[Any](numElements.toInt))
+    } else {
+      throw new RuntimeException(s"Unsuccessful try create array with $arraySize" +
+        " bytes of data due to exceeding the limit " +
+        "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for GenericArrayData." +
+        "$additionalErrorMessage")
+    }
   }
 }

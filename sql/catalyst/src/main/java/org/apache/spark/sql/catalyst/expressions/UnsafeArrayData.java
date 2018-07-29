@@ -477,9 +477,9 @@ public final class UnsafeArrayData extends ArrayData {
     return fromPrimitiveArray(null, offset, length, elementSize);
   }
 
-  public static boolean shouldUseGenericArrayData(int elementSize, int length) {
+  public static boolean shouldUseGenericArrayData(int elementSize, long length) {
     final long headerInBytes = calculateHeaderPortionInBytes(length);
-    final long valueRegionInBytes = (long)elementSize * length;
+    final long valueRegionInBytes = elementSize * length;
     final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
     return totalSizeInLongs > Integer.MAX_VALUE / 8;
   }
