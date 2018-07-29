@@ -292,8 +292,7 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     originalMap.append(key2, unsafeProj(InternalRow(value2)))
     originalMap.optimize()
 
-    val ser = new KryoSerializer(
-            (new SparkConf).set("spark.kryo.referenceTracking", "false")).newInstance()
+    val ser = sparkContext.env.serializer.newInstance()
     // Simulate serialize/deserialize twice on driver and executor
     val firstTimeSerialized = ser.deserialize[LongToUnsafeRowMap](ser.serialize(originalMap))
     val secondTimeSerialized =
