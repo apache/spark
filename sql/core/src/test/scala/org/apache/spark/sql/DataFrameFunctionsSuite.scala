@@ -901,8 +901,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("reverse function") {
-    // String test cases
+  test("reverse function - string") {
     val oneRowDF = Seq(("Spark", 3215)).toDF("s", "i")
     def testString(): Unit = {
       checkAnswer(oneRowDF.select(reverse('s)), Seq(Row("krapS")))
@@ -917,37 +916,61 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     // Test with cached relation, the Project will be evaluated with codegen
     oneRowDF.cache()
     testString()
+  }
 
-    // Array test cases (primitive-type elements)
-    val idf = Seq(
+  test("reverse function - array for primitive type not containing null") {
+    val idfNotContainsNull = Seq(
       Seq(1, 9, 8, 7),
       Seq(5, 8, 9, 7, 2),
       Seq.empty,
       null
     ).toDF("i")
 
-    def testArray(): Unit = {
+    def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
       checkAnswer(
-        idf.select(reverse('i)),
+        idfNotContainsNull.select(reverse('i)),
         Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
       )
       checkAnswer(
-        idf.selectExpr("reverse(i)"),
+        idfNotContainsNull.selectExpr("reverse(i)"),
         Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
-      )
-      checkAnswer(
-        idf.selectExpr("reverse(array(1, null, 2, null))"),
-        Seq.fill(idf.count().toInt)(Row(Seq(null, 2, null, 1)))
       )
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    testArray()
+    testArrayOfPrimitiveTypeNotContainsNull()
     // Test with cached relation, the Project will be evaluated with codegen
-    idf.cache()
-    testArray()
+    idfNotContainsNull.cache()
+    testArrayOfPrimitiveTypeNotContainsNull()
+  }
 
-    // Array test cases (non-primitive-type elements)
+  test("reverse function - array for primitive type containing null") {
+    val idfContainsNull = Seq[Seq[Integer]](
+      Seq(1, 9, 8, null, 7),
+      Seq(null, 5, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeContainsNull(): Unit = {
+      checkAnswer(
+        idfContainsNull.select(reverse('i)),
+        Seq(Row(Seq(7, null, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5, null)), Row(Seq.empty), Row(null))
+      )
+      checkAnswer(
+        idfContainsNull.selectExpr("reverse(i)"),
+        Seq(Row(Seq(7, null, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5, null)), Row(Seq.empty), Row(null))
+      )
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    idfContainsNull.cache()
+    testArrayOfPrimitiveTypeContainsNull()
+  }
+
+  test("reverse function - array for non-primitive type") {
     val sdf = Seq(
       Seq("c", "a", "b"),
       Seq("b", null, "c", null),
@@ -975,14 +998,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     // Test with cached relation, the Project will be evaluated with codegen
     sdf.cache()
     testArrayOfNonPrimitiveType()
+  }
 
-    // Error test cases
-    intercept[AnalysisException] {
-      oneRowDF.selectExpr("reverse(struct(1, 'a'))")
+  test("reverse function - data type mismatch") {
+    val ex1 = intercept[AnalysisException] {
+      sql("select reverse(struct(1, 'a'))")
     }
-    intercept[AnalysisException] {
-      oneRowDF.selectExpr("reverse(map(1, 'a'))")
+    assert(ex1.getMessage.contains("data type mismatch"))
+
+    val ex2 = intercept[AnalysisException] {
+      sql("select reverse(map(1, 'a'))")
     }
+    assert(ex2.getMessage.contains("data type mismatch"))
   }
 
   test("array position function") {
@@ -1484,6 +1511,71 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
+  }
+
+  // Shuffle expressions should produce same results at retries in the same DataFrame.
+  private def checkShuffleResult(df: DataFrame): Unit = {
+    checkAnswer(df, df.collect())
+  }
+
+  test("shuffle function - array for primitive type not containing null") {
+    val idfNotContainsNull = Seq(
+      Seq(1, 9, 8, 7),
+      Seq(5, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
+      checkShuffleResult(idfNotContainsNull.select(shuffle('i)))
+      checkShuffleResult(idfNotContainsNull.selectExpr("shuffle(i)"))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeNotContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    idfNotContainsNull.cache()
+    testArrayOfPrimitiveTypeNotContainsNull()
+  }
+
+  test("shuffle function - array for primitive type containing null") {
+    val idfContainsNull = Seq[Seq[Integer]](
+      Seq(1, 9, 8, null, 7),
+      Seq(null, 5, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeContainsNull(): Unit = {
+      checkShuffleResult(idfContainsNull.select(shuffle('i)))
+      checkShuffleResult(idfContainsNull.selectExpr("shuffle(i)"))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    idfContainsNull.cache()
+    testArrayOfPrimitiveTypeContainsNull()
+  }
+
+  test("shuffle function - array for non-primitive type") {
+    val sdf = Seq(
+      Seq("c", "a", "b"),
+      Seq("b", null, "c", null),
+      Seq.empty,
+      null
+    ).toDF("s")
+
+    def testNonPrimitiveType(): Unit = {
+      checkShuffleResult(sdf.select(shuffle('s)))
+      checkShuffleResult(sdf.selectExpr("shuffle(s)"))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testNonPrimitiveType()
+    // Test with cached relation, the Project will be evaluated with codegen
+    sdf.cache()
+    testNonPrimitiveType()
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {

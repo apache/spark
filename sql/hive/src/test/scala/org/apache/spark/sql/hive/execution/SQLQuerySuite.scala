@@ -2053,7 +2053,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       val deleteOnExitField = classOf[FileSystem].getDeclaredField("deleteOnExit")
       deleteOnExitField.setAccessible(true)
 
-      val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+      val fs = FileSystem.get(spark.sessionState.newHadoopConf())
       val setOfPath = deleteOnExitField.get(fs).asInstanceOf[Set[Path]]
 
       val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()

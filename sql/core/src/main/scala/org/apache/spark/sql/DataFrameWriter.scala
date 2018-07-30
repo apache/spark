@@ -275,7 +275,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         sparkSession = df.sparkSession,
         className = source,
         partitionColumns = partitioningColumns.getOrElse(Nil),
-        options = extraOptions.toMap).planForWriting(mode, AnalysisBarrier(df.logicalPlan))
+        options = extraOptions.toMap).planForWriting(mode, df.logicalPlan)
     }
   }
 
@@ -351,7 +351,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def assertNotPartitioned(operation: String): Unit = {
     if (partitioningColumns.isDefined) {
-      throw new AnalysisException( s"'$operation' does not support partitioning")
+      throw new AnalysisException(s"'$operation' does not support partitioning")
     }
   }
 

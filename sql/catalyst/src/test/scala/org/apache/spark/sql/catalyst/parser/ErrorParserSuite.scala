@@ -66,8 +66,11 @@ class ErrorParserSuite extends SparkFunSuite {
     intercept("select *\nfrom r\norder by q\ncluster by q", 3, 0, 11,
       "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported",
       "^^^")
+<<<<<<< HEAD
     intercept("select * from r except all select * from t", 1, 0, 41,
       "EXCEPT ALL is not supported",
       "^^^")
+=======
+>>>>>>> master
   }
 }

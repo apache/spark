@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 import java.util.TimeZone
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -1433,5 +1435,72 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(ArrayUnion(a00, a02).dataType.asInstanceOf[ArrayType].containsNull === true)
     assert(ArrayUnion(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(ArrayUnion(a20, a22).dataType.asInstanceOf[ArrayType].containsNull === true)
+  }
+
+  test("Shuffle") {
+    // Primitive-type elements
+    val ai0 = Literal.create(Seq(1, 2, 3, 4, 5), ArrayType(IntegerType, containsNull = false))
+    val ai1 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val ai2 = Literal.create(Seq(null, 1, null, 3), ArrayType(IntegerType, containsNull = true))
+    val ai3 = Literal.create(Seq(2, null, 4, null), ArrayType(IntegerType, containsNull = true))
+    val ai4 = Literal.create(Seq(null, null, null), ArrayType(IntegerType, containsNull = true))
+    val ai5 = Literal.create(Seq(1), ArrayType(IntegerType, containsNull = false))
+    val ai6 = Literal.create(Seq.empty, ArrayType(IntegerType, containsNull = false))
+    val ai7 = Literal.create(null, ArrayType(IntegerType, containsNull = true))
+
+    checkEvaluation(Shuffle(ai0, Some(0)), Seq(4, 1, 2, 3, 5))
+    checkEvaluation(Shuffle(ai1, Some(0)), Seq(3, 1, 2))
+    checkEvaluation(Shuffle(ai2, Some(0)), Seq(3, null, 1, null))
+    checkEvaluation(Shuffle(ai3, Some(0)), Seq(null, 2, null, 4))
+    checkEvaluation(Shuffle(ai4, Some(0)), Seq(null, null, null))
+    checkEvaluation(Shuffle(ai5, Some(0)), Seq(1))
+    checkEvaluation(Shuffle(ai6, Some(0)), Seq.empty)
+    checkEvaluation(Shuffle(ai7, Some(0)), null)
+
+    // Non-primitive-type elements
+    val as0 = Literal.create(Seq("a", "b", "c", "d"), ArrayType(StringType, containsNull = false))
+    val as1 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType, containsNull = false))
+    val as2 = Literal.create(Seq(null, "a", null, "c"), ArrayType(StringType, containsNull = true))
+    val as3 = Literal.create(Seq("b", null, "d", null), ArrayType(StringType, containsNull = true))
+    val as4 = Literal.create(Seq(null, null, null), ArrayType(StringType, containsNull = true))
+    val as5 = Literal.create(Seq("a"), ArrayType(StringType, containsNull = false))
+    val as6 = Literal.create(Seq.empty, ArrayType(StringType, containsNull = false))
+    val as7 = Literal.create(null, ArrayType(StringType, containsNull = true))
+    val aa = Literal.create(
+      Seq(Seq("a", "b"), Seq("c", "d"), Seq("e")),
+      ArrayType(ArrayType(StringType)))
+
+    checkEvaluation(Shuffle(as0, Some(0)), Seq("d", "a", "b", "c"))
+    checkEvaluation(Shuffle(as1, Some(0)), Seq("c", "a", "b"))
+    checkEvaluation(Shuffle(as2, Some(0)), Seq("c", null, "a", null))
+    checkEvaluation(Shuffle(as3, Some(0)), Seq(null, "b", null, "d"))
+    checkEvaluation(Shuffle(as4, Some(0)), Seq(null, null, null))
+    checkEvaluation(Shuffle(as5, Some(0)), Seq("a"))
+    checkEvaluation(Shuffle(as6, Some(0)), Seq.empty)
+    checkEvaluation(Shuffle(as7, Some(0)), null)
+    checkEvaluation(Shuffle(aa, Some(0)), Seq(Seq("e"), Seq("a", "b"), Seq("c", "d")))
+
+    val r = new Random()
+    val seed1 = Some(r.nextLong())
+    assert(evaluateWithoutCodegen(Shuffle(ai0, seed1)) ===
+      evaluateWithoutCodegen(Shuffle(ai0, seed1)))
+    assert(evaluateWithGeneratedMutableProjection(Shuffle(ai0, seed1)) ===
+      evaluateWithGeneratedMutableProjection(Shuffle(ai0, seed1)))
+    assert(evaluateWithUnsafeProjection(Shuffle(ai0, seed1)) ===
+      evaluateWithUnsafeProjection(Shuffle(ai0, seed1)))
+
+    val seed2 = Some(r.nextLong())
+    assert(evaluateWithoutCodegen(Shuffle(ai0, seed1)) !==
+      evaluateWithoutCodegen(Shuffle(ai0, seed2)))
+    assert(evaluateWithGeneratedMutableProjection(Shuffle(ai0, seed1)) !==
+      evaluateWithGeneratedMutableProjection(Shuffle(ai0, seed2)))
+    assert(evaluateWithUnsafeProjection(Shuffle(ai0, seed1)) !==
+      evaluateWithUnsafeProjection(Shuffle(ai0, seed2)))
+
+    val shuffle = Shuffle(ai0, seed1)
+    assert(shuffle.fastEquals(shuffle))
+    assert(!shuffle.fastEquals(Shuffle(ai0, seed1)))
+    assert(!shuffle.fastEquals(shuffle.freshCopy()))
+    assert(!shuffle.fastEquals(Shuffle(ai0, seed2)))
   }
 }

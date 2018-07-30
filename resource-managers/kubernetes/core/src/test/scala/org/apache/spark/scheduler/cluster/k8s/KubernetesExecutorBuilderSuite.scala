@@ -55,7 +55,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     val conf = KubernetesConf(
       new SparkConf(false),
       KubernetesExecutorSpecificConf(
-        "executor-id", new PodBuilder().build()),
+        "executor-id", Some(new PodBuilder().build())),
       "prefix",
       "appId",
       None,
@@ -74,7 +74,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     val conf = KubernetesConf(
       new SparkConf(false),
       KubernetesExecutorSpecificConf(
-        "executor-id", new PodBuilder().build()),
+        "executor-id", Some(new PodBuilder().build())),
       "prefix",
       "appId",
       None,
@@ -124,7 +124,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     val conf = KubernetesConf(
       new SparkConf(false),
       KubernetesExecutorSpecificConf(
-        "executor-id", new PodBuilder().build()),
+        "executor-id", Some(new PodBuilder().build())),
       "prefix",
       "appId",
       Some("secret"),

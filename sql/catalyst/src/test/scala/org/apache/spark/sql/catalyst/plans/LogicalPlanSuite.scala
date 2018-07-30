@@ -18,13 +18,12 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Coalesce, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.IntegerType
 
 /**
- * This suite is used to test [[LogicalPlan]]'s `transformUp/transformDown` plus analysis barrier
- * and make sure it can correctly skip sub-trees that have already been analyzed.
+ * This suite is used to test [[LogicalPlan]]'s `transformUp/transformDown`.
  */
 class LogicalPlanSuite extends SparkFunSuite {
   private var invocationCount = 0
@@ -58,31 +57,6 @@ class LogicalPlanSuite extends SparkFunSuite {
     invocationCount = 0
     plan transformDown function
     assert(invocationCount === 2)
-  }
-
-  test("transformUp skips all ready resolved plans wrapped in analysis barrier") {
-    invocationCount = 0
-    val plan = AnalysisBarrier(Project(Nil, Project(Nil, testRelation)))
-    plan transformUp function
-
-    assert(invocationCount === 0)
-
-    invocationCount = 0
-    plan transformDown function
-    assert(invocationCount === 0)
-  }
-
-  test("transformUp skips partially resolved plans wrapped in analysis barrier") {
-    invocationCount = 0
-    val plan1 = AnalysisBarrier(Project(Nil, testRelation))
-    val plan2 = Project(Nil, plan1)
-    plan2 transformUp function
-
-    assert(invocationCount === 1)
-
-    invocationCount = 0
-    plan2 transformDown function
-    assert(invocationCount === 1)
   }
 
   test("isStreaming") {
