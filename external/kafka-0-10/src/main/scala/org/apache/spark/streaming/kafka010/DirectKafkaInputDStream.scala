@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.kafka010
 
-import java.{ util => ju }
+import java.{util => ju}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicReference
 
@@ -58,6 +58,24 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
   private val initialRate = context.sparkContext.getConf.getLong(
     "spark.streaming.backpressure.initialRate", 0)
+
+  private val alignRangesToCommittedTransaction = context.sparkContext.getConf.getBoolean(
+    "spark.streaming.kafka.alignRangesToCommittedTransaction", false)
+
+  private val offsetSearchRewind = context.sparkContext.getConf.getLong(
+    "spark.streaming.kafka.offsetSearchRewind", 10)
+
+  @transient private var rw: OffsetWithRecordRewinder[K, V] = null
+  def rewinder(): OffsetWithRecordRewinder[K, V] = this.synchronized {
+    if (rw == null) {
+      val params = new ju.HashMap[String, Object](consumerStrategy.executorKafkaParams)
+      params.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, offsetSearchRewind.toString)
+      params.remove(ConsumerConfig.GROUP_ID_CONFIG)
+      rw = new OffsetWithRecordRewinder(offsetSearchRewind,
+        consumerStrategy.executorKafkaParams)
+    }
+    rw
+  }
 
   val executorKafkaParams = {
     val ekp = new ju.HashMap[String, Object](consumerStrategy.executorKafkaParams)
@@ -223,9 +241,22 @@ private[spark] class DirectKafkaInputDStream[K, V](
     }.getOrElse(offsets)
   }
 
+  protected def handleTransaction(offsets: Map[TopicPartition, Long]) = {
+    if (alignRangesToCommittedTransaction) {
+      val localRw = rewinder()
+      val localOffsets = currentOffsets
+      context.sparkContext.parallelize(offsets.toList).mapPartitions(tpos => {
+        tpos.map{case (tp, o) => localRw.rewind(localOffsets, tp, o)}
+      }).collect().toMap
+    } else {
+      offsets
+    }
+  }
+
   override def compute(validTime: Time): Option[KafkaRDD[K, V]] = {
-    val untilOffsets = clamp(latestOffsets())
-    val offsetRanges = untilOffsets.map { case (tp, uo) =>
+    val untilOffsets = handleTransaction(clamp(latestOffsets()))
+
+      val offsetRanges = untilOffsets.map { case (tp, uo) =>
       val fo = currentOffsets(tp)
       OffsetRange(tp.topic, tp.partition, fo, uo)
     }
@@ -267,6 +298,9 @@ private[spark] class DirectKafkaInputDStream[K, V](
   override def stop(): Unit = this.synchronized {
     if (kc != null) {
       kc.close()
+    }
+    if(rw != null) {
+      rw.close()
     }
   }
 
