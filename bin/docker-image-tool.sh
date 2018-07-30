@@ -104,8 +104,8 @@ Commands:
 
 Options:
   -f file               Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
-  -p file               Dockerfile with Python baked in. By default builds the Dockerfile shipped with Spark.
-  -R file               Dockerfile with R baked in. By default builds the Dockerfile shipped with Spark.
+  -p file               Dockerfile to build for PySpark Jobs. Builds Python dependencies and ships with Spark.
+  -R file               Dockerfile to build for SparkR Jobs. Builds R dependencies and ships with Spark.
   -r repo               Repository address.
   -t tag                Tag to apply to the built image, or to identify the image to be pushed.
   -m                    Use minikube's Docker daemon.
