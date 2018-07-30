@@ -224,6 +224,32 @@ case class Stack(children: Seq[Expression]) extends Generator {
 }
 
 /**
+ * Replicate the row N times. N is specified as the first argument to the function.
+ * This is an internal function solely used by optimizer to rewrite EXCEPT ALL AND
+ * INTERSECT ALL queries.
+ */
+case class ReplicateRows(children: Seq[Expression]) extends Generator with CodegenFallback {
+  private lazy val numColumns = children.length - 1 // remove the multiplier value from output.
+
+  override def elementSchema: StructType =
+    StructType(children.tail.zipWithIndex.map {
+      case (e, index) => StructField(s"col$index", e.dataType)
+    })
+
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+    val numRows = children.head.eval(input).asInstanceOf[Long]
+    val values = children.tail.map(_.eval(input)).toArray
+    Range.Long(0, numRows, 1).map { _ =>
+      val fields = new Array[Any](numColumns)
+      for (col <- 0 until numColumns) {
+        fields.update(col, values(col))
+      }
+      InternalRow(fields: _*)
+    }
+  }
+}
+
+/**
  * Wrapper around another generator to specify outer behavior. This is used to implement functions
  * such as explode_outer. This expression gets replaced during analysis.
  */
