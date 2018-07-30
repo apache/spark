@@ -1935,6 +1935,23 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a new Dataset containing rows only in both this Dataset and another Dataset while
+   * preserving the duplicates.
+   * This is equivalent to `INTERSECT ALL` in SQL.
+   *
+   * @note Equality checking is performed directly on the encoded representation of the data
+   * and thus is not affected by a custom `equals` function defined on `T`. Also as standard
+   * in SQL, this function resolves columns by position (not by name).
+   *
+   * @group typedrel
+   * @since 2.4.0
+   */
+  def intersectAll(other: Dataset[T]): Dataset[T] = withSetOperator {
+    Intersect(logicalPlan, other.logicalPlan, isAll = true)
+  }
+
+
+  /**
    * Returns a new Dataset containing rows in this Dataset but not in another Dataset.
    * This is equivalent to `EXCEPT DISTINCT` in SQL.
    *
@@ -1961,7 +1978,7 @@ class Dataset[T] private[sql](
    * @since 2.4.0
    */
   def exceptAll(other: Dataset[T]): Dataset[T] = withSetOperator {
-    Except(planWithBarrier, other.planWithBarrier, isAll = true)
+    Except(logicalPlan, other.logicalPlan, isAll = true)
   }
 
   /**
