@@ -125,6 +125,7 @@ def grouped_agg_pandas_udf_example(spark):
     @pandas_udf("double", PandasUDFType.GROUPED_AGG)
     def mean_udf(v):
         return v.mean()
+
     df.groupby("id").agg(mean_udf(df['v'])).show()
     # +---+-----------+
     # | id|mean_udf(v)|
