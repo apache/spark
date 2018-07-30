@@ -27,12 +27,14 @@ import scala.collection.JavaConverters._
 
 import org.apache.avro.Schema
 import org.apache.avro.Schema.{Field, Type}
-import org.apache.avro.file.DataFileWriter
-import org.apache.avro.generic.{GenericData, GenericDatumWriter, GenericRecord}
+import org.apache.avro.file.{DataFileReader, DataFileWriter}
+import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
@@ -49,6 +51,13 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     val originalEntries = spark.read.format("avro").load(testAvro).collect()
     val newEntries = spark.read.format("avro").load(newFile)
     checkAnswer(newEntries, originalEntries)
+  }
+
+  test("resolve avro data source") {
+    Seq("avro", "com.databricks.spark.avro").foreach { provider =>
+      assert(DataSource.lookupDataSource(provider, spark.sessionState.conf) ===
+        classOf[org.apache.spark.sql.avro.AvroFileFormat])
+    }
   }
 
   test("reading from multiple paths") {
@@ -356,21 +365,19 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("write with compression") {
+  test("write with compression - sql configs") {
     withTempPath { dir =>
-      val AVRO_COMPRESSION_CODEC = "spark.sql.avro.compression.codec"
-      val AVRO_DEFLATE_LEVEL = "spark.sql.avro.deflate.level"
       val uncompressDir = s"$dir/uncompress"
       val deflateDir = s"$dir/deflate"
       val snappyDir = s"$dir/snappy"
 
       val df = spark.read.format("avro").load(testAvro)
-      spark.conf.set(AVRO_COMPRESSION_CODEC, "uncompressed")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "uncompressed")
       df.write.format("avro").save(uncompressDir)
-      spark.conf.set(AVRO_COMPRESSION_CODEC, "deflate")
-      spark.conf.set(AVRO_DEFLATE_LEVEL, "9")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "deflate")
+      spark.conf.set(SQLConf.AVRO_DEFLATE_LEVEL.key, "9")
       df.write.format("avro").save(deflateDir)
-      spark.conf.set(AVRO_COMPRESSION_CODEC, "snappy")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "snappy")
       df.write.format("avro").save(snappyDir)
 
       val uncompressSize = FileUtils.sizeOfDirectory(new File(uncompressDir))
@@ -384,6 +391,13 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   test("dsl test") {
     val results = spark.read.format("avro").load(episodesAvro).select("title").collect()
+    assert(results.length === 8)
+  }
+
+  test("old avro data source name works") {
+    val results =
+      spark.read.format("com.databricks.spark.avro")
+        .load(episodesAvro).select("title").collect()
     assert(results.length === 8)
   }
 
@@ -456,7 +470,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     // get the same values back.
     withTempPath { tempDir =>
       val name = "AvroTest"
-      val namespace = "com.databricks.spark.avro"
+      val namespace = "org.apache.spark.avro"
       val parameters = Map("recordName" -> name, "recordNamespace" -> namespace)
 
       val avroDir = tempDir + "/namedAvro"
@@ -630,12 +644,8 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     intercept[FileNotFoundException] {
       withTempPath { dir =>
         FileUtils.touch(new File(dir, "test"))
-        val hadoopConf = spark.sqlContext.sparkContext.hadoopConfiguration
-        try {
-          hadoopConf.set(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
+        withSQLConf(AvroFileFormat.IgnoreFilesWithoutExtensionProperty -> "true") {
           spark.read.format("avro").load(dir.toString)
-        } finally {
-          hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)
         }
       }
     }
@@ -709,15 +719,10 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       Files.createFile(new File(tempSaveDir, "non-avro").toPath)
 
-      val hadoopConf = spark.sqlContext.sparkContext.hadoopConfiguration
-      val count = try {
-        hadoopConf.set(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
+      withSQLConf(AvroFileFormat.IgnoreFilesWithoutExtensionProperty -> "true") {
         val newDf = spark.read.format("avro").load(tempSaveDir)
-        newDf.count()
-      } finally {
-        hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)
+        assert(newDf.count() == 8)
       }
-      assert(count == 8)
     }
   }
 
@@ -880,20 +885,42 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         Paths.get(new URL(episodesAvro).toURI),
         Paths.get(dir.getCanonicalPath, "episodes"))
 
-      val hadoopConf = spark.sqlContext.sparkContext.hadoopConfiguration
-      val count = try {
-        hadoopConf.set(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      withSQLConf(AvroFileFormat.IgnoreFilesWithoutExtensionProperty -> "true") {
         val newDf = spark
           .read
           .option("ignoreExtension", "true")
           .format("avro")
           .load(s"${dir.getCanonicalPath}/episodes")
-        newDf.count()
-      } finally {
-        hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)
+        assert(newDf.count() == 8)
       }
+    }
+  }
 
-      assert(count == 8)
+  test("SPARK-24881: write with compression - avro options") {
+    def getCodec(dir: String): Option[String] = {
+      val files = new File(dir)
+        .listFiles()
+        .filter(_.isFile)
+        .filter(_.getName.endsWith("avro"))
+      files.map { file =>
+        val reader = new DataFileReader(file, new GenericDatumReader[Any]())
+        val r = reader.getMetaString("avro.codec")
+        r
+      }.map(v => if (v == "null") "uncompressed" else v).headOption
+    }
+    def checkCodec(df: DataFrame, dir: String, codec: String): Unit = {
+      val subdir = s"$dir/$codec"
+      df.write.option("compression", codec).format("avro").save(subdir)
+      assert(getCodec(subdir) == Some(codec))
+    }
+    withTempPath { dir =>
+      val path = dir.toString
+      val df = spark.read.format("avro").load(testAvro)
+
+      checkCodec(df, path, "uncompressed")
+      checkCodec(df, path, "deflate")
+      checkCodec(df, path, "snappy")
     }
   }
 }

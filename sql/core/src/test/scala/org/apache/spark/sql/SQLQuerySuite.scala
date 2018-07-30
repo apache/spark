@@ -1690,22 +1690,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(e.message.contains("Hive built-in ORC data source must be used with Hive support"))
 
     e = intercept[AnalysisException] {
-      sql(s"select id from `com.databricks.spark.avro`.`file_path`")
-    }
-    assert(e.message.contains("Failed to find data source: com.databricks.spark.avro."))
-
-    // data source type is case insensitive
-    e = intercept[AnalysisException] {
-      sql(s"select id from Avro.`file_path`")
-    }
-    assert(e.message.contains("Failed to find data source: avro."))
-
-    e = intercept[AnalysisException] {
-      sql(s"select id from avro.`file_path`")
-    }
-    assert(e.message.contains("Failed to find data source: avro."))
-
-    e = intercept[AnalysisException] {
       sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
     }
     assert(e.message.contains("Table or view not found: " +
