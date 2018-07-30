@@ -93,6 +93,7 @@ class PartitionBatchPruningSuite
       spark.catalog.uncacheTable("pruningData")
       spark.catalog.uncacheTable("pruningStringData")
       spark.catalog.uncacheTable("pruningArrayData")
+      spark.catalog.uncacheTable("pruningBinaryData")
     } finally {
       super.afterEach()
     }
