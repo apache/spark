@@ -148,7 +148,7 @@
     <codahale.metrics.version>3.2.5</codahale.metrics.version>
     <dropwizard.version>1.0.0</dropwizard.version>
     <spark-influx-sink.version>0.4.0</spark-influx-sink.version>
-    <avro.version>1.8.1</avro.version>
+    <avro.version>1.8.2</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
     <jets3t.version>0.9.4</jets3t.version>
     <aws.kinesis.client.version>1.7.3</aws.kinesis.client.version>
