@@ -133,14 +133,17 @@ SELECT * FROM tab1
 EXCEPT
 SELECT * FROM tab2
 UNION ALL
+(
 SELECT * FROM tab1
 INTERSECT ALL
 SELECT * FROM tab2
+)
 -- !query 10 schema
 struct<k:int,v:int>
 -- !query 10 output
 1	2
 1	2
+1	3
 2	3
 NULL	NULL
 NULL	NULL
@@ -151,13 +154,15 @@ SELECT * FROM tab1
 EXCEPT
 SELECT * FROM tab2
 EXCEPT
+(
 SELECT * FROM tab1
 INTERSECT ALL
 SELECT * FROM tab2
+)
 -- !query 11 schema
 struct<k:int,v:int>
 -- !query 11 output
-
+1	3
 
 
 -- !query 12

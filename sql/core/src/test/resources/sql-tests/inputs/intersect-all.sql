@@ -59,22 +59,29 @@ INTERSECT ALL
 SELECT * FROM tab2;
 
 -- Chain of different `set operations
+-- We need to parenthesize the following two queries to enforce
+-- certain order of evaluation of operators. After fix to
+-- SPARK-24966 this can be removed.
 SELECT * FROM tab1
 EXCEPT
 SELECT * FROM tab2
 UNION ALL
+(
 SELECT * FROM tab1
 INTERSECT ALL
-SELECT * FROM tab2;
+SELECT * FROM tab2
+);
 
 -- Chain of different `set operations
 SELECT * FROM tab1
 EXCEPT
 SELECT * FROM tab2
 EXCEPT
+(
 SELECT * FROM tab1
 INTERSECT ALL
-SELECT * FROM tab2;
+SELECT * FROM tab2
+);
 
 -- Join under intersect all
 SELECT * 
