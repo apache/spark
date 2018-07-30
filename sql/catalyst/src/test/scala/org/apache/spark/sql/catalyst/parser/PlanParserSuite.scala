@@ -70,7 +70,6 @@ class PlanParserSuite extends AnalysisTest {
     intercept("select * from a minus all select * from b", "MINUS ALL is not supported.")
     assertEqual("select * from a minus distinct select * from b", a.except(b))
     assertEqual("select * from a intersect select * from b", a.intersect(b))
-    intercept("select * from a intersect all select * from b", "INTERSECT ALL is not supported.")
     assertEqual("select * from a intersect distinct select * from b", a.intersect(b))
   }
 

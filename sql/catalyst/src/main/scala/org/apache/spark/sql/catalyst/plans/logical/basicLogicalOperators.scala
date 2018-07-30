@@ -164,7 +164,12 @@ object SetOperation {
   def unapply(p: SetOperation): Option[(LogicalPlan, LogicalPlan)] = Some((p.left, p.right))
 }
 
-case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
+case class Intersect(
+   left: LogicalPlan,
+   right: LogicalPlan,
+   isAll: Boolean = false) extends SetOperation(left, right) {
+
+  override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
 
   override def output: Seq[Attribute] =
     left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
