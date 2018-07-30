@@ -119,9 +119,9 @@ class JDBCOptions(
   // the column used to partition
   val partitionColumn = parameters.get(JDBC_PARTITION_COLUMN)
   // the lower bound of partition column
-  val lowerBound = parameters.get(JDBC_LOWER_BOUND).map(_.toLong)
+  val lowerBound = parameters.get(JDBC_LOWER_BOUND)
   // the upper bound of the partition column
-  val upperBound = parameters.get(JDBC_UPPER_BOUND).map(_.toLong)
+  val upperBound = parameters.get(JDBC_UPPER_BOUND)
   // numPartitions is also used for data source writing
   require((partitionColumn.isEmpty && lowerBound.isEmpty && upperBound.isEmpty) ||
     (partitionColumn.isDefined && lowerBound.isDefined && upperBound.isDefined &&
