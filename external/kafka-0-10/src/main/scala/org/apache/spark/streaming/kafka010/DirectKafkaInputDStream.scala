@@ -42,7 +42,7 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
  * per second that each '''partition''' will accept.
  * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
  *   see [[LocationStrategy]] for more details.
- * @param consumerStrategy In most caseslamp, pass in [[ConsumerStrategies.Subscribe]],
+ * @param consumerStrategy In most cases, pass in [[ConsumerStrategies.Subscribe]],
  *   see [[ConsumerStrategy]] for more details
  * @param ppc configuration of settings such as max rate on a per-partition basis.
  *   see [[PerPartitionConfig]] for more details.
