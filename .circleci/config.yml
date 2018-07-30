@@ -167,7 +167,7 @@ jobs:
   run-style-tests:
     # depends only on build-maven
     <<: *test-defaults
-    resource_class: medium
+    resource_class: medium+
     steps:
       - *checkout-code
       # Need maven dependency cache, otherwise checkstyle tests fail as such:
@@ -175,10 +175,10 @@ jobs:
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - *restore-build-binaries-cache
-      - run: dev/run-style-tests.py | tee /tmp/run-style-tests.log
-      - store_artifacts:
-          path: /tmp/run-style-tests.log
-          destination: run-style-tests.log
+      - run:
+          name: Run style tests
+          command: dev/run-style-tests.py
+          no_output_timeout: 15m
 
   run-build-tests:
     # depends only on build-maven

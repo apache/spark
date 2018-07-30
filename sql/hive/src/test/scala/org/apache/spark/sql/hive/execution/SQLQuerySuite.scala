@@ -2053,7 +2053,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       val deleteOnExitField = classOf[FileSystem].getDeclaredField("deleteOnExit")
       deleteOnExitField.setAccessible(true)
 
-      val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+      val fs = FileSystem.get(spark.sessionState.newHadoopConf())
       val setOfPath = deleteOnExitField.get(fs).asInstanceOf[Set[Path]]
 
       val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
@@ -2098,7 +2098,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   Seq("orc", "parquet").foreach { format =>
-    test(s"SPARK-18355 Read data from a hive table with a new column - $format") {
+    ignore(s"SPARK-18355 Read data from a hive table with a new column - $format") {
       val client =
         spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
 

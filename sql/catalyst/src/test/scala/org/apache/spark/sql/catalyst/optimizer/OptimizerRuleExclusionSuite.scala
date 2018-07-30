@@ -28,8 +28,10 @@ class OptimizerRuleExclusionSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
 
-  private def verifyExcludedRules(excludedRuleNames: Seq[String]) {
-    val optimizer = new SimpleTestOptimizer()
+  private def verifyExcludedRules(optimizer: Optimizer, rulesToExclude: Seq[String]) {
+    val nonExcludableRules = optimizer.nonExcludableRules
+
+    val excludedRuleNames = rulesToExclude.filter(!nonExcludableRules.contains(_))
     // Batches whose rules are all to be excluded should be removed as a whole.
     val excludedBatchNames = optimizer.batches
       .filter(batch => batch.rules.forall(rule => excludedRuleNames.contains(rule.ruleName)))
@@ -38,21 +40,31 @@ class OptimizerRuleExclusionSuite extends PlanTest {
     withSQLConf(
       OPTIMIZER_EXCLUDED_RULES.key -> excludedRuleNames.foldLeft("")((l, r) => l + "," + r)) {
       val batches = optimizer.batches
+      // Verify removed batches.
       assert(batches.forall(batch => !excludedBatchNames.contains(batch.name)))
+      // Verify removed rules.
       assert(
         batches
           .forall(batch => batch.rules.forall(rule => !excludedRuleNames.contains(rule.ruleName))))
+      // Verify non-excludable rules retained.
+      nonExcludableRules.foreach { nonExcludableRule =>
+        assert(
+          optimizer.batches
+            .exists(batch => batch.rules.exists(rule => rule.ruleName == nonExcludableRule)))
+      }
     }
   }
 
   test("Exclude a single rule from multiple batches") {
     verifyExcludedRules(
+      new SimpleTestOptimizer(),
       Seq(
         PushPredicateThroughJoin.ruleName))
   }
 
   test("Exclude multiple rules from single or multiple batches") {
     verifyExcludedRules(
+      new SimpleTestOptimizer(),
       Seq(
         CombineUnions.ruleName,
         RemoveLiteralFromGroupExpressions.ruleName,
@@ -61,6 +73,7 @@ class OptimizerRuleExclusionSuite extends PlanTest {
 
   test("Exclude non-existent rule with other valid rules") {
     verifyExcludedRules(
+      new SimpleTestOptimizer(),
       Seq(
         LimitPushDown.ruleName,
         InferFiltersFromConstraints.ruleName,
@@ -68,20 +81,34 @@ class OptimizerRuleExclusionSuite extends PlanTest {
   }
 
   test("Try to exclude a non-excludable rule") {
-    val excludedRules = Seq(
-      ReplaceIntersectWithSemiJoin.ruleName,
-      PullupCorrelatedPredicates.ruleName)
+    verifyExcludedRules(
+      new SimpleTestOptimizer(),
+      Seq(
+        ReplaceIntersectWithSemiJoin.ruleName,
+        PullupCorrelatedPredicates.ruleName))
+  }
 
-    val optimizer = new SimpleTestOptimizer()
+  test("Custom optimizer") {
+    val optimizer = new SimpleTestOptimizer() {
+      override def defaultBatches: Seq[Batch] =
+        Batch("push", Once,
+          PushDownPredicate,
+          PushPredicateThroughJoin,
+          PushProjectionThroughUnion) ::
+        Batch("pull", Once,
+          PullupCorrelatedPredicates) :: Nil
 
-    withSQLConf(
-      OPTIMIZER_EXCLUDED_RULES.key -> excludedRules.foldLeft("")((l, r) => l + "," + r)) {
-      excludedRules.foreach { excludedRule =>
-        assert(
-          optimizer.batches
-            .exists(batch => batch.rules.exists(rule => rule.ruleName == excludedRule)))
-      }
+      override def nonExcludableRules: Seq[String] =
+        PushDownPredicate.ruleName ::
+          PullupCorrelatedPredicates.ruleName :: Nil
     }
+
+    verifyExcludedRules(
+      optimizer,
+      Seq(
+        PushDownPredicate.ruleName,
+        PushProjectionThroughUnion.ruleName,
+        PullupCorrelatedPredicates.ruleName))
   }
 
   test("Verify optimized plan after excluding CombineUnions rule") {

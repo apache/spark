@@ -21,6 +21,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Options for Avro Reader and Writer stored in case insensitive manner.
@@ -67,5 +68,15 @@ class AvroOptions(
       .get("ignoreExtension")
       .map(_.toBoolean)
       .getOrElse(!ignoreFilesWithoutExtension)
+  }
+
+  /**
+   * The `compression` option allows to specify a compression codec used in write.
+   * Currently supported codecs are `uncompressed`, `snappy` and `deflate`.
+   * If the option is not set, the `spark.sql.avro.compression.codec` config is taken into
+   * account. If the former one is not set too, the `snappy` codec is used by default.
+   */
+  val compression: String = {
+    parameters.get("compression").getOrElse(SQLConf.get.avroCompressionCodec)
   }
 }
