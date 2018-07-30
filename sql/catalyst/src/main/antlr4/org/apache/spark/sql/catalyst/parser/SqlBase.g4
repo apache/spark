@@ -18,6 +18,12 @@ grammar SqlBase;
 
 @members {
   /**
+   * When true, INTERSECT is given precedence over UNION and EXCEPT set operations as per
+   * the SQL standard.
+   */
+  public boolean setops_precedence_enforced = true;
+
+  /**
    * Verify whether current token is a valid decimal token (which contains dot).
    * Returns true if the character that follows the token is not a digit or letter or underscore.
    *
@@ -352,8 +358,13 @@ multiInsertQueryBody
     ;
 
 queryTerm
-    : queryPrimary                                                                         #queryTermDefault
-    | left=queryTerm operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
+    : queryPrimary                                                                       #queryTermDefault
+    | left=queryTerm {!setops_precedence_enforced}?
+        operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
+    | left=queryTerm {setops_precedence_enforced}?
+        operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
+    | left=queryTerm {setops_precedence_enforced}?
+        operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
     ;
 
 queryPrimary
