@@ -118,18 +118,22 @@ private[avro] class AvroFileFormat extends FileFormat with DataSourceRegister {
 
     AvroJob.setOutputKeySchema(job, outputAvroSchema)
 
-    val (compression, levelInfo) = parsedOptions.compression match {
-      case "uncompressed" => (NULL_CODEC, "")
-      case codec @ (SNAPPY_CODEC | BZIP2_CODEC | XZ_CODEC) => (codec, "")
-      case DEFLATE_CODEC =>
-        val deflateLevel = spark.sessionState.conf.avroDeflateLevel
-        job.getConfiguration.setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, deflateLevel)
-        (DEFLATE_CODEC, s" (level = $deflateLevel)")
-      case unknown => throw new IllegalArgumentException(s"Invalid compression codec: $unknown")
+    if (parsedOptions.compression == "uncompressed") {
+      job.getConfiguration.setBoolean("mapred.output.compress", false)
+    } else {
+      job.getConfiguration.setBoolean("mapred.output.compress", true)
+      log.info(s"Compressing Avro output using the ${parsedOptions.compression} codec")
+      val codec = parsedOptions.compression match {
+        case DEFLATE_CODEC =>
+          val deflateLevel = spark.sessionState.conf.avroDeflateLevel
+          log.info(s"Avro compression level $deflateLevel will be used for $DEFLATE_CODEC codec.")
+          job.getConfiguration.setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, deflateLevel)
+          DEFLATE_CODEC
+        case codec @ (SNAPPY_CODEC | BZIP2_CODEC | XZ_CODEC) => codec
+        case unknown => throw new IllegalArgumentException(s"Invalid compression codec: $unknown")
+      }
+      job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, codec)
     }
-    job.getConfiguration.setBoolean("mapred.output.compress", compression != NULL_CODEC)
-    job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, compression)
-    log.info(s"Compressing Avro output using the $compression codec$levelInfo")
 
     new AvroOutputWriterFactory(dataSchema, outputAvroSchema.toString)
   }
