@@ -59,7 +59,7 @@ abstract class AverageLike(child: Expression) extends DeclarativeAggregate {
   override lazy val evaluateExpression = child.dataType match {
     case _: DecimalType =>
       Cast(
-        DecimalPrecision.decimalAndDecimal.lift(sum / Cast(count, DecimalType.LongDecimal)).get,
+        DecimalPrecision.decimalAndDecimal(sum / Cast(count, DecimalType.LongDecimal)),
         resultType)
     case _ =>
       Cast(sum, resultType) / Cast(count, resultType)
