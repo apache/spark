@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.kafka010
 
-import java.{util => ju}
+import java.{ util => ju }
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicReference
 
@@ -42,7 +42,7 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
  * per second that each '''partition''' will accept.
  * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
  *   see [[LocationStrategy]] for more details.
- * @param consumerStrategy In most cases, pass in [[ConsumerStrategies.Subscribe]],
+ * @param consumerStrategy In most caseslamp, pass in [[ConsumerStrategies.Subscribe]],
  *   see [[ConsumerStrategy]] for more details
  * @param ppc configuration of settings such as max rate on a per-partition basis.
  *   see [[PerPartitionConfig]] for more details.
@@ -256,7 +256,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
   override def compute(validTime: Time): Option[KafkaRDD[K, V]] = {
     val untilOffsets = handleTransaction(clamp(latestOffsets()))
 
-      val offsetRanges = untilOffsets.map { case (tp, uo) =>
+    val offsetRanges = untilOffsets.map { case (tp, uo) =>
       val fo = currentOffsets(tp)
       OffsetRange(tp.topic, tp.partition, fo, uo)
     }
