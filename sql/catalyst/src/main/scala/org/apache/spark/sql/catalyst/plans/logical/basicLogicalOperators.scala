@@ -165,9 +165,9 @@ object SetOperation {
 }
 
 case class Intersect(
-   left: LogicalPlan,
-   right: LogicalPlan,
-   isAll: Boolean = false) extends SetOperation(left, right) {
+    left: LogicalPlan,
+    right: LogicalPlan,
+    isAll: Boolean = false) extends SetOperation(left, right) {
 
   override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
 
