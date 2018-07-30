@@ -30,27 +30,13 @@ import org.apache.spark.util.ThreadUtils
  * This test suite covers all the cases that shall fail fast on job submitted that contains one
  * of more barrier stages.
  */
-class BarrierStageOnSubmittedSuite extends SparkFunSuite with BeforeAndAfterEach
-    with LocalSparkContext {
+class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext {
 
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-
-    val conf = new SparkConf()
-      .setMaster("local[4]")
-      .setAppName("test")
-    sc = new SparkContext(conf)
-  }
-
-  private def testSubmitJob(
-      sc: SparkContext,
-      rdd: RDD[Int],
-      partitions: Option[Seq[Int]] = None,
-      message: String): Unit = {
+  private def testSubmitJob(sc: SparkContext, rdd: RDD[Int], message: String): Unit = {
     val futureAction = sc.submitJob(
       rdd,
       (iter: Iterator[Int]) => iter.toArray,
-      partitions.getOrElse(0 until rdd.partitions.length),
+      0 until rdd.partitions.length,
       { case (_, _) => return }: (Int, Array[Int]) => Unit,
       { return }
     )
@@ -149,5 +135,36 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with BeforeAndAfterEach
     // Should be able to submit job and run successfully.
     val result = rdd3.collect().sorted
     assert(result === Seq(12, 14, 16, 18, 20, 22, 24, 26, 28, 30))
+
+  test("submit a barrier ResultStage with dynamic resource allocation enabled") {
+    val conf = new SparkConf()
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.dynamicAllocation.testing", "true")
+      .setMaster("local[4]")
+      .setAppName("test")
+    sc = new SparkContext(conf)
+
+    val rdd = sc.parallelize(1 to 10, 4)
+      .barrier()
+      .mapPartitions((iter, context) => iter)
+    testSubmitJob(sc, rdd,
+      "Don't support run a barrier stage with dynamic resource allocation enabled")
+  }
+
+  test("submit a barrier ShuffleMapStage with dynamic resource allocation enabled") {
+    val conf = new SparkConf()
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.dynamicAllocation.testing", "true")
+      .setMaster("local[4]")
+      .setAppName("test")
+    sc = new SparkContext(conf)
+
+    val rdd = sc.parallelize(1 to 10, 4)
+      .barrier()
+      .mapPartitions((iter, context) => iter)
+      .repartition(2)
+      .map(x => x + 1)
+    testSubmitJob(sc, rdd,
+      "Don't support run a barrier stage with dynamic resource allocation enabled")
   }
 }
