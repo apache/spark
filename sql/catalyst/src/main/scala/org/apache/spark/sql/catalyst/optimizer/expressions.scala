@@ -417,22 +417,34 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         val (h, t) = branches.span(_._1 != TrueLiteral)
         CaseWhen( h :+ t.head, None)
 
-      case e @ CaseWhen(branches, _) =>
-        val newBranches = branches.foldLeft(List[(Expression, Expression)]()) {
-          case (newBranches, branch) =>
-            if (newBranches.exists(_._1.semanticEquals(branch._1))) {
-              // If a condition in a branch is previously seen, this branch can be pruned.
-              // TODO: In fact, if a condition is a sub-condition of the previous one,
-              // TODO: it can be pruned. This is less strict and can be implemented
-              // TODO: by decomposing seen conditions.
-              newBranches
-            } else if (newBranches.nonEmpty && newBranches.last._2.semanticEquals(branch._2)) {
-              // If the outputs of two adjacent branches are the same, two branches can be combined.
-              newBranches.take(newBranches.length - 1)
-                .:+((Or(newBranches.last._1, branch._1), newBranches.last._2))
-            } else {
-              newBranches.:+(branch)
-            }
+      case e @ CaseWhen(branches, _) if {
+
+        true
+      } =>
+        val newBranches = branches.foldLeft(new ArrayBuffer[(Expression, Expression)]()) {
+          case (newBranches, branch) if newBranches.exists(_._1.semanticEquals(branch._1)) =>
+            // If a condition in a branch is previously seen, this branch can be pruned.
+            // TODO: In fact, if a condition is a sub-condition of the previous one,
+            // TODO: it can be pruned. This is less strict and can be implemented
+            // TODO: by decomposing the seen conditions.
+            newBranches
+          case (newBranches, branch) => newBranches += branch
+        }
+        if (newBranches.length < branches.length) {
+          e.copy(branches = newBranches)
+        } else {
+          e
+        }
+
+      case e @ CaseWhen(branches, _) if {
+        true
+      } =>
+        val newBranches = branches.foldLeft(new ArrayBuffer[(Expression, Expression)]()) {
+          case (newBranches, branch)
+            if newBranches.nonEmpty && newBranches.last._2.semanticEquals(branch._2) =>
+            // If the outputs of two adjacent branches are the same, two branches can be combined.
+            newBranches.init += ((Or(newBranches.last._1, branch._1), newBranches.last._2))
+          case (newBranches, branch) => newBranches += branch
         }
         if (newBranches.length < branches.length) {
           e.copy(branches = newBranches)

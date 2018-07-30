@@ -156,7 +156,7 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
         Nil,
         None),
       CaseWhen((Or(GreaterThan(Rand(0), Literal(0.5)), NonFoldableLiteral(true)), Literal(1)) ::
-        (Or(LessThan(Rand(1), Literal(0.5)), NonFoldableLiteral(true)), Literal(3)) ::
+        (LessThan(Rand(1), Literal(0.5)), Literal(3)) ::
         (NonFoldableLiteral(false), Literal(4)) ::
         Nil,
         None)
