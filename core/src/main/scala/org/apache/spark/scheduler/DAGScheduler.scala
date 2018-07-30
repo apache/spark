@@ -592,6 +592,14 @@ class DAGScheduler(
           "Total number of partitions: " + maxPartitions)
     }
 
+    // Check to make sure we are not launching a barrier stage on only a subset of all the
+    // partitions, one example is the `first()` operation.
+    if (rdd.isBarrier() &&
+        partitions.filter(p => p >= 0 && p < maxPartitions).size < maxPartitions) {
+      throw new SparkException("Don't support run a barrier stage on partial partitions(eg. by " +
+        "calling .first() on a barrier RDD).")
+    }
+
     val jobId = nextJobId.getAndIncrement()
     if (partitions.size == 0) {
       // Return immediately if the job is running 0 tasks
