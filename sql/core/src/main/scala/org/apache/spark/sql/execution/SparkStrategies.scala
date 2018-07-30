@@ -529,9 +529,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Distinct(child) =>
         throw new IllegalStateException(
           "logical distinct operator should have been replaced by aggregate in the optimizer")
-      case logical.Intersect(left, right) =>
+      case logical.Intersect(left, right, false) =>
         throw new IllegalStateException(
-          "logical intersect operator should have been replaced by semi-join in the optimizer")
+          "logical intersect  operator should have been replaced by semi-join in the optimizer")
+      case logical.Intersect(left, right, true) =>
+        throw new IllegalStateException(
+          "logical intersect operator should have been replaced by union, aggregate" +
+            "and generate operators in the optimizer")
       case logical.Except(left, right, false) =>
         throw new IllegalStateException(
           "logical except operator should have been replaced by anti-join in the optimizer")
