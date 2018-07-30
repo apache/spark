@@ -417,10 +417,8 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         val (h, t) = branches.span(_._1 != TrueLiteral)
         CaseWhen( h :+ t.head, None)
 
-      case e @ CaseWhen(branches, Some(elseValue)) if {
-        val values = branches.map(_._2) :+ elseValue
-        values.tail.forall(values.head.semanticEquals)
-      } =>
+      case e @ CaseWhen(branches, Some(elseValue)) if branches
+        .forall(_._2.semanticEquals(elseValue)) =>
         // For non-deterministic conditions with side effect, we can not remove it, or change
         // the ordering. As a result, we try to remove the deterministic conditions from the tail.
         val newBranches = branches.map(_._1).foldRight((List[Expression](), false)) {
