@@ -146,7 +146,7 @@ def grouped_agg_pandas_udf_example(spark):
     # |  2| 5.0|   6.0|
     # |  2|10.0|   6.0|
     # +---+----+------+
-    # $example off:grouped_map_pandas_udf$
+    # $example off:grouped_agg_pandas_udf$
 
 
 if __name__ == "__main__":
