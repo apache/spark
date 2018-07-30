@@ -55,7 +55,7 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
   private val mid = numRows / 2
   private val blockSize = 1048576
 
-  private val spark = SparkSession.builder().config(conf).getOrCreate()
+  private lazy val spark = SparkSession.builder().config(conf).getOrCreate()
 
   private var out: OutputStream = _
 

@@ -45,19 +45,19 @@ import static org.apache.spark.sql.functions.*;
 import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaDataFrameSuite {
-  private static TestSparkSession spark;
-  private static JavaSparkContext jsc;
+  private transient TestSparkSession spark;
+  private transient JavaSparkContext jsc;
 
-  @BeforeClass
-  public static void setUp() {
+  @Before
+  public void setUp() {
     // Trigger static initializer of TestData
     spark = new TestSparkSession();
     jsc = new JavaSparkContext(spark.sparkContext());
     spark.loadTestData();
   }
 
-  @AfterClass
-  public static void tearDown() {
+  @After
+  public void tearDown() {
     spark.stop();
     spark = null;
   }
