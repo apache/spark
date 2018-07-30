@@ -38,6 +38,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       val data = dataset.withColumn("items", col("items").cast(ArrayType(dt)))
       val model = new FPGrowth().setMinSupport(0.5).fit(data)
       val generatedRules = model.setMinConfidence(0.5).associationRules
+      generatedRules.show()
       val expectedRules = spark.createDataFrame(Seq(
         (Array("2"), Array("1"), 1.0, 0.75),
         (Array("1"), Array("2"), 0.75, 0.75)

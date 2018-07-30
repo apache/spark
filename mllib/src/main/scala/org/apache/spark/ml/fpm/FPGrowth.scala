@@ -220,7 +220,7 @@ object FPGrowth extends DefaultParamsReadable[FPGrowth] {
 class FPGrowthModel private[ml] (
     @Since("2.2.0") override val uid: String,
     @Since("2.2.0") @transient val freqItemsets: DataFrame,
-    @Since("2.4.0") val numTrainingRecords: Long)
+    @Since("2.4.0") val numTrainingRecords: Long = -1)
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
 
   /** @group setParam */
@@ -359,7 +359,7 @@ private[fpm] object AssociationRules {
    *                from algorithms like [[FPGrowth]].
    * @param itemsCol column name for frequent itemsets
    * @param freqCol column name for frequent itemsets count
-   * @param numTrainingRecords count of training Dataset
+   * @param numTrainingRecords count of training Dataset, default -1.
    * @param minConfidence minimum confidence for the result association rules
    * @return a DataFrame("antecedent", "consequent", "confidence", "support") containing the
    *         association rules.
@@ -376,15 +376,26 @@ private[fpm] object AssociationRules {
     val rows = new MLlibAssociationRules()
       .setMinConfidence(minConfidence)
       .run(freqItemSetRdd)
-      .map(r => Row(r.antecedent, r.consequent, r.confidence, r.freqUnion / numTrainingRecords))
+      .map { r =>
+        if (numTrainingRecords > 0) {
+          Row(r.antecedent, r.consequent, r.confidence, r.freqUnion / numTrainingRecords)
+        } else {
+          Row(r.antecedent, r.consequent, r.confidence)
+        }
+
+      }
 
     val dt = dataset.schema(itemsCol).dataType
     val schema = StructType(Seq(
       StructField("antecedent", dt, nullable = false),
       StructField("consequent", dt, nullable = false),
-      StructField("confidence", DoubleType, nullable = false),
-      StructField("support", DoubleType, nullable = false)))
-    val rules = dataset.sparkSession.createDataFrame(rows, schema)
+      StructField("confidence", DoubleType, nullable = false)))
+    val rulesSchema = if (numTrainingRecords > 0) {
+      schema.add(StructField("support", DoubleType, nullable = false))
+    } else {
+      schema
+    }
+    val rules = dataset.sparkSession.createDataFrame(rows, rulesSchema)
     rules
   }
 }
