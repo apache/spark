@@ -36,7 +36,7 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming.{ContinuousRecordEndpoint, ContinuousRecordPartitionOffset, GetRecord}
 import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader}
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader, SupportsDeprecatedScanRow}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousInputPartitionReader, ContinuousReader, Offset, PartitionOffset}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 import org.apache.spark.util.RpcUtils
@@ -58,7 +58,8 @@ object TextSocketContinuousReader {
  * The driver maintains a socket connection to the host-port, keeps the received messages in
  * buckets and serves the messages to the executors via a RPC endpoint.
  */
-class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousReader with Logging {
+class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousReader
+  with SupportsDeprecatedScanRow with Logging {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
   private val host: String = options.get("host").get()
@@ -118,7 +119,7 @@ class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousR
     }
   }
 
-  override def planInputPartitions(): JList[InputPartition[Row]] = {
+  override def planRowInputPartitions(): JList[InputPartition[Row]] = {
 
     val endpointName = s"TextSocketContinuousReaderEndpoint-${java.util.UUID.randomUUID()}"
     endpointRef = recordEndpoint.rpcEnv.setupEndpoint(endpointName, recordEndpoint)

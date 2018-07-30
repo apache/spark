@@ -32,21 +32,13 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
-<<<<<<< HEAD
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.execution.streaming.continuous._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupport}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
-=======
-import org.apache.spark.sql.execution.streaming.continuous._
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupport}
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
-import org.apache.spark.sql.streaming.StreamTest
->>>>>>> d17a83d6cbf... SPARK-24127: More unit tests
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
-
 
 class TextSocketStreamSuite extends StreamTest with SharedSQLContext with BeforeAndAfterEach {
 
@@ -317,7 +309,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       new DataSourceOptions(Map("numPartitions" -> "2", "host" -> "localhost",
         "port" -> serverThread.port.toString).asJava))
     reader.setStartOffset(Optional.empty())
-    val tasks = reader.planInputPartitions()
+    val tasks = reader.planRowInputPartitions()
     assert(tasks.size == 2)
 
     val numRecords = 10
@@ -383,7 +375,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
         "includeTimestamp" -> "true",
         "port" -> serverThread.port.toString).asJava))
     reader.setStartOffset(Optional.empty())
-    val tasks = reader.planInputPartitions()
+    val tasks = reader.planRowInputPartitions()
     assert(tasks.size == 2)
 
     val numRecords = 4
@@ -403,8 +395,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     }
   }
 
-<<<<<<< HEAD
-          /**
+  /**
    * This class tries to mimic the behavior of netcat, so that we can ensure
    * TextSocketStream supports netcat, which only accepts the first connection
    * and exits the process when the first connection is closed.
@@ -412,9 +403,6 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
    * Please refer SPARK-24466 for more details.
    */
   private class ServerThread extends Thread with Logging {
-=======
-    private class ServerThread extends Thread with Logging {
->>>>>>> d17a83d6cbf... SPARK-24127: More unit tests
     private val serverSocketChannel = ServerSocketChannel.open()
     serverSocketChannel.bind(new InetSocketAddress(0))
     private val messageQueue = new LinkedBlockingQueue[String]()
