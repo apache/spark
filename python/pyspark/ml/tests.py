@@ -1888,6 +1888,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertTrue(isinstance(s.cluster, DataFrame))
         self.assertEqual(len(s.clusterSizes), 2)
         self.assertEqual(s.k, 2)
+        self.assertEqual(s.numIter, 3)
 
     def test_bisecting_kmeans_summary(self):
         data = [(Vectors.dense(1.0),), (Vectors.dense(5.0),), (Vectors.dense(10.0),),
@@ -1903,6 +1904,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertTrue(isinstance(s.cluster, DataFrame))
         self.assertEqual(len(s.clusterSizes), 2)
         self.assertEqual(s.k, 2)
+        self.assertEqual(s.numIter, 20)
 
     def test_kmeans_summary(self):
         data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
@@ -1918,6 +1920,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertTrue(isinstance(s.cluster, DataFrame))
         self.assertEqual(len(s.clusterSizes), 2)
         self.assertEqual(s.k, 2)
+        self.assertEqual(s.numIter, 1)
 
 
 class KMeansTests(SparkSessionTestCase):
