@@ -21,7 +21,6 @@ import java.nio.file.Files
 import scala.io.Source
 import scala.util.Properties
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.collection.mutable.Stack
 
 import sbt._
@@ -34,9 +33,7 @@ import com.typesafe.sbt.pom.{MavenHelper, PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
 import org.scalastyle.sbt.ScalastylePlugin.autoImport._
 import org.scalastyle.sbt.Tasks
-import sbt.internals.DslEntry
-import sbt.plugins.JUnitXmlReportPlugin
-import sbt.plugins.JvmPlugin
+
 import spray.revolver.RevolverPlugin._
 
 object BuildCommons {
@@ -207,7 +204,6 @@ object SparkBuild extends PomBuild {
     }
   )
 
-
   lazy val sharedSettings = sparkGenjavadocSettings ++
       (if (sys.env.contains("NOLINT_ON_COMPILE")) Nil else enableScalaStyle) ++ Seq(
     exportJars in Compile := true,
@@ -221,6 +217,7 @@ object SparkBuild extends PomBuild {
 
     // Override SBT's default resolvers:
     resolvers := Seq(
+      Resolver.bintrayRepo("palantir", "releases"),
       DefaultMavenRepository,
       Resolver.mavenLocal,
       Resolver.file("local", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
