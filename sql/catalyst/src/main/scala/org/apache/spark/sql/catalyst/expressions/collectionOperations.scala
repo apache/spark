@@ -372,7 +372,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
     val values = childMap.valueArray()
     val length = childMap.numElements()
     val resultData = new Array[AnyRef](length)
-    var i = 0;
+    var i = 0
     while (i < length) {
       val key = keys.get(i, childDataType.keyType)
       val value = values.get(i, childDataType.valueType)
@@ -667,12 +667,10 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     val y = ctx.freshName("y")
     val z = ctx.freshName("z")
 
-    val getValue = CodeGenerator.getValue(s"$argsName[$y]", elementType, z)
-
     val (allocation, assignment) =
       ctx.createArrayData(arrayData, dataType, elementType, numElemName,
-        z, counter, s"$argsName[$y]", getValue, s" $prettyName failed.",
-        Some(checkForNull))
+        z, counter, s"$argsName[$y]", s" $prettyName failed.",
+        checkForNull = Some(checkForNull))
 
     val concat = ctx.freshName("concat")
     val concatDef =
@@ -1225,11 +1223,9 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
     val indices = ctx.freshName("indices")
     val i = ctx.freshName("i")
 
-    val getValue = CodeGenerator.getValue(childName, elementType, s"$indices[$i]")
-
     val (initialization, assignment) =
       ctx.createArrayData(arrayData, dataType, elementType, numElements,
-        s"$indices[$i]", i, childName, getValue, s" $prettyName failed.")
+        s"$indices[$i]", i, childName, s" $prettyName failed.")
 
     s"""
        |int $numElements = $childName.numElements();
@@ -1293,11 +1289,9 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
     val i = ctx.freshName("i")
     val j = ctx.freshName("j")
 
-    val getValue = CodeGenerator.getValue(childName, elementType, i)
-
     val (initialization, assignment) =
       ctx.createArrayData(arrayData, dataType, elementType, numElements,
-        i, j, childName, getValue, s" $prettyName failed.")
+        i, j, childName, s" $prettyName failed.")
 
     s"""
        |final int $numElements = $childName.numElements();
@@ -1699,12 +1693,11 @@ case class Slice(x: Expression, start: Expression, length: Expression)
       resLength: String): String = {
     val values = ctx.freshName("values")
     val i = ctx.freshName("i")
-    val getValue = CodeGenerator.getValue(inputArray, elementType, s"$i + $startIdx")
-
     val genericArrayData = classOf[GenericArrayData].getName
+
     val (allocation, assignment) =
       ctx.createArrayData(values, dataType, elementType, resLength,
-        s"$i + $startIdx", i, inputArray, getValue, s" $prettyName failed.")
+        s"$i + $startIdx", i, inputArray, s" $prettyName failed.")
 
     s"""
        |if ($startIdx < 0 || $startIdx >= $inputArray.numElements()) {
@@ -2375,11 +2368,9 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx)
 
-    val getValue = CodeGenerator.getValue(s"args[$y]", elementType, z)
-
     val (initialization, assignment) =
       ctx.createArrayData(arrayData, dataType, elementType, numElemName,
-        z, counter, s"args[$y]", getValue, s" $prettyName failed.")
+        z, counter, s"args[$y]", s" $prettyName failed.")
 
     val concat = ctx.freshName("concat")
     val concatDef =
@@ -2497,11 +2488,9 @@ case class Flatten(child: Expression) extends UnaryExpression {
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, childVariableName)
 
-    val getValue = CodeGenerator.getValue("arr", elementType, l)
-
     val (allocation, assignment) =
       ctx.createArrayData(tempArrayDataName, dataType, elementType, numElemName,
-        l, counter, "arr", getValue, s" $prettyName failed.")
+        l, counter, "arr", s" $prettyName failed.")
 
     s"""
     |$numElemCode
@@ -2959,11 +2948,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
     val count = rightGen.value
     val et = dataType.elementType
 
-    val coreLogic = if (CodeGenerator.isPrimitiveType(et)) {
-      genCodeForPrimitiveElement(ctx, et, element, count, leftGen.isNull, ev.value)
-    } else {
-      genCodeForNonPrimitiveElement(ctx, element, count, leftGen.isNull, ev.value)
-    }
+    val coreLogic = genCodeForElement(ctx, et, element, count, leftGen.isNull, ev.value)
     val resultCode = nullElementsProtection(ev, rightGen.isNull, coreLogic)
 
     ev.copy(code =
@@ -3002,17 +2987,12 @@ case class ArrayRepeat(left: Expression, right: Expression)
          |if ($count > 0) {
          |  $numElements = $count;
          |}
-         |if ($numElements > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-         |  throw new RuntimeException("Unsuccessful try to create array with " + $numElements +
-         |    " elements due to exceeding the array size limit" +
-         |    " ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
-         |}
        """.stripMargin
 
     (numElements, numElementsCode)
   }
 
-  private def genCodeForPrimitiveElement(
+  private def genCodeForElement(
       ctx: CodegenContext,
       elementType: DataType,
       element: String,
@@ -3020,45 +3000,27 @@ case class ArrayRepeat(left: Expression, right: Expression)
       leftIsNull: String,
       arrayDataName: String): String = {
     val tempArrayDataName = ctx.freshName("tempArrayData")
-    val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
-    val errorMessage = s" $prettyName failed."
+    val k = ctx.freshName("k")
     val (numElemName, numElemCode) = genCodeForNumberOfElements(ctx, count)
+
+    val (allocation, assignment) =
+      ctx.createArrayData(tempArrayDataName, dataType, elementType, numElemName,
+        "", k, "", s" $prettyName failed.",
+        rhsValue = element, checkForNull = Some(false))
 
     s"""
        |$numElemCode
-       |${ctx.createUnsafeArray(tempArrayDataName, numElemName, elementType, errorMessage)}
+       |$allocation
        |if (!$leftIsNull) {
-       |  for (int k = 0; k < $tempArrayDataName.numElements(); k++) {
-       |    $tempArrayDataName.set$primitiveValueTypeName(k, $element);
+       |  for (int $k = 0; $k < $tempArrayDataName.numElements(); $k++) {
+       |    $assignment
        |  }
        |} else {
-       |  for (int k = 0; k < $tempArrayDataName.numElements(); k++) {
-       |    $tempArrayDataName.setNullAt(k);
+       |  for (int $k = 0; $k < $tempArrayDataName.numElements(); $k++) {
+       |    $tempArrayDataName.setNullAt($k);
        |  }
        |}
        |$arrayDataName = $tempArrayDataName;
-     """.stripMargin
-  }
-
-  private def genCodeForNonPrimitiveElement(
-      ctx: CodegenContext,
-      element: String,
-      count: String,
-      leftIsNull: String,
-      arrayDataName: String): String = {
-    val genericArrayClass = classOf[GenericArrayData].getName
-    val arrayName = ctx.freshName("arrayObject")
-    val (numElemName, numElemCode) = genCodeForNumberOfElements(ctx, count)
-
-    s"""
-       |$numElemCode
-       |Object[] $arrayName = new Object[(int)$numElemName];
-       |if (!$leftIsNull) {
-       |  for (int k = 0; k < $numElemName; k++) {
-       |    $arrayName[k] = $element;
-       |  }
-       |}
-       |$arrayDataName = new $genericArrayClass($arrayName);
      """.stripMargin
   }
 

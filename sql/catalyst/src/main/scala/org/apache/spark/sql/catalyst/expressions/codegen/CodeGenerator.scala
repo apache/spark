@@ -796,10 +796,16 @@ class CodegenContext {
       srcLoopIndex: String,
       dstLoopIndex: String,
       srcArray: String,
-      setValue: String,
       additionalErrorMessage: String,
+      rhsValue: String = null,
       checkForNull: Option[Boolean] = None): (String, String) = {
     val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
+
+    val setValue = if (rhsValue != null) {
+      rhsValue
+    } else {
+      CodeGenerator.getValue(srcArray, elementType, srcLoopIndex)
+    }
 
     val setFunc = if (isPrimitiveType) {
       s"set${CodeGenerator.primitiveTypeName(elementType)}"
@@ -829,7 +835,7 @@ class CodegenContext {
     val allocation =
       s"""
          |ArrayData $arrayName = $codeGenerator$$.MODULE$$.allocateArrayData(
-         |  $elementSize, $numElements, $isPrimitiveType);
+         |  $elementSize, $numElements, $isPrimitiveType, "$additionalErrorMessage");
        """.stripMargin
 
     (allocation, assignment)
@@ -1771,7 +1777,8 @@ object CodeGenerator extends Logging {
   def allocateArrayData(
       elementSize: Int,
       numElements : Long,
-      isPrimitiveType: Boolean) : ArrayData = {
+      isPrimitiveType: Boolean,
+      additionalErrorMessage: String) : ArrayData = {
     val arraySize = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(numElements, elementSize)
     if (isPrimitiveType && !UnsafeArrayData.shouldUseGenericArrayData(elementSize, numElements)) {
       val arrayBytes = new Array[Byte](arraySize.toInt)
@@ -1782,10 +1789,10 @@ object CodeGenerator extends Logging {
     } else if (numElements <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toLong) {
       new GenericArrayData(new Array[Any](numElements.toInt))
     } else {
-      throw new RuntimeException(s"Unsuccessful try create array with $arraySize" +
-        " bytes of data due to exceeding the limit " +
-        "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for GenericArrayData." +
-        "$additionalErrorMessage")
+      throw new RuntimeException(s"Unsuccessful try create array with $arraySize " +
+        "bytes of data due to exceeding the limit " +
+        s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for GenericArrayData." +
+        s"$additionalErrorMessage")
     }
   }
 }
