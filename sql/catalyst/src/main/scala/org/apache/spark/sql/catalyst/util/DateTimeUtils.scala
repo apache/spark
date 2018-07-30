@@ -96,9 +96,9 @@ object DateTimeUtils {
     }
   }
 
-  def getThreadLocalDateFormat(): DateFormat = {
+  def getThreadLocalDateFormat(timeZone: TimeZone): DateFormat = {
     val sdf = threadLocalDateFormat.get()
-    sdf.setTimeZone(defaultTimeZone())
+    sdf.setTimeZone(timeZone)
     sdf
   }
 
@@ -144,7 +144,11 @@ object DateTimeUtils {
   }
 
   def dateToString(days: SQLDate): String =
-    getThreadLocalDateFormat.format(toJavaDate(days))
+    getThreadLocalDateFormat(defaultTimeZone()).format(toJavaDate(days))
+
+  def dateToString(days: SQLDate, timeZone: TimeZone): String = {
+    getThreadLocalDateFormat(timeZone).format(toJavaDate(days))
+  }
 
   // Converts Timestamp to string according to Hive TimestampWritable convention.
   def timestampToString(us: SQLTimestamp): String = {
