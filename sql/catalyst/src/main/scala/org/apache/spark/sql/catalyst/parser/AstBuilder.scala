@@ -51,6 +51,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
   def this() = this(new SQLConf())
 
+  def ansi: Boolean = conf.ansiParserEnabled
+
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
   }

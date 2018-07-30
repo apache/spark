@@ -1407,6 +1407,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ANSI_SQL_PARSER =
+    buildConf("spark.sql.parser.ansi.enabled")
+      .doc("When true, tries to conform to ANSI SQL syntax.")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
     .doc("If it is set to true, size of null returns -1. This behavior was inherited from Hive. " +
       "The size function returns null for null input if the flag is disabled.")
@@ -1624,6 +1630,8 @@ class SQLConf extends Serializable with Logging {
   def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
 
   def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
+
+  def ansiParserEnabled: Boolean = getConf(ANSI_SQL_PARSER)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

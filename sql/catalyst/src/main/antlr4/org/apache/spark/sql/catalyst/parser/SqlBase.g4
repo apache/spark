@@ -38,6 +38,11 @@ grammar SqlBase;
       return true;
     }
   }
+
+  /**
+   * When true, ANSI SQL parsing mode is enabled.
+   */
+  public boolean ansi = false;
 }
 
 singleStatement
