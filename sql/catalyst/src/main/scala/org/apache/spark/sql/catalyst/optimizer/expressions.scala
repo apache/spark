@@ -385,6 +385,40 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
+  // If a condition in a branch is previously seen, this branch can be pruned.
+  // TODO: In fact, if a condition is a sub-condition of the previous one,
+  // TODO: it can be pruned. This is less strict and can be implemented
+  // TODO: by decomposing the seen conditions.
+  private def pruneSeenBranches(branches: Seq[(Expression, Expression)])
+  : Option[Seq[(Expression, Expression)]] = {
+    val newBranches = branches.foldLeft(new ArrayBuffer[(Expression, Expression)]()) {
+      case (newBranches, branch) if newBranches.exists(_._1.semanticEquals(branch._1)) =>
+        newBranches
+      case (newBranches, branch) => newBranches += branch
+    }
+    if (newBranches.length < branches.length) {
+      Some(newBranches)
+    } else {
+      None
+    }
+  }
+
+  // If the outputs of two adjacent branches are the same, two branches can be combined.
+  private def combineAdjacentBranches(branches: Seq[(Expression, Expression)])
+  : Option[Seq[(Expression, Expression)]] = {
+    val newBranches = branches.foldLeft(new ArrayBuffer[(Expression, Expression)]()) {
+      case (newBranches, branch)
+        if newBranches.nonEmpty && newBranches.last._2.semanticEquals(branch._2) =>
+        newBranches.init += ((Or(newBranches.last._1, branch._1), newBranches.last._2))
+      case (newBranches, branch) => newBranches += branch
+    }
+    if (newBranches.length < branches.length) {
+      Some(newBranches)
+    } else {
+      None
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case If(TrueLiteral, trueValue, _) => trueValue
@@ -417,40 +451,11 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         val (h, t) = branches.span(_._1 != TrueLiteral)
         CaseWhen( h :+ t.head, None)
 
-      case e @ CaseWhen(branches, _) if {
+      case e @ CaseWhen(branches, _) if pruneSeenBranches(branches).nonEmpty =>
+        e.copy(branches = pruneSeenBranches(branches).get)
 
-        true
-      } =>
-        val newBranches = branches.foldLeft(new ArrayBuffer[(Expression, Expression)]()) {
-          case (newBranches, branch) if newBranches.exists(_._1.semanticEquals(branch._1)) =>
-            // If a condition in a branch is previously seen, this branch can be pruned.
-            // TODO: In fact, if a condition is a sub-condition of the previous one,
-            // TODO: it can be pruned. This is less strict and can be implemented
-            // TODO: by decomposing the seen conditions.
-            newBranches
-          case (newBranches, branch) => newBranches += branch
-        }
-        if (newBranches.length < branches.length) {
-          e.copy(branches = newBranches)
-        } else {
-          e
-        }
-
-      case e @ CaseWhen(branches, _) if {
-        true
-      } =>
-        val newBranches = branches.foldLeft(new ArrayBuffer[(Expression, Expression)]()) {
-          case (newBranches, branch)
-            if newBranches.nonEmpty && newBranches.last._2.semanticEquals(branch._2) =>
-            // If the outputs of two adjacent branches are the same, two branches can be combined.
-            newBranches.init += ((Or(newBranches.last._1, branch._1), newBranches.last._2))
-          case (newBranches, branch) => newBranches += branch
-        }
-        if (newBranches.length < branches.length) {
-          e.copy(branches = newBranches)
-        } else {
-          e
-        }
+      case e @ CaseWhen(branches, _) if combineAdjacentBranches(branches).nonEmpty =>
+        e.copy(branches = combineAdjacentBranches(branches).get)
     }
   }
 }
