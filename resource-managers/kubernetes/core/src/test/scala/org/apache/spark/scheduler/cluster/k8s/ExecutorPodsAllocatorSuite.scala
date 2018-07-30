@@ -167,7 +167,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
             conf,
             executorSpecificConf.executorId,
             TEST_SPARK_APP_ID,
-            driverPod)
+            Some(driverPod))
           k8sConf.sparkConf.getAll.toMap == conf.getAll.toMap &&
             // Since KubernetesConf.createExecutorConf clones the SparkConf object, force
             // deep equality comparison for the SparkConf object and use object equality

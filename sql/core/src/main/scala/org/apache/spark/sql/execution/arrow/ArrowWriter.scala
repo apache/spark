@@ -68,7 +68,7 @@ object ArrowWriter {
         }
         new StructWriter(vector, children.toArray)
       case (dt, _) =>
-        throw new UnsupportedOperationException(s"Unsupported data type: ${dt.simpleString}")
+        throw new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
     }
   }
 }

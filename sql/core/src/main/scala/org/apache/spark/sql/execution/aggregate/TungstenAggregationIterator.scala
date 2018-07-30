@@ -166,7 +166,7 @@ class TungstenAggregationIterator(
     initialAggregationBuffer,
     StructType.fromAttributes(aggregateFunctions.flatMap(_.aggBufferAttributes)),
     StructType.fromAttributes(groupingExpressions.map(_.toAttribute)),
-    TaskContext.get().taskMemoryManager(),
+    TaskContext.get(),
     1024 * 16, // initial capacity
     TaskContext.get().taskMemoryManager().pageSizeBytes
   )

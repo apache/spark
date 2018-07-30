@@ -61,6 +61,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with Bef
       Map.empty,
       Map.empty,
       Map.empty,
+      Nil,
       Seq.empty[String],
       hadoopConfDir = None)
     val kubernetesCredentialsStep = new DriverKubernetesCredentialsFeatureStep(kubernetesConf)
@@ -93,6 +94,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with Bef
       Map.empty,
       Map.empty,
       Map.empty,
+      Nil,
       Seq.empty[String],
       hadoopConfDir = None)
 
@@ -132,6 +134,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with Bef
       Map.empty,
       Map.empty,
       Map.empty,
+      Nil,
       Seq.empty[String],
       hadoopConfDir = None)
     val kubernetesCredentialsStep = new DriverKubernetesCredentialsFeatureStep(kubernetesConf)

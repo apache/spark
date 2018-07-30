@@ -3351,11 +3351,41 @@ class SQLTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(path)
 
-    def test_repr_html(self):
+    def test_repr_behaviors(self):
         import re
         pattern = re.compile(r'^ *\|', re.MULTILINE)
         df = self.spark.createDataFrame([(1, "1"), (22222, "22222")], ("key", "value"))
-        self.assertEquals(None, df._repr_html_())
+
+        # test when eager evaluation is enabled and _repr_html_ will not be called
+        with self.sql_conf({"spark.sql.repl.eagerEval.enabled": True}):
+            expected1 = """+-----+-----+
+                ||  key|value|
+                |+-----+-----+
+                ||    1|    1|
+                ||22222|22222|
+                |+-----+-----+
+                |"""
+            self.assertEquals(re.sub(pattern, '', expected1), df.__repr__())
+            with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
+                expected2 = """+---+-----+
+                ||key|value|
+                |+---+-----+
+                ||  1|    1|
+                ||222|  222|
+                |+---+-----+
+                |"""
+                self.assertEquals(re.sub(pattern, '', expected2), df.__repr__())
+                with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
+                    expected3 = """+---+-----+
+                    ||key|value|
+                    |+---+-----+
+                    ||  1|    1|
+                    |+---+-----+
+                    |only showing top 1 row
+                    |"""
+                    self.assertEquals(re.sub(pattern, '', expected3), df.__repr__())
+
+        # test when eager evaluation is enabled and _repr_html_ will be called
         with self.sql_conf({"spark.sql.repl.eagerEval.enabled": True}):
             expected1 = """<table border='1'>
                 |<tr><th>key</th><th>value</th></tr>
@@ -3380,6 +3410,18 @@ class SQLTests(ReusedSQLTestCase):
                         |only showing top 1 row
                         |"""
                     self.assertEquals(re.sub(pattern, '', expected3), df._repr_html_())
+
+        # test when eager evaluation is disabled and _repr_html_ will be called
+        with self.sql_conf({"spark.sql.repl.eagerEval.enabled": False}):
+            expected = "DataFrame[key: bigint, value: string]"
+            self.assertEquals(None, df._repr_html_())
+            self.assertEquals(expected, df.__repr__())
+            with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
+                self.assertEquals(None, df._repr_html_())
+                self.assertEquals(expected, df.__repr__())
+                with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
+                    self.assertEquals(None, df._repr_html_())
+                    self.assertEquals(expected, df.__repr__())
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
@@ -3553,7 +3595,7 @@ class UDFInitializationTests(unittest.TestCase):
             SparkSession._instantiatedSession.stop()
 
         if SparkContext._active_spark_context is not None:
-            SparkContext._active_spark_contex.stop()
+            SparkContext._active_spark_context.stop()
 
     def test_udf_init_shouldnt_initalize_context(self):
         from pyspark.sql.functions import UserDefinedFunction
@@ -4721,17 +4763,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                     'Result vector from pandas_udf was not the required length'):
                 df.select(raise_exception(col('id'))).collect()
 
-    def test_vectorized_udf_mix_udf(self):
-        from pyspark.sql.functions import pandas_udf, udf, col
-        df = self.spark.range(10)
-        row_by_row_udf = udf(lambda x: x, LongType())
-        pd_udf = pandas_udf(lambda x: x, LongType())
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
-                    Exception,
-                    'Can not mix vectorized and non-vectorized UDFs'):
-                df.select(row_by_row_udf(col('id')), pd_udf(col('id'))).collect()
-
     def test_vectorized_udf_chained(self):
         from pyspark.sql.functions import pandas_udf, col
         df = self.spark.range(10)
@@ -5017,6 +5048,166 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             _locals)
         df = self.spark.range(1).select(pandas_udf(f=_locals['noop'], returnType='bigint')('id'))
         self.assertEqual(df.first()[0], 0)
+
+    def test_mixed_udf(self):
+        import pandas as pd
+        from pyspark.sql.functions import col, udf, pandas_udf
+
+        df = self.spark.range(0, 1).toDF('v')
+
+        # Test mixture of multiple UDFs and Pandas UDFs.
+
+        @udf('int')
+        def f1(x):
+            assert type(x) == int
+            return x + 1
+
+        @pandas_udf('int')
+        def f2(x):
+            assert type(x) == pd.Series
+            return x + 10
+
+        @udf('int')
+        def f3(x):
+            assert type(x) == int
+            return x + 100
+
+        @pandas_udf('int')
+        def f4(x):
+            assert type(x) == pd.Series
+            return x + 1000
+
+        # Test single expression with chained UDFs
+        df_chained_1 = df.withColumn('f2_f1', f2(f1(df['v'])))
+        df_chained_2 = df.withColumn('f3_f2_f1', f3(f2(f1(df['v']))))
+        df_chained_3 = df.withColumn('f4_f3_f2_f1', f4(f3(f2(f1(df['v'])))))
+        df_chained_4 = df.withColumn('f4_f2_f1', f4(f2(f1(df['v']))))
+        df_chained_5 = df.withColumn('f4_f3_f1', f4(f3(f1(df['v']))))
+
+        expected_chained_1 = df.withColumn('f2_f1', df['v'] + 11)
+        expected_chained_2 = df.withColumn('f3_f2_f1', df['v'] + 111)
+        expected_chained_3 = df.withColumn('f4_f3_f2_f1', df['v'] + 1111)
+        expected_chained_4 = df.withColumn('f4_f2_f1', df['v'] + 1011)
+        expected_chained_5 = df.withColumn('f4_f3_f1', df['v'] + 1101)
+
+        self.assertEquals(expected_chained_1.collect(), df_chained_1.collect())
+        self.assertEquals(expected_chained_2.collect(), df_chained_2.collect())
+        self.assertEquals(expected_chained_3.collect(), df_chained_3.collect())
+        self.assertEquals(expected_chained_4.collect(), df_chained_4.collect())
+        self.assertEquals(expected_chained_5.collect(), df_chained_5.collect())
+
+        # Test multiple mixed UDF expressions in a single projection
+        df_multi_1 = df \
+            .withColumn('f1', f1(col('v'))) \
+            .withColumn('f2', f2(col('v'))) \
+            .withColumn('f3', f3(col('v'))) \
+            .withColumn('f4', f4(col('v'))) \
+            .withColumn('f2_f1', f2(col('f1'))) \
+            .withColumn('f3_f1', f3(col('f1'))) \
+            .withColumn('f4_f1', f4(col('f1'))) \
+            .withColumn('f3_f2', f3(col('f2'))) \
+            .withColumn('f4_f2', f4(col('f2'))) \
+            .withColumn('f4_f3', f4(col('f3'))) \
+            .withColumn('f3_f2_f1', f3(col('f2_f1'))) \
+            .withColumn('f4_f2_f1', f4(col('f2_f1'))) \
+            .withColumn('f4_f3_f1', f4(col('f3_f1'))) \
+            .withColumn('f4_f3_f2', f4(col('f3_f2'))) \
+            .withColumn('f4_f3_f2_f1', f4(col('f3_f2_f1')))
+
+        # Test mixed udfs in a single expression
+        df_multi_2 = df \
+            .withColumn('f1', f1(col('v'))) \
+            .withColumn('f2', f2(col('v'))) \
+            .withColumn('f3', f3(col('v'))) \
+            .withColumn('f4', f4(col('v'))) \
+            .withColumn('f2_f1', f2(f1(col('v')))) \
+            .withColumn('f3_f1', f3(f1(col('v')))) \
+            .withColumn('f4_f1', f4(f1(col('v')))) \
+            .withColumn('f3_f2', f3(f2(col('v')))) \
+            .withColumn('f4_f2', f4(f2(col('v')))) \
+            .withColumn('f4_f3', f4(f3(col('v')))) \
+            .withColumn('f3_f2_f1', f3(f2(f1(col('v'))))) \
+            .withColumn('f4_f2_f1', f4(f2(f1(col('v'))))) \
+            .withColumn('f4_f3_f1', f4(f3(f1(col('v'))))) \
+            .withColumn('f4_f3_f2', f4(f3(f2(col('v'))))) \
+            .withColumn('f4_f3_f2_f1', f4(f3(f2(f1(col('v'))))))
+
+        expected = df \
+            .withColumn('f1', df['v'] + 1) \
+            .withColumn('f2', df['v'] + 10) \
+            .withColumn('f3', df['v'] + 100) \
+            .withColumn('f4', df['v'] + 1000) \
+            .withColumn('f2_f1', df['v'] + 11) \
+            .withColumn('f3_f1', df['v'] + 101) \
+            .withColumn('f4_f1', df['v'] + 1001) \
+            .withColumn('f3_f2', df['v'] + 110) \
+            .withColumn('f4_f2', df['v'] + 1010) \
+            .withColumn('f4_f3', df['v'] + 1100) \
+            .withColumn('f3_f2_f1', df['v'] + 111) \
+            .withColumn('f4_f2_f1', df['v'] + 1011) \
+            .withColumn('f4_f3_f1', df['v'] + 1101) \
+            .withColumn('f4_f3_f2', df['v'] + 1110) \
+            .withColumn('f4_f3_f2_f1', df['v'] + 1111)
+
+        self.assertEquals(expected.collect(), df_multi_1.collect())
+        self.assertEquals(expected.collect(), df_multi_2.collect())
+
+    def test_mixed_udf_and_sql(self):
+        import pandas as pd
+        from pyspark.sql import Column
+        from pyspark.sql.functions import udf, pandas_udf
+
+        df = self.spark.range(0, 1).toDF('v')
+
+        # Test mixture of UDFs, Pandas UDFs and SQL expression.
+
+        @udf('int')
+        def f1(x):
+            assert type(x) == int
+            return x + 1
+
+        def f2(x):
+            assert type(x) == Column
+            return x + 10
+
+        @pandas_udf('int')
+        def f3(x):
+            assert type(x) == pd.Series
+            return x + 100
+
+        df1 = df.withColumn('f1', f1(df['v'])) \
+            .withColumn('f2', f2(df['v'])) \
+            .withColumn('f3', f3(df['v'])) \
+            .withColumn('f1_f2', f1(f2(df['v']))) \
+            .withColumn('f1_f3', f1(f3(df['v']))) \
+            .withColumn('f2_f1', f2(f1(df['v']))) \
+            .withColumn('f2_f3', f2(f3(df['v']))) \
+            .withColumn('f3_f1', f3(f1(df['v']))) \
+            .withColumn('f3_f2', f3(f2(df['v']))) \
+            .withColumn('f1_f2_f3', f1(f2(f3(df['v'])))) \
+            .withColumn('f1_f3_f2', f1(f3(f2(df['v'])))) \
+            .withColumn('f2_f1_f3', f2(f1(f3(df['v'])))) \
+            .withColumn('f2_f3_f1', f2(f3(f1(df['v'])))) \
+            .withColumn('f3_f1_f2', f3(f1(f2(df['v'])))) \
+            .withColumn('f3_f2_f1', f3(f2(f1(df['v']))))
+
+        expected = df.withColumn('f1', df['v'] + 1) \
+            .withColumn('f2', df['v'] + 10) \
+            .withColumn('f3', df['v'] + 100) \
+            .withColumn('f1_f2', df['v'] + 11) \
+            .withColumn('f1_f3', df['v'] + 101) \
+            .withColumn('f2_f1', df['v'] + 11) \
+            .withColumn('f2_f3', df['v'] + 110) \
+            .withColumn('f3_f1', df['v'] + 101) \
+            .withColumn('f3_f2', df['v'] + 110) \
+            .withColumn('f1_f2_f3', df['v'] + 111) \
+            .withColumn('f1_f3_f2', df['v'] + 111) \
+            .withColumn('f2_f1_f3', df['v'] + 111) \
+            .withColumn('f2_f3_f1', df['v'] + 111) \
+            .withColumn('f3_f1_f2', df['v'] + 111) \
+            .withColumn('f3_f2_f1', df['v'] + 111)
+
+        self.assertEquals(expected.collect(), df1.collect())
 
 
 @unittest.skipIf(
@@ -5428,6 +5619,37 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             for r in result:
                 self.assertEqual(r.a, 'hi')
                 self.assertEqual(r.b, 1)
+
+    def test_self_join_with_pandas(self):
+        import pyspark.sql.functions as F
+
+        @F.pandas_udf('key long, col string', F.PandasUDFType.GROUPED_MAP)
+        def dummy_pandas_udf(df):
+            return df[['key', 'col']]
+
+        df = self.spark.createDataFrame([Row(key=1, col='A'), Row(key=1, col='B'),
+                                         Row(key=2, col='C')])
+        df_with_pandas = df.groupBy('key').apply(dummy_pandas_udf)
+
+        # this was throwing an AnalysisException before SPARK-24208
+        res = df_with_pandas.alias('temp0').join(df_with_pandas.alias('temp1'),
+                                                 F.col('temp0.key') == F.col('temp1.key'))
+        self.assertEquals(res.count(), 5)
+
+    def test_mixed_scalar_udfs_followed_by_grouby_apply(self):
+        import pandas as pd
+        from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
+
+        df = self.spark.range(0, 10).toDF('v1')
+        df = df.withColumn('v2', udf(lambda x: x + 1, 'int')(df['v1'])) \
+            .withColumn('v3', pandas_udf(lambda x: x + 2, 'int')(df['v1']))
+
+        result = df.groupby() \
+            .apply(pandas_udf(lambda x: pd.DataFrame([x.sum().sum()]),
+                              'sum int',
+                              PandasUDFType.GROUPED_MAP))
+
+        self.assertEquals(result.collect()[0]['sum'], 165)
 
 
 @unittest.skipIf(

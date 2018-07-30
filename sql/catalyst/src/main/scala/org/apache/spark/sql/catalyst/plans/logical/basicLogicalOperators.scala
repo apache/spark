@@ -164,7 +164,12 @@ object SetOperation {
   def unapply(p: SetOperation): Option[(LogicalPlan, LogicalPlan)] = Some((p.left, p.right))
 }
 
-case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
+case class Intersect(
+   left: LogicalPlan,
+   right: LogicalPlan,
+   isAll: Boolean = false) extends SetOperation(left, right) {
+
+  override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
 
   override def output: Seq[Attribute] =
     left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
@@ -183,8 +188,11 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
   }
 }
 
-case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
-
+case class Except(
+    left: LogicalPlan,
+    right: LogicalPlan,
+    isAll: Boolean = false) extends SetOperation(left, right) {
+  override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
 
@@ -700,7 +708,7 @@ case class GroupingSets(
 case class Pivot(
     groupByExprsOpt: Option[Seq[NamedExpression]],
     pivotColumn: Expression,
-    pivotValues: Seq[Literal],
+    pivotValues: Seq[Expression],
     aggregates: Seq[Expression],
     child: LogicalPlan) extends UnaryNode {
   override lazy val resolved = false // Pivot will be replaced after being resolved.

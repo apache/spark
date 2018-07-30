@@ -18,12 +18,15 @@
 package org.apache.spark.sql
 
 import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
+import java.util.TimeZone
 
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -306,113 +309,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("mask functions") {
-    val df = Seq("TestString-123", "", null).toDF("a")
-    checkAnswer(df.select(mask($"a")), Seq(Row("XxxxXxxxxx-nnn"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_first_n($"a", 4)), Seq(Row("XxxxString-123"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_last_n($"a", 4)), Seq(Row("TestString-nnn"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_show_first_n($"a", 4)),
-      Seq(Row("TestXxxxxx-nnn"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_show_last_n($"a", 4)),
-      Seq(Row("XxxxXxxxxx-123"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_hash($"a")),
-      Seq(Row("dd78d68ad1b23bde126812482dd70ac6"),
-        Row("d41d8cd98f00b204e9800998ecf8427e"),
-        Row(null)))
-
-    checkAnswer(df.select(mask($"a", "U", "l", "#")),
-      Seq(Row("UlllUlllll-###"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_first_n($"a", 4, "U", "l", "#")),
-      Seq(Row("UlllString-123"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_last_n($"a", 4, "U", "l", "#")),
-      Seq(Row("TestString-###"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_show_first_n($"a", 4, "U", "l", "#")),
-      Seq(Row("TestUlllll-###"), Row(""), Row(null)))
-    checkAnswer(df.select(mask_show_last_n($"a", 4, "U", "l", "#")),
-      Seq(Row("UlllUlllll-123"), Row(""), Row(null)))
-
-    checkAnswer(
-      df.selectExpr("mask(a)", "mask(a, 'U')", "mask(a, 'U', 'l')", "mask(a, 'U', 'l', '#')"),
-      Seq(Row("XxxxXxxxxx-nnn", "UxxxUxxxxx-nnn", "UlllUlllll-nnn", "UlllUlllll-###"),
-        Row("", "", "", ""),
-        Row(null, null, null, null)))
-    checkAnswer(sql("select mask(null)"), Row(null))
-    checkAnswer(sql("select mask('AAaa11', null, null, null)"), Row("XXxxnn"))
-    intercept[AnalysisException] {
-      checkAnswer(df.selectExpr("mask(a, a)"), Seq(Row("XxxxXxxxxx-nnn"), Row(""), Row(null)))
-    }
-
-    checkAnswer(
-      df.selectExpr(
-        "mask_first_n(a)",
-        "mask_first_n(a, 6)",
-        "mask_first_n(a, 6, 'U')",
-        "mask_first_n(a, 6, 'U', 'l')",
-        "mask_first_n(a, 6, 'U', 'l', '#')"),
-      Seq(Row("XxxxString-123", "XxxxXxring-123", "UxxxUxring-123", "UlllUlring-123",
-        "UlllUlring-123"),
-        Row("", "", "", "", ""),
-        Row(null, null, null, null, null)))
-    checkAnswer(sql("select mask_first_n(null)"), Row(null))
-    checkAnswer(sql("select mask_first_n('A1aA1a', null, null, null, null)"), Row("XnxX1a"))
-    intercept[AnalysisException] {
-      checkAnswer(spark.range(1).selectExpr("mask_first_n('A1aA1a', id)"), Row("XnxX1a"))
-    }
-
-    checkAnswer(
-      df.selectExpr(
-        "mask_last_n(a)",
-        "mask_last_n(a, 6)",
-        "mask_last_n(a, 6, 'U')",
-        "mask_last_n(a, 6, 'U', 'l')",
-        "mask_last_n(a, 6, 'U', 'l', '#')"),
-      Seq(Row("TestString-nnn", "TestStrixx-nnn", "TestStrixx-nnn", "TestStrill-nnn",
-        "TestStrill-###"),
-        Row("", "", "", "", ""),
-        Row(null, null, null, null, null)))
-    checkAnswer(sql("select mask_last_n(null)"), Row(null))
-    checkAnswer(sql("select mask_last_n('A1aA1a', null, null, null, null)"), Row("A1xXnx"))
-    intercept[AnalysisException] {
-      checkAnswer(spark.range(1).selectExpr("mask_last_n('A1aA1a', id)"), Row("A1xXnx"))
-    }
-
-    checkAnswer(
-      df.selectExpr(
-        "mask_show_first_n(a)",
-        "mask_show_first_n(a, 6)",
-        "mask_show_first_n(a, 6, 'U')",
-        "mask_show_first_n(a, 6, 'U', 'l')",
-        "mask_show_first_n(a, 6, 'U', 'l', '#')"),
-      Seq(Row("TestXxxxxx-nnn", "TestStxxxx-nnn", "TestStxxxx-nnn", "TestStllll-nnn",
-        "TestStllll-###"),
-        Row("", "", "", "", ""),
-        Row(null, null, null, null, null)))
-    checkAnswer(sql("select mask_show_first_n(null)"), Row(null))
-    checkAnswer(sql("select mask_show_first_n('A1aA1a', null, null, null, null)"), Row("A1aAnx"))
-    intercept[AnalysisException] {
-      checkAnswer(spark.range(1).selectExpr("mask_show_first_n('A1aA1a', id)"), Row("A1aAnx"))
-    }
-
-    checkAnswer(
-      df.selectExpr(
-        "mask_show_last_n(a)",
-        "mask_show_last_n(a, 6)",
-        "mask_show_last_n(a, 6, 'U')",
-        "mask_show_last_n(a, 6, 'U', 'l')",
-        "mask_show_last_n(a, 6, 'U', 'l', '#')"),
-      Seq(Row("XxxxXxxxxx-123", "XxxxXxxxng-123", "UxxxUxxxng-123", "UlllUlllng-123",
-        "UlllUlllng-123"),
-        Row("", "", "", "", ""),
-        Row(null, null, null, null, null)))
-    checkAnswer(sql("select mask_show_last_n(null)"), Row(null))
-    checkAnswer(sql("select mask_show_last_n('A1aA1a', null, null, null, null)"), Row("XnaA1a"))
-    intercept[AnalysisException] {
-      checkAnswer(spark.range(1).selectExpr("mask_show_last_n('A1aA1a', id)"), Row("XnaA1a"))
-    }
-
-    checkAnswer(sql("select mask_hash(null)"), Row(null))
-  }
-
   test("sort_array/array_sort functions") {
     val df = Seq(
       (Array[Int](2, 1, 3), Array("b", "c", "a")),
@@ -487,26 +383,29 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }.getMessage().contains("only supports array input"))
   }
 
-  test("array size function") {
+  def testSizeOfArray(sizeOfNull: Any): Unit = {
     val df = Seq(
       (Seq[Int](1, 2), "x"),
       (Seq[Int](), "y"),
       (Seq[Int](1, 2, 3), "z"),
       (null, "empty")
     ).toDF("a", "b")
-    checkAnswer(
-      df.select(size($"a")),
-      Seq(Row(2), Row(0), Row(3), Row(-1))
-    )
-    checkAnswer(
-      df.selectExpr("size(a)"),
-      Seq(Row(2), Row(0), Row(3), Row(-1))
-    )
 
-    checkAnswer(
-      df.selectExpr("cardinality(a)"),
-      Seq(Row(2L), Row(0L), Row(3L), Row(-1L))
-    )
+    checkAnswer(df.select(size($"a")), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+    checkAnswer(df.selectExpr("size(a)"), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+    checkAnswer(df.selectExpr("cardinality(a)"), Seq(Row(2L), Row(0L), Row(3L), Row(sizeOfNull)))
+  }
+
+  test("array size function - legacy") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
+      testSizeOfArray(sizeOfNull = -1)
+    }
+  }
+
+  test("array size function") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "false") {
+      testSizeOfArray(sizeOfNull = null)
+    }
   }
 
   test("dataframe arrays_zip function") {
@@ -556,21 +455,39 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df8.selectExpr("arrays_zip(v1, v2)"), expectedValue8)
   }
 
-  test("map size function") {
+  test("SPARK-24633: arrays_zip splits input processing correctly") {
+    Seq("true", "false").foreach { wholestageCodegenEnabled =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholestageCodegenEnabled) {
+        val df = spark.range(1)
+        val exprs = (0 to 5).map(x => array($"id" + lit(x)))
+        checkAnswer(df.select(arrays_zip(exprs: _*)),
+          Row(Seq(Row(0, 1, 2, 3, 4, 5))))
+      }
+    }
+  }
+
+  def testSizeOfMap(sizeOfNull: Any): Unit = {
     val df = Seq(
       (Map[Int, Int](1 -> 1, 2 -> 2), "x"),
       (Map[Int, Int](), "y"),
       (Map[Int, Int](1 -> 1, 2 -> 2, 3 -> 3), "z"),
       (null, "empty")
     ).toDF("a", "b")
-    checkAnswer(
-      df.select(size($"a")),
-      Seq(Row(2), Row(0), Row(3), Row(-1))
-    )
-    checkAnswer(
-      df.selectExpr("size(a)"),
-      Seq(Row(2), Row(0), Row(3), Row(-1))
-    )
+
+    checkAnswer(df.select(size($"a")), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+    checkAnswer(df.selectExpr("size(a)"), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+  }
+
+  test("map size function - legacy") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
+      testSizeOfMap(sizeOfNull = -1: Int)
+    }
+  }
+
+  test("map size function") {
+    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "false") {
+      testSizeOfMap(sizeOfNull = null)
+    }
   }
 
   test("map_keys/map_values function") {
@@ -590,8 +507,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("map_entries") {
-    val dummyFilter = (c: Column) => c.isNotNull || c.isNull
-
     // Primitive-type elements
     val idf = Seq(
       Map[Int, Int](1 -> 100, 2 -> 200, 3 -> 300),
@@ -604,15 +519,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null)
     )
 
-    checkAnswer(idf.select(map_entries('m)), iExpected)
-    checkAnswer(idf.selectExpr("map_entries(m)"), iExpected)
-    checkAnswer(idf.filter(dummyFilter('m)).select(map_entries('m)), iExpected)
-    checkAnswer(
-      spark.range(1).selectExpr("map_entries(map(1, null, 2, null))"),
-      Seq(Row(Seq(Row(1, null), Row(2, null)))))
-    checkAnswer(
-      spark.range(1).filter(dummyFilter('id)).selectExpr("map_entries(map(1, null, 2, null))"),
-      Seq(Row(Seq(Row(1, null), Row(2, null)))))
+    def testPrimitiveType(): Unit = {
+      checkAnswer(idf.select(map_entries('m)), iExpected)
+      checkAnswer(idf.selectExpr("map_entries(m)"), iExpected)
+      checkAnswer(idf.selectExpr("map_entries(map(1, null, 2, null))"),
+        Seq.fill(iExpected.length)(Row(Seq(Row(1, null), Row(2, null)))))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testPrimitiveType()
+    // Test with cached relation, the Project will be evaluated with codegen
+    idf.cache()
+    testPrimitiveType()
 
     // Non-primitive-type elements
     val sdf = Seq(
@@ -628,15 +546,97 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null)
     )
 
-    checkAnswer(sdf.select(map_entries('m)), sExpected)
-    checkAnswer(sdf.selectExpr("map_entries(m)"), sExpected)
-    checkAnswer(sdf.filter(dummyFilter('m)).select(map_entries('m)), sExpected)
+    def testNonPrimitiveType(): Unit = {
+      checkAnswer(sdf.select(map_entries('m)), sExpected)
+      checkAnswer(sdf.selectExpr("map_entries(m)"), sExpected)
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testNonPrimitiveType()
+    // Test with cached relation, the Project will be evaluated with codegen
+    sdf.cache()
+    testNonPrimitiveType()
+  }
+
+  test("map_concat function") {
+    val df1 = Seq(
+      (Map[Int, Int](1 -> 100, 2 -> 200), Map[Int, Int](3 -> 300, 4 -> 400)),
+      (Map[Int, Int](1 -> 100, 2 -> 200), Map[Int, Int](3 -> 300, 1 -> 400)),
+      (null, Map[Int, Int](3 -> 300, 4 -> 400))
+    ).toDF("map1", "map2")
+
+    val expected1a = Seq(
+      Row(Map(1 -> 100, 2 -> 200, 3 -> 300, 4 -> 400)),
+      Row(Map(1 -> 400, 2 -> 200, 3 -> 300)),
+      Row(null)
+    )
+
+    checkAnswer(df1.selectExpr("map_concat(map1, map2)"), expected1a)
+    checkAnswer(df1.select(map_concat('map1, 'map2)), expected1a)
+
+    val expected1b = Seq(
+      Row(Map(1 -> 100, 2 -> 200)),
+      Row(Map(1 -> 100, 2 -> 200)),
+      Row(null)
+    )
+
+    checkAnswer(df1.selectExpr("map_concat(map1)"), expected1b)
+    checkAnswer(df1.select(map_concat('map1)), expected1b)
+
+    val df2 = Seq(
+      (
+        Map[Array[Int], Int](Array(1) -> 100, Array(2) -> 200),
+        Map[String, Int]("3" -> 300, "4" -> 400)
+      )
+    ).toDF("map1", "map2")
+
+    val expected2 = Seq(Row(Map()))
+
+    checkAnswer(df2.selectExpr("map_concat()"), expected2)
+    checkAnswer(df2.select(map_concat()), expected2)
+
+    val df3 = {
+      val schema = StructType(
+        StructField("map1", MapType(StringType, IntegerType, true), false)  ::
+        StructField("map2", MapType(StringType, IntegerType, false), false) :: Nil
+      )
+      val data = Seq(
+        Row(Map[String, Any]("a" -> 1, "b" -> null), Map[String, Any]("c" -> 3, "d" -> 4)),
+        Row(Map[String, Any]("a" -> 1, "b" -> 2), Map[String, Any]("c" -> 3, "d" -> 4))
+      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    }
+
+    val expected3 = Seq(
+      Row(Map[String, Any]("a" -> 1, "b" -> null, "c" -> 3, "d" -> 4)),
+      Row(Map[String, Any]("a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4))
+    )
+
+    checkAnswer(df3.selectExpr("map_concat(map1, map2)"), expected3)
+    checkAnswer(df3.select(map_concat('map1, 'map2)), expected3)
+
+    val expectedMessage1 = "input to function map_concat should all be the same type"
+
+    assert(intercept[AnalysisException] {
+      df2.selectExpr("map_concat(map1, map2)").collect()
+    }.getMessage().contains(expectedMessage1))
+
+    assert(intercept[AnalysisException] {
+      df2.select(map_concat('map1, 'map2)).collect()
+    }.getMessage().contains(expectedMessage1))
+
+    val expectedMessage2 = "input to function map_concat should all be of type map"
+
+    assert(intercept[AnalysisException] {
+      df2.selectExpr("map_concat(map1, 12)").collect()
+    }.getMessage().contains(expectedMessage2))
+
+    assert(intercept[AnalysisException] {
+      df2.select(map_concat('map1, lit(12))).collect()
+    }.getMessage().contains(expectedMessage2))
   }
 
   test("map_from_entries function") {
-    def dummyFilter(c: Column): Column = c.isNull || c.isNotNull
-    val oneRowDF = Seq(3215).toDF("i")
-
     // Test cases with primitive-type keys and values
     val idf = Seq(
       Seq((1, 10), (2, 20), (3, 10)),
@@ -650,18 +650,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Map.empty),
       Row(null))
 
-    checkAnswer(idf.select(map_from_entries('a)), iExpected)
-    checkAnswer(idf.selectExpr("map_from_entries(a)"), iExpected)
-    checkAnswer(idf.filter(dummyFilter('a)).select(map_from_entries('a)), iExpected)
-    checkAnswer(
-      oneRowDF.selectExpr("map_from_entries(array(struct(1, null), struct(2, null)))"),
-      Seq(Row(Map(1 -> null, 2 -> null)))
-    )
-    checkAnswer(
-      oneRowDF.filter(dummyFilter('i))
-        .selectExpr("map_from_entries(array(struct(1, null), struct(2, null)))"),
-      Seq(Row(Map(1 -> null, 2 -> null)))
-    )
+    def testPrimitiveType(): Unit = {
+      checkAnswer(idf.select(map_from_entries('a)), iExpected)
+      checkAnswer(idf.selectExpr("map_from_entries(a)"), iExpected)
+      checkAnswer(idf.selectExpr("map_from_entries(array(struct(1, null), struct(2, null)))"),
+        Seq.fill(iExpected.length)(Row(Map(1 -> null, 2 -> null))))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testPrimitiveType()
+    // Test with cached relation, the Project will be evaluated with codegen
+    idf.cache()
+    testPrimitiveType()
 
     // Test cases with non-primitive-type keys and values
     val sdf = Seq(
@@ -678,9 +678,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Map.empty),
       Row(null))
 
-    checkAnswer(sdf.select(map_from_entries('a)), sExpected)
-    checkAnswer(sdf.selectExpr("map_from_entries(a)"), sExpected)
-    checkAnswer(sdf.filter(dummyFilter('a)).select(map_from_entries('a)), sExpected)
+    def testNonPrimitiveType(): Unit = {
+      checkAnswer(sdf.select(map_from_entries('a)), sExpected)
+      checkAnswer(sdf.selectExpr("map_from_entries(a)"), sExpected)
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testNonPrimitiveType()
+    // Test with cached relation, the Project will be evaluated with codegen
+    sdf.cache()
+    testNonPrimitiveType()
   }
 
   test("array contains function") {
@@ -794,6 +801,23 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("array_join(x, delimiter, 'NULL')"),
       Seq(Row("a,b"), Row("a,NULL,b"), Row("")))
+
+    val idf = Seq(Seq(1, 2, 3)).toDF("x")
+
+    checkAnswer(
+      idf.select(array_join(idf("x"), ", ")),
+      Seq(Row("1, 2, 3"))
+    )
+    checkAnswer(
+      idf.selectExpr("array_join(x, ', ')"),
+      Seq(Row("1, 2, 3"))
+    )
+    intercept[AnalysisException] {
+      idf.selectExpr("array_join(x, 1)")
+    }
+    intercept[AnalysisException] {
+      idf.selectExpr("array_join(x, ', ', 1)")
+    }
   }
 
   test("array_min function") {
@@ -824,63 +848,129 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.selectExpr("array_max(a)"), answer)
   }
 
-  test("reverse function") {
-    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // switch codegen on
+  test("sequence") {
+    checkAnswer(Seq((-2, 2)).toDF().select(sequence('_1, '_2)), Seq(Row(Array(-2, -1, 0, 1, 2))))
+    checkAnswer(Seq((7, 2, -2)).toDF().select(sequence('_1, '_2, '_3)), Seq(Row(Array(7, 5, 3))))
 
-    // String test cases
+    checkAnswer(
+      spark.sql("select sequence(" +
+        "   cast('2018-01-01 00:00:00' as timestamp)" +
+        ",  cast('2018-01-02 00:00:00' as timestamp)" +
+        ",  interval 12 hours)"),
+      Seq(Row(Array(
+        Timestamp.valueOf("2018-01-01 00:00:00"),
+        Timestamp.valueOf("2018-01-01 12:00:00"),
+        Timestamp.valueOf("2018-01-02 00:00:00")))))
+
+    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("UTC")) {
+      checkAnswer(
+        spark.sql("select sequence(" +
+          "   cast('2018-01-01' as date)" +
+          ",  cast('2018-03-01' as date)" +
+          ",  interval 1 month)"),
+        Seq(Row(Array(
+          Date.valueOf("2018-01-01"),
+          Date.valueOf("2018-02-01"),
+          Date.valueOf("2018-03-01")))))
+    }
+
+    // test type coercion
+    checkAnswer(
+      Seq((1.toByte, 3L, 1)).toDF().select(sequence('_1, '_2, '_3)),
+      Seq(Row(Array(1L, 2L, 3L))))
+
+    checkAnswer(
+      spark.sql("select sequence(" +
+        "   cast('2018-01-01' as date)" +
+        ",  cast('2018-01-02 00:00:00' as timestamp)" +
+        ",  interval 12 hours)"),
+      Seq(Row(Array(
+        Timestamp.valueOf("2018-01-01 00:00:00"),
+        Timestamp.valueOf("2018-01-01 12:00:00"),
+        Timestamp.valueOf("2018-01-02 00:00:00")))))
+
+    // test invalid data types
+    intercept[AnalysisException] {
+      Seq((true, false)).toDF().selectExpr("sequence(_1, _2)")
+    }
+    intercept[AnalysisException] {
+      Seq((true, false, 42)).toDF().selectExpr("sequence(_1, _2, _3)")
+    }
+    intercept[AnalysisException] {
+      Seq((1, 2, 0.5)).toDF().selectExpr("sequence(_1, _2, _3)")
+    }
+  }
+
+  test("reverse function - string") {
     val oneRowDF = Seq(("Spark", 3215)).toDF("s", "i")
+    def testString(): Unit = {
+      checkAnswer(oneRowDF.select(reverse('s)), Seq(Row("krapS")))
+      checkAnswer(oneRowDF.selectExpr("reverse(s)"), Seq(Row("krapS")))
+      checkAnswer(oneRowDF.select(reverse('i)), Seq(Row("5123")))
+      checkAnswer(oneRowDF.selectExpr("reverse(i)"), Seq(Row("5123")))
+      checkAnswer(oneRowDF.selectExpr("reverse(null)"), Seq(Row(null)))
+    }
 
-    checkAnswer(
-      oneRowDF.select(reverse('s)),
-      Seq(Row("krapS"))
-    )
-    checkAnswer(
-      oneRowDF.selectExpr("reverse(s)"),
-      Seq(Row("krapS"))
-    )
-    checkAnswer(
-      oneRowDF.select(reverse('i)),
-      Seq(Row("5123"))
-    )
-    checkAnswer(
-      oneRowDF.selectExpr("reverse(i)"),
-      Seq(Row("5123"))
-    )
-    checkAnswer(
-      oneRowDF.selectExpr("reverse(null)"),
-      Seq(Row(null))
-    )
+    // Test with local relation, the Project will be evaluated without codegen
+    testString()
+    // Test with cached relation, the Project will be evaluated with codegen
+    oneRowDF.cache()
+    testString()
+  }
 
-    // Array test cases (primitive-type elements)
-    val idf = Seq(
+  test("reverse function - array for primitive type not containing null") {
+    val idfNotContainsNull = Seq(
       Seq(1, 9, 8, 7),
       Seq(5, 8, 9, 7, 2),
       Seq.empty,
       null
     ).toDF("i")
 
-    checkAnswer(
-      idf.select(reverse('i)),
-      Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
-    )
-    checkAnswer(
-      idf.filter(dummyFilter('i)).select(reverse('i)),
-      Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
-    )
-    checkAnswer(
-      idf.selectExpr("reverse(i)"),
-      Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
-    )
-    checkAnswer(
-      oneRowDF.selectExpr("reverse(array(1, null, 2, null))"),
-      Seq(Row(Seq(null, 2, null, 1)))
-    )
-    checkAnswer(
-      oneRowDF.filter(dummyFilter('i)).selectExpr("reverse(array(1, null, 2, null))"),
-      Seq(Row(Seq(null, 2, null, 1)))
-    )
+    def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
+      checkAnswer(
+        idfNotContainsNull.select(reverse('i)),
+        Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
+      )
+      checkAnswer(
+        idfNotContainsNull.selectExpr("reverse(i)"),
+        Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
+      )
+    }
 
-    // Array test cases (non-primitive-type elements)
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeNotContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    idfNotContainsNull.cache()
+    testArrayOfPrimitiveTypeNotContainsNull()
+  }
+
+  test("reverse function - array for primitive type containing null") {
+    val idfContainsNull = Seq[Seq[Integer]](
+      Seq(1, 9, 8, null, 7),
+      Seq(null, 5, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeContainsNull(): Unit = {
+      checkAnswer(
+        idfContainsNull.select(reverse('i)),
+        Seq(Row(Seq(7, null, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5, null)), Row(Seq.empty), Row(null))
+      )
+      checkAnswer(
+        idfContainsNull.selectExpr("reverse(i)"),
+        Seq(Row(Seq(7, null, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5, null)), Row(Seq.empty), Row(null))
+      )
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    idfContainsNull.cache()
+    testArrayOfPrimitiveTypeContainsNull()
+  }
+
+  test("reverse function - array for non-primitive type") {
     val sdf = Seq(
       Seq("c", "a", "b"),
       Seq("b", null, "c", null),
@@ -888,34 +978,38 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("s")
 
-    checkAnswer(
-      sdf.select(reverse('s)),
-      Seq(Row(Seq("b", "a", "c")), Row(Seq(null, "c", null, "b")), Row(Seq.empty), Row(null))
-    )
-    checkAnswer(
-      sdf.filter(dummyFilter('s)).select(reverse('s)),
-      Seq(Row(Seq("b", "a", "c")), Row(Seq(null, "c", null, "b")), Row(Seq.empty), Row(null))
-    )
-    checkAnswer(
-      sdf.selectExpr("reverse(s)"),
-      Seq(Row(Seq("b", "a", "c")), Row(Seq(null, "c", null, "b")), Row(Seq.empty), Row(null))
-    )
-    checkAnswer(
-      oneRowDF.selectExpr("reverse(array(array(1, 2), array(3, 4)))"),
-      Seq(Row(Seq(Seq(3, 4), Seq(1, 2))))
-    )
-    checkAnswer(
-      oneRowDF.filter(dummyFilter('s)).selectExpr("reverse(array(array(1, 2), array(3, 4)))"),
-      Seq(Row(Seq(Seq(3, 4), Seq(1, 2))))
-    )
+    def testArrayOfNonPrimitiveType(): Unit = {
+      checkAnswer(
+        sdf.select(reverse('s)),
+        Seq(Row(Seq("b", "a", "c")), Row(Seq(null, "c", null, "b")), Row(Seq.empty), Row(null))
+      )
+      checkAnswer(
+        sdf.selectExpr("reverse(s)"),
+        Seq(Row(Seq("b", "a", "c")), Row(Seq(null, "c", null, "b")), Row(Seq.empty), Row(null))
+      )
+      checkAnswer(
+        sdf.selectExpr("reverse(array(array(1, 2), array(3, 4)))"),
+        Seq.fill(sdf.count().toInt)(Row(Seq(Seq(3, 4), Seq(1, 2))))
+      )
+    }
 
-    // Error test cases
-    intercept[AnalysisException] {
-      oneRowDF.selectExpr("reverse(struct(1, 'a'))")
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfNonPrimitiveType()
+    // Test with cached relation, the Project will be evaluated with codegen
+    sdf.cache()
+    testArrayOfNonPrimitiveType()
+  }
+
+  test("reverse function - data type mismatch") {
+    val ex1 = intercept[AnalysisException] {
+      sql("select reverse(struct(1, 'a'))")
     }
-    intercept[AnalysisException] {
-      oneRowDF.selectExpr("reverse(map(1, 'a'))")
+    assert(ex1.getMessage.contains("data type mismatch"))
+
+    val ex2 = intercept[AnalysisException] {
+      sql("select reverse(map(1, 'a'))")
     }
+    assert(ex2.getMessage.contains("data type mismatch"))
   }
 
   test("array position function") {
@@ -1026,69 +1120,122 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       "argument 1 requires (array or map) type, however, '`_1`' is of string type"))
   }
 
+  test("array_union functions") {
+    val df1 = Seq((Array(1, 2, 3), Array(4, 2))).toDF("a", "b")
+    val ans1 = Row(Seq(1, 2, 3, 4))
+    checkAnswer(df1.select(array_union($"a", $"b")), ans1)
+    checkAnswer(df1.selectExpr("array_union(a, b)"), ans1)
+
+    val df2 = Seq((Array[Integer](1, 2, null, 4, 5), Array(-5, 4, -3, 2, -1))).toDF("a", "b")
+    val ans2 = Row(Seq(1, 2, null, 4, 5, -5, -3, -1))
+    checkAnswer(df2.select(array_union($"a", $"b")), ans2)
+    checkAnswer(df2.selectExpr("array_union(a, b)"), ans2)
+
+    val df3 = Seq((Array(1L, 2L, 3L), Array(4L, 2L))).toDF("a", "b")
+    val ans3 = Row(Seq(1L, 2L, 3L, 4L))
+    checkAnswer(df3.select(array_union($"a", $"b")), ans3)
+    checkAnswer(df3.selectExpr("array_union(a, b)"), ans3)
+
+    val df4 = Seq((Array[java.lang.Long](1L, 2L, null, 4L, 5L), Array(-5L, 4L, -3L, 2L, -1L)))
+      .toDF("a", "b")
+    val ans4 = Row(Seq(1L, 2L, null, 4L, 5L, -5L, -3L, -1L))
+    checkAnswer(df4.select(array_union($"a", $"b")), ans4)
+    checkAnswer(df4.selectExpr("array_union(a, b)"), ans4)
+
+    val df5 = Seq((Array("b", "a", "c"), Array("b", null, "a", "g"))).toDF("a", "b")
+    val ans5 = Row(Seq("b", "a", "c", null, "g"))
+    checkAnswer(df5.select(array_union($"a", $"b")), ans5)
+    checkAnswer(df5.selectExpr("array_union(a, b)"), ans5)
+
+    val df6 = Seq((null, Array("a"))).toDF("a", "b")
+    intercept[AnalysisException] {
+      df6.select(array_union($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df6.selectExpr("array_union(a, b)")
+    }
+
+    val df7 = Seq((null, null)).toDF("a", "b")
+    intercept[AnalysisException] {
+      df7.select(array_union($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df7.selectExpr("array_union(a, b)")
+    }
+
+    val df8 = Seq((Array(Array(1)), Array("a"))).toDF("a", "b")
+    intercept[AnalysisException] {
+      df8.select(array_union($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df8.selectExpr("array_union(a, b)")
+    }
+  }
+
   test("concat function - arrays") {
     val nseqi : Seq[Int] = null
     val nseqs : Seq[String] = null
     val df = Seq(
-
       (Seq(1), Seq(2, 3), Seq(5L, 6L), nseqi, Seq("a", "b", "c"), Seq("d", "e"), Seq("f"), nseqs),
       (Seq(1, 0), Seq.empty[Int], Seq(2L), nseqi, Seq("a"), Seq.empty[String], Seq(null), nseqs)
     ).toDF("i1", "i2", "i3", "in", "s1", "s2", "s3", "sn")
 
-    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // switch codeGen on
-
     // Simple test cases
-    checkAnswer(
-      df.selectExpr("array(1, 2, 3L)"),
-      Seq(Row(Seq(1L, 2L, 3L)), Row(Seq(1L, 2L, 3L)))
-    )
+    def simpleTest(): Unit = {
+      checkAnswer (
+        df.select(concat($"i1", $"s1")),
+        Seq(Row(Seq("1", "a", "b", "c")), Row(Seq("1", "0", "a")))
+      )
+      checkAnswer(
+        df.select(concat($"i1", $"i2", $"i3")),
+        Seq(Row(Seq(1, 2, 3, 5, 6)), Row(Seq(1, 0, 2)))
+      )
+      checkAnswer(
+        df.selectExpr("concat(array(1, null), i2, i3)"),
+        Seq(Row(Seq(1, null, 2, 3, 5, 6)), Row(Seq(1, null, 2)))
+      )
+      checkAnswer(
+        df.select(concat($"s1", $"s2", $"s3")),
+        Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
+      )
+      checkAnswer(
+        df.selectExpr("concat(s1, s2, s3)"),
+        Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
+      )
+    }
 
-    checkAnswer (
-      df.select(concat($"i1", $"s1")),
-      Seq(Row(Seq("1", "a", "b", "c")), Row(Seq("1", "0", "a")))
-    )
-    checkAnswer(
-      df.select(concat($"i1", $"i2", $"i3")),
-      Seq(Row(Seq(1, 2, 3, 5, 6)), Row(Seq(1, 0, 2)))
-    )
-    checkAnswer(
-      df.filter(dummyFilter($"i1")).select(concat($"i1", $"i2", $"i3")),
-      Seq(Row(Seq(1, 2, 3, 5, 6)), Row(Seq(1, 0, 2)))
-    )
-    checkAnswer(
-      df.selectExpr("concat(array(1, null), i2, i3)"),
-      Seq(Row(Seq(1, null, 2, 3, 5, 6)), Row(Seq(1, null, 2)))
-    )
-    checkAnswer(
-      df.select(concat($"s1", $"s2", $"s3")),
-      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
-    )
-    checkAnswer(
-      df.selectExpr("concat(s1, s2, s3)"),
-      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
-    )
-    checkAnswer(
-      df.filter(dummyFilter($"s1"))select(concat($"s1", $"s2", $"s3")),
-      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
-    )
+    // Test with local relation, the Project will be evaluated without codegen
+    simpleTest()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    simpleTest()
 
     // Null test cases
-    checkAnswer(
-      df.select(concat($"i1", $"in")),
-      Seq(Row(null), Row(null))
-    )
-    checkAnswer(
-      df.select(concat($"in", $"i1")),
-      Seq(Row(null), Row(null))
-    )
-    checkAnswer(
-      df.select(concat($"s1", $"sn")),
-      Seq(Row(null), Row(null))
-    )
-    checkAnswer(
-      df.select(concat($"sn", $"s1")),
-      Seq(Row(null), Row(null))
-    )
+    def nullTest(): Unit = {
+      checkAnswer(
+        df.select(concat($"i1", $"in")),
+        Seq(Row(null), Row(null))
+      )
+      checkAnswer(
+        df.select(concat($"in", $"i1")),
+        Seq(Row(null), Row(null))
+      )
+      checkAnswer(
+        df.select(concat($"s1", $"sn")),
+        Seq(Row(null), Row(null))
+      )
+      checkAnswer(
+        df.select(concat($"sn", $"s1")),
+        Seq(Row(null), Row(null))
+      )
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    df.unpersist()
+    nullTest()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    nullTest()
 
     // Type error test cases
     intercept[AnalysisException] {
@@ -1106,9 +1253,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("flatten function") {
-    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // to switch codeGen on
-    val oneRowDF = Seq((1, "a", Seq(1, 2, 3))).toDF("i", "s", "arr")
-
     // Test cases with a primitive type
     val intDF = Seq(
       (Seq(Seq(1, 2, 3), Seq(4, 5), Seq(6))),
@@ -1131,12 +1275,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null),
       Row(null))
 
-    checkAnswer(intDF.select(flatten($"i")), intDFResult)
-    checkAnswer(intDF.filter(dummyFilter($"i"))select(flatten($"i")), intDFResult)
-    checkAnswer(intDF.selectExpr("flatten(i)"), intDFResult)
-    checkAnswer(
-      oneRowDF.selectExpr("flatten(array(arr, array(null, 5), array(6, null)))"),
-      Seq(Row(Seq(1, 2, 3, null, 5, 6, null))))
+    def testInt(): Unit = {
+      checkAnswer(intDF.select(flatten($"i")), intDFResult)
+      checkAnswer(intDF.selectExpr("flatten(i)"), intDFResult)
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testInt()
+    // Test with cached relation, the Project will be evaluated with codegen
+    intDF.cache()
+    testInt()
 
     // Test cases with non-primitive types
     val strDF = Seq(
@@ -1162,14 +1310,36 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null),
       Row(null))
 
-    checkAnswer(strDF.select(flatten($"s")), strDFResult)
-    checkAnswer(strDF.filter(dummyFilter($"s")).select(flatten($"s")), strDFResult)
-    checkAnswer(strDF.selectExpr("flatten(s)"), strDFResult)
-    checkAnswer(
-      oneRowDF.selectExpr("flatten(array(array(arr, arr), array(arr)))"),
-      Seq(Row(Seq(Seq(1, 2, 3), Seq(1, 2, 3), Seq(1, 2, 3)))))
+    def testString(): Unit = {
+      checkAnswer(strDF.select(flatten($"s")), strDFResult)
+      checkAnswer(strDF.selectExpr("flatten(s)"), strDFResult)
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testString()
+    // Test with cached relation, the Project will be evaluated with codegen
+    strDF.cache()
+    testString()
+
+    val arrDF = Seq((1, "a", Seq(1, 2, 3))).toDF("i", "s", "arr")
+
+    def testArray(): Unit = {
+      checkAnswer(
+        arrDF.selectExpr("flatten(array(arr, array(null, 5), array(6, null)))"),
+        Seq(Row(Seq(1, 2, 3, null, 5, 6, null))))
+      checkAnswer(
+        arrDF.selectExpr("flatten(array(array(arr, arr), array(arr)))"),
+        Seq(Row(Seq(Seq(1, 2, 3), Seq(1, 2, 3), Seq(1, 2, 3)))))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArray()
+    // Test with cached relation, the Project will be evaluated with codegen
+    arrDF.cache()
+    testArray()
 
     // Error test cases
+    val oneRowDF = Seq((1, "a", Seq(1, 2, 3))).toDF("i", "s", "arr")
     intercept[AnalysisException] {
       oneRowDF.select(flatten($"arr"))
     }
@@ -1185,7 +1355,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("array_repeat function") {
-    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // to switch codeGen on
     val strDF = Seq(
       ("hi", 2),
       (null, 2)
@@ -1196,12 +1365,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Seq(null, null))
     )
 
-    checkAnswer(strDF.select(array_repeat($"a", 2)), strDFTwiceResult)
-    checkAnswer(strDF.filter(dummyFilter($"a")).select(array_repeat($"a", 2)), strDFTwiceResult)
-    checkAnswer(strDF.select(array_repeat($"a", $"b")), strDFTwiceResult)
-    checkAnswer(strDF.filter(dummyFilter($"a")).select(array_repeat($"a", $"b")), strDFTwiceResult)
-    checkAnswer(strDF.selectExpr("array_repeat(a, 2)"), strDFTwiceResult)
-    checkAnswer(strDF.selectExpr("array_repeat(a, b)"), strDFTwiceResult)
+    def testString(): Unit = {
+      checkAnswer(strDF.select(array_repeat($"a", 2)), strDFTwiceResult)
+      checkAnswer(strDF.select(array_repeat($"a", $"b")), strDFTwiceResult)
+      checkAnswer(strDF.selectExpr("array_repeat(a, 2)"), strDFTwiceResult)
+      checkAnswer(strDF.selectExpr("array_repeat(a, b)"), strDFTwiceResult)
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testString()
+    // Test with cached relation, the Project will be evaluated with codegen
+    strDF.cache()
+    testString()
 
     val intDF = {
       val schema = StructType(Seq(
@@ -1219,12 +1394,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Seq(null, null))
     )
 
-    checkAnswer(intDF.select(array_repeat($"a", 2)), intDFTwiceResult)
-    checkAnswer(intDF.filter(dummyFilter($"a")).select(array_repeat($"a", 2)), intDFTwiceResult)
-    checkAnswer(intDF.select(array_repeat($"a", $"b")), intDFTwiceResult)
-    checkAnswer(intDF.filter(dummyFilter($"a")).select(array_repeat($"a", $"b")), intDFTwiceResult)
-    checkAnswer(intDF.selectExpr("array_repeat(a, 2)"), intDFTwiceResult)
-    checkAnswer(intDF.selectExpr("array_repeat(a, b)"), intDFTwiceResult)
+    def testInt(): Unit = {
+      checkAnswer(intDF.select(array_repeat($"a", 2)), intDFTwiceResult)
+      checkAnswer(intDF.select(array_repeat($"a", $"b")), intDFTwiceResult)
+      checkAnswer(intDF.selectExpr("array_repeat(a, 2)"), intDFTwiceResult)
+      checkAnswer(intDF.selectExpr("array_repeat(a, b)"), intDFTwiceResult)
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testInt()
+    // Test with cached relation, the Project will be evaluated with codegen
+    intDF.cache()
+    testInt()
 
     val nullCountDF = {
       val schema = StructType(Seq(
@@ -1237,13 +1418,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
     }
 
-    checkAnswer(
-      nullCountDF.select(array_repeat($"a", $"b")),
-      Seq(
-        Row(null),
-        Row(null)
+    def testNull(): Unit = {
+      checkAnswer(
+        nullCountDF.select(array_repeat($"a", $"b")),
+        Seq(Row(null), Row(null))
       )
-    )
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    nullCountDF.cache()
+    testNull()
 
     // Error test cases
     val invalidTypeDF = Seq(("hi", "1")).toDF("a", "b")
@@ -1327,6 +1513,71 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  // Shuffle expressions should produce same results at retries in the same DataFrame.
+  private def checkShuffleResult(df: DataFrame): Unit = {
+    checkAnswer(df, df.collect())
+  }
+
+  test("shuffle function - array for primitive type not containing null") {
+    val idfNotContainsNull = Seq(
+      Seq(1, 9, 8, 7),
+      Seq(5, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
+      checkShuffleResult(idfNotContainsNull.select(shuffle('i)))
+      checkShuffleResult(idfNotContainsNull.selectExpr("shuffle(i)"))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeNotContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    idfNotContainsNull.cache()
+    testArrayOfPrimitiveTypeNotContainsNull()
+  }
+
+  test("shuffle function - array for primitive type containing null") {
+    val idfContainsNull = Seq[Seq[Integer]](
+      Seq(1, 9, 8, null, 7),
+      Seq(null, 5, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeContainsNull(): Unit = {
+      checkShuffleResult(idfContainsNull.select(shuffle('i)))
+      checkShuffleResult(idfContainsNull.selectExpr("shuffle(i)"))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    idfContainsNull.cache()
+    testArrayOfPrimitiveTypeContainsNull()
+  }
+
+  test("shuffle function - array for non-primitive type") {
+    val sdf = Seq(
+      Seq("c", "a", "b"),
+      Seq("b", null, "c", null),
+      Seq.empty,
+      null
+    ).toDF("s")
+
+    def testNonPrimitiveType(): Unit = {
+      checkShuffleResult(sdf.select(shuffle('s)))
+      checkShuffleResult(sdf.selectExpr("shuffle(s)"))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testNonPrimitiveType()
+    // Test with cached relation, the Project will be evaluated with codegen
+    sdf.cache()
+    testNonPrimitiveType()
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {
@@ -1397,6 +1648,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       val errMsg = intercept[AnalysisException] { func(df) }.getMessage
       assert(errMsg.contains(s"input to function $name requires at least two arguments"))
     }
+  }
+
+  test("SPARK-24734: Fix containsNull of Concat for array type") {
+    val df = Seq((Seq(1), Seq[Integer](null), Seq("a", "b"))).toDF("k1", "k2", "v")
+    val ex = intercept[RuntimeException] {
+      df.select(map_from_arrays(concat($"k1", $"k2"), $"v")).show()
+    }
+    assert(ex.getMessage.contains("Cannot use null as map key"))
   }
 }
 

@@ -104,6 +104,7 @@
     <module>external/kafka-0-10</module>
     <module>external/kafka-0-10-assembly</module>
     <module>external/kafka-0-10-sql</module>
+    <module>external/avro</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
@@ -113,7 +114,7 @@
     <java.version>1.8</java.version>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
-    <maven.version>3.3.9</maven.version>
+    <maven.version>3.5.4</maven.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.16</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
@@ -130,7 +131,7 @@
     <hive.version.short>1.2.1</hive.version.short>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.0</parquet.version>
-    <orc.version>1.4.4</orc.version>
+    <orc.version>1.5.2</orc.version>
     <orc.classifier>nohive</orc.classifier>
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.3.20.v20170531</jetty.version>
@@ -139,7 +140,7 @@
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <codahale.metrics.version>3.1.5</codahale.metrics.version>
-    <avro.version>1.7.7</avro.version>
+    <avro.version>1.8.2</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
     <jets3t.version>0.9.4</jets3t.version>
     <aws.kinesis.client.version>1.7.3</aws.kinesis.client.version>
@@ -155,7 +156,7 @@
     <commons.math3.version>3.4.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
-    <scala.version>2.11.8</scala.version>
+    <scala.version>2.11.12</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.6.7</fasterxml.jackson.version>
@@ -193,6 +194,7 @@
 
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
+    <test.include.tags></test.include.tags>
 
     <!-- Package to use when relocating shaded classes. -->
     <spark.shade.packageName>org.spark_project</spark.shade.packageName>
@@ -313,13 +315,13 @@
         <artifactId>chill-java</artifactId>
         <version>${chill.version}</version>
       </dependency>
-      <!-- This artifact is a shaded version of ASM 5.0.4. The POM that was used to produce this
-           is at https://github.com/apache/geronimo-xbean/tree/xbean-4.4/xbean-asm5-shaded
+      <!-- This artifact is a shaded version of ASM 6.x. The POM that was used to produce this
+           is at https://github.com/apache/geronimo-xbean/tree/trunk/xbean-asm6-shaded
            For context on why we shade ASM, see SPARK-782 and SPARK-6152. -->
       <dependency>
         <groupId>org.apache.xbean</groupId>
-        <artifactId>xbean-asm5-shaded</artifactId>
-        <version>4.4</version>
+        <artifactId>xbean-asm6-shaded</artifactId>
+        <version>4.8</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -536,7 +538,6 @@
         <groupId>org.xerial.snappy</groupId>
         <artifactId>snappy-java</artifactId>
         <version>${snappy.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.lz4</groupId>
@@ -740,13 +741,13 @@
       <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-parser-combinators_${scala.binary.version}</artifactId>
-        <version>1.0.4</version>
+        <version>1.1.0</version>
       </dependency>
       <!-- SPARK-16770 affecting Scala 2.11.x -->
       <dependency>
         <groupId>jline</groupId>
         <artifactId>jline</artifactId>
-        <version>2.12.1</version>
+        <version>2.14.3</version>
       </dependency>
       <dependency>
         <groupId>org.scalatest</groupId>
@@ -2122,7 +2123,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>2.20.1</version>
+          <version>2.22.0</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
@@ -2161,6 +2162,7 @@
             </systemProperties>
             <failIfNoTests>false</failIfNoTests>
             <excludedGroups>${test.exclude.tags}</excludedGroups>
+            <groups>${test.include.tags}</groups>
           </configuration>
           <executions>
             <execution>
@@ -2208,6 +2210,7 @@
               <test.src.tables>__not_used__</test.src.tables>
             </systemProperties>
             <tagsToExclude>${test.exclude.tags}</tagsToExclude>
+            <tagsToInclude>${test.include.tags}</tagsToInclude>
           </configuration>
           <executions>
             <execution>
@@ -2755,7 +2758,7 @@
     <profile>
       <id>scala-2.12</id>
       <properties>
-        <scala.version>2.12.4</scala.version>
+        <scala.version>2.12.6</scala.version>
         <scala.binary.version>2.12</scala.binary.version>
       </properties>
       <build>

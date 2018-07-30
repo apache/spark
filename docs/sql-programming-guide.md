@@ -1302,9 +1302,33 @@ the following case-insensitive options:
   <tr>
     <td><code>dbtable</code></td>
     <td>
-      The JDBC table that should be read. Note that anything that is valid in a <code>FROM</code> clause of
-      a SQL query can be used. For example, instead of a full table you could also use a
-      subquery in parentheses.
+      The JDBC table that should be read from or written into. Note that when using it in the read
+      path anything that is valid in a <code>FROM</code> clause of a SQL query can be used.
+      For example, instead of a full table you could also use a subquery in parentheses. It is not
+      allowed to specify `dbtable` and `query` options at the same time.
+    </td>
+  </tr>
+  <tr>
+    <td><code>query</code></td>
+    <td>
+      A query that will be used to read data into Spark. The specified query will be parenthesized and used
+      as a subquery in the <code>FROM</code> clause. Spark will also assign an alias to the subquery clause.
+      As an example, spark will issue a query of the following form to the JDBC Source.<br><br>
+      <code> SELECT &lt;columns&gt; FROM (&lt;user_specified_query&gt;) spark_gen_alias</code><br><br>
+      Below are couple of restrictions while using this option.<br>
+      <ol>
+         <li> It is not allowed to specify `dbtable` and `query` options at the same time. </li>
+         <li> It is not allowed to spcify `query` and `partitionColumn` options at the same time. When specifying
+            `partitionColumn` option is required, the subquery can be specified using `dbtable` option instead and
+            partition columns can be qualified using the subquery alias provided as part of `dbtable`. <br>
+            Example:<br>
+            <code>
+               spark.read.format("jdbc")<br>
+               &nbsp&nbsp .option("dbtable", "(select c1, c2 from t1) as subq")<br>
+               &nbsp&nbsp .option("partitionColumn", "subq.c1"<br>
+               &nbsp&nbsp .load()
+            </code></li>
+      </ol>
     </td>
   </tr>
 
@@ -1321,8 +1345,8 @@ the following case-insensitive options:
       These options must all be specified if any of them is specified. In addition,
       <code>numPartitions</code> must be specified. They describe how to partition the table when
       reading in parallel from multiple workers.
-      <code>partitionColumn</code> must be a numeric column from the table in question. Notice
-      that <code>lowerBound</code> and <code>upperBound</code> are just used to decide the
+      <code>partitionColumn</code> must be a numeric, date, or timestamp column from the table in question.
+      Notice that <code>lowerBound</code> and <code>upperBound</code> are just used to decide the
       partition stride, not for filtering the rows in table. So all rows in the table will be
       partitioned and returned. This option applies only to reading.
     </td>
@@ -1383,6 +1407,13 @@ the following case-insensitive options:
      This is a JDBC writer related option. When <code>SaveMode.Overwrite</code> is enabled, this option causes Spark to truncate an existing table instead of dropping and recreating it. This can be more efficient, and prevents the table metadata (e.g., indices) from being removed. However, it will not work in some cases, such as when the new data has a different schema. It defaults to <code>false</code>. This option applies only to writing.
    </td>
   </tr>
+  
+  <tr>
+    <td><code>cascadeTruncate</code></td>
+    <td>
+        This is a JDBC writer related option. If enabled and supported by the JDBC database (PostgreSQL and Oracle at the moment), this options allows execution of a <code>TRUNCATE TABLE t CASCADE</code> (in the case of PostgreSQL a <code>TRUNCATE TABLE ONLY t CASCADE</code> is executed to prevent inadvertently truncating descendant tables). This will affect other tables, and thus should be used with care. This option applies only to writing. It defaults to the default cascading truncate behaviour of the JDBC database in question, specified in the <code>isCascadeTruncate</code> in each JDBCDialect.
+    </td>
+  </tr>
 
   <tr>
     <td><code>createTableOptions</code></td>
@@ -1402,6 +1433,13 @@ the following case-insensitive options:
     <td><code>customSchema</code></td>
     <td>
      The custom schema to use for reading data from JDBC connectors. For example, <code>"id DECIMAL(38, 0), name STRING"</code>. You can also specify partial fields, and the others use the default type mapping. For example, <code>"id DECIMAL(38, 0)"</code>. The column names should be identical to the corresponding column names of JDBC table. Users can specify the corresponding data types of Spark SQL instead of using the defaults. This option applies only to reading.
+    </td>
+  </tr>
+
+  <tr>
+    <td><code>pushDownPredicate</code></td>
+    <td>
+     The option to enable or disable predicate push-down into the JDBC data source. The default value is true, in which case Spark will push down filters to the JDBC data source as much as possible. Otherwise, if set to false, no filter will be pushed down to the JDBC data source and thus all filters will be handled by Spark. Predicate push-down is usually turned off when the predicate filtering is performed faster by Spark than by the JDBC data source.
     </td>
   </tr>
 </table>
@@ -1819,6 +1857,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
 
 ## Upgrading From Spark SQL 2.3 to 2.4
 
+  - Since Spark 2.4, Spark will display table description column Last Access value as UNKNOWN when the value was Jan 01 1970.
   - Since Spark 2.4, Spark maximizes the usage of a vectorized ORC reader for ORC files by default. To do that, `spark.sql.orc.impl` and `spark.sql.orc.filterPushdown` change their default values to `native` and `true` respectively.
   - In PySpark, when Arrow optimization is enabled, previously `toPandas` just failed when Arrow optimization is unable to be used whereas `createDataFrame` from Pandas DataFrame allowed the fallback to non-optimization. Now, both `toPandas` and `createDataFrame` from Pandas DataFrame allow the fallback by default, which can be switched off by `spark.sql.execution.arrow.fallback.enabled`.
   - Since Spark 2.4, writing an empty dataframe to a directory launches at least one write task, even if physically the dataframe has no partition. This introduces a small behavior change that for self-describing file formats like Parquet and Orc, Spark creates a metadata-only file in the target directory when writing a 0-partition dataframe, so that schema inference can still work if users read that directory later. The new behavior is more reasonable and more consistent regarding writing empty dataframe.
@@ -1826,6 +1865,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
   - Since Spark 2.4, writing a dataframe with an empty or nested empty schema using any file formats (parquet, orc, json, text, csv etc.) is not allowed. An exception is thrown when attempting to write dataframes with empty schema.
   - Since Spark 2.4, Spark compares a DATE type with a TIMESTAMP type after promotes both sides to TIMESTAMP. To set `false` to `spark.sql.hive.compareDateTimestampInTimestamp` restores the previous behavior. This option will be removed in Spark 3.0.
   - Since Spark 2.4, creating a managed table with nonempty location is not allowed. An exception is thrown when attempting to create a managed table with nonempty location. To set `true` to `spark.sql.allowCreatingManagedTableUsingNonemptyLocation` restores the previous behavior. This option will be removed in Spark 3.0.
+  - Since Spark 2.4, renaming a managed table to existing location is not allowed. An exception is thrown when attempting to rename a managed table to existing location.
   - Since Spark 2.4, the type coercion rules can automatically promote the argument types of the variadic SQL functions (e.g., IN/COALESCE) to the widest common type, no matter how the input arguments order. In prior Spark versions, the promotion could fail in some specific orders (e.g., TimestampType, IntegerType and StringType) and throw an exception.
   - Since Spark 2.4, Spark has enabled non-cascading SQL cache invalidation in addition to the traditional cache invalidation mechanism. The non-cascading cache invalidation mechanism allows users to remove a cache without impacting its dependent caches. This new cache invalidation mechanism is used in scenarios where the data of the cache to be removed is still valid, e.g., calling unpersist() on a Dataset, or dropping a temporary view. This allows users to free up memory and keep the desired caches valid at the same time.
   - In version 2.3 and earlier, `to_utc_timestamp` and `from_utc_timestamp` respect the timezone in the input timestamp string, which breaks the assumption that the input timestamp is in a specific timezone. Therefore, these 2 functions can return unexpected results. In version 2.4 and later, this problem has been fixed. `to_utc_timestamp` and `from_utc_timestamp` will return null if the input timestamp string contains timezone. As an example, `from_utc_timestamp('2000-10-10 00:00:00', 'GMT+1')` will return `2000-10-10 01:00:00` in both Spark 2.3 and 2.4. However, `from_utc_timestamp('2000-10-10 00:00:00+00:00', 'GMT+1')`, assuming a local timezone of GMT+8, will return `2000-10-10 09:00:00` in Spark 2.3 but `null` in 2.4. For people who don't care about this problem and want to retain the previous behaivor to keep their query unchanged, you can set `spark.sql.function.rejectTimezoneInString` to false. This option will be removed in Spark 3.0 and should only be used as a temporary workaround.
@@ -1993,6 +2033,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
     - Literal values used in SQL operations are converted to DECIMAL with the exact precision and scale needed by them.
     - The configuration `spark.sql.decimalOperations.allowPrecisionLoss` has been introduced. It defaults to `true`, which means the new behavior described here; if set to `false`, Spark uses previous rules, ie. it doesn't adjust the needed scale to represent the values and it returns NULL if an exact representation of the value is not possible.
   - In PySpark, `df.replace` does not allow to omit `value` when `to_replace` is not a dictionary. Previously, `value` could be omitted in the other cases and had `None` by default, which is counterintuitive and error-prone.
+  - Un-aliased subquery's semantic has not been well defined with confusing behaviors. Since Spark 2.3, we invalidate such confusing cases, for example: `SELECT v.i from (SELECT i FROM v)`, Spark will throw an analysis exception in this case because users should not be able to use the qualifier inside a subquery. See [SPARK-20690](https://issues.apache.org/jira/browse/SPARK-20690) and [SPARK-21335](https://issues.apache.org/jira/browse/SPARK-21335) for more details.
 
 ## Upgrading From Spark SQL 2.1 to 2.2
 

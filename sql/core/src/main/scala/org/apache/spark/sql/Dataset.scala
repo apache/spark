@@ -196,7 +196,8 @@ class Dataset[T] private[sql](
   }
 
   // Wraps analyzed logical plans with an analysis barrier so we won't traverse/resolve it again.
-  @transient private[sql] val planWithBarrier = AnalysisBarrier(logicalPlan)
+  // TODO(rxin): remove this later.
+  @transient private[sql] val planWithBarrier = logicalPlan
 
   /**
    * Currently [[ExpressionEncoder]] is the only implementation of [[Encoder]], here we turn the
@@ -236,12 +237,10 @@ class Dataset[T] private[sql](
    * @param numRows Number of rows to return
    * @param truncate If set to more than 0, truncates strings to `truncate` characters and
    *                   all cells will be aligned right.
-   * @param vertical If set to true, the rows to return do not need truncate.
    */
   private[sql] def getRows(
       numRows: Int,
-      truncate: Int,
-      vertical: Boolean): Seq[Seq[String]] = {
+      truncate: Int): Seq[Seq[String]] = {
     val newDf = toDF()
     val castCols = newDf.logicalPlan.output.map { col =>
       // Since binary types in top-level schema fields have a specific format to print,
@@ -289,7 +288,7 @@ class Dataset[T] private[sql](
       vertical: Boolean = false): String = {
     val numRows = _numRows.max(0).min(Int.MaxValue - 1)
     // Get rows represented by Seq[Seq[String]], we may get one more line if it has more data.
-    val tmpRows = getRows(numRows, truncate, vertical)
+    val tmpRows = getRows(numRows, truncate)
 
     val hasMoreData = tmpRows.length - 1 > numRows
     val rows = tmpRows.take(numRows + 1)
@@ -1016,6 +1015,11 @@ class Dataset[T] private[sql](
       case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
           if a.sameRef(b) =>
         catalyst.expressions.EqualTo(
+          withPlan(plan.left).resolve(a.name),
+          withPlan(plan.right).resolve(b.name))
+      case catalyst.expressions.EqualNullSafe(a: AttributeReference, b: AttributeReference)
+        if a.sameRef(b) =>
+        catalyst.expressions.EqualNullSafe(
           withPlan(plan.left).resolve(a.name),
           withPlan(plan.right).resolve(b.name))
     }}
@@ -1854,7 +1858,7 @@ class Dataset[T] private[sql](
   def union(other: Dataset[T]): Dataset[T] = withSetOperator {
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
-    CombineUnions(Union(logicalPlan, other.logicalPlan)).mapChildren(AnalysisBarrier)
+    CombineUnions(Union(logicalPlan, other.logicalPlan))
   }
 
   /**
@@ -1913,7 +1917,7 @@ class Dataset[T] private[sql](
 
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
-    CombineUnions(Union(logicalPlan, rightChild)).mapChildren(AnalysisBarrier)
+    CombineUnions(Union(logicalPlan, rightChild))
   }
 
   /**
@@ -1931,6 +1935,23 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a new Dataset containing rows only in both this Dataset and another Dataset while
+   * preserving the duplicates.
+   * This is equivalent to `INTERSECT ALL` in SQL.
+   *
+   * @note Equality checking is performed directly on the encoded representation of the data
+   * and thus is not affected by a custom `equals` function defined on `T`. Also as standard
+   * in SQL, this function resolves columns by position (not by name).
+   *
+   * @group typedrel
+   * @since 2.4.0
+   */
+  def intersectAll(other: Dataset[T]): Dataset[T] = withSetOperator {
+    Intersect(logicalPlan, other.logicalPlan, isAll = true)
+  }
+
+
+  /**
    * Returns a new Dataset containing rows in this Dataset but not in another Dataset.
    * This is equivalent to `EXCEPT DISTINCT` in SQL.
    *
@@ -1942,6 +1963,22 @@ class Dataset[T] private[sql](
    */
   def except(other: Dataset[T]): Dataset[T] = withSetOperator {
     Except(planWithBarrier, other.planWithBarrier)
+  }
+
+  /**
+   * Returns a new Dataset containing rows in this Dataset but not in another Dataset while
+   * preserving the duplicates.
+   * This is equivalent to `EXCEPT ALL` in SQL.
+   *
+   * @note Equality checking is performed directly on the encoded representation of the data
+   * and thus is not affected by a custom `equals` function defined on `T`. Also as standard in
+   * SQL, this function resolves columns by position (not by name).
+   *
+   * @group typedrel
+   * @since 2.4.0
+   */
+  def exceptAll(other: Dataset[T]): Dataset[T] = withSetOperator {
+    Except(logicalPlan, other.logicalPlan, isAll = true)
   }
 
   /**
@@ -3226,11 +3263,10 @@ class Dataset[T] private[sql](
 
   private[sql] def getRowsToPython(
       _numRows: Int,
-      truncate: Int,
-      vertical: Boolean): Array[Any] = {
+      truncate: Int): Array[Any] = {
     EvaluatePython.registerPicklers()
     val numRows = _numRows.max(0).min(Int.MaxValue - 1)
-    val rows = getRows(numRows, truncate, vertical).map(_.toArray).toArray
+    val rows = getRows(numRows, truncate).map(_.toArray).toArray
     val toJava: (Any) => Any = EvaluatePython.toJava(_, ArrayType(ArrayType(StringType)))
     val iter: Iterator[Array[Byte]] = new SerDeUtil.AutoBatchedPickler(
       rows.iterator.map(toJava))

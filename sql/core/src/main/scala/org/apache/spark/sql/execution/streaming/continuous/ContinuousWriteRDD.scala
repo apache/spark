@@ -56,7 +56,7 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
           val dataIterator = prev.compute(split, context)
           dataWriter = writeTask.createDataWriter(
             context.partitionId(),
-            context.attemptNumber(),
+            context.taskAttemptId(),
             EpochTracker.getCurrentEpoch.get)
           while (dataIterator.hasNext) {
             dataWriter.write(dataIterator.next())

@@ -441,6 +441,24 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("rename a managed table with existing empty directory") {
+    val tableLoc = new File(spark.sessionState.catalog.defaultTablePath(TableIdentifier("tab2")))
+    try {
+      withTable("tab1") {
+        sql(s"CREATE TABLE tab1 USING $dataSource AS SELECT 1, 'a'")
+        tableLoc.mkdir()
+        val ex = intercept[AnalysisException] {
+          sql("ALTER TABLE tab1 RENAME TO tab2")
+        }.getMessage
+        val expectedMsg = "Can not rename the managed table('`tab1`'). The associated location"
+        assert(ex.contains(expectedMsg))
+      }
+    } finally {
+      waitForTasksToFinish()
+      Utils.deleteRecursively(tableLoc)
+    }
+  }
+
   private def checkSchemaInCreatedDataSourceTable(
       path: File,
       userSpecifiedSchema: Option[String],
@@ -2495,7 +2513,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   test("alter datasource table add columns - text format not supported") {
     withTable("t1") {
-      sql("CREATE TABLE t1 (c1 int) USING text")
+      sql("CREATE TABLE t1 (c1 string) USING text")
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE t1 ADD COLUMNS (c2 int)")
       }.getMessage

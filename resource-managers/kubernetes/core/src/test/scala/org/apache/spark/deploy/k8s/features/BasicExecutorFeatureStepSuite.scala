@@ -81,7 +81,7 @@ class BasicExecutorFeatureStepSuite
     val step = new BasicExecutorFeatureStep(
       KubernetesConf(
         baseConf,
-        KubernetesExecutorSpecificConf("1", DRIVER_POD),
+        KubernetesExecutorSpecificConf("1", Some(DRIVER_POD)),
         RESOURCE_NAME_PREFIX,
         APP_ID,
         LABELS,
@@ -89,6 +89,7 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Map.empty,
         Map.empty,
+        Nil,
         Seq.empty[String],
         hadoopConfDir = None))
     val executor = step.configurePod(SparkPod.initialPod())
@@ -121,7 +122,7 @@ class BasicExecutorFeatureStepSuite
     val step = new BasicExecutorFeatureStep(
       KubernetesConf(
         conf,
-        KubernetesExecutorSpecificConf("1", DRIVER_POD),
+        KubernetesExecutorSpecificConf("1", Some(DRIVER_POD)),
         longPodNamePrefix,
         APP_ID,
         LABELS,
@@ -129,6 +130,7 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Map.empty,
         Map.empty,
+        Nil,
         Seq.empty[String],
         hadoopConfDir = None))
     assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length === 63)
@@ -142,7 +144,7 @@ class BasicExecutorFeatureStepSuite
     val step = new BasicExecutorFeatureStep(
       KubernetesConf(
         conf,
-        KubernetesExecutorSpecificConf("1", DRIVER_POD),
+        KubernetesExecutorSpecificConf("1", Some(DRIVER_POD)),
         RESOURCE_NAME_PREFIX,
         APP_ID,
         LABELS,
@@ -150,6 +152,7 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Map.empty,
         Map("qux" -> "quux"),
+        Nil,
         Seq.empty[String],
         hadoopConfDir = None))
     val executor = step.configurePod(SparkPod.initialPod())

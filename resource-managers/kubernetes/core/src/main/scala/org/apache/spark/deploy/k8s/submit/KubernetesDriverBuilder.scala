@@ -33,10 +33,13 @@ private[spark] class KubernetesDriverBuilder(
       new MountSecretsFeatureStep(_),
     provideEnvSecretsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => EnvSecretsFeatureStep) =
-    new EnvSecretsFeatureStep(_),
-    provideLocalDirsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
-      => LocalDirsFeatureStep) =
+      new EnvSecretsFeatureStep(_),
+    provideLocalDirsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf])
+      => LocalDirsFeatureStep =
       new LocalDirsFeatureStep(_),
+    provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+      => MountVolumesFeatureStep) =
+      new MountVolumesFeatureStep(_),
     provideJavaStep: (
       KubernetesConf[KubernetesDriverSpecificConf]
         => JavaDriverFeatureStep) =
@@ -58,17 +61,22 @@ private[spark] class KubernetesDriverBuilder(
       provideServiceStep(kubernetesConf),
       provideLocalDirsStep(kubernetesConf))
 
-    val maybeRoleSecretNamesStep = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
-      Some(provideSecretsStep(kubernetesConf)) } else None
-
-    val maybeProvideSecretsStep = if (kubernetesConf.roleSecretEnvNamesToKeyRefs.nonEmpty) {
-      Some(provideEnvSecretsStep(kubernetesConf)) } else None
+    val secretFeature = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
+      Seq(provideSecretsStep(kubernetesConf))
+    } else Nil
+    val envSecretFeature = if (kubernetesConf.roleSecretEnvNamesToKeyRefs.nonEmpty) {
+      Seq(provideEnvSecretsStep(kubernetesConf))
+    } else Nil
+    val volumesFeature = if (kubernetesConf.roleVolumes.nonEmpty) {
+      Seq(provideVolumesStep(kubernetesConf))
+    } else Nil
 
     val bindingsStep = kubernetesConf.roleSpecificConf.mainAppResource.map {
         case JavaMainAppResource(_) =>
           provideJavaStep(kubernetesConf)
         case PythonMainAppResource(_) =>
-          providePythonStep(kubernetesConf)}.getOrElse(provideJavaStep(kubernetesConf))
+          providePythonStep(kubernetesConf)}
+      .getOrElse(provideJavaStep(kubernetesConf))
 
     val maybeHadoopConfigStep =
       kubernetesConf.hadoopConfDir.map { _ =>
@@ -76,8 +84,7 @@ private[spark] class KubernetesDriverBuilder(
 
     val allFeatures: Seq[KubernetesFeatureConfigStep] =
       (baseFeatures :+ bindingsStep) ++
-        maybeRoleSecretNamesStep.toSeq ++
-        maybeProvideSecretsStep.toSeq ++
+        secretFeature ++ envSecretFeature ++ volumesFeature ++
         maybeHadoopConfigStep.toSeq
 
     var spec = KubernetesDriverSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)

@@ -67,6 +67,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
         Map.empty,
         Map.empty,
         Map.empty,
+        Nil,
         Seq.empty[String],
         hadoopConfDir = None))
     assert(configurationStep.configurePod(SparkPod.initialPod()) === SparkPod.initialPod())
@@ -99,6 +100,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
         Map.empty,
         Map.empty,
         Map.empty,
+        Nil,
         Seq.empty[String],
         hadoopConfDir = None))
     val expectedServiceName = SHORT_RESOURCE_NAME_PREFIX +
@@ -121,6 +123,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
         Map.empty,
         Map.empty,
         Map.empty,
+        Nil,
         Seq.empty[String],
         hadoopConfDir = None))
     val resolvedService = configurationStep
@@ -152,6 +155,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
         Map.empty,
         Map.empty,
         Map.empty,
+        Nil,
         Seq.empty[String],
         hadoopConfDir = None),
       clock)
@@ -180,6 +184,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
           Map.empty,
           Map.empty,
           Map.empty,
+          Nil,
           Seq.empty[String],
           hadoopConfDir = None),
         clock)
@@ -206,6 +211,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
           Map.empty,
           Map.empty,
           Map.empty,
+          Nil,
           Seq.empty[String],
           hadoopConfDir = None),
         clock)

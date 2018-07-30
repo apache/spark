@@ -17,25 +17,31 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import java.io.File
+import java.io.{File, FileOutputStream, OutputStream}
 
 import scala.util.{Random, Try}
 
+import org.scalatest.{BeforeAndAfterEachTestData, Suite, TestData}
+
 import org.apache.spark.SparkConf
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.monotonically_increasing_id
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
+import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType}
 import org.apache.spark.util.{Benchmark, Utils}
-
 
 /**
  * Benchmark to measure read performance with Filter pushdown.
  * To run this:
- *  spark-submit --class <this class> <spark sql test jar>
+ *  build/sbt "sql/test-only *FilterPushdownBenchmark"
+ *
+ * Results will be written to "benchmarks/FilterPushdownBenchmark-results.txt".
  */
-object FilterPushdownBenchmark {
-  val conf = new SparkConf()
-    .setAppName("FilterPushdownBenchmark")
+class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfterEachTest {
+  private val conf = new SparkConf()
+    .setAppName(this.getClass.getSimpleName)
     // Since `spark.master` always exists, overrides this value
     .set("spark.master", "local[1]")
     .setIfMissing("spark.driver.memory", "3g")
@@ -44,7 +50,39 @@ object FilterPushdownBenchmark {
     .setIfMissing("orc.compression", "snappy")
     .setIfMissing("spark.sql.parquet.compression.codec", "snappy")
 
+  private val numRows = 1024 * 1024 * 15
+  private val width = 5
+  private val mid = numRows / 2
+  private val blockSize = 1048576
+
   private val spark = SparkSession.builder().config(conf).getOrCreate()
+
+  private var out: OutputStream = _
+
+  override def beforeAll() {
+    super.beforeAll()
+    out = new FileOutputStream(new File("benchmarks/FilterPushdownBenchmark-results.txt"))
+  }
+
+  override def beforeEach(td: TestData) {
+    super.beforeEach(td)
+    val separator = "=" * 96
+    val testHeader = (separator + '\n' + td.name + '\n' + separator + '\n' + '\n').getBytes
+    out.write(testHeader)
+  }
+
+  override def afterEach(td: TestData) {
+    out.write('\n')
+    super.afterEach(td)
+  }
+
+  override def afterAll() {
+    try {
+      out.close()
+    } finally {
+      super.afterAll()
+    }
+  }
 
   def withTempPath(f: File => Unit): Unit = {
     val path = Utils.createTempDir()
@@ -81,8 +119,7 @@ object FilterPushdownBenchmark {
       .withColumn("value", valueCol)
       .sort("value")
 
-    saveAsOrcTable(df, dir.getCanonicalPath + "/orc")
-    saveAsParquetTable(df, dir.getCanonicalPath + "/parquet")
+    saveAsTable(df, dir)
   }
 
   private def prepareStringDictTable(
@@ -93,19 +130,22 @@ object FilterPushdownBenchmark {
     }
     val df = spark.range(numRows).selectExpr(selectExpr: _*).sort("value")
 
-    saveAsOrcTable(df, dir.getCanonicalPath + "/orc")
-    saveAsParquetTable(df, dir.getCanonicalPath + "/parquet")
+    saveAsTable(df, dir)
   }
 
-  private def saveAsOrcTable(df: DataFrame, dir: String): Unit = {
+  private def saveAsTable(df: DataFrame, dir: File): Unit = {
+    val orcPath = dir.getCanonicalPath + "/orc"
+    val parquetPath = dir.getCanonicalPath + "/parquet"
+
     // To always turn on dictionary encoding, we set 1.0 at the threshold (the default is 0.8)
-    df.write.mode("overwrite").option("orc.dictionary.key.threshold", 1.0).orc(dir)
-    spark.read.orc(dir).createOrReplaceTempView("orcTable")
-  }
+    df.write.mode("overwrite")
+      .option("orc.dictionary.key.threshold", 1.0)
+      .option("orc.stripe.size", blockSize).orc(orcPath)
+    spark.read.orc(orcPath).createOrReplaceTempView("orcTable")
 
-  private def saveAsParquetTable(df: DataFrame, dir: String): Unit = {
-    df.write.mode("overwrite").parquet(dir)
-    spark.read.parquet(dir).createOrReplaceTempView("parquetTable")
+    df.write.mode("overwrite")
+      .option("parquet.block.size", blockSize).parquet(parquetPath)
+    spark.read.parquet(parquetPath).createOrReplaceTempView("parquetTable")
   }
 
   def filterPushDownBenchmark(
@@ -113,7 +153,7 @@ object FilterPushdownBenchmark {
       title: String,
       whereExpr: String,
       selectExpr: String = "*"): Unit = {
-    val benchmark = new Benchmark(title, values, minNumIters = 5)
+    val benchmark = new Benchmark(title, values, minNumIters = 5, output = Some(out))
 
     Seq(false, true).foreach { pushDownEnabled =>
       val name = s"Parquet Vectorized ${if (pushDownEnabled) s"(Pushdown)" else ""}"
@@ -132,214 +172,6 @@ object FilterPushdownBenchmark {
         }
       }
     }
-
-    /*
-    OpenJDK 64-Bit Server VM 1.8.0_171-b10 on Linux 4.14.33-51.37.amzn1.x86_64
-    Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
-    Select 0 string row (value IS NULL):     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                            9201 / 9300          1.7         585.0       1.0X
-    Parquet Vectorized (Pushdown)                   89 /  105        176.3           5.7     103.1X
-    Native ORC Vectorized                         8886 / 8898          1.8         564.9       1.0X
-    Native ORC Vectorized (Pushdown)               110 /  128        143.4           7.0      83.9X
-
-
-    Select 0 string row
-    ('7864320' < value < '7864320'):         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                            9336 / 9357          1.7         593.6       1.0X
-    Parquet Vectorized (Pushdown)                  927 /  937         17.0          58.9      10.1X
-    Native ORC Vectorized                         9026 / 9041          1.7         573.9       1.0X
-    Native ORC Vectorized (Pushdown)               257 /  272         61.1          16.4      36.3X
-
-
-    Select 1 string row (value = '7864320'): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                            9209 / 9223          1.7         585.5       1.0X
-    Parquet Vectorized (Pushdown)                  908 /  925         17.3          57.7      10.1X
-    Native ORC Vectorized                         8878 / 8904          1.8         564.4       1.0X
-    Native ORC Vectorized (Pushdown)               248 /  261         63.4          15.8      37.1X
-
-
-    Select 1 string row
-    (value <=> '7864320'):                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                            9194 / 9216          1.7         584.5       1.0X
-    Parquet Vectorized (Pushdown)                  899 /  908         17.5          57.2      10.2X
-    Native ORC Vectorized                         8934 / 8962          1.8         568.0       1.0X
-    Native ORC Vectorized (Pushdown)               249 /  254         63.3          15.8      37.0X
-
-
-    Select 1 string row
-    ('7864320' <= value <= '7864320'):       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                            9332 / 9351          1.7         593.3       1.0X
-    Parquet Vectorized (Pushdown)                  915 /  934         17.2          58.2      10.2X
-    Native ORC Vectorized                         9049 / 9057          1.7         575.3       1.0X
-    Native ORC Vectorized (Pushdown)               248 /  258         63.5          15.8      37.7X
-
-
-    Select all string rows
-    (value IS NOT NULL):                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                          20478 / 20497          0.8        1301.9       1.0X
-    Parquet Vectorized (Pushdown)               20461 / 20550          0.8        1300.9       1.0X
-    Native ORC Vectorized                       27464 / 27482          0.6        1746.1       0.7X
-    Native ORC Vectorized (Pushdown)            27454 / 27488          0.6        1745.5       0.7X
-
-
-    Select 0 int row (value IS NULL):        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                            8489 / 8519          1.9         539.7       1.0X
-    Parquet Vectorized (Pushdown)                   64 /   69        246.1           4.1     132.8X
-    Native ORC Vectorized                         8064 / 8099          2.0         512.7       1.1X
-    Native ORC Vectorized (Pushdown)                88 /   94        178.6           5.6      96.4X
-
-
-    Select 0 int row
-    (7864320 < value < 7864320):             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                            8494 / 8514          1.9         540.0       1.0X
-    Parquet Vectorized (Pushdown)                  835 /  840         18.8          53.1      10.2X
-    Native ORC Vectorized                         8090 / 8106          1.9         514.4       1.0X
-    Native ORC Vectorized (Pushdown)               249 /  257         63.2          15.8      34.1X
-
-
-    Select 1 int row (value = 7864320):      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                            8552 / 8560          1.8         543.7       1.0X
-    Parquet Vectorized (Pushdown)                  837 /  841         18.8          53.2      10.2X
-    Native ORC Vectorized                         8178 / 8188          1.9         519.9       1.0X
-    Native ORC Vectorized (Pushdown)               249 /  258         63.2          15.8      34.4X
-
-
-    Select 1 int row (value <=> 7864320):    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                            8562 / 8580          1.8         544.3       1.0X
-    Parquet Vectorized (Pushdown)                  833 /  836         18.9          53.0      10.3X
-    Native ORC Vectorized                         8164 / 8185          1.9         519.0       1.0X
-    Native ORC Vectorized (Pushdown)               245 /  254         64.3          15.6      35.0X
-
-
-    Select 1 int row
-    (7864320 <= value <= 7864320):           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                            8540 / 8555          1.8         542.9       1.0X
-    Parquet Vectorized (Pushdown)                  837 /  839         18.8          53.2      10.2X
-    Native ORC Vectorized                         8182 / 8231          1.9         520.2       1.0X
-    Native ORC Vectorized (Pushdown)               250 /  259         62.9          15.9      34.1X
-
-
-    Select 1 int row
-    (7864319 < value < 7864321):             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                            8535 / 8555          1.8         542.6       1.0X
-    Parquet Vectorized (Pushdown)                  835 /  841         18.8          53.1      10.2X
-    Native ORC Vectorized                         8159 / 8179          1.9         518.8       1.0X
-    Native ORC Vectorized (Pushdown)               244 /  250         64.5          15.5      35.0X
-
-
-    Select 10% int rows (value < 1572864):   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                            9609 / 9634          1.6         610.9       1.0X
-    Parquet Vectorized (Pushdown)                 2663 / 2672          5.9         169.3       3.6X
-    Native ORC Vectorized                         9824 / 9850          1.6         624.6       1.0X
-    Native ORC Vectorized (Pushdown)              2717 / 2722          5.8         172.7       3.5X
-
-
-    Select 50% int rows (value < 7864320):   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                          13592 / 13613          1.2         864.2       1.0X
-    Parquet Vectorized (Pushdown)                 9720 / 9738          1.6         618.0       1.4X
-    Native ORC Vectorized                       16366 / 16397          1.0        1040.5       0.8X
-    Native ORC Vectorized (Pushdown)            12437 / 12459          1.3         790.7       1.1X
-
-
-    Select 90% int rows (value < 14155776):  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                          17580 / 17617          0.9        1117.7       1.0X
-    Parquet Vectorized (Pushdown)               16803 / 16827          0.9        1068.3       1.0X
-    Native ORC Vectorized                       24169 / 24187          0.7        1536.6       0.7X
-    Native ORC Vectorized (Pushdown)            22147 / 22341          0.7        1408.1       0.8X
-
-
-    Select all int rows (value IS NOT NULL): Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                          18461 / 18491          0.9        1173.7       1.0X
-    Parquet Vectorized (Pushdown)               18466 / 18530          0.9        1174.1       1.0X
-    Native ORC Vectorized                       24231 / 24270          0.6        1540.6       0.8X
-    Native ORC Vectorized (Pushdown)            24207 / 24304          0.6        1539.0       0.8X
-
-
-    Select all int rows (value > -1):        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                          18414 / 18453          0.9        1170.7       1.0X
-    Parquet Vectorized (Pushdown)               18435 / 18464          0.9        1172.1       1.0X
-    Native ORC Vectorized                       24430 / 24454          0.6        1553.2       0.8X
-    Native ORC Vectorized (Pushdown)            24410 / 24465          0.6        1552.0       0.8X
-
-
-    Select all int rows (value != -1):       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                          18446 / 18457          0.9        1172.8       1.0X
-    Parquet Vectorized (Pushdown)               18428 / 18440          0.9        1171.6       1.0X
-    Native ORC Vectorized                       24414 / 24450          0.6        1552.2       0.8X
-    Native ORC Vectorized (Pushdown)            24385 / 24472          0.6        1550.4       0.8X
-
-
-    Select 0 distinct string row
-    (value IS NULL):                         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                            8322 / 8352          1.9         529.1       1.0X
-    Parquet Vectorized (Pushdown)                   53 /   57        296.3           3.4     156.7X
-    Native ORC Vectorized                         7903 / 7953          2.0         502.4       1.1X
-    Native ORC Vectorized (Pushdown)                80 /   82        197.2           5.1     104.3X
-
-
-    Select 0 distinct string row
-    ('100' < value < '100'):                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                            8712 / 8743          1.8         553.9       1.0X
-    Parquet Vectorized (Pushdown)                  995 / 1030         15.8          63.3       8.8X
-    Native ORC Vectorized                         8345 / 8362          1.9         530.6       1.0X
-    Native ORC Vectorized (Pushdown)                84 /   87        187.6           5.3     103.9X
-
-
-    Select 1 distinct string row
-    (value = '100'):                         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                            8574 / 8610          1.8         545.1       1.0X
-    Parquet Vectorized (Pushdown)                 1127 / 1135         14.0          71.6       7.6X
-    Native ORC Vectorized                         8163 / 8181          1.9         519.0       1.1X
-    Native ORC Vectorized (Pushdown)               426 /  433         36.9          27.1      20.1X
-
-
-    Select 1 distinct string row
-    (value <=> '100'):                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                            8549 / 8568          1.8         543.5       1.0X
-    Parquet Vectorized (Pushdown)                 1124 / 1131         14.0          71.4       7.6X
-    Native ORC Vectorized                         8163 / 8210          1.9         519.0       1.0X
-    Native ORC Vectorized (Pushdown)               426 /  436         36.9          27.1      20.1X
-
-
-    Select 1 distinct string row
-    ('100' <= value <= '100'):               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                            8889 / 8896          1.8         565.2       1.0X
-    Parquet Vectorized (Pushdown)                 1161 / 1168         13.6          73.8       7.7X
-    Native ORC Vectorized                         8519 / 8554          1.8         541.6       1.0X
-    Native ORC Vectorized (Pushdown)               430 /  437         36.6          27.3      20.7X
-
-
-    Select all distinct string rows
-    (value IS NOT NULL):                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Parquet Vectorized                          20433 / 20533          0.8        1299.1       1.0X
-    Parquet Vectorized (Pushdown)               20433 / 20456          0.8        1299.1       1.0X
-    Native ORC Vectorized                       25435 / 25513          0.6        1617.1       0.8X
-    Native ORC Vectorized (Pushdown)            25435 / 25507          0.6        1617.1       0.8X
-    */
 
     benchmark.run()
   }
@@ -408,14 +240,8 @@ object FilterPushdownBenchmark {
     }
   }
 
-  def main(args: Array[String]): Unit = {
-    val numRows = 1024 * 1024 * 15
-    val width = 5
-
-    // Pushdown for many distinct value case
+  ignore("Pushdown for many distinct value case") {
     withTempPath { dir =>
-      val mid = numRows / 2
-
       withTempTable("orcTable", "patquetTable") {
         Seq(true, false).foreach { useStringForValue =>
           prepareTable(dir, numRows, width, useStringForValue)
@@ -427,16 +253,160 @@ object FilterPushdownBenchmark {
         }
       }
     }
+  }
 
-    // Pushdown for few distinct value case (use dictionary encoding)
+  ignore("Pushdown for few distinct value case (use dictionary encoding)") {
     withTempPath { dir =>
       val numDistinctValues = 200
-      val mid = numDistinctValues / 2
 
       withTempTable("orcTable", "patquetTable") {
         prepareStringDictTable(dir, numRows, numDistinctValues, width)
-        runStringBenchmark(numRows, width, mid, "distinct string")
+        runStringBenchmark(numRows, width, numDistinctValues / 2, "distinct string")
       }
     }
+  }
+
+  ignore("Pushdown benchmark for StringStartsWith") {
+    withTempPath { dir =>
+      withTempTable("orcTable", "patquetTable") {
+        prepareTable(dir, numRows, width, true)
+        Seq(
+          "value like '10%'",
+          "value like '1000%'",
+          s"value like '${mid.toString.substring(0, mid.toString.length - 1)}%'"
+        ).foreach { whereExpr =>
+          val title = s"StringStartsWith filter: ($whereExpr)"
+          filterPushDownBenchmark(numRows, title, whereExpr)
+        }
+      }
+    }
+  }
+
+  ignore(s"Pushdown benchmark for ${DecimalType.simpleString}") {
+    withTempPath { dir =>
+      Seq(
+        s"decimal(${Decimal.MAX_INT_DIGITS}, 2)",
+        s"decimal(${Decimal.MAX_LONG_DIGITS}, 2)",
+        s"decimal(${DecimalType.MAX_PRECISION}, 2)"
+      ).foreach { dt =>
+        val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
+        val valueCol = if (dt.equalsIgnoreCase(s"decimal(${Decimal.MAX_INT_DIGITS}, 2)")) {
+          monotonically_increasing_id() % 9999999
+        } else {
+          monotonically_increasing_id()
+        }
+        val df = spark.range(numRows).selectExpr(columns: _*).withColumn("value", valueCol.cast(dt))
+        withTempTable("orcTable", "patquetTable") {
+          saveAsTable(df, dir)
+
+          Seq(s"value = $mid").foreach { whereExpr =>
+            val title = s"Select 1 $dt row ($whereExpr)".replace("value AND value", "value")
+            filterPushDownBenchmark(numRows, title, whereExpr)
+          }
+
+          val selectExpr = (1 to width).map(i => s"MAX(c$i)").mkString("", ",", ", MAX(value)")
+          Seq(10, 50, 90).foreach { percent =>
+            filterPushDownBenchmark(
+              numRows,
+              s"Select $percent% $dt rows (value < ${numRows * percent / 100})",
+              s"value < ${numRows * percent / 100}",
+              selectExpr
+            )
+          }
+        }
+      }
+    }
+  }
+
+  ignore("Pushdown benchmark for InSet -> InFilters") {
+    withTempPath { dir =>
+      withTempTable("orcTable", "patquetTable") {
+        prepareTable(dir, numRows, width, false)
+        Seq(5, 10, 50, 100).foreach { count =>
+          Seq(10, 50, 90).foreach { distribution =>
+            val filter =
+              Range(0, count).map(r => scala.util.Random.nextInt(numRows * distribution / 100))
+            val whereExpr = s"value in(${filter.mkString(",")})"
+            val title = s"InSet -> InFilters (values count: $count, distribution: $distribution)"
+            filterPushDownBenchmark(numRows, title, whereExpr)
+          }
+        }
+      }
+    }
+  }
+
+  ignore(s"Pushdown benchmark for ${ByteType.simpleString}") {
+    withTempPath { dir =>
+      val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
+      val df = spark.range(numRows).selectExpr(columns: _*)
+        .withColumn("value", (monotonically_increasing_id() % Byte.MaxValue).cast(ByteType))
+        .orderBy("value")
+      withTempTable("orcTable", "patquetTable") {
+        saveAsTable(df, dir)
+
+        Seq(s"value = CAST(${Byte.MaxValue / 2} AS ${ByteType.simpleString})")
+          .foreach { whereExpr =>
+            val title = s"Select 1 ${ByteType.simpleString} row ($whereExpr)"
+              .replace("value AND value", "value")
+            filterPushDownBenchmark(numRows, title, whereExpr)
+          }
+
+        val selectExpr = (1 to width).map(i => s"MAX(c$i)").mkString("", ",", ", MAX(value)")
+        Seq(10, 50, 90).foreach { percent =>
+          filterPushDownBenchmark(
+            numRows,
+            s"Select $percent% ${ByteType.simpleString} rows " +
+              s"(value < CAST(${Byte.MaxValue * percent / 100} AS ${ByteType.simpleString}))",
+            s"value < CAST(${Byte.MaxValue * percent / 100} AS ${ByteType.simpleString})",
+            selectExpr
+          )
+        }
+      }
+    }
+  }
+
+  ignore(s"Pushdown benchmark for Timestamp") {
+    withTempPath { dir =>
+      withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED.key -> true.toString) {
+        ParquetOutputTimestampType.values.toSeq.map(_.toString).foreach { fileType =>
+          withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> fileType) {
+            val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
+            val df = spark.range(numRows).selectExpr(columns: _*)
+              .withColumn("value", monotonically_increasing_id().cast(TimestampType))
+            withTempTable("orcTable", "patquetTable") {
+              saveAsTable(df, dir)
+
+              Seq(s"value = CAST($mid AS timestamp)").foreach { whereExpr =>
+                val title = s"Select 1 timestamp stored as $fileType row ($whereExpr)"
+                  .replace("value AND value", "value")
+                filterPushDownBenchmark(numRows, title, whereExpr)
+              }
+
+              val selectExpr = (1 to width).map(i => s"MAX(c$i)").mkString("", ",", ", MAX(value)")
+              Seq(10, 50, 90).foreach { percent =>
+                filterPushDownBenchmark(
+                  numRows,
+                  s"Select $percent% timestamp stored as $fileType rows " +
+                    s"(value < CAST(${numRows * percent / 100} AS timestamp))",
+                  s"value < CAST(${numRows * percent / 100} as timestamp)",
+                  selectExpr
+                )
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+trait BenchmarkBeforeAndAfterEachTest extends BeforeAndAfterEachTestData { this: Suite =>
+
+  override def beforeEach(td: TestData) {
+    super.beforeEach(td)
+  }
+
+  override def afterEach(td: TestData) {
+    super.afterEach(td)
   }
 }
