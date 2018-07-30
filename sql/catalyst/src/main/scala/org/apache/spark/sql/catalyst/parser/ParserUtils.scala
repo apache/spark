@@ -96,9 +96,6 @@ object ParserUtils {
     }
   }
 
-  def extraMethod(s: String): String = {
-    s
-  }
   /**
    * Register the origin of the context. Any TreeNode created in the closure will be assigned the
    * registered origin. This method restores the previously set origin after completion of the

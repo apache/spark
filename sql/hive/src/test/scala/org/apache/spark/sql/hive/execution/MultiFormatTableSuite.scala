@@ -57,7 +57,6 @@ class MultiFormatTableSuite
       location: URI,
       format: Option[String] = None
   ) {
-
     def toSpec: String = {
       s"($column='$value')"
     }
@@ -195,7 +194,8 @@ class MultiFormatTableSuite
           s"""
              |INSERT OVERWRITE TABLE $pqPartitionTable
              |SELECT 1 as id, 'a' as value
-                  """.stripMargin)
+           """.stripMargin
+        )
 
         val parquetData = spark.read.parquet(partitions.head.location.toString)
         checkAnswer(parquetData, Row(1, "a"))
@@ -244,7 +244,6 @@ class MultiFormatTableSuite
   test("create hive table with multi format partitions - test plan") {
     withTempDir { baseDir =>
       val partitionedTable = "ext_multiformat_partition_table"
-
       val partitions = createMultiformatPartitionDefinitions(baseDir)
 
       withTable(partitionedTable) {
@@ -267,7 +266,6 @@ class MultiFormatTableSuite
 
   test("create hive table with multi format partitions containing correct data") {
     withTempDir { baseDir =>
-      //      withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
       val partitionedTable = "ext_multiformat_partition_table_with_data"
       val avroPartitionTable = "ext_avro_partition_table"
       val pqPartitionTable = "ext_pq_partition_table"
@@ -287,7 +285,8 @@ class MultiFormatTableSuite
           s"""
              |INSERT OVERWRITE TABLE $pqPartitionTable
              |SELECT 1 as id, 'a' as value
-                  """.stripMargin)
+           """.stripMargin
+        )
 
         val parquetData = spark.read.parquet(partitions.head.location.toString)
         checkAnswer(parquetData, Row(1, "a"))
@@ -336,60 +335,41 @@ class MultiFormatTableSuite
         val allData = sql(selectQuery)
         checkAnswer(allData, Seq(Row(1, "a"), Row(2, "b")))
       }
-      //      }
     }
   }
 
-  private def createMultiformatPartitionDefinitions(baseDir: File): List[PartitionDefinition] = {
+  private def createMultiformatPartitionDefinitions(
+    baseDir: File,
+    formats: List[Option[String]] = List(Some("PARQUET"), Some("AVRO"))
+  ): List[PartitionDefinition] = {
     val basePath = baseDir.getCanonicalPath
     val partitionPath_part1 = new File(basePath + s"/$partitionCol=$partitionVal1")
     val partitionPath_part2 = new File(basePath + s"/$partitionCol=$partitionVal2")
 
     List(
       PartitionDefinition(
-        partitionCol, partitionVal1, partitionPath_part1.toURI, format = Some("PARQUET")
+        partitionCol, partitionVal1, partitionPath_part1.toURI, format = formats.head
       ),
       PartitionDefinition(
-        partitionCol, partitionVal2, partitionPath_part2.toURI, format = Some("AVRO")
+        partitionCol, partitionVal2, partitionPath_part2.toURI, format = formats.last
       )
     )
   }
 
   private def createParquetPartitionDefinitions(baseDir: File): List[PartitionDefinition] = {
-    val basePath = baseDir.getCanonicalPath
-    val partitionPath_part1 = new File(basePath + s"/$partitionCol=$partitionVal1")
-    val partitionPath_part2 = new File(basePath + s"/$partitionCol=$partitionVal2")
-
-    List(
-      PartitionDefinition(
-        partitionCol, partitionVal1, partitionPath_part1.toURI, format = Some("PARQUET")
-      ),
-      PartitionDefinition(
-        partitionCol, partitionVal2, partitionPath_part2.toURI, format = Some("PARQUET")
-      )
-    )
+    createMultiformatPartitionDefinitions(baseDir, List(Some("PARQUET"), Some("PARQUET")))
   }
 
   private def createAvroPartitionDefinitions(baseDir: File): List[PartitionDefinition] = {
-    val basePath = baseDir.getCanonicalPath
-    val partitionPath_part1 = new File(basePath + s"/$partitionCol=$partitionVal1")
-    val partitionPath_part2 = new File(basePath + s"/$partitionCol=$partitionVal2")
-
-    List(
-      PartitionDefinition(
-        partitionCol, partitionVal1, partitionPath_part1.toURI, format = Some("AVRO")
-      ),
-      PartitionDefinition(
-        partitionCol, partitionVal2, partitionPath_part2.toURI, format = Some("AVRO")
-      )
-    )
+    createMultiformatPartitionDefinitions(baseDir, List(Some("AVRO"), Some("AVRO")))
   }
 
-  private def createTableWithPartitions(table: String,
-                                        baseDir: File,
-                                        partitions: List[PartitionDefinition],
-                                        avro: Boolean = false
-                                       ): Unit = {
+  private def createTableWithPartitions(
+    table: String,
+    baseDir: File,
+    partitions: List[PartitionDefinition],
+    avro: Boolean = false
+  ): Unit = {
     if (avro) {
       createAvroExternalTable(table, baseDir.toURI)
     } else {
@@ -434,7 +414,6 @@ class MultiFormatTableSuite
   }
 
   private def createPqCheckTable(pqTable: String, partition: PartitionDefinition): Unit = {
-
     // Creates the Parquet table
     sql(
       s"""
@@ -500,10 +479,7 @@ class MultiFormatTableSuite
 
   }
 
-  private def setPartitionFormat(
-                                  table: String,
-                                  partitionDef: PartitionDefinition
-                                ): DataFrame = {
+  private def setPartitionFormat(table: String, partitionDef: PartitionDefinition): DataFrame = {
     sql(
       s"""
          |ALTER TABLE $table
