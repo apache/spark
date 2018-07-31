@@ -27,6 +27,7 @@ import scala.collection.immutable
 import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
+import org.tukaani.xz.LZMA2Options
 
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
@@ -1437,9 +1438,10 @@ object SQLConf {
     .createWithDefault(20)
 
   val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
-    .doc("Compression codec used in writing of AVRO files. Default codec is snappy.")
+    .doc("Compression codec used in writing of AVRO files. Supported codecs: " +
+      "uncompressed, deflate, snappy, bzip2 and xz. Default codec is snappy.")
     .stringConf
-    .checkValues(Set("uncompressed", "deflate", "snappy"))
+    .checkValues(Set("uncompressed", "deflate", "snappy", "bzip2", "xz"))
     .createWithDefault("snappy")
 
   val AVRO_DEFLATE_LEVEL = buildConf("spark.sql.avro.deflate.level")

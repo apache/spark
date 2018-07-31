@@ -19,7 +19,7 @@ package org.apache.spark.sql.avro
 
 import java.io._
 import java.net.URL
-import java.nio.file.{Files, Path, Paths}
+import java.nio.file.{Files, Paths}
 import java.sql.{Date, Timestamp}
 import java.util.{TimeZone, UUID}
 
@@ -368,12 +368,18 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("write with compression - sql configs") {
     withTempPath { dir =>
       val uncompressDir = s"$dir/uncompress"
+      val bzip2Dir = s"$dir/bzip2"
+      val xzDir = s"$dir/xz"
       val deflateDir = s"$dir/deflate"
       val snappyDir = s"$dir/snappy"
 
       val df = spark.read.format("avro").load(testAvro)
       spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "uncompressed")
       df.write.format("avro").save(uncompressDir)
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "bzip2")
+      df.write.format("avro").save(bzip2Dir)
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "xz")
+      df.write.format("avro").save(xzDir)
       spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "deflate")
       spark.conf.set(SQLConf.AVRO_DEFLATE_LEVEL.key, "9")
       df.write.format("avro").save(deflateDir)
@@ -381,11 +387,15 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       df.write.format("avro").save(snappyDir)
 
       val uncompressSize = FileUtils.sizeOfDirectory(new File(uncompressDir))
+      val bzip2Size = FileUtils.sizeOfDirectory(new File(bzip2Dir))
+      val xzSize = FileUtils.sizeOfDirectory(new File(xzDir))
       val deflateSize = FileUtils.sizeOfDirectory(new File(deflateDir))
       val snappySize = FileUtils.sizeOfDirectory(new File(snappyDir))
 
       assert(uncompressSize > deflateSize)
       assert(snappySize > deflateSize)
+      assert(snappySize > bzip2Size)
+      assert(bzip2Size > xzSize)
     }
   }
 
@@ -921,6 +931,8 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       checkCodec(df, path, "uncompressed")
       checkCodec(df, path, "deflate")
       checkCodec(df, path, "snappy")
+      checkCodec(df, path, "bzip2")
+      checkCodec(df, path, "xz")
     }
   }
 }
