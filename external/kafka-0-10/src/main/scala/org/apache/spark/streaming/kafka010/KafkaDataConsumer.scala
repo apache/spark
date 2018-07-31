@@ -80,7 +80,7 @@ private[kafka010] sealed trait KafkaDataConsumer[K, V] {
 private[kafka010] class InternalKafkaConsumer[K, V](
     val topicPartition: TopicPartition,
     val kafkaParams: ju.Map[String, Object],
-    val consumerStrategy: SparkKafkaConsumer[K, V]) extends Logging {
+    val sparkKafkaConsumer: SparkKafkaConsumer[K, V]) extends Logging {
 
   private[kafka010] val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG)
     .asInstanceOf[String]
@@ -98,7 +98,7 @@ private[kafka010] class InternalKafkaConsumer[K, V](
       s"topicPartition=$topicPartition)"
   }
 
-  def close(): Unit = consumerStrategy.close()
+  def close(): Unit = sparkKafkaConsumer.close()
 
   /**
    * Get the record for the given offset, waiting up to timeout ms if IO is necessary.
@@ -106,22 +106,24 @@ private[kafka010] class InternalKafkaConsumer[K, V](
    */
   def get(offset: Long): ConsumerRecord[K, V] = {
     logTrace(s"Get $groupId $topicPartition nextOffset "
-      + consumerStrategy.getNextOffset()
+      + sparkKafkaConsumer.getNextOffset()
       + " requested $offset")
-    if (offset != consumerStrategy.getNextOffset()) {
+    if (offset != sparkKafkaConsumer.getNextOffset()) {
       logInfo(s"Initial fetch for $groupId $topicPartition $offset")
-      consumerStrategy.ensureOffset(offset)
+      sparkKafkaConsumer.ensureOffset(offset)
     }
 
-    var record = consumerStrategy.getNextRecord()
+    var record = sparkKafkaConsumer.getNextRecord()
     require(record != null,
-      s"Failed to get records for $groupId $topicPartition $offset")
+      s"Failed to get records for $groupId $topicPartition $offset after polling for "
+    + sparkKafkaConsumer.getTimeout())
 
     if (record.offset != offset) {
-      consumerStrategy.ensureOffset(offset)
-      record = consumerStrategy.getNextRecord()
+      sparkKafkaConsumer.ensureOffset(offset)
+      record = sparkKafkaConsumer.getNextRecord()
       require(record != null,
-        s"Failed to get records for $groupId $topicPartition $offset")
+        s"Failed to get records for $groupId $topicPartition $offset after polling for "
+          + sparkKafkaConsumer.getTimeout())
     }
     record
   }
@@ -132,9 +134,9 @@ private[kafka010] class InternalKafkaConsumer[K, V](
   def compactedStart(offset: Long): Unit = {
     logDebug(s"compacted start $groupId $topicPartition starting $offset")
     // This seek may not be necessary, but it's hard to tell due to gaps in compacted topics
-    if (offset != consumerStrategy.getNextOffset()) {
+    if (offset != sparkKafkaConsumer.getNextOffset()) {
       logInfo(s"Initial fetch for compacted $groupId $topicPartition $offset")
-      consumerStrategy.ensureOffset(offset)
+      sparkKafkaConsumer.ensureOffset(offset)
     }
   }
 
@@ -143,9 +145,10 @@ private[kafka010] class InternalKafkaConsumer[K, V](
    * Assumes compactedStart has been called first, and ignores gaps.
    */
   def compactedNext(): ConsumerRecord[K, V] = {
-    val record = consumerStrategy.getNextRecord()
+    val record = sparkKafkaConsumer.getNextRecord()
     require(record != null,
-      s"Failed to get records for compacted $groupId $topicPartition ")
+      s"Failed to get records for compacted $groupId $topicPartition after polling for "
+        + sparkKafkaConsumer.getTimeout())
     record
   }
 
@@ -154,7 +157,7 @@ private[kafka010] class InternalKafkaConsumer[K, V](
    * @throws NoSuchElementException if no previous element
    */
   def compactedPrevious(): ConsumerRecord[K, V] = {
-    consumerStrategy.moveToPrevious()
+    sparkKafkaConsumer.moveToPrevious()
   }
 }
 
@@ -233,13 +236,13 @@ private[kafka010] object KafkaDataConsumer extends Logging {
       kafkaParams: ju.Map[String, Object],
       context: TaskContext,
       useCache: Boolean,
-      consumerStrategyParam: SparkKafkaConsumer[K, V]): KafkaDataConsumer[K, V] = synchronized {
+      sparkKafkaConsumer: SparkKafkaConsumer[K, V]): KafkaDataConsumer[K, V] = synchronized {
     val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
     val key = new CacheKey(groupId, topicPartition)
     val existingInternalConsumer = cache.get(key)
 
     lazy val newInternalConsumer = new InternalKafkaConsumer[K, V](
-      topicPartition, kafkaParams, consumerStrategyParam
+      topicPartition, kafkaParams, sparkKafkaConsumer
     )
 
     if (context != null && context.attemptNumber >= 1) {

@@ -72,6 +72,8 @@ class SyncSparkKafkaConsumer [K, V](
 
   override def close(): Unit = consumer.close()
 
+  override def getTimeout(): Long = pollTimeoutMs
+
   private def seek(offset: Long): Unit = {
     logDebug(s"Seeking to $topicPartition $offset")
     consumer.seek(topicPartition, offset)

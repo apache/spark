@@ -77,14 +77,11 @@ private[spark] class KafkaRDD[K, V](
     conf.getDouble("spark.streaming.kafka.consumer.cache.loadFactor", 0.75).toFloat
   private val compacted =
     conf.getBoolean("spark.streaming.kafka.allowNonConsecutiveOffsets", false)
-  private val maintainBufferMin =
-    conf.getInt("spark.streaming.kafka.buffer.minRecordsPerPartition", 0)
 
   private val defaultConsumerBuilder: String =
     classOf[SyncSparkKafkaConsumerBuilder[_, _]].getCanonicalName
   private val consumerBuilder = conf.get("spark.streaming.kafka.consumer.builder.name",
     defaultConsumerBuilder)
-
   private val consumerBuilderConfs =
     conf.getAllWithPrefix("spark.streaming.kafka.consumer.builder.config.")
 
@@ -248,8 +245,7 @@ private[spark] class KafkaRDD[K, V](
     } catch {
       case x: Exception =>
         logError(s"Error finding consumerBuilder $consumerBuilder $x. " +
-          "Defaulting to " +
-          defaultConsumerBuilder
+          "Defaulting to " + defaultConsumerBuilder
         )
     }
     builder
@@ -269,7 +265,7 @@ private class KafkaRDDIterator[K, V](
   cacheInitialCapacity: Int,
   cacheMaxCapacity: Int,
   cacheLoadFactor: Float,
-  consumerBuilder: SparkKafkaConsumer[K, V]
+  sparkKafkaConsumer: SparkKafkaConsumer[K, V]
 ) extends Iterator[ConsumerRecord[K, V]] {
 
   context.addTaskCompletionListener(_ => closeIfNeeded())
@@ -279,7 +275,7 @@ private class KafkaRDDIterator[K, V](
       cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor
     )
     KafkaDataConsumer.acquire[K, V](
-      part.topicPartition(), kafkaParams, context, useConsumerCache, consumerBuilder
+      part.topicPartition(), kafkaParams, context, useConsumerCache, sparkKafkaConsumer
     )
   }
 

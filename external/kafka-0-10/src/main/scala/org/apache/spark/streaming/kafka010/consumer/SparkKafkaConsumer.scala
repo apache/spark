@@ -33,5 +33,7 @@ abstract class SparkKafkaConsumer [K, V](
 
   def getNextOffset(): Long
 
+  def getTimeout(): Long
+
   def close(): Unit
 }

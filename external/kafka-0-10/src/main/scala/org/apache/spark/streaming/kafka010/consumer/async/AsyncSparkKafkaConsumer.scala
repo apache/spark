@@ -33,7 +33,7 @@ class AsyncSparkKafkaConsumer[K, V](
                                         val topicPartition: TopicPartition,
                                         val kafkaParams: ju.Map[String, Object],
                                         val maintainBufferMin: Int,
-                                        val pollTimeout: Long
+                                        val pollTimeoutMs: Long
                                       ) extends SparkKafkaConsumer[K, V] {
 
   /** We need to maintain lastRecord to revert buffer to previous state
@@ -48,7 +48,7 @@ class AsyncSparkKafkaConsumer[K, V](
   private def createNewPollTask(offset: Long) = {
     new AsyncPollTask[K, V](
       topicPartition, ExecutionContext.fromExecutor(Executors.newSingleThreadExecutor()),
-      createConsumer, maintainBufferMin, pollTimeout, offset
+      createConsumer, maintainBufferMin, pollTimeoutMs, offset
     )
   }
 
@@ -56,12 +56,12 @@ class AsyncSparkKafkaConsumer[K, V](
    * Ensure that next record have expected offset.
    * If not clear the buffer and async poll task, and reset seek offset
    */
-  def ensureOffset(offset: Long): Unit = {
+  override def ensureOffset(offset: Long): Unit = {
     if (asyncPollTask == null) {
       asyncPollTask = createNewPollTask(offset)
     }
     else if (asyncPollTask.getNextOffset() != offset) {
-      logInfo(s"Seeking to offset $offset")
+      logDebug(s"Seeking to offset $offset")
       asyncPollTask.close()
       asyncPollTask = createNewPollTask(offset)
     }
@@ -72,20 +72,20 @@ class AsyncSparkKafkaConsumer[K, V](
    *  First ensure buffer have data.
    *  Then return first record from buffer.
    */
-  def getNextRecord(): ConsumerRecord[K, V] = {
-    lastRecord = asyncPollTask.getNextRecord(pollTimeout)
+  override def getNextRecord(): ConsumerRecord[K, V] = {
+    lastRecord = asyncPollTask.getNextRecord(pollTimeoutMs)
     lastRecord
   }
 
   /**
    * Add last record back to buffer to revert the state.
    */
-  def moveToPrevious(): ConsumerRecord[K, V] = {
+  override def moveToPrevious(): ConsumerRecord[K, V] = {
     asyncPollTask.revertLastRecord(lastRecord)
     lastRecord
   }
 
-  def getNextOffset(): Long = {
+  override def getNextOffset(): Long = {
     if (asyncPollTask == null) {
       AsyncSparkKafkaConsumer.UNKNOWN_OFFSET
     }
@@ -99,12 +99,14 @@ class AsyncSparkKafkaConsumer[K, V](
     val c = new KafkaConsumer[K, V](kafkaParams)
     val topics = ju.Arrays.asList(topicPartition)
     c.assign(topics)
-    logInfo(s"$topicPartition Created new kafka consumer with assigned topics $topics")
+    logDebug(s"$topicPartition Created new kafka consumer with assigned topics $topics")
     c
   }
 
-  def close(): Unit = {
-    logInfo(s"$topicPartition Closing consumers")
+  override def getTimeout(): Long = pollTimeoutMs
+
+  override def close(): Unit = {
+    logDebug(s"$topicPartition Closing consumers")
     asyncPollTask.close()
   }
 }
@@ -132,34 +134,34 @@ private[kafka010] class AsyncPollTask[K, V](
     while (!shouldClose.get()) {
       val lastRequestedAtBefore = lastRequestedAt.get()
       listSize = bufferList.size()
-      logInfo(s"$topicPartition Buffersize is $listSize and maintain buffer is $maintainBufferMin")
+      logDebug(s"$topicPartition Buffersize is $listSize and maintain buffer is $maintainBufferMin")
       if (listSize < maintainBufferMin) {
         var records = fetch(currentSeekOffset.get())
         var count = if (records == null) 0 else records.size()
         if (count == 0) {
           waitForReactivation(lastRequestedAtBefore)
         } else {
-          logInfo(s"$topicPartition Adding $count records to buffer")
+          logDebug(s"$topicPartition Adding $count records to buffer")
           currentSeekOffset.set(records.get(count - 1).offset() + 1)
           bufferList.addAll(records)
         }
       } else {
-        logInfo(s"$topicPartition Since buffer is sufficient")
+        logDebug(s"$topicPartition Since buffer is sufficient")
         waitForReactivation(lastRequestedAtBefore)
       }
     }
-    logInfo(s"$topicPartition Closing consumer")
+    logDebug(s"$topicPartition Closing consumer")
     kafkaConsumer.close()
   }(executionContext)
 
   private def waitForReactivation(lastRequestedAtBefore: Long) = {
     lastRequestedAt.synchronized {
       if (lastRequestedAtBefore == lastRequestedAt.get()) {
-        logInfo(s"$topicPartition Future going to sleep")
+        logDebug(s"$topicPartition Future going to sleep")
         lastRequestedAt.wait()
-        logInfo(s"$topicPartition Future is awake")
+        logDebug(s"$topicPartition Future is awake")
       } else {
-        logInfo(s"$topicPartition Last requested value mismatched Before : $lastRequestedAtBefore"
+        logDebug(s"$topicPartition Last requested value mismatched Before : $lastRequestedAtBefore"
           + " Current : " + lastRequestedAt.get() + ", Skipping wait.")
       }
     }
@@ -170,11 +172,11 @@ private[kafka010] class AsyncPollTask[K, V](
     try {
       var count = 0
       if (seekOffset != AsyncSparkKafkaConsumer.UNKNOWN_OFFSET) {
-        logInfo(s"$topicPartition Polling from offset $seekOffset")
+        logDebug(s"$topicPartition Polling from offset $seekOffset")
         kafkaConsumer.seek(topicPartition, seekOffset)
         val records = kafkaConsumer.poll(pollTimeout)
         count = records.count()
-        logInfo(s"$topicPartition Received records $count offset $seekOffset " + this.toString)
+        logDebug(s"$topicPartition Received records $count offset $seekOffset " + this.toString)
         result = records.records(topicPartition)
       }
     }
@@ -193,12 +195,12 @@ private[kafka010] class AsyncPollTask[K, V](
   }
 
   def resetOffset(offset: Long): Unit = {
-    logInfo(s"$topicPartition Clearing buffer and resetting offset from old value "
+    logDebug(s"$topicPartition Clearing buffer and resetting offset from old value "
       + currentSeekOffset.get() + " to new value " + offset + s"for partition $topicPartition"
       + this.toString)
     bufferList.clear()
     currentSeekOffset.set(offset)
-    logInfo(s"$topicPartition Notifying sleeping poll task for partition $topicPartition")
+    logDebug(s"$topicPartition Notifying sleeping poll task for partition $topicPartition")
     ensureAsyncTaskRunning()
   }
 
@@ -217,7 +219,7 @@ private[kafka010] class AsyncPollTask[K, V](
    * since task could be running and throw exception if closed directly
    */
   def close(): Unit = {
-    logInfo(s"$topicPartition Mark consumer for closure")
+    logDebug(s"$topicPartition Mark consumer for closure")
     resetOffset(AsyncSparkKafkaConsumer.UNKNOWN_OFFSET)
     shouldClose.set(true)
   }
