@@ -23,7 +23,8 @@ import java.net.URI
 import scala.util.control.NonFatal
 
 import org.apache.avro.Schema
-import org.apache.avro.file.{DataFileConstants, DataFileReader}
+import org.apache.avro.file.DataFileConstants._
+import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
 import org.apache.avro.mapreduce.AvroJob
@@ -116,27 +117,22 @@ private[avro] class AvroFileFormat extends FileFormat
       dataSchema, nullable = false, parsedOptions.recordName, parsedOptions.recordNamespace)
 
     AvroJob.setOutputKeySchema(job, outputAvroSchema)
-    val COMPRESS_KEY = "mapred.output.compress"
 
-    parsedOptions.compression match {
-      case "uncompressed" =>
-        logInfo("writing uncompressed Avro records")
-        job.getConfiguration.setBoolean(COMPRESS_KEY, false)
-
-      case "snappy" =>
-        logInfo("compressing Avro output using Snappy")
-        job.getConfiguration.setBoolean(COMPRESS_KEY, true)
-        job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, DataFileConstants.SNAPPY_CODEC)
-
-      case "deflate" =>
-        val deflateLevel = spark.sessionState.conf.avroDeflateLevel
-        logInfo(s"compressing Avro output using deflate (level=$deflateLevel)")
-        job.getConfiguration.setBoolean(COMPRESS_KEY, true)
-        job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, DataFileConstants.DEFLATE_CODEC)
-        job.getConfiguration.setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, deflateLevel)
-
-      case unknown: String =>
-        logError(s"unsupported compression codec $unknown")
+    if (parsedOptions.compression == "uncompressed") {
+      job.getConfiguration.setBoolean("mapred.output.compress", false)
+    } else {
+      job.getConfiguration.setBoolean("mapred.output.compress", true)
+      logInfo(s"Compressing Avro output using the ${parsedOptions.compression} codec")
+      val codec = parsedOptions.compression match {
+        case DEFLATE_CODEC =>
+          val deflateLevel = spark.sessionState.conf.avroDeflateLevel
+          logInfo(s"Avro compression level $deflateLevel will be used for $DEFLATE_CODEC codec.")
+          job.getConfiguration.setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, deflateLevel)
+          DEFLATE_CODEC
+        case codec @ (SNAPPY_CODEC | BZIP2_CODEC | XZ_CODEC) => codec
+        case unknown => throw new IllegalArgumentException(s"Invalid compression codec: $unknown")
+      }
+      job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, codec)
     }
 
     new AvroOutputWriterFactory(dataSchema, outputAvroSchema.toString)
