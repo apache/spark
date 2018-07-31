@@ -136,6 +136,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       OptimizeSubqueries) ::
     Batch("Replace Operators", fixedPoint,
       RewriteExcepAll,
+      RewriteIntersectAll,
       ReplaceIntersectWithSemiJoin,
       ReplaceExceptWithFilter,
       ReplaceExceptWithAntiJoin,
@@ -1402,7 +1403,7 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
  */
 object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Intersect(left, right) =>
+    case Intersect(left, right, false) =>
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
       Distinct(Join(left, right, LeftSemi, joinCond.reduceLeftOption(And)))
@@ -1483,6 +1484,84 @@ object RewriteExcepAll extends Rule[LogicalPlan] {
         qualifier = None,
         left.output,
         filteredAggPlan
+      )
+      Project(left.output, genRowPlan)
+  }
+}
+
+/**
+ * Replaces logical [[Intersect]] operator using a combination of Union, Aggregate
+ * and Generate operator.
+ *
+ * Input Query :
+ * {{{
+ *    SELECT c1 FROM ut1 INTERSECT ALL SELECT c1 FROM ut2
+ * }}}
+ *
+ * Rewritten Query:
+ * {{{
+ *   SELECT c1
+ *   FROM (
+ *        SELECT replicate_row(min_count, c1)
+ *        FROM (
+ *             SELECT c1, If (vcol1_cnt > vcol2_cnt, vcol2_cnt, vcol1_cnt) AS min_count
+ *             FROM (
+ *                  SELECT   c1, count(vcol1) as vcol1_cnt, count(vcol2) as vcol2_cnt
+ *                  FROM (
+ *                       SELECT true as vcol1, null as , c1 FROM ut1
+ *                       UNION ALL
+ *                       SELECT null as vcol1, true as vcol2, c1 FROM ut2
+ *                       ) AS union_all
+ *                  GROUP BY c1
+ *                  HAVING vcol1_cnt >= 1 AND vcol2_cnt >= 1
+ *                  )
+ *             )
+ *         )
+ * }}}
+ */
+object RewriteIntersectAll extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Intersect(left, right, true) =>
+      assert(left.output.size == right.output.size)
+
+      val trueVcol1 = Alias(Literal(true), "vcol1")()
+      val nullVcol1 = Alias(Literal(null, BooleanType), "vcol1")()
+
+      val trueVcol2 = Alias(Literal(true), "vcol2")()
+      val nullVcol2 = Alias(Literal(null, BooleanType), "vcol2")()
+
+      // Add a projection on the top of left and right plans to project out
+      // the additional virtual columns.
+      val leftPlanWithAddedVirtualCols = Project(Seq(trueVcol1, nullVcol2) ++ left.output, left)
+      val rightPlanWithAddedVirtualCols = Project(Seq(nullVcol1, trueVcol2) ++ right.output, right)
+
+      val unionPlan = Union(leftPlanWithAddedVirtualCols, rightPlanWithAddedVirtualCols)
+
+      // Expressions to compute count and minimum of both the counts.
+      val vCol1AggrExpr =
+        Alias(AggregateExpression(Count(unionPlan.output(0)), Complete, false), "vcol1_count")()
+      val vCol2AggrExpr =
+        Alias(AggregateExpression(Count(unionPlan.output(1)), Complete, false), "vcol2_count")()
+      val ifExpression = Alias(If(
+        GreaterThan(vCol1AggrExpr.toAttribute, vCol2AggrExpr.toAttribute),
+        vCol2AggrExpr.toAttribute,
+        vCol1AggrExpr.toAttribute
+      ), "min_count")()
+
+      val aggregatePlan = Aggregate(left.output,
+        Seq(vCol1AggrExpr, vCol2AggrExpr) ++ left.output, unionPlan)
+      val filterPlan = Filter(And(GreaterThanOrEqual(vCol1AggrExpr.toAttribute, Literal(1L)),
+        GreaterThanOrEqual(vCol2AggrExpr.toAttribute, Literal(1L))), aggregatePlan)
+      val projectMinPlan = Project(left.output ++ Seq(ifExpression), filterPlan)
+
+      // Apply the replicator to replicate rows based on min_count
+      val genRowPlan = Generate(
+        ReplicateRows(Seq(ifExpression.toAttribute) ++ left.output),
+        unrequiredChildIndex = Nil,
+        outer = false,
+        qualifier = None,
+        left.output,
+        projectMinPlan
       )
       Project(left.output, genRowPlan)
   }

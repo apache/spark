@@ -309,7 +309,7 @@ object UnsupportedOperationChecker {
         case Except(left, right, _) if right.isStreaming =>
           throwError("Except on a streaming DataFrame/Dataset on the right is not supported")
 
-        case Intersect(left, right) if left.isStreaming && right.isStreaming =>
+        case Intersect(left, right, _) if left.isStreaming && right.isStreaming =>
           throwError("Intersect between two streaming DataFrames/Datasets is not supported")
 
         case GroupingSets(_, _, child, _) if child.isStreaming =>
