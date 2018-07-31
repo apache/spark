@@ -77,7 +77,8 @@ object StaticSQLConf {
   val CODEGEN_COMMENTS = buildStaticConf("spark.sql.codegen.comments")
     .internal()
     .doc("When true, put comment in the generated code. Since computing huge comments " +
-      "can be extremely expensive in certain cases, default is false.")
+      "can be extremely expensive in certain cases, such as deeply-nested expressions which " +
+      "operate over inputs with wide schemas, default is false.")
     .booleanConf
     .createWithDefault(false)
 
