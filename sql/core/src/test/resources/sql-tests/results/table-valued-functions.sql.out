@@ -84,7 +84,12 @@ select * from range(1, null)
 struct<>
 -- !query 6 output
 org.apache.spark.sql.AnalysisException
-Invalid arguments for resolved function: 1, null
+error: table-valued function range with alternatives:
+ (end: long)
+ (start: long, end: long)
+ (start: long, end: long, step: long)
+ (start: long, end: long, step: long, numPartitions: integer)
+cannot be applied to: (integer, null); line 1 pos 14
 
 
 -- !query 7
