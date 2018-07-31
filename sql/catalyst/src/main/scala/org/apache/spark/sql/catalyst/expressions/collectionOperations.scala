@@ -4111,8 +4111,9 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
                """.stripMargin)
           case _ =>
             val genericArrayData = classOf[GenericArrayData].getName
+            val et = ctx.addReferenceObj("elementType", elementType)
             ("", "Object", "Object", value,
-              s"get($i, null)", s"update($pos, $value)", "Object", "Ref",
+              s"get($i, $et)", s"update($pos, $value)", "Object", "Ref",
               s"${ev.value} = new $genericArrayData(new Object[$size]);")
         }
 
