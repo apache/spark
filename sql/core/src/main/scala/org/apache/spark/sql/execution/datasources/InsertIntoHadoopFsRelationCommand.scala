@@ -169,7 +169,9 @@ case class InsertIntoHadoopFsRelationCommand(
       if (updatedPartitionPaths.isEmpty && staticPartitions.nonEmpty
         && partitionColumns.length == staticPartitions.size) {
         // Avoid empty static partition can't loaded to datasource table.
-        refreshUpdatedPartitions(Set(PartitioningUtils.getPathFragment(staticPartitions)))
+        val staticPathFragment =
+          PartitioningUtils.getPathFragment(staticPartitions, partitionColumns)
+        refreshUpdatedPartitions(Set(staticPathFragment))
       } else {
         refreshUpdatedPartitions(updatedPartitionPaths)
       }

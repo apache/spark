@@ -30,7 +30,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCoercion}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -284,10 +284,9 @@ object PartitioningUtils {
     }.mkString("/")
   }
 
-  def getPathFragment(partitions: TablePartitionSpec): String = partitions.map {
-    case (k, v) =>
-      escapePathName(k) + "=" + escapePathName(v)
-  }.mkString("/")
+  def getPathFragment(spec: TablePartitionSpec, partitionColumns: Seq[Attribute]): String = {
+    getPathFragment(spec, StructType.fromAttributes(partitionColumns))
+  }
 
   /**
    * Normalize the column names in partition specification, w.r.t. the real partition column names
