@@ -4087,13 +4087,8 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
       val (postFix, openHashElementType, hsJavaTypeName, genHsValue,
            getter, setter, javaTypeName, primitiveTypeName, arrayDataBuilder) =
         elementType match {
-          case BooleanType | ByteType | ShortType | IntegerType =>
-            ("$mcI$sp", "Int", "int",
-              if (elementType != BooleanType) {
-                s"(int) $value"
-              } else {
-                s"$value ? 1 : 0;"
-              },
+          case ByteType | ShortType | IntegerType =>
+            ("$mcI$sp", "Int", "int", s"(int) $value",
               s"get$ptName($i)", s"set$ptName($pos, $value)",
               CodeGenerator.javaType(elementType), ptName,
               s"""
