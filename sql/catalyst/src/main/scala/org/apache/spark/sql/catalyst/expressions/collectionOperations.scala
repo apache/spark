@@ -4081,11 +4081,11 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
     val value = ctx.freshName("value")
     val hsValue = ctx.freshName("hsValue")
     val size = ctx.freshName("size")
-    val (postFix, openHashElementType, hsJavaTypeName, genHsValue,
-         getter, setter, javaTypeName, primitiveTypeName, arrayDataBuilder) =
-      if (elementTypeSupportEquals) {
-        val ptName = CodeGenerator.primitiveTypeName(elementType)
-        val unsafeArray = ctx.freshName("unsafeArray")
+    if (elementTypeSupportEquals) {
+      val ptName = CodeGenerator.primitiveTypeName(elementType)
+      val unsafeArray = ctx.freshName("unsafeArray")
+      val (postFix, openHashElementType, hsJavaTypeName, genHsValue,
+           getter, setter, javaTypeName, primitiveTypeName, arrayDataBuilder) =
         elementType match {
           case BooleanType | ByteType | ShortType | IntegerType =>
             ("$mcI$sp", "Int", "int",
@@ -4120,13 +4120,8 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
               s"get($i, null)", s"update($pos, $value)", "Object", "Ref",
               s"${ev.value} = new $genericArrayData(new Object[$size]);")
         }
-      } else {
-        ("", "", "", "", "", "", "", "", "")
-      }
 
-    nullSafeCodeGen(ctx, ev, (array1, array2) => {
-      if (openHashElementType != "") {
-        // Here, we ensure elementTypeSupportEquals is true
+      nullSafeCodeGen(ctx, ev, (array1, array2) => {
         val notFoundNullElement = ctx.freshName("notFoundNullElement")
         val nullElementIndex = ctx.freshName("nullElementIndex")
         val builder = ctx.freshName("builder")
@@ -4184,7 +4179,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
              |$hsJavaTypeName $hsValue = $genHsValue;
              |if (!$hs.contains($hsValue)) {
              |  $hs.add$postFix($hsValue);
-             |  $builder.$$plus$$eq($value);
+             |   $builder.$$plus$$eq($value);
              |  $size++;
              |}
            """.stripMargin
@@ -4240,11 +4235,13 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
            |}
            |${buildResultArrayData(nonNullArrayDataBuild)}
          """.stripMargin
-      } else {
+      })
+    } else {
+      nullSafeCodeGen(ctx, ev, (array1, array2) => {
         val expr = ctx.addReferenceObj("arrayExceptExpr", this)
         s"${ev.value} = ($arrayData)$expr.nullSafeEval($array1, $array2);"
-      }
-    })
+      })
+    }
   }
 
   override def prettyName: String = "array_except"
