@@ -308,4 +308,36 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
 
     assert(exception.getMessage.contains("aggregate functions are not allowed"))
   }
+
+  test("SPARK-24722: pivoting column list with values") {
+    val expected = Row(2012, 10000.0, null) :: Row(2013, 48000.0, 30000.0) :: Nil
+    val df = trainingSales
+      .groupBy($"sales.year")
+      .pivot(struct(lower($"sales.course"), $"training"), Seq(
+        struct(lit("dotnet"), lit("Experts")),
+        struct(lit("java"), lit("Dummies")))
+      ).agg(sum($"sales.earnings"))
+
+    checkAnswer(df, expected)
+
+    val df2 = trainingSales
+      .groupBy($"sales.year")
+      .pivot(struct(lower($"sales.course"), $"training"),
+        Seq(Seq("dotnet", "Experts"), Seq("java", "Dummies"))
+      ).agg(sum($"sales.earnings"))
+
+    checkAnswer(df2, expected)
+  }
+
+  test("SPARK-24722: pivoting column list") {
+    val expected = Seq(
+      Row(2012, 5000.0, 10000.0, null, 20000.0),
+      Row(2013, null, 48000.0, 30000.0, null))
+    val df = trainingSales
+      .groupBy($"sales.year")
+      .pivot(struct(lower($"sales.course"), $"training"))
+      .agg(sum($"sales.earnings"))
+
+    checkAnswer(df, expected)
+  }
 }
