@@ -162,7 +162,8 @@ class PlanParserSuite extends AnalysisTest {
         }
     }
 
-    val msg = "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported"
+    val msg = "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/RANGE PARTITION BY/CLUSTER BY " +
+      "is not supported"
     intercept(s"$baseSql order by a sort by a", msg)
     intercept(s"$baseSql cluster by a distribute by a", msg)
     intercept(s"$baseSql order by a cluster by a", msg)

@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1541,7 +1541,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a clause for DISTRIBUTE BY.
+   * Create a clause for DISTRIBUTE BY/RANGE PARTITION BY.
    */
   override protected def withRepartitionByExpression(
       ctx: QueryOrganizationContext,

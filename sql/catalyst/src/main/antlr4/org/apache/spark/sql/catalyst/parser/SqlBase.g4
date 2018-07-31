@@ -340,6 +340,7 @@ queryOrganization
     : (ORDER BY order+=sortItem (',' order+=sortItem)*)?
       (CLUSTER BY clusterBy+=expression (',' clusterBy+=expression)*)?
       (DISTRIBUTE BY distributeBy+=expression (',' distributeBy+=expression)*)?
+      (RANGE PARTITION BY rangePartitionBy+=sortItem (',' rangePartitionBy+=sortItem)*)?
       (SORT BY sort+=sortItem (',' sort+=sortItem)*)?
       windows?
       (LIMIT (ALL | limit=expression))?
