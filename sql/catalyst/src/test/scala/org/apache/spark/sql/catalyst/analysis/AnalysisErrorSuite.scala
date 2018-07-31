@@ -393,6 +393,12 @@ class AnalysisErrorSuite extends AnalysisTest {
   )
 
   errorTest(
+    "an evaluated limit class must not be null",
+    testRelation.limit(Literal(null, IntegerType)),
+    "The evaluated limit expression must not be null, but got " :: Nil
+  )
+
+  errorTest(
     "num_rows in limit clause must be equal to or greater than 0",
     listRelation.limit(-1),
     "The limit expression must be equal to or greater than 0, but got -1" :: Nil
