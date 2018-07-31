@@ -70,6 +70,8 @@ private[spark] class SerializerManager(
   private[this] val compressRdds = conf.getBoolean("spark.rdd.compress", false)
   // Whether to compress shuffle output temporarily spilled to disk
   private[this] val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", true)
+  // Size of the chunks to be used in the ChunkedByteBuffer
+  private[this] val chunkSizeMb = conf.getSizeAsMb("spark.memory.chunkSize", "4m").toInt
 
   /* The compression codec to use. Note that the "lazy" val is necessary because we want to delay
    * the initialization of the compression codec until it is first used. The reason is that a Spark
@@ -186,7 +188,7 @@ private[spark] class SerializerManager(
       blockId: BlockId,
       values: Iterator[_],
       classTag: ClassTag[_]): ChunkedByteBuffer = {
-    val bbos = new ChunkedByteBufferOutputStream(1024 * 1024 * 4, ByteBuffer.allocate)
+    val bbos = new ChunkedByteBufferOutputStream(1024 * 1024 * chunkSizeMb, ByteBuffer.allocate)
     val byteStream = new BufferedOutputStream(bbos)
     val autoPick = !blockId.isInstanceOf[StreamBlockId]
     val ser = getSerializer(classTag, autoPick).newInstance()
