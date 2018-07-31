@@ -4174,22 +4174,36 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
              |$javaTypeName $value = $array1.$getter;
              |$hsJavaTypeName $hsValue = $genHsValue;
              |if (!$hs.contains($hsValue)) {
+             |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+             |    break;
+             |  }
              |  $hs.add$postFix($hsValue);
-             |   $builder.$$plus$$eq($value);
-             |  $size++;
+             |  $builder.$$plus$$eq($value);
              |}
            """.stripMargin
 
-        val nonNullArrayDataBuild = if (postFix != "") {
+        val nonNullArrayDataBuild = {
+          val build = if (postFix != "") {
+            val defaultSize = elementType.defaultSize
+            s"""
+               |if (!UnsafeArrayData.shouldUseGenericArrayData($defaultSize, $size)) {
+               |  ${ev.value} = UnsafeArrayData.fromPrimitiveArray($builder.result());
+               |} else {
+               |  ${ev.value} = new $genericArrayData($builder.result());
+               |}
+             """.stripMargin
+          } else {
+            s"${ev.value} = new $genericArrayData($builder.result());"
+          }
           s"""
-             |if (!UnsafeArrayData.shouldUseGenericArrayData(${elementType.defaultSize}, $size)) {
-             |  ${ev.value} = UnsafeArrayData.fromPrimitiveArray($builder.result());
-             |} else {
-             |  ${ev.value} = new $genericArrayData($builder.result());
+             |if ($size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+             |  throw new RuntimeException("Unsuccessful try create array with " + $size +
+             |  " bytes of data due to exceeding the limit " +
+             |  "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for GenericArrayData." +
+             |  " $prettyName failed.");
              |}
+             |$build
            """.stripMargin
-        } else {
-          s"${ev.value} = new $genericArrayData($builder.result());"
         }
 
         def buildResultArrayData(nonNullArrayDataBuild: String) =
