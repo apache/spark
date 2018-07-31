@@ -173,12 +173,14 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
     val avroFields = avroStruct.getFields
     if (avroFields.size != catalystStruct.length) {
       throw new IncompatibleSchemaException(
-        s"Field list length of ${catalystStruct} does not correspond to length of ${avroStruct}")
+        s"""Field list length ${catalystStruct.size} of SparkSQL record does not
+           |correspond to field list length of avro schema ${avroStruct.getFields.size()}"""
+          .stripMargin.replaceAll("\n", " "))
     }
     val fieldConverters = catalystStruct.zip(avroFields.asScala).map {
       case (f1, f2) =>
         newConverter(f1.dataType, resolveUnionType(f2.schema(), f1.dataType, f1.nullable))
-    }
+    }.toArray
     val numFields = catalystStruct.length
     (row: InternalRow) =>
       val result = new Record(avroStruct)
@@ -200,7 +202,7 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
   // an IntType resolves against a ["int", "long", "null"] will correctly return a schema of
   // type Schema.Type.LONG
   private def resolveUnionType(avroType: Schema, catalystType: DataType,
-                                  nullable: Boolean): Schema = {
+      nullable: Boolean): Schema = {
     if (avroType.getType == Type.UNION) {
       // avro uses union to represent nullable type.
       val fieldTypes = avroType.getTypes.asScala
@@ -216,14 +218,8 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
         case NullType => fieldTypes.filter(_.getType == Type.NULL)
         case BooleanType => fieldTypes.filter(_.getType == Type.BOOLEAN)
         case ByteType => fieldTypes.filter(_.getType == Type.INT)
-        case BinaryType =>
-          val at = fieldTypes.filter(x => x.getType == Type.BYTES || x.getType == Type.FIXED)
-          if (at.length > 1) {
-            throw new IncompatibleSchemaException(
-              s"Cannot resolve schema of ${catalystType} against union ${avroType.toString}")
-          } else {
-            at
-          }
+        case BinaryType => fieldTypes
+          .filter(x => x.getType == Type.BYTES || x.getType == Type.FIXED)
         case ShortType | IntegerType => fieldTypes.filter(_.getType == Type.INT)
         case LongType => fieldTypes.filter(_.getType == Type.LONG)
         case FloatType => fieldTypes.filter(_.getType == Type.FLOAT)
@@ -231,13 +227,14 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
         case d: DecimalType => fieldTypes.filter(_.getType == Type.STRING)
         case StringType => fieldTypes
           .filter(x => x.getType == Type.STRING || x.getType == Type.ENUM)
-        case DateType => fieldTypes.filter(x => x.getType == Type.INT || x.getType == Type.LONG)
+        case DateType => fieldTypes
+          .filter(x => x.getType == Type.INT || x.getType == Type.LONG)
         case TimestampType => fieldTypes.filter(_.getType == Type.LONG)
         case ArrayType(et, containsNull) =>
           // Find array that matches the element type specified
           fieldTypes.filter(x => x.getType == Type.ARRAY
             && typeMatchesSchema(et, x.getElementType))
-        case st: StructType => // Find the matching record!
+        case st: StructType =>
           val recordTypes = fieldTypes.filter(x => x.getType == Type.RECORD)
           if (recordTypes.length > 1) {
             throw new IncompatibleSchemaException(
@@ -246,6 +243,11 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
           recordTypes
         case MapType(kt, vt, valueContainsNull) =>
           // Find the map that matches the value type.  Maps in Avro are always key type string
+          if (kt != StringType) {
+            throw new IncompatibleSchemaException(
+              "Non-string Map keys are unsupported"
+            )
+          }
           fieldTypes.filter(x => x.getType == Type.MAP && typeMatchesSchema(vt, x.getValueType))
         case other =>
           throw new IncompatibleSchemaException(s"Unexpected type: $other")
@@ -253,7 +255,7 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
 
       if (actualType.length != 1) {
         throw new IncompatibleSchemaException(
-          s"Failed to resolve ${catalystType} against ambiguous schema ${avroType}")
+          s"Failed to resolve schema ${catalystType} against Avro schema ${avroType}")
       }
       actualType.head
     } else {
@@ -306,6 +308,5 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
                 .getValueType)
       }
     }
-
   }
 }

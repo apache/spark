@@ -25,18 +25,16 @@ import java.util.{TimeZone, UUID}
 
 import scala.collection.JavaConverters._
 import scala.io.Source
-
 import org.apache.avro.Schema
 import org.apache.avro.Schema.{Field, Type}
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.{SQLTestUtils, SharedSQLContext}
 import org.apache.spark.sql.types._
 
 class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
@@ -46,10 +44,12 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   val testAvro = testFile("test.avro")
   val messyAvro = testFile("messy.avro")
   val multiRecordTypeUnionAvro = testFile("multirecordtypeunion.avro")
+  val speechAvro = testFile("speech.avro")
   val episodesSchemaFile = testFile("episodes.avsc")
   val testSchemaFile = testFile("test.avsc")
   val messySchemaFile = testFile("messy.avsc")
   val multiRecordTypeUnionSchemaFile = testFile("multirecordtypeunion.avsc")
+  val speechSchemaFile = testFile("speech.avsc")
 
   // The test file timestamp.avro is generated via following Python code:
   // import json
@@ -1079,14 +1079,35 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   // Read an avro, write it with converted schema, read it, write it with original avroSchema
-  test("read read-write, read-write w/ schema, read") {
+  test("SPARK-24855: support write with compatible user-specified schema") {
     checkSpecifySchemaOnWrite(episodesAvro, episodesSchemaFile)
     checkSpecifySchemaOnWrite(testAvro, testSchemaFile)
     checkSpecifySchemaOnWrite(messyAvro, messySchemaFile)
   }
 
+  test("SPARK-24855: avro timing") {
+    // Test if load works as expected
+    val initialTime = System.currentTimeMillis()
+    withTempDir { tempDir =>
+      val forceSchema = readFileToString(speechSchemaFile)
+      val df = spark.read.format("avro").load(speechAvro)
+
+      val tempSaveDir = s"$tempDir/save/"
+
+      df.write
+        .format("avro")
+        .option("avroSchema", forceSchema)
+        .save(tempSaveDir)
+
+      val newDf = spark.read.format("avro").load(tempSaveDir)
+      assert(newDf.count == 5980)
+    }
+    val time = System.currentTimeMillis() - initialTime
+    println("Runtime is " + time + "ms")
+  }
+
   // TODO Make this work somehow
-  test("multiunion force schema throws exception") {
+  test("SPARK-24855: multiunion force schema throws exception") {
     try {
       checkSpecifySchemaOnWrite(multiRecordTypeUnionAvro, multiRecordTypeUnionSchemaFile)
       assert(false)
