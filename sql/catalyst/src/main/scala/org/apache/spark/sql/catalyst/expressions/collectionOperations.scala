@@ -4082,26 +4082,25 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
     val hsValue = ctx.freshName("hsValue")
     val size = ctx.freshName("size")
     val (postFix, openHashElementType, hsJavaTypeName, genHsValue,
-         getter, setter, javaTypeName, arrayBuilder) =
+         getter, setter, javaTypeName, primitiveTypeName, arrayDataBuilder) =
       if (elementTypeSupportEquals) {
+        val ptName = CodeGenerator.primitiveTypeName(elementType)
+        val unsafeArray = ctx.freshName("unsafeArray")
         elementType match {
           case BooleanType | ByteType | ShortType | IntegerType =>
-            val ptName = CodeGenerator.primitiveTypeName(elementType)
-            val unsafeArray = ctx.freshName("unsafeArray")
             ("$mcI$sp", "Int", "int",
               if (elementType != BooleanType) {
                 s"(int) $value"
               } else {
                 s"$value ? 1 : 0;"
               },
-              s"get$ptName($i)", s"set$ptName($pos, $value)", CodeGenerator.javaType(elementType),
+              s"get$ptName($i)", s"set$ptName($pos, $value)",
+              CodeGenerator.javaType(elementType), ptName,
               s"""
                  |${ctx.createUnsafeArray(unsafeArray, size, elementType, s" $prettyName failed.")}
                  |${ev.value} = $unsafeArray;
                """.stripMargin)
           case LongType | FloatType | DoubleType =>
-            val ptName = CodeGenerator.primitiveTypeName(elementType)
-            val unsafeArray = ctx.freshName("unsafeArray")
             val signature = elementType match {
               case LongType => "$mcJ$sp"
               case FloatType => "$mcF$sp"
@@ -4109,115 +4108,137 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
             }
             (signature, CodeGenerator.boxedType(elementType),
               CodeGenerator.javaType(elementType), value,
-              s"get$ptName($i)", s"set$ptName($pos, $value)", CodeGenerator.javaType(elementType),
+              s"get$ptName($i)", s"set$ptName($pos, $value)",
+              CodeGenerator.javaType(elementType), ptName,
               s"""
                  |${ctx.createUnsafeArray(unsafeArray, size, elementType, s" $prettyName failed.")}
                  |${ev.value} = $unsafeArray;
                """.stripMargin)
           case _ =>
             val genericArrayData = classOf[GenericArrayData].getName
-            val et = ctx.addReferenceObj("elementType", elementType)
             ("", "Object", "Object", value,
-              s"get($i, $et)", s"update($pos, $value)", "Object",
+              s"get($i, null)", s"update($pos, $value)", "Object", "Ref",
               s"${ev.value} = new $genericArrayData(new Object[$size]);")
         }
       } else {
-        ("", "", "", "", "", "", "", "")
+        ("", "", "", "", "", "", "", "", "")
       }
 
     nullSafeCodeGen(ctx, ev, (array1, array2) => {
       if (openHashElementType != "") {
         // Here, we ensure elementTypeSupportEquals is true
         val notFoundNullElement = ctx.freshName("notFoundNullElement")
+        val nullElementIndex = ctx.freshName("nullElementIndex")
+        val builder = ctx.freshName("builder")
+        val array = ctx.freshName("array")
         val openHashSet = classOf[OpenHashSet[_]].getName
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$openHashElementType()"
         val hs = ctx.freshName("hs")
-        val arrayData = classOf[ArrayData].getName
-        val arrays = ctx.freshName("arrays")
-        val array = ctx.freshName("array")
-        val arrayDataIdx = ctx.freshName("arrayDataIdx")
+        val genericArrayData = classOf[GenericArrayData].getName
+        val arrayBuilder = "scala.collection.mutable.ArrayBuilder"
+        val arrayBuilderClass = s"$arrayBuilder$$of$primitiveTypeName"
+        val arrayBuilderClassTag = if (primitiveTypeName != "Ref") {
+          s"scala.reflect.ClassTag$$.MODULE$$.$primitiveTypeName()"
+        } else {
+          s"scala.reflect.ClassTag$$.MODULE$$.AnyRef()"
+        }
 
-        val array2NullCheck = if (right.dataType.asInstanceOf[ArrayType].containsNull) {
+        def withArray2NullCheck(body: String) =
+          if (right.dataType.asInstanceOf[ArrayType].containsNull) {
+            s"""
+               |if ($array2.isNullAt($i)) {
+               |  $notFoundNullElement = false;
+               |} else {
+               |  $body
+               |}
+             """.stripMargin
+          } else {
+            body
+          }
+        val array2Body =
           s"""
-            |if ($array2.isNullAt($i)) {
-            |  $notFoundNullElement = false;
-            |} else
+             |$javaTypeName $value = $array2.$getter;
+             |$hsJavaTypeName $hsValue = $genHsValue;
+             |$hs.add$postFix($hsValue);
+           """.stripMargin
+
+        def withArray1NullAssignment(body: String) =
+          if (left.dataType.asInstanceOf[ArrayType].containsNull) {
+            s"""
+               |if ($array1.isNullAt($i)) {
+               |  if ($notFoundNullElement) {
+               |    $nullElementIndex = $size;
+               |    $notFoundNullElement = false;
+               |    $size++;
+               |  }
+               |} else {
+               |  $body
+               |}
+             """.stripMargin
+          } else {
+            body
+          }
+        val array1Body =
+          s"""
+             |$javaTypeName $value = $array1.$getter;
+             |$hsJavaTypeName $hsValue = $genHsValue;
+             |if (!$hs.contains($hsValue)) {
+             |  $hs.add$postFix($hsValue);
+             |  $builder.$$plus$$eq($value);
+             |  $size++;
+             |}
+           """.stripMargin
+
+        val nonNullArrayDataBuild = if (postFix != "") {
+          s"""
+             |if (!UnsafeArrayData.shouldUseGenericArrayData(${elementType.defaultSize}, $size)) {
+             |  ${ev.value} = UnsafeArrayData.fromPrimitiveArray($builder.result());
+             |} else {
+             |  ${ev.value} = new $genericArrayData($builder.result());
+             |}
            """.stripMargin
         } else {
-          ""
+          s"${ev.value} = new $genericArrayData($builder.result());"
         }
-        val array1NullCheck = if (left.dataType.asInstanceOf[ArrayType].containsNull) {
-          s"""
-             |if ($array1.isNullAt($i)) {
-             |  if ($notFoundNullElement) {
-             |    $size++;
-             |    $notFoundNullElement = false;
-             |  }
-             |} else
-           """.stripMargin
-        } else {
-          ""
-        }
-        val array1NullAssignment = if (left.dataType.asInstanceOf[ArrayType].containsNull) {
-          s"""
-             |if ($array1.isNullAt($i)) {
-             |  if ($notFoundNullElement) {
-             |    ${ev.value}.setNullAt($pos++);
-             |    $notFoundNullElement = false;
-             |  }
-             |} else
-           """.stripMargin
-        } else {
-          ""
-        }
+
+        def buildResultArrayData(nonNullArrayDataBuild: String) =
+          if (dataType.asInstanceOf[ArrayType].containsNull) {
+            s"""
+               |if ($nullElementIndex < 0) {
+               |  // result has no null element
+               |  $nonNullArrayDataBuild
+               |} else {
+               |  // result has null element
+               |  $arrayDataBuilder
+               |  $javaTypeName[] $array = $builder.result();
+               |  for (int $i = 0, $pos = 0; $pos < $size; $pos++) {
+               |    if ($pos == $nullElementIndex) {
+               |      ${ev.value}.setNullAt($pos);
+               |    } else {
+               |      $javaTypeName $value = $array[$i++];
+               |      ${ev.value}.$setter;
+               |    }
+               |  }
+               |}
+             """.stripMargin
+          } else {
+            nonNullArrayDataBuild
+          }
 
         s"""
            |$openHashSet $hs = new $openHashSet$postFix($classTag);
            |boolean $notFoundNullElement = true;
+           |for (int $i = 0; $i < $array2.numElements(); $i++) {
+           |  ${withArray2NullCheck(array2Body)}
+           |}
+           |$arrayBuilderClass $builder =
+           |  ($arrayBuilderClass)$arrayBuilder.make($arrayBuilderClassTag);
+           |int $nullElementIndex = -1;
            |int $size = 0;
-           |for (int $i = 0; $i < $array2.numElements(); $i++) {
-           |  $array2NullCheck
-           |  {
-           |    $javaTypeName $value = $array2.$getter;
-           |    $hsJavaTypeName $hsValue = $genHsValue;
-           |    $hs.add$postFix($hsValue);
-           |  }
-           |}
            |for (int $i = 0; $i < $array1.numElements(); $i++) {
-           |  $array1NullCheck
-           |  {
-           |    $javaTypeName $value = $array1.$getter;
-           |    $hsJavaTypeName $hsValue = $genHsValue;
-           |    if (!$hs.contains($hsValue)) {
-           |      $hs.add$postFix($hsValue);
-           |      $size++;
-           |    }
-           |  }
+           |  ${withArray1NullAssignment(array1Body)}
            |}
-           |$arrayBuilder
-           |$hs = new $openHashSet$postFix($classTag);
-           |$notFoundNullElement = true;
-           |int $pos = 0;
-           |for (int $i = 0; $i < $array2.numElements(); $i++) {
-           |  $array2NullCheck
-           |  {
-           |    $javaTypeName $value = $array2.$getter;
-           |    $hsJavaTypeName $hsValue = $genHsValue;
-           |    $hs.add$postFix($hsValue);
-           |  }
-           |}
-           |for (int $i = 0; $i < $array1.numElements(); $i++) {
-           |  $array1NullAssignment
-           |  {
-           |    $javaTypeName $value = $array1.$getter;
-           |    $hsJavaTypeName $hsValue = $genHsValue;
-           |    if (!$hs.contains($hsValue)) {
-           |      $hs.add$postFix($hsValue);
-           |      ${ev.value}.$setter;
-           |      $pos++;
-           |    }
-           |  }
-           |}
+           |${buildResultArrayData(nonNullArrayDataBuild)}
          """.stripMargin
       } else {
         val expr = ctx.addReferenceObj("arrayExceptExpr", this)
