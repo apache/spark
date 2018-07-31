@@ -22,9 +22,8 @@ import java.util.{ArrayList, List => JList}
 import test.org.apache.spark.sql.sources.v2._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanExec}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
@@ -135,8 +134,8 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
   test("schema required data source") {
     Seq(classOf[SchemaRequiredDataSource], classOf[JavaSchemaRequiredDataSource]).foreach { cls =>
       withClue(cls.getName) {
-        val e = intercept[AnalysisException](spark.read.format(cls.getName).load())
-        assert(e.message.contains("requires a user-supplied schema"))
+        val e = intercept[IllegalArgumentException](spark.read.format(cls.getName).load())
+        assert(e.getMessage.contains("requires a user-supplied schema"))
 
         val schema = new StructType().add("i", "int").add("s", "string")
         val df = spark.read.format(cls.getName).schema(schema).load()
@@ -455,15 +454,20 @@ class AdvancedInputPartition(start: Int, end: Int, requiredSchema: StructType)
 }
 
 
-class SchemaRequiredDataSource extends DataSourceV2 with ReadSupportWithSchema {
+class SchemaRequiredDataSource extends DataSourceV2 with ReadSupport {
 
   class Reader(val readSchema: StructType) extends DataSourceReader {
     override def planInputPartitions(): JList[InputPartition[InternalRow]] =
       java.util.Collections.emptyList()
   }
 
-  override def createReader(schema: StructType, options: DataSourceOptions): DataSourceReader =
+  override def createReader(options: DataSourceOptions): DataSourceReader = {
+    throw new IllegalArgumentException("requires a user-supplied schema")
+  }
+
+  override def createReader(schema: StructType, options: DataSourceOptions): DataSourceReader = {
     new Reader(schema)
+  }
 }
 
 class BatchDataSourceV2 extends DataSourceV2 with ReadSupport {
