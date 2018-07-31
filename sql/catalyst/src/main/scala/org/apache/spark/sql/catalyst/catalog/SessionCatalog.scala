@@ -684,6 +684,7 @@ class SessionCatalog(
    *
    * If the relation is a view, we generate a [[View]] operator from the view description, and
    * wrap the logical plan in a [[SubqueryAlias]] which will track the name of the view.
+   * [[SubqueryAlias]] will also keep track of the name and database(optional) of the table/view
    *
    * @param name The name of the table/view that we look up.
    */
@@ -691,9 +692,11 @@ class SessionCatalog(
     synchronized {
       val db = formatDatabaseName(name.database.getOrElse(currentDb))
       val table = formatTableName(name.table)
+      // To keep track of the name and database of the table/view
+      val alias = AliasIdentifier(table, Some(db))
       if (db == globalTempViewManager.database) {
         globalTempViewManager.get(table).map { viewDef =>
-          SubqueryAlias(table, viewDef)
+          SubqueryAlias(alias, viewDef)
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempViews.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
@@ -706,9 +709,9 @@ class SessionCatalog(
             desc = metadata,
             output = metadata.schema.toAttributes,
             child = parser.parsePlan(viewText))
-          SubqueryAlias(table, child)
+          SubqueryAlias(alias, child)
         } else {
-          SubqueryAlias(table, UnresolvedCatalogRelation(metadata))
+          SubqueryAlias(alias, UnresolvedCatalogRelation(metadata))
         }
       } else {
         SubqueryAlias(table, tempViews(table))

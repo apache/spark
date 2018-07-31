@@ -1967,6 +1967,22 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("column resolution scenarios with hive table") {
+    val currentDb = spark.catalog.currentDatabase
+    withTempDatabase { db1 =>
+      try {
+        spark.catalog.setCurrentDatabase(db1)
+        spark.sql("CREATE TABLE t1(i1 int) STORED AS parquet")
+        spark.sql("INSERT INTO t1 VALUES(1)")
+        checkAnswer(spark.sql(s"SELECT $db1.t1.i1 FROM t1"), Row(1))
+        checkAnswer(spark.sql(s"SELECT $db1.t1.i1 FROM $db1.t1"), Row(1))
+        checkAnswer(spark.sql(s"SELECT $db1.t1.* FROM $db1.t1"), Row(1))
+      } finally {
+        spark.catalog.setCurrentDatabase(currentDb)
+      }
+    }
+  }
+
   test("SPARK-17409: Do Not Optimize Query in CTAS (Hive Serde Table) More Than Once") {
     withTable("bar") {
       withTempView("foo") {
