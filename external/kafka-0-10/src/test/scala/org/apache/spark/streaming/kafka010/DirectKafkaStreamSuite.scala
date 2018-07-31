@@ -569,7 +569,6 @@ class DirectKafkaStreamSuite
       .setMaster("local[1]")
       .setAppName(this.getClass.getSimpleName)
       .set("spark.streaming.kafka.maxRatePerPartition", "100")
-      .set("spark.streaming.kafka.buffer.minRecordsPerPartition", "10000")
 
     // Setup the streaming context
     ssc = new StreamingContext(sparkConf, Milliseconds(batchIntervalMilliseconds))
