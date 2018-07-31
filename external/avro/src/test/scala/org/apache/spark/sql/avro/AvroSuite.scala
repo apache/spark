@@ -41,6 +41,7 @@ import org.apache.spark.sql.types._
 class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   val episodesAvro = testFile("episodes.avro")
   val testAvro = testFile("test.avro")
+  val timestampAvro = testFile("timestamp.avro")
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -329,6 +330,63 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         spark.read.format("avro").load(dir.toString).select("date").collect().map(_(0)).toSet ==
         Array(null, 1451865600000L, 1459987200000L).toSet)
     }
+  }
+
+  test("Logical type: timestamp_millis") {
+    val sparkSession = spark
+    import sparkSession.implicits._
+
+    val expected =
+      Seq(1L, 666L).toDF("timestamp_millis").select('timestamp_millis.cast(TimestampType)).collect()
+    val df = spark.read.format("avro").load(timestampAvro).select('timestamp_millis)
+
+    checkAnswer(df, expected)
+
+    withTempPath { dir =>
+      df.write.format("avro").save(dir.toString)
+      checkAnswer(spark.read.format("avro").load(dir.toString), expected)
+    }
+  }
+
+  test("Logical type: timestamp_micros") {
+    val sparkSession = spark
+    import sparkSession.implicits._
+
+    val expected =
+      Seq(2L, 999L).toDF("timestamp_micros").select('timestamp_micros.cast(TimestampType)).collect()
+    val df = spark.read.format("avro").load(timestampAvro).select('timestamp_micros)
+
+    checkAnswer(df, expected)
+
+    withTempPath { dir =>
+      df.write.format("avro").save(dir.toString)
+      checkAnswer(spark.read.format("avro").load(dir.toString), expected)
+    }
+  }
+
+  test("Logical type: user specified schema") {
+    val sparkSession = spark
+    import sparkSession.implicits._
+
+    val expected = Seq((1L, 2L), (666L, 999L))
+      .toDF("timestamp_millis", "timestamp_micros")
+      .select('timestamp_millis.cast(TimestampType), 'timestamp_micros.cast(TimestampType))
+      .collect()
+
+    val avroSchema = s"""
+      {
+        "namespace": "logical",
+        "type": "record",
+        "name": "test",
+        "fields": [
+          {"name": "timestamp_millis", "type": {"type": "long","logicalType": "timestamp-millis"}},
+          {"name": "timestamp_micros", "type": {"type": "long","logicalType": "timestamp-micros"}}
+        ]
+      }
+    """
+    val df = spark.read.format("avro").option("avroSchema", avroSchema).load(timestampAvro)
+
+    checkAnswer(df, expected)
   }
 
   test("Array data types") {

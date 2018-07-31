@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.avro.{Schema, SchemaBuilder}
+import org.apache.avro.LogicalTypes.{TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.generic._
 import org.apache.avro.util.Utf8
@@ -71,7 +72,15 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
   private def newWriter(
       avroType: Schema,
       catalystType: DataType,
-      path: List[String]): (CatalystDataUpdater, Int, Any) => Unit =
+      path: List[String]): (CatalystDataUpdater, Int, Any) => Unit = {
+    (avroType.getLogicalType, catalystType) match {
+      case (_: TimestampMillis, TimestampType) => return (updater, ordinal, value) =>
+        updater.setLong(ordinal, value.asInstanceOf[Long] * 1000)
+      case (_: TimestampMicros, TimestampType) => return (updater, ordinal, value) =>
+        updater.setLong(ordinal, value.asInstanceOf[Long])
+      case _ =>
+    }
+
     (avroType.getType, catalystType) match {
       case (NULL, NullType) => (updater, ordinal, _) =>
         updater.setNullAt(ordinal)
@@ -246,6 +255,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
             s"Source Avro schema: $rootAvroType.\n" +
             s"Target Catalyst type: $rootCatalystType")
     }
+  }
 
   private def getRecordWriter(
       avroType: Schema,

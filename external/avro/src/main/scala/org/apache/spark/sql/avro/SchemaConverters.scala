@@ -19,7 +19,8 @@ package org.apache.spark.sql.avro
 
 import scala.collection.JavaConverters._
 
-import org.apache.avro.{Schema, SchemaBuilder}
+import org.apache.avro.{LogicalType, Schema, SchemaBuilder}
+import org.apache.avro.LogicalTypes.{TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 
 import org.apache.spark.sql.types._
@@ -35,6 +36,12 @@ object SchemaConverters {
    * This function takes an avro schema and returns a sql schema.
    */
   def toSqlType(avroSchema: Schema): SchemaType = {
+    avroSchema.getLogicalType match {
+      case _: TimestampMillis | _: TimestampMicros =>
+        return SchemaType(TimestampType, nullable = false)
+      case _ =>
+    }
+
     avroSchema.getType match {
       case INT => SchemaType(IntegerType, nullable = false)
       case STRING => SchemaType(StringType, nullable = false)
@@ -114,7 +121,10 @@ object SchemaConverters {
       case ByteType | ShortType | IntegerType => builder.intType()
       case LongType => builder.longType()
       case DateType => builder.longType()
-      case TimestampType => builder.longType()
+      case TimestampType =>
+        // To be consistent with the previous behavior of writing Timestamp type with Avro 1.7,
+        // the default output Avro Timestamp type is with millisecond precision.
+        builder.longBuilder().prop(LogicalType.LOGICAL_TYPE_PROP, "timestamp-millis").endLong()
       case FloatType => builder.floatType()
       case DoubleType => builder.doubleType()
       case _: DecimalType | StringType => builder.stringType()
