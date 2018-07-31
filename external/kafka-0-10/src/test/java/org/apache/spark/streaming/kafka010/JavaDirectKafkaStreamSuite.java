@@ -163,7 +163,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     ssc.start();
     long startTime = System.currentTimeMillis();
     boolean matches = false;
-    while (!matches && System.currentTimeMillis() - startTime < 20000) {
+    while (!matches && System.currentTimeMillis() - startTime < 300000) {
       matches = sent.size() == result.size();
       Thread.sleep(50);
     }

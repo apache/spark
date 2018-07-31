@@ -17,9 +17,9 @@
 
 package org.apache.spark.streaming.kafka010
 
-import java.{ util => ju }
+import java.{util => ju}
 
-import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord }
+import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
@@ -28,6 +28,9 @@ import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.kafka010.consumer.{SparkKafkaConsumer, SparkKafkaConsumerBuilder}
+import org.apache.spark.streaming.kafka010.consumer.sync.SyncSparkKafkaConsumerBuilder
+import org.apache.spark.util.Utils
 
 /**
  * A batch-oriented interface for consuming from Kafka.
@@ -46,11 +49,11 @@ import org.apache.spark.storage.StorageLevel
  * @tparam V type of Kafka message value
  */
 private[spark] class KafkaRDD[K, V](
-    sc: SparkContext,
-    val kafkaParams: ju.Map[String, Object],
-    val offsetRanges: Array[OffsetRange],
-    val preferredHosts: ju.Map[TopicPartition, String],
-    useConsumerCache: Boolean
+   sc: SparkContext,
+   val kafkaParams: ju.Map[String, Object],
+   val offsetRanges: Array[OffsetRange],
+   val preferredHosts: ju.Map[TopicPartition, String],
+   useConsumerCache: Boolean
 ) extends RDD[ConsumerRecord[K, V]](sc, Nil) with Logging with HasOffsetRanges {
 
   require("none" ==
@@ -76,8 +79,14 @@ private[spark] class KafkaRDD[K, V](
     conf.getBoolean("spark.streaming.kafka.allowNonConsecutiveOffsets", false)
   private val maintainBufferMin =
     conf.getInt("spark.streaming.kafka.buffer.minRecordsPerPartition", 0)
-  private val asyncBufferThread =
-    conf.getInt("spark.streaming.kafka.buffer.async.threads", 1)
+
+  private val defaultConsumerBuilder: String =
+    classOf[SyncSparkKafkaConsumerBuilder[_, _]].getCanonicalName
+  private val consumerBuilder = conf.get("spark.streaming.kafka.consumer.builder.name",
+    defaultConsumerBuilder)
+
+  private val consumerBuilderConfs =
+    conf.getAllWithPrefix("spark.streaming.kafka.consumer.builder.config.")
 
   override def persist(newLevel: StorageLevel): this.type = {
     logError("Kafka ConsumerRecord is not serializable. " +
@@ -199,16 +208,23 @@ private[spark] class KafkaRDD[K, V](
     } else {
       logInfo(s"Computing topic ${part.topic}, partition ${part.partition} " +
         s"offsets ${part.fromOffset} -> ${part.untilOffset}")
+
+      val consumerBuilderConfig: ju.Map[String, String] = new ju.HashMap[String, String]
+      consumerBuilderConfs.foreach(r => consumerBuilderConfig.put(r._1, r._2))
+      var consumerInstance = Utils.classForName(getValidConsumerBuilder)
+        .newInstance().asInstanceOf[SparkKafkaConsumerBuilder[K, V]]
+        .init(part.topicPartition(), kafkaParams, consumerBuilderConfig, pollTimeout)
+
       if (compacted) {
         new CompactedKafkaRDDIterator[K, V](
           part,
           context,
           kafkaParams,
           useConsumerCache,
-          pollTimeout,
           cacheInitialCapacity,
           cacheMaxCapacity,
-          cacheLoadFactor
+          cacheLoadFactor,
+          consumerInstance
         )
       } else {
         new KafkaRDDIterator[K, V](
@@ -216,16 +232,29 @@ private[spark] class KafkaRDD[K, V](
           context,
           kafkaParams,
           useConsumerCache,
-          pollTimeout,
           cacheInitialCapacity,
           cacheMaxCapacity,
           cacheLoadFactor,
-          maintainBufferMin,
-          asyncBufferThread
+          consumerInstance
         )
       }
     }
   }
+
+  private def getValidConsumerBuilder(): String = {
+    var builder: String = defaultConsumerBuilder;
+    try {
+      builder = Utils.classForName(consumerBuilder).getCanonicalName
+    } catch {
+      case x: Exception =>
+        logError(s"Error finding consumerBuilder $consumerBuilder $x. " +
+          "Defaulting to " +
+          defaultConsumerBuilder
+        )
+    }
+    builder
+  }
+
 }
 
 /**
@@ -237,22 +266,20 @@ private class KafkaRDDIterator[K, V](
   context: TaskContext,
   kafkaParams: ju.Map[String, Object],
   useConsumerCache: Boolean,
-  pollTimeout: Long,
   cacheInitialCapacity: Int,
   cacheMaxCapacity: Int,
   cacheLoadFactor: Float,
-  maintainBufferMin: Int,
-  asyncBufferThread: Int
+  consumerBuilder: SparkKafkaConsumer[K, V]
 ) extends Iterator[ConsumerRecord[K, V]] {
 
   context.addTaskCompletionListener(_ => closeIfNeeded())
 
   val consumer = {
     KafkaDataConsumer.init(
-      cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor, asyncBufferThread
+      cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor
     )
     KafkaDataConsumer.acquire[K, V](
-      part.topicPartition(), kafkaParams, context, useConsumerCache, maintainBufferMin
+      part.topicPartition(), kafkaParams, context, useConsumerCache, consumerBuilder
     )
   }
 
@@ -270,7 +297,7 @@ private class KafkaRDDIterator[K, V](
     if (!hasNext) {
       throw new ju.NoSuchElementException("Can't call getNext() once untilOffset has been reached")
     }
-    val r = consumer.get(requestOffset, pollTimeout)
+    val r = consumer.get(requestOffset)
     requestOffset += 1
     r
   }
@@ -286,26 +313,24 @@ private class CompactedKafkaRDDIterator[K, V](
     context: TaskContext,
     kafkaParams: ju.Map[String, Object],
     useConsumerCache: Boolean,
-    pollTimeout: Long,
     cacheInitialCapacity: Int,
     cacheMaxCapacity: Int,
-    cacheLoadFactor: Float
+    cacheLoadFactor: Float,
+    sparkKafkaConsumer: SparkKafkaConsumer[K, V]
   ) extends KafkaRDDIterator[K, V](
     part,
     context,
     kafkaParams,
     useConsumerCache,
-    pollTimeout,
     cacheInitialCapacity,
     cacheMaxCapacity,
     cacheLoadFactor,
-    0,
-    1
+    sparkKafkaConsumer
   ) {
 
-  consumer.compactedStart(part.fromOffset, pollTimeout)
+  consumer.compactedStart(part.fromOffset)
 
-  private var nextRecord = consumer.compactedNext(pollTimeout)
+  private var nextRecord = consumer.compactedNext()
 
   private var okNext: Boolean = true
 
@@ -319,7 +344,7 @@ private class CompactedKafkaRDDIterator[K, V](
     if (r.offset + 1 >= part.untilOffset) {
       okNext = false
     } else {
-      nextRecord = consumer.compactedNext(pollTimeout)
+      nextRecord = consumer.compactedNext()
       if (nextRecord.offset >= part.untilOffset) {
         okNext = false
         consumer.compactedPrevious()
