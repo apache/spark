@@ -50,11 +50,7 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
   override def output: Seq[Attribute] = Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val writeTask = writer match {
-      case w: SupportsWriteInternalRow => w.createInternalRowWriterFactory()
-      case _ => new InternalRowDataWriterFactory(writer.createWriterFactory(), query.schema)
-    }
-
+    val writeTask = writer.createWriterFactory()
     val useCommitCoordinator = writer.useCommitCoordinator
     val rdd = query.execute()
     val messages = new Array[WriterCommitMessage](rdd.partitions.length)

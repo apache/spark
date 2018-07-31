@@ -41,11 +41,7 @@ case class WriteToContinuousDataSourceExec(writer: StreamWriter, query: SparkPla
   override def output: Seq[Attribute] = Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val writerFactory = writer match {
-      case w: SupportsWriteInternalRow => w.createInternalRowWriterFactory()
-      case _ => new InternalRowDataWriterFactory(writer.createWriterFactory(), query.schema)
-    }
-
+    val writerFactory = writer.createWriterFactory()
     val rdd = new ContinuousWriteRDD(query.execute(), writerFactory)
 
     logInfo(s"Start processing data source writer: $writer. " +
