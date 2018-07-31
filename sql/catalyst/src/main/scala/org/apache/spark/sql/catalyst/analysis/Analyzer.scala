@@ -2124,9 +2124,6 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
       case p if p.resolved => p
       case p => p transformExpressionsUp {
-        // Produces a placeholder random seed for streaming query, the real random seed
-        // is given at the beginning of Optimizer.
-        case Uuid(None) if p.isStreaming => Uuid(Some(-1))
         case Uuid(None) => Uuid(Some(random.nextLong()))
       }
     }
