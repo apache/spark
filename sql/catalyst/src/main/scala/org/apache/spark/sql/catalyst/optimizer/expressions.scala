@@ -429,14 +429,10 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
             i -= 1
           }
         }
-        if (i != branches.length) {
-          if (i == 0) {
-            elseValue
-          } else {
-            e.copy(branches = branches.take(i))
-          }
+        if (i == 0) {
+          elseValue
         } else {
-          e
+          e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
         }
     }
   }
