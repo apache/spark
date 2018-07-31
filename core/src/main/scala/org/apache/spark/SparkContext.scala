@@ -1496,6 +1496,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param path can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), or an HTTP, HTTPS or FTP URI. To access the file in Spark jobs,
    * use `SparkFiles.get(fileName)` to find its download location.
+   *
+   * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addFile(path: String): Unit = {
     addFile(path, false)
@@ -1516,11 +1518,17 @@ class SparkContext(config: SparkConf) extends Logging {
    * use `SparkFiles.get(fileName)` to find its download location.
    * @param recursive if true, a directory can be given in `path`. Currently directories are
    * only supported for Hadoop-supported filesystems.
+   *
+   * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addFile(path: String, recursive: Boolean): Unit = {
     val uri = new Path(path).toUri
     val schemeCorrectedPath = uri.getScheme match {
-      case null | "local" => new File(path).getCanonicalFile.toURI.toString
+      case null => new File(path).getCanonicalFile.toURI.toString
+      case "local" =>
+        logWarning("File with 'local' scheme is not supported to add to file server, since " +
+          "it is already available on every node.")
+        return
       case _ => path
     }
 
@@ -1555,6 +1563,9 @@ class SparkContext(config: SparkConf) extends Logging {
       Utils.fetchFile(uri.toString, new File(SparkFiles.getRootDirectory()), conf,
         env.securityManager, hadoopConfiguration, timestamp, useCache = false)
       postEnvironmentUpdate()
+    } else {
+      logWarning(s"The path $path has been added already. Overwriting of added paths " +
+       "is not supported in the current version.")
     }
   }
 
@@ -1803,6 +1814,8 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @param path can be either a local file, a file in HDFS (or other Hadoop-supported filesystems),
    * an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
+   *
+   * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addJar(path: String) {
     def addJarFile(file: File): String = {
@@ -1849,6 +1862,9 @@ class SparkContext(config: SparkConf) extends Logging {
         if (addedJars.putIfAbsent(key, timestamp).isEmpty) {
           logInfo(s"Added JAR $path at $key with timestamp $timestamp")
           postEnvironmentUpdate()
+        } else {
+          logWarning(s"The jar $path has been added already. Overwriting of added jars " +
+            "is not supported in the current version.")
         }
       }
     }

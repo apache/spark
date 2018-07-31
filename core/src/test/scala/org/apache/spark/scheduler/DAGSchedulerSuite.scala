@@ -1055,6 +1055,64 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(sparkListener.failedStages.size == 1)
   }
 
+  test("Retry all the tasks on a resubmitted attempt of a barrier stage caused by FetchFailure") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil).barrier().mapPartitions((it, context) => it)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1))
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", reduceRdd.partitions.length)),
+      (Success, makeMapStatus("hostB", reduceRdd.partitions.length))))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq.empty))
+
+    // The first result task fails, with a fetch failure for the output from the first mapper.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"),
+      null))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq(0, 1)))
+
+    scheduler.resubmitFailedStages()
+    // Complete the map stage.
+    completeShuffleMapStageSuccessfully(0, 1, numShufflePartitions = 2)
+
+    // Complete the result stage.
+    completeNextResultStageWithSuccess(1, 1)
+
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assertDataStructuresEmpty()
+  }
+
+  test("Retry all the tasks on a resubmitted attempt of a barrier stage caused by TaskKilled") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil).barrier().mapPartitions((it, context) => it)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1))
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", reduceRdd.partitions.length))))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq(1)))
+
+    // The second map task fails with TaskKilled.
+    runEvent(makeCompletionEvent(
+      taskSets(0).tasks(1),
+      TaskKilled("test"),
+      null))
+    assert(sparkListener.failedStages === Seq(0))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq(0, 1)))
+
+    scheduler.resubmitFailedStages()
+    // Complete the map stage.
+    completeShuffleMapStageSuccessfully(0, 1, numShufflePartitions = 2)
+
+    // Complete the result stage.
+    completeNextResultStageWithSuccess(1, 0)
+
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assertDataStructuresEmpty()
+  }
+
   /**
    * This tests the case where another FetchFailed comes in while the map stage is getting
    * re-run.

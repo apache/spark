@@ -21,6 +21,7 @@ import java.util.TimeZone
 
 import org.scalatest.Matchers
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -315,7 +316,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     // only primitive parameter needs special null handling
     val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil)
-    val expected2 = If(IsNull(double), nullResult, udf2)
+    val expected2 =
+      If(IsNull(double), nullResult, udf2.copy(children = string :: KnowNotNull(double) :: Nil))
     checkUDF(udf2, expected2)
 
     // special null handling should apply to all primitive parameters
@@ -323,7 +325,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val expected3 = If(
       IsNull(short) || IsNull(double),
       nullResult,
-      udf3)
+      udf3.copy(children = KnowNotNull(short) :: KnowNotNull(double) :: Nil))
     checkUDF(udf3, expected3)
 
     // we can skip special null handling for primitive parameters that are not nullable
@@ -335,8 +337,17 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val expected4 = If(
       IsNull(short),
       nullResult,
-      udf4)
+      udf4.copy(children = KnowNotNull(short) :: double.withNullability(false) :: Nil))
     // checkUDF(udf4, expected4)
+  }
+
+  test("SPARK-24891 Fix HandleNullInputsForUDF rule") {
+    val a = testRelation.output(0)
+    val func = (x: Int, y: Int) => x + y
+    val udf1 = ScalaUDF(func, IntegerType, a :: a :: Nil)
+    val udf2 = ScalaUDF(func, IntegerType, a :: udf1 :: Nil)
+    val plan = Project(Alias(udf2, "")() :: Nil, testRelation)
+    comparePlans(plan.analyze, plan.analyze.analyze)
   }
 
   test("SPARK-11863 mixture of aliases and real columns in order by clause - tpcds 19,55,71") {
@@ -544,17 +555,28 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
   }
 
-  test("SPARK-20392: analysis barrier") {
-    // [[AnalysisBarrier]] will be removed after analysis
-    checkAnalysis(
-      Project(Seq(UnresolvedAttribute("tbl.a")),
-        AnalysisBarrier(SubqueryAlias("tbl", testRelation))),
-      Project(testRelation.output, SubqueryAlias("tbl", testRelation)))
+  test("SPARK-24208: analysis fails on self-join with FlatMapGroupsInPandas") {
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("a", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+      true)
+    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
+    val flatMapGroupsInPandas = FlatMapGroupsInPandas(
+      Seq(UnresolvedAttribute("a")), pythonUdf, output, project)
+    val left = SubqueryAlias("temp0", flatMapGroupsInPandas)
+    val right = SubqueryAlias("temp1", flatMapGroupsInPandas)
+    val join = Join(left, right, Inner, None)
+    assertAnalysisSuccess(
+      Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
+  }
 
-    // Verify we won't go through a plan wrapped in a barrier.
-    // Since we wrap an unresolved plan and analyzer won't go through it. It remains unresolved.
-    val barrier = AnalysisBarrier(Project(Seq(UnresolvedAttribute("tbl.b")),
-      SubqueryAlias("tbl", testRelation)))
-    assertAnalysisError(barrier, Seq("cannot resolve '`tbl.b`'"))
+  test("SPARK-24488 Generator with multiple aliases") {
+    assertAnalysisSuccess(
+      listRelation.select(Explode('list).as("first_alias").as("second_alias")))
+    assertAnalysisSuccess(
+      listRelation.select(MultiAlias(MultiAlias(
+        PosExplode('list), Seq("first_pos", "first_val")), Seq("second_pos", "second_val"))))
   }
 }

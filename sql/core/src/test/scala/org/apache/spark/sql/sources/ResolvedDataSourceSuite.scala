@@ -77,19 +77,9 @@ class ResolvedDataSourceSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("error message for unknown data sources") {
-    val error1 = intercept[AnalysisException] {
-      getProvidingClass("avro")
-    }
-    assert(error1.getMessage.contains("Failed to find data source: avro."))
-
-    val error2 = intercept[AnalysisException] {
-      getProvidingClass("com.databricks.spark.avro")
-    }
-    assert(error2.getMessage.contains("Failed to find data source: com.databricks.spark.avro."))
-
-    val error3 = intercept[ClassNotFoundException] {
+    val error = intercept[ClassNotFoundException] {
       getProvidingClass("asfdwefasdfasdf")
     }
-    assert(error3.getMessage.contains("Failed to find data source: asfdwefasdfasdf."))
+    assert(error.getMessage.contains("Failed to find data source: asfdwefasdfasdf."))
   }
 }
