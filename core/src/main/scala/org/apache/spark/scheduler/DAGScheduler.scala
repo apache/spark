@@ -39,7 +39,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.rdd.{RDD, RDDCheckpointData}
+import org.apache.spark.rdd.{PartitionPruningRDD, RDD, RDDCheckpointData}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -341,6 +341,18 @@ class DAGScheduler(
   }
 
   /**
+   * Check to make sure we are not launching a barrier stage that contains PartitionPruningRDD,
+   * which may launch tasks on partial partitions.
+   */
+  private def checkBarrierStageWithPartitionPruningRDD(rdd: RDD[_]): Unit = {
+    if (rdd.isBarrier() &&
+        !traverseParentRDDsWithinStage(rdd, (r => !r.isInstanceOf[PartitionPruningRDD[_]]))) {
+      throw new SparkException("Don't support run a barrier stage that contains " +
+        "PartitionPruningRDD, because PartitionPruningRDD may launch tasks on partial partitions.")
+    }
+  }
+
+  /**
    * Creates a ShuffleMapStage that generates the given shuffle dependency's partitions. If a
    * previously run stage generated the same shuffle data, this function will copy the output
    * locations that are still available from the previous shuffle to avoid unnecessarily
@@ -348,6 +360,7 @@ class DAGScheduler(
    */
   def createShuffleMapStage(shuffleDep: ShuffleDependency[_, _, _], jobId: Int): ShuffleMapStage = {
     val rdd = shuffleDep.rdd
+    checkBarrierStageWithPartitionPruningRDD(rdd)
     val numTasks = rdd.partitions.length
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
@@ -376,6 +389,7 @@ class DAGScheduler(
       partitions: Array[Int],
       jobId: Int,
       callSite: CallSite): ResultStage = {
+    checkBarrierStageWithPartitionPruningRDD(rdd)
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
     val stage = new ResultStage(id, rdd, func, partitions, parents, jobId, callSite)
@@ -449,6 +463,32 @@ class DAGScheduler(
       }
     }
     parents
+  }
+
+  /**
+   * Traverse all the parent RDDs within the same stage with the given RDD, check whether all the
+   * parent RDDs satisfy a given predicate.
+   */
+  private def traverseParentRDDsWithinStage(rdd: RDD[_], predicate: RDD[_] => Boolean): Boolean = {
+    val visited = new HashSet[RDD[_]]
+    val waitingForVisit = new ArrayStack[RDD[_]]
+    waitingForVisit.push(rdd)
+    while (waitingForVisit.nonEmpty) {
+      val toVisit = waitingForVisit.pop()
+      if (!visited(toVisit)) {
+        if (!predicate(toVisit)) {
+          return false
+        }
+        visited += toVisit
+        toVisit.dependencies.foreach {
+          case shuffleDep: ShuffleDependency[_, _, _] =>
+            // Not within the same stage with current rdd, do nothing.
+          case dependency =>
+            waitingForVisit.push(dependency.rdd)
+        }
+      }
+    }
+    true
   }
 
   private def getMissingParentStages(stage: Stage): List[Stage] = {
