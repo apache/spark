@@ -134,7 +134,7 @@ SELECT k FROM tab2 GROUP BY k;
 -- from left to right as they appear in the query.
 
 -- Set the property
-SET spark.sql.setops.precedence.enforced = false;
+SET spark.sql.legacy.setopsPrecedence.enabled= true;
 
 SELECT * FROM tab1
 EXCEPT
@@ -153,7 +153,7 @@ INTERSECT
 SELECT * FROM tab2;
 
 -- Restore the property
-SET spark.sql.setops.precedence.enforced = true;
+SET spark.sql.legacy.setopsPrecedence.enabled = false;
 
 -- Clean-up 
 DROP VIEW IF EXISTS tab1;

@@ -242,11 +242,11 @@ NULL
 
 
 -- !query 16
-SET spark.sql.setops.precedence.enforced = false
+SET spark.sql.legacy.setopsPrecedence.enabled= true
 -- !query 16 schema
 struct<key:string,value:string>
 -- !query 16 output
-spark.sql.setops.precedence.enforced	false
+spark.sql.legacy.setopsPrecedence.enabled	true
 
 
 -- !query 17
@@ -284,11 +284,11 @@ NULL	NULL
 
 
 -- !query 19
-SET spark.sql.setops.precedence.enforced = true
+SET spark.sql.legacy.setopsPrecedence.enabled = false
 -- !query 19 schema
 struct<key:string,value:string>
 -- !query 19 output
-spark.sql.setops.precedence.enforced	true
+spark.sql.legacy.setopsPrecedence.enabled	false
 
 
 -- !query 20

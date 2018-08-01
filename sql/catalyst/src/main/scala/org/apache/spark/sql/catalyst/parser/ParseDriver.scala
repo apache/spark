@@ -84,14 +84,14 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
-    lexer.setops_precedence_enforced = SQLConf.get.setOpsPrecedenceEnforced
+    lexer.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
     parser.addParseListener(PostProcessor)
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
-    parser.setops_precedence_enforced = SQLConf.get.setOpsPrecedenceEnforced
+    parser.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
 
     try {
       try {

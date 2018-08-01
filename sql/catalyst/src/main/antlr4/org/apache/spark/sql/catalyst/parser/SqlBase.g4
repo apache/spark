@@ -18,10 +18,10 @@ grammar SqlBase;
 
 @members {
   /**
-   * When true, INTERSECT is given the greater precedence over the other set
+   * When false, INTERSECT is given the greater precedence over the other set
    * operations (UNION, EXCEPT and MINUS) as per the SQL standard.
    */
-  public boolean setops_precedence_enforced = true;
+  public boolean legacy_setops_precedence_enbled = false;
 
   /**
    * Verify whether current token is a valid decimal token (which contains dot).
@@ -359,11 +359,11 @@ multiInsertQueryBody
 
 queryTerm
     : queryPrimary                                                                       #queryTermDefault
-    | left=queryTerm {!setops_precedence_enforced}?
+    | left=queryTerm {legacy_setops_precedence_enbled}?
         operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
-    | left=queryTerm {setops_precedence_enforced}?
+    | left=queryTerm {!legacy_setops_precedence_enbled}?
         operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
-    | left=queryTerm {setops_precedence_enforced}?
+    | left=queryTerm {!legacy_setops_precedence_enbled}?
         operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
     ;
 
