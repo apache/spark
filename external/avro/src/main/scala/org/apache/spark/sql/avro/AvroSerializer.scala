@@ -100,17 +100,20 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
           et, resolveNullableType(avroType.getElementType, containsNull))
         (getter, ordinal) => {
           val arrayData = getter.getArray(ordinal)
-          val result = new java.util.ArrayList[Any]
+          val len = arrayData.numElements()
+          val result = new Array[Any](len)
           var i = 0
-          while (i < arrayData.numElements()) {
-            if (arrayData.isNullAt(i)) {
-              result.add(null)
+          while (i < len) {
+            if (containsNull && arrayData.isNullAt(i)) {
+              result(i) = null
             } else {
-              result.add(elementConverter(arrayData, i))
+              result(i) = elementConverter(arrayData, i)
             }
             i += 1
           }
-          result
+          // avro writer is expecting a Java Collection, so we convert it into
+          // `ArrayList` backed by the specified array without data copying.
+          java.util.Arrays.asList(result: _*)
         }
 
       case st: StructType =>
@@ -123,13 +126,14 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
           vt, resolveNullableType(avroType.getValueType, valueContainsNull))
         (getter, ordinal) =>
           val mapData = getter.getMap(ordinal)
-          val result = new java.util.HashMap[String, Any](mapData.numElements())
+          val len = mapData.numElements()
+          val result = new java.util.HashMap[String, Any](len)
           val keyArray = mapData.keyArray()
           val valueArray = mapData.valueArray()
           var i = 0
-          while (i < mapData.numElements()) {
+          while (i < len) {
             val key = keyArray.getUTF8String(i).toString
-            if (valueArray.isNullAt(i)) {
+            if (valueContainsNull && valueArray.isNullAt(i)) {
               result.put(key, null)
             } else {
               result.put(key, valueConverter(valueArray, i))
@@ -151,11 +155,12 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       case (f1, f2) => newConverter(f1.dataType, resolveNullableType(f2.schema(), f1.nullable))
     }
     val numFields = catalystStruct.length
+    val containsNull = catalystStruct.exists(_.nullable)
     (row: InternalRow) =>
       val result = new Record(avroStruct)
       var i = 0
       while (i < numFields) {
-        if (row.isNullAt(i)) {
+        if (containsNull && row.isNullAt(i)) {
           result.put(i, null)
         } else {
           result.put(i, fieldConverters(i).apply(row, i))
