@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StreamingAggregationStateManager}
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -65,7 +65,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
 
   def testWithAllStateVersions(name: String, confPairs: (String, String)*)
                               (func: => Any): Unit = {
-    for (version <- StatefulOperatorsHelper.supportedVersions) {
+    for (version <- StreamingAggregationStateManager.supportedVersions) {
       test(s"$name - state format version $version") {
         executeFuncWithStateVersionSQLConf(version, confPairs, func)
       }
@@ -74,7 +74,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
 
   def testQuietlyWithAllStateVersions(name: String, confPairs: (String, String)*)
                                      (func: => Any): Unit = {
-    for (version <- StatefulOperatorsHelper.supportedVersions) {
+    for (version <- StreamingAggregationStateManager.supportedVersions) {
       testQuietly(s"$name - state format version $version") {
         executeFuncWithStateVersionSQLConf(version, confPairs, func)
       }

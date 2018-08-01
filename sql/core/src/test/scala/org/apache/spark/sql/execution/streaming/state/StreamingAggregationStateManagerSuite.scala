@@ -19,11 +19,10 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.execution.streaming.StatefulOperatorsHelper.StreamingAggregationStateManager
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
-class StatefulOperatorsHelperSuite extends StreamTest {
+class StreamingAggregationStateManagerSuite extends StreamTest {
   // ============================ fields and method for test data ============================
 
   val testKeys: Seq[String] = Seq("key1", "key2")

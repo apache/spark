@@ -20,8 +20,12 @@ package org.apache.spark.sql.execution.streaming
 import scala.reflect.ClassTag
 
 import org.apache.spark.TaskContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateUnsafeRowJoiner}
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 
@@ -81,4 +85,110 @@ package object state {
         storeCoordinator)
     }
   }
+
+  sealed trait StreamingAggregationStateManager extends Serializable {
+    def getKey(row: InternalRow): UnsafeRow
+    def getStateValueSchema: StructType
+    def restoreOriginRow(rowPair: UnsafeRowPair): UnsafeRow
+    def get(store: StateStore, key: UnsafeRow): UnsafeRow
+    def put(store: StateStore, row: UnsafeRow): Unit
+  }
+
+  object StreamingAggregationStateManager extends Logging {
+    val supportedVersions = Seq(1, 2)
+    val legacyVersion = 1
+
+    def createStateManager(
+        keyExpressions: Seq[Attribute],
+        inputRowAttributes: Seq[Attribute],
+        stateFormatVersion: Int): StreamingAggregationStateManager = {
+      stateFormatVersion match {
+        case 1 => new StreamingAggregationStateManagerImplV1(keyExpressions, inputRowAttributes)
+        case 2 => new StreamingAggregationStateManagerImplV2(keyExpressions, inputRowAttributes)
+        case _ => throw new IllegalArgumentException(s"Version $stateFormatVersion is invalid")
+      }
+    }
+  }
+
+  abstract class StreamingAggregationStateManagerBaseImpl(
+      protected val keyExpressions: Seq[Attribute],
+      protected val inputRowAttributes: Seq[Attribute]) extends StreamingAggregationStateManager {
+
+    @transient protected lazy val keyProjector =
+      GenerateUnsafeProjection.generate(keyExpressions, inputRowAttributes)
+
+    def getKey(row: InternalRow): UnsafeRow = keyProjector(row)
+  }
+
+  class StreamingAggregationStateManagerImplV1(
+      keyExpressions: Seq[Attribute],
+      inputRowAttributes: Seq[Attribute])
+    extends StreamingAggregationStateManagerBaseImpl(keyExpressions, inputRowAttributes) {
+
+    override def getStateValueSchema: StructType = inputRowAttributes.toStructType
+
+    override def restoreOriginRow(rowPair: UnsafeRowPair): UnsafeRow = {
+      rowPair.value
+    }
+
+    override def get(store: StateStore, key: UnsafeRow): UnsafeRow = {
+      store.get(key)
+    }
+
+    override def put(store: StateStore, row: UnsafeRow): Unit = {
+      store.put(getKey(row), row)
+    }
+  }
+
+  class StreamingAggregationStateManagerImplV2(
+      keyExpressions: Seq[Attribute],
+      inputRowAttributes: Seq[Attribute])
+    extends StreamingAggregationStateManagerBaseImpl(keyExpressions, inputRowAttributes) {
+
+    private val valueExpressions: Seq[Attribute] = inputRowAttributes.diff(keyExpressions)
+    private val keyValueJoinedExpressions: Seq[Attribute] = keyExpressions ++ valueExpressions
+    private val needToProjectToRestoreValue: Boolean =
+      keyValueJoinedExpressions != inputRowAttributes
+
+    @transient private lazy val valueProjector =
+      GenerateUnsafeProjection.generate(valueExpressions, inputRowAttributes)
+
+    @transient private lazy val joiner =
+      GenerateUnsafeRowJoiner.create(StructType.fromAttributes(keyExpressions),
+        StructType.fromAttributes(valueExpressions))
+    @transient private lazy val restoreValueProjector = GenerateUnsafeProjection.generate(
+      keyValueJoinedExpressions, inputRowAttributes)
+
+    override def getStateValueSchema: StructType = valueExpressions.toStructType
+
+    override def restoreOriginRow(rowPair: UnsafeRowPair): UnsafeRow = {
+      val joinedRow = joiner.join(rowPair.key, rowPair.value)
+      if (needToProjectToRestoreValue) {
+        restoreValueProjector(joinedRow)
+      } else {
+        joinedRow
+      }
+    }
+
+    override def get(store: StateStore, key: UnsafeRow): UnsafeRow = {
+      val savedState = store.get(key)
+      if (savedState == null) {
+        return savedState
+      }
+
+      val joinedRow = joiner.join(key, savedState)
+      if (needToProjectToRestoreValue) {
+        restoreValueProjector(joinedRow)
+      } else {
+        joinedRow
+      }
+    }
+
+    override def put(store: StateStore, row: UnsafeRow): Unit = {
+      val key = keyProjector(row)
+      val value = valueProjector(row)
+      store.put(key, value)
+    }
+  }
+
 }

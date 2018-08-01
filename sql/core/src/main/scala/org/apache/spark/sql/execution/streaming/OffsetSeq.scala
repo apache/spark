@@ -22,7 +22,7 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.RuntimeConfig
-import org.apache.spark.sql.execution.streaming.state.FlatMapGroupsWithStateExecHelper
+import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, StreamingAggregationStateManager}
 import org.apache.spark.sql.internal.SQLConf.{FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION, _}
 
 /**
@@ -106,7 +106,7 @@ object OffsetSeqMetadata extends Logging {
     FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key ->
       FlatMapGroupsWithStateExecHelper.legacyVersion.toString,
     STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key ->
-      StatefulOperatorsHelper.legacyVersion.toString
+      StreamingAggregationStateManager.legacyVersion.toString
   )
 
   def apply(json: String): OffsetSeqMetadata = Serialization.read[OffsetSeqMetadata](json)
