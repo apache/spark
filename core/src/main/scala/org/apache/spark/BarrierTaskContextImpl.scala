@@ -26,7 +26,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc.{RpcEndpointRef, RpcTimeout}
-import org.apache.spark.util.RpcUtils
+import org.apache.spark.util.{RpcUtils, Utils}
 
 /** A [[BarrierTaskContext]] implementation. */
 private[spark] class BarrierTaskContextImpl(
@@ -53,11 +53,13 @@ private[spark] class BarrierTaskContextImpl(
 
   private var barrierEpoch = 0
 
-  private lazy val numTasks = localProperties.getProperty("numTasks", "0").toInt
+  private lazy val numTasks = getTaskInfos().size
 
   override def barrier(): Unit = {
+    val callSite = Utils.getCallSite()
     logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) has entered " +
       s"the global sync, current barrier epoch is $barrierEpoch.")
+    logTrace(s"Current callSite: $callSite")
 
     val startTime = System.currentTimeMillis()
     val timerTask = new TimerTask {
@@ -73,7 +75,10 @@ private[spark] class BarrierTaskContextImpl(
 
     try {
       barrierCoordinator.askSync[Unit](
-        message = RequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId, barrierEpoch),
+        message = RequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
+          barrierEpoch),
+        // Set a fixed timeout for RPC here, so users shall get a SparkException thrown by
+        // BarrierCoordinator on timeout, instead of RPCTimeoutException from the RPC framework.
         timeout = new RpcTimeout(31536000 /** = 3600 * 24 * 365 */ seconds, "barrierTimeout"))
       barrierEpoch += 1
       logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) finished " +

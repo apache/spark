@@ -25,6 +25,8 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
 
   test("global sync by barrier() call") {
     val conf = new SparkConf()
+      // Init local cluster here so each barrier task runs in a separated process, thus `barrier()`
+      // call is actually useful.
       .setMaster("local-cluster[4, 1, 1024]")
       .setAppName("test-cluster")
     sc = new SparkContext(conf)
@@ -38,7 +40,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
 
     val times = rdd2.collect()
     // All the tasks shall finish global sync within a short time slot.
-    assert(times.max - times.min <= 5)
+    assert(times.max - times.min <= 1000)
   }
 
   test("support multiple barrier() call within a single task") {
@@ -62,25 +64,25 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     val times = rdd2.collect()
     // All the tasks shall finish the first round of global sync within a short time slot.
     val times1 = times.map(_._1)
-    assert(times1.max - times1.min <= 5)
+    assert(times1.max - times1.min <= 1000)
 
     // All the tasks shall finish the second round of global sync within a short time slot.
     val times2 = times.map(_._2)
-    assert(times2.max - times2.min <= 5)
+    assert(times2.max - times2.min <= 1000)
   }
 
   test("throw exception on barrier() call timeout") {
     val conf = new SparkConf()
-      .set("spark.barrier.sync.timeout", "100")
+      .set("spark.barrier.sync.timeout", "1")
       .set("spark.test.noStageRetry", "true")
       .setMaster("local-cluster[4, 1, 1024]")
       .setAppName("test-cluster")
     sc = new SparkContext(conf)
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { (it, context) =>
-      // Task 3 shall sleep 200ms to ensure barrier() call timeout
+      // Task 3 shall sleep 2000ms to ensure barrier() call timeout
       if (context.taskAttemptId() == 3) {
-        Thread.sleep(200)
+        Thread.sleep(2000)
       }
       context.barrier()
       it
@@ -90,12 +92,12 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       rdd2.collect()
     }.getMessage
     assert(error.contains("The coordinator didn't get all barrier sync requests"))
-    assert(error.contains("within 100 ms"))
+    assert(error.contains("within 1s"))
   }
 
   test("throw exception if barrier() call doesn't happen on every task") {
     val conf = new SparkConf()
-      .set("spark.barrier.sync.timeout", "100")
+      .set("spark.barrier.sync.timeout", "1")
       .set("spark.test.noStageRetry", "true")
       .setMaster("local-cluster[4, 1, 1024]")
       .setAppName("test-cluster")
@@ -112,11 +114,12 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       rdd2.collect()
     }.getMessage
     assert(error.contains("The coordinator didn't get all barrier sync requests"))
-    assert(error.contains("within 100 ms"))
+    assert(error.contains("within 1s"))
   }
 
-  ignore("throw exception if barrier() call mismatched") {
+  test("throw exception if the number of barrier() calls are not the same on every task") {
     val conf = new SparkConf()
+      .set("spark.barrier.sync.timeout", "1")
       .set("spark.test.noStageRetry", "true")
       .setMaster("local-cluster[4, 1, 1024]")
       .setAppName("test-cluster")
@@ -139,6 +142,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     val error = intercept[SparkException] {
       rdd2.collect()
     }.getMessage
-    assert(error.contains("fails due to mismatched barrier epoch"))
+    assert(error.contains("The coordinator didn't get all barrier sync requests"))
+    assert(error.contains("within 1s"))
   }
 }

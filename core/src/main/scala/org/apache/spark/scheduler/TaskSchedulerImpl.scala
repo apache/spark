@@ -432,10 +432,7 @@ private[spark] class TaskSchedulerImpl(
             .sortBy(_._2.partitionId)
             .map(_._1)
             .mkString(",")
-          addressesWithDescs.foreach { case (_, taskDesc) =>
-            taskDesc.properties.setProperty("addresses", addressesStr)
-            taskDesc.properties.setProperty("numTasks", taskSet.numTasks.toString)
-          }
+          addressesWithDescs.foreach(_._2.properties.setProperty("addresses", addressesStr))
 
           logInfo(s"Successfully scheduled all the ${addressesWithDescs.size} tasks for barrier " +
             s"stage ${taskSet.stageId}.")
