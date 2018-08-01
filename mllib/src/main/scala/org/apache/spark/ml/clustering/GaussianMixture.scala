@@ -387,7 +387,8 @@ class GaussianMixture @Since("2.0.0") (
       bcGaussians.destroy(blocking = false)
 
       if (iter == 0) {
-        instr.logNumExamples(sums.count)
+        val numSamples = sums.count
+        instr.logNumExamples(numSamples)
       }
 
       /*

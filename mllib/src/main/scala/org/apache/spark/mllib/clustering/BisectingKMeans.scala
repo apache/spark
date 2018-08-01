@@ -246,10 +246,10 @@ class BisectingKMeans private (
   }
 
   /**
-    * Runs the bisecting k-means algorithm.
-    * @param input RDD of vectors
-    * @return model for the bisecting kmeans
-    */
+   * Runs the bisecting k-means algorithm.
+   * @param input RDD of vectors
+   * @return model for the bisecting kmeans
+   */
   @Since("1.6.0")
   private[spark] def run(input: RDD[Vector]): BisectingKMeansModel = run(input, None)
 
