@@ -22,6 +22,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.AvroOutputTimestampType
 
 /**
  * Options for Avro Reader and Writer stored in case insensitive manner.
@@ -87,7 +88,8 @@ class AvroOptions(
    * from the Unix epoch. TIMESTAMP_MILLIS is also logical, but with millisecond precision,
    * which means Spark has to truncate the microsecond portion of its timestamp value.
    */
-  val outputTimestampType: String = {
-    parameters.get("outputTimestampType").getOrElse(SQLConf.get.avroOutputTimestampType)
+  val outputTimestampType: AvroOutputTimestampType.Value = {
+    parameters.get("outputTimestampType").map(AvroOutputTimestampType.withName(_))
+      .getOrElse(SQLConf.get.avroOutputTimestampType)
   }
 }

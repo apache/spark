@@ -92,7 +92,9 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
           updater.setLong(ordinal, value.asInstanceOf[Long] * 1000)
         case _: TimestampMicros => (updater, ordinal, value) =>
           updater.setLong(ordinal, value.asInstanceOf[Long])
-        case _ => (updater, ordinal, value) =>
+        case null => (updater, ordinal, value) =>
+          // For backward compatibility, if the Avro type is Long and it is not logical type,
+          // the value is processed as timestamp type with millisecond precision.
           updater.setLong(ordinal, value.asInstanceOf[Long] * 1000)
       }
 

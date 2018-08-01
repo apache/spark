@@ -1850,7 +1850,8 @@ class SQLConf extends Serializable with Logging {
 
   def replEagerEvalTruncate: Int = getConf(SQLConf.REPL_EAGER_EVAL_TRUNCATE)
 
-  def avroOutputTimestampType: String = getConf(SQLConf.AVRO_OUTPUT_TIMESTAMP_TYPE)
+  def avroOutputTimestampType: AvroOutputTimestampType.Value =
+    AvroOutputTimestampType.withName(getConf(SQLConf.AVRO_OUTPUT_TIMESTAMP_TYPE))
 
   def avroCompressionCodec: String = getConf(SQLConf.AVRO_COMPRESSION_CODEC)
 

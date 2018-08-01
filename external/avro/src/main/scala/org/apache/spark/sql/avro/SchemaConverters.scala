@@ -23,6 +23,7 @@ import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.LogicalTypes.{TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 
+import org.apache.spark.sql.internal.SQLConf.AvroOutputTimestampType
 import org.apache.spark.sql.types._
 
 /**
@@ -44,8 +45,7 @@ object SchemaConverters {
       case DOUBLE => SchemaType(DoubleType, nullable = false)
       case FLOAT => SchemaType(FloatType, nullable = false)
       case LONG => avroSchema.getLogicalType match {
-        case _: TimestampMillis | _: TimestampMicros =>
-          return SchemaType(TimestampType, nullable = false)
+        case _: TimestampMillis | _: TimestampMicros => SchemaType(TimestampType, nullable = false)
         case _ => SchemaType(LongType, nullable = false)
       }
       case FIXED => SchemaType(BinaryType, nullable = false)
@@ -109,7 +109,8 @@ object SchemaConverters {
       nullable: Boolean = false,
       recordName: String = "topLevelRecord",
       prevNameSpace: String = "",
-      outputTimestampType: String = "TIMESTAMP_MICROS"): Schema = {
+      outputTimestampType: AvroOutputTimestampType.Value = AvroOutputTimestampType.TIMESTAMP_MICROS
+    ): Schema = {
     val builder = if (nullable) {
       SchemaBuilder.builder().nullable()
     } else {
@@ -123,8 +124,8 @@ object SchemaConverters {
       case DateType => builder.longType()
       case TimestampType =>
         val timestampType = outputTimestampType match {
-          case "TIMESTAMP_MILLIS" => LogicalTypes.timestampMillis()
-          case "TIMESTAMP_MICROS" => LogicalTypes.timestampMicros()
+          case AvroOutputTimestampType.TIMESTAMP_MILLIS => LogicalTypes.timestampMillis()
+          case AvroOutputTimestampType.TIMESTAMP_MICROS => LogicalTypes.timestampMicros()
           case other =>
             throw new IncompatibleSchemaException(s"Unexpected output timestamp type $other.")
         }

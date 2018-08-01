@@ -97,7 +97,9 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
         (getter, ordinal) => avroType.getLogicalType match {
           case _: TimestampMillis => getter.getLong(ordinal) / 1000
           case _: TimestampMicros => getter.getLong(ordinal)
-          case _ => getter.getLong(ordinal)
+          // For backward compatibility, if the Avro type is Long and it is not logical type,
+          // output the timestamp value as with millisecond precision.
+          case null => getter.getLong(ordinal) / 1000
         }
 
       case ArrayType(et, containsNull) =>
