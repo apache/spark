@@ -1647,6 +1647,159 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(result10.first.schema(0).dataType === expectedType10)
   }
 
+  test("transform function - array for primitive type not containing null") {
+    val df = Seq(
+      Seq(1, 9, 8, 7),
+      Seq(5, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
+      checkAnswer(df.selectExpr("transform(i, x -> x + 1)"),
+        Seq(
+          Row(Seq(2, 10, 9, 8)),
+          Row(Seq(6, 9, 10, 8, 3)),
+          Row(Seq.empty),
+          Row(null)))
+      checkAnswer(df.selectExpr("transform(i, (x, i) -> x + i)"),
+        Seq(
+          Row(Seq(1, 10, 10, 10)),
+          Row(Seq(5, 9, 11, 10, 6)),
+          Row(Seq.empty),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeNotContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testArrayOfPrimitiveTypeNotContainsNull()
+  }
+
+  test("transform function - array for primitive type containing null") {
+    val df = Seq[Seq[Integer]](
+      Seq(1, 9, 8, null, 7),
+      Seq(5, null, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeContainsNull(): Unit = {
+      checkAnswer(df.selectExpr("transform(i, x -> x + 1)"),
+        Seq(
+          Row(Seq(2, 10, 9, null, 8)),
+          Row(Seq(6, null, 9, 10, 8, 3)),
+          Row(Seq.empty),
+          Row(null)))
+      checkAnswer(df.selectExpr("transform(i, (x, i) -> x + i)"),
+        Seq(
+          Row(Seq(1, 10, 10, null, 11)),
+          Row(Seq(5, null, 10, 12, 11, 7)),
+          Row(Seq.empty),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testArrayOfPrimitiveTypeContainsNull()
+  }
+
+  test("transform function - array for non-primitive type") {
+    val df = Seq(
+      Seq("c", "a", "b"),
+      Seq("b", null, "c", null),
+      Seq.empty,
+      null
+    ).toDF("s")
+
+    def testNonPrimitiveType(): Unit = {
+      checkAnswer(df.selectExpr("transform(s, x -> concat(x, x))"),
+        Seq(
+          Row(Seq("cc", "aa", "bb")),
+          Row(Seq("bb", null, "cc", null)),
+          Row(Seq.empty),
+          Row(null)))
+      checkAnswer(df.selectExpr("transform(s, (x, i) -> concat(x, i))"),
+        Seq(
+          Row(Seq("c0", "a1", "b2")),
+          Row(Seq("b0", null, "c2", null)),
+          Row(Seq.empty),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testNonPrimitiveType()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testNonPrimitiveType()
+  }
+
+  test("transform function - special cases") {
+    val df = Seq(
+      Seq("c", "a", "b"),
+      Seq("b", null, "c", null),
+      Seq.empty,
+      null
+    ).toDF("arg")
+
+    def testSpecialCases(): Unit = {
+      checkAnswer(df.selectExpr("transform(arg, arg -> arg)"),
+        Seq(
+          Row(Seq("c", "a", "b")),
+          Row(Seq("b", null, "c", null)),
+          Row(Seq.empty),
+          Row(null)))
+      checkAnswer(df.selectExpr("transform(arg, arg)"),
+        Seq(
+          Row(Seq(Seq("c", "a", "b"), Seq("c", "a", "b"), Seq("c", "a", "b"))),
+          Row(Seq(
+            Seq("b", null, "c", null),
+            Seq("b", null, "c", null),
+            Seq("b", null, "c", null),
+            Seq("b", null, "c", null))),
+          Row(Seq.empty),
+          Row(null)))
+      checkAnswer(df.selectExpr("transform(arg, x -> concat(arg, array(x)))"),
+        Seq(
+          Row(Seq(Seq("c", "a", "b", "c"), Seq("c", "a", "b", "a"), Seq("c", "a", "b", "b"))),
+          Row(Seq(
+            Seq("b", null, "c", null, "b"),
+            Seq("b", null, "c", null, null),
+            Seq("b", null, "c", null, "c"),
+            Seq("b", null, "c", null, null))),
+          Row(Seq.empty),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testSpecialCases()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testSpecialCases()
+  }
+
+  test("transform function - invalid") {
+    val df = Seq(
+      (Seq("c", "a", "b"), 1),
+      (Seq("b", null, "c", null), 2),
+      (Seq.empty, 3),
+      (null, 4)
+    ).toDF("s", "i")
+
+    val ex1 = intercept[AnalysisException] {
+      df.selectExpr("transform(s, (x, y, z) -> x + y + z)")
+    }
+    assert(ex1.getMessage.contains("The number of lambda function arguments '3' does not match"))
+
+    val ex2 = intercept[AnalysisException] {
+      df.selectExpr("transform(i, x -> x)")
+    }
+    assert(ex2.getMessage.contains("data type mismatch: argument 1 requires array type"))
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {

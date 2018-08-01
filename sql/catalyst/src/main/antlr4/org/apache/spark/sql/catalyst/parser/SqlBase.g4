@@ -591,6 +591,8 @@ primaryExpression
        (OVER windowSpec)?                                                                      #functionCall
     | qualifiedName '(' trimOption=(BOTH | LEADING | TRAILING) argument+=expression
       FROM argument+=expression ')'                                                            #functionCall
+    | IDENTIFIER '->' expression                                                               #lambda
+    | '(' IDENTIFIER (',' IDENTIFIER)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
