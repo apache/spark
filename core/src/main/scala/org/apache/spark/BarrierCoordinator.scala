@@ -25,6 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
+import org.apache.spark.scheduler.{LiveListenerBus, SparkListener, SparkListenerStageCompleted}
 
 /**
  * A coordinator that handles all global sync requests from BarrierTaskContext. Each global sync
@@ -35,9 +36,19 @@ import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
  */
 private[spark] class BarrierCoordinator(
     timeout: Int,
+    listenerBus: LiveListenerBus,
     override val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint with Logging {
 
   private val timer = new Timer("BarrierCoordinator barrier epoch increment timer")
+
+  private val listener = new SparkListener {
+    override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
+      val stageInfo = stageCompleted.stageInfo
+      // Remove internal data from a finished stage attempt.
+      cleanupSyncRequests(stageInfo.stageId, stageInfo.attemptNumber)
+      barrierEpochByStageIdAndAttempt.remove((stageInfo.stageId, stageInfo.attemptNumber))
+    }
+  }
 
   // Epoch counter for each barrier (stage, attempt).
   private val barrierEpochByStageIdAndAttempt = new ConcurrentHashMap[(Int, Int), AtomicInteger]
@@ -45,6 +56,11 @@ private[spark] class BarrierCoordinator(
   // Remember all the blocking global sync requests for each barrier (stage, attempt).
   private val syncRequestsByStageIdAndAttempt =
     new ConcurrentHashMap[(Int, Int), ArrayBuffer[RpcCallContext]]
+
+  override def onStart(): Unit = {
+    super.onStart()
+    listenerBus.addToStatusQueue(listener)
+  }
 
   /**
    * Get the array of [[RpcCallContext]]s that correspond to a barrier sync request from a stage

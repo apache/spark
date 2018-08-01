@@ -142,7 +142,7 @@ private[spark] class TaskSchedulerImpl(
   private lazy val barrierSyncTimeout = conf.get(config.BARRIER_SYNC_TIMEOUT)
 
   private[scheduler] lazy val barrierCoordinator: RpcEndpoint = {
-    val coordinator = new BarrierCoordinator(barrierSyncTimeout, sc.env.rpcEnv)
+    val coordinator = new BarrierCoordinator(barrierSyncTimeout, sc.listenerBus, sc.env.rpcEnv)
     sc.env.rpcEnv.setupEndpoint("barrierSync", coordinator)
     logInfo("Registered BarrierCoordinator endpoint")
     coordinator
