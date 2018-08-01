@@ -65,6 +65,17 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
     assert(collected === (1 to 1000))
   }
 
+  test("aggregateAsync") {
+    assert(zeroPartRdd.aggregateAsync(0)((acc, _) => acc + 1, _ + _).get() === 0)
+    val aggregated = sc.parallelize(1 to 10000, 5).aggregateAsync(0)((acc, _) => acc + 1, _ + _)
+    assert(aggregated.get() === 10000)
+  }
+
+  test("foldAsync") {
+    assert(zeroPartRdd.foldAsync(0)(_ + _).get() === 0)
+    assert(sc.parallelize(1 to 1000, 5).foldAsync(0)(_ + _).get() === 500500)
+  }
+
   test("foreachAsync") {
     zeroPartRdd.foreachAsync(i => Unit).get()
 

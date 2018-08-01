@@ -17,7 +17,8 @@
 
 package org.apache.spark.rdd
 
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
+import java.util.function.BinaryOperator
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
@@ -60,6 +61,36 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
     self.context.submitJob[T, Array[T], Seq[T]](self, _.toArray, Range(0, self.partitions.length),
       (index, data) => results(index) = data, results.flatten.toSeq)
   }
+
+
+  /**
+   * Returns a future of an aggregation across the RDD.
+   *
+   * @see [[RDD.aggregate]] which is the synchronous version of this method.
+   */
+  def aggregateAsync[U](zeroValue: U)(seqOp: (U, T) => U, combOp: (U, U) => U): FutureAction[U] =
+    self.withScope {
+      val cleanSeqOp = self.context.clean(seqOp)
+      val cleanCombOp = self.context.clean(combOp)
+      val combBinOp = new BinaryOperator[U] {
+        def apply(u1: U, u2: U): U = cleanCombOp(u1, u2)
+      }
+      val acc = new AtomicReference[U](zeroValue)
+      self.context.submitJob(
+        self,
+        (_: Iterator[T]).aggregate(zeroValue)(cleanSeqOp, cleanCombOp),
+        Range(0, self.partitions.length),
+        (index: Int, data: U) => acc.accumulateAndGet(data, combBinOp),
+        acc.get())
+    }
+
+  /**
+   * Returns a future of a fold across the RDD.
+   *
+   * @see [[RDD.fold]] which is the synchronous version of this method.
+   */
+  def foldAsync(zeroValue: T)(op: (T, T) => T): FutureAction[T] =
+    aggregateAsync(zeroValue)(op, op)
 
   /**
    * Returns a future for retrieving the first num elements of the RDD.
