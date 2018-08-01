@@ -341,14 +341,18 @@ class DAGScheduler(
   }
 
   /**
-   * Check to make sure we are not launching a barrier stage that contains PartitionPruningRDD,
-   * which may launch tasks on partial partitions.
+   * Check to make sure we don't launch a barrier stage with unsupported RDD chain pattern. The
+   * following patterns are not supported:
+   * 1. Ancestor RDDs that have different number of partitions from the resulting RDD (eg.
+   * union()/coalesce()/first()/PartitionPruningRDD);
+   * 2. An RDD that depends on multiple barrier RDDs (eg. barrierRdd1.zip(barrierRdd2)).
    */
-  private def checkBarrierStageWithPartitionPruningRDD(rdd: RDD[_]): Unit = {
-    if (rdd.isBarrier() &&
-        !traverseParentRDDsWithinStage(rdd, (r => !r.isInstanceOf[PartitionPruningRDD[_]]))) {
-      throw new SparkException("Don't support run a barrier stage that contains " +
-        "PartitionPruningRDD, because PartitionPruningRDD may launch tasks on partial partitions.")
+  private def checkBarrierStageWithRDDChainPattern(rdd: RDD[_], numPartitions: Int): Unit = {
+    val predicate: RDD[_] => Boolean = (r =>
+      r.getNumPartitions == numPartitions && r.dependencies.filter(_.rdd.isBarrier()).size <= 1)
+    if (rdd.isBarrier() && !traverseParentRDDsWithinStage(rdd, predicate)) {
+      throw new SparkException(
+        DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
     }
   }
 
@@ -360,7 +364,7 @@ class DAGScheduler(
    */
   def createShuffleMapStage(shuffleDep: ShuffleDependency[_, _, _], jobId: Int): ShuffleMapStage = {
     val rdd = shuffleDep.rdd
-    checkBarrierStageWithPartitionPruningRDD(rdd)
+    checkBarrierStageWithRDDChainPattern(rdd, rdd.getNumPartitions)
     val numTasks = rdd.partitions.length
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
@@ -389,7 +393,7 @@ class DAGScheduler(
       partitions: Array[Int],
       jobId: Int,
       callSite: CallSite): ResultStage = {
-    checkBarrierStageWithPartitionPruningRDD(rdd)
+    checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
     val stage = new ResultStage(id, rdd, func, partitions, parents, jobId, callSite)
@@ -466,8 +470,8 @@ class DAGScheduler(
   }
 
   /**
-   * Traverse all the parent RDDs within the same stage with the given RDD, check whether all the
-   * parent RDDs satisfy a given predicate.
+   * Traverses the given RDD and its ancestors within the same stage and checks whether all of the
+   * RDDs satisfy a given predicate.
    */
   private def traverseParentRDDsWithinStage(rdd: RDD[_], predicate: RDD[_] => Boolean): Boolean = {
     val visited = new HashSet[RDD[_]]
@@ -481,7 +485,7 @@ class DAGScheduler(
         }
         visited += toVisit
         toVisit.dependencies.foreach {
-          case shuffleDep: ShuffleDependency[_, _, _] =>
+          case _: ShuffleDependency[_, _, _] =>
             // Not within the same stage with current rdd, do nothing.
           case dependency =>
             waitingForVisit.push(dependency.rdd)
@@ -1986,4 +1990,11 @@ private[spark] object DAGScheduler {
 
   // Number of consecutive stage attempts allowed before a stage is aborted
   val DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS = 4
+
+  // Error message when running a barrier stage that have unsupported RDD chain pattern.
+  val ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN =
+    "[SPARK-24820][SPARK-24821]: Barrier execution mode does not allow the following pattern of " +
+      "RDD chain within a barrier stage:\n1. Ancestor RDDs that have different number of " +
+      "partitions from the resulting RDD (eg. union()/coalesce()/first()/PartitionPruningRDD);\n" +
+      "2. An RDD that depends on multiple barrier RDDs (eg. barrierRdd1.zip(barrierRdd2))."
 }
