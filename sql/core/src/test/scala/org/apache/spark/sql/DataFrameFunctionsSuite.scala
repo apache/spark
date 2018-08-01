@@ -1578,6 +1578,75 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     testNonPrimitiveType()
   }
 
+  test("array_except functions") {
+    val df1 = Seq((Array(1, 2, 4), Array(4, 2))).toDF("a", "b")
+    val ans1 = Row(Seq(1))
+    checkAnswer(df1.select(array_except($"a", $"b")), ans1)
+    checkAnswer(df1.selectExpr("array_except(a, b)"), ans1)
+
+    val df2 = Seq((Array[Integer](1, 2, null, 4, 5), Array[Integer](-5, 4, null, 2, -1)))
+      .toDF("a", "b")
+    val ans2 = Row(Seq(1, 5))
+    checkAnswer(df2.select(array_except($"a", $"b")), ans2)
+    checkAnswer(df2.selectExpr("array_except(a, b)"), ans2)
+
+    val df3 = Seq((Array(1L, 2L, 4L), Array(4L, 2L))).toDF("a", "b")
+    val ans3 = Row(Seq(1L))
+    checkAnswer(df3.select(array_except($"a", $"b")), ans3)
+    checkAnswer(df3.selectExpr("array_except(a, b)"), ans3)
+
+    val df4 = Seq(
+      (Array[java.lang.Long](1L, 2L, null, 4L, 5L), Array[java.lang.Long](-5L, 4L, null, 2L, -1L)))
+      .toDF("a", "b")
+    val ans4 = Row(Seq(1L, 5L))
+    checkAnswer(df4.select(array_except($"a", $"b")), ans4)
+    checkAnswer(df4.selectExpr("array_except(a, b)"), ans4)
+
+    val df5 = Seq((Array("c", null, "a", "f"), Array("b", null, "a", "g"))).toDF("a", "b")
+    val ans5 = Row(Seq("c", "f"))
+    checkAnswer(df5.select(array_except($"a", $"b")), ans5)
+    checkAnswer(df5.selectExpr("array_except(a, b)"), ans5)
+
+    val df6 = Seq((null, null)).toDF("a", "b")
+    intercept[AnalysisException] {
+      df6.select(array_except($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df6.selectExpr("array_except(a, b)")
+    }
+    val df7 = Seq((Array(1), Array("a"))).toDF("a", "b")
+    intercept[AnalysisException] {
+      df7.select(array_except($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df7.selectExpr("array_except(a, b)")
+    }
+    val df8 = Seq((Array("a"), null)).toDF("a", "b")
+    intercept[AnalysisException] {
+      df8.select(array_except($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df8.selectExpr("array_except(a, b)")
+    }
+    val df9 = Seq((null, Array("a"))).toDF("a", "b")
+    intercept[AnalysisException] {
+      df9.select(array_except($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df9.selectExpr("array_except(a, b)")
+    }
+
+    val df10 = Seq(
+      (Array[Integer](1, 2), Array[Integer](2)),
+      (Array[Integer](1, 2), Array[Integer](1, null)),
+      (Array[Integer](1, null, 3), Array[Integer](1, 2)),
+      (Array[Integer](1, null), Array[Integer](2, null))
+    ).toDF("a", "b")
+    val result10 = df10.select(array_except($"a", $"b"))
+    val expectedType10 = ArrayType(IntegerType, containsNull = true)
+    assert(result10.first.schema(0).dataType === expectedType10)
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {

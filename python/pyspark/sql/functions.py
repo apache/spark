@@ -2052,6 +2052,25 @@ def array_union(col1, col2):
     return Column(sc._jvm.functions.array_union(_to_java_column(col1), _to_java_column(col2)))
 
 
+@ignore_unicode_prefix
+@since(2.4)
+def array_except(col1, col2):
+    """
+    Collection function: returns an array of the elements in col1 but not in col2,
+    without duplicates.
+
+    :param col1: name of column containing array
+    :param col2: name of column containing array
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
+    >>> df.select(array_except(df.c1, df.c2)).collect()
+    [Row(array_except(c1, c2)=[u'b'])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_except(_to_java_column(col1), _to_java_column(col2)))
+
+
 @since(1.4)
 def explode(col):
     """Returns a new row for each element in the given array or map.
