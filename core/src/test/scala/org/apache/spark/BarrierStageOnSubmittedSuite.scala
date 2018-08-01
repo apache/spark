@@ -148,7 +148,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .barrier()
       .mapPartitions((iter, context) => iter)
     testSubmitJob(sc, rdd,
-      "Don't support run a barrier stage with dynamic resource allocation enabled")
+      DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
   }
 
   test("submit a barrier ShuffleMapStage with dynamic resource allocation enabled") {
@@ -165,6 +165,6 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .repartition(2)
       .map(x => x + 1)
     testSubmitJob(sc, rdd,
-      "Don't support run a barrier stage with dynamic resource allocation enabled")
+      DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
   }
 }

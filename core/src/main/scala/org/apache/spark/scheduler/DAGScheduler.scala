@@ -398,9 +398,7 @@ class DAGScheduler(
    */
   private def checkBarrierStageWithDynamicAllocation(rdd: RDD[_]): Unit = {
     if (rdd.isBarrier() && Utils.isDynamicAllocationEnabled(sc.getConf)) {
-      throw new SparkException("Don't support run a barrier stage with dynamic resource " +
-        "allocation enabled for now, please disable dynamic resource allocation by setting " +
-        "\"spark.dynamicAllocation.enabled\" to \"false\".")
+      throw new SparkException(DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
     }
   }
 
@@ -2022,4 +2020,10 @@ private[spark] object DAGScheduler {
       "PartitionPruningRDD). A workaround for first()/take() can be barrierRdd.collect().head " +
       "(scala) or barrierRdd.collect()[0] (python).\n" +
       "2. An RDD that depends on multiple barrier RDDs (eg. barrierRdd1.zip(barrierRdd2))."
+
+  // Error message when running a barrier stage with dynamic resource allocation enabled.
+  val ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION =
+    "[SPARK-24942]: Barrier execution mode does not support dynamic resource allocation for " +
+      "now. You can disable dynamic resource allocation by setting Spark conf " +
+      "\"spark.dynamicAllocation.enabled\" to \"false\"."
 }
