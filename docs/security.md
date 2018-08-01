@@ -278,7 +278,7 @@ To enable authorization in the SHS, a few extra options are used:
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td>spark.history.ui.acls.enable</td>
+  <td><code>spark.history.ui.acls.enable</code></td>
   <td>false</td>
   <td>
     Specifies whether ACLs should be checked to authorize users viewing the applications in
@@ -292,7 +292,7 @@ To enable authorization in the SHS, a few extra options are used:
   </td>
 </tr>
 <tr>
-  <td>spark.history.ui.admin.acls</td>
+  <td><code>spark.history.ui.admin.acls</code></td>
   <td>None</td>
   <td>
     Comma separated list of users that have view access to all the Spark applications in history
@@ -300,7 +300,7 @@ To enable authorization in the SHS, a few extra options are used:
   </td>
 </tr>
 <tr>
-  <td>spark.history.ui.admin.acls.groups</td>
+  <td><code>spark.history.ui.admin.acls.groups</code></td>
   <td>None</td>
   <td>
     Comma separated list of groups that have view access to all the Spark applications in history
@@ -501,6 +501,7 @@ can be accomplished by setting `spark.ssl.useNodeLocalConf` to `true`. In that c
 provided by the user on the client side are not used.
 
 ### Mesos mode
+
 Mesos 1.3.0 and newer supports `Secrets` primitives as both file-based and environment based
 secrets. Spark allows the specification of file-based and environment variable based secrets with
 `spark.mesos.driver.secret.filenames` and `spark.mesos.driver.secret.envkeys`, respectively.
@@ -562,8 +563,12 @@ Security.
 
 # Configuring Ports for Network Security
 
-Spark makes heavy use of the network, and some environments have strict requirements for using tight
-firewall settings.  Below are the primary ports that Spark uses for its communication and how to
+Generally speaking, a Spark cluster and its services are not deployed on the public internet.
+They are generally private services, and should only be accessible within the network of the
+organization that deploys Spark. Access to the hosts and ports used by Spark services should
+be limited to origin hosts that need to access the services.
+
+Below are the primary ports that Spark uses for its communication and how to
 configure those ports.
 
 ## Standalone mode only

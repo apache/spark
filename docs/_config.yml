@@ -1,6 +1,6 @@
 highlighter: pygments
 markdown: kramdown
-gems:
+plugins:
   - jekyll-redirect-from
 
 # For some reason kramdown seems to behave differently on different
