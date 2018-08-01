@@ -1436,16 +1436,15 @@ class DAGScheduler(
         val message = s"Stage failed because barrier task $task finished unsuccessfully.\n" +
           failure.toErrorString
         try {
-          // cancelTasks will fail if a SchedulerBackend does not implement killTask
+          // killAllTaskAttempts will fail if a SchedulerBackend does not implement killTask.
           val reason = s"Task $task from barrier stage $failedStage (${failedStage.name}) failed."
           taskScheduler.killAllTaskAttempts(stageId, interruptThread = false, reason)
-          taskScheduler.cancelTasks(stageId, interruptThread = false)
         } catch {
           case e: UnsupportedOperationException =>
             // Cannot continue with barrier stage if failed to cancel zombie barrier tasks.
             // TODO SPARK-24877 leave the zombie tasks and ignore their completion events.
-            logWarning(s"Could not cancel tasks for stage $stageId", e)
-            abortStage(failedStage, "Could not cancel zombie barrier tasks for stage " +
+            logWarning(s"Could not kill all tasks for stage $stageId", e)
+            abortStage(failedStage, "Could not kill zombie barrier tasks for stage " +
               s"$failedStage (${failedStage.name})", Some(e))
         }
         markStageAsFinished(failedStage, Some(message))
