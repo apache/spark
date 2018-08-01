@@ -569,7 +569,8 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       // TimesStamps are converted to longs
       val times = spark.read.format("avro").load(avroDir).select("Time").collect()
-      assert(times.map(_(0)).toSet == Set(666, 777, 42))
+      assert(times.map(_(0)).toSet ==
+        Set(new Timestamp(666), new Timestamp(777), new Timestamp(42)))
 
       // DecimalType should be converted to string
       val decimals = spark.read.format("avro").load(avroDir).select("Decimal").collect()
