@@ -157,11 +157,15 @@ class NaiveBayes @Since("1.5.0") (
     instr.logNumFeatures(numFeatures)
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
+    val countAccum = dataset.sparkSession.sparkContext.longAccumulator
+
     // Aggregates term frequencies per label.
     // TODO: Calling aggregateByKey and collect creates two stages, we can implement something
     // TODO: similar to reduceByKeyLocally to save one stage.
     val aggregated = dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd
-      .map { row => (row.getDouble(0), (row.getDouble(1), row.getAs[Vector](2)))
+      .map { row =>
+        countAccum.add(1L)
+        (row.getDouble(0), (row.getDouble(1), row.getAs[Vector](2)))
       }.aggregateByKey[(Double, DenseVector)]((0.0, Vectors.zeros(numFeatures).toDense))(
       seqOp = {
          case ((weightSum: Double, featureSum: DenseVector), (weight, features)) =>
@@ -175,6 +179,7 @@ class NaiveBayes @Since("1.5.0") (
            (weightSum1 + weightSum2, featureSum1)
       }).collect().sortBy(_._1)
 
+    instr.logNumExamples(countAccum.value)
     val numLabels = aggregated.length
     instr.logNumClasses(numLabels)
     val numDocuments = aggregated.map(_._2._1).sum

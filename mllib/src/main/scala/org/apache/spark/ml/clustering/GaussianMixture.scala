@@ -386,6 +386,10 @@ class GaussianMixture @Since("2.0.0") (
       bcWeights.destroy(blocking = false)
       bcGaussians.destroy(blocking = false)
 
+      if (iter == 0) {
+        instr.logNumExamples(sums.count)
+      }
+
       /*
          Create new distributions based on the partial assignments
          (often referred to as the "M" step in literature)
