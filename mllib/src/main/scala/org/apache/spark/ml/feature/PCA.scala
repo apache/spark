@@ -21,6 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -33,7 +34,7 @@ import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.VersionUtils.majorVersion
 
 /**
@@ -50,15 +51,6 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
 
   /** @group getParam */
   def getK: Int = $(k)
-
-  /** Validates and transforms the input schema. */
-  protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
-    require(!schema.fieldNames.contains($(outputCol)),
-      s"Output column ${$(outputCol)} already exists.")
-    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
-    StructType(outputFields)
-  }
 
 }
 
@@ -102,7 +94,14 @@ class PCA @Since("1.5.0") (
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    val group = AttributeGroup.fromStructField(schema($(inputCol)))
+    require(group.size < 0 || group.size >= $(k),
+      s"Input vector size ${group.size} must be no less than k=${$(k)}")
+    require(!schema.fieldNames.contains($(outputCol)),
+      s"Output column ${$(outputCol)} already exists.")
+    val attrGroup = new AttributeGroup($(outputCol), $(k))
+    SchemaUtils.appendColumn(schema, attrGroup.toStructField())
   }
 
   @Since("1.5.0")
@@ -148,7 +147,7 @@ class PCAModel private[ml] (
    */
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     val pcaModel = new feature.PCAModel($(k),
       OldMatrices.fromML(pc).asInstanceOf[OldDenseMatrix],
       OldVectors.fromML(explainedVariance).asInstanceOf[OldDenseVector])
@@ -157,12 +156,20 @@ class PCAModel private[ml] (
     val transformer: Vector => Vector = v => pcaModel.transform(OldVectors.fromML(v)).asML
 
     val pcaOp = udf(transformer)
-    dataset.withColumn($(outputCol), pcaOp(col($(inputCol))))
+    dataset.withColumn($(outputCol), pcaOp(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    val group = AttributeGroup.fromStructField(schema($(inputCol)))
+    require(group.size < 0 || group.size == pc.numRows,
+      s"Input vector size do not match the expected size ${pc.numRows}")
+    require(!schema.fieldNames.contains($(outputCol)),
+      s"Output column ${$(outputCol)} already exists.")
+    val attrGroup = new AttributeGroup($(outputCol), $(k))
+    SchemaUtils.appendColumn(schema, attrGroup.toStructField())
   }
 
   @Since("1.5.0")
