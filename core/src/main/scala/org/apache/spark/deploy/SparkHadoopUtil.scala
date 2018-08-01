@@ -17,31 +17,32 @@
 
 package org.apache.spark.deploy
 
-import java.io._
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale, ServiceLoader}
-
-import com.google.common.primitives.Longs
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.permission.FsAction
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
-import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
-import org.apache.hadoop.security.token.{Token, TokenIdentifier}
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
-import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, SparkException}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
-import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
+import scala.util.control.NonFatal
+
+import com.google.common.primitives.Longs
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
+import org.apache.hadoop.fs.permission.FsAction
+import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.token.{Token, TokenIdentifier}
+import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
+
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
