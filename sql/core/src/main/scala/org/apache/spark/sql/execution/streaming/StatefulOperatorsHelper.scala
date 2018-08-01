@@ -30,8 +30,8 @@ object StatefulOperatorsHelper {
   val legacyVersion = 1
 
   sealed trait StreamingAggregationStateManager extends Serializable {
-    def extractKey(row: InternalRow): UnsafeRow
-    def getValueExpressions: Seq[Attribute]
+    def getKey(row: InternalRow): UnsafeRow
+    def getStateValueSchema: StructType
     def restoreOriginRow(rowPair: UnsafeRowPair): UnsafeRow
     def get(store: StateStore, key: UnsafeRow): UnsafeRow
     def put(store: StateStore, row: UnsafeRow): Unit
@@ -40,11 +40,11 @@ object StatefulOperatorsHelper {
   object StreamingAggregationStateManager extends Logging {
     def createStateManager(
         keyExpressions: Seq[Attribute],
-        childOutput: Seq[Attribute],
+        inputRowAttributes: Seq[Attribute],
         stateFormatVersion: Int): StreamingAggregationStateManager = {
       stateFormatVersion match {
-        case 1 => new StreamingAggregationStateManagerImplV1(keyExpressions, childOutput)
-        case 2 => new StreamingAggregationStateManagerImplV2(keyExpressions, childOutput)
+        case 1 => new StreamingAggregationStateManagerImplV1(keyExpressions, inputRowAttributes)
+        case 2 => new StreamingAggregationStateManagerImplV2(keyExpressions, inputRowAttributes)
         case _ => throw new IllegalArgumentException(s"Version $stateFormatVersion is invalid")
       }
     }
@@ -52,22 +52,20 @@ object StatefulOperatorsHelper {
 
   abstract class StreamingAggregationStateManagerBaseImpl(
       protected val keyExpressions: Seq[Attribute],
-      protected val childOutput: Seq[Attribute]) extends StreamingAggregationStateManager {
+      protected val inputRowAttributes: Seq[Attribute]) extends StreamingAggregationStateManager {
 
     @transient protected lazy val keyProjector =
-      GenerateUnsafeProjection.generate(keyExpressions, childOutput)
+      GenerateUnsafeProjection.generate(keyExpressions, inputRowAttributes)
 
-    def extractKey(row: InternalRow): UnsafeRow = keyProjector(row)
+    def getKey(row: InternalRow): UnsafeRow = keyProjector(row)
   }
 
   class StreamingAggregationStateManagerImplV1(
       keyExpressions: Seq[Attribute],
-      childOutput: Seq[Attribute])
-    extends StreamingAggregationStateManagerBaseImpl(keyExpressions, childOutput) {
+      inputRowAttributes: Seq[Attribute])
+    extends StreamingAggregationStateManagerBaseImpl(keyExpressions, inputRowAttributes) {
 
-    override def getValueExpressions: Seq[Attribute] = {
-      childOutput
-    }
+    override def getStateValueSchema: StructType = inputRowAttributes.toStructType
 
     override def restoreOriginRow(rowPair: UnsafeRowPair): UnsafeRow = {
       rowPair.value
@@ -78,31 +76,30 @@ object StatefulOperatorsHelper {
     }
 
     override def put(store: StateStore, row: UnsafeRow): Unit = {
-      store.put(extractKey(row), row)
+      store.put(getKey(row), row)
     }
   }
 
   class StreamingAggregationStateManagerImplV2(
       keyExpressions: Seq[Attribute],
-      childOutput: Seq[Attribute])
-    extends StreamingAggregationStateManagerBaseImpl(keyExpressions, childOutput) {
+      inputRowAttributes: Seq[Attribute])
+    extends StreamingAggregationStateManagerBaseImpl(keyExpressions, inputRowAttributes) {
 
-    private val valueExpressions: Seq[Attribute] = childOutput.diff(keyExpressions)
+    private val valueExpressions: Seq[Attribute] = inputRowAttributes.diff(keyExpressions)
     private val keyValueJoinedExpressions: Seq[Attribute] = keyExpressions ++ valueExpressions
-    private val needToProjectToRestoreValue: Boolean = keyValueJoinedExpressions != childOutput
+    private val needToProjectToRestoreValue: Boolean =
+      keyValueJoinedExpressions != inputRowAttributes
 
     @transient private lazy val valueProjector =
-      GenerateUnsafeProjection.generate(valueExpressions, childOutput)
+      GenerateUnsafeProjection.generate(valueExpressions, inputRowAttributes)
 
     @transient private lazy val joiner =
       GenerateUnsafeRowJoiner.create(StructType.fromAttributes(keyExpressions),
       StructType.fromAttributes(valueExpressions))
     @transient private lazy val restoreValueProjector = GenerateUnsafeProjection.generate(
-      keyValueJoinedExpressions, childOutput)
+      keyValueJoinedExpressions, inputRowAttributes)
 
-    override def getValueExpressions: Seq[Attribute] = {
-      valueExpressions
-    }
+    override def getStateValueSchema: StructType = valueExpressions.toStructType
 
     override def restoreOriginRow(rowPair: UnsafeRowPair): UnsafeRow = {
       val joinedRow = joiner.join(rowPair.key, rowPair.value)

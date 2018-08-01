@@ -213,7 +213,7 @@ case class StateStoreRestoreExec(
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
       keyExpressions.toStructType,
-      stateManager.getValueExpressions.toStructType,
+      stateManager.getStateValueSchema,
       indexOrdinal = None,
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
@@ -227,7 +227,7 @@ case class StateStoreRestoreExec(
           store.iterator().map(_.value)
         } else {
           iter.flatMap { row =>
-            val key = stateManager.extractKey(row)
+            val key = stateManager.getKey(row)
             val restoredRow = stateManager.get(store, key)
             numOutputRows += 1
             Option(restoredRow).toSeq :+ row
@@ -272,7 +272,7 @@ case class StateStoreSaveExec(
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
       keyExpressions.toStructType,
-      stateManager.getValueExpressions.toStructType,
+      stateManager.getStateValueSchema,
       indexOrdinal = None,
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>

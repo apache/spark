@@ -872,11 +872,11 @@ object SQLConf {
     .createWithDefault(2)
 
   val STREAMING_AGGREGATION_STATE_FORMAT_VERSION =
-    buildConf("spark.sql.streaming.streamingAggregation.stateFormatVersion")
+    buildConf("spark.sql.streaming.aggregation.stateFormatVersion")
       .internal()
-      .doc("State format version used by streaming aggregation operations triggered " +
-        "explicitly or implicitly via agg() in a streaming query. State between versions are " +
-        "tend to be incompatible, so state format version shouldn't be modified after running.")
+      .doc("State format version used by streaming aggregation operations in a streaming query. " +
+        "State between versions are tend to be incompatible, so state format version shouldn't " +
+        "be modified after running.")
       .intConf
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)

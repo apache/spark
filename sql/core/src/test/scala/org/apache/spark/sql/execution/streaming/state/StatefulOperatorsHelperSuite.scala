@@ -24,48 +24,88 @@ import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class StatefulOperatorsHelperSuite extends StreamTest {
-  import TestMaterial._
+  // ============================ fields and method for test data ============================
+
+  val testKeys: Seq[String] = Seq("key1", "key2")
+  val testValues: Seq[String] = Seq("sum(key1)", "sum(key2)")
+
+  val testOutputSchema: StructType = StructType(
+    testKeys.map(createIntegerField) ++ testValues.map(createIntegerField))
+
+  val testOutputAttributes: Seq[Attribute] = testOutputSchema.toAttributes
+  val testKeyAttributes: Seq[Attribute] = testOutputAttributes.filter { p =>
+    testKeys.contains(p.name)
+  }
+  val testValuesAttributes: Seq[Attribute] = testOutputAttributes.filter { p =>
+    testValues.contains(p.name)
+  }
+  val expectedTestValuesSchema: StructType = testValuesAttributes.toStructType
+
+  val testRow: UnsafeRow = {
+    val unsafeRowProjection = UnsafeProjection.create(testOutputSchema)
+    val row = unsafeRowProjection(new SpecificInternalRow(testOutputSchema))
+    (testKeys ++ testValues).zipWithIndex.foreach { case (_, index) => row.setInt(index, index) }
+    row
+  }
+
+  val expectedTestKeyRow: UnsafeRow = {
+    val keyProjector = GenerateUnsafeProjection.generate(testKeyAttributes, testOutputAttributes)
+    keyProjector(testRow)
+  }
+
+  val expectedTestValueRowForV2: UnsafeRow = {
+    val valueProjector = GenerateUnsafeProjection.generate(testValuesAttributes,
+      testOutputAttributes)
+    valueProjector(testRow)
+  }
+
+  private def createIntegerField(name: String): StructField = {
+    StructField(name, IntegerType, nullable = false)
+  }
+
+  // ============================ StateManagerImplV1 ============================
 
   test("StateManager v1 - get, put, iter") {
-    val stateManager = newStateManager(KEYS_ATTRIBUTES, OUTPUT_ATTRIBUTES, 1)
+    val stateManager = newStateManager(testKeyAttributes, testOutputAttributes, 1)
 
     // in V1, input row is stored as value
-    testGetPutIterOnStateManager(stateManager, OUTPUT_ATTRIBUTES, TEST_ROW, TEST_KEY_ROW, TEST_ROW)
+    testGetPutIterOnStateManager(stateManager, testOutputSchema, testRow,
+      expectedTestKeyRow, testRow)
   }
 
   // ============================ StateManagerImplV2 ============================
   test("StateManager v2 - get, put, iter") {
-    val stateManager = newStateManager(KEYS_ATTRIBUTES, OUTPUT_ATTRIBUTES, 2)
+    val stateManager = newStateManager(testKeyAttributes, testOutputAttributes, 2)
 
     // in V2, row for values itself (excluding keys from input row) is stored as value
     // so that stored value doesn't have key part, but state manager V2 will provide same output
     // as V1 when getting row for key
-    testGetPutIterOnStateManager(stateManager, VALUES_ATTRIBUTES, TEST_ROW, TEST_KEY_ROW,
-      TEST_VALUE_ROW)
+    testGetPutIterOnStateManager(stateManager, expectedTestValuesSchema, testRow,
+      expectedTestKeyRow, expectedTestValueRowForV2)
   }
 
   private def newStateManager(
       keysAttributes: Seq[Attribute],
-      outputAttributes: Seq[Attribute],
+      inputRowAttributes: Seq[Attribute],
       version: Int): StreamingAggregationStateManager = {
-    StreamingAggregationStateManager.createStateManager(keysAttributes, outputAttributes, version)
+    StreamingAggregationStateManager.createStateManager(keysAttributes, inputRowAttributes, version)
   }
 
   private def testGetPutIterOnStateManager(
       stateManager: StreamingAggregationStateManager,
-      expectedValueExpressions: Seq[Attribute],
+      expectedValueSchema: StructType,
       inputRow: UnsafeRow,
       expectedStateKey: UnsafeRow,
       expectedStateValue: UnsafeRow): Unit = {
 
-    assert(stateManager.getValueExpressions === expectedValueExpressions)
+    assert(stateManager.getStateValueSchema === expectedValueSchema)
 
     val memoryStateStore = new MemoryStateStore()
     stateManager.put(memoryStateStore, inputRow)
 
     assert(memoryStateStore.iterator().size === 1)
 
-    val keyRow = stateManager.extractKey(inputRow)
+    val keyRow = stateManager.getKey(inputRow)
     assert(keyRow === expectedStateKey)
 
     // iterate state store and verify whether expected format of key and value are stored
@@ -81,41 +121,4 @@ class StatefulOperatorsHelperSuite extends StreamTest {
     assert(inputRow === stateManager.get(memoryStateStore, keyRow))
   }
 
-}
-
-object TestMaterial {
-  val KEYS: Seq[String] = Seq("key1", "key2")
-  val VALUES: Seq[String] = Seq("sum(key1)", "sum(key2)")
-
-  val OUTPUT_SCHEMA: StructType = StructType(
-    KEYS.map(createIntegerField) ++ VALUES.map(createIntegerField))
-
-  val OUTPUT_ATTRIBUTES: Seq[Attribute] = OUTPUT_SCHEMA.toAttributes
-  val KEYS_ATTRIBUTES: Seq[Attribute] = OUTPUT_ATTRIBUTES.filter { p =>
-    KEYS.contains(p.name)
-  }
-  val VALUES_ATTRIBUTES: Seq[Attribute] = OUTPUT_ATTRIBUTES.filter { p =>
-    VALUES.contains(p.name)
-  }
-
-  val TEST_ROW: UnsafeRow = {
-    val unsafeRowProjection = UnsafeProjection.create(OUTPUT_SCHEMA)
-    val row = unsafeRowProjection(new SpecificInternalRow(OUTPUT_SCHEMA))
-    (KEYS ++ VALUES).zipWithIndex.foreach { case (_, index) => row.setInt(index, index) }
-    row
-  }
-
-  val TEST_KEY_ROW: UnsafeRow = {
-    val keyProjector = GenerateUnsafeProjection.generate(KEYS_ATTRIBUTES, OUTPUT_ATTRIBUTES)
-    keyProjector(TEST_ROW)
-  }
-
-  val TEST_VALUE_ROW: UnsafeRow = {
-    val valueProjector = GenerateUnsafeProjection.generate(VALUES_ATTRIBUTES, OUTPUT_ATTRIBUTES)
-    valueProjector(TEST_ROW)
-  }
-
-  private def createIntegerField(name: String): StructField = {
-    StructField(name, IntegerType, nullable = false)
-  }
 }
