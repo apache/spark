@@ -27,15 +27,13 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
-import org.apache.hadoop.fs.permission.FsAction
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.security.AccessControlException
 import org.json4s.jackson.JsonMethods._
-import org.mockito.Matchers.any
-import org.mockito.Mockito.{mock, spy, verify, when}
-import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
+import org.mockito.ArgumentMatcher
+import org.mockito.Matchers.{any, argThat}
+import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
@@ -822,31 +820,40 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     }
   }
 
-  test("SPARK-24948: delegate permission check to the file system class") {
-    val helper = new CachedFileSystemHelper {
-      override protected val fs: FileSystem = mock(classOf[FileSystem])
-      when(fs.access(any[Path], any[FsAction])).thenAnswer(new Answer[Unit] {
-        override def answer(invocation: InvocationOnMock): Unit = {
-          invocation.getArgumentAt(0, classOf[Path]).getName match {
-            case "accessGranted" =>
-            case "accessDenied" => throw new AccessControlException("File not found.")
-            case _ => throw new FileNotFoundException("File not found.")
-          }
+  test("SPARK-24948: blacklist files we don't have read permission on") {
+    val clock = new ManualClock(1533132471)
+    val provider = new FsHistoryProvider(createTestConf(), clock)
+    val accessDenied = newLogFile("accessDenied", None, inProgress = false)
+    writeFile(accessDenied, true, None,
+      SparkListenerApplicationStart("accessDenied", Some("accessDenied"), 1L, "test", None))
+    val accessGranted = newLogFile("accessGranted", None, inProgress = false)
+    writeFile(accessGranted, true, None,
+      SparkListenerApplicationStart("accessGranted", Some("accessGranted"), 1L, "test", None),
+      SparkListenerApplicationEnd(5L))
+    val mockedFs = spy(provider.fs)
+    doThrow(new AccessControlException("Cannot read accessDenied file")).when(mockedFs).open(
+      argThat(new ArgumentMatcher[Path]() {
+        override def matches(path: Any): Boolean = {
+          path.asInstanceOf[Path].getName.toLowerCase == "accessdenied"
         }
-      })
-
-      override protected def expireTimeInSeconds = 5L
+      }))
+    val mockedProvider = spy(provider)
+    when(mockedProvider.fs).thenReturn(mockedFs)
+    updateAndCheck(mockedProvider) { list =>
+      list.size should be(1)
     }
-    assert(helper.checkAccessPermission(new Path("accessGranted"), FsAction.READ))
-    assert(helper.cache.getIfPresent("accessGranted"))
-    assert(!helper.checkAccessPermission(new Path("accessDenied"), FsAction.READ))
-    assert(!helper.cache.getIfPresent("accessDenied"))
-    assert(!helper.checkAccessPermission(new Path("nonExisting"), FsAction.READ))
-    assert(helper.cache.getIfPresent("nonExisting") == null)
-    Thread.sleep(5000) // wait for the cache entries to expire
-    helper.cache.cleanUp()
-    assert(helper.cache.getIfPresent("accessGranted") == null)
-    assert(helper.cache.getIfPresent("accessGranted") == null)
+    writeFile(accessDenied, true, None,
+      SparkListenerApplicationStart("accessDenied", Some("accessDenied"), 1L, "test", None),
+      SparkListenerApplicationEnd(5L))
+    // Doing 2 times in order to check the blacklist filter too
+    updateAndCheck(mockedProvider) { list =>
+      list.size should be(1)
+    }
+    val accessDeniedPath = new Path(accessDenied.getPath)
+    assert(mockedProvider.isBlacklisted(accessDeniedPath))
+    clock.advance(24 * 60 * 60 * 1000 + 1) // add a bit more than 1d
+    mockedProvider.cleanLogs()
+    assert(!mockedProvider.isBlacklisted(accessDeniedPath))
   }
 
   /**
