@@ -18,8 +18,8 @@ grammar SqlBase;
 
 @members {
   /**
-   * When true, INTERSECT is given precedence over UNION and EXCEPT set operations as per
-   * the SQL standard.
+   * When true, INTERSECT is given the greater precedence over the other set
+   * operations (UNION, EXCEPT and MINUS) as per the SQL standard.
    */
   public boolean setops_precedence_enforced = true;
 

@@ -714,5 +714,11 @@ class PlanParserSuite extends AnalysisTest {
       assertEqual(query1, Distinct(a.union(b)).except(c).intersect(d))
       assertEqual(query2, Distinct(a.union(b)).except(c, isAll = true).intersect(d, isAll = true))
     }
+
+    // Explicitly enable the precedence enforcement
+    withSQLConf(SQLConf.SETOPS_PRECEDENCE_ENFORCED.key -> "true") {
+      assertEqual(query1, Distinct(a.union(b)).except(c.intersect(d)))
+      assertEqual(query2, Distinct(a.union(b)).except(c.intersect(d, isAll = true), isAll = true))
+    }
   }
 }
