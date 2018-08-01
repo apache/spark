@@ -1433,10 +1433,12 @@ class DAGScheduler(
         val failedStage = stageIdToStage(task.stageId)
         logInfo(s"Marking $failedStage (${failedStage.name}) as failed due to a barrier task " +
           "failed.")
-        val message = s"Stage failed because barrier task $task finished unsuccessfully. " +
+        val message = s"Stage failed because barrier task $task finished unsuccessfully.\n" +
           failure.toErrorString
         try {
           // cancelTasks will fail if a SchedulerBackend does not implement killTask
+          val reason = s"Task $task from barrier stage $failedStage (${failedStage.name}) failed."
+          taskScheduler.killAllTaskAttempts(stageId, interruptThread = false, reason)
           taskScheduler.cancelTasks(stageId, interruptThread = false)
         } catch {
           case e: UnsupportedOperationException =>
@@ -1457,7 +1459,8 @@ class DAGScheduler(
 
         if (shouldAbortStage) {
           val abortMessage = if (disallowStageRetryForTest) {
-            "Barrier stage will not retry stage due to testing config"
+            "Barrier stage will not retry stage due to testing config. Most recent failure " +
+              s"reason: $message"
           } else {
             s"""$failedStage (${failedStage.name})
                |has failed the maximum allowable number of

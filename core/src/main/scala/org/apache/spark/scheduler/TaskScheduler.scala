@@ -61,6 +61,9 @@ private[spark] trait TaskScheduler {
    */
   def killTaskAttempt(taskId: Long, interruptThread: Boolean, reason: String): Boolean
 
+  // Kill all the running task attempts in a stage.
+  def killAllTaskAttempts(stageId: Int, interruptThread: Boolean, reason: String): Unit
+
   // Set the DAG scheduler for upcalls. This is guaranteed to be set before submitTasks is called.
   def setDAGScheduler(dagScheduler: DAGScheduler): Unit
 

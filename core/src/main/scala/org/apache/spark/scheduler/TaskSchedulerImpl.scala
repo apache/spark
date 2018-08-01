@@ -252,6 +252,22 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
+  override def killAllTaskAttempts(
+      stageId: Int,
+      interruptThread: Boolean,
+      reason: String): Unit = synchronized {
+    logInfo(s"Killing all running tasks in stage $stageId: $reason")
+    taskSetsByStageIdAndAttempt.get(stageId).foreach { attempts =>
+      attempts.foreach { case (_, tsm) =>
+        tsm.runningTasksSet.foreach { tid =>
+          taskIdToExecutorId.get(tid).foreach { execId =>
+            backend.killTask(tid, execId, interruptThread, reason)
+          }
+        }
+      }
+    }
+  }
+
   /**
    * Called to indicate that all task attempts (including speculated tasks) associated with the
    * given TaskSetManager have completed, so state associated with the TaskSetManager should be
