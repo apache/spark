@@ -51,7 +51,7 @@ private[spark] trait TaskScheduler {
   // Submit a sequence of tasks to run.
   def submitTasks(taskSet: TaskSet): Unit
 
-  // Cancel a stage.
+  // Kill all the tasks in a stage and fail the stage and all the jobs that depend on the stage.
   def cancelTasks(stageId: Int, interruptThread: Boolean): Unit
 
   /**
