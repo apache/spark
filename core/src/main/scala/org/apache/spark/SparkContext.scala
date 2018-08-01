@@ -2668,9 +2668,16 @@ object SparkContext extends Logging {
   }
 
   /**
-   * The number of cores available to the driver to use for tasks such as IO with Netty
+   * The number of cores available to the driver to use for tasks such as I/O with Netty
    */
-  private[spark] def numDriverCores(master: String, conf: SparkConf = null): Int = {
+  private[spark] def numDriverCores(master: String): Int = {
+    numDriverCores(master, null)
+  }
+
+  /**
+   * The number of cores available to the driver to use for tasks such as I/O with Netty
+   */
+  private[spark] def numDriverCores(master: String, conf: SparkConf): Int = {
     def convertToInt(threads: String): Int = {
       if (threads == "*") Runtime.getRuntime.availableProcessors() else threads.toInt
     }
@@ -2681,8 +2688,7 @@ object SparkContext extends Logging {
       case "yarn" =>
         if (conf != null && conf.getOption("spark.submit.deployMode").contains("cluster")) {
           conf.getInt("spark.driver.cores", 0)
-        }
-        else {
+        } else {
           0
         }
       case _ => 0 // Either driver is not being used, or its core count will be interpolated later
