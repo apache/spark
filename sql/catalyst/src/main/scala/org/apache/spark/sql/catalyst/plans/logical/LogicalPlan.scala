@@ -98,9 +98,9 @@ abstract class LogicalPlan
   def resolveChildren(
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
-   //KSUNITHA
-  // resolve(nameParts, children.flatMap(_.output), resolver)
-  childAttributes.resolve(nameParts, resolver)
+   resolve(nameParts, children.flatMap(_.output), resolver)
+   // todo: @skambha
+   // childAttributes.resolve(nameParts, resolver)
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] based on the output of this
@@ -110,10 +110,10 @@ abstract class LogicalPlan
   def resolve(
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
-    // KSUNITHA
-    // resolve(nameParts, output, resolver)
 
-    outputAttributes.resolve(nameParts, resolver)
+    resolve(nameParts, output, resolver)
+    // todo: @skambha
+    // outputAttributes.resolve(nameParts, resolver)
 
   /**
    * Given an attribute name, split it to name parts by dot, but
@@ -123,9 +123,9 @@ abstract class LogicalPlan
   def resolveQuoted(
       name: String,
       resolver: Resolver): Option[NamedExpression] = {
-    //KSUNITHA
-    // resolve(UnresolvedAttribute.parseAttributeName(name), output, resolver)
-    outputAttributes.resolve(UnresolvedAttribute.parseAttributeName(name), resolver)
+    resolve(UnresolvedAttribute.parseAttributeName(name), output, resolver)
+    // todo: @skambha
+    // outputAttributes.resolve(UnresolvedAttribute.parseAttributeName(name), resolver)
   }
 
   /**

@@ -70,6 +70,7 @@ SELECT t5.t5.* FROM mydb1.t5;
 SELECT mydb1.t5.t5.i1 FROM mydb1.t5;
 SELECT mydb1.t5.t5.i2 FROM mydb1.t5;
 SELECT mydb1.t5.* FROM mydb1.t5;
+SELECT mydb1.t5.* FROM t5;
 
 -- Cleanup and Reset
 USE default;

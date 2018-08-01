@@ -155,7 +155,7 @@ package object expressions  {
     /** Map to use for qualified case insensitive attribute lookups. */
     @transient private val qualified: Map[(String, String), Seq[Attribute]] = {
       val grouped = attrs.filter(_.qualifier.isDefined).groupBy { a =>
-        (a.qualifier.get.toLowerCase(Locale.ROOT), a.name.toLowerCase(Locale.ROOT))
+        (a.qualifier.get.last.toLowerCase(Locale.ROOT), a.name.toLowerCase(Locale.ROOT))
       }
       unique(grouped)
     }
@@ -180,7 +180,7 @@ package object expressions  {
         case qualifier +: name +: nestedFields =>
           val key = (qualifier.toLowerCase(Locale.ROOT), name.toLowerCase(Locale.ROOT))
           val attributes = collectMatches(name, qualified.get(key)).filter { a =>
-            resolver(qualifier, a.qualifier.get)
+            resolver(qualifier, a.qualifier.get.last)
           }
           (attributes, nestedFields)
         case all =>
