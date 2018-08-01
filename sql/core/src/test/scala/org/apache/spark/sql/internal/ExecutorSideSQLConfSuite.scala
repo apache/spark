@@ -86,20 +86,16 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
   }
 
   test("SPARK-22219: refactor to control to generate comment") {
-    withSQLConf(StaticSQLConf.CODEGEN_COMMENTS.key -> "false") {
-      val res = codegenStringSeq(spark.range(10).groupBy(col("id") * 2).count()
-        .queryExecution.executedPlan)
-      assert(res.length == 2)
-      assert(res.forall{ case (_, code) =>
-        !code.contains("* Codegend pipeline") && !code.contains("// input[")})
-    }
-
-    withSQLConf(StaticSQLConf.CODEGEN_COMMENTS.key -> "true") {
-      val res = codegenStringSeq(spark.range(10).groupBy(col("id") * 2).count()
-        .queryExecution.executedPlan)
-      assert(res.length == 2)
-      assert(res.forall{ case (_, code) =>
-        code.contains("* Codegend pipeline") && code.contains("// input[")})
+    Seq(true, false).foreach { flag =>
+      withSQLConf(StaticSQLConf.CODEGEN_COMMENTS.key -> flag.toString) {
+        val res = codegenStringSeq(spark.range(10).groupBy(col("id") * 2).count()
+          .queryExecution.executedPlan)
+        assert(res.length == 2)
+        assert(res.forall { case (_, code) =>
+          (code.contains("* Codegend pipeline") == flag) &&
+            (code.contains("// input[") == flag)
+        })
+      }
     }
   }
 }
