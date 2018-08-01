@@ -103,6 +103,7 @@ class StreamingAggregationStateManagerSuite extends StreamTest {
     stateManager.put(memoryStateStore, inputRow)
 
     assert(memoryStateStore.iterator().size === 1)
+    assert(stateManager.iterator(memoryStateStore).size === memoryStateStore.iterator().size)
 
     val keyRow = stateManager.getKey(inputRow)
     assert(keyRow === expectedStateKey)
@@ -111,7 +112,15 @@ class StreamingAggregationStateManagerSuite extends StreamTest {
     val pair = memoryStateStore.iterator().next()
     assert(pair.key === keyRow)
     assert(pair.value === expectedStateValue)
-    assert(stateManager.restoreOriginRow(pair) === inputRow)
+
+    // iterate with state manager and see whether original rows are returned as values
+    val pairFromStateManager = stateManager.iterator(memoryStateStore).next()
+    assert(pairFromStateManager.key === keyRow)
+    assert(pairFromStateManager.value === inputRow)
+
+    // following as keys and values
+    assert(stateManager.keys(memoryStateStore).next() === keyRow)
+    assert(stateManager.values(memoryStateStore).next() === inputRow)
 
     // verify the stored value once again via get
     assert(memoryStateStore.get(keyRow) === expectedStateValue)

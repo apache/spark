@@ -165,6 +165,18 @@ trait WatermarkSupport extends UnaryExecNode {
       }
     }
   }
+
+  protected def removeKeysOlderThanWatermark(storeManager: StreamingAggregationStateManager,
+                                             store: StateStore)
+    : Unit = {
+    if (watermarkPredicateForKeys.nonEmpty) {
+      storeManager.keys(store).foreach { keyRow =>
+        if (watermarkPredicateForKeys.get.eval(keyRow)) {
+          store.remove(keyRow)
+        }
+      }
+    }
+  }
 }
 
 object WatermarkSupport {
@@ -293,12 +305,12 @@ case class StateStoreSaveExec(
             }
             allRemovalsTimeMs += 0
             commitTimeMs += timeTakenMs {
-              store.commit()
+              stateManager.commit(store)
             }
             setStoreMetrics(store)
-            store.iterator().map { rowPair =>
+            stateManager.values(store).map { valueRow =>
               numOutputRows += 1
-              stateManager.restoreOriginRow(rowPair)
+              valueRow
             }
 
           // Update and output only rows being evicted from the StateStore
@@ -314,7 +326,7 @@ case class StateStoreSaveExec(
             }
 
             val removalStartTimeNs = System.nanoTime
-            val rangeIter = store.getRange(None, None)
+            val rangeIter = stateManager.iterator(store)
 
             new NextIterator[InternalRow] {
               override protected def getNext(): InternalRow = {
@@ -322,8 +334,8 @@ case class StateStoreSaveExec(
                 while(rangeIter.hasNext && removedValueRow == null) {
                   val rowPair = rangeIter.next()
                   if (watermarkPredicateForKeys.get.eval(rowPair.key)) {
-                    store.remove(rowPair.key)
-                    removedValueRow = stateManager.restoreOriginRow(rowPair)
+                    stateManager.remove(store, rowPair.key)
+                    removedValueRow = rowPair.value
                   }
                 }
                 if (removedValueRow == null) {
@@ -336,7 +348,7 @@ case class StateStoreSaveExec(
 
               override protected def close(): Unit = {
                 allRemovalsTimeMs += NANOSECONDS.toMillis(System.nanoTime - removalStartTimeNs)
-                commitTimeMs += timeTakenMs { store.commit() }
+                commitTimeMs += timeTakenMs { stateManager.commit(store) }
                 setStoreMetrics(store)
               }
             }
@@ -370,7 +382,7 @@ case class StateStoreSaveExec(
 
                 // Remove old aggregates if watermark specified
                 allRemovalsTimeMs += timeTakenMs { removeKeysOlderThanWatermark(store) }
-                commitTimeMs += timeTakenMs { store.commit() }
+                commitTimeMs += timeTakenMs { stateManager.commit(store) }
                 setStoreMetrics(store)
               }
             }

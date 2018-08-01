@@ -89,9 +89,13 @@ package object state {
   sealed trait StreamingAggregationStateManager extends Serializable {
     def getKey(row: InternalRow): UnsafeRow
     def getStateValueSchema: StructType
-    def restoreOriginRow(rowPair: UnsafeRowPair): UnsafeRow
     def get(store: StateStore, key: UnsafeRow): UnsafeRow
     def put(store: StateStore, row: UnsafeRow): Unit
+    def commit(store: StateStore): Long
+    def remove(store: StateStore, key: UnsafeRow): Unit
+    def iterator(store: StateStore): Iterator[UnsafeRowPair]
+    def keys(store: StateStore): Iterator[UnsafeRow]
+    def values(store: StateStore): Iterator[UnsafeRow]
   }
 
   object StreamingAggregationStateManager extends Logging {
@@ -118,6 +122,15 @@ package object state {
       GenerateUnsafeProjection.generate(keyExpressions, inputRowAttributes)
 
     def getKey(row: InternalRow): UnsafeRow = keyProjector(row)
+
+    override def commit(store: StateStore): Long = store.commit()
+
+    override def remove(store: StateStore, key: UnsafeRow): Unit = store.remove(key)
+
+    override def keys(store: StateStore): Iterator[UnsafeRow] = {
+      // discard and don't convert values to avoid computation
+      store.getRange(None, None).map(_.key)
+    }
   }
 
   class StreamingAggregationStateManagerImplV1(
@@ -127,16 +140,20 @@ package object state {
 
     override def getStateValueSchema: StructType = inputRowAttributes.toStructType
 
-    override def restoreOriginRow(rowPair: UnsafeRowPair): UnsafeRow = {
-      rowPair.value
-    }
-
     override def get(store: StateStore, key: UnsafeRow): UnsafeRow = {
       store.get(key)
     }
 
     override def put(store: StateStore, row: UnsafeRow): Unit = {
       store.put(getKey(row), row)
+    }
+
+    override def iterator(store: StateStore): Iterator[UnsafeRowPair] = {
+      store.iterator()
+    }
+
+    override def values(store: StateStore): Iterator[UnsafeRow] = {
+      store.iterator().map(_.value)
     }
   }
 
@@ -161,15 +178,6 @@ package object state {
 
     override def getStateValueSchema: StructType = valueExpressions.toStructType
 
-    override def restoreOriginRow(rowPair: UnsafeRowPair): UnsafeRow = {
-      val joinedRow = joiner.join(rowPair.key, rowPair.value)
-      if (needToProjectToRestoreValue) {
-        restoreValueProjector(joinedRow)
-      } else {
-        joinedRow
-      }
-    }
-
     override def get(store: StateStore, key: UnsafeRow): UnsafeRow = {
       val savedState = store.get(key)
       if (savedState == null) {
@@ -188,6 +196,23 @@ package object state {
       val key = keyProjector(row)
       val value = valueProjector(row)
       store.put(key, value)
+    }
+
+    override def iterator(store: StateStore): Iterator[UnsafeRowPair] = {
+      store.iterator().map(rowPair => new UnsafeRowPair(rowPair.key, restoreOriginRow(rowPair)))
+    }
+
+    override def values(store: StateStore): Iterator[UnsafeRow] = {
+      store.iterator().map(rowPair => restoreOriginRow(rowPair))
+    }
+
+    private def restoreOriginRow(rowPair: UnsafeRowPair): UnsafeRow = {
+      val joinedRow = joiner.join(rowPair.key, rowPair.value)
+      if (needToProjectToRestoreValue) {
+        restoreValueProjector(joinedRow)
+      } else {
+        joinedRow
+      }
     }
   }
 
