@@ -3244,6 +3244,17 @@ object functions {
   }
 
   /**
+   * Returns an array of the elements in the first array but not in the second array,
+   * without duplicates. The order of elements in the result is not determined
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_except(col1: Column, col2: Column): Column = withExpr {
+    ArrayExcept(col1.expr, col2.expr)
+  }
+
+  /**
    * Creates a new row for each element in the given array or map column.
    *
    * @group collection_funcs
