@@ -19,6 +19,7 @@ package org.apache.spark.network.shuffle;
 
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -27,6 +28,7 @@ import java.util.Map;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
+import io.netty.util.internal.OutOfDirectMemoryError;
 import org.junit.Test;
 import org.mockito.stubbing.Answer;
 import org.mockito.stubbing.Stubber;
@@ -162,6 +164,33 @@ public class RetryingBlockFetcherSuite {
   }
 
   @Test
+  public void testOutOfDirectMemoryError() throws Exception {
+    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+    Constructor<?> constructor = OutOfDirectMemoryError.class.getDeclaredConstructor(String.class);
+    constructor.setAccessible(true);
+    OutOfDirectMemoryError err = (OutOfDirectMemoryError) constructor.newInstance(
+      "failed to allocate x byte(s) of direct memory");
+
+    List<? extends Map<String, Object>> interactions = Arrays.asList(
+      // IOException will cause a retry. Since b0 fails, we will retry both.
+      ImmutableMap.<String, Object>builder()
+        .put("b0", err)
+        .put("b1", block1)
+        .build(),
+      ImmutableMap.<String, Object>builder()
+        .put("b0", block0)
+        .put("b1", block1)
+        .build()
+    );
+
+    performInteractions(interactions, listener);
+
+    verify(listener, timeout(5000)).onBlockFetchSuccess("b0", block0);
+    verify(listener, timeout(5000)).onBlockFetchSuccess("b1", block1);
+    verifyNoMoreInteractions(listener);
+  }
+
+  @Test
   public void testThreeIOExceptions() throws IOException, InterruptedException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
 
@@ -269,10 +298,10 @@ public class RetryingBlockFetcherSuite {
 
             if (blockValue instanceof ManagedBuffer) {
               retryListener.onBlockFetchSuccess(blockId, (ManagedBuffer) blockValue);
-            } else if (blockValue instanceof Exception) {
-              retryListener.onBlockFetchFailure(blockId, (Exception) blockValue);
+            } else if (blockValue instanceof Throwable) {
+              retryListener.onBlockFetchFailure(blockId, (Throwable) blockValue);
             } else {
-              fail("Can only handle ManagedBuffers and Exceptions, got " + blockValue);
+              fail("Can only handle ManagedBuffers and Throwable, got " + blockValue);
             }
           }
           return null;
