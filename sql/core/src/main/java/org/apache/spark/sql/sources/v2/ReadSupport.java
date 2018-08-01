@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.sources.DataSourceRegister;
 import org.apache.spark.sql.sources.v2.reader.DataSourceReader;
 import org.apache.spark.sql.types.StructType;
 
@@ -34,16 +35,21 @@ public interface ReadSupport extends DataSourceV2 {
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    *
-   * @param schema the user provided schema.
+   * @param schema the user specified schema.
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.
    *
-   * By default this method ignores the user provided schema and just calls
-   * {@link #createReader(DataSourceOptions)}, implementations should override this method to
-   * handle user provided schema.
+   * By default this method throws {@link UnsupportedOperationException}, implementations should
+   * override this method to handle user specified schema.
    */
   default DataSourceReader createReader(StructType schema, DataSourceOptions options) {
-    return createReader(options);
+    String name;
+    if (this instanceof DataSourceRegister) {
+      name = ((DataSourceRegister) this).shortName();
+    } else {
+      name = this.getClass().getName();
+    }
+    throw new UnsupportedOperationException(name + " does not support user specified schema");
   }
 
   /**
