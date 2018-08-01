@@ -151,7 +151,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
   test("SPARK-24626 parallelize location size calculation in Analyze Table command") {
     withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "2",
-      SQLConf.COMPUTE_STATS_LIST_FILES_IN_PARALLEL.key -> "True") {
+      SQLConf.PARALLEL_FILE_LISTING_IN_COMMMANDS.key -> "True") {
       val checkSizeTable = "checkSizeTable"
       withTable(checkSizeTable) {
           sql(s"CREATE TABLE $checkSizeTable (key STRING, value STRING) PARTITIONED BY (ds STRING)")
