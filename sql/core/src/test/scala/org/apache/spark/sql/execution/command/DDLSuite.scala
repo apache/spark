@@ -2249,48 +2249,64 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("Datasource partition table should load empty partitions") {
+  test("Partition table should load empty static partitions") {
     // All static partitions
-    withTable("t", "t1") {
+    withTable("t", "t1", "t2") {
       withTempPath { dir =>
         spark.sql("CREATE TABLE t(a int) USING parquet")
         spark.sql("CREATE TABLE t1(a int, c string, b string) " +
           s"USING parquet PARTITIONED BY(c, b) LOCATION '${dir.toURI}'")
 
-        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+        // datasource table
+        validateStaticPartitionTable("t1")
 
-        assert(spark.sql("SHOW PARTITIONS t1").count() == 0)
+        // hive table
+        if (isUsingHiveMetastore) {
+          spark.sql("CREATE TABLE t2(a int) " +
+            s"PARTITIONED BY(c string, b string) LOCATION '${dir.toURI}'")
+          validateStaticPartitionTable("t2")
+        }
 
-        spark.sql("INSERT INTO TABLE t1 PARTITION(b='b', c='c') SELECT * FROM t WHERE 1 = 0")
-
-        assert(spark.sql("SHOW PARTITIONS t1").count() == 1)
-
-        assert(new File(dir, "c=c/b=b").exists())
-
-        checkAnswer(spark.table("t1"), Nil)
+        def validateStaticPartitionTable(tableName: String): Unit = {
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+          assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+          assert(spark.sql(s"SHOW PARTITIONS $tableName").count() == 0)
+          spark.sql(
+            s"INSERT INTO TABLE $tableName PARTITION(b='b', c='c') SELECT * FROM t WHERE 1 = 0")
+          assert(spark.sql(s"SHOW PARTITIONS $tableName").count() == 1)
+          assert(new File(dir, "c=c/b=b").exists())
+          checkAnswer(spark.table(tableName), Nil)
+        }
       }
     }
 
     // Partial dynamic partitions
-    withTable("t", "t1") {
+    withTable("t", "t1", "t2") {
       withTempPath { dir =>
         spark.sql("CREATE TABLE t(a int) USING parquet")
         spark.sql("CREATE TABLE t1(a int, b string, c string) " +
           s"USING parquet PARTITIONED BY(c, b) LOCATION '${dir.toURI}'")
 
-        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+        // datasource table
+        validatePartialStaticPartitionTable("t1")
 
-        assert(spark.sql("SHOW PARTITIONS t1").count() == 0)
+        // hive table
+        if (isUsingHiveMetastore) {
+          spark.sql("CREATE TABLE t2(a int) " +
+            s"PARTITIONED BY(c string, b string) LOCATION '${dir.toURI}'")
+          validatePartialStaticPartitionTable("t2")
+        }
 
-        spark.sql("INSERT INTO TABLE t1 PARTITION(c='c', b) SELECT *, 'b' FROM t WHERE 1 = 0")
-
-        assert(spark.sql("SHOW PARTITIONS t1").count() == 0)
-
-        assert(!new File(dir, "c=c/b=b").exists())
-
-        checkAnswer(spark.table("t1"), Nil)
+        def validatePartialStaticPartitionTable(tableName: String): Unit = {
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+          assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+          assert(spark.sql(s"SHOW PARTITIONS $tableName").count() == 0)
+          spark.sql(
+            s"INSERT INTO TABLE $tableName PARTITION(c='c', b) SELECT *, 'b' FROM t WHERE 1 = 0")
+          assert(spark.sql(s"SHOW PARTITIONS $tableName").count() == 0)
+          assert(!new File(dir, "c=c/b=b").exists())
+          checkAnswer(spark.table(tableName), Nil)
+        }
       }
     }
   }
