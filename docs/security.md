@@ -603,6 +603,14 @@ configure those ports.
     <td>Set to "0" to choose a port randomly. Standalone mode only.</td>
   </tr>
   <tr>
+    <td>External Service</td>
+    <td>Standalone Master</td>
+    <td>6066</td>
+    <td>Submit job to cluster via REST API</td>
+    <td><code>spark.master.rest.port</code></td>
+    <td>Use <code>spark.master.rest.enabled</code> to enable/disable this service. Standalone mode only.</td>
+  </tr>
+  <tr>
     <td>Standalone Master</td>
     <td>Standalone Worker</td>
     <td>(random)</td>
