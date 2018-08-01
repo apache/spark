@@ -28,7 +28,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -350,9 +350,7 @@ object DataType {
    *   compatible (including nullability), or is nullable if the write struct does not contain the
    *   field. Write-side structs are not compatible if they contain fields that are not present in
    *   the read-side struct.
-   * - Both types are atomic and are the same type
-   *
-   * This method does not allow type promotion such as, write type int with read type long.
+   * - Both types are atomic and the write type can be safely cast to the read type.
    *
    * Extra fields in write-side structs are not allowed to avoid accidentally writing data that
    * the read schema will not read, and to ensure map key equality is not changed when data is read.
@@ -364,38 +362,68 @@ object DataType {
   def canWrite(
       write: DataType,
       read: DataType,
-      resolver: Resolver): Boolean = {
+      resolver: Resolver,
+      context: String,
+      addError: String => Unit = (_: String) => {}): Boolean = {
     (write, read) match {
       case (wArr: ArrayType, rArr: ArrayType) =>
-        canWrite(wArr.elementType, rArr.elementType, resolver) &&
-            (rArr.containsNull || !wArr.containsNull)
+        if (wArr.containsNull && !rArr.containsNull) {
+          addError(s"Cannot write nullable elements to array of non-nulls: '$context'")
+          false
+        } else {
+          canWrite(wArr.elementType, rArr.elementType, resolver, context + ".element", addError)
+        }
 
       case (wMap: MapType, rMap: MapType) =>
         // map keys cannot include data fields not in the read schema without changing equality when
         // read. map keys can be missing fields as long as they are nullable in the read schema.
-        canWrite(wMap.keyType, rMap.keyType, resolver) &&
-            canWrite(wMap.valueType, rMap.valueType, resolver) &&
-            (rMap.valueContainsNull || !wMap.valueContainsNull)
+        if (wMap.valueContainsNull && !rMap.valueContainsNull) {
+          addError(s"Cannot write nullable values to map of non-nulls: '$context'")
+          false
+        } else {
+          canWrite(wMap.keyType, rMap.keyType, resolver, context + ".key", addError) &&
+              canWrite(wMap.valueType, rMap.valueType, resolver, context + ".value", addError)
+        }
 
       case (StructType(writeFields), StructType(readFields)) =>
-        lazy val hasNoExtraFields =
-          (writeFields.map(_.name).toSet -- readFields.map(_.name)).isEmpty
+        lazy val extraFields = writeFields.map(_.name).toSet -- readFields.map(_.name)
 
-        readFields.forall { readField =>
+        var result = readFields.forall { readField =>
+          val fieldContext = context + "." + readField.name
           writeFields.find(writeField => resolver(writeField.name, readField.name)) match {
             case Some(writeField) =>
-              canWrite(writeField.dataType, readField.dataType, resolver) &&
-                  (readField.nullable || !writeField.nullable)
+              if (writeField.nullable && !readField.nullable) {
+                addError(s"Cannot write nullable values to non-null field: '$fieldContext'")
+                false
+              } else {
+                canWrite(writeField.dataType, readField.dataType, resolver, fieldContext, addError)
+              }
+
+            case None if !readField.nullable =>
+              // the write schema doesn't have the field, so it must be nullable in the read schema
+              addError(s"Missing required (non-null) field: '$fieldContext'")
+              false
 
             case None =>
-              // the write schema doesn't have the field, so it must be nullable in the read schema
-              readField.nullable
+              true
           }
-        } && hasNoExtraFields
+        }
 
-      case (w, r) =>
-        // the write and read types are atomic and must be the same
-        w.sameType(r)
+        if (extraFields.nonEmpty) {
+          val extraFieldsStr = extraFields.map(context + "." + _).mkString("'", "', '", "'")
+          addError(s"Cannot write extra fields to table: $extraFieldsStr")
+          result = false
+        }
+
+        result
+
+      case (w: AtomicType, r: AtomicType) =>
+        if (!Cast.canSafeCast(w, r)) {
+          addError(s"Cannot safely cast '$context': $w to $r")
+          false
+        } else {
+          true
+        }
     }
   }
 }

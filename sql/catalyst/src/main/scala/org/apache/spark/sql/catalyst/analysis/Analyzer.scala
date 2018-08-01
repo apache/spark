@@ -2258,20 +2258,12 @@ class Analyzer(
 
       val errors = new mutable.ArrayBuffer[String]()
       val resolved: Seq[NamedExpression] = if (byName) {
-        expected.flatMap { outAttr =>
-          query.resolveQuoted(outAttr.name, resolver) match {
-            case Some(inAttr) if inAttr.nullable && !outAttr.nullable =>
-              errors += s"Cannot write nullable values to non-null column '${outAttr.name}'"
-              None
-
-            case Some(inAttr) if !DataType.canWrite(outAttr.dataType, inAttr.dataType, resolver) =>
-              Some(upcast(inAttr, outAttr))
-
-            case Some(inAttr) =>
-              Some(inAttr) // matches nullability, datatype, and name
-
-            case _ =>
-              errors += s"Cannot find data for output column '${outAttr.name}'"
+        expected.flatMap { tableAttr =>
+          query.resolveQuoted(tableAttr.name, resolver) match {
+            case Some(queryExpr) =>
+              checkField(tableAttr, queryExpr, err => errors += err)
+            case None =>
+              errors += s"Cannot find data for output column '${tableAttr.name}'"
               None
           }
         }
@@ -2285,17 +2277,8 @@ class Analyzer(
         }
 
         query.output.zip(expected).flatMap {
-          case (inAttr, outAttr) if inAttr.nullable && !outAttr.nullable =>
-            errors += s"Cannot write nullable values to non-null column '${outAttr.name}'"
-            None
-
-          case (inAttr, outAttr)
-            if !DataType.canWrite(inAttr.dataType, outAttr.dataType, resolver) ||
-                inAttr.name != outAttr.name =>
-            Some(upcast(inAttr, outAttr))
-
-          case (inAttr, _) =>
-            Some(inAttr) // matches nullability, datatype, and name
+          case (queryExpr, tableAttr) =>
+            checkField(tableAttr, queryExpr, err => errors += err)
         }
       }
 
@@ -2307,12 +2290,27 @@ class Analyzer(
       Project(resolved, query)
     }
 
-    private def upcast(inAttr: NamedExpression, outAttr: Attribute): NamedExpression = {
-      Alias(
-        UpCast(inAttr, outAttr.dataType, Seq()), outAttr.name
-      )(
-        explicitMetadata = Option(outAttr.metadata)
-      )
+    private def checkField(
+        tableAttr: Attribute,
+        queryExpr: NamedExpression,
+        addError: String => Unit): Option[NamedExpression] = {
+
+      if (queryExpr.nullable && !tableAttr.nullable) {
+        addError(s"Cannot write nullable values to non-null column '${tableAttr.name}'")
+        None
+
+      } else if (!DataType.canWrite(
+          tableAttr.dataType, queryExpr.dataType, resolver, tableAttr.name, addError)) {
+        None
+
+      } else {
+        // always add an UpCast. it will be removed in the optimizer if it is unnecessary.
+        Some(Alias(
+          UpCast(queryExpr, tableAttr.dataType, Seq()), tableAttr.name
+        )(
+          explicitMetadata = Option(tableAttr.metadata)
+        ))
+      }
     }
   }
 
