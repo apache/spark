@@ -72,15 +72,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
   private def newWriter(
       avroType: Schema,
       catalystType: DataType,
-      path: List[String]): (CatalystDataUpdater, Int, Any) => Unit = {
-    (avroType.getLogicalType, catalystType) match {
-      case (_: TimestampMillis, TimestampType) => return (updater, ordinal, value) =>
-        updater.setLong(ordinal, value.asInstanceOf[Long] * 1000)
-      case (_: TimestampMicros, TimestampType) => return (updater, ordinal, value) =>
-        updater.setLong(ordinal, value.asInstanceOf[Long])
-      case _ =>
-    }
-
+      path: List[String]): (CatalystDataUpdater, Int, Any) => Unit =
     (avroType.getType, catalystType) match {
       case (NULL, NullType) => (updater, ordinal, _) =>
         updater.setNullAt(ordinal)
@@ -95,8 +87,14 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
       case (LONG, LongType) => (updater, ordinal, value) =>
         updater.setLong(ordinal, value.asInstanceOf[Long])
 
-      case (LONG, TimestampType) => (updater, ordinal, value) =>
-        updater.setLong(ordinal, value.asInstanceOf[Long] * 1000)
+      case (LONG, TimestampType) => avroType.getLogicalType match {
+        case _: TimestampMillis => (updater, ordinal, value) =>
+          updater.setLong(ordinal, value.asInstanceOf[Long] * 1000)
+        case _: TimestampMicros => (updater, ordinal, value) =>
+          updater.setLong(ordinal, value.asInstanceOf[Long])
+        case _ => (updater, ordinal, value) =>
+          updater.setLong(ordinal, value.asInstanceOf[Long] * 1000)
+      }
 
       case (LONG, DateType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, (value.asInstanceOf[Long] / DateTimeUtils.MILLIS_PER_DAY).toInt)
@@ -255,7 +253,6 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
             s"Source Avro schema: $rootAvroType.\n" +
             s"Target Catalyst type: $rootCatalystType")
     }
-  }
 
   private def getRecordWriter(
       avroType: Schema,

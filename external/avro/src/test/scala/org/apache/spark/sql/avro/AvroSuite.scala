@@ -36,7 +36,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{StructType, _}
 
 class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   val episodesAvro = testFile("episodes.avro")
@@ -361,6 +361,25 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     withTempPath { dir =>
       df.write.format("avro").save(dir.toString)
       checkAnswer(spark.read.format("avro").load(dir.toString), expected)
+    }
+  }
+
+  test("Logical type: specify different output timestamp types") {
+    val sparkSession = spark
+    import sparkSession.implicits._
+
+    val df = spark.read.format("avro").load(timestampAvro)
+
+    val expected = Seq((1L, 2L), (666L, 999L))
+      .toDF("timestamp_millis", "timestamp_micros")
+      .select('timestamp_millis.cast(TimestampType), 'timestamp_micros.cast(TimestampType))
+      .collect()
+
+    Seq("TIMESTAMP_MILLIS", "TIMESTAMP_MICROS").foreach { timestampType =>
+      withTempPath { dir =>
+        df.write.format("avro").option("outputTimestampType", timestampType).save(dir.toString)
+        checkAnswer(spark.read.format("avro").load(dir.toString), expected)
+      }
     }
   }
 
