@@ -52,21 +52,17 @@ class StateOperatorProgress private[sql](
     new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes, customMetrics)
 
   private[sql] def jsonValue: JValue = {
-    def safeMapToJValue[T](map: ju.Map[String, T], valueToJValue: T => JValue): JValue = {
-      if (map.isEmpty) return JNothing
-      val keys = map.keySet.asScala.toSeq.sorted
-      keys.map { k => k -> valueToJValue(map.get(k)) : JObject }.reduce(_ ~ _)
-    }
-
-    val jsonVal = ("numRowsTotal" -> JInt(numRowsTotal)) ~
-      ("numRowsUpdated" -> JInt(numRowsUpdated)) ~
-      ("memoryUsedBytes" -> JInt(memoryUsedBytes))
-
-    if (!customMetrics.isEmpty) {
-      jsonVal ~ ("customMetrics" -> safeMapToJValue[JLong](customMetrics, v => JInt(v.toLong)))
-    } else {
-      jsonVal
-    }
+    ("numRowsTotal" -> JInt(numRowsTotal)) ~
+    ("numRowsUpdated" -> JInt(numRowsUpdated)) ~
+    ("memoryUsedBytes" -> JInt(memoryUsedBytes)) ~
+    ("customMetrics" -> {
+      if (!customMetrics.isEmpty) {
+        val keys = customMetrics.keySet.asScala.toSeq.sorted
+        keys.map { k => k -> JInt(customMetrics.get(k).toLong) : JObject }.reduce(_ ~ _)
+      } else {
+        JNothing
+      }
+    })
   }
 
   override def toString: String = prettyJson

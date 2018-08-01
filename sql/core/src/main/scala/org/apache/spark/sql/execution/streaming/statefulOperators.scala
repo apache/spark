@@ -90,13 +90,11 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
    * the driver after this SparkPlan has been executed and metrics have been updated.
    */
   def getProgress(): StateOperatorProgress = {
-    // average metric is a bit tricky, so hard to aggregate: just exclude them to simplify issue
-    val avgExcludedCustomMetrics = stateStoreCustomMetrics
-      .filterNot(_._2.metricType == SQLMetrics.AVERAGE_METRIC)
+    val customMetrics = stateStoreCustomMetrics
       .map(entry => entry._1 -> longMetric(entry._1).value)
 
     val javaConvertedCustomMetrics: java.util.HashMap[String, java.lang.Long] =
-      new java.util.HashMap(avgExcludedCustomMetrics.mapValues(long2Long).asJava)
+      new java.util.HashMap(customMetrics.mapValues(long2Long).asJava)
 
     new StateOperatorProgress(
       numRowsTotal = longMetric("numTotalStateRows").value,
