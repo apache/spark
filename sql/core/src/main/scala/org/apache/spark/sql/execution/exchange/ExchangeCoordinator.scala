@@ -83,7 +83,6 @@ import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan}
  *  - post-shuffle partition 3: pre-shuffle partition 3 and 4 (size 50 MB)
  */
 class ExchangeCoordinator(
-    numExchanges: Int,
     advisoryTargetPostShuffleInputSize: Long,
     minNumPostShufflePartitions: Option[Int] = None)
   extends Logging {
@@ -91,8 +90,10 @@ class ExchangeCoordinator(
   // The registered Exchange operators.
   private[this] val exchanges = ArrayBuffer[ShuffleExchangeExec]()
 
+  private[this] lazy val numExchanges = exchanges.size
+
   // This map is used to lookup the post-shuffle ShuffledRowRDD for an Exchange operator.
-  private[this] val postShuffleRDDs: JMap[ShuffleExchangeExec, ShuffledRowRDD] =
+  private[this] lazy val postShuffleRDDs: JMap[ShuffleExchangeExec, ShuffledRowRDD] =
     new JHashMap[ShuffleExchangeExec, ShuffledRowRDD](numExchanges)
 
   // A boolean that indicates if this coordinator has made decision on how to shuffle data.
@@ -117,10 +118,6 @@ class ExchangeCoordinator(
    */
   def estimatePartitionStartIndices(
       mapOutputStatistics: Array[MapOutputStatistics]): Array[Int] = {
-    // If we have mapOutputStatistics.length < numExchange, it is because we do not submit
-    // a stage when the number of partitions of this dependency is 0.
-    assert(mapOutputStatistics.length <= numExchanges)
-
     // If minNumPostShufflePartitions is defined, it is possible that we need to use a
     // value less than advisoryTargetPostShuffleInputSize as the target input size of
     // a post shuffle task.
@@ -200,18 +197,14 @@ class ExchangeCoordinator(
       // Make sure we have the expected number of registered Exchange operators.
       assert(exchanges.length == numExchanges)
 
-      val distinctExchanges = exchanges.distinct
-      val numDistinctExchanges = distinctExchanges.length
-
-      val newPostShuffleRDDs =
-        new JHashMap[ShuffleExchangeExec, ShuffledRowRDD](numDistinctExchanges)
+      val newPostShuffleRDDs = new JHashMap[ShuffleExchangeExec, ShuffledRowRDD](numExchanges)
 
       // Submit all map stages
       val shuffleDependencies = ArrayBuffer[ShuffleDependency[Int, InternalRow, InternalRow]]()
       val submittedStageFutures = ArrayBuffer[SimpleFutureAction[MapOutputStatistics]]()
       var i = 0
-      while (i < numDistinctExchanges) {
-        val exchange = distinctExchanges(i)
+      while (i < numExchanges) {
+        val exchange = exchanges(i)
         val shuffleDependency = exchange.prepareShuffleDependency()
         shuffleDependencies += shuffleDependency
         if (shuffleDependency.rdd.partitions.length != 0) {
@@ -232,6 +225,10 @@ class ExchangeCoordinator(
         j += 1
       }
 
+      // If we have mapOutputStatistics.length < numExchange, it is because we do not submit
+      // a stage when the number of partitions of this dependency is 0.
+      assert(mapOutputStatistics.length <= numExchanges)
+
       // Now, we estimate partitionStartIndices. partitionStartIndices.length will be the
       // number of post-shuffle partitions.
       val partitionStartIndices =
@@ -242,8 +239,8 @@ class ExchangeCoordinator(
         }
 
       var k = 0
-      while (k < numDistinctExchanges) {
-        val exchange = distinctExchanges(k)
+      while (k < numExchanges) {
+        val exchange = exchanges(k)
         val rdd =
           exchange.preparePostShuffleRDD(shuffleDependencies(k), Some(partitionStartIndices))
         newPostShuffleRDDs.put(exchange, rdd)
@@ -253,7 +250,7 @@ class ExchangeCoordinator(
 
       // Finally, we set postShuffleRDDs and estimated.
       assert(postShuffleRDDs.isEmpty)
-      assert(newPostShuffleRDDs.size() == numDistinctExchanges)
+      assert(newPostShuffleRDDs.size() == numExchanges)
       postShuffleRDDs.putAll(newPostShuffleRDDs)
       estimated = true
     }

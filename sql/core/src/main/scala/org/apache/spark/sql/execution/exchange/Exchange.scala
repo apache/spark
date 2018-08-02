@@ -52,14 +52,6 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
   // Ignore this wrapper for canonicalizing.
   override def doCanonicalize(): SparkPlan = child.canonicalized
 
-  override protected def doPrepare(): Unit = {
-    child match {
-      case shuffleExchange @ ShuffleExchangeExec(_, _, Some(coordinator)) =>
-        coordinator.registerExchange(shuffleExchange)
-      case _ =>
-    }
-  }
-
   def doExecute(): RDD[InternalRow] = {
     child.execute()
   }

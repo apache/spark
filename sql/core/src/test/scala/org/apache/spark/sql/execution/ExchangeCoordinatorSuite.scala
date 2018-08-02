@@ -58,7 +58,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("test estimatePartitionStartIndices - 1 Exchange") {
-    val coordinator = new ExchangeCoordinator(1, 100L)
+    val coordinator = new ExchangeCoordinator(100L)
 
     {
       // All bytes per partition are 0.
@@ -105,7 +105,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("test estimatePartitionStartIndices - 2 Exchanges") {
-    val coordinator = new ExchangeCoordinator(2, 100L)
+    val coordinator = new ExchangeCoordinator(100L)
 
     {
       // If there are multiple values of the number of pre-shuffle partitions,
@@ -199,7 +199,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("test estimatePartitionStartIndices and enforce minimal number of reducers") {
-    val coordinator = new ExchangeCoordinator(2, 100L, Some(2))
+    val coordinator = new ExchangeCoordinator(100L, Some(2))
 
     {
       // The minimal number of post-shuffle partitions is not enforced because
