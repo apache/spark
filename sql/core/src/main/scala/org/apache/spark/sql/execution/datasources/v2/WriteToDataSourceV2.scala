@@ -109,11 +109,15 @@ object DataWritingSparkTask extends Logging {
     val attemptId = context.attemptNumber()
     val epochId = Option(context.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY)).getOrElse("0")
     val dataWriter = writeTask.createDataWriter(partId, taskId, epochId.toLong)
+    val copyIfNeeded: InternalRow => InternalRow =
+      if (writeTask.reuseDataObject()) identity else _.copy()
 
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
       while (iter.hasNext) {
-        dataWriter.write(iter.next())
+        // Internally Spark reuse the same UnsafeRow instance when producing output rows, here we
+        // copy it to avoid troubles at data source side.
+        dataWriter.write(copyIfNeeded(iter.next()))
       }
 
       val msg = if (useCommitCoordinator) {
@@ -150,28 +154,4 @@ object DataWritingSparkTask extends Logging {
             s"stage $stageId.$stageAttempt)")
     })
   }
-}
-
-class InternalRowDataWriterFactory(
-    rowWriterFactory: DataWriterFactory[Row],
-    schema: StructType) extends DataWriterFactory[InternalRow] {
-
-  override def createDataWriter(
-      partitionId: Int,
-      taskId: Long,
-      epochId: Long): DataWriter[InternalRow] = {
-    new InternalRowDataWriter(
-      rowWriterFactory.createDataWriter(partitionId, taskId, epochId),
-      RowEncoder.apply(schema).resolveAndBind())
-  }
-}
-
-class InternalRowDataWriter(rowWriter: DataWriter[Row], encoder: ExpressionEncoder[Row])
-  extends DataWriter[InternalRow] {
-
-  override def write(record: InternalRow): Unit = rowWriter.write(encoder.fromRow(record))
-
-  override def commit(): WriterCommitMessage = rowWriter.commit()
-
-  override def abort(): Unit = rowWriter.abort()
 }

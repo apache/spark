@@ -17,13 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
-import java.util.concurrent.atomic.AtomicLong
-
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.v2.DataWritingSparkTask.{logError, logInfo}
-import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory}
 import org.apache.spark.util.Utils
 
 /**
@@ -47,6 +44,8 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
       SparkEnv.get)
     EpochTracker.initializeCurrentEpoch(
       context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong)
+    val copyIfNeeded: InternalRow => InternalRow =
+      if (writeTask.reuseDataObject()) identity else _.copy()
 
     while (!context.isInterrupted() && !context.isCompleted()) {
       var dataWriter: DataWriter[InternalRow] = null
@@ -59,7 +58,7 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
             context.taskAttemptId(),
             EpochTracker.getCurrentEpoch.get)
           while (dataIterator.hasNext) {
-            dataWriter.write(dataIterator.next())
+            dataWriter.write(copyIfNeeded(dataIterator.next()))
           }
           logInfo(s"Writer for partition ${context.partitionId()} " +
             s"in epoch ${EpochTracker.getCurrentEpoch.get} is committing.")

@@ -50,4 +50,15 @@ public interface DataWriterFactory<T> extends Serializable {
    *                this ID will always be 0.
    */
   DataWriter<T> createDataWriter(int partitionId, long taskId, long epochId);
+
+  /**
+   * When true, Spark will reuse the same data object instance when sending data to the data writer,
+   * for better performance. Data writers should carefully handle the data objects if it's reused,
+   * e.g. do not buffer the data objects in a list. By default it returns false for safety, data
+   * sources can override it if their data writers immediately write the data object to somewhere
+   * else like a memory buffer or disk.
+   */
+  default boolean reuseDataObject() {
+    return false;
+  }
 }

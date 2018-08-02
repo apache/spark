@@ -71,6 +71,10 @@ case class KafkaStreamWriterFactory(
       epochId: Long): DataWriter[InternalRow] = {
     new KafkaStreamDataWriter(topic, producerParams, schema.toAttributes)
   }
+
+  // `KafkaRowWriter` copies the input row immediately via a unsafe projection, so we can skip the
+  // copy at Spark side.
+  override def reuseDataObject(): Boolean = true
 }
 
 /**
