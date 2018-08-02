@@ -490,24 +490,36 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c1.set(1997, 1, 28, 10, 30, 0)
     val c2 = Calendar.getInstance()
     c2.set(1996, 9, 30, 0, 0, 0)
-    assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === 3.94959677)
-    c2.set(2000, 1, 28, 0, 0, 0)
-    assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === -36)
-    c2.set(2000, 1, 29, 0, 0, 0)
-    assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === -36)
-    c2.set(1996, 2, 31, 0, 0, 0)
-    assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === 11)
+    assert(monthsBetween(
+      c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, true, c1.getTimeZone) === 3.94959677)
+    assert(monthsBetween(
+      c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, false, c1.getTimeZone)
+      === 3.9495967741935485)
+    Seq(true, false).foreach { roundOff =>
+      c2.set(2000, 1, 28, 0, 0, 0)
+      assert(monthsBetween(
+        c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, roundOff, c1.getTimeZone) === -36)
+      c2.set(2000, 1, 29, 0, 0, 0)
+      assert(monthsBetween(
+        c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, roundOff, c1.getTimeZone) === -36)
+      c2.set(1996, 2, 31, 0, 0, 0)
+      assert(monthsBetween(
+        c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, roundOff, c1.getTimeZone) === 11)
+    }
 
     val c3 = Calendar.getInstance(TimeZonePST)
     c3.set(2000, 1, 28, 16, 0, 0)
     val c4 = Calendar.getInstance(TimeZonePST)
     c4.set(1997, 1, 28, 16, 0, 0)
     assert(
-      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, TimeZonePST)
+      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, true, TimeZonePST)
       === 36.0)
     assert(
-      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, TimeZoneGMT)
+      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, true, TimeZoneGMT)
       === 35.90322581)
+    assert(
+      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, false, TimeZoneGMT)
+        === 35.903225806451616)
   }
 
   test("from UTC timestamp") {
@@ -563,6 +575,76 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     }
   }
 
+  test("truncTimestamp") {
+    def testTrunc(
+        level: Int,
+        expected: String,
+        inputTS: SQLTimestamp,
+        timezone: TimeZone = DateTimeUtils.defaultTimeZone()): Unit = {
+      val truncated =
+        DateTimeUtils.truncTimestamp(inputTS, level, timezone)
+      val expectedTS =
+        DateTimeUtils.stringToTimestamp(UTF8String.fromString(expected))
+      assert(truncated === expectedTS.get)
+    }
+
+    val defaultInputTS =
+      DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-05T09:32:05.359"))
+    val defaultInputTS1 =
+      DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-31T20:32:05.359"))
+    val defaultInputTS2 =
+      DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-04-01T02:32:05.359"))
+    val defaultInputTS3 =
+      DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-30T02:32:05.359"))
+    val defaultInputTS4 =
+      DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-29T02:32:05.359"))
+
+    testTrunc(DateTimeUtils.TRUNC_TO_YEAR, "2015-01-01T00:00:00", defaultInputTS.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_MONTH, "2015-03-01T00:00:00", defaultInputTS.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_DAY, "2015-03-05T00:00:00", defaultInputTS.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_HOUR, "2015-03-05T09:00:00", defaultInputTS.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_MINUTE, "2015-03-05T09:32:00", defaultInputTS.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_SECOND, "2015-03-05T09:32:05", defaultInputTS.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-02T00:00:00", defaultInputTS.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-30T00:00:00", defaultInputTS1.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-30T00:00:00", defaultInputTS2.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-30T00:00:00", defaultInputTS3.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-23T00:00:00", defaultInputTS4.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-01-01T00:00:00", defaultInputTS.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-01-01T00:00:00", defaultInputTS1.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-04-01T00:00:00", defaultInputTS2.get)
+
+    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
+      DateTimeTestUtils.withDefaultTimeZone(tz) {
+        val inputTS =
+          DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-05T09:32:05.359"))
+        val inputTS1 =
+          DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-31T20:32:05.359"))
+        val inputTS2 =
+          DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-04-01T02:32:05.359"))
+        val inputTS3 =
+          DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-30T02:32:05.359"))
+        val inputTS4 =
+          DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-29T02:32:05.359"))
+
+        testTrunc(DateTimeUtils.TRUNC_TO_YEAR, "2015-01-01T00:00:00", inputTS.get, tz)
+        testTrunc(DateTimeUtils.TRUNC_TO_MONTH, "2015-03-01T00:00:00", inputTS.get, tz)
+        testTrunc(DateTimeUtils.TRUNC_TO_DAY, "2015-03-05T00:00:00", inputTS.get, tz)
+        testTrunc(DateTimeUtils.TRUNC_TO_HOUR, "2015-03-05T09:00:00", inputTS.get, tz)
+        testTrunc(DateTimeUtils.TRUNC_TO_MINUTE, "2015-03-05T09:32:00", inputTS.get, tz)
+        testTrunc(DateTimeUtils.TRUNC_TO_SECOND, "2015-03-05T09:32:05", inputTS.get, tz)
+        testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-02T00:00:00", inputTS.get, tz)
+        testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-30T00:00:00", inputTS1.get, tz)
+        testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-30T00:00:00", inputTS2.get, tz)
+        testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-30T00:00:00", inputTS3.get, tz)
+        testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-23T00:00:00", inputTS4.get, tz)
+        testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-01-01T00:00:00", inputTS.get, tz)
+        testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-01-01T00:00:00", inputTS1.get, tz)
+        testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-04-01T00:00:00", inputTS2.get, tz)
+      }
+    }
+  }
+
   test("daysToMillis and millisToDays") {
     val c = Calendar.getInstance(TimeZonePST)
 
@@ -580,18 +662,18 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(daysToMillis(16800, TimeZoneGMT) === c.getTimeInMillis)
 
     // There are some days are skipped entirely in some timezone, skip them here.
-    val skipped_days = Map[String, Int](
-      "Kwajalein" -> 8632,
-      "Pacific/Apia" -> 15338,
-      "Pacific/Enderbury" -> 9131,
-      "Pacific/Fakaofo" -> 15338,
-      "Pacific/Kiritimati" -> 9131,
-      "Pacific/Kwajalein" -> 8632,
-      "MIT" -> 15338)
+    val skipped_days = Map[String, Set[Int]](
+      "Kwajalein" -> Set(8632),
+      "Pacific/Apia" -> Set(15338),
+      "Pacific/Enderbury" -> Set(9130, 9131),
+      "Pacific/Fakaofo" -> Set(15338),
+      "Pacific/Kiritimati" -> Set(9130, 9131),
+      "Pacific/Kwajalein" -> Set(8632),
+      "MIT" -> Set(15338))
     for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
-      val skipped = skipped_days.getOrElse(tz.getID, Int.MinValue)
+      val skipped = skipped_days.getOrElse(tz.getID, Set.empty)
       (-20000 to 20000).foreach { d =>
-        if (d != skipped) {
+        if (!skipped.contains(d)) {
           assert(millisToDays(daysToMillis(d, tz), tz) === d,
             s"Round trip of ${d} did not work in tz ${tz}")
         }

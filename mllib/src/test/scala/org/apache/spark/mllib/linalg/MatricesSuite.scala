@@ -20,16 +20,42 @@ package org.apache.spark.mllib.linalg
 import java.util.Random
 
 import scala.collection.mutable.{Map => MutableMap}
+import scala.reflect.ClassTag
 
 import breeze.linalg.{CSCMatrix, Matrix => BM}
 import org.mockito.Mockito.when
-import org.scalatest.mock.MockitoSugar._
+import org.scalatest.mockito.MockitoSugar._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.serializer.KryoSerializer
 
 class MatricesSuite extends SparkFunSuite {
+  test("kryo class register") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+
+    val ser = new KryoSerializer(conf).newInstance()
+
+    def check[T: ClassTag](t: T) {
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
+
+    val m = 3
+    val n = 2
+    val denseValues = Array(0.0, 1.0, 2.0, 3.0, 4.0, 5.0)
+    val denseMat = Matrices.dense(m, n, denseValues).asInstanceOf[DenseMatrix]
+
+    val sparseValues = Array(1.0, 2.0, 4.0, 5.0)
+    val colPtrs = Array(0, 2, 4)
+    val rowIndices = Array(1, 2, 1, 2)
+    val sparseMat =
+      Matrices.sparse(m, n, colPtrs, rowIndices, sparseValues).asInstanceOf[SparseMatrix]
+    check(denseMat)
+    check(sparseMat)
+  }
+
   test("dense matrix construction") {
     val m = 3
     val n = 2

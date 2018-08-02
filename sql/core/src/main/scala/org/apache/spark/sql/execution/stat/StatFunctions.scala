@@ -99,7 +99,7 @@ object StatFunctions extends Logging {
         sum2: Array[QuantileSummaries]): Array[QuantileSummaries] = {
       sum1.zip(sum2).map { case (s1, s2) => s1.compress().merge(s2.compress()) }
     }
-    val summaries = df.select(columns: _*).rdd.aggregate(emptySummaries)(apply, merge)
+    val summaries = df.select(columns: _*).rdd.treeAggregate(emptySummaries)(apply, merge)
 
     summaries.map { summary => probabilities.flatMap(summary.query) }
   }
@@ -157,10 +157,10 @@ object StatFunctions extends Logging {
     cols.map(name => (name, df.schema.fields.find(_.name == name))).foreach { case (name, data) =>
       require(data.nonEmpty, s"Couldn't find column with name $name")
       require(data.get.dataType.isInstanceOf[NumericType], s"Currently $functionName calculation " +
-        s"for columns with dataType ${data.get.dataType} not supported.")
+        s"for columns with dataType ${data.get.dataType.catalogString} not supported.")
     }
     val columns = cols.map(n => Column(Cast(Column(n).expr, DoubleType)))
-    df.select(columns: _*).queryExecution.toRdd.aggregate(new CovarianceCounter)(
+    df.select(columns: _*).queryExecution.toRdd.treeAggregate(new CovarianceCounter)(
       seqOp = (counter, row) => {
         counter.add(row.getDouble(0), row.getDouble(1))
       },

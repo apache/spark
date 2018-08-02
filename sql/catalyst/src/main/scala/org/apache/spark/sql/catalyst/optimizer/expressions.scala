@@ -64,49 +64,89 @@ object ConstantFolding extends Rule[LogicalPlan] {
  * }}}
  *
  * Approach used:
- * - Start from AND operator as the root
- * - Get all the children conjunctive predicates which are EqualTo / EqualNullSafe such that they
- *   don't have a `NOT` or `OR` operator in them
  * - Populate a mapping of attribute => constant value by looking at all the equals predicates
  * - Using this mapping, replace occurrence of the attributes with the corresponding constant values
  *   in the AND node.
  */
 object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
-  private def containsNonConjunctionPredicates(expression: Expression): Boolean = expression.find {
-    case _: Not | _: Or => true
-    case _ => false
-  }.isDefined
-
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case f: Filter => f transformExpressionsUp {
-      case and: And =>
-        val conjunctivePredicates =
-          splitConjunctivePredicates(and)
-            .filter(expr => expr.isInstanceOf[EqualTo] || expr.isInstanceOf[EqualNullSafe])
-            .filterNot(expr => containsNonConjunctionPredicates(expr))
+    case f: Filter =>
+      val (newCondition, _) = traverse(f.condition, replaceChildren = true)
+      if (newCondition.isDefined) {
+        f.copy(condition = newCondition.get)
+      } else {
+        f
+      }
+  }
 
-        val equalityPredicates = conjunctivePredicates.collect {
-          case e @ EqualTo(left: AttributeReference, right: Literal) => ((left, right), e)
-          case e @ EqualTo(left: Literal, right: AttributeReference) => ((right, left), e)
-          case e @ EqualNullSafe(left: AttributeReference, right: Literal) => ((left, right), e)
-          case e @ EqualNullSafe(left: Literal, right: AttributeReference) => ((right, left), e)
+  type EqualityPredicates = Seq[((AttributeReference, Literal), BinaryComparison)]
+
+  /**
+   * Traverse a condition as a tree and replace attributes with constant values.
+   * - On matching [[And]], recursively traverse each children and get propagated mappings.
+   *   If the current node is not child of another [[And]], replace all occurrences of the
+   *   attributes with the corresponding constant values.
+   * - If a child of [[And]] is [[EqualTo]] or [[EqualNullSafe]], propagate the mapping
+   *   of attribute => constant.
+   * - On matching [[Or]] or [[Not]], recursively traverse each children, propagate empty mapping.
+   * - Otherwise, stop traversal and propagate empty mapping.
+   * @param condition condition to be traversed
+   * @param replaceChildren whether to replace attributes with constant values in children
+   * @return A tuple including:
+   *         1. Option[Expression]: optional changed condition after traversal
+   *         2. EqualityPredicates: propagated mapping of attribute => constant
+   */
+  private def traverse(condition: Expression, replaceChildren: Boolean)
+    : (Option[Expression], EqualityPredicates) =
+    condition match {
+      case e @ EqualTo(left: AttributeReference, right: Literal) => (None, Seq(((left, right), e)))
+      case e @ EqualTo(left: Literal, right: AttributeReference) => (None, Seq(((right, left), e)))
+      case e @ EqualNullSafe(left: AttributeReference, right: Literal) =>
+        (None, Seq(((left, right), e)))
+      case e @ EqualNullSafe(left: Literal, right: AttributeReference) =>
+        (None, Seq(((right, left), e)))
+      case a: And =>
+        val (newLeft, equalityPredicatesLeft) = traverse(a.left, replaceChildren = false)
+        val (newRight, equalityPredicatesRight) = traverse(a.right, replaceChildren = false)
+        val equalityPredicates = equalityPredicatesLeft ++ equalityPredicatesRight
+        val newSelf = if (equalityPredicates.nonEmpty && replaceChildren) {
+          Some(And(replaceConstants(newLeft.getOrElse(a.left), equalityPredicates),
+            replaceConstants(newRight.getOrElse(a.right), equalityPredicates)))
+        } else {
+          if (newLeft.isDefined || newRight.isDefined) {
+            Some(And(newLeft.getOrElse(a.left), newRight.getOrElse(a.right)))
+          } else {
+            None
+          }
         }
-
-        val constantsMap = AttributeMap(equalityPredicates.map(_._1))
-        val predicates = equalityPredicates.map(_._2).toSet
-
-        def replaceConstants(expression: Expression) = expression transform {
-          case a: AttributeReference =>
-            constantsMap.get(a) match {
-              case Some(literal) => literal
-              case None => a
-            }
+        (newSelf, equalityPredicates)
+      case o: Or =>
+        // Ignore the EqualityPredicates from children since they are only propagated through And.
+        val (newLeft, _) = traverse(o.left, replaceChildren = true)
+        val (newRight, _) = traverse(o.right, replaceChildren = true)
+        val newSelf = if (newLeft.isDefined || newRight.isDefined) {
+          Some(Or(left = newLeft.getOrElse(o.left), right = newRight.getOrElse((o.right))))
+        } else {
+          None
         }
+        (newSelf, Seq.empty)
+      case n: Not =>
+        // Ignore the EqualityPredicates from children since they are only propagated through And.
+        val (newChild, _) = traverse(n.child, replaceChildren = true)
+        (newChild.map(Not), Seq.empty)
+      case _ => (None, Seq.empty)
+    }
 
-        and transform {
-          case e @ EqualTo(_, _) if !predicates.contains(e) => replaceConstants(e)
-          case e @ EqualNullSafe(_, _) if !predicates.contains(e) => replaceConstants(e)
-        }
+  private def replaceConstants(condition: Expression, equalityPredicates: EqualityPredicates)
+    : Expression = {
+    val constantsMap = AttributeMap(equalityPredicates.map(_._1))
+    val predicates = equalityPredicates.map(_._2).toSet
+    def replaceConstants0(expression: Expression) = expression transform {
+      case a: AttributeReference => constantsMap.getOrElse(a, a)
+    }
+    condition transform {
+      case e @ EqualTo(_, _) if !predicates.contains(e) => replaceConstants0(e)
+      case e @ EqualNullSafe(_, _) if !predicates.contains(e) => replaceConstants0(e)
     }
   }
 }
@@ -169,21 +209,33 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
 
 /**
  * Optimize IN predicates:
- * 1. Removes literal repetitions.
- * 2. Replaces [[In (value, seq[Literal])]] with optimized version
+ * 1. Converts the predicate to false when the list is empty and
+ *    the value is not nullable.
+ * 2. Removes literal repetitions.
+ * 3. Replaces [[In (value, seq[Literal])]] with optimized version
  *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
 object OptimizeIn extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
+      case In(v, list) if list.isEmpty =>
+        // When v is not nullable, the following expression will be optimized
+        // to FalseLiteral which is tested in OptimizeInSuite.scala
+        If(IsNotNull(v), FalseLiteral, Literal(null, BooleanType))
       case expr @ In(v, list) if expr.inSetConvertible =>
         val newList = ExpressionSet(list).toSeq
-        if (newList.size > SQLConf.get.optimizerInSetConversionThreshold) {
+        if (newList.length == 1
+          // TODO: `EqualTo` for structural types are not working. Until SPARK-24443 is addressed,
+          // TODO: we exclude them in this rule.
+          && !v.isInstanceOf[CreateNamedStructLike]
+          && !newList.head.isInstanceOf[CreateNamedStructLike]) {
+          EqualTo(v, newList.head)
+        } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
           InSet(v, HashSet() ++ hSet)
-        } else if (newList.size < list.size) {
+        } else if (newList.length < list.length) {
           expr.copy(list = newList)
-        } else { // newList.length == list.length
+        } else { // newList.length == list.length && newList.length > 1
           expr
         }
     }
@@ -338,6 +390,8 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
       case If(Literal(null, _), _, falseValue) => falseValue
+      case If(cond, trueValue, falseValue)
+        if cond.deterministic && trueValue.semanticEquals(falseValue) => trueValue
 
       case e @ CaseWhen(branches, elseValue) if branches.exists(x => falseOrNullLiteral(x._1)) =>
         // If there are branches that are always false, remove them.
@@ -351,17 +405,35 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
           e.copy(branches = newBranches)
         }
 
-      case e @ CaseWhen(branches, _) if branches.headOption.map(_._1) == Some(TrueLiteral) =>
+      case CaseWhen(branches, _) if branches.headOption.map(_._1).contains(TrueLiteral) =>
         // If the first branch is a true literal, remove the entire CaseWhen and use the value
         // from that. Note that CaseWhen.branches should never be empty, and as a result the
         // headOption (rather than head) added above is just an extra (and unnecessary) safeguard.
         branches.head._2
 
       case CaseWhen(branches, _) if branches.exists(_._1 == TrueLiteral) =>
-        // a branc with a TRue condition eliminates all following branches,
+        // a branch with a true condition eliminates all following branches,
         // these branches can be pruned away
         val (h, t) = branches.span(_._1 != TrueLiteral)
         CaseWhen( h :+ t.head, None)
+
+      case e @ CaseWhen(branches, Some(elseValue))
+          if branches.forall(_._2.semanticEquals(elseValue)) =>
+        // For non-deterministic conditions with side effect, we can not remove it, or change
+        // the ordering. As a result, we try to remove the deterministic conditions from the tail.
+        var hitNonDeterministicCond = false
+        var i = branches.length
+        while (i > 0 && !hitNonDeterministicCond) {
+          hitNonDeterministicCond = !branches(i - 1)._1.deterministic
+          if (!hitNonDeterministicCond) {
+            i -= 1
+          }
+        }
+        if (i == 0) {
+          elseValue
+        } else {
+          e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
+        }
     }
   }
 }
@@ -462,18 +534,21 @@ object NullPropagation extends Rule[LogicalPlan] {
 
 
 /**
- * Propagate foldable expressions:
  * Replace attributes with aliases of the original foldable expressions if possible.
- * Other optimizations will take advantage of the propagated foldable expressions.
- *
+ * Other optimizations will take advantage of the propagated foldable expressions. For example,
+ * this rule can optimize
  * {{{
  *   SELECT 1.0 x, 'abc' y, Now() z ORDER BY x, y, 3
- *   ==>  SELECT 1.0 x, 'abc' y, Now() z ORDER BY 1.0, 'abc', Now()
  * }}}
+ * to
+ * {{{
+ *   SELECT 1.0 x, 'abc' y, Now() z ORDER BY 1.0, 'abc', Now()
+ * }}}
+ * and other rules can further optimize it and remove the ORDER BY operator.
  */
 object FoldablePropagation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val foldableMap = AttributeMap(plan.flatMap {
+    var foldableMap = AttributeMap(plan.flatMap {
       case Project(projectList, _) => projectList.collect {
         case a: Alias if a.child.foldable => (a.toAttribute, a)
       }
@@ -486,38 +561,44 @@ object FoldablePropagation extends Rule[LogicalPlan] {
     if (foldableMap.isEmpty) {
       plan
     } else {
-      var stop = false
       CleanupAliases(plan.transformUp {
-        // A leaf node should not stop the folding process (note that we are traversing up the
-        // tree, starting at the leaf nodes); so we are allowing it.
-        case l: LeafNode =>
-          l
-
         // We can only propagate foldables for a subset of unary nodes.
-        case u: UnaryNode if !stop && canPropagateFoldables(u) =>
+        case u: UnaryNode if foldableMap.nonEmpty && canPropagateFoldables(u) =>
           u.transformExpressions(replaceFoldable)
 
-        // Allow inner joins. We do not allow outer join, although its output attributes are
-        // derived from its children, they are actually different attributes: the output of outer
-        // join is not always picked from its children, but can also be null.
+        // Join derives the output attributes from its child while they are actually not the
+        // same attributes. For example, the output of outer join is not always picked from its
+        // children, but can also be null. We should exclude these miss-derived attributes when
+        // propagating the foldable expressions.
         // TODO(cloud-fan): It seems more reasonable to use new attributes as the output attributes
         // of outer join.
-        case j @ Join(_, _, Inner, _) if !stop =>
-          j.transformExpressions(replaceFoldable)
+        case j @ Join(left, right, joinType, _) if foldableMap.nonEmpty =>
+          val newJoin = j.transformExpressions(replaceFoldable)
+          val missDerivedAttrsSet: AttributeSet = AttributeSet(joinType match {
+            case _: InnerLike | LeftExistence(_) => Nil
+            case LeftOuter => right.output
+            case RightOuter => left.output
+            case FullOuter => left.output ++ right.output
+          })
+          foldableMap = AttributeMap(foldableMap.baseMap.values.filterNot {
+            case (attr, _) => missDerivedAttrsSet.contains(attr)
+          }.toSeq)
+          newJoin
 
-        // We can fold the projections an expand holds. However expand changes the output columns
-        // and often reuses the underlying attributes; so we cannot assume that a column is still
-        // foldable after the expand has been applied.
-        // TODO(hvanhovell): Expand should use new attributes as the output attributes.
-        case expand: Expand if !stop =>
-          val newExpand = expand.copy(projections = expand.projections.map { projection =>
+        // We can not replace the attributes in `Expand.output`. If there are other non-leaf
+        // operators that have the `output` field, we should put them here too.
+        case expand: Expand if foldableMap.nonEmpty =>
+          expand.copy(projections = expand.projections.map { projection =>
             projection.map(_.transform(replaceFoldable))
           })
-          stop = true
-          newExpand
 
-        case other =>
-          stop = true
+        // For other plans, they are not safe to apply foldable propagation, and they should not
+        // propagate foldable expressions from children.
+        case other if foldableMap.nonEmpty =>
+          val childrenOutputSet = AttributeSet(other.children.flatMap(_.output))
+          foldableMap = AttributeMap(foldableMap.baseMap.values.filterNot {
+            case (attr, _) => childrenOutputSet.contains(attr)
+          }.toSeq)
           other
       })
     }
@@ -550,21 +631,6 @@ object FoldablePropagation extends Rule[LogicalPlan] {
 
 
 /**
- * Optimizes expressions by replacing according to CodeGen configuration.
- */
-object OptimizeCodegen extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case e: CaseWhen if canCodegen(e) => e.toCodegen()
-  }
-
-  private def canCodegen(e: CaseWhen): Boolean = {
-    val numBranches = e.branches.size + e.elseValue.size
-    numBranches <= SQLConf.get.maxCaseBranchesForCodegen
-  }
-}
-
-
-/**
  * Removes [[Cast Casts]] that are unnecessary because the input is already the correct type.
  */
 object SimplifyCasts extends Rule[LogicalPlan] {
@@ -586,7 +652,6 @@ object SimplifyCasts extends Rule[LogicalPlan] {
 object RemoveDispensableExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case UnaryPositive(child) => child
-    case PromotePrecision(child) => child
   }
 }
 
@@ -606,6 +671,7 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
   }
 }
 
+
 /**
  * Combine nested [[Concat]] expressions.
  */
@@ -618,6 +684,12 @@ object CombineConcats extends Rule[LogicalPlan] {
       stack.pop() match {
         case Concat(children) =>
           stack.pushAll(children.reverse)
+        // If `spark.sql.function.concatBinaryAsString` is false, nested `Concat` exprs possibly
+        // have `Concat`s with binary output. Since `TypeCoercion` casts them into strings,
+        // we need to handle the case to combine all nested `Concat`s.
+        case c @ Cast(Concat(children), StringType, _) =>
+          val newChildren = children.map { e => c.copy(child = e) }
+          stack.pushAll(newChildren.reverse)
         case child =>
           flattened += child
       }
@@ -625,8 +697,14 @@ object CombineConcats extends Rule[LogicalPlan] {
     Concat(flattened)
   }
 
+  private def hasNestedConcats(concat: Concat): Boolean = concat.children.exists {
+    case c: Concat => true
+    case c @ Cast(Concat(children), StringType, _) => true
+    case _ => false
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {
-    case concat: Concat if concat.children.exists(_.isInstanceOf[Concat]) =>
+    case concat: Concat if hasNestedConcats(concat) =>
       flattenConcats(concat)
   }
 }

@@ -66,11 +66,11 @@ private[spark] object UIWorkloadGenerator {
     def nextFloat(): Float = new Random().nextFloat()
 
     val jobs = Seq[(String, () => Long)](
-      ("Count", baseData.count),
-      ("Cache and Count", baseData.map(x => x).cache().count),
-      ("Single Shuffle", baseData.map(x => (x % 10, x)).reduceByKey(_ + _).count),
-      ("Entirely failed phase", baseData.map(x => throw new Exception).count),
-      ("Partially failed phase", {
+      ("Count", () => baseData.count),
+      ("Cache and Count", () => baseData.map(x => x).cache().count),
+      ("Single Shuffle", () => baseData.map(x => (x % 10, x)).reduceByKey(_ + _).count),
+      ("Entirely failed phase", () => baseData.map { x => throw new Exception(); 1 }.count),
+      ("Partially failed phase", () => {
         baseData.map{x =>
           val probFailure = (4.0 / NUM_PARTITIONS)
           if (nextFloat() < probFailure) {
@@ -79,7 +79,7 @@ private[spark] object UIWorkloadGenerator {
           1
         }.count
       }),
-      ("Partially failed phase (longer tasks)", {
+      ("Partially failed phase (longer tasks)", () => {
         baseData.map{x =>
           val probFailure = (4.0 / NUM_PARTITIONS)
           if (nextFloat() < probFailure) {
@@ -89,7 +89,7 @@ private[spark] object UIWorkloadGenerator {
           1
         }.count
       }),
-      ("Job with delays", baseData.map(x => Thread.sleep(100)).count)
+      ("Job with delays", () => baseData.map(x => Thread.sleep(100)).count)
     )
 
     val barrier = new Semaphore(-nJobSet * jobs.size + 1)

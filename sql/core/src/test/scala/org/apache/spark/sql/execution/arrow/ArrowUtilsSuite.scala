@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.execution.arrow
 
+import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
 class ArrowUtilsSuite extends SparkFunSuite {
@@ -25,7 +28,7 @@ class ArrowUtilsSuite extends SparkFunSuite {
   def roundtrip(dt: DataType): Unit = {
     dt match {
       case schema: StructType =>
-        assert(ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(schema)) === schema)
+        assert(ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(schema, null)) === schema)
       case _ =>
         roundtrip(new StructType().add("value", dt))
     }
@@ -42,6 +45,27 @@ class ArrowUtilsSuite extends SparkFunSuite {
     roundtrip(StringType)
     roundtrip(BinaryType)
     roundtrip(DecimalType.SYSTEM_DEFAULT)
+    roundtrip(DateType)
+    val tsExMsg = intercept[UnsupportedOperationException] {
+      roundtrip(TimestampType)
+    }
+    assert(tsExMsg.getMessage.contains("timeZoneId"))
+  }
+
+  test("timestamp") {
+
+    def roundtripWithTz(timeZoneId: String): Unit = {
+      val schema = new StructType().add("value", TimestampType)
+      val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+      val fieldType = arrowSchema.findField("value").getType.asInstanceOf[ArrowType.Timestamp]
+      assert(fieldType.getTimezone() === timeZoneId)
+      assert(ArrowUtils.fromArrowSchema(arrowSchema) === schema)
+    }
+
+    roundtripWithTz(DateTimeUtils.defaultTimeZone().getID)
+    roundtripWithTz("Asia/Tokyo")
+    roundtripWithTz("UTC")
+    roundtripWithTz("America/Los_Angeles")
   }
 
   test("array") {

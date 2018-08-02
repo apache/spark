@@ -23,6 +23,7 @@ import java.util.zip.GZIPOutputStream
 
 import scala.io.Source
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io._
 import org.apache.hadoop.io.compress.DefaultCodec
@@ -31,8 +32,8 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.{FileSplit => NewFileSplit, TextInputFormat => NewTextInputFormat}
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 
-import org.apache.spark.internal.config.IGNORE_CORRUPT_FILES
-import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
+import org.apache.spark.internal.config._
+import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -244,7 +245,10 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     for (i <- 0 until testOutputCopies) {
       // Shift values by i so that they're different in the output
       val alteredOutput = testOutput.map(b => (b + i).toByte)
-      channel.write(ByteBuffer.wrap(alteredOutput))
+      val buffer = ByteBuffer.wrap(alteredOutput)
+      while (buffer.hasRemaining) {
+        channel.write(buffer)
+      }
     }
     channel.close()
     file.close()
@@ -347,10 +351,10 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test ("allow user to disable the output directory existence checking (old Hadoop API") {
-    val sf = new SparkConf()
-    sf.setAppName("test").setMaster("local").set("spark.hadoop.validateOutputSpecs", "false")
-    sc = new SparkContext(sf)
+  test ("allow user to disable the output directory existence checking (old Hadoop API)") {
+    val conf = new SparkConf()
+    conf.setAppName("test").setMaster("local").set("spark.hadoop.validateOutputSpecs", "false")
+    sc = new SparkContext(conf)
     val randomRDD = sc.parallelize(Array((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
     randomRDD.saveAsTextFile(tempDir.getPath + "/output")
     assert(new File(tempDir.getPath + "/output/part-00000").exists() === true)
@@ -380,9 +384,9 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test ("allow user to disable the output directory existence checking (new Hadoop API") {
-    val sf = new SparkConf()
-    sf.setAppName("test").setMaster("local").set("spark.hadoop.validateOutputSpecs", "false")
-    sc = new SparkContext(sf)
+    val conf = new SparkConf()
+    conf.setAppName("test").setMaster("local").set("spark.hadoop.validateOutputSpecs", "false")
+    sc = new SparkContext(conf)
     val randomRDD = sc.parallelize(
       Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
     randomRDD.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](
@@ -510,4 +514,153 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("spark.hadoopRDD.ignoreEmptySplits work correctly (old Hadoop API)") {
+    val conf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local")
+      .set(HADOOP_RDD_IGNORE_EMPTY_SPLITS, true)
+    sc = new SparkContext(conf)
+
+    def testIgnoreEmptySplits(
+        data: Array[Tuple2[String, String]],
+        actualPartitionNum: Int,
+        expectedPartitionNum: Int): Unit = {
+      val output = new File(tempDir, "output")
+      sc.parallelize(data, actualPartitionNum)
+        .saveAsHadoopFile[TextOutputFormat[String, String]](output.getPath)
+      for (i <- 0 until actualPartitionNum) {
+        assert(new File(output, s"part-0000$i").exists() === true)
+      }
+      val hadoopRDD = sc.textFile(new File(output, "part-*").getPath)
+      assert(hadoopRDD.partitions.length === expectedPartitionNum)
+      Utils.deleteRecursively(output)
+    }
+
+    // Ensure that if all of the splits are empty, we remove the splits correctly
+    testIgnoreEmptySplits(
+      data = Array.empty[Tuple2[String, String]],
+      actualPartitionNum = 1,
+      expectedPartitionNum = 0)
+
+    // Ensure that if no split is empty, we don't lose any splits
+    testIgnoreEmptySplits(
+      data = Array(("key1", "a"), ("key2", "a"), ("key3", "b")),
+      actualPartitionNum = 2,
+      expectedPartitionNum = 2)
+
+    // Ensure that if part of the splits are empty, we remove the splits correctly
+    testIgnoreEmptySplits(
+      data = Array(("key1", "a"), ("key2", "a")),
+      actualPartitionNum = 5,
+      expectedPartitionNum = 2)
+  }
+
+  test("spark.hadoopRDD.ignoreEmptySplits work correctly (new Hadoop API)") {
+    val conf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local")
+      .set(HADOOP_RDD_IGNORE_EMPTY_SPLITS, true)
+    sc = new SparkContext(conf)
+
+    def testIgnoreEmptySplits(
+        data: Array[Tuple2[String, String]],
+        actualPartitionNum: Int,
+        expectedPartitionNum: Int): Unit = {
+      val output = new File(tempDir, "output")
+      sc.parallelize(data, actualPartitionNum)
+        .saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](output.getPath)
+      for (i <- 0 until actualPartitionNum) {
+        assert(new File(output, s"part-r-0000$i").exists() === true)
+      }
+      val hadoopRDD = sc.newAPIHadoopFile(new File(output, "part-r-*").getPath,
+        classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text])
+        .asInstanceOf[NewHadoopRDD[_, _]]
+      assert(hadoopRDD.partitions.length === expectedPartitionNum)
+      Utils.deleteRecursively(output)
+    }
+
+    // Ensure that if all of the splits are empty, we remove the splits correctly
+    testIgnoreEmptySplits(
+      data = Array.empty[Tuple2[String, String]],
+      actualPartitionNum = 1,
+      expectedPartitionNum = 0)
+
+    // Ensure that if no split is empty, we don't lose any splits
+    testIgnoreEmptySplits(
+      data = Array(("1", "a"), ("2", "a"), ("3", "b")),
+      actualPartitionNum = 2,
+      expectedPartitionNum = 2)
+
+    // Ensure that if part of the splits are empty, we remove the splits correctly
+    testIgnoreEmptySplits(
+      data = Array(("1", "a"), ("2", "b")),
+      actualPartitionNum = 5,
+      expectedPartitionNum = 2)
+  }
+
+  test("spark.files.ignoreMissingFiles should work both HadoopRDD and NewHadoopRDD") {
+    // "file not found" can happen both when getPartitions or compute in HadoopRDD/NewHadoopRDD,
+    // We test both cases here.
+
+    val deletedPath = new Path(tempDir.getAbsolutePath, "test-data-1")
+    val fs = deletedPath.getFileSystem(new Configuration())
+    fs.delete(deletedPath, true)
+    intercept[FileNotFoundException](fs.open(deletedPath))
+
+    def collectRDDAndDeleteFileBeforeCompute(newApi: Boolean): Array[_] = {
+      val dataPath = new Path(tempDir.getAbsolutePath, "test-data-2")
+      val writer = new OutputStreamWriter(new FileOutputStream(new File(dataPath.toString)))
+      writer.write("hello\n")
+      writer.write("world\n")
+      writer.close()
+      val rdd = if (newApi) {
+        sc.newAPIHadoopFile(dataPath.toString, classOf[NewTextInputFormat],
+          classOf[LongWritable], classOf[Text])
+      } else {
+        sc.textFile(dataPath.toString)
+      }
+      rdd.partitions
+      fs.delete(dataPath, true)
+      // Exception happens when initialize record reader in HadoopRDD/NewHadoopRDD.compute
+      // because partitions' info already cached.
+      rdd.collect()
+    }
+
+    // collect HadoopRDD and NewHadoopRDD when spark.files.ignoreMissingFiles=false by default.
+    sc = new SparkContext("local", "test")
+    intercept[org.apache.hadoop.mapred.InvalidInputException] {
+      // Exception happens when HadoopRDD.getPartitions
+      sc.textFile(deletedPath.toString).collect()
+    }
+
+    var e = intercept[SparkException] {
+      collectRDDAndDeleteFileBeforeCompute(false)
+    }
+    assert(e.getCause.isInstanceOf[java.io.FileNotFoundException])
+
+    intercept[org.apache.hadoop.mapreduce.lib.input.InvalidInputException] {
+      // Exception happens when NewHadoopRDD.getPartitions
+      sc.newAPIHadoopFile(deletedPath.toString, classOf[NewTextInputFormat],
+        classOf[LongWritable], classOf[Text]).collect
+    }
+
+    e = intercept[SparkException] {
+      collectRDDAndDeleteFileBeforeCompute(true)
+    }
+    assert(e.getCause.isInstanceOf[java.io.FileNotFoundException])
+
+    sc.stop()
+
+    // collect HadoopRDD and NewHadoopRDD when spark.files.ignoreMissingFiles=true.
+    val conf = new SparkConf().set(IGNORE_MISSING_FILES, true)
+    sc = new SparkContext("local", "test", conf)
+    assert(sc.textFile(deletedPath.toString).collect().isEmpty)
+
+    assert(collectRDDAndDeleteFileBeforeCompute(false).isEmpty)
+
+    assert(sc.newAPIHadoopFile(deletedPath.toString, classOf[NewTextInputFormat],
+      classOf[LongWritable], classOf[Text]).collect().isEmpty)
+
+    assert(collectRDDAndDeleteFileBeforeCompute(true).isEmpty)
+  }
 }

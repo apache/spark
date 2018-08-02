@@ -30,8 +30,7 @@ import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, Gener
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, ExternalCatalog, FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
@@ -40,8 +39,8 @@ import org.apache.spark.sql.types.{DecimalType, DoubleType}
 
 
 private[sql] class HiveSessionCatalog(
-    externalCatalog: HiveExternalCatalog,
-    globalTempViewManager: GlobalTempViewManager,
+    externalCatalogBuilder: () => ExternalCatalog,
+    globalTempViewManagerBuilder: () => GlobalTempViewManager,
     val metastoreCatalog: HiveMetastoreCatalog,
     functionRegistry: FunctionRegistry,
     conf: SQLConf,
@@ -49,8 +48,8 @@ private[sql] class HiveSessionCatalog(
     parser: ParserInterface,
     functionResourceLoader: FunctionResourceLoader)
   extends SessionCatalog(
-      externalCatalog,
-      globalTempViewManager,
+      externalCatalogBuilder,
+      globalTempViewManagerBuilder,
       functionRegistry,
       conf,
       hadoopConf,
@@ -95,8 +94,15 @@ private[sql] class HiveSessionCatalog(
         }
       } catch {
         case NonFatal(e) =>
-          val analysisException =
-            new AnalysisException(s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e")
+          val noHandlerMsg = s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e"
+          val errorMsg =
+            if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
+              s"$noHandlerMsg\nPlease make sure your function overrides " +
+                "`public StructObjectInspector initialize(ObjectInspector[] args)`."
+            } else {
+              noHandlerMsg
+            }
+          val analysisException = new AnalysisException(errorMsg)
           analysisException.setStackTrace(e.getStackTrace)
           throw analysisException
       }
@@ -167,6 +173,10 @@ private[sql] class HiveSessionCatalog(
   // TODO Removes this method after implementing Spark native "histogram_numeric".
   override def functionExists(name: FunctionIdentifier): Boolean = {
     super.functionExists(name) || hiveFunctions.contains(name.funcName)
+  }
+
+  override def isPersistentFunction(name: FunctionIdentifier): Boolean = {
+    super.isPersistentFunction(name) || hiveFunctions.contains(name.funcName)
   }
 
   /** List of functions we pass over to Hive. Note that over time this list should go to 0. */

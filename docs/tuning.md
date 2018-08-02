@@ -132,7 +132,7 @@ The best way to size the amount of memory consumption a dataset will require is 
 into cache, and look at the "Storage" page in the web UI. The page will tell you how much memory the RDD
 is occupying.
 
-To estimate the memory consumption of a particular object, use `SizeEstimator`'s `estimate` method
+To estimate the memory consumption of a particular object, use `SizeEstimator`'s `estimate` method.
 This is useful for experimenting with different data layouts to trim memory usage, as well as
 determining the amount of space a broadcast variable will occupy on each executor heap.
 
@@ -196,7 +196,7 @@ To further tune garbage collection, we first need to understand some basic infor
 
 * A simplified description of the garbage collection procedure: When Eden is full, a minor GC is run on Eden and objects
   that are alive from Eden and Survivor1 are copied to Survivor2. The Survivor regions are swapped. If an object is old
-  enough or Survivor2 is full, it is moved to Old. Finally when Old is close to full, a full GC is invoked.
+  enough or Survivor2 is full, it is moved to Old. Finally, when Old is close to full, a full GC is invoked.
 
 The goal of GC tuning in Spark is to ensure that only long-lived RDDs are stored in the Old generation and that
 the Young generation is sufficiently sized to store short-lived objects. This will help avoid full GCs to collect
@@ -219,7 +219,7 @@ temporary objects created during task execution. Some steps which may be useful 
   
 * Try the G1GC garbage collector with `-XX:+UseG1GC`. It can improve performance in some situations where
   garbage collection is a bottleneck. Note that with large executor heap sizes, it may be important to
-  increase the [G1 region size](https://blogs.oracle.com/g1gc/entry/g1_gc_tuning_a_case) 
+  increase the [G1 region size](http://www.oracle.com/technetwork/articles/java/g1gc-1984535.html) 
   with `-XX:G1HeapRegionSize`
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using

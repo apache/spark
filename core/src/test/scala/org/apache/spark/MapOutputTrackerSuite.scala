@@ -147,7 +147,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     masterTracker.registerMapOutput(10, 0, MapStatus(
       BlockManagerId("a", "hostA", 1000), Array(1000L)))
     slaveTracker.updateEpoch(masterTracker.getEpoch)
-    assert(slaveTracker.getMapSizesByExecutorId(10, 0) ===
+    assert(slaveTracker.getMapSizesByExecutorId(10, 0).toSeq ===
       Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000)))))
     assert(0 == masterTracker.getNumCachedSerializedBroadcast)
 
@@ -273,6 +273,58 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       masterTracker.unregisterShuffle(20)
       assert(0 == masterTracker.getNumCachedSerializedBroadcast)
     }
+  }
+
+  test("equally divide map statistics tasks") {
+    val func = newTrackerMaster().equallyDivide _
+    val cases = Seq((0, 5), (4, 5), (15, 5), (16, 5), (17, 5), (18, 5), (19, 5), (20, 5))
+    val expects = Seq(
+      Seq(0, 0, 0, 0, 0),
+      Seq(1, 1, 1, 1, 0),
+      Seq(3, 3, 3, 3, 3),
+      Seq(4, 3, 3, 3, 3),
+      Seq(4, 4, 3, 3, 3),
+      Seq(4, 4, 4, 3, 3),
+      Seq(4, 4, 4, 4, 3),
+      Seq(4, 4, 4, 4, 4))
+    cases.zip(expects).foreach { case ((num, divisor), expect) =>
+      val answer = func(num, divisor).toSeq
+      var wholeSplit = (0 until num)
+      answer.zip(expect).foreach { case (split, expectSplitLength) =>
+        val (currentSplit, rest) = wholeSplit.splitAt(expectSplitLength)
+        assert(currentSplit.toSet == split.toSet)
+        wholeSplit = rest
+      }
+    }
+  }
+
+  test("zero-sized blocks should be excluded when getMapSizesByExecutorId") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+    tracker.registerShuffle(10, 2)
+
+    val size0 = MapStatus.decompressSize(MapStatus.compressSize(0L))
+    val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
+    val size10000 = MapStatus.decompressSize(MapStatus.compressSize(10000L))
+    tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
+      Array(size0, size1000, size0, size10000)))
+    tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
+      Array(size10000, size0, size1000, size0)))
+    assert(tracker.containsShuffle(10))
+    assert(tracker.getMapSizesByExecutorId(10, 0, 4).toSeq ===
+        Seq(
+          (BlockManagerId("a", "hostA", 1000),
+              Seq((ShuffleBlockId(10, 0, 1), size1000), (ShuffleBlockId(10, 0, 3), size10000))),
+          (BlockManagerId("b", "hostB", 1000),
+              Seq((ShuffleBlockId(10, 1, 0), size10000), (ShuffleBlockId(10, 1, 2), size1000)))
+        )
+    )
+
+    tracker.unregisterShuffle(10)
+    tracker.stop()
+    rpcEnv.shutdown()
   }
 
 }

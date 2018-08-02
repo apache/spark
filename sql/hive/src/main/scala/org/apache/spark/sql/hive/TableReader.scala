@@ -110,8 +110,9 @@ class HadoopTableReader(
       deserializerClass: Class[_ <: Deserializer],
       filterOpt: Option[PathFilter]): RDD[InternalRow] = {
 
-    assert(!hiveTable.isPartitioned, """makeRDDForTable() cannot be called on a partitioned table,
-      since input formats may differ across partitions. Use makeRDDForTablePartitions() instead.""")
+    assert(!hiveTable.isPartitioned,
+      "makeRDDForTable() cannot be called on a partitioned table, since input formats may " +
+      "differ across partitions. Use makeRDDForPartitionedTable() instead.")
 
     // Create local references to member variables, so that the entire `this` object won't be
     // serialized in the closure below.
@@ -381,7 +382,7 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
 
     val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map { case (attr, ordinal) =>
       soi.getStructFieldRef(attr.name) -> ordinal
-    }.unzip
+    }.toArray.unzip
 
     /**
      * Builds specific unwrappers ahead of time according to object inspector

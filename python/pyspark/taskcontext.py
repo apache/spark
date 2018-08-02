@@ -34,6 +34,7 @@ class TaskContext(object):
     _partitionId = None
     _stageId = None
     _taskAttemptId = None
+    _localProperties = None
 
     def __new__(cls):
         """Even if users construct TaskContext instead of using get, give them the singleton."""
@@ -88,3 +89,9 @@ class TaskContext(object):
         TaskAttemptID.
         """
         return self._taskAttemptId
+
+    def getLocalProperty(self, key):
+        """
+        Get a local property set upstream in the driver, or None if it is missing.
+        """
+        return self._localProperties.get(key, None)

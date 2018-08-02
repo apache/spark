@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
-import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.LongType
 
 /**
- * An [[LogicalPlanVisitor]] that computes a the statistics used in a cost-based optimizer.
+ * A [[LogicalPlanVisitor]] that computes the statistics for the cost-based optimizer.
  */
 object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
@@ -54,7 +52,7 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def visitIntersect(p: Intersect): Statistics = fallback(p)
 
   override def visitJoin(p: Join): Statistics = {
-    JoinEstimation.estimate(p).getOrElse(fallback(p))
+    JoinEstimation(p).estimate.getOrElse(fallback(p))
   }
 
   override def visitLocalLimit(p: LocalLimit): Statistics = fallback(p)

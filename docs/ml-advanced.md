@@ -77,7 +77,7 @@ Quasi-Newton methods in this case. This fallback is currently always enabled for
 L1 regularization is applied (i.e. $\alpha = 0$), there exists an analytical solution and either Cholesky or Quasi-Newton solver may be used. When $\alpha > 0$ no analytical 
 solution exists and we instead use the Quasi-Newton solver to find the coefficients iteratively. 
 
-In order to make the normal equation approach efficient, `WeightedLeastSquares` requires that the number of features be no more than 4096. For larger problems, use L-BFGS instead.
+In order to make the normal equation approach efficient, `WeightedLeastSquares` requires that the number of features is no more than 4096. For larger problems, use L-BFGS instead.
 
 ## Iteratively reweighted least squares (IRLS)
 

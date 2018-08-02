@@ -42,23 +42,7 @@ abstract class Covariance(x: Expression, y: Expression)
 
   override val initialValues: Seq[Expression] = Array.fill(4)(Literal(0.0))
 
-  override lazy val updateExpressions: Seq[Expression] = {
-    val newN = n + Literal(1.0)
-    val dx = x - xAvg
-    val dy = y - yAvg
-    val dyN = dy / newN
-    val newXAvg = xAvg + dx / newN
-    val newYAvg = yAvg + dyN
-    val newCk = ck + dx * (y - newYAvg)
-
-    val isNull = IsNull(x) || IsNull(y)
-    Seq(
-      If(isNull, n, newN),
-      If(isNull, xAvg, newXAvg),
-      If(isNull, yAvg, newYAvg),
-      If(isNull, ck, newCk)
-    )
-  }
+  override lazy val updateExpressions: Seq[Expression] = updateExpressionsDef
 
   override val mergeExpressions: Seq[Expression] = {
 
@@ -74,6 +58,24 @@ abstract class Covariance(x: Expression, y: Expression)
     val newCk = ck.left + ck.right + dx * dyN * n1 * n2
 
     Seq(newN, newXAvg, newYAvg, newCk)
+  }
+
+  protected def updateExpressionsDef: Seq[Expression] = {
+    val newN = n + Literal(1.0)
+    val dx = x - xAvg
+    val dy = y - yAvg
+    val dyN = dy / newN
+    val newXAvg = xAvg + dx / newN
+    val newYAvg = yAvg + dyN
+    val newCk = ck + dx * (y - newYAvg)
+
+    val isNull = IsNull(x) || IsNull(y)
+    Seq(
+      If(isNull, n, newN),
+      If(isNull, xAvg, newXAvg),
+      If(isNull, yAvg, newYAvg),
+      If(isNull, ck, newCk)
+    )
   }
 }
 

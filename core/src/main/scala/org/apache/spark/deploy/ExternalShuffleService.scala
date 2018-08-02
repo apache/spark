@@ -56,7 +56,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
 
   private var server: TransportServer = _
 
-  private val shuffleServiceSource = new ExternalShuffleServiceSource(blockHandler)
+  private val shuffleServiceSource = new ExternalShuffleServiceSource
 
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalShuffleBlockHandler = {
@@ -83,6 +83,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
       }
     server = transportContext.createServer(port, bootstraps.asJava)
 
+    shuffleServiceSource.registerMetricSet(server.getAllMetrics)
+    shuffleServiceSource.registerMetricSet(blockHandler.getAllMetrics)
     masterMetricsSystem.registerSource(shuffleServiceSource)
     masterMetricsSystem.start()
   }
@@ -90,6 +92,11 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   /** Clean up all shuffle files associated with an application that has exited. */
   def applicationRemoved(appId: String): Unit = {
     blockHandler.applicationRemoved(appId, true /* cleanupLocalDirs */)
+  }
+
+  /** Clean up all the non-shuffle files associated with an executor that has exited. */
+  def executorRemoved(executorId: String, appId: String): Unit = {
+    blockHandler.executorRemoved(executorId, appId)
   }
 
   def stop() {

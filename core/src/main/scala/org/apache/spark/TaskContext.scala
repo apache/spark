@@ -66,7 +66,7 @@ object TaskContext {
    * An empty task context that does not represent an actual task.  This is only used in tests.
    */
   private[spark] def empty(): TaskContextImpl = {
-    new TaskContextImpl(0, 0, 0, 0, null, new Properties, null)
+    new TaskContextImpl(0, 0, 0, 0, 0, null, new Properties, null)
   }
 }
 
@@ -123,7 +123,10 @@ abstract class TaskContext extends Serializable {
    *
    * Exceptions thrown by the listener will result in failure of the task.
    */
-  def addTaskCompletionListener(f: (TaskContext) => Unit): TaskContext = {
+  def addTaskCompletionListener[U](f: (TaskContext) => U): TaskContext = {
+    // Note that due to this scala bug: https://github.com/scala/bug/issues/11016, we need to make
+    // this function polymorphic for every scala version >= 2.12, otherwise an overloaded method
+    // resolution error occurs at compile time.
     addTaskCompletionListener(new TaskCompletionListener {
       override def onTaskCompletion(context: TaskContext): Unit = f(context)
     })
@@ -149,6 +152,13 @@ abstract class TaskContext extends Serializable {
    * The ID of the stage that this task belong to.
    */
   def stageId(): Int
+
+  /**
+   * How many times the stage that this task belongs to has been attempted. The first stage attempt
+   * will be assigned stageAttemptNumber = 0, and subsequent attempts will have increasing attempt
+   * numbers.
+   */
+  def stageAttemptNumber(): Int
 
   /**
    * The ID of the RDD partition that is computed by this task.

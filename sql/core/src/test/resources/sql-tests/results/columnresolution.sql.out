@@ -179,7 +179,7 @@ SELECT mydb1.t1.* FROM mydb1.t1
 struct<>
 -- !query 21 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'mydb1.t1.*' give input columns 'i1';
+cannot resolve 'mydb1.t1.*' given input columns 'i1';
 
 
 -- !query 22
@@ -212,7 +212,7 @@ SELECT mydb1.t1.* FROM mydb1.t1
 struct<>
 -- !query 25 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'mydb1.t1.*' give input columns 'i1';
+cannot resolve 'mydb1.t1.*' given input columns 'i1';
 
 
 -- !query 26
@@ -420,7 +420,7 @@ SELECT mydb1.t5.* FROM mydb1.t5
 struct<>
 -- !query 50 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'mydb1.t5.*' give input columns 'i1, t5';
+cannot resolve 'mydb1.t5.*' given input columns 'i1, t5';
 
 
 -- !query 51

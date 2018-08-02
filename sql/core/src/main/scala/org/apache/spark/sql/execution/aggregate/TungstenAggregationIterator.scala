@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
+import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -165,7 +166,7 @@ class TungstenAggregationIterator(
     initialAggregationBuffer,
     StructType.fromAttributes(aggregateFunctions.flatMap(_.aggBufferAttributes)),
     StructType.fromAttributes(groupingExpressions.map(_.toAttribute)),
-    TaskContext.get().taskMemoryManager(),
+    TaskContext.get(),
     1024 * 16, // initial capacity
     TaskContext.get().taskMemoryManager().pageSizeBytes
   )
@@ -205,7 +206,7 @@ class TungstenAggregationIterator(
           buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
           if (buffer == null) {
             // failed to allocate the first page
-            throw new OutOfMemoryError("No enough memory for aggregation")
+            throw new SparkOutOfMemoryError("No enough memory for aggregation")
           }
         }
         processRow(buffer, newInput)
@@ -371,7 +372,7 @@ class TungstenAggregationIterator(
     }
   }
 
-  TaskContext.get().addTaskCompletionListener(_ => {
+  TaskContext.get().addTaskCompletionListener[Unit](_ => {
     // At the end of the task, update the task's peak memory usage. Since we destroy
     // the map to create the sorter, their memory usages should not overlap, so it is safe
     // to just use the max of the two.

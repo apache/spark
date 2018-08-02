@@ -30,8 +30,9 @@ object ExpressionSet {
 }
 
 /**
- * A [[Set]] where membership is determined based on a canonical representation of an [[Expression]]
- * (i.e. one that attempts to ignore cosmetic differences).  See [[Canonicalize]] for more details.
+ * A [[Set]] where membership is determined based on determinacy and a canonical representation of
+ * an [[Expression]] (i.e. one that attempts to ignore cosmetic differences).
+ * See [[Canonicalize]] for more details.
  *
  * Internally this set uses the canonical representation, but keeps also track of the original
  * expressions to ease debugging.  Since different expressions can share the same canonical
@@ -46,6 +47,10 @@ object ExpressionSet {
  *   set.contains(1 + a) => true
  *   set.contains(a + 2) => false
  * }}}
+ *
+ * For non-deterministic expressions, they are always considered as not contained in the [[Set]].
+ * On adding a non-deterministic expression, simply append it to the original expressions.
+ * This is consistent with how we define `semanticEquals` between two expressions.
  */
 class ExpressionSet protected(
     protected val baseSet: mutable.Set[Expression] = new mutable.HashSet,
@@ -53,7 +58,9 @@ class ExpressionSet protected(
   extends Set[Expression] {
 
   protected def add(e: Expression): Unit = {
-    if (!baseSet.contains(e.canonicalized)) {
+    if (!e.deterministic) {
+      originals += e
+    } else if (!baseSet.contains(e.canonicalized) ) {
       baseSet.add(e.canonicalized)
       originals += e
     }
@@ -74,9 +81,13 @@ class ExpressionSet protected(
   }
 
   override def -(elem: Expression): ExpressionSet = {
-    val newBaseSet = baseSet.clone().filterNot(_ == elem.canonicalized)
-    val newOriginals = originals.clone().filterNot(_.canonicalized == elem.canonicalized)
-    new ExpressionSet(newBaseSet, newOriginals)
+    if (elem.deterministic) {
+      val newBaseSet = baseSet.clone().filterNot(_ == elem.canonicalized)
+      val newOriginals = originals.clone().filterNot(_.canonicalized == elem.canonicalized)
+      new ExpressionSet(newBaseSet, newOriginals)
+    } else {
+      new ExpressionSet(baseSet.clone(), originals.clone())
+    }
   }
 
   override def iterator: Iterator[Expression] = originals.iterator

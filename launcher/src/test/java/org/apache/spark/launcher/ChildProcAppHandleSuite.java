@@ -24,7 +24,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import static java.nio.file.attribute.PosixFilePermission.*;
 
@@ -114,6 +113,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     assumeFalse(isWindows());
 
     Path err = Files.createTempFile("stderr", "txt");
+    err.toFile().deleteOnExit();
 
     SparkAppHandle handle = (ChildProcAppHandle) new TestSparkLauncher()
       .redirectError(err.toFile())
@@ -129,6 +129,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     assumeFalse(isWindows());
 
     Path out = Files.createTempFile("stdout", "txt");
+    out.toFile().deleteOnExit();
 
     SparkAppHandle handle = (ChildProcAppHandle) new TestSparkLauncher()
       .redirectOutput(out.toFile())
@@ -145,6 +146,8 @@ public class ChildProcAppHandleSuite extends BaseSuite {
 
     Path out = Files.createTempFile("stdout", "txt");
     Path err = Files.createTempFile("stderr", "txt");
+    out.toFile().deleteOnExit();
+    err.toFile().deleteOnExit();
 
     ChildProcAppHandle handle = (ChildProcAppHandle) new TestSparkLauncher()
       .redirectError(err.toFile())
@@ -159,9 +162,11 @@ public class ChildProcAppHandleSuite extends BaseSuite {
 
   @Test(expected = IllegalArgumentException.class)
   public void testBadLogRedirect() throws Exception {
+    File out = Files.createTempFile("stdout", "txt").toFile();
+    out.deleteOnExit();
     new SparkLauncher()
       .redirectError()
-      .redirectOutput(Files.createTempFile("stdout", "txt").toFile())
+      .redirectOutput(out)
       .redirectToLog("foo")
       .launch()
       .waitFor();
@@ -169,9 +174,11 @@ public class ChildProcAppHandleSuite extends BaseSuite {
 
   @Test(expected = IllegalArgumentException.class)
   public void testRedirectErrorTwiceFails() throws Exception {
+    File err = Files.createTempFile("stderr", "txt").toFile();
+    err.deleteOnExit();
     new SparkLauncher()
       .redirectError()
-      .redirectError(Files.createTempFile("stderr", "txt").toFile())
+      .redirectError(err)
       .launch()
       .waitFor();
   }
@@ -180,6 +187,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
   public void testProcMonitorWithOutputRedirection() throws Exception {
     assumeFalse(isWindows());
     File err = Files.createTempFile("out", "txt").toFile();
+    err.deleteOnExit();
     SparkAppHandle handle = new TestSparkLauncher()
       .redirectError()
       .redirectOutput(err)
@@ -206,21 +214,6 @@ public class ChildProcAppHandleSuite extends BaseSuite {
       .startApplication();
     waitFor(handle);
     assertEquals(SparkAppHandle.State.FAILED, handle.getState());
-  }
-
-  private void waitFor(SparkAppHandle handle) throws Exception {
-    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-    try {
-      while (!handle.getState().isFinal()) {
-        assertTrue("Timed out waiting for handle to transition to final state.",
-          System.nanoTime() < deadline);
-        TimeUnit.MILLISECONDS.sleep(10);
-      }
-    } finally {
-      if (!handle.getState().isFinal()) {
-        handle.kill();
-      }
-    }
   }
 
   private static class TestSparkLauncher extends SparkLauncher {

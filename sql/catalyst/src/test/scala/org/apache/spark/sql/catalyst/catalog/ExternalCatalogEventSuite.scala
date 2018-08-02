@@ -36,7 +36,7 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
   private def testWithCatalog(
       name: String)(
       f: (ExternalCatalog, Seq[ExternalCatalogEvent] => Unit) => Unit): Unit = test(name) {
-    val catalog = newCatalog
+    val catalog = new ExternalCatalogWithListener(newCatalog)
     val recorder = mutable.Buffer.empty[ExternalCatalogEvent]
     catalog.addListener(new ExternalCatalogEventListener {
       override def onEvent(event: ExternalCatalogEvent): Unit = {
@@ -74,6 +74,11 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
       catalog.createDatabase(dbDefinition, ignoreIfExists = false)
     }
     checkEvents(CreateDatabasePreEvent("db5") :: Nil)
+
+    // ALTER
+    val newDbDefinition = dbDefinition.copy(description = "test")
+    catalog.alterDatabase(newDbDefinition)
+    checkEvents(AlterDatabasePreEvent("db5") :: AlterDatabaseEvent("db5") :: Nil)
 
     // DROP
     intercept[AnalysisException] {
@@ -118,6 +123,23 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
       catalog.createTable(tableDefinition, ignoreIfExists = false)
     }
     checkEvents(CreateTablePreEvent("db5", "tbl1") :: Nil)
+
+    // ALTER
+    val newTableDefinition = tableDefinition.copy(tableType = CatalogTableType.EXTERNAL)
+    catalog.alterTable(newTableDefinition)
+    checkEvents(AlterTablePreEvent("db5", "tbl1", AlterTableKind.TABLE) ::
+      AlterTableEvent("db5", "tbl1", AlterTableKind.TABLE) :: Nil)
+
+    // ALTER schema
+    val newSchema = new StructType().add("id", "long", nullable = false)
+    catalog.alterTableDataSchema("db5", "tbl1", newSchema)
+    checkEvents(AlterTablePreEvent("db5", "tbl1", AlterTableKind.DATASCHEMA) ::
+      AlterTableEvent("db5", "tbl1", AlterTableKind.DATASCHEMA) :: Nil)
+
+    // ALTER stats
+    catalog.alterTableStats("db5", "tbl1", None)
+    checkEvents(AlterTablePreEvent("db5", "tbl1", AlterTableKind.STATS) ::
+      AlterTableEvent("db5", "tbl1", AlterTableKind.STATS) :: Nil)
 
     // RENAME
     catalog.renameTable("db5", "tbl1", "tbl2")

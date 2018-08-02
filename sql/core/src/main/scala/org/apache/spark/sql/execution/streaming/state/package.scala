@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.util.UUID
-
 import scala.reflect.ClassTag
 
 import org.apache.spark.TaskContext
@@ -63,7 +61,7 @@ package object state {
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
       val wrappedF = (store: StateStore, iter: Iterator[T]) => {
         // Abort the state store in case of error
-        TaskContext.get().addTaskCompletionListener(_ => {
+        TaskContext.get().addTaskCompletionListener[Unit](_ => {
           if (!store.hasCommitted) store.abort()
         })
         cleanedF(store, iter)

@@ -29,7 +29,6 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.util.Utils
 
 /**
  * Handles registering and unregistering the application with the YARN ResourceManager.
@@ -43,23 +42,20 @@ private[spark] class YarnRMClient extends Logging {
   /**
    * Registers the application master with the RM.
    *
+   * @param driverHost Host name where driver is running.
+   * @param driverPort Port where driver is listening.
    * @param conf The Yarn configuration.
    * @param sparkConf The Spark configuration.
    * @param uiAddress Address of the SparkUI.
    * @param uiHistoryAddress Address of the application on the History Server.
-   * @param securityMgr The security manager.
-   * @param localResources Map with information about files distributed via YARN's cache.
    */
   def register(
-      driverUrl: String,
-      driverRef: RpcEndpointRef,
+      driverHost: String,
+      driverPort: Int,
       conf: YarnConfiguration,
       sparkConf: SparkConf,
       uiAddress: Option[String],
-      uiHistoryAddress: String,
-      securityMgr: SecurityManager,
-      localResources: Map[String, LocalResource]
-    ): YarnAllocator = {
+      uiHistoryAddress: String): Unit = {
     amClient = AMRMClient.createAMRMClient()
     amClient.init(conf)
     amClient.start()
@@ -71,9 +67,19 @@ private[spark] class YarnRMClient extends Logging {
 
     logInfo("Registering the ApplicationMaster")
     synchronized {
-      amClient.registerApplicationMaster(Utils.localHostName(), 0, trackingUrl)
+      amClient.registerApplicationMaster(driverHost, driverPort, trackingUrl)
       registered = true
     }
+  }
+
+  def createAllocator(
+      conf: YarnConfiguration,
+      sparkConf: SparkConf,
+      driverUrl: String,
+      driverRef: RpcEndpointRef,
+      securityMgr: SecurityManager,
+      localResources: Map[String, LocalResource]): YarnAllocator = {
+    require(registered, "Must register AM before creating allocator.")
     new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, getAttemptId(), securityMgr,
       localResources, new SparkRackResolver())
   }
@@ -88,11 +94,14 @@ private[spark] class YarnRMClient extends Logging {
     if (registered) {
       amClient.unregisterApplicationMaster(status, diagnostics, uiHistoryAddress)
     }
+    if (amClient != null) {
+      amClient.stop()
+    }
   }
 
   /** Returns the attempt ID. */
   def getAttemptId(): ApplicationAttemptId = {
-    YarnSparkHadoopUtil.get.getContainerId.getApplicationAttemptId()
+    YarnSparkHadoopUtil.getContainerId.getApplicationAttemptId()
   }
 
   /** Returns the configuration for the AmIpFilter to add to the Spark UI. */

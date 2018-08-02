@@ -26,12 +26,14 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasPredictionCol
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.fpm.{AssociationRules => MLlibAssociationRules,
   FPGrowth => MLlibFPGrowth}
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Common params for FPGrowth and FPGrowthModel
@@ -105,7 +107,7 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     val inputType = schema($(itemsCol)).dataType
     require(inputType.isInstanceOf[ArrayType],
-      s"The input column must be ArrayType, but got $inputType.")
+      s"The input column must be ${ArrayType.simpleString}, but got ${inputType.catalogString}.")
     SchemaUtils.appendColumn(schema, $(predictionCol), schema($(itemsCol)).dataType)
   }
 }
@@ -157,19 +159,34 @@ class FPGrowth @Since("2.2.0") (
     genericFit(dataset)
   }
 
-  private def genericFit[T: ClassTag](dataset: Dataset[_]): FPGrowthModel = {
+  private def genericFit[T: ClassTag](dataset: Dataset[_]): FPGrowthModel = instrumented { instr =>
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, params: _*)
     val data = dataset.select($(itemsCol))
-    val items = data.where(col($(itemsCol)).isNotNull).rdd.map(r => r.getSeq[T](0).toArray)
+    val items = data.where(col($(itemsCol)).isNotNull).rdd.map(r => r.getSeq[Any](0).toArray)
     val mllibFP = new MLlibFPGrowth().setMinSupport($(minSupport))
     if (isSet(numPartitions)) {
       mllibFP.setNumPartitions($(numPartitions))
     }
+
+    if (handlePersistence) {
+      items.persist(StorageLevel.MEMORY_AND_DISK)
+    }
+
     val parentModel = mllibFP.run(items)
     val rows = parentModel.freqItemsets.map(f => Row(f.items, f.freq))
     val schema = StructType(Seq(
       StructField("items", dataset.schema($(itemsCol)).dataType, nullable = false),
       StructField("freq", LongType, nullable = false)))
     val frequentItems = dataset.sparkSession.createDataFrame(rows, schema)
+
+    if (handlePersistence) {
+      items.unpersist()
+    }
+
     copyValues(new FPGrowthModel(uid, frequentItems)).setParent(this)
   }
 
@@ -322,7 +339,7 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
       val dataPath = new Path(path, "data").toString
       val frequentItems = sparkSession.read.parquet(dataPath)
       val model = new FPGrowthModel(metadata.uid, frequentItems)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
