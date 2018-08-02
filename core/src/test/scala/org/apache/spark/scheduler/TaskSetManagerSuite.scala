@@ -178,12 +178,12 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   }
 
   override def afterEach(): Unit = {
-    super.afterEach()
     if (sched != null) {
       sched.dagScheduler.stop()
       sched.stop()
       sched = null
     }
+    super.afterEach()
   }
 
 

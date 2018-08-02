@@ -68,10 +68,14 @@ trait CheckAnalysis extends PredicateHelper {
       case e if e.dataType != IntegerType => failAnalysis(
         s"The limit expression must be integer type, but got " +
           e.dataType.catalogString)
-      case e if e.eval().asInstanceOf[Int] < 0 => failAnalysis(
-        "The limit expression must be equal to or greater than 0, but got " +
-          e.eval().asInstanceOf[Int])
-      case e => // OK
+      case e =>
+        e.eval() match {
+          case null => failAnalysis(
+            s"The evaluated limit expression must not be null, but got ${limitExpr.sql}")
+          case v: Int if v < 0 => failAnalysis(
+            s"The limit expression must be equal to or greater than 0, but got $v")
+          case _ => // OK
+        }
     }
   }
 

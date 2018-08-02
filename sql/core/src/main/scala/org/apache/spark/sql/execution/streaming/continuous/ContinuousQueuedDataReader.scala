@@ -70,7 +70,7 @@ class ContinuousQueuedDataReader(
   dataReaderThread.setDaemon(true)
   dataReaderThread.start()
 
-  context.addTaskCompletionListener(_ => {
+  context.addTaskCompletionListener[Unit](_ => {
     this.close()
   })
 

@@ -88,6 +88,14 @@ class ClusteringSummary(JavaWrapper):
         """
         return self._call_java("clusterSizes")
 
+    @property
+    @since("2.4.0")
+    def numIter(self):
+        """
+        Number of iterations.
+        """
+        return self._call_java("numIter")
+
 
 class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """

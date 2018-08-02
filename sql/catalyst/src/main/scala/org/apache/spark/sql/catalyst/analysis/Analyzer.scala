@@ -529,6 +529,10 @@ class Analyzer(
         || (p.groupByExprsOpt.isDefined && !p.groupByExprsOpt.get.forall(_.resolved))
         || !p.pivotColumn.resolved || !p.pivotValues.forall(_.resolved) => p
       case Pivot(groupByExprsOpt, pivotColumn, pivotValues, aggregates, child) =>
+        if (!RowOrdering.isOrderable(pivotColumn.dataType)) {
+          throw new AnalysisException(
+            s"Invalid pivot column '${pivotColumn}'. Pivot columns must be comparable.")
+        }
         // Check all aggregate expressions.
         aggregates.foreach(checkValidAggregateExpression)
         // Check all pivot values are literal and match pivot column data type.
@@ -574,10 +578,14 @@ class Analyzer(
           // Since evaluating |pivotValues| if statements for each input row can get slow this is an
           // alternate plan that instead uses two steps of aggregation.
           val namedAggExps: Seq[NamedExpression] = aggregates.map(a => Alias(a, a.sql)())
-          val bigGroup = groupByExprs ++ pivotColumn.references
+          val namedPivotCol = pivotColumn match {
+            case n: NamedExpression => n
+            case _ => Alias(pivotColumn, "__pivot_col")()
+          }
+          val bigGroup = groupByExprs :+ namedPivotCol
           val firstAgg = Aggregate(bigGroup, bigGroup ++ namedAggExps, child)
           val pivotAggs = namedAggExps.map { a =>
-            Alias(PivotFirst(pivotColumn, a.toAttribute, evalPivotValues)
+            Alias(PivotFirst(namedPivotCol.toAttribute, a.toAttribute, evalPivotValues)
               .toAggregateExpression()
             , "__pivot_" + a.sql)()
           }
@@ -799,7 +807,6 @@ class Analyzer(
           right
         case Some((oldRelation, newRelation)) =>
           val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
-          // TODO(rxin): Why do we need transformUp here?
           right transformUp {
             case r if r == oldRelation => newRelation
           } transformUp {
@@ -914,7 +921,7 @@ class Analyzer(
       // To resolve duplicate expression IDs for Join and Intersect
       case j @ Join(left, right, _, _) if !j.duplicateResolved =>
         j.copy(right = dedupRight(left, right))
-      case i @ Intersect(left, right) if !i.duplicateResolved =>
+      case i @ Intersect(left, right, _) if !i.duplicateResolved =>
         i.copy(right = dedupRight(left, right))
       case e @ Except(left, right, _) if !e.duplicateResolved =>
         e.copy(right = dedupRight(left, right))

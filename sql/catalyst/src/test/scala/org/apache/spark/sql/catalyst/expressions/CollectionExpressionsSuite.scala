@@ -1503,4 +1503,119 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(!shuffle.fastEquals(shuffle.freshCopy()))
     assert(!shuffle.fastEquals(Shuffle(ai0, seed2)))
   }
+
+  test("Array Except") {
+    val a00 = Literal.create(Seq(1, 2, 4, 3), ArrayType(IntegerType, false))
+    val a01 = Literal.create(Seq(4, 2), ArrayType(IntegerType, false))
+    val a02 = Literal.create(Seq(1, 2, 4, 2), ArrayType(IntegerType, false))
+    val a03 = Literal.create(Seq(4, 2, 4), ArrayType(IntegerType, false))
+    val a04 = Literal.create(Seq(1, 2, null, 4, 5, 1), ArrayType(IntegerType, true))
+    val a05 = Literal.create(Seq(-5, 4, null, 2, -1), ArrayType(IntegerType, true))
+    val a06 = Literal.create(Seq.empty[Int], ArrayType(IntegerType, false))
+    val abl0 = Literal.create(Seq[Boolean](true, true), ArrayType(BooleanType, false))
+    val abl1 = Literal.create(Seq[Boolean](false, false), ArrayType(BooleanType, false))
+    val ab0 = Literal.create(Seq[Byte](1, 2, 3, 2), ArrayType(ByteType, false))
+    val ab1 = Literal.create(Seq[Byte](4, 2, 4), ArrayType(ByteType, false))
+    val as0 = Literal.create(Seq[Short](1, 2, 3, 2), ArrayType(ShortType, false))
+    val as1 = Literal.create(Seq[Short](4, 2, 4), ArrayType(ShortType, false))
+    val af0 = Literal.create(Seq[Float](1.1F, 2.2F, 3.3F, 2.2F), ArrayType(FloatType, false))
+    val af1 = Literal.create(Seq[Float](4.4F, 2.2F, 4.4F), ArrayType(FloatType, false))
+    val ad0 = Literal.create(Seq[Double](1.1, 2.2, 3.3, 2.2), ArrayType(DoubleType, false))
+    val ad1 = Literal.create(Seq[Double](4.4, 2.2, 4.4), ArrayType(DoubleType, false))
+
+    val a10 = Literal.create(Seq(1L, 2L, 4L, 3L), ArrayType(LongType, false))
+    val a11 = Literal.create(Seq(4L, 2L), ArrayType(LongType, false))
+    val a12 = Literal.create(Seq(1L, 2L, 4L, 2L), ArrayType(LongType, false))
+    val a13 = Literal.create(Seq(4L, 2L), ArrayType(LongType, false))
+    val a14 = Literal.create(Seq(1L, 2L, null, 4L, 5L, 1L), ArrayType(LongType, true))
+    val a15 = Literal.create(Seq(-5L, 4L, null, 2L, -1L), ArrayType(LongType, true))
+    val a16 = Literal.create(Seq.empty[Long], ArrayType(LongType, false))
+
+    val a20 = Literal.create(Seq("b", "a", "c", "d"), ArrayType(StringType, false))
+    val a21 = Literal.create(Seq("c", "a"), ArrayType(StringType, false))
+    val a22 = Literal.create(Seq("b", "a", "c", "a"), ArrayType(StringType, false))
+    val a23 = Literal.create(Seq("c", "a", "c"), ArrayType(StringType, false))
+    val a24 = Literal.create(Seq("c", null, "a", "f", "c"), ArrayType(StringType, true))
+    val a25 = Literal.create(Seq("b", null, "a", "g"), ArrayType(StringType, true))
+    val a26 = Literal.create(Seq.empty[String], ArrayType(StringType, false))
+
+    val a30 = Literal.create(Seq(null, null), ArrayType(IntegerType))
+    val a31 = Literal.create(null, ArrayType(StringType))
+
+    checkEvaluation(ArrayExcept(a00, a01), Seq(1, 3))
+    checkEvaluation(ArrayExcept(a02, a01), Seq(1))
+    checkEvaluation(ArrayExcept(a02, a02), Seq.empty)
+    checkEvaluation(ArrayExcept(a02, a03), Seq(1))
+    checkEvaluation(ArrayExcept(a04, a02), Seq(null, 5))
+    checkEvaluation(ArrayExcept(a04, a05), Seq(1, 5))
+    checkEvaluation(ArrayExcept(a04, a06), Seq(1, 2, null, 4, 5))
+    checkEvaluation(ArrayExcept(a06, a04), Seq.empty)
+    checkEvaluation(ArrayExcept(abl0, abl1), Seq[Boolean](true))
+    checkEvaluation(ArrayExcept(ab0, ab1), Seq[Byte](1, 3))
+    checkEvaluation(ArrayExcept(as0, as1), Seq[Short](1, 3))
+    checkEvaluation(ArrayExcept(af0, af1), Seq[Float](1.1F, 3.3F))
+    checkEvaluation(ArrayExcept(ad0, ad1), Seq[Double](1.1, 3.3))
+
+    checkEvaluation(ArrayExcept(a10, a11), Seq(1L, 3L))
+    checkEvaluation(ArrayExcept(a12, a11), Seq(1L))
+    checkEvaluation(ArrayExcept(a12, a12), Seq.empty)
+    checkEvaluation(ArrayExcept(a12, a13), Seq(1L))
+    checkEvaluation(ArrayExcept(a14, a12), Seq(null, 5L))
+    checkEvaluation(ArrayExcept(a14, a15), Seq(1L, 5L))
+    checkEvaluation(ArrayExcept(a14, a16), Seq(1L, 2L, null, 4L, 5L))
+    checkEvaluation(ArrayExcept(a16, a14), Seq.empty)
+
+    checkEvaluation(ArrayExcept(a20, a21), Seq("b", "d"))
+    checkEvaluation(ArrayExcept(a22, a21), Seq("b"))
+    checkEvaluation(ArrayExcept(a22, a22), Seq.empty)
+    checkEvaluation(ArrayExcept(a22, a23), Seq("b"))
+    checkEvaluation(ArrayExcept(a24, a22), Seq(null, "f"))
+    checkEvaluation(ArrayExcept(a24, a25), Seq("c", "f"))
+    checkEvaluation(ArrayExcept(a24, a26), Seq("c", null, "a", "f"))
+    checkEvaluation(ArrayExcept(a26, a24), Seq.empty)
+
+    checkEvaluation(ArrayExcept(a30, a30), Seq.empty)
+    checkEvaluation(ArrayExcept(a20, a31), null)
+    checkEvaluation(ArrayExcept(a31, a20), null)
+
+    val b0 = Literal.create(
+      Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2), Array[Byte](3, 4), Array[Byte](7, 8)),
+      ArrayType(BinaryType))
+    val b1 = Literal.create(
+      Seq[Array[Byte]](Array[Byte](2, 1), Array[Byte](3, 4), Array[Byte](5, 6)),
+      ArrayType(BinaryType))
+    val b2 = Literal.create(
+      Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](3, 4), Array[Byte](1, 2)),
+      ArrayType(BinaryType))
+    val b3 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), Array[Byte](3, 4), null),
+      ArrayType(BinaryType))
+    val b4 = Literal.create(Seq[Array[Byte]](null, Array[Byte](3, 4), null), ArrayType(BinaryType))
+    val b5 = Literal.create(Seq.empty, ArrayType(BinaryType))
+    val arrayWithBinaryNull = Literal.create(Seq(null), ArrayType(BinaryType))
+
+    checkEvaluation(ArrayExcept(b0, b1), Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](7, 8)))
+    checkEvaluation(ArrayExcept(b1, b0), Seq[Array[Byte]](Array[Byte](2, 1)))
+    checkEvaluation(ArrayExcept(b0, b2), Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](7, 8)))
+    checkEvaluation(ArrayExcept(b2, b0), Seq.empty)
+    checkEvaluation(ArrayExcept(b2, b3), Seq[Array[Byte]](Array[Byte](1, 2)))
+    checkEvaluation(ArrayExcept(b3, b2), Seq[Array[Byte]](Array[Byte](2, 1), null))
+    checkEvaluation(ArrayExcept(b3, b4), Seq[Array[Byte]](Array[Byte](2, 1)))
+    checkEvaluation(ArrayExcept(b4, b3), Seq.empty)
+    checkEvaluation(ArrayExcept(b4, b5), Seq[Array[Byte]](null, Array[Byte](3, 4)))
+    checkEvaluation(ArrayExcept(b5, b4), Seq.empty)
+    checkEvaluation(ArrayExcept(b4, arrayWithBinaryNull), Seq[Array[Byte]](Array[Byte](3, 4)))
+
+    val aa0 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4), Seq[Int](1, 2)),
+      ArrayType(ArrayType(IntegerType)))
+    val aa1 = Literal.create(Seq[Seq[Int]](Seq[Int](3, 4), Seq[Int](2, 1), Seq[Int](3, 4)),
+      ArrayType(ArrayType(IntegerType)))
+    checkEvaluation(ArrayExcept(aa0, aa1), Seq[Seq[Int]](Seq[Int](1, 2)))
+    checkEvaluation(ArrayExcept(aa1, aa0), Seq[Seq[Int]](Seq[Int](2, 1)))
+
+    assert(ArrayExcept(a00, a01).dataType.asInstanceOf[ArrayType].containsNull === false)
+    assert(ArrayExcept(a04, a02).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayExcept(a04, a05).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayExcept(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
+    assert(ArrayExcept(a24, a22).dataType.asInstanceOf[ArrayType].containsNull === true)
+  }
 }

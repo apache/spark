@@ -205,7 +205,7 @@ class OrcFileFormat
           // There is a possibility that `initialize` and `initBatch` hit some errors (like OOM)
           // after opening a file.
           val iter = new RecordReaderIterator(batchReader)
-          Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
+          Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
 
           batchReader.initialize(fileSplit, taskAttemptContext)
           batchReader.initBatch(
@@ -220,7 +220,7 @@ class OrcFileFormat
           val orcRecordReader = new OrcInputFormat[OrcStruct]
             .createRecordReader(fileSplit, taskAttemptContext)
           val iter = new RecordReaderIterator[OrcStruct](orcRecordReader)
-          Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
+          Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
 
           val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
           val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
