@@ -3072,3 +3072,10 @@ Specifically:
  - In aggregations, all NaN values are grouped together.
  - NaN is treated as a normal value in join keys.
  - NaN values go last when in ascending order, larger than any other numeric value.
+ 
+ ## Arithmetic operations
+ 
+Operations performed on numeric types (with the exception of `decimal`) are not checked for overflow.
+This means that in case an operation causes an overflow, the result is the same that the same operation
+returns in a Java/Scala program (eg. if the sum of 2 integers is higher than the maximum value representable,
+the result is a negative number).
