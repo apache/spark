@@ -436,8 +436,10 @@ object DataSourceStrategy {
    *
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
-  protected[sql] def translateFilter(predicate: Expression): Option[Filter] = {
-    predicate match {
+  protected[sql] def translateFilter(
+      predicate: Expression,
+      filterCast: Boolean = true): Option[Filter] = {
+    var filter = predicate match {
       case expressions.EqualTo(a: Attribute, Literal(v, t)) =>
         Some(sources.EqualTo(a.name, convertToScala(v, t)))
       case expressions.EqualTo(Literal(v, t), a: Attribute) =>
@@ -496,18 +498,18 @@ object DataSourceStrategy {
         // Pushing one leg of AND down is only safe to do at the top level.
         // You can see ParquetFilters' createFilter for more details.
         for {
-          leftFilter <- translateFilter(left)
-          rightFilter <- translateFilter(right)
+          leftFilter <- translateFilter(left, filterCast)
+          rightFilter <- translateFilter(right, filterCast)
         } yield sources.And(leftFilter, rightFilter)
 
       case expressions.Or(left, right) =>
         for {
-          leftFilter <- translateFilter(left)
-          rightFilter <- translateFilter(right)
+          leftFilter <- translateFilter(left, filterCast)
+          rightFilter <- translateFilter(right, filterCast)
         } yield sources.Or(leftFilter, rightFilter)
 
       case expressions.Not(child) =>
-        translateFilter(child).map(sources.Not)
+        translateFilter(child, filterCast).map(sources.Not)
 
       case expressions.StartsWith(a: Attribute, Literal(v: UTF8String, StringType)) =>
         Some(sources.StringStartsWith(a.name, v.toString))
@@ -520,6 +522,51 @@ object DataSourceStrategy {
 
       case _ => None
     }
+
+    if (!filter.isDefined && !filterCast) {
+      filter = predicate match {
+        case expressions.EqualTo(a: Cast, Literal(v, t)) if (a.child.isInstanceOf[Attribute]) =>
+          Some(sources.EqualTo(a.child.asInstanceOf[Attribute].name, convertToScala(v, t)))
+        case expressions.EqualTo(Literal(v, t), a: Cast) if (a.child.isInstanceOf[Attribute]) =>
+          Some(sources.EqualTo(a.child.asInstanceOf[Attribute].name, convertToScala(v, t)))
+
+        case expressions.EqualNullSafe(a: Cast, Literal(v, t))
+          if (a.child.isInstanceOf[Attribute]) =>
+          Some(sources.EqualNullSafe(a.child.asInstanceOf[Attribute].name, convertToScala(v, t)))
+        case expressions.EqualNullSafe(Literal(v, t), a: Cast)
+          if (a.child.isInstanceOf[Attribute]) =>
+          Some(sources.EqualNullSafe(a.child.asInstanceOf[Attribute].name, convertToScala(v, t)))
+
+        case expressions.GreaterThan(a: Cast, Literal(v, t)) if (a.child.isInstanceOf[Attribute]) =>
+          Some(sources.GreaterThan(a.child.asInstanceOf[Attribute].name, convertToScala(v, t)))
+        case expressions.GreaterThan(Literal(v, t), a: Cast) if (a.child.isInstanceOf[Attribute]) =>
+          Some(sources.LessThan(a.child.asInstanceOf[Attribute].name, convertToScala(v, t)))
+
+        case expressions.LessThan(a: Cast, Literal(v, t)) if (a.child.isInstanceOf[Attribute]) =>
+          Some(sources.LessThan(a.child.asInstanceOf[Attribute].name, convertToScala(v, t)))
+        case expressions.LessThan(Literal(v, t), a: Cast) if (a.child.isInstanceOf[Attribute]) =>
+          Some(sources.GreaterThan(a.child.asInstanceOf[Attribute].name, convertToScala(v, t)))
+
+        case expressions.GreaterThanOrEqual(a: Cast, Literal(v, t))
+          if (a.child.isInstanceOf[Attribute]) =>
+          Some(sources.GreaterThanOrEqual(a.child.asInstanceOf[Attribute].name,
+            convertToScala(v, t)))
+        case expressions.GreaterThanOrEqual(Literal(v, t), a: Cast)
+          if (a.child.isInstanceOf[Attribute]) =>
+          Some(sources.LessThanOrEqual(a.child.asInstanceOf[Attribute].name, convertToScala(v, t)))
+
+        case expressions.LessThanOrEqual(a: Cast, Literal(v, t))
+          if (a.child.isInstanceOf[Attribute]) =>
+          Some(sources.LessThanOrEqual(a.child.asInstanceOf[Attribute].name, convertToScala(v, t)))
+        case expressions.LessThanOrEqual(Literal(v, t), a: Cast)
+          if (a.child.isInstanceOf[Attribute]) =>
+          Some(sources.GreaterThanOrEqual(a.child.asInstanceOf[Attribute].name,
+            convertToScala(v, t)))
+
+        case _ => None
+      }
+    }
+    filter
   }
 
   /**

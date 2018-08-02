@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsR
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
@@ -104,8 +105,9 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         }.flatten.reduceLeftOption(_ && _)
         assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
-        val (_, selectedFilters, _) =
-          DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
+        val selectedFilters: Seq[Filter] = maybeAnalyzedPredicate.toSeq.flatMap { p =>
+          DataSourceStrategy.translateFilter(p, false).map(f => p -> f)
+        }.toMap.values.toSeq
         assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
         selectedFilters.foreach { pred =>
@@ -250,6 +252,13 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       checkFilterPredicate(!('_1 < 4.toByte), classOf[GtEq[_]], 4)
       checkFilterPredicate('_1 < 2.toByte || '_1 > 3.toByte,
         classOf[Operators.Or], Seq(Row(1), Row(4)))
+
+      checkFilterPredicate(Literal(1) === '_1, classOf[Eq[_]], 1)
+      checkFilterPredicate(Literal(1) <=> '_1, classOf[Eq[_]], 1)
+      checkFilterPredicate(Literal(2) > '_1, classOf[Lt[_]], 1)
+      checkFilterPredicate(Literal(3) < '_1, classOf[Gt[_]], 4)
+      checkFilterPredicate(Literal(1) >= '_1, classOf[LtEq[_]], 1)
+      checkFilterPredicate(Literal(4) <= '_1, classOf[GtEq[_]], 4)
     }
   }
 
@@ -278,6 +287,13 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       checkFilterPredicate(!('_1 < 4.toShort), classOf[GtEq[_]], 4)
       checkFilterPredicate('_1 < 2.toShort || '_1 > 3.toShort,
         classOf[Operators.Or], Seq(Row(1), Row(4)))
+
+      checkFilterPredicate('_1 === 1, classOf[Eq[_]], 1)
+      checkFilterPredicate('_1 <=> 1, classOf[Eq[_]], 1)
+      checkFilterPredicate('_1 < 2 || '_1 > 3,
+        classOf[Operators.Or], Seq(Row(1), Row(4)))
+      checkFilterPredicate('_1 <= 2 || '_1 >= 3,
+        classOf[Operators.Or], (1 to 4).map(Row.apply(_)))
     }
   }
 
@@ -557,6 +573,9 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
             checkFilterPredicate(!('a < 4), classOf[GtEq[_]], 4)
             checkFilterPredicate('a < 2 || 'a > 3, classOf[Operators.Or], Seq(Row(1), Row(4)))
+
+            checkFilterPredicate('a < BigDecimal(2000000000, 2), classOf[Lt[_]],
+              (1 to 4).map(Row.apply(_)))
           }
         }
       }

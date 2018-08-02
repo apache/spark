@@ -269,7 +269,8 @@ case class FileSourceScanExec(
   }
 
   @transient
-  private val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
+  private val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.
+    translateFilter(_, !relation.fileFormat.isInstanceOf[ParquetSource]))
   logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
 
   override lazy val metadata: Map[String, String] = {

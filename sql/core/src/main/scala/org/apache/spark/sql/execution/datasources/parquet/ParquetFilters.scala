@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.lang.{Boolean => JBoolean, Double => JDouble, Float => JFloat, Long => JLong}
+import java.lang.{Boolean => JBoolean, Byte => JByte, Double => JDouble, Float => JFloat, Integer => JInteger, Long => JLong, Short => JShort}
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Date, Timestamp}
 
@@ -383,7 +383,13 @@ private[parquet] class ParquetFilters(
     def valueCanMakeFilterOn(name: String, value: Any): Boolean = {
       value == null || (nameToType(name) match {
         case ParquetBooleanType => value.isInstanceOf[JBoolean]
-        case ParquetByteType | ParquetShortType | ParquetIntegerType => value.isInstanceOf[Number]
+        case ParquetByteType => value.isInstanceOf[JByte] ||
+          (value.isInstanceOf[JInteger] && value.asInstanceOf[JInteger].toByte.toInt ==
+            value.asInstanceOf[JInteger])
+        case ParquetShortType => value.isInstanceOf[JShort] ||
+          (value.isInstanceOf[JInteger] && value.asInstanceOf[JInteger].toShort.toInt ==
+            value.asInstanceOf[JInteger])
+        case ParquetIntegerType => value.isInstanceOf[JInteger]
         case ParquetLongType => value.isInstanceOf[JLong]
         case ParquetFloatType => value.isInstanceOf[JFloat]
         case ParquetDoubleType => value.isInstanceOf[JDouble]
