@@ -478,6 +478,21 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   val TOPIC_OPTION_KEY = "topic"
   val PATH_OPTION_KEY = "path"
 
+  val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE =
+    """
+      |Some data may have been lost because they are not available in Kafka any more; either the
+      | data was aged out by Kafka or the topic may have been deleted before all the data in the
+      | topic was processed. If you want your streaming query to fail on such cases, set the source
+      | option "failOnDataLoss" to "true".
+    """.stripMargin
+  val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE =
+    """
+      |Some data may have been lost because they are not available in Kafka any more; either the
+      | data was aged out by Kafka or the topic may have been deleted before all the data in the
+      | topic was processed. If you don't want your streaming query to fail on such cases, set the
+      | source option "failOnDataLoss" to "false".
+    """.stripMargin
+
   private val deserClassName = classOf[ByteArrayDeserializer].getName
 
   def getKafkaOffsetRangeLimit(
