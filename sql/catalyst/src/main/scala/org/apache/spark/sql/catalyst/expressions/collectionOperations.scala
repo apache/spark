@@ -3672,6 +3672,113 @@ abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
     case _: AtomicType => true
     case _ => false
   }
+
+  protected def makeAccessors(
+      ctx : CodegenContext,
+      ev : ExprCode,
+      unsafeArray : String,
+      size : String,
+      value : String,
+      pos : String,
+      i : String) : (String, String, String, String, String, String, String, String, String) = {
+    val ptName = CodeGenerator.primitiveTypeName(elementType)
+    elementType match {
+      case ByteType | ShortType | IntegerType =>
+        ("$mcI$sp", "Int", "int", s"(int) $value",
+          s"get$ptName($i)", s"set$ptName($pos, $value)",
+          CodeGenerator.javaType(elementType), ptName,
+          s"""
+             |${ctx.createUnsafeArray(unsafeArray, size, elementType, s" $prettyName failed.")}
+             |${ev.value} = $unsafeArray;
+           """.stripMargin)
+      case LongType | FloatType | DoubleType =>
+        val signature = elementType match {
+          case LongType => "$mcJ$sp"
+          case FloatType => "$mcF$sp"
+          case DoubleType => "$mcD$sp"
+        }
+        (signature, CodeGenerator.boxedType(elementType),
+          CodeGenerator.javaType(elementType), value,
+          s"get$ptName($i)", s"set$ptName($pos, $value)",
+          CodeGenerator.javaType(elementType), ptName,
+          s"""
+             |${ctx.createUnsafeArray(unsafeArray, size, elementType, s" $prettyName failed.")}
+             |${ev.value} = $unsafeArray;
+           """.stripMargin)
+      case _ =>
+        val genericArrayData = classOf[GenericArrayData].getName
+        val et = ctx.addReferenceObj("elementType", elementType)
+        ("", "Object", "Object", value,
+          s"get($i, $et)", s"update($pos, $value)", "Object", "Ref",
+          s"${ev.value} = new $genericArrayData(new Object[$size]);")
+    }
+  }
+
+  protected def nonNullArrayDataBuild(
+      mayUseUnsafeArray: Boolean,
+      ev : ExprCode,
+      builder : String,
+      size : String) : String = {
+    val genericArrayData = classOf[GenericArrayData].getName
+    val build = if (mayUseUnsafeArray) {
+      val defaultSize = elementType.defaultSize
+      s"""
+         |if (!UnsafeArrayData.shouldUseGenericArrayData($defaultSize, $size)) {
+         |  ${ev.value} = UnsafeArrayData.fromPrimitiveArray($builder.result());
+         |} else {
+         |  ${ev.value} = new $genericArrayData($builder.result());
+         |}
+       """.stripMargin
+    } else {
+      s"${ev.value} = new $genericArrayData($builder.result());"
+    }
+    s"""
+       |if ($size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+       |  throw new RuntimeException("Unsuccessful try create array with " + $size +
+       |  " bytes of data due to exceeding the limit " +
+       |  "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for GenericArrayData." +
+       |  " $prettyName failed.");
+       |}
+       |$build
+     """.stripMargin
+  }
+
+  protected def buildResultArrayData(
+      nonNullArrayDataBuild : String,
+      arrayDataBuilder : String,
+      ev : ExprCode,
+      builder : String,
+      setter : String,
+      javaTypeName : String,
+      array : String,
+      value : String,
+      nullElementIndex : String,
+      size : String,
+      i : String,
+      pos : String) : String = {
+    if (dataType.asInstanceOf[ArrayType].containsNull) {
+      s"""
+         |if ($nullElementIndex < 0) {
+         |  // result has no null element
+         |  $nonNullArrayDataBuild
+         |} else {
+         |  // result has null element
+         |  $arrayDataBuilder
+         |  $javaTypeName[] $array = $builder.result();
+         |  for (int $i = 0, $pos = 0; $pos < $size; $pos++) {
+         |    if ($pos == $nullElementIndex) {
+         |      ${ev.value}.setNullAt($pos);
+         |    } else {
+         |      $javaTypeName $value = $array[$i++];
+         |      ${ev.value}.$setter;
+         |    }
+         |  }
+         |}
+       """.stripMargin
+    } else {
+      nonNullArrayDataBuild
+    }
+  }
 }
 
 object ArraySetLike {
@@ -4080,40 +4187,10 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
     val hsValue = ctx.freshName("hsValue")
     val size = ctx.freshName("size")
     if (elementTypeSupportEquals) {
-      val ptName = CodeGenerator.primitiveTypeName(elementType)
       val unsafeArray = ctx.freshName("unsafeArray")
       val (postFix, openHashElementType, hsJavaTypeName, genHsValue,
-      getter, setter, javaTypeName, primitiveTypeName, arrayDataBuilder) =
-        elementType match {
-          case ByteType | ShortType | IntegerType =>
-            ("$mcI$sp", "Int", "int", s"(int) $value",
-              s"get$ptName($i)", s"set$ptName($pos, $value)",
-              CodeGenerator.javaType(elementType), ptName,
-              s"""
-                 |${ctx.createUnsafeArray(unsafeArray, size, elementType, s" $prettyName failed.")}
-                 |${ev.value} = $unsafeArray;
-               """.stripMargin)
-          case LongType | FloatType | DoubleType =>
-            val signature = elementType match {
-              case LongType => "$mcJ$sp"
-              case FloatType => "$mcF$sp"
-              case DoubleType => "$mcD$sp"
-            }
-            (signature, CodeGenerator.boxedType(elementType),
-              CodeGenerator.javaType(elementType), value,
-              s"get$ptName($i)", s"set$ptName($pos, $value)",
-              CodeGenerator.javaType(elementType), ptName,
-              s"""
-                 |${ctx.createUnsafeArray(unsafeArray, size, elementType, s" $prettyName failed.")}
-                 |${ev.value} = $unsafeArray;
-               """.stripMargin)
-          case _ =>
-            val genericArrayData = classOf[GenericArrayData].getName
-            val et = ctx.addReferenceObj("elementType", elementType)
-            ("", "Object", "Object", value,
-              s"get($i, $et)", s"update($pos, $value)", "Object", "Ref",
-              s"${ev.value} = new $genericArrayData(new Object[$size]);")
-        }
+           getter, setter, javaTypeName, primitiveTypeName, arrayDataBuilder) =
+        makeAccessors(ctx, ev, unsafeArray, size, value, pos, i)
 
       nullSafeCodeGen(ctx, ev, (array1, array2) => {
         val foundNullElement = ctx.freshName("foundNullElement")
@@ -4124,7 +4201,6 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$openHashElementType()"
         val hs = ctx.freshName("hs")
         val hsResult = ctx.freshName("hsResult")
-        val genericArrayData = classOf[GenericArrayData].getName
         val arrayBuilder = "scala.collection.mutable.ArrayBuilder"
         val arrayBuilderClass = s"$arrayBuilder$$of$primitiveTypeName"
         val arrayBuilderClassTag = if (primitiveTypeName != "Ref") {
@@ -4181,54 +4257,10 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
              |}
            """.stripMargin
 
-        val nonNullArrayDataBuild = {
-          val build = if (postFix != "") {
-            val defaultSize = elementType.defaultSize
-            s"""
-               |if (!UnsafeArrayData.shouldUseGenericArrayData($defaultSize, $size)) {
-               |  ${ev.value} = UnsafeArrayData.fromPrimitiveArray($builder.result());
-               |} else {
-               |  ${ev.value} = new $genericArrayData($builder.result());
-               |}
-             """.stripMargin
-          } else {
-            s"${ev.value} = new $genericArrayData($builder.result());"
-          }
-          s"""
-             |if ($size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-             |  throw new RuntimeException("Unsuccessful try create array with " + $size +
-             |  " bytes of data due to exceeding the limit " +
-             |  "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for GenericArrayData." +
-             |  " $prettyName failed.");
-             |}
-             |$build
-           """.stripMargin
-        }
-
-        def buildResultArrayData(nonNullArrayDataBuild: String) =
-          if (dataType.asInstanceOf[ArrayType].containsNull) {
-            s"""
-               |if ($nullElementIndex < 0) {
-               |  // result has no null element
-               |  $nonNullArrayDataBuild
-               |} else {
-               |  // result has null element
-               |  $arrayDataBuilder
-               |  $javaTypeName[] $array = $builder.result();
-               |  for (int $i = 0, $pos = 0; $pos < $size; $pos++) {
-               |    if ($pos == $nullElementIndex) {
-               |      ${ev.value}.setNullAt($pos);
-               |    } else {
-               |      $javaTypeName $value = $array[$i++];
-               |      ${ev.value}.$setter;
-               |    }
-               |  }
-               |}
-             """.stripMargin
-          } else {
-            nonNullArrayDataBuild
-          }
-
+        val nonNullArrayData = nonNullArrayDataBuild(postFix != "", ev, builder, size)
+        val resultArrayData = buildResultArrayData(
+          nonNullArrayData, arrayDataBuilder, ev, builder, setter,
+          javaTypeName, array, value, nullElementIndex, size, i, pos)
         s"""
            |$openHashSet $hs = new $openHashSet$postFix($classTag);
            |$openHashSet $hsResult = new $openHashSet$postFix($classTag);
@@ -4243,7 +4275,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
            |for (int $i = 0; $i < $array1.numElements(); $i++) {
            |  ${withArray1NullAssignment(array1Body)}
            |}
-           |${buildResultArrayData(nonNullArrayDataBuild)}
+           |$resultArrayData
          """.stripMargin
       })
     } else {
@@ -4538,55 +4570,4 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
   }
 
   override def prettyName: String = "array_except"
-}
-
-object ArrayIntersect {
-  def intersectOrdering(
-      array1: ArrayData,
-      array2: ArrayData,
-      elementType: DataType,
-      ordering: Ordering[Any]): ArrayData = {
-    val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-    var alreadySeenNull = false
-    var i = 0
-    while (i < array2.numElements()) {
-      var found = false
-      val elem2 = array2.get(i, elementType)
-      if (array2.isNullAt(i)) {
-        if (!alreadySeenNull) {
-          var j = 0
-          while (!found && j < array1.numElements()) {
-            found = array1.isNullAt(j)
-            j += 1
-          }
-          // array1 is scaned only once for null element
-          alreadySeenNull = true
-        }
-      } else {
-        var j = 0
-        while (!found && j < array1.numElements()) {
-          if (!array1.isNullAt(j)) {
-            val elem1 = array1.get(j, elementType)
-            if (ordering.equiv(elem1, elem2)) {
-              // check whether elem1 is already stored in arrayBuffer
-              var foundArrayBuffer = false
-              var k = 0
-              while (!foundArrayBuffer && k < arrayBuffer.size) {
-                val va = arrayBuffer(k)
-                foundArrayBuffer = (va != null) && ordering.equiv(va, elem1)
-                k += 1
-              }
-              found = !foundArrayBuffer
-            }
-          }
-          j += 1
-        }
-      }
-      if (found) {
-        arrayBuffer += elem2
-      }
-      i += 1
-    }
-    new GenericArrayData(arrayBuffer)
-  }
 }
