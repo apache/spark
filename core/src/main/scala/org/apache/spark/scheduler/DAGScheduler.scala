@@ -1433,17 +1433,18 @@ class DAGScheduler(
         val failedStage = stageIdToStage(task.stageId)
         logInfo(s"Marking $failedStage (${failedStage.name}) as failed due to a barrier task " +
           "failed.")
-        val message = s"Stage failed because barrier task $task finished unsuccessfully. " +
+        val message = s"Stage failed because barrier task $task finished unsuccessfully.\n" +
           failure.toErrorString
         try {
-          // cancelTasks will fail if a SchedulerBackend does not implement killTask
-          taskScheduler.cancelTasks(stageId, interruptThread = false)
+          // killAllTaskAttempts will fail if a SchedulerBackend does not implement killTask.
+          val reason = s"Task $task from barrier stage $failedStage (${failedStage.name}) failed."
+          taskScheduler.killAllTaskAttempts(stageId, interruptThread = false, reason)
         } catch {
           case e: UnsupportedOperationException =>
             // Cannot continue with barrier stage if failed to cancel zombie barrier tasks.
             // TODO SPARK-24877 leave the zombie tasks and ignore their completion events.
-            logWarning(s"Could not cancel tasks for stage $stageId", e)
-            abortStage(failedStage, "Could not cancel zombie barrier tasks for stage " +
+            logWarning(s"Could not kill all tasks for stage $stageId", e)
+            abortStage(failedStage, "Could not kill zombie barrier tasks for stage " +
               s"$failedStage (${failedStage.name})", Some(e))
         }
         markStageAsFinished(failedStage, Some(message))
@@ -1457,7 +1458,8 @@ class DAGScheduler(
 
         if (shouldAbortStage) {
           val abortMessage = if (disallowStageRetryForTest) {
-            "Barrier stage will not retry stage due to testing config"
+            "Barrier stage will not retry stage due to testing config. Most recent failure " +
+              s"reason: $message"
           } else {
             s"""$failedStage (${failedStage.name})
                |has failed the maximum allowable number of
