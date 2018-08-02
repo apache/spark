@@ -19,15 +19,18 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
-import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.execution.FileSchemaPruningTest
+import org.scalactic.Equality
+
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.StructType
 
 class ParquetSchemaPruningSuite
     extends QueryTest
     with ParquetTest
-    with FileSchemaPruningTest
     with SharedSQLContext {
   case class FullName(first: String, middle: String, last: String)
   case class Contact(
@@ -35,14 +38,14 @@ class ParquetSchemaPruningSuite
     name: FullName,
     address: String,
     pets: Int,
-    friends: Array[FullName] = Array(),
-    relatives: Map[String, FullName] = Map())
+    friends: Array[FullName] = Array.empty,
+    relatives: Map[String, FullName] = Map.empty)
 
   val janeDoe = FullName("Jane", "X.", "Doe")
   val johnDoe = FullName("John", "Y.", "Doe")
   val susanSmith = FullName("Susan", "Z.", "Smith")
 
-  val contacts =
+  private val contacts =
     Contact(0, janeDoe, "123 Main Street", 1, friends = Array(susanSmith),
       relatives = Map("brother" -> johnDoe)) ::
     Contact(1, johnDoe, "321 Wall Street", 3, relatives = Map("sister" -> janeDoe)) :: Nil
@@ -50,7 +53,7 @@ class ParquetSchemaPruningSuite
   case class Name(first: String, last: String)
   case class BriefContact(id: Int, name: Name, address: String)
 
-  val briefContacts =
+  private val briefContacts =
     BriefContact(2, Name("Janet", "Jones"), "567 Maple Drive") ::
     BriefContact(3, Name("Jim", "Jones"), "6242 Ash Street") :: Nil
 
@@ -65,10 +68,10 @@ class ParquetSchemaPruningSuite
 
   case class BriefContactWithDataPartitionColumn(id: Int, name: Name, address: String, p: Int)
 
-  val contactsWithDataPartitionColumn =
+  private val contactsWithDataPartitionColumn =
     contacts.map { case Contact(id, name, address, pets, friends, relatives) =>
       ContactWithDataPartitionColumn(id, name, address, pets, friends, relatives, 1) }
-  val briefContactsWithDataPartitionColumn =
+  private val briefContactsWithDataPartitionColumn =
     briefContacts.map { case BriefContact(id, name, address) =>
       BriefContactWithDataPartitionColumn(id, name, address, 2) }
 
@@ -161,10 +164,10 @@ class ParquetSchemaPruningSuite
     }
 
     withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-      test(s"Parquet-mr reader - without partition data column - $testName") {
+      test(s"Native Parquet reader - without partition data column - $testName") {
         withContacts(testThunk)
       }
-      test(s"Parquet-mr reader - with partition data column - $testName") {
+      test(s"Native Parquet reader - with partition data column - $testName") {
         withContactsWithDataPartitionColumn(testThunk)
       }
     }
@@ -193,6 +196,37 @@ class ParquetSchemaPruningSuite
       spark.read.parquet(path + "/contacts").createOrReplaceTempView("contacts")
 
       testThunk
+    }
+  }
+
+  private val schemaEquality = new Equality[StructType] {
+    override def areEqual(a: StructType, b: Any): Boolean =
+      b match {
+        case otherType: StructType => a.sameType(otherType)
+        case _ => false
+      }
+  }
+
+  protected def checkScan(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
+    checkScanSchemata(df, expectedSchemaCatalogStrings: _*)
+    // We check here that we can execute the query without throwing an exception. The results
+    // themselves are irrelevant, and should be checked elsewhere as needed
+    df.collect()
+  }
+
+  private def checkScanSchemata(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
+    val fileSourceScanSchemata =
+      df.queryExecution.executedPlan.collect {
+        case scan: FileSourceScanExec => scan.requiredSchema
+      }
+    assert(fileSourceScanSchemata.size === expectedSchemaCatalogStrings.size,
+      s"Found ${fileSourceScanSchemata.size} file sources in dataframe, " +
+        s"but expected $expectedSchemaCatalogStrings")
+    fileSourceScanSchemata.zip(expectedSchemaCatalogStrings).foreach {
+      case (scanSchema, expectedScanSchemaCatalogString) =>
+        val expectedScanSchema = CatalystSqlParser.parseDataType(expectedScanSchemaCatalogString)
+        implicit val equality = schemaEquality
+        assert(scanSchema === expectedScanSchema)
     }
   }
 }

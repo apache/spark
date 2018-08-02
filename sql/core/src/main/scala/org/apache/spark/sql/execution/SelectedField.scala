@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.planning
+package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
@@ -24,27 +24,27 @@ import org.apache.spark.sql.types._
  * A Scala extractor that builds a [[org.apache.spark.sql.types.StructField]] from a Catalyst
  * complex type extractor. For example, consider a relation with the following schema:
  *
- *   {{{
- *   root
- *    |-- name: struct (nullable = true)
- *    |    |-- first: string (nullable = true)
- *    |    |-- last: string (nullable = true)
- *    }}}
+ * {{{
+ * root
+ * |-- name: struct (nullable = true)
+ * |    |-- first: string (nullable = true)
+ * |    |-- last: string (nullable = true)
+ * }}}
  *
  * Further, suppose we take the select expression `name.first`. This will parse into an
  * `Alias(child, "first")`. Ignoring the alias, `child` matches the following pattern:
  *
- *   {{{
- *   GetStructFieldObject(
- *     AttributeReference("name", StructType(_), _, _),
- *     StructField("first", StringType, _, _))
- *   }}}
+ * {{{
+ * GetStructFieldObject(
+ *   AttributeReference("name", StructType(_), _, _),
+ *   StructField("first", StringType, _, _))
+ * }}}
  *
  * [[SelectedField]] converts that expression into
  *
- *   {{{
- *   StructField("name", StructType(Array(StructField("first", StringType))))
- *   }}}
+ * {{{
+ * StructField("name", StructType(Array(StructField("first", StringType))))
+ * }}}
  *
  * by mapping each complex type extractor to a [[org.apache.spark.sql.types.StructField]] with the
  * same name as its child (or "parent" going right to left in the select expression) and a data
@@ -54,7 +54,7 @@ import org.apache.spark.sql.types._
  *
  * @param expr the top-level complex type extractor
  */
-object SelectedField {
+private[execution] object SelectedField {
   def unapply(expr: Expression): Option[StructField] = {
     // If this expression is an alias, work on its child instead
     val unaliased = expr match {
@@ -85,16 +85,16 @@ object SelectedField {
           field @ StructField(name, dataType, nullable, metadata), _, _, _) =>
         val childField = fieldOpt.map(field => StructField(name,
             wrapStructType(dataType, field),
-            nullable, metadata)).getOrElse(field)
-        selectField(child, Some(childField))
+            nullable, metadata)).orElse(Some(field))
+        selectField(child, childField)
       // Handles case "expr0.field", where "expr0" is of array type.
       case GetArrayStructFields(child,
-          field @ StructField(name, dataType, nullable, metadata), _, _, containsNull) =>
+          field @ StructField(name, dataType, nullable, metadata), _, _, _) =>
         val childField =
           fieldOpt.map(field => StructField(name,
             wrapStructType(dataType, field),
-            nullable, metadata)).getOrElse(field)
-        selectField(child, Some(childField))
+            nullable, metadata)).orElse(Some(field))
+        selectField(child, childField)
       // Handles case "expr0.field[key]", where "expr0" is of struct type and "expr0.field" is of
       // map type.
       case GetMapValue(x @ GetStructFieldObject(child, field @ StructField(name,
@@ -102,8 +102,8 @@ object SelectedField {
           nullable, metadata)), _) =>
         val childField = fieldOpt.map(field => StructField(name,
           wrapStructType(dataType, field),
-          nullable, metadata)).getOrElse(field)
-        selectField(child, Some(childField))
+          nullable, metadata)).orElse(Some(field))
+        selectField(child, childField)
       // Handles case "expr0.field[key]", where "expr0.field" is of map type.
       case GetMapValue(child, _) =>
         selectField(child, fieldOpt)
@@ -112,8 +112,8 @@ object SelectedField {
         field @ StructField(name, dataType, nullable, metadata)) =>
         val childField = fieldOpt.map(field => StructField(name,
           wrapStructType(dataType, field),
-          nullable, metadata)).getOrElse(field)
-        selectField(child, Some(childField))
+          nullable, metadata)).orElse(Some(field))
+        selectField(child, childField)
       case _ =>
         None
     }
