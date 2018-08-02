@@ -234,6 +234,11 @@ class ExpressionParserSuite extends PlanTest {
     intercept("foo(a x)", "extraneous input 'x'")
   }
 
+  test("lambda functions") {
+    assertEqual("x -> x + 1", LambdaFunction('x + 1, Seq('x.attr)))
+    assertEqual("(x, y) -> x + y", LambdaFunction('x + 'y, Seq('x.attr, 'y.attr)))
+  }
+
   test("window function expressions") {
     val func = 'foo.function(star())
     def windowed(
