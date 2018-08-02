@@ -2813,4 +2813,25 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(df, Seq(Row(3, 99, 1)))
     }
   }
+
+  test("SPARK-24900: speed up sort when the dataset is small") {
+    withTempView("src") {
+      // the optimization works
+      Seq((5, 5), (3, 3), (1, 1), (2, 2), (4, 4), (6, 6), (7,7))
+        .toDF("key", "value").repartition(2).createOrReplaceTempView("src")
+      checkAnswer(sql("SELECT * FROM src ORDER BY key"),
+        Seq(Row(1, 1), Row(2, 2), Row(3, 3), Row(4, 4), Row(5, 5), Row(6, 6), Row(7, 7)))
+      checkAnswer(sql("SELECT * FROM src ORDER BY key DESC"),
+        Seq(Row(7, 7), Row(6, 6), Row(5, 5), Row(4, 4), Row(3, 3), Row(2, 2), Row(1, 1)))
+
+      // total sample size is 2 * 1 * 3 = 6. 6 < 7, so the optimization won't work
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+        SQLConf.RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION.key -> "1") {
+        checkAnswer(sql("SELECT * FROM src ORDER BY key"),
+          Seq(Row(1, 1), Row(2, 2), Row(3, 3), Row(4, 4), Row(5, 5), Row(6, 6), Row(7, 7)))
+        checkAnswer(sql("SELECT * FROM src ORDER BY key DESC"),
+          Seq(Row(7, 7), Row(6, 6), Row(5, 5), Row(4, 4), Row(3, 3), Row(2, 2), Row(1, 1)))
+      }
+    }
+  }
 }
