@@ -455,9 +455,9 @@ public final class ArrowColumnVector extends ColumnVector {
     @Override
     final ColumnarArray getArray(int rowId) {
       ArrowBuf offsets = accessor.getOffsetBuffer();
-      int index = rowId * accessor.OFFSET_WIDTH;
+      int index = rowId * BaseRepeatedValueVector.OFFSET_WIDTH;
       int start = offsets.getInt(index);
-      int end = offsets.getInt(index + accessor.OFFSET_WIDTH);
+      int end = offsets.getInt(index + BaseRepeatedValueVector.OFFSET_WIDTH);
       return new ColumnarArray(arrayData, start, end - start);
     }
   }

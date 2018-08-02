@@ -155,7 +155,7 @@ private[sql] trait ParquetTest extends SQLTestUtils {
   }
 
   protected def readFooter(path: Path, configuration: Configuration): ParquetMetadata = {
-    ParquetFileReader.readFooter(
+    ParquetUtils.readFooter(
       configuration,
       new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE),
       ParquetMetadataConverter.NO_FILTER)

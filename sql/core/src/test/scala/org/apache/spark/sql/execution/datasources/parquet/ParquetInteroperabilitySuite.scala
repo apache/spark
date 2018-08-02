@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
+import scala.language.existentials
+
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
@@ -172,11 +174,11 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               // sure the test is configured correctly.
               assert(parts.size == 2)
               parts.foreach { part =>
-                val oneFooter =
-                  ParquetFileReader.readFooter(hadoopConf, part.getPath, NO_FILTER)
+                val oneFooter = ParquetUtils.readFooter(hadoopConf, part.getPath, NO_FILTER)
                 assert(oneFooter.getFileMetaData.getSchema.getColumns.size === 1)
-                assert(oneFooter.getFileMetaData.getSchema.getColumns.get(0).getType() ===
-                  PrimitiveTypeName.INT96)
+                val typeName = oneFooter
+                  .getFileMetaData.getSchema.getColumns.get(0).getPrimitiveType.getPrimitiveTypeName
+                assert(typeName === PrimitiveTypeName.INT96)
                 val oneBlockMeta = oneFooter.getBlocks().get(0)
                 val oneBlockColumnMeta = oneBlockMeta.getColumns().get(0)
                 val columnStats = oneBlockColumnMeta.getStatistics
