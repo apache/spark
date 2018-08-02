@@ -39,7 +39,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.rdd.{RDD, RDDCheckpointData}
+import org.apache.spark.rdd.{PartitionPruningRDD, RDD, RDDCheckpointData}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -341,6 +341,22 @@ class DAGScheduler(
   }
 
   /**
+   * Check to make sure we don't launch a barrier stage with unsupported RDD chain pattern. The
+   * following patterns are not supported:
+   * 1. Ancestor RDDs that have different number of partitions from the resulting RDD (eg.
+   * union()/coalesce()/first()/take()/PartitionPruningRDD);
+   * 2. An RDD that depends on multiple barrier RDDs (eg. barrierRdd1.zip(barrierRdd2)).
+   */
+  private def checkBarrierStageWithRDDChainPattern(rdd: RDD[_], numTasksInStage: Int): Unit = {
+    val predicate: RDD[_] => Boolean = (r =>
+      r.getNumPartitions == numTasksInStage && r.dependencies.filter(_.rdd.isBarrier()).size <= 1)
+    if (rdd.isBarrier() && !traverseParentRDDsWithinStage(rdd, predicate)) {
+      throw new SparkException(
+        DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
+    }
+  }
+
+  /**
    * Creates a ShuffleMapStage that generates the given shuffle dependency's partitions. If a
    * previously run stage generated the same shuffle data, this function will copy the output
    * locations that are still available from the previous shuffle to avoid unnecessarily
@@ -348,6 +364,7 @@ class DAGScheduler(
    */
   def createShuffleMapStage(shuffleDep: ShuffleDependency[_, _, _], jobId: Int): ShuffleMapStage = {
     val rdd = shuffleDep.rdd
+    checkBarrierStageWithRDDChainPattern(rdd, rdd.getNumPartitions)
     val numTasks = rdd.partitions.length
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
@@ -376,6 +393,7 @@ class DAGScheduler(
       partitions: Array[Int],
       jobId: Int,
       callSite: CallSite): ResultStage = {
+    checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
     val stage = new ResultStage(id, rdd, func, partitions, parents, jobId, callSite)
@@ -449,6 +467,32 @@ class DAGScheduler(
       }
     }
     parents
+  }
+
+  /**
+   * Traverses the given RDD and its ancestors within the same stage and checks whether all of the
+   * RDDs satisfy a given predicate.
+   */
+  private def traverseParentRDDsWithinStage(rdd: RDD[_], predicate: RDD[_] => Boolean): Boolean = {
+    val visited = new HashSet[RDD[_]]
+    val waitingForVisit = new ArrayStack[RDD[_]]
+    waitingForVisit.push(rdd)
+    while (waitingForVisit.nonEmpty) {
+      val toVisit = waitingForVisit.pop()
+      if (!visited(toVisit)) {
+        if (!predicate(toVisit)) {
+          return false
+        }
+        visited += toVisit
+        toVisit.dependencies.foreach {
+          case _: ShuffleDependency[_, _, _] =>
+            // Not within the same stage with current rdd, do nothing.
+          case dependency =>
+            waitingForVisit.push(dependency.rdd)
+        }
+      }
+    }
+    true
   }
 
   private def getMissingParentStages(stage: Stage): List[Stage] = {
@@ -1948,4 +1992,13 @@ private[spark] object DAGScheduler {
 
   // Number of consecutive stage attempts allowed before a stage is aborted
   val DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS = 4
+
+  // Error message when running a barrier stage that have unsupported RDD chain pattern.
+  val ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN =
+    "[SPARK-24820][SPARK-24821]: Barrier execution mode does not allow the following pattern of " +
+      "RDD chain within a barrier stage:\n1. Ancestor RDDs that have different number of " +
+      "partitions from the resulting RDD (eg. union()/coalesce()/first()/take()/" +
+      "PartitionPruningRDD). A workaround for first()/take() can be barrierRdd.collect().head " +
+      "(scala) or barrierRdd.collect()[0] (python).\n" +
+      "2. An RDD that depends on multiple barrier RDDs (eg. barrierRdd1.zip(barrierRdd2))."
 }
