@@ -470,7 +470,6 @@ private[spark] object Utils extends Logging {
         }
       }
       val localDir = new File(cachedLocalDir)
-
       val lockFile = new File(localDir, lockFileName)
       val lockFileChannel = new RandomAccessFile(lockFile, "rw").getChannel()
       // Only one executor entry.
