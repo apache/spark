@@ -25,15 +25,14 @@ import org.apache.spark.annotation.DeveloperApi;
  * of each plugin will be created for every executor, including those created by dynamic allocation,
  * before the executor starts running any tasks.
  *
- * The specific api exposed to the end users still considered to be very unstable.  If implementors
- * extend this base class, we will *hopefully* be able to keep compatability by providing dummy
- * implementations for any methods added, but make no guarantees this will always be possible across
- * all spark releases.
+ * The specific api exposed to the end users still considered to be very unstable.  We will
+ * *hopefully* be able to keep compatability by providing default implementations for any methods
+ * added, but make no guarantees this will always be possible across all spark releases.
  *
  * Spark does nothing to verify the plugin is doing legitimate things, or to manage the resources
  * it uses.  A plugin acquires the same privileges as the user running the task.  A bad plugin
  * could also intefere with task execution and make the executor fail in unexpected ways.
  */
 @DeveloperApi
-public class AbstractExecutorPlugin {
+interface ExecutorPlugin {
 }
