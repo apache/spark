@@ -19,7 +19,7 @@ package org.apache.spark.sql.avro
 
 import scala.collection.JavaConverters._
 
-import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
+import org.apache.avro.{LogicalType, LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.LogicalTypes.{TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 
@@ -129,12 +129,8 @@ object SchemaConverters {
           case other =>
             throw new IncompatibleSchemaException(s"Unexpected output timestamp type $other.")
         }
-        if (nullable) {
-          val avroType = timestampType.addToSchema(SchemaBuilder.builder().longType())
-          builder.`type`(avroType)
-        } else {
-          timestampType.addToSchema(builder.longType())
-        }
+        builder.longBuilder().prop(LogicalType.LOGICAL_TYPE_PROP, timestampType.getName).endLong()
+
       case FloatType => builder.floatType()
       case DoubleType => builder.doubleType()
       case _: DecimalType | StringType => builder.stringType()

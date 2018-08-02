@@ -39,6 +39,8 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
 class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
+  import testImplicits._
+
   val episodesAvro = testFile("episodes.avro")
   val testAvro = testFile("test.avro")
 
@@ -355,11 +357,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("Logical type: timestamp_millis") {
-    val sparkSession = spark
-    import sparkSession.implicits._
-
-    val expected =
-      Seq(1L, 666L).toDF("timestamp_millis").select('timestamp_millis.cast(TimestampType)).collect()
+    val expected = Seq(1000L, 666000L).map(t => Row(new Timestamp(t)))
     val df = spark.read.format("avro").load(timestampAvro).select('timestamp_millis)
 
     checkAnswer(df, expected)
@@ -371,11 +369,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("Logical type: timestamp_micros") {
-    val sparkSession = spark
-    import sparkSession.implicits._
-
-    val expected =
-      Seq(2L, 999L).toDF("timestamp_micros").select('timestamp_micros.cast(TimestampType)).collect()
+    val expected = Seq(2000L, 999000L).map(t => Row(new Timestamp(t)))
     val df = spark.read.format("avro").load(timestampAvro).select('timestamp_micros)
 
     checkAnswer(df, expected)
@@ -387,16 +381,11 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("Logical type: specify different output timestamp types") {
-    val sparkSession = spark
-    import sparkSession.implicits._
-
     val df =
       spark.read.format("avro").load(timestampAvro).select('timestamp_millis, 'timestamp_micros)
 
-    val expected = Seq((1L, 2L), (666L, 999L))
-      .toDF("timestamp_millis", "timestamp_micros")
-      .select('timestamp_millis.cast(TimestampType), 'timestamp_micros.cast(TimestampType))
-      .collect()
+    val expected = Seq((1000L, 2000L), (666000L, 999000L))
+      .map(t => Row(new Timestamp(t._1), new Timestamp(t._2)))
 
     Seq("TIMESTAMP_MILLIS", "TIMESTAMP_MICROS").foreach { timestampType =>
       withSQLConf(SQLConf.AVRO_OUTPUT_TIMESTAMP_TYPE.key -> timestampType) {
@@ -409,25 +398,17 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("Read Long type as Timestamp") {
-    val sparkSession = spark
-    import sparkSession.implicits._
-
     val schema = StructType(StructField("long", TimestampType, true) :: Nil)
     val df = spark.read.format("avro").schema(schema).load(timestampAvro).select('long)
 
-    val expected = Seq(3L, 777L).toDF("long").select('long.cast(TimestampType)).collect()
+    val expected = Seq(3000L, 777000L).map(t => Row(new Timestamp(t)))
 
     checkAnswer(df, expected)
   }
 
   test("Logical type: user specified schema") {
-    val sparkSession = spark
-    import sparkSession.implicits._
-
-    val expected = Seq((1L, 2L, 3000L), (666L, 999L, 777000L))
-      .toDF("timestamp_millis", "timestamp_micros", "long")
-      .select('timestamp_millis.cast(TimestampType), 'timestamp_micros.cast(TimestampType), 'long)
-      .collect()
+    val expected = Seq((1000L, 2000L, 3000L), (666000L, 999000L, 777000L))
+      .map(t => Row(new Timestamp(t._1), new Timestamp(t._2), t._3))
 
     val avroSchema = s"""
       {
@@ -646,9 +627,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   test("correctly read long as date/timestamp type") {
     withTempPath { tempDir =>
-      val sparkSession = spark
-      import sparkSession.implicits._
-
       val currentTime = new Timestamp(System.currentTimeMillis())
       val currentDate = new Date(System.currentTimeMillis())
       val schema = StructType(Seq(
@@ -676,9 +654,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   test("does not coerce null date/timestamp value to 0 epoch.") {
     withTempPath { tempDir =>
-      val sparkSession = spark
-      import sparkSession.implicits._
-
       val nullTime: Timestamp = null
       val nullDate: Date = null
       val schema = StructType(Seq(
@@ -884,8 +859,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   test("read avro file partitioned") {
     withTempPath { dir =>
-      val sparkSession = spark
-      import sparkSession.implicits._
       val df = (0 to 1024 * 3).toDS.map(i => s"record${i}").toDF("records")
       val outputDir = s"$dir/${UUID.randomUUID}"
       df.write.format("avro").save(outputDir)
