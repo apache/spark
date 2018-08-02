@@ -47,15 +47,22 @@ private[spark] class BarrierCoordinator(
       // Remove internal data from a finished stage attempt.
       cleanupSyncRequests(stageInfo.stageId, stageInfo.attemptNumber)
       barrierEpochByStageIdAndAttempt.remove((stageInfo.stageId, stageInfo.attemptNumber))
+      cancelTimerTask(stageInfo.stageId, stageInfo.attemptNumber)
     }
   }
 
   // Epoch counter for each barrier (stage, attempt).
-  private val barrierEpochByStageIdAndAttempt = new ConcurrentHashMap[(Int, Int), AtomicInteger]
+  private val barrierEpochByStageIdAndAttempt = new ConcurrentHashMap[(Int, Int), Int]
 
   // Remember all the blocking global sync requests for each barrier (stage, attempt).
   private val syncRequestsByStageIdAndAttempt =
     new ConcurrentHashMap[(Int, Int), ArrayBuffer[RpcCallContext]]
+
+  // Remember all the TimerTasks for each barrier (stage, attempt).
+  private val timerTaskByStageIdAndAttempt = new ConcurrentHashMap[(Int, Int), TimerTask]
+
+  // Number of tasks for each stage.
+  private val numTasksByStage = new ConcurrentHashMap[Int, Int]
 
   override def onStart(): Unit = {
     super.onStart()
@@ -69,7 +76,7 @@ private[spark] class BarrierCoordinator(
   private def getOrInitSyncRequests(
       stageId: Int,
       stageAttemptId: Int,
-      numTasks: Int = 0): ArrayBuffer[RpcCallContext] = {
+      numTasks: Int): ArrayBuffer[RpcCallContext] = {
     val requests = syncRequestsByStageIdAndAttempt.putIfAbsent((stageId, stageAttemptId),
       new ArrayBuffer[RpcCallContext](numTasks))
     if (requests == null) {
@@ -95,13 +102,37 @@ private[spark] class BarrierCoordinator(
   /**
    * Get the barrier epoch that correspond to a barrier sync request from a stage attempt.
    */
-  private def getOrInitBarrierEpoch(stageId: Int, stageAttemptId: Int): AtomicInteger = {
+  private def getOrInitBarrierEpoch(stageId: Int, stageAttemptId: Int): Int = {
+    val defaultBarrierEpoch = 0
     val barrierEpoch = barrierEpochByStageIdAndAttempt.putIfAbsent((stageId, stageAttemptId),
-      new AtomicInteger(0))
+      defaultBarrierEpoch)
     if (barrierEpoch == null) {
-      barrierEpochByStageIdAndAttempt.get((stageId, stageAttemptId))
+      defaultBarrierEpoch
     } else {
       barrierEpoch
+    }
+  }
+
+  /**
+   * Increase the barrier epoch that correspond to a barrier sync request from a stage attempt.
+   */
+  private def increaseBarrierEpoch(stageId: Int, stageAttemptId: Int): Unit = {
+    val barrierEpoch = barrierEpochByStageIdAndAttempt.get((stageId, stageAttemptId))
+    if (barrierEpoch != null) {
+      barrierEpochByStageIdAndAttempt.put((stageId, stageAttemptId), barrierEpoch + 1)
+    } else {
+      // The barrier epoch have been removed because the stage attempt already completed.
+    }
+  }
+
+  /**
+   * Cancel TimerTask for a stage attempt.
+   */
+  private def cancelTimerTask(stageId: Int, stageAttemptId: Int): Unit = {
+    val timerTask = timerTaskByStageIdAndAttempt.get((stageId, stageAttemptId))
+    if (timerTask != null) {
+      timerTask.cancel()
+      timerTaskByStageIdAndAttempt.remove((stageId, stageAttemptId))
     }
   }
 
@@ -124,41 +155,49 @@ private[spark] class BarrierCoordinator(
       numTasks: Int): Boolean = {
     if (syncRequests.size == numTasks) {
       syncRequests.foreach(_.reply(()))
-      return true
+      true
+    } else {
+      false
     }
-
-    false
   }
 
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RequestToSync(numTasks, stageId, stageAttemptId, taskAttemptId, barrierEpoch) =>
+      // Require the number of tasks is correctly set from the BarrierTaskContext.
+      val currentNumTasks: Any = numTasksByStage.putIfAbsent(stageId, numTasks)
+      require(currentNumTasks == null || currentNumTasks == numTasks, "Number of tasks of " +
+        s"Stage $stageId is $numTasks from Task $taskAttemptId, previously it was " +
+        s"$currentNumTasks.")
+
       // Check the barrier epoch, to see which barrier() call we are processing.
       val currentBarrierEpoch = getOrInitBarrierEpoch(stageId, stageAttemptId)
       logInfo(s"Current barrier epoch for Stage $stageId (Attempt $stageAttemptId) is" +
         s"$currentBarrierEpoch.")
-      if (currentBarrierEpoch.get() != barrierEpoch) {
+      if (currentBarrierEpoch != barrierEpoch) {
         context.sendFailure(new SparkException(s"The request to sync of Stage $stageId (Attempt " +
           s"$stageAttemptId) with barrier epoch $barrierEpoch has already finished. Maybe task " +
           s"$taskAttemptId is not properly killed."))
       } else {
-        val syncRequests = getOrInitSyncRequests(stageId, stageAttemptId)
+        val syncRequests = getOrInitSyncRequests(stageId, stageAttemptId, numTasks)
         // If this is the first sync message received for a barrier() call, init a timer to ensure
         // we may timeout for the sync.
         if (syncRequests.isEmpty) {
-          timer.schedule(new TimerTask {
+          val timerTask = new TimerTask {
             override def run(): Unit = {
               // Timeout for current barrier() call, fail all the sync requests.
-              val requests = getOrInitSyncRequests(stageId, stageAttemptId)
+              val requests = getOrInitSyncRequests(stageId, stageAttemptId, numTasks)
               failAllSyncRequests(requests, "The coordinator didn't get all barrier sync " +
                 s"requests for barrier epoch $barrierEpoch from Stage $stageId (Attempt " +
                 s"$stageAttemptId) within ${timeout}s.")
               cleanupSyncRequests(stageId, stageAttemptId)
               // The global sync fails so the stage is expected to retry another attempt, all sync
               // messages come from current stage attempt shall fail.
-              currentBarrierEpoch.set(-1)
+              barrierEpochByStageIdAndAttempt.put((stageId, stageAttemptId), -1)
             }
-          }, timeout * 1000)
+          }
+          timer.schedule(timerTask, timeout * 1000)
+          timerTaskByStageIdAndAttempt.putIfAbsent((stageId, stageAttemptId), timerTask)
         }
 
         syncRequests += context
@@ -171,7 +210,8 @@ private[spark] class BarrierCoordinator(
           logInfo(s"Barrier sync epoch $barrierEpoch from Stage $stageId (Attempt " +
             s"$stageAttemptId) received all updates from tasks, finished successfully.")
           cleanupSyncRequests(stageId, stageAttemptId)
-          currentBarrierEpoch.incrementAndGet()
+          increaseBarrierEpoch(stageId, stageAttemptId)
+          cancelTimerTask(stageId, stageAttemptId)
         }
       }
   }
