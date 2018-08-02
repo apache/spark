@@ -139,8 +139,10 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))), true)
     checkEvaluation(In(Literal(2), Seq(Literal(1), Literal(2))), true)
     checkEvaluation(In(Literal(3), Seq(Literal(1), Literal(2))), false)
-    checkEvaluation(And(In(Literal(1), Seq(Literal(1), Literal(2))),
-        In(Literal(2), Seq(Literal(1), Literal(2)))), true)
+    checkEvaluation(
+      And(In(Literal(1), Seq(Literal(1), Literal(2))), In(Literal(2), Seq(Literal(1),
+        Literal(2)))),
+      true)
 
     val ns = NonFoldableLiteral.create(null, StringType)
     checkEvaluation(In(ns, Seq(Literal("1"), Literal("2"))), null)
@@ -185,7 +187,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       } else {
         false
       }
-      checkEvaluation(In(input.head, input.slice(1, 10)), expected)
+      checkEvaluation(In(input(0), input.slice(1, 10)), expected)
     }
 
     val atomicTypes = DataTypeTestUtils.atomicTypes.filter { t =>
