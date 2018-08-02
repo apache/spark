@@ -90,6 +90,10 @@ class ExchangeCoordinator(
   // The registered Exchange operators.
   private[this] val exchanges = ArrayBuffer[ShuffleExchangeExec]()
 
+  // `lazy val` is used here so that we could notice the wrong use of this class, e.g., all the
+  // exchanges should be registered before `postShuffleRDD` called first time. If a new exchange is
+  // registered after the `postShuffleRDD` call, `assert(exchanges.length == numExchanges)` fails
+  // in `doEstimationIfNecessary`.
   private[this] lazy val numExchanges = exchanges.size
 
   // This map is used to lookup the post-shuffle ShuffledRowRDD for an Exchange operator.
