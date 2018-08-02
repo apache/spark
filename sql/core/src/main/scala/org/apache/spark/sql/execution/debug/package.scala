@@ -48,10 +48,11 @@ import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
  * {{{
  *   import org.apache.spark.sql.execution.debug._
  *   val query = df.writeStream.<...>.start()
- *   query.debug()
  *   query.debugCodegen()
  * }}}
  *
+ * Note that debug in structured streaming is not supported, because it doesn't make sense for
+ * streaming to execute batch once while main query is running concurrently.
  */
 package object debug {
 
@@ -107,15 +108,11 @@ package object debug {
    * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
    */
   def codegenString(query: StreamingQuery): String = {
-    try {
-      val w = asStreamExecution(query)
-      if (w.lastExecution != null) {
-        codegenString(w.lastExecution.executedPlan)
-      } else {
-        "No physical plan. Waiting for data."
-      }
-    } catch {
-      case _: IllegalArgumentException => "Only supported for StreamExecution."
+    val w = asStreamExecution(query)
+    if (w.lastExecution != null) {
+      codegenString(w.lastExecution.executedPlan)
+    } else {
+      "No physical plan. Waiting for data."
     }
   }
 
@@ -126,30 +123,11 @@ package object debug {
    * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
    */
   def codegenStringSeq(query: StreamingQuery): Seq[(String, String)] = {
-    try {
-      val w = asStreamExecution(query)
-      if (w.lastExecution != null) {
-        codegenStringSeq(w.lastExecution.executedPlan)
-      } else {
-        Seq.empty
-      }
-    } catch {
-      case _: IllegalArgumentException => Seq.empty
-    }
-  }
-
-  /** Visit and print out debug information in all physical plans for debugging purpose. */
-  private def debugInternal(plan: SparkPlan): Unit = {
-    val visited = new collection.mutable.HashSet[TreeNodeRef]()
-    val debugPlan = plan transform {
-      case s: SparkPlan if !visited.contains(new TreeNodeRef(s)) =>
-        visited += new TreeNodeRef(s)
-        DebugExec(s)
-    }
-    debugPrint(s"Results returned: ${debugPlan.execute().count()}")
-    debugPlan.foreach {
-      case d: DebugExec => d.dumpStats()
-      case _ =>
+    val w = asStreamExecution(query)
+    if (w.lastExecution != null) {
+      codegenStringSeq(w.lastExecution.executedPlan)
+    } else {
+      Seq.empty
     }
   }
 
@@ -165,7 +143,17 @@ package object debug {
    */
   implicit class DebugQuery(query: Dataset[_]) extends Logging {
     def debug(): Unit = {
-      debugInternal(query.queryExecution.executedPlan)
+      val visited = new collection.mutable.HashSet[TreeNodeRef]()
+      val debugPlan = query.queryExecution.executedPlan transform {
+        case s: SparkPlan if !visited.contains(new TreeNodeRef(s)) =>
+          visited += new TreeNodeRef(s)
+          DebugExec(s)
+      }
+      debugPrint(s"Results returned: ${debugPlan.execute().count()}")
+      debugPlan.foreach {
+        case d: DebugExec => d.dumpStats()
+        case _ =>
+      }
     }
 
     /**
@@ -178,24 +166,6 @@ package object debug {
   }
 
   implicit class DebugStreamQuery(query: StreamingQuery) extends Logging {
-    def debug(): Unit = {
-      try {
-        val w = asStreamExecution(query)
-        if (w.lastExecution == null) {
-          debugPrint("No physical plan. Waiting for data.")
-        } else {
-          val executedPlan = w.lastExecution.executedPlan
-          if (executedPlan.find(_.isInstanceOf[WriteToContinuousDataSourceExec]).isDefined) {
-            debugPrint("Debug on continuous mode is not supported.")
-          } else {
-            debugInternal(executedPlan)
-          }
-        }
-      } catch {
-        case _: IllegalArgumentException => debugPrint("Only supported for StreamExecution.")
-      }
-    }
-
     def debugCodegen(): Unit = {
       debugPrint(codegenString(query))
     }

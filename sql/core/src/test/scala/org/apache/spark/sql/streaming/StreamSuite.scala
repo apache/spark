@@ -586,10 +586,6 @@ class StreamSuite extends StreamTest {
       inputData.addData(1, 2, 3, 4, 5)
       q.processAllAvailable()
 
-      // just ensure that it doesn't raise any error
-      // it will provide debug information on last execution
-      q.debug()
-
       val codegenStr = codegenString(q)
       assert(codegenStr.contains("Found 1 WholeStageCodegen subtrees."))
       // assuming that code is generated for the test query
@@ -623,10 +619,6 @@ class StreamSuite extends StreamTest {
       eventually(timeout(2.seconds), interval(100.milliseconds)) {
         assert(q.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution != null)
       }
-
-      // just ensure that it doesn't raise any error
-      // it will provide the message that continuous mode doesn't support debug
-      q.debug()
 
       val codegenStr = codegenString(q)
       assert(codegenStr.contains("Found 1 WholeStageCodegen subtrees."))
