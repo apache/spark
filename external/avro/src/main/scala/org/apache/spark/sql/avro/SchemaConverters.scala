@@ -109,8 +109,8 @@ object SchemaConverters {
       nullable: Boolean = false,
       recordName: String = "topLevelRecord",
       prevNameSpace: String = "",
-      outputTimestampType: AvroOutputTimestampType.Value = AvroOutputTimestampType.TIMESTAMP_MICROS
-    ): Schema = {
+      outputTimestampType: AvroOutputTimestampType.Value = AvroOutputTimestampType.TIMESTAMP_MICROS)
+    : Schema = {
     val builder = if (nullable) {
       SchemaBuilder.builder().nullable()
     } else {

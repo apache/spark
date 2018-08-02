@@ -376,9 +376,11 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .collect()
 
     Seq("TIMESTAMP_MILLIS", "TIMESTAMP_MICROS").foreach { timestampType =>
-      withTempPath { dir =>
-        df.write.format("avro").option("outputTimestampType", timestampType).save(dir.toString)
-        checkAnswer(spark.read.format("avro").load(dir.toString), expected)
+      withSQLConf(SQLConf.AVRO_OUTPUT_TIMESTAMP_TYPE.key -> timestampType) {
+        withTempPath { dir =>
+          df.write.format("avro").save(dir.toString)
+          checkAnswer(spark.read.format("avro").load(dir.toString), expected)
+        }
       }
     }
   }

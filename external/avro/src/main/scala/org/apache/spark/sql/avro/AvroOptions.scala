@@ -82,14 +82,12 @@ class AvroOptions(
   }
 
   /**
-   * The `outputTimestampType` option sets which Avro timestamp type to use when Spark writes
-   * data to Avro files. Currently supported types are `TIMESTAMP_MICROS` and `TIMESTAMP_MILLIS`.
+   * Avro timestamp type used when Spark writes data to Avro files.
+   * Currently supported types are `TIMESTAMP_MICROS` and `TIMESTAMP_MILLIS`.
    * TIMESTAMP_MICROS is a logical timestamp type in Avro, which stores number of microseconds
    * from the Unix epoch. TIMESTAMP_MILLIS is also logical, but with millisecond precision,
    * which means Spark has to truncate the microsecond portion of its timestamp value.
+   * The related configuration is set via SQLConf, and it is not exposed as an option.
    */
-  val outputTimestampType: AvroOutputTimestampType.Value = {
-    parameters.get("outputTimestampType").map(AvroOutputTimestampType.withName(_))
-      .getOrElse(SQLConf.get.avroOutputTimestampType)
-  }
+  val outputTimestampType: AvroOutputTimestampType.Value = SQLConf.get.avroOutputTimestampType
 }
