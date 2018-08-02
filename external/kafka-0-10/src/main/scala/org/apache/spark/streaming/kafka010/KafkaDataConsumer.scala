@@ -19,7 +19,7 @@ package org.apache.spark.streaming.kafka010
 
 import java.{util => ju}
 
-import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaConsumer}
+import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, ConsumerRecords, KafkaConsumer}
 import org.apache.kafka.common.{KafkaException, TopicPartition}
 
 import org.apache.spark.TaskContext
@@ -54,6 +54,10 @@ private[kafka010] sealed trait KafkaDataConsumer[K, V] {
    */
   def compactedNext(pollTimeoutMs: Long): ConsumerRecord[K, V] = {
     internalConsumer.compactedNext(pollTimeoutMs)
+  }
+
+  def next(pollTimeoutMs: Long): Option[ConsumerRecord[K, V]] = {
+    internalConsumer.next(pollTimeoutMs)
   }
 
   /**
@@ -184,11 +188,32 @@ private[kafka010] class InternalKafkaConsumer[K, V](
   }
 
   /**
+   * Similar to compactedStart but will return None if poll doesn't
+   * return any value. Won't throw any exception.
+    */
+  def next(pollTimeoutMs: Long): Option[ConsumerRecord[K, V]] = {
+    if (!buffer.hasNext()) {
+      poll(pollTimeoutMs)
+    }
+    if (!buffer.hasNext) {
+      return None
+    }
+    val record = buffer.next()
+    nextOffset = record.offset + 1
+    Some(record)
+  }
+
+  /**
    * Rewind to previous record in the batch from a compacted topic.
    * @throws NoSuchElementException if no previous element
    */
   def compactedPrevious(): ConsumerRecord[K, V] = {
     buffer.previous()
+  }
+
+  def seekAndPoll(offset: Long, timeout: Long): ConsumerRecords[K, V] = {
+    seek(offset)
+    consumer.poll(timeout)
   }
 
   private def seek(offset: Long): Unit = {

@@ -79,8 +79,8 @@ public class JavaKafkaRDDSuite implements Serializable {
       "-" + System.currentTimeMillis());
 
     OffsetRange[] offsetRanges = {
-      OffsetRange.create(topic1, 0, 0, 1),
-      OffsetRange.create(topic2, 0, 0, 1)
+      OffsetRange.create(topic1, 0, 0, 1, 1),
+      OffsetRange.create(topic2, 0, 0, 1, 1)
     };
 
     Map<TopicPartition, String> leaders = new HashMap<>();

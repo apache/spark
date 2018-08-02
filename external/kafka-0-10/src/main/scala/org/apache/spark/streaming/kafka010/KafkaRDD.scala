@@ -64,16 +64,11 @@ private[spark] class KafkaRDD[K, V](
       " must be set to false for executor kafka params, else offsets may commit before processing")
 
   // TODO is it necessary to have separate configs for initial poll time vs ongoing poll time?
-  private val pollTimeout = conf.getLong("spark.streaming.kafka.consumer.poll.ms",
-    conf.getTimeAsSeconds("spark.network.timeout", "120s") * 1000L)
-  private val cacheInitialCapacity =
-    conf.getInt("spark.streaming.kafka.consumer.cache.initialCapacity", 16)
-  private val cacheMaxCapacity =
-    conf.getInt("spark.streaming.kafka.consumer.cache.maxCapacity", 64)
-  private val cacheLoadFactor =
-    conf.getDouble("spark.streaming.kafka.consumer.cache.loadFactor", 0.75).toFloat
-  private val compacted =
-    conf.getBoolean("spark.streaming.kafka.allowNonConsecutiveOffsets", false)
+  private val pollTimeout = DirectKafkaConf.pollTimeout(conf)
+  private val cacheInitialCapacity = DirectKafkaConf.cacheInitialCapacity(conf)
+  private val cacheMaxCapacity = DirectKafkaConf.cacheMaxCapacity(conf)
+  private val cacheLoadFactor = DirectKafkaConf.cacheLoadFactor(conf)
+  private val compacted = DirectKafkaConf.nonConsecutive(conf)
 
   override def persist(newLevel: StorageLevel): this.type = {
     logError("Kafka ConsumerRecord is not serializable. " +
@@ -87,30 +82,17 @@ private[spark] class KafkaRDD[K, V](
     }.toArray
   }
 
-  override def count(): Long =
-    if (compacted) {
-      super.count()
-    } else {
-      offsetRanges.map(_.count).sum
-    }
+  override def count(): Long = offsetRanges.map(_.count).sum
 
   override def countApprox(
       timeout: Long,
       confidence: Double = 0.95
-  ): PartialResult[BoundedDouble] =
-    if (compacted) {
-      super.countApprox(timeout, confidence)
-    } else {
+  ): PartialResult[BoundedDouble] = {
       val c = count
       new PartialResult(new BoundedDouble(c, 1.0, c, c), true)
     }
 
-  override def isEmpty(): Boolean =
-    if (compacted) {
-      super.isEmpty()
-    } else {
-      count == 0L
-    }
+  override def isEmpty(): Boolean = count == 0L
 
   override def take(num: Int): Array[ConsumerRecord[K, V]] =
     if (compacted) {
@@ -291,7 +273,6 @@ private class CompactedKafkaRDDIterator[K, V](
 
   consumer.compactedStart(part.fromOffset, pollTimeout)
 
-  private var nextRecord = consumer.compactedNext(pollTimeout)
 
   private var okNext: Boolean = true
 
@@ -301,15 +282,9 @@ private class CompactedKafkaRDDIterator[K, V](
     if (!hasNext) {
       throw new ju.NoSuchElementException("Can't call getNext() once untilOffset has been reached")
     }
-    val r = nextRecord
+    val r = consumer.compactedNext(pollTimeout)
     if (r.offset + 1 >= part.untilOffset) {
       okNext = false
-    } else {
-      nextRecord = consumer.compactedNext(pollTimeout)
-      if (nextRecord.offset >= part.untilOffset) {
-        okNext = false
-        consumer.compactedPrevious()
-      }
     }
     r
   }

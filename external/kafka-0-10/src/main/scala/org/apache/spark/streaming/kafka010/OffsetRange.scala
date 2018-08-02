@@ -90,21 +90,23 @@ final class OffsetRange private(
     val topic: String,
     val partition: Int,
     val fromOffset: Long,
-    val untilOffset: Long) extends Serializable {
+    val untilOffset: Long,
+    val recordNumber: Long) extends Serializable {
   import OffsetRange.OffsetRangeTuple
 
   /** Kafka TopicPartition object, for convenience */
   def topicPartition(): TopicPartition = new TopicPartition(topic, partition)
 
   /** Number of messages this OffsetRange refers to */
-  def count(): Long = untilOffset - fromOffset
+  def count(): Long = recordNumber
 
   override def equals(obj: Any): Boolean = obj match {
     case that: OffsetRange =>
       this.topic == that.topic &&
         this.partition == that.partition &&
         this.fromOffset == that.fromOffset &&
-        this.untilOffset == that.untilOffset
+        this.untilOffset == that.untilOffset &&
+        this.recordNumber == that.recordNumber
     case _ => false
   }
 
@@ -113,41 +115,48 @@ final class OffsetRange private(
   }
 
   override def toString(): String = {
-    s"OffsetRange(topic: '$topic', partition: $partition, range: [$fromOffset -> $untilOffset])"
+    s"OffsetRange(topic: '$topic', partition: $partition, range: [$fromOffset -> $untilOffset]," +
+      s" recordNumber: $recordNumber)"
   }
 
   /** this is to avoid ClassNotFoundException during checkpoint restore */
   private[streaming]
-  def toTuple: OffsetRangeTuple = (topic, partition, fromOffset, untilOffset)
+  def toTuple: OffsetRangeTuple = (topic, partition, fromOffset, untilOffset, recordNumber)
 }
 
 /**
  * Companion object the provides methods to create instances of [[OffsetRange]].
  */
 object OffsetRange {
-  def create(topic: String, partition: Int, fromOffset: Long, untilOffset: Long): OffsetRange =
-    new OffsetRange(topic, partition, fromOffset, untilOffset)
+  def create(topic: String, partition: Int, fromOffset: Long, untilOffset: Long,
+             recordNumber: Long): OffsetRange =
+    new OffsetRange(topic, partition, fromOffset, untilOffset, recordNumber)
 
   def create(
       topicPartition: TopicPartition,
       fromOffset: Long,
-      untilOffset: Long): OffsetRange =
-    new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset)
+      untilOffset: Long,
+      recordNumber: Long): OffsetRange =
+    new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset,
+                    recordNumber)
 
-  def apply(topic: String, partition: Int, fromOffset: Long, untilOffset: Long): OffsetRange =
-    new OffsetRange(topic, partition, fromOffset, untilOffset)
+  def apply(topic: String, partition: Int, fromOffset: Long, untilOffset: Long,
+            recordNumber: Long): OffsetRange =
+    new OffsetRange(topic, partition, fromOffset, untilOffset, recordNumber)
 
   def apply(
       topicPartition: TopicPartition,
       fromOffset: Long,
-      untilOffset: Long): OffsetRange =
-    new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset)
+      untilOffset: Long,
+      recordNumber: Long): OffsetRange =
+    new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset,
+                    recordNumber)
 
   /** this is to avoid ClassNotFoundException during checkpoint restore */
   private[kafka010]
-  type OffsetRangeTuple = (String, Int, Long, Long)
+  type OffsetRangeTuple = (String, Int, Long, Long, Long)
 
   private[kafka010]
   def apply(t: OffsetRangeTuple) =
-    new OffsetRange(t._1, t._2, t._3, t._4)
+    new OffsetRange(t._1, t._2, t._3, t._4, t._4)
 }

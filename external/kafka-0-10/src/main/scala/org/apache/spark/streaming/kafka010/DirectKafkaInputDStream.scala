@@ -56,23 +56,22 @@ private[spark] class DirectKafkaInputDStream[K, V](
     ppc: PerPartitionConfig
   ) extends InputDStream[ConsumerRecord[K, V]](_ssc) with Logging with CanCommitOffsets {
 
-  private val initialRate = context.sparkContext.getConf.getLong(
-    "spark.streaming.backpressure.initialRate", 0)
+  private val initialRate = DirectKafkaConf.initialRate(context.sparkContext.conf)
+  private val nonConsecutive = DirectKafkaConf.nonConsecutive(context.sparkContext.conf)
 
-  private val alignRangesToCommittedTransaction = context.sparkContext.getConf.getBoolean(
-    "spark.streaming.kafka.alignRangesToCommittedTransaction", false)
-
-  private val offsetSearchRewind = context.sparkContext.getConf.getLong(
-    "spark.streaming.kafka.offsetSearchRewind", 10)
-
-  @transient private var rw: OffsetWithRecordRewinder[K, V] = null
-  def rewinder(): OffsetWithRecordRewinder[K, V] = this.synchronized {
+  @transient private var rw: OffsetWithRecordScanner[K, V] = null
+  def rewinder(): OffsetWithRecordScanner[K, V] = this.synchronized {
     if (rw == null) {
       val params = new ju.HashMap[String, Object](consumerStrategy.executorKafkaParams)
-      params.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, offsetSearchRewind.toString)
-      params.remove(ConsumerConfig.GROUP_ID_CONFIG)
-      rw = new OffsetWithRecordRewinder(offsetSearchRewind,
-        consumerStrategy.executorKafkaParams)
+      val cacheInitialCapacity = DirectKafkaConf
+        .cacheInitialCapacity(context.sparkContext.conf)
+      val cacheMaxCapacity = DirectKafkaConf.cacheMaxCapacity(context.sparkContext.conf)
+      val cacheLoadFactor = DirectKafkaConf.cacheLoadFactor(context.sparkContext.conf)
+      val useConsumerCache = DirectKafkaConf.useConsumerCache(context.sparkContext.conf)
+
+      rw = new OffsetWithRecordScanner(
+        consumerStrategy.executorKafkaParams, cacheInitialCapacity,
+        cacheMaxCapacity, cacheLoadFactor, useConsumerCache)
     }
     rw
   }
@@ -241,29 +240,46 @@ private[spark] class DirectKafkaInputDStream[K, V](
     }.getOrElse(offsets)
   }
 
-  protected def handleTransaction(offsets: Map[TopicPartition, Long]) = {
-    if (alignRangesToCommittedTransaction) {
+  /**
+   * Return the offset range. For non consecutive offset the last offset must have record.
+   * If offsets have missing data (transaction marker or abort), increases the
+   * range until we get the requested number of record or no more records.
+   * Because we have to iterate over all the records in this case,
+   * we also return the total number of records.
+   * @param offsets the target range we would like if offset were continue
+   * @return (totalNumberOfRecords, updated offset)
+   */
+  private def alignRanges(offsets: Map[TopicPartition, Long]): Iterable[OffsetRange] = {
+    if (nonConsecutive) {
       val localRw = rewinder()
       val localOffsets = currentOffsets
       context.sparkContext.parallelize(offsets.toList).mapPartitions(tpos => {
-        tpos.map{case (tp, o) => localRw.rewind(localOffsets, tp, o)}
-      }).collect().toMap
+        tpos.map { case (tp, o) =>
+          val offsetAndCount = localRw.getLastOffsetAndCount(localOffsets(tp), tp, o)
+          (tp, offsetAndCount)
+        }
+      }).collect()
+        .map { case (tp, (untilOffset, size)) =>
+          val fromOffset = currentOffsets(tp)
+          OffsetRange(tp.topic(), tp.partition, fromOffset, untilOffset, size)
+        }
     } else {
-      offsets
+      offsets.map { case (tp, untilOffset) =>
+        val size = untilOffset - currentOffsets(tp)
+        val offsetFrom = currentOffsets(tp)
+        OffsetRange(tp.topic(), tp.partition, offsetFrom, untilOffset, size)
+      }
     }
   }
 
-  override def compute(validTime: Time): Option[KafkaRDD[K, V]] = {
-    val untilOffsets = handleTransaction(clamp(latestOffsets()))
 
-    val offsetRanges = untilOffsets.map { case (tp, uo) =>
-      val fo = currentOffsets(tp)
-      OffsetRange(tp.topic, tp.partition, fo, uo)
-    }
-    val useConsumerCache = context.conf.getBoolean("spark.streaming.kafka.consumer.cache.enabled",
-      true)
+  override def compute(validTime: Time): Option[KafkaRDD[K, V]] = {
+    val offsets = clamp(latestOffsets())
+    val offsetRanges = alignRanges(offsets)
+    val useConsumerCache = DirectKafkaConf.useConsumerCache(context.conf)
     val rdd = new KafkaRDD[K, V](context.sparkContext, executorKafkaParams, offsetRanges.toArray,
       getPreferredHosts, useConsumerCache)
+
 
     // Report the record number and metadata of this batch interval to InputInfoTracker.
     val description = offsetRanges.filter { offsetRange =>
@@ -280,7 +296,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
     val inputInfo = StreamInputInfo(id, rdd.count, metadata)
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
-    currentOffsets = untilOffsets
+    currentOffsets = offsetRanges.map(r => (r.topicPartition(), r.untilOffset)).toMap
     commitAll()
     Some(rdd)
   }
@@ -298,9 +314,6 @@ private[spark] class DirectKafkaInputDStream[K, V](
   override def stop(): Unit = this.synchronized {
     if (kc != null) {
       kc.close()
-    }
-    if(rw != null) {
-      rw.close()
     }
   }
 
@@ -342,7 +355,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
   private[streaming]
   class DirectKafkaInputDStreamCheckpointData extends DStreamCheckpointData(this) {
-    def batchForTime: mutable.HashMap[Time, Array[(String, Int, Long, Long)]] = {
+    def batchForTime: mutable.HashMap[Time, Array[(String, Int, Long, Long, Long)]] = {
       data.asInstanceOf[mutable.HashMap[Time, Array[OffsetRange.OffsetRangeTuple]]]
     }
 
