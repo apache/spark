@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.concurrent.atomic.AtomicReference
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -209,4 +211,60 @@ case class ArrayTransform(
   }
 
   override def prettyName: String = "transform"
+}
+
+/**
+ * Filters the input array using the given lambda function.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr, func) - Filters the input array using the given predicate.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 1);
+       array(1, 3)
+  """,
+  since = "2.4.0")
+case class ArrayFilter(
+    input: Expression,
+    function: Expression)
+  extends ArrayBasedHigherOrderFunction with CodegenFallback {
+
+  override def nullable: Boolean = input.nullable
+
+  override def dataType: DataType = input.dataType
+
+  override def expectingFunctionType: AbstractDataType = BooleanType
+
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayFilter = {
+    val (elementType, containsNull) = input.dataType match {
+      case ArrayType(elementType, containsNull) => (elementType, containsNull)
+      case _ =>
+        val ArrayType(elementType, containsNull) = ArrayType.defaultConcreteType
+        (elementType, containsNull)
+    }
+    copy(function = f(function, (elementType, containsNull) :: Nil))
+  }
+
+  @transient lazy val LambdaFunction(_, Seq(elementVar: NamedLambdaVariable), _) = function
+
+  override def eval(input: InternalRow): Any = {
+    val arr = this.input.eval(input).asInstanceOf[ArrayData]
+    if (arr == null) {
+      null
+    } else {
+      val f = functionForEval
+      val buffer = new mutable.ArrayBuffer[Any]
+      var i = 0
+      while (i < arr.numElements) {
+        elementVar.value.set(arr.get(i, elementVar.dataType))
+        if (f.eval(input).asInstanceOf[Boolean]) {
+          buffer += elementVar.value.get
+        }
+        i += 1
+      }
+      new GenericArrayData(buffer)
+    }
+  }
+
+  override def prettyName: String = "filter"
 }
