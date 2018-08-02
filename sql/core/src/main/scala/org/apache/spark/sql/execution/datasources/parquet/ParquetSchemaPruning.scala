@@ -18,9 +18,10 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Expression, NamedExpression}
-import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ProjectionOverSchema, SelectedField}
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.{ProjectionOverSchema, SelectedField}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
@@ -43,52 +44,25 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
     plan transformDown {
       case op @ PhysicalOperation(projects, filters,
           l @ LogicalRelation(hadoopFsRelation @ HadoopFsRelation(_, _,
-            dataSchema, _, parquetFormat: ParquetFileFormat, _), _, _, _)) =>
+            dataSchema, _, _: ParquetFileFormat, _), _, _, _)) =>
         val projectionRootFields = projects.flatMap(getRootFields)
         val filterRootFields = filters.flatMap(getRootFields)
         val requestedRootFields = (projectionRootFields ++ filterRootFields).distinct
 
-        // If [[requestedRootFields]] includes a nested field, continue. Otherwise,
-        // return [[op]]
+        // If requestedRootFields includes a nested field, continue. Otherwise,
+        // return op
         if (requestedRootFields.exists { case RootField(_, derivedFromAtt) => !derivedFromAtt }) {
-          // Merge the requested root fields into a single schema. Note the ordering of the fields
-          // in the resulting schema may differ from their ordering in the logical relation's
-          // original schema
-          val mergedSchema = requestedRootFields
-            .map { case RootField(field, _) => StructType(Array(field)) }
-            .reduceLeft(_ merge _)
-          val dataSchemaFieldNames = dataSchema.fieldNames.toSet
-          val mergedDataSchema =
-            StructType(mergedSchema.filter(f => dataSchemaFieldNames.contains(f.name)))
-          // Sort the fields of [[mergedDataSchema]] according to their order in [[dataSchema]],
-          // recursively. This makes [[mergedDataSchema]] a pruned schema of [[dataSchema]]
-          val prunedDataSchema =
-            sortLeftFieldsByRight(mergedDataSchema, dataSchema).asInstanceOf[StructType]
+          val prunedDataSchema = buildPrunedDataSchema(dataSchema, requestedRootFields)
 
           // If the data schema is different from the pruned data schema, continue. Otherwise,
-          // return [[op]]. We effect this comparison by counting the number of "leaf" fields in
+          // return op. We effect this comparison by counting the number of "leaf" fields in
           // each schemata, assuming the fields in [[prunedDataSchema]] are a subset of the fields
-          // in [[dataSchema]].
+          // in dataSchema.
           if (countLeaves(dataSchema) > countLeaves(prunedDataSchema)) {
             val prunedParquetRelation =
               hadoopFsRelation.copy(dataSchema = prunedDataSchema)(hadoopFsRelation.sparkSession)
 
-            // We need to replace the expression ids of the pruned relation output attributes
-            // with the expression ids of the original relation output attributes so that
-            // references to the original relation's output are not broken
-            val outputIdMap = l.output.map(att => (att.name, att.exprId)).toMap
-            val prunedRelationOutput =
-              prunedParquetRelation
-                .schema
-                .toAttributes
-                .map {
-                  case att if outputIdMap.contains(att.name) =>
-                    att.withExprId(outputIdMap(att.name))
-                  case att => att
-                }
-            val prunedRelation =
-              l.copy(relation = prunedParquetRelation, output = prunedRelationOutput)
-
+            val prunedRelation = buildPrunedRelation(l, prunedParquetRelation)
             val projectionOverSchema = ProjectionOverSchema(prunedDataSchema)
 
             // Construct a new target for our projection by rewriting and
@@ -104,14 +78,16 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
                 prunedRelation
               }
 
-            // Construct the new projections of our [[Project]] by
+            // Construct the new projections of our Project by
             // rewriting the original projections
             val newProjects = projects.map(_.transformDown {
               case projectionOverSchema(expr) => expr
             }).map { case expr: NamedExpression => expr }
 
-            logDebug(s"New projects:\n${newProjects.map(_.treeString).mkString("\n")}")
-            logDebug(s"Pruned data schema:\n${prunedDataSchema.treeString}")
+            if (log.isDebugEnabled) {
+              logDebug(s"New projects:\n${newProjects.map(_.treeString).mkString("\n")}")
+              logDebug(s"Pruned data schema:\n${prunedDataSchema.treeString}")
+            }
 
             Project(newProjects, projectionChild)
           } else {
@@ -122,25 +98,59 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
         }
     }
 
+  private def buildPrunedDataSchema(fileDataSchema: StructType,
+                                    requestedRootFields: Seq[RootField]) = {
+    // Merge the requested root fields into a single schema. Note the ordering of the fields
+    // in the resulting schema may differ from their ordering in the logical relation's
+    // original schema
+    val mergedSchema = requestedRootFields
+      .map { case RootField(field, _) => StructType(Array(field)) }
+      .reduceLeft(_ merge _)
+    val dataSchemaFieldNames = fileDataSchema.fieldNames.toSet
+    val mergedDataSchema =
+      StructType(mergedSchema.filter(f => dataSchemaFieldNames.contains(f.name)))
+    // Sort the fields of [[mergedDataSchema]] according to their order in [[dataSchema]],
+    // recursively. This makes [[mergedDataSchema]] a pruned schema of [[dataSchema]]
+    sortLeftFieldsByRight(mergedDataSchema, fileDataSchema).asInstanceOf[StructType]
+  }
+
+  private def buildPrunedRelation(outputRelation: LogicalRelation,
+                                  parquetRelation: HadoopFsRelation) = {
+    // We need to replace the expression ids of the pruned relation output attributes
+    // with the expression ids of the original relation output attributes so that
+    // references to the original relation's output are not broken
+    val outputIdMap = outputRelation.output.map(att => (att.name, att.exprId)).toMap
+    val prunedRelationOutput =
+      parquetRelation
+        .schema
+        .toAttributes
+        .map {
+          case att if outputIdMap.contains(att.name) =>
+            att.withExprId(outputIdMap(att.name))
+          case att => att
+        }
+    outputRelation.copy(relation = parquetRelation, output = prunedRelationOutput)
+  }
+
   /**
    * Gets the root (aka top-level, no-parent) [[StructField]]s for the given [[Expression]].
-   * When [[expr]] is an [[Attribute]], construct a field around it and indicate that that
+   * When expr is an [[Attribute]], construct a field around it and indicate that that
    * field was derived from an attribute.
    */
   private def getRootFields(expr: Expression): Seq[RootField] = {
     expr match {
       case att: Attribute =>
-        RootField(StructField(att.name, att.dataType, att.nullable), true) :: Nil
-      case SelectedField(field) => RootField(field, false) :: Nil
+        RootField(StructField(att.name, att.dataType, att.nullable), derivedFromAtt = true) :: Nil
+      case SelectedField(field) => RootField(field, derivedFromAtt = false) :: Nil
       case _ =>
         expr.children.flatMap(getRootFields)
     }
   }
 
   /**
-   * Counts the "leaf" fields of the given [[dataType]]. Informally, this is the
+   * Counts the "leaf" fields of the given dataType. Informally, this is the
    * number of fields of non-complex data type in the tree representation of
-   * [[dataType]].
+   * [[DataType]].
    */
   private def countLeaves(dataType: DataType): Int = {
     dataType match {
@@ -153,9 +163,9 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
   }
 
   /**
-  *  Sorts the fields and descendant fields of structs in [[left]] according to their order in
-  *  [[right]]. This function assumes that the fields of [[left]] are a subset of the fields of
-  *  [[right]], recursively. That is, [[left]] is a "subschema" of [[right]], ignoring order of
+  *  Sorts the fields and descendant fields of structs in left according to their order in
+  *  right. This function assumes that the fields of left are a subset of the fields of
+  *  right, recursively. That is, left is a "subschema" of right, ignoring order of
   *  fields.
   */
   private def sortLeftFieldsByRight(left: DataType, right: DataType): DataType =

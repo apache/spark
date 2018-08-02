@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.planning
+package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
@@ -26,18 +26,18 @@ import org.apache.spark.sql.types._
  * are adjusted to fit the schema. All other expressions are left as-is. This
  * class is motivated by columnar nested schema pruning.
  */
-case class ProjectionOverSchema(schema: StructType) {
+private[execution] case class ProjectionOverSchema(schema: StructType) {
   private val fieldNames = schema.fieldNames.toSet
 
   def unapply(expr: Expression): Option[Expression] = getProjection(expr)
 
   private def getProjection(expr: Expression): Option[Expression] =
     expr match {
-      case a @ AttributeReference(name, _, _, _) if (fieldNames.contains(name)) =>
+      case a @ AttributeReference(name, _, _, _) if fieldNames.contains(name) =>
         Some(a.copy(dataType = schema(name).dataType)(a.exprId, a.qualifier))
       case GetArrayItem(child, arrayItemOrdinal) =>
         getProjection(child).map { projection => GetArrayItem(projection, arrayItemOrdinal) }
-      case GetArrayStructFields(child, StructField(name, _, _, _), _, numFields, containsNull) =>
+      case GetArrayStructFields(child, StructField(name, _, _, _), _, _, containsNull) =>
         getProjection(child).map(p => (p, p.dataType)).map {
           case (projection, ArrayType(projSchema @ StructType(_), _)) =>
             GetArrayStructFields(projection,

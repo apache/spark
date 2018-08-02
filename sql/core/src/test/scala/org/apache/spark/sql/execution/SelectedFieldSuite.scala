@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.planning
+package org.apache.spark.sql.execution
 
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.exceptions.TestFailedException
@@ -27,8 +27,39 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types._
 
-// scalastyle:off line.size.limit
 class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
+  private val innerSchemaCol1 = StructField("col2", StructType(
+    StructField("field1", IntegerType) ::
+      StructField("field2", ArrayType(IntegerType, containsNull = false)) ::
+      StructField("field3", ArrayType(StructType(
+        StructField("subfield1", IntegerType) ::
+          StructField("subfield2", IntegerType) ::
+          StructField("subfield3", ArrayType(IntegerType)) :: Nil)), nullable = false) ::
+      StructField("field4", MapType(StringType, StructType(
+        StructField("subfield1", IntegerType) ::
+          StructField("subfield2", ArrayType(IntegerType, containsNull = false))
+          :: Nil), valueContainsNull = false)) ::
+      StructField("field5", ArrayType(StructType(
+        StructField("subfield1", StructType(
+          StructField("subsubfield1", IntegerType) ::
+            StructField("subsubfield2", IntegerType) :: Nil), nullable = false) ::
+          StructField("subfield2", StructType(
+            StructField("subsubfield1", StructType(
+              StructField("subsubsubfield1", StringType) :: Nil)) ::
+              StructField("subsubfield2", IntegerType) :: Nil)) :: Nil)), nullable = false) ::
+      StructField("field6", StructType(
+        StructField("subfield1", StringType, nullable = false) ::
+          StructField("subfield2", StringType) :: Nil)) ::
+      StructField("field7", StructType(
+        StructField("subfield1", StructType(
+          StructField("subsubfield1", IntegerType) ::
+            StructField("subsubfield2", IntegerType) :: Nil)) :: Nil)) ::
+      StructField("field8", MapType(StringType, ArrayType(StructType(
+        StructField("subfield1", IntegerType) ::
+          StructField("subfield2", ArrayType(IntegerType, containsNull = false))
+          :: Nil)), valueContainsNull = false)) ::
+      StructField("field9", MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil))
+
   // The test schema as a tree string, i.e. `schema.treeString`
   // root
   //  |-- col1: string (nullable = false)
@@ -120,45 +151,19 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
   private val schema =
     StructType(
       StructField("col1", StringType, nullable = false) ::
-      StructField("col2", StructType(
-        StructField("field1", IntegerType) ::
-        StructField("field2", ArrayType(IntegerType, containsNull = false)) ::
-        StructField("field3", ArrayType(StructType(
-          StructField("subfield1", IntegerType) ::
-          StructField("subfield2", IntegerType) ::
-          StructField("subfield3", ArrayType(IntegerType)) :: Nil)), nullable = false) ::
-        StructField("field4", MapType(StringType, StructType(
-          StructField("subfield1", IntegerType) ::
-          StructField("subfield2", ArrayType(IntegerType, containsNull = false)) :: Nil), valueContainsNull = false)) ::
-        StructField("field5", ArrayType(StructType(
-          StructField("subfield1", StructType(
-            StructField("subsubfield1", IntegerType) ::
-            StructField("subsubfield2", IntegerType) :: Nil), nullable = false) ::
-          StructField("subfield2", StructType(
-            StructField("subsubfield1", StructType(
-              StructField("subsubsubfield1", StringType) :: Nil)) ::
-            StructField("subsubfield2", IntegerType) :: Nil)) :: Nil)), nullable = false) ::
-        StructField("field6", StructType(
-          StructField("subfield1", StringType, nullable = false) ::
-          StructField("subfield2", StringType) :: Nil)) ::
-        StructField("field7", StructType(
-          StructField("subfield1", StructType(
-            StructField("subsubfield1", IntegerType) ::
-            StructField("subsubfield2", IntegerType) :: Nil)) :: Nil)) ::
-        StructField("field8", MapType(StringType, ArrayType(StructType(
-          StructField("subfield1", IntegerType) ::
-          StructField("subfield2", ArrayType(IntegerType, containsNull = false)) :: Nil)), valueContainsNull = false)) ::
-        StructField("field9", MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil)) ::
-     StructField("col3", ArrayType(StructType(
-       StructField("field1", StructType(
+      innerSchemaCol1 ::
+      StructField("col3", ArrayType(StructType(
+        StructField("field1", StructType(
          StructField("subfield1", IntegerType, nullable = false) ::
          StructField("subfield2", IntegerType) :: Nil)) ::
-       StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil), containsNull = false), nullable = false) ::
+       StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false))
+          :: Nil), containsNull = false), nullable = false) ::
      StructField("col4", MapType(StringType, StructType(
        StructField("field1", StructType(
          StructField("subfield1", IntegerType, nullable = false) ::
          StructField("subfield2", IntegerType) :: Nil)) ::
-       StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil), valueContainsNull = false), nullable = false) ::
+       StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false))
+         :: Nil), valueContainsNull = false), nullable = false) ::
      StructField("col5", ArrayType(MapType(StringType, StructType(
        StructField("field1", StructType(
          StructField("subfield1", IntegerType) ::
@@ -174,14 +179,15 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
        StructField("field3", ArrayType(StructType(
          StructField("subfield1", IntegerType, nullable = false) :: Nil))) :: Nil))) ::
      StructField("col8", ArrayType(StructType(
-       StructField("field1", ArrayType(IntegerType, containsNull = false), nullable = false) :: Nil))) :: Nil)
+       StructField("field1", ArrayType(IntegerType, containsNull = false), nullable = false)
+         :: Nil))) :: Nil)
 
   private val testRelation = LocalRelation(schema.toAttributes)
 
   test("SelectedField should not match an attribute reference") {
-    assertResult(None)(unapplySelect("col1"))
-    assertResult(None)(unapplySelect("col1 as foo"))
-    assertResult(None)(unapplySelect("col2"))
+    assertResult(None)(unapplySelect("col1", testRelation))
+    assertResult(None)(unapplySelect("col1 as foo", testRelation))
+    assertResult(None)(unapplySelect("col2", testRelation))
   }
 
   info("For a relation with schema\n" + indent(schema.treeString))
@@ -214,29 +220,34 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
       StructField("field5", ArrayType(StructType(
         StructField("subfield1", StructType(
           StructField("subsubfield1", IntegerType) ::
-          StructField("subsubfield2", IntegerType) :: Nil), nullable = false) :: Nil)), nullable = false) :: Nil))
+          StructField("subsubfield2", IntegerType) :: Nil), nullable = false)
+          :: Nil)), nullable = false) :: Nil))
   }
 
   testSelect("col3.field1.subfield1") {
     StructField("col3", ArrayType(StructType(
       StructField("field1", StructType(
-        StructField("subfield1", IntegerType, nullable = false) :: Nil)) :: Nil), containsNull = false), nullable = false)
+        StructField("subfield1", IntegerType, nullable = false) :: Nil))
+        :: Nil), containsNull = false), nullable = false)
   }
 
   testSelect("col3.field2['foo'] as foo") {
     StructField("col3", ArrayType(StructType(
-      StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil), containsNull = false), nullable = false)
+      StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false))
+        :: Nil), containsNull = false), nullable = false)
   }
 
   testSelect("col4['foo'].field1.subfield1 as foo") {
     StructField("col4", MapType(StringType, StructType(
       StructField("field1", StructType(
-        StructField("subfield1", IntegerType, nullable = false) :: Nil)) :: Nil), valueContainsNull = false), nullable = false)
+        StructField("subfield1", IntegerType, nullable = false) :: Nil))
+        :: Nil), valueContainsNull = false), nullable = false)
   }
 
   testSelect("col4['foo'].field2['bar'] as foo") {
     StructField("col4", MapType(StringType, StructType(
-      StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil), valueContainsNull = false), nullable = false)
+      StructField("field2", MapType(StringType, IntegerType, valueContainsNull = false))
+        :: Nil), valueContainsNull = false), nullable = false)
   }
 
   testSelect("col5[0]['foo'].field1.subfield1 as foo") {
@@ -255,7 +266,8 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
     StructField("col2", StructType(
       StructField("field5", ArrayType(StructType(
         StructField("subfield1", StructType(
-          StructField("subsubfield1", IntegerType) :: Nil), nullable = false) :: Nil)), nullable = false) :: Nil))
+          StructField("subsubfield1", IntegerType) :: Nil), nullable = false)
+          :: Nil)), nullable = false) :: Nil))
   }
 
   testSelect("col2.field5.subfield2.subsubfield1.subsubsubfield1") {
@@ -263,7 +275,8 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
       StructField("field5", ArrayType(StructType(
         StructField("subfield2", StructType(
           StructField("subsubfield1", StructType(
-            StructField("subsubsubfield1", StringType) :: Nil)) :: Nil)) :: Nil)), nullable = false) :: Nil))
+            StructField("subsubsubfield1", StringType) :: Nil)) :: Nil))
+          :: Nil)), nullable = false) :: Nil))
   }
 
   testSelect("col2.field4['foo'].subfield1 as foo") {
@@ -275,7 +288,8 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
   testSelect("col2.field4['foo'].subfield2 as foo", "col2.field4['foo'].subfield2[0] as foo") {
     StructField("col2", StructType(
       StructField("field4", MapType(StringType, StructType(
-        StructField("subfield2", ArrayType(IntegerType, containsNull = false)) :: Nil), valueContainsNull = false)) :: Nil))
+        StructField("subfield2", ArrayType(IntegerType, containsNull = false))
+          :: Nil), valueContainsNull = false)) :: Nil))
   }
 
   testSelect("col2.field8['foo'][0].subfield1 as foo") {
@@ -327,9 +341,13 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
         StructField("subfield1", IntegerType, nullable = false) :: Nil))) :: Nil)))
   }
 
-  testSelect("col8.field1", "col8[0].field1 as foo", "col8.field1[0] as foo", "col8[0].field1[0] as foo") {
+  testSelect("col8.field1",
+    "col8[0].field1 as foo",
+    "col8.field1[0] as foo",
+    "col8[0].field1[0] as foo") {
     StructField("col8", ArrayType(StructType(
-      StructField("field1", ArrayType(IntegerType, containsNull = false), nullable = false) :: Nil)))
+      StructField("field1", ArrayType(IntegerType, containsNull = false), nullable = false)
+        :: Nil)))
   }
 
   def assertResult(expected: StructField)(actual: StructField)(selectExpr: String): Unit = {
@@ -352,16 +370,22 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
   // defined by the given field
   private def testSelect(selectExpr: String, otherSelectExprs: String*)(expected: StructField) {
     val selectExprs = selectExpr +: otherSelectExprs
+    testSelect(selectExprs, schema)(expected)
+  }
+
+  private def testSelect(selectExprs: Seq[String], inputSchema: StructType)
+                        (expected: StructField) {
     test(s"SELECT ${selectExprs.map(s => s""""$s"""").mkString(", ")} should select the schema\n" +
-        indent(StructType(expected :: Nil).treeString)) {
+      indent(StructType(expected :: Nil).treeString)) {
       for (selectExpr <- selectExprs) {
-        assertSelect(selectExpr, expected)
+        assertSelect(selectExpr, expected, inputSchema)
       }
     }
   }
 
-  private def assertSelect(expr: String, expected: StructField) = {
-    unapplySelect(expr) match {
+  private def assertSelect(expr: String, expected: StructField, inputSchema: StructType): Unit = {
+    val relation = LocalRelation(inputSchema.toAttributes)
+    unapplySelect(expr, relation) match {
       case Some(field) =>
         assertResult(expected)(field)(expr)
       case None =>
@@ -373,14 +397,17 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
-  private def unapplySelect(expr: String) = {
-    val parsedExpr =
-      CatalystSqlParser.parseExpression(expr) match {
-        case namedExpr: NamedExpression => namedExpr
-      }
-    val select = testRelation.select(parsedExpr)
+  private def unapplySelect(expr: String, relation: LocalRelation) = {
+    val parsedExpr = parseAsCatalystExpression(Seq(expr)).head
+    val select = relation.select(parsedExpr)
     val analyzed = select.analyze
     SelectedField.unapply(analyzed.expressions.head)
+  }
+
+  private def parseAsCatalystExpression(exprs: Seq[String]) = {
+    exprs.map(CatalystSqlParser.parseExpression(_) match {
+      case namedExpr: NamedExpression => namedExpr
+    })
   }
 
   // Indent every line in `string` by four spaces
