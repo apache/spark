@@ -1368,6 +1368,22 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Casts all the values of the current Dataset following the types of a specific StructType.
+   * This method works also with nested structTypes.
+   *
+   *  @group typedrel
+   *  @since 2.4.0
+   */
+  def castBySchema(schema: StructType): DataFrame = {
+    assert(schema.fields.map(_.name).toList.sameElements(this.schema.fields.map(_.name).toList),
+      "schema should have the same fields as the original schema")
+
+    selectExpr(schema.map(
+      field => s"CAST ( ${field.name} As ${field.dataType.sql}) ${field.name}"
+    ): _*)
+  }
+
+  /**
    * :: Experimental ::
    * Returns a new Dataset by computing the given [[Column]] expression for each element.
    *

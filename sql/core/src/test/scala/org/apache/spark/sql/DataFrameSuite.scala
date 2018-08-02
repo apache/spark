@@ -2528,4 +2528,87 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       checkAnswer(aggPlusFilter1, aggPlusFilter2.collect())
     }
   }
+
+  test("SPARK-24988: castBySchema should perfectly cast a simple dataframe") {
+    val df = Seq(("test1", "0"), ("test2", "1")).toDF("name", "id")
+    val castSchema = StructType(
+      Seq(
+        StructField("name", StringType, true),
+        StructField("id", IntegerType, true)
+      )
+    )
+    assert(df.castBySchema(castSchema).toString() === "[name: string, id: int]")
+  }
+
+  test("SPARK-24988: castBySchema should perfectly cast a dataframe with nested structTypes") {
+    val df = Seq(
+      ("1", ("a", "b"), "8.00", ("1", "2")),
+      ("2", ("c", "d"), "9.00", ("3", "4"))
+    ).toDF("id", "s1", "d", "s2")
+
+    val castSchema = StructType(
+      Seq(
+        StructField("id", IntegerType, true),
+        StructField("s1", StructType(
+          Seq(
+            StructField("x", StringType, true),
+            StructField("y", StringType, true)
+          )
+        ), true),
+        StructField("d", DoubleType, true),
+        StructField("s2", StructType(
+          Seq(
+            StructField("u", IntegerType, true),
+            StructField("v", IntegerType, true)
+          )
+        ), true)
+      )
+    )
+
+    val expectedDf = Seq(
+      (1, ("a", "b"), 8.00, (1, 2)),
+      (2, ("c", "d"), 9.00, (3, 4))
+    ).toDF("id", "s1", "d", "s2")
+
+    assert(!df.castBySchema(castSchema).collect.toList.sameElements(df.collect),
+      "casted dataframe shouldn't contain the same elements as the original dataframe")
+    assert(df.castBySchema(castSchema).collect.toList.sameElements(expectedDf.collect),
+      "casted dataframe didn't contain the same elements as the expected dataframe")
+  }
+
+  test("SPARK-24988: castBySchema should perfectly cast a dataframe with an ArrayType of Struct") {
+    val df = Seq(
+      ("1", ("a", "b"), "8.00", Seq(("1", "2"), ("12", "22"))),
+      ("2", ("c", "d"), "9.00", Seq(("3", "4"), ("33", "44")))
+    ).toDF("id", "s1", "d", "s2")
+
+    val castSchema = StructType(
+      Seq(
+        StructField("id", IntegerType, true),
+        StructField("s1", StructType(
+          Seq(
+            StructField("x", StringType, true),
+            StructField("y", StringType, true)
+          )
+        ), true),
+        StructField("d", DoubleType, true),
+        StructField("s2", ArrayType(StructType(
+          Seq(
+            StructField("u", IntegerType, true),
+            StructField("v", IntegerType, true)
+          )
+        )), true)
+      )
+    )
+
+    val expectedDf = Seq(
+      (1, ("a", "b"), 8.00, Seq((1, 2), (12, 22))),
+      (2, ("c", "d"), 9.00, Seq((3, 4), (33, 44)))
+    ).toDF("id", "s1", "d", "s2")
+
+    assert(!df.castBySchema(castSchema).collect.toList.sameElements(df.collect),
+      "casted dataframe shouldn't contain the same elements as the original dataframe")
+    assert(df.castBySchema(castSchema).collect.sameElements(expectedDf.collect),
+      "casted dataframe didn't contain the same elements as the expected dataframe")
+  }
 }
