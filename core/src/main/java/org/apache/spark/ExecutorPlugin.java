@@ -34,5 +34,5 @@ import org.apache.spark.annotation.DeveloperApi;
  * could also intefere with task execution and make the executor fail in unexpected ways.
  */
 @DeveloperApi
-interface ExecutorPlugin {
+public interface ExecutorPlugin {
 }
