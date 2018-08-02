@@ -461,14 +461,16 @@ private[spark] object Utils extends Logging {
     if (useCache && fetchCacheEnabled) {
       val cachedFileName = s"${url.hashCode}${timestamp}_cache"
       val lockFileName = s"${url.hashCode}${timestamp}_lock"
-      var localDir: File = null
       // Set the cachedLocalDir for the first time and re-use it later
-      this.synchronized {
-        if (cachedLocalDir.isEmpty) {
-          cachedLocalDir = getLocalDir(conf)
+      if (cachedLocalDir.isEmpty) {
+        this.synchronized {
+          if (cachedLocalDir.isEmpty) {
+            cachedLocalDir = getLocalDir(conf)
+          }
         }
-        localDir = new File(cachedLocalDir)
       }
+      val localDir = new File(cachedLocalDir)
+
       val lockFile = new File(localDir, lockFileName)
       val lockFileChannel = new RandomAccessFile(lockFile, "rw").getChannel()
       // Only one executor entry.
