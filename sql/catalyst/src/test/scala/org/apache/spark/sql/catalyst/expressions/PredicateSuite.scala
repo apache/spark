@@ -129,15 +129,13 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal(2))), null)
     checkEvaluation(In(NonFoldableLiteral.create(null, IntegerType),
       Seq(NonFoldableLiteral.create(null, IntegerType))), null)
-    checkEvaluation(In(NonFoldableLiteral.create(null, IntegerType), Seq.empty),
-      null)
+    checkEvaluation(In(NonFoldableLiteral.create(null, IntegerType), Seq.empty), null)
     checkEvaluation(In(Literal(1), Seq.empty), false)
-    checkEvaluation(
-      In(Literal(1), Seq(NonFoldableLiteral.create(null, IntegerType))), null)
-    checkEvaluation(In(Literal(1),
-      Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))), true)
-    checkEvaluation(In(Literal(2),
-      Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))), null)
+    checkEvaluation(In(Literal(1), Seq(NonFoldableLiteral.create(null, IntegerType))), null)
+    checkEvaluation(In(Literal(1), Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
+      true)
+    checkEvaluation(In(Literal(2), Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
+      null)
     checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))), true)
     checkEvaluation(In(Literal(2), Seq(Literal(1), Literal(2))), true)
     checkEvaluation(In(Literal(3), Seq(Literal(1), Literal(2))), false)
