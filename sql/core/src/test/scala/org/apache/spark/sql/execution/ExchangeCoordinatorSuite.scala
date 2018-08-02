@@ -278,25 +278,6 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
     try f(spark) finally spark.stop()
   }
 
-  def withSparkSession(pairs: (String, String)*)(f: SparkSession => Unit): Unit = {
-    val sparkConf = new SparkConf(false)
-      .setMaster("local[*]")
-      .setAppName("test")
-      .set("spark.ui.enabled", "false")
-      .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
-      .set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "true")
-      .set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
-
-    pairs.foreach {
-      case (k, v) => sparkConf.set(k, v)
-    }
-
-    val spark = SparkSession.builder()
-      .config(sparkConf)
-      .getOrCreate()
-    try f(spark) finally spark.stop()
-  }
-
   Seq(Some(5), None).foreach { minNumPostShufflePartitions =>
     val testNameNote = minNumPostShufflePartitions match {
       case Some(numPartitions) => "(minNumPostShufflePartitions: " + numPartitions + ")"
@@ -501,7 +482,8 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("SPARK-24705 adaptive query execution works correctly when exchange reuse enabled") {
-    withSparkSession(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true") { spark =>
+    val test = { spark: SparkSession =>
+      spark.sql("SET spark.sql.exchange.reuse=true")
       val df = spark.range(1).selectExpr("id AS key", "id AS value")
       val resultDf = df.join(df, "key").join(df, "key")
       val sparkPlan = resultDf.queryExecution.executedPlan
@@ -509,5 +491,6 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       assert(sparkPlan.collect { case p @ ShuffleExchangeExec(_, _, Some(c)) => p }.length == 3)
       checkAnswer(resultDf, Row(0, 0, 0, 0) :: Nil)
     }
+    withSparkSession(test, 4, None)
   }
 }
