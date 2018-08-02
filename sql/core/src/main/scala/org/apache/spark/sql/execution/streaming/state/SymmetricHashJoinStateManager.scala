@@ -290,7 +290,7 @@ class SymmetricHashJoinStateManager(
   private val keyWithIndexToValue = new KeyWithIndexToValueStore()
 
   // Clean up any state store resources if necessary at the end of the task
-  Option(TaskContext.get()).foreach { _.addTaskCompletionListener { _ => abortIfNeeded() } }
+  Option(TaskContext.get()).foreach { _.addTaskCompletionListener[Unit] { _ => abortIfNeeded() } }
 
   /** Helper trait for invoking common functionalities of a state store. */
   private abstract class StateStoreHandler(stateStoreType: StateStoreType) extends Logging {
