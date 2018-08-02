@@ -36,7 +36,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
-import org.apache.spark.sql.types.{StructType, _}
+import org.apache.spark.sql.types._
 
 class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   val episodesAvro = testFile("episodes.avro")

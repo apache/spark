@@ -96,6 +96,8 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
           // For backward compatibility, if the Avro type is Long and it is not logical type,
           // the value is processed as timestamp type with millisecond precision.
           updater.setLong(ordinal, value.asInstanceOf[Long] * 1000)
+        case other => throw new IncompatibleSchemaException(
+          s"Cannot convert Avro logical type ${other} to Catalyst Timestamp type.")
       }
 
       case (LONG, DateType) => (updater, ordinal, value) =>

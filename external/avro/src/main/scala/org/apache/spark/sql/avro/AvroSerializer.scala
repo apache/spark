@@ -93,13 +93,14 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
         (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
       case DateType =>
         (getter, ordinal) => getter.getInt(ordinal) * DateTimeUtils.MILLIS_PER_DAY
-      case TimestampType =>
-        (getter, ordinal) => avroType.getLogicalType match {
-          case _: TimestampMillis => getter.getLong(ordinal) / 1000
-          case _: TimestampMicros => getter.getLong(ordinal)
+      case TimestampType => avroType.getLogicalType match {
+          case _: TimestampMillis => (getter, ordinal) => getter.getLong(ordinal) / 1000
+          case _: TimestampMicros => (getter, ordinal) => getter.getLong(ordinal)
           // For backward compatibility, if the Avro type is Long and it is not logical type,
           // output the timestamp value as with millisecond precision.
-          case null => getter.getLong(ordinal) / 1000
+          case null => (getter, ordinal) => getter.getLong(ordinal) / 1000
+          case other => throw new IncompatibleSchemaException(
+            s"Cannot convert Catalyst Timestamp type to Avro logical type ${other}")
         }
 
       case ArrayType(et, containsNull) =>
