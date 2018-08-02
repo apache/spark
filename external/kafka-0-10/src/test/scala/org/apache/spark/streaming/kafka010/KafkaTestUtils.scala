@@ -109,7 +109,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
       brokerConf = new KafkaConfig(brokerConfiguration, doLog = false)
       server = new KafkaServer(brokerConf)
       server.startup()
-      brokerPort = server.boundPort()
+      brokerPort = server.boundPort(brokerConf.interBrokerListenerName)
       (server, brokerPort)
     }, new SparkConf(), "KafkaBroker")
 
@@ -270,12 +270,10 @@ private[kafka010] class KafkaTestUtils extends Logging {
   private def waitUntilMetadataIsPropagated(topic: String, partition: Int): Unit = {
     def isPropagated = server.apis.metadataCache.getPartitionInfo(topic, partition) match {
       case Some(partitionState) =>
-        val leaderAndInSyncReplicas = partitionState.leaderIsrAndControllerEpoch.leaderAndIsr
-
+        val leader = partitionState.basePartitionState.leader
+        val isr = partitionState.basePartitionState.isr
         zkUtils.getLeaderForPartition(topic, partition).isDefined &&
-          Request.isValidBrokerId(leaderAndInSyncReplicas.leader) &&
-          leaderAndInSyncReplicas.isr.nonEmpty
-
+          Request.isValidBrokerId(leader) && !isr.isEmpty
       case _ =>
         false
     }
