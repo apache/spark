@@ -29,7 +29,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalogTableIdentifier, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat
 import org.apache.spark.sql.catalyst.expressions._
@@ -79,6 +79,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitSingleTableIdentifier(
       ctx: SingleTableIdentifierContext): TableIdentifier = withOrigin(ctx) {
     visitTableIdentifier(ctx.tableIdentifier)
+  }
+
+  override def visitSingleCatalogTableIdentifier(
+      ctx: SingleCatalogTableIdentifierContext): CatalogTableIdentifier = withOrigin(ctx) {
+    visitCatalogTableIdentifier(ctx.catalogTableIdentifier)
   }
 
   override def visitSingleFunctionIdentifier(
@@ -943,6 +948,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitTableIdentifier(
       ctx: TableIdentifierContext): TableIdentifier = withOrigin(ctx) {
     TableIdentifier(ctx.table.getText, Option(ctx.db).map(_.getText))
+  }
+
+  /**
+   * Create a [[CatalogTableIdentifier]] from a 'tableName' or 'databaseName'.'tableName' pattern.
+   */
+  override def visitCatalogTableIdentifier(
+      ctx: CatalogTableIdentifierContext): CatalogTableIdentifier = withOrigin(ctx) {
+    CatalogTableIdentifier(
+      ctx.table.getText,
+      Option(ctx.db).map(_.getText),
+      Option(ctx.catalog).map(_.getText))
   }
 
   /**

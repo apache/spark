@@ -58,6 +58,10 @@ singleTableIdentifier
     : tableIdentifier EOF
     ;
 
+singleCatalogTableIdentifier
+    : catalogTableIdentifier EOF
+    ;
+
 singleFunctionIdentifier
     : functionIdentifier EOF
     ;
@@ -536,6 +540,10 @@ rowFormat
       (MAP KEYS TERMINATED BY keysTerminatedBy=STRING)?
       (LINES TERMINATED BY linesSeparatedBy=STRING)?
       (NULL DEFINED AS nullDefinedAs=STRING)?                                       #rowFormatDelimited
+    ;
+
+catalogTableIdentifier
+    : ((catalog=identifier '.')? db=identifier '.')? table=identifier
     ;
 
 tableIdentifier

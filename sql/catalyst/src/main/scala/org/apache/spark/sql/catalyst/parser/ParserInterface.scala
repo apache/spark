@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalogTableIdentifier, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -45,6 +45,12 @@ trait ParserInterface {
    */
   @throws[ParseException]("Text cannot be parsed to a TableIdentifier")
   def parseTableIdentifier(sqlText: String): TableIdentifier
+
+  /**
+   * Parse a string to a [[CatalogTableIdentifier]].
+   */
+  @throws[ParseException]("Text cannot be parsed to a CatalogTableIdentifier")
+  def parseCatalogTableIdentifier(sqlText: String): CatalogTableIdentifier
 
   /**
    * Parse a string to a [[FunctionIdentifier]].

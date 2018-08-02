@@ -23,7 +23,7 @@ import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalogTableIdentifier, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
@@ -48,6 +48,13 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
   /** Creates TableIdentifier for a given SQL string. */
   override def parseTableIdentifier(sqlText: String): TableIdentifier = parse(sqlText) { parser =>
     astBuilder.visitSingleTableIdentifier(parser.singleTableIdentifier())
+  }
+
+  /** Creates a CatalogTableIdentifier for a given SQL string */
+  override def parseCatalogTableIdentifier(sqlText: String): CatalogTableIdentifier = {
+    parse(sqlText) { parser =>
+      astBuilder.visitSingleCatalogTableIdentifier(parser.singleCatalogTableIdentifier())
+    }
   }
 
   /** Creates FunctionIdentifier for a given SQL string. */
