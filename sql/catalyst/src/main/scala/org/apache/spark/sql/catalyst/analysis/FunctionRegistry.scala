@@ -440,6 +440,7 @@ object FunctionRegistry {
     expression[ArrayRepeat]("array_repeat"),
     expression[ArrayRemove]("array_remove"),
     expression[ArrayDistinct]("array_distinct"),
+    expression[ArrayTransform]("transform"),
     CreateStruct.registryEntry,
 
     // misc functions

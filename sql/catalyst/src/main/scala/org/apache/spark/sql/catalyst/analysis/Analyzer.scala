@@ -180,6 +180,8 @@ class Analyzer(
       ResolveAggregateFunctions ::
       TimeWindowing ::
       ResolveInlineTables(conf) ::
+      ResolveHigherOrderFunctions(catalog) ::
+      ResolveLambdaVariables(conf) ::
       ResolveTimeZone(conf) ::
       ResolveRandomSeed ::
       TypeCoercion.typeCoercionRules(conf) ++
@@ -878,6 +880,7 @@ class Analyzer(
     }
 
     private def resolve(e: Expression, q: LogicalPlan): Expression = e match {
+      case f: LambdaFunction if !f.bound => f
       case u @ UnresolvedAttribute(nameParts) =>
         // Leave unchanged if resolution fails. Hopefully will be resolved next round.
         val result =

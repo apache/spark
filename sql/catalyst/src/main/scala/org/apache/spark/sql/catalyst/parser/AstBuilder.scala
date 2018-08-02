@@ -1313,6 +1313,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create an [[LambdaFunction]].
+   */
+  override def visitLambda(ctx: LambdaContext): Expression = withOrigin(ctx) {
+    val arguments = ctx.IDENTIFIER().asScala.map { name =>
+      UnresolvedAttribute.quoted(name.getText)
+    }
+    LambdaFunction(expression(ctx.expression), arguments)
+  }
+
+  /**
    * Create a reference to a window frame, i.e. [[WindowSpecReference]].
    */
   override def visitWindowRef(ctx: WindowRefContext): WindowSpecReference = withOrigin(ctx) {
