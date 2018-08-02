@@ -41,6 +41,28 @@ import org.apache.spark.sql.types._
 class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   val episodesAvro = testFile("episodes.avro")
   val testAvro = testFile("test.avro")
+
+  // The test file timestamp.avro is generated via following Python code:
+  // import json
+  // import avro.schema
+  // from avro.datafile import DataFileWriter
+  // from avro.io import DatumWriter
+  //
+  // write_schema = avro.schema.parse(json.dumps({
+  //   "namespace": "logical",
+  //   "type": "record",
+  //   "name": "test",
+  //   "fields": [
+  //   {"name": "timestamp_millis", "type": {"type": "long","logicalType": "timestamp-millis"}},
+  //   {"name": "timestamp_micros", "type": {"type": "long","logicalType": "timestamp-micros"}},
+  //   {"name": "long", "type": "long"}
+  //   ]
+  // }))
+  //
+  // writer = DataFileWriter(open("timestamp.avro", "wb"), DatumWriter(), write_schema)
+  // writer.append({"timestamp_millis": 1000, "timestamp_micros": 2000000, "long": 3000})
+  // writer.append({"timestamp_millis": 666000, "timestamp_micros": 999000000, "long": 777000})
+  // writer.close()
   val timestampAvro = testFile("timestamp.avro")
 
   override protected def beforeAll(): Unit = {
@@ -368,7 +390,8 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     val sparkSession = spark
     import sparkSession.implicits._
 
-    val df = spark.read.format("avro").load(timestampAvro)
+    val df =
+      spark.read.format("avro").load(timestampAvro).select('timestamp_millis, 'timestamp_micros)
 
     val expected = Seq((1L, 2L), (666L, 999L))
       .toDF("timestamp_millis", "timestamp_micros")
@@ -385,13 +408,25 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  test("Read Long type as Timestamp") {
+    val sparkSession = spark
+    import sparkSession.implicits._
+
+    val schema = StructType(StructField("long", TimestampType, true) :: Nil)
+    val df = spark.read.format("avro").schema(schema).load(timestampAvro).select('long)
+
+    val expected = Seq(3L, 777L).toDF("long").select('long.cast(TimestampType)).collect()
+
+    checkAnswer(df, expected)
+  }
+
   test("Logical type: user specified schema") {
     val sparkSession = spark
     import sparkSession.implicits._
 
-    val expected = Seq((1L, 2L), (666L, 999L))
-      .toDF("timestamp_millis", "timestamp_micros")
-      .select('timestamp_millis.cast(TimestampType), 'timestamp_micros.cast(TimestampType))
+    val expected = Seq((1L, 2L, 3000L), (666L, 999L, 777000L))
+      .toDF("timestamp_millis", "timestamp_micros", "long")
+      .select('timestamp_millis.cast(TimestampType), 'timestamp_micros.cast(TimestampType), 'long)
       .collect()
 
     val avroSchema = s"""
@@ -401,7 +436,8 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         "name": "test",
         "fields": [
           {"name": "timestamp_millis", "type": {"type": "long","logicalType": "timestamp-millis"}},
-          {"name": "timestamp_micros", "type": {"type": "long","logicalType": "timestamp-micros"}}
+          {"name": "timestamp_micros", "type": {"type": "long","logicalType": "timestamp-micros"}},
+          {"name": "long", "type": "long"}
         ]
       }
     """
