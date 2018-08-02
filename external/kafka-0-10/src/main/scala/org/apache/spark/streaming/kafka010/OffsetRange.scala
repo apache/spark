@@ -132,25 +132,43 @@ object OffsetRange {
              recordNumber: Long): OffsetRange =
     new OffsetRange(topic, partition, fromOffset, untilOffset, recordNumber)
 
-  def create(
-      topicPartition: TopicPartition,
-      fromOffset: Long,
-      untilOffset: Long,
-      recordNumber: Long): OffsetRange =
+  def create(topic: String, partition: Int, fromOffset: Long, untilOffset: Long): OffsetRange =
+    new OffsetRange(topic, partition, fromOffset, untilOffset, untilOffset - fromOffset)
+
+  def create(topicPartition: TopicPartition,
+              fromOffset: Long,
+              untilOffset: Long,
+              recordNumber: Long): OffsetRange =
     new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset,
-                    recordNumber)
+      recordNumber)
+
+  def create(topicPartition: TopicPartition,
+              fromOffset: Long,
+              untilOffset: Long): OffsetRange =
+    new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset,
+      untilOffset - fromOffset)
 
   def apply(topic: String, partition: Int, fromOffset: Long, untilOffset: Long,
             recordNumber: Long): OffsetRange =
     new OffsetRange(topic, partition, fromOffset, untilOffset, recordNumber)
 
   def apply(
-      topicPartition: TopicPartition,
-      fromOffset: Long,
-      untilOffset: Long,
-      recordNumber: Long): OffsetRange =
+             topicPartition: TopicPartition,
+             fromOffset: Long,
+             untilOffset: Long,
+             recordNumber: Long): OffsetRange =
     new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset,
-                    recordNumber)
+      recordNumber)
+
+  def apply(topic: String, partition: Int, fromOffset: Long, untilOffset: Long): OffsetRange =
+    new OffsetRange(topic, partition, fromOffset, untilOffset, untilOffset - fromOffset)
+
+  def apply(
+             topicPartition: TopicPartition,
+             fromOffset: Long,
+             untilOffset: Long): OffsetRange =
+    new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset,
+      untilOffset - fromOffset)
 
   /** this is to avoid ClassNotFoundException during checkpoint restore */
   private[kafka010]

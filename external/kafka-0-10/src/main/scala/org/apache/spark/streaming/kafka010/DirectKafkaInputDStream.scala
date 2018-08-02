@@ -265,9 +265,8 @@ private[spark] class DirectKafkaInputDStream[K, V](
         }
     } else {
       offsets.map { case (tp, untilOffset) =>
-        val size = untilOffset - currentOffsets(tp)
         val offsetFrom = currentOffsets(tp)
-        OffsetRange(tp.topic(), tp.partition, offsetFrom, untilOffset, size)
+        OffsetRange(tp.topic(), tp.partition, offsetFrom, untilOffset)
       }
     }
   }
