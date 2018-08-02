@@ -491,7 +491,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, protected val clock: C
             throw e
           case e: ExecutionException if e.getCause.isInstanceOf[AccessControlException] =>
             // We don't have read permissions on the log file
-            logDebug(s"Unable to read log $path", e.getCause)
+            logWarning(s"Unable to read log $path", e.getCause)
             blacklist(path)
           case e: Exception =>
             logError("Exception while merging application listings", e)
