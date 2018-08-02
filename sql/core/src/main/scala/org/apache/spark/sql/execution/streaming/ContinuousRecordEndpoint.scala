@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset
 
 case class ContinuousRecordPartitionOffset(partitionId: Int, offset: Int) extends PartitionOffset
@@ -63,7 +63,7 @@ class ContinuousRecordEndpoint(buckets: Seq[Seq[Any]], lock: Object)
         val buf = buckets(partitionId)
         val record = if (buf.size <= bufOffset) None else Some(buf(bufOffset))
 
-        context.reply(record.map(Row(_)))
+        context.reply(record.map(InternalRow(_)))
       }
   }
 }

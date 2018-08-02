@@ -38,7 +38,7 @@ import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupport
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types._
 
 class TextSocketStreamSuite extends StreamTest with SharedSQLContext with BeforeAndAfterEach {
 
@@ -309,7 +309,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       new DataSourceOptions(Map("numPartitions" -> "2", "host" -> "localhost",
         "port" -> serverThread.port.toString).asJava))
     reader.setStartOffset(Optional.empty())
-    val tasks = reader.planRowInputPartitions()
+    val tasks = reader.planInputPartitions()
     assert(tasks.size == 2)
 
     val numRecords = 10
@@ -327,7 +327,8 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
           for (i <- 0 until numRecords / 2) {
             r.next()
             offsets.append(r.getOffset().asInstanceOf[ContinuousRecordPartitionOffset].offset)
-            data.append(r.get().getString(0).toInt)
+            data.append(r.get().get(0, DataTypes.StringType).asInstanceOf[String].toInt)
+            // commit the offsets in the middle and validate if processing continues
             if (i == 2) {
               commitOffset(t.partitionId, i + 1)
             }
@@ -375,11 +376,10 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
         "includeTimestamp" -> "true",
         "port" -> serverThread.port.toString).asJava))
     reader.setStartOffset(Optional.empty())
-    val tasks = reader.planRowInputPartitions()
+    val tasks = reader.planInputPartitions()
     assert(tasks.size == 2)
 
     val numRecords = 4
-    import org.apache.spark.sql.Row
     // inject rows, read and check the data and offsets
     for (i <- 0 until numRecords) {
       serverThread.enqueue(i.toString)
@@ -389,7 +389,8 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
         val r = t.createPartitionReader().asInstanceOf[TextSocketContinuousInputPartitionReader]
         for (i <- 0 until numRecords / 2) {
           r.next()
-          assert(r.get().get(0).isInstanceOf[(String, Timestamp)])
+          assert(r.get().get(0, TextSocketReader.SCHEMA_TIMESTAMP)
+            .isInstanceOf[(String, Timestamp)])
         }
       case _ => throw new IllegalStateException("Unexpected task type")
     }

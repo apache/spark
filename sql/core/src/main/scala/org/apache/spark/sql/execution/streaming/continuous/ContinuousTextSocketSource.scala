@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.streaming.continuous
 import java.io.{BufferedReader, InputStreamReader, IOException}
 import java.net.Socket
 import java.sql.Timestamp
-import java.text.SimpleDateFormat
-import java.util.{Calendar, List => JList, Locale}
+import java.util.{Calendar, List => JList}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -34,21 +33,15 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.streaming.{ContinuousRecordEndpoint, ContinuousRecordPartitionOffset, GetRecord}
+import org.apache.spark.sql.execution.streaming.sources.TextSocketReader
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader, SupportsDeprecatedScanRow}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousInputPartitionReader, ContinuousReader, Offset, PartitionOffset}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 import org.apache.spark.util.RpcUtils
 
-
-object TextSocketContinuousReader {
-  val SCHEMA_REGULAR = StructType(StructField("value", StringType) :: Nil)
-  val SCHEMA_TIMESTAMP = StructType(
-    StructField("value", StringType)
-      :: StructField("timestamp", TimestampType) :: Nil)
-  val DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-}
 
 /**
  * A ContinuousReader that reads text lines through a TCP socket, designed only for tutorials and
@@ -58,8 +51,7 @@ object TextSocketContinuousReader {
  * The driver maintains a socket connection to the host-port, keeps the received messages in
  * buckets and serves the messages to the executors via a RPC endpoint.
  */
-class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousReader
-  with SupportsDeprecatedScanRow with Logging {
+class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousReader with Logging {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
   private val host: String = options.get("host").get()
@@ -113,13 +105,13 @@ class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousR
 
   override def readSchema(): StructType = {
     if (includeTimestamp) {
-      TextSocketContinuousReader.SCHEMA_TIMESTAMP
+      TextSocketReader.SCHEMA_TIMESTAMP
     } else {
-      TextSocketContinuousReader.SCHEMA_REGULAR
+      TextSocketReader.SCHEMA_REGULAR
     }
   }
 
-  override def planRowInputPartitions(): JList[InputPartition[Row]] = {
+  override def planInputPartitions(): JList[InputPartition[InternalRow]] = {
 
     val endpointName = s"TextSocketContinuousReaderEndpoint-${java.util.UUID.randomUUID()}"
     endpointRef = recordEndpoint.rpcEnv.setupEndpoint(endpointName, recordEndpoint)
@@ -141,13 +133,18 @@ class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousR
     startOffset.offsets.zipWithIndex.map {
       case (offset, i) =>
         TextSocketContinuousInputPartition(
-          endpointName, i, offset, includeTimestamp): InputPartition[Row]
+          endpointName, i, offset, includeTimestamp): InputPartition[InternalRow]
     }.asJava
 
   }
 
   override def commit(end: Offset): Unit = synchronized {
-    val endOffset = end.asInstanceOf[TextSocketOffset]
+    val endOffset = end match {
+      case off: TextSocketOffset => off
+      case _ => throw new IllegalArgumentException(s"TextSocketContinuousReader.commit()" +
+        s"received an offset ($end) that did not originate with an instance of this class")
+    }
+
     endOffset.offsets.zipWithIndex.foreach {
       case (offset, partition) =>
         val max = startOffset.offsets(partition) + buckets(partition).size
@@ -197,7 +194,7 @@ class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousR
               currentOffset += 1
               val newData = (line,
                 Timestamp.valueOf(
-                  TextSocketContinuousReader.DATE_FORMAT.format(Calendar.getInstance().getTime()))
+                  TextSocketReader.DATE_FORMAT.format(Calendar.getInstance().getTime()))
               )
               buckets(currentOffset % numPartitions) += newData
             }
@@ -225,9 +222,9 @@ case class TextSocketContinuousInputPartition(
     partitionId: Int,
     startOffset: Int,
     includeTimestamp: Boolean)
-extends InputPartition[Row] {
+extends InputPartition[InternalRow] {
 
-  override def createPartitionReader(): InputPartitionReader[Row] =
+  override def createPartitionReader(): InputPartitionReader[InternalRow] =
     new TextSocketContinuousInputPartitionReader(driverEndpointName, partitionId, startOffset,
       includeTimestamp)
 }
@@ -242,7 +239,7 @@ class TextSocketContinuousInputPartitionReader(
     partitionId: Int,
     startOffset: Int,
     includeTimestamp: Boolean)
-  extends ContinuousInputPartitionReader[Row] {
+  extends ContinuousInputPartitionReader[InternalRow] {
 
   private val endpoint = RpcUtils.makeDriverRef(
     driverEndpointName,
@@ -250,7 +247,7 @@ class TextSocketContinuousInputPartitionReader(
     SparkEnv.get.rpcEnv)
 
   private var currentOffset = startOffset
-  private var current: Option[Row] = None
+  private var current: Option[InternalRow] = None
 
   override def next(): Boolean = {
     try {
@@ -268,7 +265,7 @@ class TextSocketContinuousInputPartitionReader(
     true
   }
 
-  override def get(): Row = {
+  override def get(): InternalRow = {
     current.get
   }
 
@@ -277,16 +274,16 @@ class TextSocketContinuousInputPartitionReader(
   override def getOffset: PartitionOffset =
     ContinuousRecordPartitionOffset(partitionId, currentOffset)
 
-  private def getRecord: Option[Row] =
-    endpoint.askSync[Option[Row]](GetRecord(
-      ContinuousRecordPartitionOffset(partitionId, currentOffset)))
-      .map(rec => {
-        if (includeTimestamp) {
-          rec
-        } else {
-          Row(rec.get(0).asInstanceOf[(String, Timestamp)]._1)
-        }
-      })
+  private def getRecord: Option[InternalRow] =
+    endpoint.askSync[Option[InternalRow]](GetRecord(
+      ContinuousRecordPartitionOffset(partitionId, currentOffset))).map(rec =>
+      if (includeTimestamp) {
+        rec
+      } else {
+        InternalRow(rec.get(0, TextSocketReader.SCHEMA_TIMESTAMP)
+          .asInstanceOf[(String, Timestamp)]._1)
+      }
+    )
 }
 
 case class TextSocketOffset(offsets: List[Int]) extends Offset {
