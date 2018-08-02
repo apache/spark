@@ -45,13 +45,13 @@ case class TimeWindow(
       windowDuration: Expression,
       slideDuration: Expression,
       startTime: Expression) = {
-    this(timeColumn, TimeWindow.parseExpression(windowDuration),
-      TimeWindow.parseExpression(slideDuration), TimeWindow.parseExpression(startTime))
+    this(timeColumn, TimeWindowUtil.parseExpression(windowDuration),
+      TimeWindowUtil.parseExpression(slideDuration), TimeWindowUtil.parseExpression(startTime))
   }
 
   def this(timeColumn: Expression, windowDuration: Expression, slideDuration: Expression) = {
-    this(timeColumn, TimeWindow.parseExpression(windowDuration),
-      TimeWindow.parseExpression(slideDuration), 0)
+    this(timeColumn, TimeWindowUtil.parseExpression(windowDuration),
+      TimeWindowUtil.parseExpression(slideDuration), 0)
   }
 
   def this(timeColumn: Expression, windowDuration: Expression) = {
@@ -93,7 +93,47 @@ case class TimeWindow(
   }
 }
 
-object TimeWindow {
+case class SessionWindow(
+    timeColumn: Expression,
+    windowGap: Long) extends UnaryExpression
+  with ImplicitCastInputTypes
+  with Unevaluable
+  with NonSQLExpression {
+
+  //////////////////////////
+  // SQL Constructors
+  //////////////////////////
+
+  def this(
+      timeColumn: Expression,
+      windowGap: Expression) = {
+    this(timeColumn, TimeWindowUtil.parseExpression(windowGap))
+  }
+
+  override def child: Expression = timeColumn
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+  override def dataType: DataType = new StructType()
+    .add(StructField("start", TimestampType))
+    .add(StructField("end", TimestampType))
+
+  // This expression is replaced in the analyzer.
+  override lazy val resolved = false
+
+  /**
+   * Validate the inputs for the window gap.
+   */
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val dataTypeCheck = super.checkInputDataTypes()
+    if (dataTypeCheck.isSuccess) {
+      if (windowGap <= 0) {
+        return TypeCheckFailure(s"The window duration ($windowGap) must be greater than 0.")
+      }
+    }
+    dataTypeCheck
+  }
+}
+
+object TimeWindowUtil {
   /**
    * Parses the interval string for a valid time duration. CalendarInterval expects interval
    * strings to start with the string `interval`. For usability, we prepend `interval` to the string
@@ -103,7 +143,7 @@ object TimeWindow {
    * @return The interval duration in microseconds. SparkSQL casts TimestampType has microsecond
    *         precision.
    */
-  private def getIntervalInMicroSeconds(interval: String): Long = {
+  def getIntervalInMicroSeconds(interval: String): Long = {
     if (StringUtils.isBlank(interval)) {
       throw new IllegalArgumentException(
         "The window duration, slide duration and start time cannot be null or blank.")
@@ -129,23 +169,34 @@ object TimeWindow {
    * Parses the duration expression to generate the long value for the original constructor so
    * that we can use `window` in SQL.
    */
-  private def parseExpression(expr: Expression): Long = expr match {
+  def parseExpression(expr: Expression): Long = expr match {
     case NonNullLiteral(s, StringType) => getIntervalInMicroSeconds(s.toString)
     case IntegerLiteral(i) => i.toLong
     case NonNullLiteral(l, LongType) => l.toString.toLong
     case _ => throw new AnalysisException("The duration and time inputs to window must be " +
       "an integer, long or string literal.")
   }
+}
 
+object TimeWindow {
   def apply(
       timeColumn: Expression,
       windowDuration: String,
       slideDuration: String,
       startTime: String): TimeWindow = {
     TimeWindow(timeColumn,
-      getIntervalInMicroSeconds(windowDuration),
-      getIntervalInMicroSeconds(slideDuration),
-      getIntervalInMicroSeconds(startTime))
+      TimeWindowUtil.getIntervalInMicroSeconds(windowDuration),
+      TimeWindowUtil.getIntervalInMicroSeconds(slideDuration),
+      TimeWindowUtil.getIntervalInMicroSeconds(startTime))
+  }
+}
+
+object SessionWindow {
+  def apply(
+      timeColumn: Expression,
+      windowGap: String): SessionWindow = {
+    SessionWindow(timeColumn,
+      TimeWindowUtil.getIntervalInMicroSeconds(windowGap))
   }
 }
 

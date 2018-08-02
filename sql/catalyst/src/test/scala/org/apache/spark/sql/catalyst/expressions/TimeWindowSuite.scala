@@ -91,34 +91,34 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
   }
 
   private val parseExpression = PrivateMethod[Long]('parseExpression)
-
+  
   test("parse sql expression for duration in microseconds - string") {
-    val dur = TimeWindow.invokePrivate(parseExpression(Literal("5 seconds")))
+    val dur = TimeWindowUtil.parseExpression(Literal("5 seconds"))
     assert(dur.isInstanceOf[Long])
     assert(dur === 5000000)
   }
 
   test("parse sql expression for duration in microseconds - integer") {
-    val dur = TimeWindow.invokePrivate(parseExpression(Literal(100)))
+    val dur = TimeWindowUtil.parseExpression(Literal(100))
     assert(dur.isInstanceOf[Long])
     assert(dur === 100)
   }
 
   test("parse sql expression for duration in microseconds - long") {
-    val dur = TimeWindow.invokePrivate(parseExpression(Literal.create(2 << 52, LongType)))
+    val dur = TimeWindowUtil.parseExpression(Literal.create(2 << 52, LongType))
     assert(dur.isInstanceOf[Long])
     assert(dur === (2 << 52))
   }
 
   test("parse sql expression for duration in microseconds - invalid interval") {
     intercept[IllegalArgumentException] {
-      TimeWindow.invokePrivate(parseExpression(Literal("2 apples")))
+      TimeWindowUtil.parseExpression(Literal("2 apples"))
     }
   }
 
   test("parse sql expression for duration in microseconds - invalid expression") {
     intercept[AnalysisException] {
-      TimeWindow.invokePrivate(parseExpression(Rand(123)))
+      TimeWindowUtil.parseExpression(Rand(123))
     }
   }
 
@@ -131,6 +131,16 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
         Literal(slideLength),
         Literal("0 seconds"))
       assert(applyValue == constructed)
+    }
+  }
+
+  test("test interval string work with session window") {
+    for ((text, seconds) <- Seq(
+      ("1 second", 1000000), // 1e6
+      ("1 minute", 60000000), // 6e7
+      ("2 hours", 7200000000L))) { // 72e9
+      assert(SessionWindow(Literal(10L), text).windowGap === seconds)
+      assert(SessionWindow(Literal(10L), "interval " + text).windowGap === seconds)
     }
   }
 }
