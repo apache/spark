@@ -132,7 +132,7 @@ private[spark] class Executor(
 
   Thread.currentThread().setContextClassLoader(replClassLoader)
   conf.get(EXECUTOR_PLUGINS).foreach { classes =>
-    Utils.loadExtensions(classOf[AbstractExecutorPlugin], classes, conf)
+    Utils.loadExtensions(classOf[ExecutorPlugin], classes, conf)
   }
 
 
