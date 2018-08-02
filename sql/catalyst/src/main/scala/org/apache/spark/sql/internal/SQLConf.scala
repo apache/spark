@@ -1450,8 +1450,8 @@ object SQLConf {
     .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
     .createWithDefault(Deflater.DEFAULT_COMPRESSION)
 
-  val PARALLEL_FILE_LISTING_IN_COMMMANDS =
-    buildConf("spark.sql.parallelFileListingInCommands.enabled")
+  val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
+    buildConf("spark.sql.parallelFileListingInStatsComputation.enabled")
       .internal()
       .doc("When true, SQL commands use parallel file listing, " +
         "as opposed to single thread listing." +
@@ -1848,8 +1848,8 @@ class SQLConf extends Serializable with Logging {
 
   def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
 
-  def parallelFileListingInCommands: Boolean =
-    getConf(SQLConf.PARALLEL_FILE_LISTING_IN_COMMMANDS)
+  def parallelFileListingInStatsComputation: Boolean =
+    getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)
 
   /** ********************** SQLConf functionality methods ************ */
 
