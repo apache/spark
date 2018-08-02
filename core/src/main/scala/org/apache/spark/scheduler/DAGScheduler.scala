@@ -344,12 +344,12 @@ class DAGScheduler(
    * Check to make sure we don't launch a barrier stage with unsupported RDD chain pattern. The
    * following patterns are not supported:
    * 1. Ancestor RDDs that have different number of partitions from the resulting RDD (eg.
-   * union()/coalesce()/first()/PartitionPruningRDD);
+   * union()/coalesce()/first()/take()/PartitionPruningRDD);
    * 2. An RDD that depends on multiple barrier RDDs (eg. barrierRdd1.zip(barrierRdd2)).
    */
-  private def checkBarrierStageWithRDDChainPattern(rdd: RDD[_], numPartitions: Int): Unit = {
+  private def checkBarrierStageWithRDDChainPattern(rdd: RDD[_], numTasksInStage: Int): Unit = {
     val predicate: RDD[_] => Boolean = (r =>
-      r.getNumPartitions == numPartitions && r.dependencies.filter(_.rdd.isBarrier()).size <= 1)
+      r.getNumPartitions == numTasksInStage && r.dependencies.filter(_.rdd.isBarrier()).size <= 1)
     if (rdd.isBarrier() && !traverseParentRDDsWithinStage(rdd, predicate)) {
       throw new SparkException(
         DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
@@ -1995,6 +1995,8 @@ private[spark] object DAGScheduler {
   val ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN =
     "[SPARK-24820][SPARK-24821]: Barrier execution mode does not allow the following pattern of " +
       "RDD chain within a barrier stage:\n1. Ancestor RDDs that have different number of " +
-      "partitions from the resulting RDD (eg. union()/coalesce()/first()/PartitionPruningRDD);\n" +
+      "partitions from the resulting RDD (eg. union()/coalesce()/first()/take()/" +
+      "PartitionPruningRDD). A workaround for first()/take() can be barrierRdd.collect().head " +
+      "(scala) or barrierRdd.collect()[0] (python).\n" +
       "2. An RDD that depends on multiple barrier RDDs (eg. barrierRdd1.zip(barrierRdd2))."
 }
