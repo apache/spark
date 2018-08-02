@@ -24,8 +24,8 @@ import scala.collection.JavaConverters._
 import scala.util.Random
 
 import kafka.common.TopicAndPartition
-import kafka.log._
-import kafka.message._
+import kafka.log.{CleanerConfig, Log, LogCleaner, LogConfig}
+import kafka.message.NoCompressionCodec
 import kafka.utils.Pool
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.StringDeserializer
@@ -98,7 +98,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val cleaner = new LogCleaner(CleanerConfig(), logDirs = Array(dir), logs = logs)
     cleaner.startup()
-    cleaner.awaitCleaned(topic, partition, log.activeSegment.baseOffset, 1000)
+    cleaner.awaitCleaned(new TopicPartition(topic, partition), log.activeSegment.baseOffset, 1000)
 
     cleaner.shutdown()
     mockTime.scheduler.shutdown()

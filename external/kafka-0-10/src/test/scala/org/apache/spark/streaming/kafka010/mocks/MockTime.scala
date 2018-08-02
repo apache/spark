@@ -19,7 +19,7 @@ package org.apache.spark.streaming.kafka010.mocks
 
 import java.util.concurrent._
 
-import kafka.utils.Time
+import org.apache.kafka.common.utils.Time
 
 /**
  * A class used for unit testing things which depend on the Time interface.
