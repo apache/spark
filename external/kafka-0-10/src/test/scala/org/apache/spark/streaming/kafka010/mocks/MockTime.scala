@@ -36,12 +36,14 @@ private[kafka010] class MockTime(@volatile private var currentMs: Long) extends 
 
   def this() = this(System.currentTimeMillis)
 
-  def milliseconds: Long = currentMs
+  override def milliseconds: Long = currentMs
 
-  def nanoseconds: Long =
+  override def hiResClockMs(): Long = milliseconds
+
+  override def nanoseconds: Long =
     TimeUnit.NANOSECONDS.convert(currentMs, TimeUnit.MILLISECONDS)
 
-  def sleep(ms: Long) {
+  override def sleep(ms: Long) {
     this.currentMs += ms
     scheduler.tick()
   }
