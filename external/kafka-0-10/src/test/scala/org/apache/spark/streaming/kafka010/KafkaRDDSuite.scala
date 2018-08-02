@@ -27,7 +27,7 @@ import kafka.log.{CleanerConfig, Log, LogCleaner, LogConfig, ProducerStateManage
 import kafka.server.{BrokerTopicStats, LogDirFailureChannel}
 import kafka.utils.Pool
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.record.MemoryRecords
+import org.apache.kafka.common.record.{CompressionType, MemoryRecords, SimpleRecord}
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.scalatest.BeforeAndAfterAll
 
@@ -79,8 +79,8 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     val logProps = new ju.Properties()
     logProps.put(LogConfig.CleanupPolicyProp, LogConfig.Compact)
     logProps.put(LogConfig.MinCleanableDirtyRatioProp, java.lang.Float.valueOf(0.1f))
-    // TODO is this new Log declaration correct?
-    val logDirFailureChannel = new LogDirFailureChannel(0)
+    val logDirFailureChannel = new LogDirFailureChannel(1)
+    val topicPartition = new TopicPartition(topic, partition)
     val log = new Log(
       dir,
       LogConfig(logProps),
@@ -91,16 +91,16 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       mockTime,
       Int.MaxValue,
       Int.MaxValue,
-      new TopicPartition(topic, partition),
-      new ProducerStateManager(new TopicPartition(topic, partition), dir),
+      topicPartition,
+      new ProducerStateManager(topicPartition, dir),
       logDirFailureChannel
     )
     messages.foreach { case (k, v) =>
-      val records = new MemoryRecords()
-      // TODO
+      val record = new SimpleRecord(k.getBytes, v.getBytes)
+      log.appendAsLeader(MemoryRecords.withRecords(CompressionType.NONE, record), 0);
     }
     log.roll()
-    logs.put(new TopicPartition(topic, partition), log)
+    logs.put(topicPartition, log)
 
     val cleaner = new LogCleaner(CleanerConfig(), Array(dir), logs, logDirFailureChannel)
     cleaner.startup()
