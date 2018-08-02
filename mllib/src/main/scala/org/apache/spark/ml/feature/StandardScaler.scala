@@ -180,8 +180,7 @@ class StandardScalerModel private[ml] (
     * @return Standardized vector. If the std of a column is zero, it will return default `0.0`
     *         for the column with zero std.
     */
-  @Since("2.3.0")
-  def transform(vector: Vector): Vector = {
+  private[spark] def transform(vector: Vector): Vector = {
     require(mean.size == vector.size)
     if ($(withMean)) {
       /**
