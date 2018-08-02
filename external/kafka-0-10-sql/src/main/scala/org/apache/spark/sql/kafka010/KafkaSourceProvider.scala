@@ -485,6 +485,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       | topic was processed. If you want your streaming query to fail on such cases, set the source
       | option "failOnDataLoss" to "true".
     """.stripMargin
+
   val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE =
     """
       |Some data may have been lost because they are not available in Kafka any more; either the
@@ -492,6 +493,8 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       | topic was processed. If you don't want your streaming query to fail on such cases, set the
       | source option "failOnDataLoss" to "false".
     """.stripMargin
+
+
 
   private val deserClassName = classOf[ByteArrayDeserializer].getName
 
