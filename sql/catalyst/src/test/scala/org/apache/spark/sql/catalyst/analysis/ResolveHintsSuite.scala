@@ -134,26 +134,15 @@ class ResolveHintsSuite extends AnalysisTest {
   test("coalesce hint") {
     checkAnalysis(
       UnresolvedHint("COALESCE", Seq(Literal(10)), table("TaBlE")),
-      Repartition(10, false, testRelation),  // Default shuffle is false for COALESCE
-      caseSensitive = true)
-    checkAnalysis(
-      UnresolvedHint("COALESCE", Seq(Literal(20), Literal(true)), table("TaBlE")),
-      Repartition(20, true, testRelation),
-      caseSensitive = true)
+      Repartition(numPartitions = 10, shuffle = false, child = testRelation))
     checkAnalysis(
       UnresolvedHint("REPARTITION", Seq(Literal(100)), table("TaBlE")),
-      Repartition(100, true, testRelation),  // Default shuffle is true for REPARTITION
-      caseSensitive = true)
-    checkAnalysis(
-      UnresolvedHint("REPARTITION", Seq(Literal(200), Literal(false)), table("TaBlE")),
-      Repartition(200, false, testRelation),
-      caseSensitive = true)
+      Repartition(numPartitions = 100, shuffle = true, child = testRelation))
 
-    val errMsg = "Coalesce hint expects a partition number and an optional boolean to indicate" +
-      " whether shuffle is allowed"
+    val errMsg = "COALESCE Hint expects a partition number as parameter"
     intercept(UnresolvedHint("COALESCE", Seq.empty, table("TaBlE")), errMsg)
-    intercept(UnresolvedHint("COALESCE", Seq(UnresolvedAttribute("a")), table("TaBlE")), errMsg)
-    intercept(UnresolvedHint("COALESCE", Seq(Literal(true)), table("TaBlE")), errMsg)
-    intercept(UnresolvedHint("COALESCE", Seq(Literal(10), Literal(33)), table("TaBlE")), errMsg)
+    intercept(UnresolvedHint("COALESCE", Seq(Literal(10), Literal(false)), table("TaBlE")), errMsg)
+    intercept(UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("a")), table("TaBlE")), errMsg)
+    intercept(UnresolvedHint("REPARTITION", Seq(Literal(true)), table("TaBlE")), errMsg)
   }
 }

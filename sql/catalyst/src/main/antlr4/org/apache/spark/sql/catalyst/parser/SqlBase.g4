@@ -338,7 +338,7 @@ resource
     ;
 
 queryNoWith
-    : (insertInto (hints+=hint)*)? queryTerm queryOrganization                             #singleInsertQuery
+    : insertInto? queryTerm queryOrganization                                              #singleInsertQuery
     | fromClause multiInsertQueryBody+                                                     #multiInsertQuery
     ;
 
@@ -352,7 +352,7 @@ queryOrganization
     ;
 
 multiInsertQueryBody
-    : (insertInto (hints+=hint)*)?
+    : insertInto?
       querySpecification
       queryOrganization
     ;

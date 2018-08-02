@@ -155,8 +155,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         withQuerySpecification(body.querySpecification, from).
           // Add organization statements.
           optionalMap(body.queryOrganization)(withQueryResultClauses).
-          // Add hint.
-          optionalMap(body.hint)(withHints).
           // Add insert.
           optionalMap(body.insertInto())(withInsertInto)
     }
@@ -176,8 +174,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     plan(ctx.queryTerm).
       // Add organization statements.
       optionalMap(ctx.queryOrganization)(withQueryResultClauses).
-      // Add hint.
-      optionalMap(ctx.hint)(withHints).
       // Add insert.
       optionalMap(ctx.insertInto())(withInsertInto)
   }

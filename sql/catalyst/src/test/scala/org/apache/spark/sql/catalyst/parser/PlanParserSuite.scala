@@ -593,6 +593,22 @@ class PlanParserSuite extends AnalysisTest {
       parsePlan("SELECT /*+ MAPJOIN(t) */ a from t where true group by a order by a"),
       UnresolvedHint("MAPJOIN", Seq($"t"),
         table("t").where(Literal(true)).groupBy('a)('a)).orderBy('a.asc))
+
+    comparePlans(
+      parsePlan("SELECT /*+ COALESCE(10) */ * FROM t"),
+      UnresolvedHint("COALESCE", Seq(Literal(10)),
+        table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ REPARTITION(100) */ * FROM t"),
+      UnresolvedHint("REPARTITION", Seq(Literal(100)),
+        table("t").select(star())))
+
+    comparePlans(
+      parsePlan("INSERT INTO s SELECT /*+ COALESCE(10) */ * FROM t"),
+      InsertIntoTable(table("s"), Map.empty,
+        UnresolvedHint("COALESCE", Seq(Literal(10)),
+          table("t").select(star())), overwrite = false, ifPartitionNotExists = false))
   }
 
   test("SPARK-20854: select hint syntax with expressions") {
@@ -660,62 +676,6 @@ class PlanParserSuite extends AnalysisTest {
         )
       )
     )
-  }
-
-  test ("insert hint syntax") {
-    assertEqual(
-      "INSERT INTO s /*+ COALESCE(10) */ SELECT * FROM t",
-      InsertIntoTable(table("s"), Map.empty,
-        UnresolvedHint("COALESCE", Seq(Literal(10)),
-          table("t").select(star())), false, false))
-    assertEqual(
-      "INSERT INTO TABLE s /*+ COALESCE(50, true) */ SELECT * FROM t",
-      InsertIntoTable(table("s"), Map.empty,
-        UnresolvedHint("COALESCE", Seq(Literal(50), Literal(true)),
-          table("t").select(star())), false, false))
-    assertEqual(
-      "INSERT INTO s /*+ REPARTITION(100) */ SELECT * FROM t",
-      InsertIntoTable(table("s"), Map.empty,
-        UnresolvedHint("REPARTITION", Seq(Literal(100)),
-          table("t").select(star())), false, false))
-    assertEqual(
-      "INSERT INTO TABLE s /*+ REPARTITION(20, false) */ SELECT * FROM t",
-      InsertIntoTable(table("s"), Map.empty,
-        UnresolvedHint("REPARTITION", Seq(Literal(20), Literal(false)),
-          table("t").select(star())), false, false))
-    assertEqual(
-      "INSERT OVERWRITE TABLE s /*+ COALESCE(10) */ SELECT * FROM t",
-      InsertIntoTable(table("s"), Map.empty,
-        UnresolvedHint("COALESCE", Seq(Literal(10)),
-          table("t").select(star())), true, false))
-    assertEqual(
-      "INSERT OVERWRITE TABLE s /*+ COALESCE(50, true) */ SELECT * FROM t",
-      InsertIntoTable(table("s"), Map.empty,
-        UnresolvedHint("COALESCE", Seq(Literal(50), Literal(true)),
-          table("t").select(star())), true, false))
-    assertEqual(
-      "INSERT OVERWRITE TABLE s /*+ REPARTITION(100) */ SELECT * FROM t",
-      InsertIntoTable(table("s"), Map.empty,
-        UnresolvedHint("REPARTITION", Seq(Literal(100)),
-          table("t").select(star())), true, false))
-    assertEqual(
-      "INSERT OVERWRITE TABLE s /*+ REPARTITION(20, false) */ SELECT * FROM t",
-      InsertIntoTable(table("s"), Map.empty,
-        UnresolvedHint("REPARTITION", Seq(Literal(20), Literal(false)),
-          table("t").select(star())), true, false))
-
-    // Multiple hints
-    assertEqual(
-      "INSERT INTO s /*+ REPARTITION(100), COALESCE(50, true), COALESCE(10) */ SELECT * FROM t",
-      InsertIntoTable(table("s"), Map.empty,
-        UnresolvedHint("REPARTITION", Seq(Literal(100)),
-          UnresolvedHint("COALESCE", Seq(Literal(50), Literal(true)),
-            UnresolvedHint("COALESCE", Seq(Literal(10)),
-              table("t").select(star())))), false, false))
-
-    // Wrong hint location
-    intercept("INSERT INTO /*+ COALESCE(10) */ s SELECT * FROM t",
-      "extraneous input '/*+' expecting")
   }
 
   test("TRIM function") {

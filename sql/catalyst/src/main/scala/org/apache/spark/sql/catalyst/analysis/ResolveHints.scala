@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, IntegerType}
+import org.apache.spark.sql.types.IntegerType
 
 
 /**
@@ -105,9 +105,8 @@ object ResolveHints {
   }
 
   /**
-   * For coalesce hint, we accept "COALESCE" and "REPARTITION".
-   * Its parameters include a partition number and an optional boolean to indicate
-   * whether shuffle is allowed.
+   * COALESCE Hint accepts name "COALESCE" and "REPARTITION".
+   * Its parameter includes a partition number.
    */
   class ResolveCoalesceHints(conf: SQLConf) extends Rule[LogicalPlan] {
     private val COALESCE_HINT_NAMES = Set("COALESCE", "REPARTITION")
@@ -122,17 +121,14 @@ object ResolveHints {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case h: UnresolvedHint if COALESCE_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
         h.parameters match {
-          case Seq(Literal(i, IntegerType)) =>
-            val defaultShuffle = h.name.toUpperCase(Locale.ROOT) match {
+          case Seq(Literal(numPartitions: Int, IntegerType)) =>
+            val shuffle = h.name.toUpperCase(Locale.ROOT) match {
               case "REPARTITION" => true
-              case _ => false
+              case "COALESCE" => false
             }
-            applyCoalesceHint(h.child, i.asInstanceOf[Int], defaultShuffle)
-          case Seq(Literal(i, IntegerType), Literal(b, BooleanType)) =>
-            applyCoalesceHint(h.child, i.asInstanceOf[Int], b.asInstanceOf[Boolean])
+            applyCoalesceHint(h.child, numPartitions, shuffle)
           case _ =>
-            throw new AnalysisException("Coalesce hint expects a partition number" +
-              " and an optional boolean to indicate whether shuffle is allowed")
+            throw new AnalysisException("COALESCE Hint expects a partition number as parameter")
         }
     }
   }
