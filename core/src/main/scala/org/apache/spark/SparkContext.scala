@@ -575,7 +575,7 @@ class SparkContext(config: SparkConf) extends Logging {
         stop()
       } catch {
         case e: Throwable =>
-          logWarning("Ignoring Exception while stopping SparkContext", e)
+          logWarning("Ignoring Exception while stopping SparkContext from shutdownhook", e)
       }
     }
   } catch {
