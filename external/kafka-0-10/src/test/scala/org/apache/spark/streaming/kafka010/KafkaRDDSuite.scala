@@ -113,7 +113,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val kafkaParams = getKafkaParams()
 
-    val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size, messages.size))
+    val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
 
     val rdd = KafkaUtils.createRDD[String, String](sc, kafkaParams, offsetRanges, preferredHosts)
       .map(_.value)
@@ -130,12 +130,12 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(rdd.take(messages.size + 10).size === messages.size)
 
     val emptyRdd = KafkaUtils.createRDD[String, String](
-      sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0, 0)), preferredHosts)
+      sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts)
 
     assert(emptyRdd.isEmpty)
 
     // invalid offset ranges throw exceptions
-    val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1, messages.size + 1))
+    val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1))
     intercept[SparkException] {
       val result = KafkaUtils.createRDD[String, String](sc, kafkaParams, badRanges, preferredHosts)
         .map(_.value)
@@ -177,7 +177,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val kafkaParams = getKafkaParams()
 
-    val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size, messages.size))
+    val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
 
     val rdd = KafkaUtils.createRDD[String, String](
       sc, kafkaParams, offsetRanges, preferredHosts
@@ -195,12 +195,12 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(rdd.take(messages.size + 10).size === compactedMessages.size)
 
     val emptyRdd = KafkaUtils.createRDD[String, String](
-      sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0, 0)), preferredHosts)
+      sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts)
 
     assert(emptyRdd.isEmpty)
 
     // invalid offset ranges throw exceptions
-    val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1, messages.size + 1))
+    val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1))
     intercept[SparkException] {
       val result = KafkaUtils.createRDD[String, String](sc, kafkaParams, badRanges, preferredHosts)
         .map(_.value)
@@ -221,7 +221,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     var sentCount = sent.values.sum
 
     val rdd = KafkaUtils.createRDD[String, String](sc, kafkaParams,
-      Array(OffsetRange(topic, 0, 0, sentCount, sentCount)), preferredHosts)
+      Array(OffsetRange(topic, 0, 0, sentCount)), preferredHosts)
 
     val ranges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
     val rangeCount = ranges.map(o => o.untilOffset - o.fromOffset).sum
@@ -232,7 +232,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     // this is the "0 messages" case
     val rdd2 = KafkaUtils.createRDD[String, String](sc, kafkaParams,
-      Array(OffsetRange(topic, 0, sentCount, sentCount, 0)), preferredHosts)
+      Array(OffsetRange(topic, 0, sentCount, sentCount)), preferredHosts)
 
     // shouldn't get anything, since message is sent after rdd was defined
     val sentOnlyOne = Map("d" -> 1)
@@ -243,7 +243,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     // this is the "exactly 1 message" case, namely the single message from sentOnlyOne above
     val rdd3 = KafkaUtils.createRDD[String, String](sc, kafkaParams,
-      Array(OffsetRange(topic, 0, sentCount, sentCount + 1, 1)), preferredHosts)
+      Array(OffsetRange(topic, 0, sentCount, sentCount + 1)), preferredHosts)
 
     // send lots of messages after rdd was defined, they shouldn't show up
     kafkaTestUtils.sendMessages(topic, Map("extra" -> 22))
@@ -258,7 +258,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     val rdd = new KafkaRDD[String, String](
       sc,
       kafkaParams,
-      Array(OffsetRange("unused", 0, 1, 2, 1)),
+      Array(OffsetRange("unused", 0, 1, 2)),
       ju.Collections.emptyMap[TopicPartition, String](),
       true)
     val a3 = ExecutorCacheTaskLocation("a", "3")
