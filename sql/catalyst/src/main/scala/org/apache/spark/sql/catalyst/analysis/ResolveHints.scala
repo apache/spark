@@ -120,15 +120,16 @@ object ResolveHints {
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case h: UnresolvedHint if COALESCE_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
+        val hintName = h.name.toUpperCase(Locale.ROOT)
         h.parameters match {
           case Seq(Literal(numPartitions: Int, IntegerType)) =>
-            val shuffle = h.name.toUpperCase(Locale.ROOT) match {
+            val shuffle = hintName match {
               case "REPARTITION" => true
               case "COALESCE" => false
             }
             applyCoalesceHint(h.child, numPartitions, shuffle)
           case _ =>
-            throw new AnalysisException("COALESCE Hint expects a partition number as parameter")
+            throw new AnalysisException(s"$hintName Hint expects a partition number as parameter")
         }
     }
   }

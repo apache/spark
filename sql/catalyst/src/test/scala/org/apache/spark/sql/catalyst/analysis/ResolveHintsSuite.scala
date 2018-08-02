@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Literal
@@ -27,14 +26,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 
 class ResolveHintsSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
-
-  private def intercept(plan: LogicalPlan, messages: String*): Unit = {
-    val analyzer = getAnalyzer(false)
-    val e = intercept[AnalysisException](analyzer.executeAndCheck(plan))
-    messages.foreach { message =>
-      assert(e.message.contains(message))
-    }
-  }
 
   test("invalid hints should be ignored") {
     checkAnalysis(
@@ -136,13 +127,32 @@ class ResolveHintsSuite extends AnalysisTest {
       UnresolvedHint("COALESCE", Seq(Literal(10)), table("TaBlE")),
       Repartition(numPartitions = 10, shuffle = false, child = testRelation))
     checkAnalysis(
+      UnresolvedHint("coalesce", Seq(Literal(20)), table("TaBlE")),
+      Repartition(numPartitions = 20, shuffle = false, child = testRelation))
+    checkAnalysis(
       UnresolvedHint("REPARTITION", Seq(Literal(100)), table("TaBlE")),
       Repartition(numPartitions = 100, shuffle = true, child = testRelation))
+    checkAnalysis(
+      UnresolvedHint("RePARTITion", Seq(Literal(200)), table("TaBlE")),
+      Repartition(numPartitions = 200, shuffle = true, child = testRelation))
 
-    val errMsg = "COALESCE Hint expects a partition number as parameter"
-    intercept(UnresolvedHint("COALESCE", Seq.empty, table("TaBlE")), errMsg)
-    intercept(UnresolvedHint("COALESCE", Seq(Literal(10), Literal(false)), table("TaBlE")), errMsg)
-    intercept(UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("a")), table("TaBlE")), errMsg)
-    intercept(UnresolvedHint("REPARTITION", Seq(Literal(true)), table("TaBlE")), errMsg)
+    val errMsgCoal = "COALESCE Hint expects a partition number as parameter"
+    assertAnalysisError(
+      UnresolvedHint("COALESCE", Seq.empty, table("TaBlE")),
+      Seq(errMsgCoal))
+    assertAnalysisError(
+      UnresolvedHint("COALESCE", Seq(Literal(10), Literal(false)), table("TaBlE")),
+      Seq(errMsgCoal))
+    assertAnalysisError(
+      UnresolvedHint("COALESCE", Seq(Literal(1.0)), table("TaBlE")),
+      Seq(errMsgCoal))
+
+    val errMsgRepa = "REPARTITION Hint expects a partition number as parameter"
+    assertAnalysisError(
+      UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("a")), table("TaBlE")),
+      Seq(errMsgRepa))
+    assertAnalysisError(
+      UnresolvedHint("REPARTITION", Seq(Literal(true)), table("TaBlE")),
+      Seq(errMsgRepa))
   }
 }

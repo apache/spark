@@ -605,10 +605,21 @@ class PlanParserSuite extends AnalysisTest {
         table("t").select(star())))
 
     comparePlans(
-      parsePlan("INSERT INTO s SELECT /*+ COALESCE(10) */ * FROM t"),
+      parsePlan(
+        "INSERT INTO s SELECT /*+ REPARTITION(100), COALESCE(500), COALESCE(10) */ * FROM t"),
       InsertIntoTable(table("s"), Map.empty,
-        UnresolvedHint("COALESCE", Seq(Literal(10)),
-          table("t").select(star())), overwrite = false, ifPartitionNotExists = false))
+        UnresolvedHint("REPARTITION", Seq(Literal(100)),
+          UnresolvedHint("COALESCE", Seq(Literal(500)),
+            UnresolvedHint("COALESCE", Seq(Literal(10)),
+              table("t").select(star())))), overwrite = false, ifPartitionNotExists = false))
+
+    comparePlans(
+      parsePlan("SELECT /*+ BROADCASTJOIN(u), REPARTITION(100) */ * FROM t"),
+      UnresolvedHint("BROADCASTJOIN", Seq($"u"),
+        UnresolvedHint("REPARTITION", Seq(Literal(100)),
+          table("t").select(star()))))
+
+    intercept("SELECT /*+ COALESCE(30 + 50) */ * FROM t", "mismatched input")
   }
 
   test("SPARK-20854: select hint syntax with expressions") {
