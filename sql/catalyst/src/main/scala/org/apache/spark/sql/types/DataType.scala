@@ -424,6 +424,10 @@ object DataType {
         } else {
           true
         }
+
+      case (w, r) =>
+        addError(s"Cannot write '$context': $w is incompatible with $r")
+        false
     }
   }
 }
