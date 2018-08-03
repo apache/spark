@@ -276,7 +276,7 @@ private[spark] object ThreadUtils {
       implicit val ec = ExecutionContext.fromExecutor(pool)
       parmap(in)(f)
     } finally {
-      pool.shutdown()
+      pool.shutdownNow()
     }
   }
 
