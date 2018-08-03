@@ -22,7 +22,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
-import org.apache.spark.internal.config.PYSPARK_EXECUTOR_MEMORY
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -75,18 +74,6 @@ case class FlatMapGroupsInPandasExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute()
 
-    val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
-    val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
-    val memoryMb = {
-      val allocation = inputRDD.conf.get(PYSPARK_EXECUTOR_MEMORY)
-      if (reuseWorker) {
-        // the shared python worker gets the entire allocation
-        allocation
-      } else {
-        // each python worker gets an equal part of the allocation
-        allocation.map(_ / inputRDD.conf.getInt("spark.executor.cores", 1))
-      }
-    }
     val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
     val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
@@ -152,14 +139,12 @@ case class FlatMapGroupsInPandasExec(
 
       val columnarBatchIter = new ArrowPythonRunner(
         chainedFunc,
-        bufferSize,
-        reuseWorker,
-        memoryMb,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         argOffsets,
         dedupSchema,
         sessionLocalTimeZone,
-        pythonRunnerConf).compute(grouped, context.partitionId(), context)
+        pythonRunnerConf,
+        sparkContext.conf).compute(grouped, context.partitionId(), context)
 
       columnarBatchIter.flatMap(_.rowIterator.asScala).map(UnsafeProjection.create(output, output))
     }

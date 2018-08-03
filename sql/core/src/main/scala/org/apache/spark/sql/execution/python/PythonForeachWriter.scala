@@ -24,7 +24,6 @@ import java.util.concurrent.locks.ReentrantLock
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.PYSPARK_EXECUTOR_MEMORY
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.sql.ForeachWriter
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -46,20 +45,7 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
   }
 
   private lazy val pythonRunner = {
-    val conf = SparkEnv.get.conf
-    val bufferSize = conf.getInt("spark.buffer.size", 65536)
-    val reuseWorker = conf.getBoolean("spark.python.worker.reuse", true)
-    val memoryMb = {
-      val allocation = conf.get(PYSPARK_EXECUTOR_MEMORY)
-      if (reuseWorker) {
-        // the shared python worker gets the entire allocation
-        allocation
-      } else {
-        // each python worker gets an equal part of the allocation
-        allocation.map(_ / conf.getInt("spark.executor.cores", 1))
-      }
-    }
-    PythonRunner(func, bufferSize, reuseWorker, memoryMb)
+    PythonRunner(func, SparkEnv.get.conf)
   }
 
   private lazy val outputIterator =

@@ -271,19 +271,19 @@ def main(infile, outfile):
         try:
             (total_memory_limit, max_total_memory) = resource.getrlimit(total_memory)
             msg = "Current mem: {0} of max {1}\n".format(total_memory_limit, max_total_memory)
-            sys.stderr.write(msg)
+            print(msg, file=sys.stderr)
 
             if memory_limit_mb > 0 and total_memory_limit == resource.RLIM_INFINITY:
                 # convert to bytes
                 total_memory_limit = memory_limit_mb * 1024 * 1024
 
                 msg = "Setting mem to {0} of max {1}\n".format(total_memory_limit, max_total_memory)
-                sys.stderr.write(msg)
+                print(msg, file=sys.stderr)
                 resource.setrlimit(total_memory, (total_memory_limit, total_memory_limit))
 
-        except (resource.error, OSError) as e:
+        except (resource.error, OSError, ValueError) as e:
             # not all systems support resource limits, so warn instead of failing
-            sys.stderr.write("WARN: Failed to set memory limit: {0}\n".format(e))
+            print("WARN: Failed to set memory limit: {0}\n".format(e), file=sys.stderr)
 
         # initialize global state
         taskContext = None

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -68,9 +68,6 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
   protected override def evaluate(
       funcs: Seq[ChainedPythonFunctions],
-      bufferSize: Int,
-      reuseWorker: Boolean,
-      pyMemoryMb: Option[Long],
       argOffsets: Array[Array[Int]],
       iter: Iterator[InternalRow],
       schema: StructType,
@@ -83,14 +80,12 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
     val columnarBatchIter = new ArrowPythonRunner(
       funcs,
-      bufferSize,
-      reuseWorker,
-      pyMemoryMb,
       PythonEvalType.SQL_SCALAR_PANDAS_UDF,
       argOffsets,
       schema,
       sessionLocalTimeZone,
-      pythonRunnerConf).compute(batchIter, context.partitionId(), context)
+      pythonRunnerConf,
+      SparkEnv.get.conf).compute(batchIter, context.partitionId(), context)
 
     new Iterator[InternalRow] {
 
