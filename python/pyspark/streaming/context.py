@@ -287,7 +287,7 @@ class StreamingContext(object):
 
     def queueStream(self, rdds, oneAtATime=True, default=None):
         """
-        Create an input stream from an queue of RDDs or list. In each batch,
+        Create an input stream from a queue of RDDs or list. In each batch,
         it will process either one or all of the RDDs returned by the queue.
 
         .. note:: Changes to the queue after the stream is created will not be recognized.
