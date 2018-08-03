@@ -546,6 +546,7 @@ private[spark] class AppStatusListener(
       exec.activeTasks -= 1
       exec.completedTasks += completedDelta
       exec.failedTasks += failedDelta
+      exec.killedTasks += killedDelta
       exec.totalDuration += event.taskInfo.duration
 
       // Note: For resubmitted tasks, we continue to use the metrics that belong to the

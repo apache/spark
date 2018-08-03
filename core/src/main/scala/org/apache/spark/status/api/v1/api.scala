@@ -84,6 +84,7 @@ class ExecutorSummary private[spark](
     val maxTasks: Int,
     val activeTasks: Int,
     val failedTasks: Int,
+    val killedTasks: Int,
     val completedTasks: Int,
     val totalTasks: Int,
     val totalDuration: Long,

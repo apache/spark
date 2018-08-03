@@ -204,6 +204,7 @@ $(document).ready(function () {
             var allMaxTasks = 0;
             var allActiveTasks = 0;
             var allFailedTasks = 0;
+            var allKilledTasks = 0;
             var allCompletedTasks = 0;
             var allTotalTasks = 0;
             var allTotalDuration = 0;
@@ -226,6 +227,7 @@ $(document).ready(function () {
             var activeMaxTasks = 0;
             var activeActiveTasks = 0;
             var activeFailedTasks = 0;
+            var activeKilledTasks = 0;
             var activeCompletedTasks = 0;
             var activeTotalTasks = 0;
             var activeTotalDuration = 0;
@@ -248,6 +250,7 @@ $(document).ready(function () {
             var deadMaxTasks = 0;
             var deadActiveTasks = 0;
             var deadFailedTasks = 0;
+            var deadKilledTasks = 0;
             var deadCompletedTasks = 0;
             var deadTotalTasks = 0;
             var deadTotalDuration = 0;
@@ -282,6 +285,7 @@ $(document).ready(function () {
                 allMaxTasks += exec.maxTasks;
                 allActiveTasks += exec.activeTasks;
                 allFailedTasks += exec.failedTasks;
+                allKilledTasks += exec.killedTasks;
                 allCompletedTasks += exec.completedTasks;
                 allTotalTasks += exec.totalTasks;
                 allTotalDuration += exec.totalDuration;
@@ -304,6 +308,7 @@ $(document).ready(function () {
                     activeMaxTasks += exec.maxTasks;
                     activeActiveTasks += exec.activeTasks;
                     activeFailedTasks += exec.failedTasks;
+                    activeKilledTasks += exec.killedTasks;
                     activeCompletedTasks += exec.completedTasks;
                     activeTotalTasks += exec.totalTasks;
                     activeTotalDuration += exec.totalDuration;
@@ -326,6 +331,7 @@ $(document).ready(function () {
                     deadMaxTasks += exec.maxTasks;
                     deadActiveTasks += exec.activeTasks;
                     deadFailedTasks += exec.failedTasks;
+                    deadKilledTasks += exec.killedTasks;
                     deadCompletedTasks += exec.completedTasks;
                     deadTotalTasks += exec.totalTasks;
                     deadTotalDuration += exec.totalDuration;
@@ -351,6 +357,7 @@ $(document).ready(function () {
                 "allMaxTasks": allMaxTasks,
                 "allActiveTasks": allActiveTasks,
                 "allFailedTasks": allFailedTasks,
+                "allKilledTasks": allKilledTasks,
                 "allCompletedTasks": allCompletedTasks,
                 "allTotalTasks": allTotalTasks,
                 "allTotalDuration": allTotalDuration,
@@ -374,6 +381,7 @@ $(document).ready(function () {
                 "allMaxTasks": activeMaxTasks,
                 "allActiveTasks": activeActiveTasks,
                 "allFailedTasks": activeFailedTasks,
+                "allKilledTasks": activeKilledTasks,
                 "allCompletedTasks": activeCompletedTasks,
                 "allTotalTasks": activeTotalTasks,
                 "allTotalDuration": activeTotalDuration,
@@ -397,6 +405,7 @@ $(document).ready(function () {
                 "allMaxTasks": deadMaxTasks,
                 "allActiveTasks": deadActiveTasks,
                 "allFailedTasks": deadFailedTasks,
+                "allKilledTasks": deadKilledTasks,
                 "allCompletedTasks": deadCompletedTasks,
                 "allTotalTasks": deadTotalTasks,
                 "allTotalDuration": deadTotalDuration,
@@ -481,6 +490,7 @@ $(document).ready(function () {
                                 }
                             }
                         },
+                        {data: 'killedTasks'},
                         {data: 'completedTasks'},
                         {data: 'totalTasks'},
                         {
@@ -577,6 +587,7 @@ $(document).ready(function () {
                                 }
                             }
                         },
+                        {data: 'allKilledTasks'},
                         {data: 'allCompletedTasks'},
                         {data: 'allTotalTasks'},
                         {

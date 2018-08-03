@@ -9,6 +9,7 @@
   "maxTasks" : 0,
   "activeTasks" : 0,
   "failedTasks" : 1,
+  "killedTasks" : 0,
   "completedTasks" : 31,
   "totalTasks" : 32,
   "totalDuration" : 8820,

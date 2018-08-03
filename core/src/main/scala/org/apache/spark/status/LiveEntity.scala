@@ -249,6 +249,7 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
   var activeTasks = 0
   var completedTasks = 0
   var failedTasks = 0
+  var killedTasks = 0
   var totalDuration = 0L
   var totalGcTime = 0L
   var totalInputBytes = 0L
@@ -288,6 +289,7 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
       maxTasks,
       activeTasks,
       failedTasks,
+      killedTasks,
       completedTasks,
       totalTasks,
       totalDuration,
