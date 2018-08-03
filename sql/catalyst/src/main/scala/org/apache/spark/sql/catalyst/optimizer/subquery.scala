@@ -91,12 +91,12 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
           // Deduplicate conflicting attributes if any.
           dedupJoin(Join(outerPlan, sub, LeftAnti, joinCond))
-        case (p, InSubquery(values, ListQuery(sub, conditions, _, _))) =>
+        case (p, InSubquery(values, sub, conditions, _, _)) =>
           val inConditions = values.zip(sub.output).map(EqualTo.tupled)
           val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions ++ conditions, p)
           // Deduplicate conflicting attributes if any.
           dedupJoin(Join(outerPlan, sub, LeftSemi, joinCond))
-        case (p, Not(InSubquery(values, ListQuery(sub, conditions, _, _)))) =>
+        case (p, Not(InSubquery(values, sub, conditions, _, _))) =>
           // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
           // result; such a row will be filtered out by the Anti-Join operator.
@@ -144,7 +144,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           newPlan = dedupJoin(
             Join(newPlan, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And)))
           exists
-        case InSubquery(values, ListQuery(sub, conditions, _, _)) =>
+        case InSubquery(values, sub, conditions, _, _) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           val inConditions = values.zip(sub.output).map(EqualTo.tupled)
           val newConditions = (inConditions ++ conditions).reduceLeftOption(And)
@@ -256,9 +256,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       case Exists(sub, children, exprId) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
         Exists(newPlan, newCond, exprId)
-      case ListQuery(sub, _, exprId, childOutputs) =>
+      case InSubquery(values, sub, _, exprId, childOutputs) =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
-        ListQuery(newPlan, newCond, exprId, childOutputs)
+        InSubquery(values, newPlan, newCond, exprId, childOutputs)
     }
   }
 

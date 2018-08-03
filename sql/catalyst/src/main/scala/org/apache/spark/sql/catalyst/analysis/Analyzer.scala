@@ -1422,16 +1422,15 @@ class Analyzer(
           resolveSubQuery(s, plans)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, _, exprId) if !sub.resolved =>
           resolveSubQuery(e, plans)(Exists(_, _, exprId))
-        case InSubquery(values, l @ ListQuery(_, _, exprId, _))
-            if values.forall(_.resolved) && !l.resolved =>
-          val expr = resolveSubQuery(l, plans)((plan, exprs) => {
-            ListQuery(plan, exprs, exprId, plan.output)
+        case i @ InSubquery(values, _, _, exprId, _)
+            if values.forall(_.resolved) && !i.resolved =>
+          val expr = resolveSubQuery(i, plans)((plan, exprs) => {
+            InSubquery(values, plan, exprs, exprId, plan.output)
           })
           val subqueryOutput = expr.plan.output
-          val resolvedIn = InSubquery(values, expr.asInstanceOf[ListQuery])
           if (values.length != subqueryOutput.length) {
             throw new AnalysisException(
-              s"""Cannot analyze ${resolvedIn.sql}.
+              s"""Cannot analyze ${expr.sql}.
                  |The number of columns in the left hand side of an IN subquery does not match the
                  |number of columns in the output of subquery.
                  |#columns in left hand side: ${values.length}
@@ -1441,7 +1440,7 @@ class Analyzer(
                  |Right side columns:
                  |[${subqueryOutput.map(_.sql).mkString(", ")}]""".stripMargin)
           }
-          resolvedIn
+          expr
       }
     }
 
