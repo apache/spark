@@ -122,7 +122,7 @@ class ResolveHintsSuite extends AnalysisTest {
       caseSensitive = false)
   }
 
-  test("coalesce hint") {
+  test("coalesce and repartition hint") {
     checkAnalysis(
       UnresolvedHint("COALESCE", Seq(Literal(10)), table("TaBlE")),
       Repartition(numPartitions = 10, shuffle = false, child = testRelation))
