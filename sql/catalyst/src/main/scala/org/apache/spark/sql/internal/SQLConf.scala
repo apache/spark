@@ -1449,6 +1449,14 @@ object SQLConf {
     .intConf
     .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
     .createWithDefault(Deflater.DEFAULT_COMPRESSION)
+
+  val BYPASS_PARSER_FOR_EMPTY_SCHEMA = buildConf("spark.sql.bypassParserForEmptySchema")
+    .doc("If required schema passed to a text datasource is empty, the parameter controls " +
+      "invocation of underlying parser. For example, if it is set to false, uniVocity parser " +
+      "is invoke by CSV datasource or Jackson parser by JSON datasource. By default, it is set " +
+      "to true which means the parsers is not invoked for empty required schema.")
+    .booleanConf
+    .createWithDefault(true)
 }
 
 /**
@@ -1838,6 +1846,8 @@ class SQLConf extends Serializable with Logging {
   def avroCompressionCodec: String = getConf(SQLConf.AVRO_COMPRESSION_CODEC)
 
   def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
+
+  def bypassParserForEmptySchema: Boolean = getConf(SQLConf.BYPASS_PARSER_FOR_EMPTY_SCHEMA)
 
   /** ********************** SQLConf functionality methods ************ */
 
