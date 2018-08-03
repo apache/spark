@@ -1437,6 +1437,21 @@ object SQLConf {
     .intConf
     .createWithDefault(20)
 
+  object AvroOutputTimestampType extends Enumeration {
+    val TIMESTAMP_MICROS, TIMESTAMP_MILLIS = Value
+  }
+
+  val AVRO_OUTPUT_TIMESTAMP_TYPE = buildConf("spark.sql.avro.outputTimestampType")
+    .doc("Sets which Avro timestamp type to use when Spark writes data to Avro files. " +
+      "TIMESTAMP_MICROS is a logical timestamp type in Avro, which stores number of " +
+      "microseconds from the Unix epoch. TIMESTAMP_MILLIS is also logical, but with " +
+      "millisecond precision, which means Spark has to truncate the microsecond portion of its " +
+      "timestamp value.")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(AvroOutputTimestampType.values.map(_.toString))
+    .createWithDefault(AvroOutputTimestampType.TIMESTAMP_MICROS.toString)
+
   val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
     .doc("Compression codec used in writing of AVRO files. Supported codecs: " +
       "uncompressed, deflate, snappy, bzip2 and xz. Default codec is snappy.")
@@ -1838,6 +1853,9 @@ class SQLConf extends Serializable with Logging {
   def replEagerEvalMaxNumRows: Int = getConf(SQLConf.REPL_EAGER_EVAL_MAX_NUM_ROWS)
 
   def replEagerEvalTruncate: Int = getConf(SQLConf.REPL_EAGER_EVAL_TRUNCATE)
+
+  def avroOutputTimestampType: AvroOutputTimestampType.Value =
+    AvroOutputTimestampType.withName(getConf(SQLConf.AVRO_OUTPUT_TIMESTAMP_TYPE))
 
   def avroCompressionCodec: String = getConf(SQLConf.AVRO_COMPRESSION_CODEC)
 
