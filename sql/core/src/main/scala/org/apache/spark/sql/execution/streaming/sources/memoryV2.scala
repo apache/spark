@@ -117,19 +117,17 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkB
   override def toString(): String = "MemorySinkV2"
 }
 
-case class MemoryWriterCommitMessage(partition: Int, data: Seq[InternalRow])
+case class MemoryWriterCommitMessage(partition: Int, data: Seq[Row])
   extends WriterCommitMessage {}
 
 class MemoryWriter(sink: MemorySinkV2, batchId: Long, outputMode: OutputMode, schema: StructType)
   extends DataSourceWriter with Logging {
 
-  private val encoder = RowEncoder(schema).resolveAndBind()
-
-  override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
+  override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode, schema)
 
   def commit(messages: Array[WriterCommitMessage]): Unit = {
     val newRows = messages.flatMap {
-      case message: MemoryWriterCommitMessage => message.data.map(encoder.fromRow)
+      case message: MemoryWriterCommitMessage => message.data
     }
     sink.write(batchId, outputMode, newRows)
   }
@@ -142,13 +140,11 @@ class MemoryWriter(sink: MemorySinkV2, batchId: Long, outputMode: OutputMode, sc
 class MemoryStreamWriter(val sink: MemorySinkV2, outputMode: OutputMode, schema: StructType)
   extends StreamWriter {
 
-  private val encoder = RowEncoder(schema).resolveAndBind()
-
-  override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
+  override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode, schema)
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
     val newRows = messages.flatMap {
-      case message: MemoryWriterCommitMessage => message.data.map(encoder.fromRow)
+      case message: MemoryWriterCommitMessage => message.data
     }
     sink.write(epochId, outputMode, newRows)
   }
@@ -158,22 +154,26 @@ class MemoryStreamWriter(val sink: MemorySinkV2, outputMode: OutputMode, schema:
   }
 }
 
-case class MemoryWriterFactory(outputMode: OutputMode) extends DataWriterFactory[InternalRow] {
+case class MemoryWriterFactory(outputMode: OutputMode, schema: StructType)
+  extends DataWriterFactory[InternalRow] {
+
   override def createDataWriter(
       partitionId: Int,
       taskId: Long,
       epochId: Long): DataWriter[InternalRow] = {
-    new MemoryDataWriter(partitionId, outputMode)
+    new MemoryDataWriter(partitionId, outputMode, schema)
   }
 }
 
-class MemoryDataWriter(partition: Int, outputMode: OutputMode)
+class MemoryDataWriter(partition: Int, outputMode: OutputMode, schema: StructType)
   extends DataWriter[InternalRow] with Logging {
 
-  private val data = mutable.Buffer[InternalRow]()
+  private val data = mutable.Buffer[Row]()
+
+  private val encoder = RowEncoder(schema).resolveAndBind()
 
   override def write(row: InternalRow): Unit = {
-    data.append(row)
+    data.append(encoder.fromRow(row))
   }
 
   override def commit(): MemoryWriterCommitMessage = {

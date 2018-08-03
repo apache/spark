@@ -51,7 +51,8 @@ case class PackedRowCommitMessage(rows: Array[InternalRow]) extends WriterCommit
 class PackedRowDataWriter() extends DataWriter[InternalRow] with Logging {
   private val data = mutable.Buffer[InternalRow]()
 
-  override def write(row: InternalRow): Unit = data.append(row)
+  // Spark reuses the same `InternalRow` instance, here we copy it before buffer it.
+  override def write(row: InternalRow): Unit = data.append(row.copy())
 
   override def commit(): PackedRowCommitMessage = {
     val msg = PackedRowCommitMessage(data.toArray)

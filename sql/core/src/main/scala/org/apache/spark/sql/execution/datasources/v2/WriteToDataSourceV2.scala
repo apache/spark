@@ -109,15 +109,11 @@ object DataWritingSparkTask extends Logging {
     val attemptId = context.attemptNumber()
     val epochId = Option(context.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY)).getOrElse("0")
     val dataWriter = writeTask.createDataWriter(partId, taskId, epochId.toLong)
-    val copyIfNeeded: InternalRow => InternalRow =
-      if (writeTask.reuseDataObject()) identity else _.copy()
 
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
       while (iter.hasNext) {
-        // Internally Spark reuse the same UnsafeRow instance when producing output rows, here we
-        // copy it to avoid troubles at data source side.
-        dataWriter.write(copyIfNeeded(iter.next()))
+        dataWriter.write(iter.next())
       }
 
       val msg = if (useCommitCoordinator) {

@@ -44,9 +44,6 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
       SparkEnv.get)
     EpochTracker.initializeCurrentEpoch(
       context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong)
-    val copyIfNeeded: InternalRow => InternalRow =
-      if (writeTask.reuseDataObject()) identity else _.copy()
-
     while (!context.isInterrupted() && !context.isCompleted()) {
       var dataWriter: DataWriter[InternalRow] = null
       // write the data and commit this writer.
@@ -58,7 +55,7 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
             context.taskAttemptId(),
             EpochTracker.getCurrentEpoch.get)
           while (dataIterator.hasNext) {
-            dataWriter.write(copyIfNeeded(dataIterator.next()))
+            dataWriter.write(dataIterator.next())
           }
           logInfo(s"Writer for partition ${context.partitionId()} " +
             s"in epoch ${EpochTracker.getCurrentEpoch.get} is committing.")

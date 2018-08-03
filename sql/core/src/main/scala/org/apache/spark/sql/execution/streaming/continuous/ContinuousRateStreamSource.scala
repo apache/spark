@@ -89,7 +89,8 @@ class RateStreamContinuousReader(options: DataSourceOptions) extends ContinuousR
         start.runTimeMs,
         i,
         numPartitions,
-        perPartitionRate): InputPartition[InternalRow]
+        perPartitionRate)
+        .asInstanceOf[InputPartition[InternalRow]]
     }.asJava
   }
 
