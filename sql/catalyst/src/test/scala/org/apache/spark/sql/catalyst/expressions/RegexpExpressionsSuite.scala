@@ -217,6 +217,36 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(nonNullExpr, "100", row1)
   }
 
+  test("RegexExtractAll") {
+    val row1 = create_row("100-200,300-400,500-600", "(\\d+)-(\\d+)", 1)
+    val row2 = create_row("100-200,300-400,500-600", "(\\d+)-(\\d+)", 2)
+    val row3 = create_row("100-200,300-400,500-600", "(\\d+).*", 1)
+    val row4 = create_row("100-200,300-400,500-600", "([a-z])", 1)
+    val row5 = create_row(null, "([a-z])", 1)
+    val row6 = create_row("100-200,300-400,500-600", null, 1)
+    val row7 = create_row("100-200,300-400,500-600", "([a-z])", null)
+
+    val s = 's.string.at(0)
+    val p = 'p.string.at(1)
+    val r = 'r.int.at(2)
+
+    val expr = RegExpExtractAll(s, p, r)
+    checkEvaluation(expr, Seq("100", "300", "500"), row1)
+    checkEvaluation(expr, Seq("200", "400", "600"), row2)
+    checkEvaluation(expr, Seq("100"), row3)
+    checkEvaluation(expr, Seq(), row4)
+    checkEvaluation(expr, null, row5)
+    checkEvaluation(expr, null, row6)
+    checkEvaluation(expr, null, row7)
+
+    val expr1 = new RegExpExtractAll(s, p)
+    checkEvaluation(expr1, Seq("100", "300", "500"), row1)
+
+    val nonNullExpr = RegExpExtractAll(Literal("100-200,300-400,500-600"),
+      Literal("(\\d+)-(\\d+)"), Literal(1))
+    checkEvaluation(nonNullExpr, Seq("100", "300", "500"), row1)
+  }
+
   test("SPLIT") {
     val s1 = 'a.string.at(0)
     val s2 = 'b.string.at(1)
