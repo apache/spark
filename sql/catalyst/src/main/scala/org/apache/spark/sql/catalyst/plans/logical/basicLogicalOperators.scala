@@ -114,7 +114,7 @@ case class Generate(
   def qualifiedGeneratorOutput: Seq[Attribute] = {
     val qualifiedOutput = qualifier.map { q =>
       // prepend the new qualifier to the existed one
-      generatorOutput.map(a => a.withQualifier(Some(Seq(q))))
+      generatorOutput.map(a => a.withQualifier(Seq(q)))
     }.getOrElse(generatorOutput)
     val nullableOutput = qualifiedOutput.map {
       // if outer, make all attributes nullable, otherwise keep existing nullability
@@ -807,7 +807,7 @@ case class SubqueryAlias(
 
   override def output: Seq[Attribute] = {
     val qualifierList = name.database.map(Seq(_, alias)).getOrElse(Seq(alias))
-    child.output.map(_.withQualifier(Some(qualifierList)))
+    child.output.map(_.withQualifier(qualifierList))
   }
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 }

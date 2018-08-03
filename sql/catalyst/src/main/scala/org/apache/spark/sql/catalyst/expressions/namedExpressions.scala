@@ -71,13 +71,7 @@ trait NamedExpression extends Expression {
    * multiple qualifiers, it is possible that there are other possible way to refer to this
    * attribute.
    */
-  def qualifiedName: String = {
-    if (qualifier.isDefined) {
-      (qualifier.get :+ name).mkString(".")
-    } else {
-      name
-    }
-  }
+  def qualifiedName: String = (qualifier :+ name).mkString(".")
 
   /**
    * Optional qualifier for the expression.
@@ -90,8 +84,9 @@ trait NamedExpression extends Expression {
    * 1. Empty Seq: when an attribute doesn't have a qualifier,
    *    e.g. top level attributes aliased in the SELECT clause, or column from a LocalRelation.
    * 2. Seq with a Single element: either the table name or the alias name of the table.
+   * 3. Seq with 2 elements: database name and table name
    */
-  def qualifier: Option[Seq[String]]
+  def qualifier: Seq[String]
 
   def toAttribute: Attribute
 
@@ -117,7 +112,7 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
   override def references: AttributeSet = AttributeSet(this)
 
   def withNullability(newNullability: Boolean): Attribute
-  def withQualifier(newQualifier: Option[Seq[String]]): Attribute
+  def withQualifier(newQualifier: Seq[String]): Attribute
   def withName(newName: String): Attribute
   def withMetadata(newMetadata: Metadata): Attribute
 
@@ -145,7 +140,7 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
  */
 case class Alias(child: Expression, name: String)(
     val exprId: ExprId = NamedExpression.newExprId,
-    val qualifier: Option[Seq[String]] = None,
+    val qualifier: Seq[String] = Seq.empty,
     val explicitMetadata: Option[Metadata] = None)
   extends UnaryExpression with NamedExpression {
 
@@ -209,7 +204,7 @@ case class Alias(child: Expression, name: String)(
   }
 
   override def sql: String = {
-    val qualifierPrefix = qualifier.map(_.mkString(".") + ".").getOrElse("")
+    val qualifierPrefix = if (qualifier.nonEmpty) qualifier.mkString(".") + "." else ""
     s"${child.sql} AS $qualifierPrefix${quoteIdentifier(name)}"
   }
 }
@@ -233,9 +228,11 @@ case class AttributeReference(
     nullable: Boolean = true,
     override val metadata: Metadata = Metadata.empty)(
     val exprId: ExprId = NamedExpression.newExprId,
-    val qualifier: Option[Seq[String]] = None)
+    val qualifier: Seq[String] = Seq.empty[String])
   extends Attribute with Unevaluable {
 
+  // currently can only handle qualifier of length 2
+  require(qualifier.length <= 2)
   /**
    * Returns true iff the expression id is the same for both attributes.
    */
@@ -294,7 +291,7 @@ case class AttributeReference(
   /**
    * Returns a copy of this [[AttributeReference]] with new qualifier.
    */
-  override def withQualifier(newQualifier: Option[Seq[String]]): AttributeReference = {
+  override def withQualifier(newQualifier: Seq[String]): AttributeReference = {
     if (newQualifier == qualifier) {
       this
     } else {
@@ -332,7 +329,7 @@ case class AttributeReference(
   override def simpleString: String = s"$name#${exprId.id}: ${dataType.simpleString}"
 
   override def sql: String = {
-    val qualifierPrefix = qualifier.map(_.mkString(".") + ".").getOrElse("")
+    val qualifierPrefix = if (qualifier.nonEmpty) qualifier.mkString(".") + "." else ""
     s"$qualifierPrefix${quoteIdentifier(name)}"
   }
 }
@@ -358,12 +355,12 @@ case class PrettyAttribute(
   override def withNullability(newNullability: Boolean): Attribute =
     throw new UnsupportedOperationException
   override def newInstance(): Attribute = throw new UnsupportedOperationException
-  override def withQualifier(newQualifier: Option[Seq[String]]): Attribute =
+  override def withQualifier(newQualifier: Seq[String]): Attribute =
     throw new UnsupportedOperationException
   override def withName(newName: String): Attribute = throw new UnsupportedOperationException
   override def withMetadata(newMetadata: Metadata): Attribute =
     throw new UnsupportedOperationException
-  override def qualifier: Option[Seq[String]] = throw new UnsupportedOperationException
+  override def qualifier: Seq[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
   override def nullable: Boolean = true
 }
@@ -379,7 +376,7 @@ case class OuterReference(e: NamedExpression)
   override def prettyName: String = "outer"
 
   override def name: String = e.name
-  override def qualifier: Option[Seq[String]] = e.qualifier
+  override def qualifier: Seq[String] = e.qualifier
   override def exprId: ExprId = e.exprId
   override def toAttribute: Attribute = e.toAttribute
   override def newInstance(): NamedExpression = OuterReference(e.newInstance())
