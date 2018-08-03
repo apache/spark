@@ -19,6 +19,10 @@ package org.apache.spark.util
 
 import java.util.concurrent._
 
+import scala.collection.TraversableLike
+import scala.collection.generic.CanBuildFrom
+import scala.language.higherKinds
+
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.{Duration, FiniteDuration}
@@ -267,14 +271,18 @@ private[spark] object ThreadUtils {
    * @return new collection in which each element was given from the input collection `in` by
    *         applying the lambda function `f`.
    */
-  def parmap[I, O](
-      in: TraversableOnce[I],
-      prefix: String,
-      maxThreads: Int)(f: I => O): TraversableOnce[O] = {
+  def parmap[I, O, Col[X] <: TraversableLike[X, Col[X]]]
+      (in: Col[I], prefix: String, maxThreads: Int)
+      (f: I => O)
+      (implicit
+        cbf: CanBuildFrom[Col[I], Future[O], Col[Future[O]]], // For in.map
+        cbf2: CanBuildFrom[Col[Future[O]], O, Col[O]] // for Future.sequence
+      ): Col[O] = {
     val pool = newForkJoinPool(prefix, maxThreads)
     try {
       implicit val ec = ExecutionContext.fromExecutor(pool)
-      parmap(in)(f)
+
+      parmap(in, prefix, maxThreads)(f)
     } finally {
       pool.shutdownNow()
     }
@@ -291,10 +299,15 @@ private[spark] object ThreadUtils {
    * @return new collection in which each element was given from the input collection `in` by
    *         applying the lambda function `f`.
    */
-  def parmap[I, O](
-      in: TraversableOnce[I])
-      (f: I => O)(implicit ec: ExecutionContext): TraversableOnce[O] = {
-    val futures = in.map(i => Future(f(i)))
+  def parmap[I, O, Col[X] <: TraversableLike[X, Col[X]]]
+      (in: Col[I])
+      (f: I => O)
+      (implicit
+        cbf: CanBuildFrom[Col[I], Future[O], Col[Future[O]]], // For in.map
+        cbf2: CanBuildFrom[Col[Future[O]], O, Col[O]], // for Future.sequence
+        ec: ExecutionContext
+      ): Col[O] = {
+    val futures = in.map(x => Future(f(x)))
     val futureSeq = Future.sequence(futures)
 
     awaitResult(futureSeq, Duration.Inf)

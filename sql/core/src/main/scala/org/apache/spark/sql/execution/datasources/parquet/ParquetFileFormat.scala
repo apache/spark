@@ -547,7 +547,7 @@ object ParquetFileFormat extends Logging {
           throw new IOException(s"Could not read footer for file: $currentFile", e)
         }
       }
-    }.flatten.toSeq
+    }.flatten
   }
 
   /**
