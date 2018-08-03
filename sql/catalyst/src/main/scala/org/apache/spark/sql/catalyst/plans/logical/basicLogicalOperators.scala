@@ -364,9 +364,10 @@ case class AppendData(
   override lazy val resolved: Boolean = {
     query.output.size == table.output.size && query.output.zip(table.output).forall {
       case (inAttr, outAttr) =>
-          inAttr.name == outAttr.name &&                // names must match
-          outAttr.dataType.sameType(inAttr.dataType) && // types must match
-          (outAttr.nullable || !inAttr.nullable)        // must accept null or never produce nulls
+          // names and types must match, nullability must be compatible
+          inAttr.name == outAttr.name &&
+          DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
+          (outAttr.nullable || !inAttr.nullable)
     }
   }
 }
