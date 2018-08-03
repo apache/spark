@@ -632,16 +632,16 @@ object CollapseProject extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p1@Project(_, p2: Project) =>
-      getMaybeCollapsedAndCleanedProjectList(p1, p2.projectList)
+      maybeGetCollapsedAndCleanedProjectList(p1, p2.projectList)
         .map(cleanedProjectList => p2.copy(projectList = cleanedProjectList))
         .getOrElse(p1)
     case p @ Project(_, agg: Aggregate) =>
-      getMaybeCollapsedAndCleanedProjectList(p, agg.aggregateExpressions)
+      maybeGetCollapsedAndCleanedProjectList(p, agg.aggregateExpressions)
         .map(cleanedProjectList => agg.copy(aggregateExpressions = cleanedProjectList))
         .getOrElse(p)
   }
 
-  private def getMaybeCollapsedAndCleanedProjectList(
+  private def maybeGetCollapsedAndCleanedProjectList(
       upper: Project,
       lowerProjectList: Seq[NamedExpression]): Option[Seq[NamedExpression]] = {
     if (!haveCommonNonDeterministicOutput(upper.projectList, lowerProjectList)) {
@@ -693,14 +693,14 @@ object CollapseProject extends Rule[LogicalPlan] {
   }
 
   private def isNumberOfLeafExpressionsBelowLimit(projectList: Seq[NamedExpression]): Boolean = {
-    SQLConf.get.optimizerMaxNumOfLeafExpressionsInCollapsedProjects < 0 ||
-      numberOfLeafExpressions(projectList) <
-        SQLConf.get.optimizerMaxNumOfLeafExpressionsInCollapsedProjects
+    SQLConf.get.optimizerMaxNumOfLeafExpressionsInCollapsedProject < 0 ||
+      numberOfLeafExpressions(projectList) <=
+        SQLConf.get.optimizerMaxNumOfLeafExpressionsInCollapsedProject
   }
 
   private def numberOfLeafExpressions(projectList: Seq[Expression]): Long = {
     projectList
-      .map(expr => if (expr.children.nonEmpty) numberOfLeafExpressions(expr.children) else 1L)
+      .map(expr => if (expr.children.nonEmpty) numberOfLeafExpressions(expr.children) else 1)
       .sum
   }
 }
