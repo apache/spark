@@ -92,7 +92,7 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       case BinaryType =>
         (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
       case DateType =>
-        (getter, ordinal) => getter.getInt(ordinal) * DateTimeUtils.MILLIS_PER_DAY
+        (getter, ordinal) => getter.getInt(ordinal)
       case TimestampType => avroType.getLogicalType match {
           case _: TimestampMillis => (getter, ordinal) => getter.getLong(ordinal) / 1000
           case _: TimestampMicros => (getter, ordinal) => getter.getLong(ordinal)
