@@ -21,7 +21,7 @@ from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, _jvm
 from pyspark.ml.param.shared import *
 
-__all__ = ["FPGrowth", "FPGrowthModel"]
+__all__ = ["FPGrowth", "FPGrowthModel", "PrefixSpan"]
 
 
 class HasMinSupport(Params):
