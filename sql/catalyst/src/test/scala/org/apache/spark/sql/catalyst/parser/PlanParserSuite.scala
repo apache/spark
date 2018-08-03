@@ -67,11 +67,13 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select * from a union all select * from b", a.union(b))
     assertEqual("select * from a except select * from b", a.except(b))
     assertEqual("select * from a except distinct select * from b", a.except(b))
+    assertEqual("select * from a except all select * from b", a.except(b, isAll = true))
     assertEqual("select * from a minus select * from b", a.except(b))
-    intercept("select * from a minus all select * from b", "MINUS ALL is not supported.")
+    assertEqual("select * from a minus all select * from b", a.except(b, isAll = true))
     assertEqual("select * from a minus distinct select * from b", a.except(b))
     assertEqual("select * from a intersect select * from b", a.intersect(b))
     assertEqual("select * from a intersect distinct select * from b", a.intersect(b))
+    assertEqual("select * from a intersect all select * from b", a.intersect(b, isAll = true))
   }
 
   test("common table expressions") {
