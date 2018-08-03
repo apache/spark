@@ -98,7 +98,7 @@ abstract class LogicalPlan
   def resolveChildren(
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
-   childAttributes.resolve(nameParts, resolver)
+    childAttributes.resolve(nameParts, resolver)
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] based on the output of this
