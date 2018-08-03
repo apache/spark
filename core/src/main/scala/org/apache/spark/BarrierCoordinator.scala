@@ -77,13 +77,9 @@ private[spark] class BarrierCoordinator(
       stageId: Int,
       stageAttemptId: Int,
       numTasks: Int): ArrayBuffer[RpcCallContext] = {
-    val requests = syncRequestsByStageIdAndAttempt.putIfAbsent((stageId, stageAttemptId),
+    syncRequestsByStageIdAndAttempt.putIfAbsent((stageId, stageAttemptId),
       new ArrayBuffer[RpcCallContext](numTasks))
-    if (requests == null) {
-      syncRequestsByStageIdAndAttempt.get((stageId, stageAttemptId))
-    } else {
-      requests
-    }
+    syncRequestsByStageIdAndAttempt.get((stageId, stageAttemptId))
   }
 
   /**
@@ -103,25 +99,19 @@ private[spark] class BarrierCoordinator(
    * Get the barrier epoch that correspond to a barrier sync request from a stage attempt.
    */
   private def getOrInitBarrierEpoch(stageId: Int, stageAttemptId: Int): Int = {
-    val defaultBarrierEpoch = 0
-    val barrierEpoch = barrierEpochByStageIdAndAttempt.putIfAbsent((stageId, stageAttemptId),
-      defaultBarrierEpoch)
-    if (barrierEpoch == null) {
-      defaultBarrierEpoch
-    } else {
-      barrierEpoch
-    }
+    barrierEpochByStageIdAndAttempt.putIfAbsent((stageId, stageAttemptId), 0)
+    barrierEpochByStageIdAndAttempt.get((stageId, stageAttemptId))
   }
 
   /**
    * Increase the barrier epoch that correspond to a barrier sync request from a stage attempt.
    */
   private def increaseBarrierEpoch(stageId: Int, stageAttemptId: Int): Unit = {
-    val barrierEpoch = barrierEpochByStageIdAndAttempt.get((stageId, stageAttemptId))
-    if (barrierEpoch != null) {
+    val barrierEpoch = barrierEpochByStageIdAndAttempt.getOrDefault((stageId, stageAttemptId), -1)
+    if (barrierEpoch >= 0) {
       barrierEpochByStageIdAndAttempt.put((stageId, stageAttemptId), barrierEpoch + 1)
     } else {
-      // The barrier epoch have been removed because the stage attempt already completed.
+      // The stage attempt already finished, don't update barrier epoch.
     }
   }
 
