@@ -154,19 +154,21 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
         # to people every time someone creates a public fork of Spark.
         merge_message_flags += ["-m", body.replace("@", "")]
 
-    authors = "\n".join(["Co-Authored-By: %s" % a for a in distinct_authors])
-
-    merge_message_flags += ["-m", authors]
+    committer_name = run_cmd("git config --get user.name").strip()
+    committer_email = run_cmd("git config --get user.email").strip()
 
     if had_conflicts:
-        committer_name = run_cmd("git config --get user.name").strip()
-        committer_email = run_cmd("git config --get user.email").strip()
         message = "This patch had conflicts when merged, resolved by\nCommitter: %s <%s>" % (
             committer_name, committer_email)
         merge_message_flags += ["-m", message]
 
     # The string "Closes #%s" string is required for GitHub to correctly close the PR
     merge_message_flags += ["-m", "Closes #%s from %s." % (pr_num, pr_repo_desc)]
+
+    authors = "\n".join(["Co-authored-by: %s" % a for a in distinct_authors])
+    authors += "\n" + "Signed-off-by: %s <%s>" % (committer_name, committer_email)
+
+    merge_message_flags += ["-m", authors]
 
     run_cmd(['git', 'commit', '--author="%s"' % primary_author] + merge_message_flags)
 
