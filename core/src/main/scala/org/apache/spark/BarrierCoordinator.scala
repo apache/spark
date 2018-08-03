@@ -96,12 +96,14 @@ private[spark] class BarrierCoordinator(
     private var timerTask: TimerTask = null
 
     // Init a TimerTask for a barrier() call.
-    private def initTimerTask(): TimerTask = new TimerTask {
-      override def run(): Unit = {
-        // Timeout current barrier() call, fail all the sync requests.
-        failAllRequesters(requesters, "The coordinator didn't get all barrier sync " +
-          s"requests for barrier epoch $barrierEpoch from $barrierId within ${timeout}s.")
-        cleanupBarrierStage(barrierId)
+    private def initTimerTask(): Unit = {
+      timerTask = new TimerTask {
+        override def run(): Unit = {
+          // Timeout current barrier() call, fail all the sync requests.
+          failAllRequesters(requesters, "The coordinator didn't get all barrier sync " +
+            s"requests for barrier epoch $barrierEpoch from $barrierId within ${timeout}s.")
+          cleanupBarrierStage(barrierId)
+        }
       }
     }
 
@@ -115,7 +117,14 @@ private[spark] class BarrierCoordinator(
 
     // Process the global sync request. The barrier() call succeed if collected enough requests
     // within a configured time, otherwise fail all the pending requests.
-    def handleRequest(requester: RpcCallContext, epoch: Int, taskId: Long): Unit = synchronized {
+    def handleRequest(requester: RpcCallContext, request: RequestToSync): Unit = synchronized {
+      val taskId = request.taskAttemptId
+      val epoch = request.barrierEpoch
+
+      // Require the number of tasks is correctly set from the BarrierTaskContext.
+      require(request.numTasks == numTasks, s"Number of tasks of $barrierId is " +
+        s"${request.numTasks} from Task $taskId, previously it was $numTasks.")
+
       // Check whether the epoch from the barrier tasks matches current barrierEpoch.
       logInfo(s"Current barrier epoch for $barrierId is $barrierEpoch.")
       if (epoch != barrierEpoch) {
@@ -126,7 +135,7 @@ private[spark] class BarrierCoordinator(
         // If this is the first sync message received for a barrier() call, start timer to ensure
         // we may timeout for the sync.
         if (requesters.isEmpty) {
-          timerTask = initTimerTask()
+          initTimerTask()
           timer.schedule(timerTask, timeout * 1000L)
         }
         // Add the requester to array of RPCCallContexts pending for reply.
@@ -145,6 +154,27 @@ private[spark] class BarrierCoordinator(
       }
     }
 
+    // Send failure to all the blocking barrier sync requests from a stage attempt with proper
+    // failure message.
+    private def failAllRequesters(
+        requesters: ArrayBuffer[RpcCallContext],
+        message: String): Unit = {
+      requesters.foreach(_.sendFailure(new SparkException(message)))
+    }
+
+    // Finish all the blocking barrier sync requests from a stage attempt successfully if we
+    // have received all the sync requests.
+    private def maybeFinishAllRequesters(
+        requesters: ArrayBuffer[RpcCallContext],
+        numTasks: Int): Boolean = {
+      if (requesters.size == numTasks) {
+        requesters.foreach(_.reply(()))
+        true
+      } else {
+        false
+      }
+    }
+
     // Cleanup the internal state of a barrier stage attempt.
     def clear(): Unit = synchronized {
       // The global sync fails so the stage is expected to retry another attempt, all sync
@@ -155,9 +185,7 @@ private[spark] class BarrierCoordinator(
     }
   }
 
-  /**
-   * Clean up the [[ContextBarrierState]] that correspond to a stage attempt.
-   */
+  // Clean up the [[ContextBarrierState]] that correspond to a stage attempt.
   private def cleanupBarrierStage(barrierId: ContextBarrierId): Unit = {
     val barrierState = states.remove(barrierId)
     if (barrierState != null) {
@@ -165,51 +193,22 @@ private[spark] class BarrierCoordinator(
     }
   }
 
-  /**
-   * Send failure to all the blocking barrier sync requests from a stage attempt with proper
-   * failure message.
-   */
-  private def failAllRequesters(
-      requesters: ArrayBuffer[RpcCallContext],
-      message: String): Unit = {
-    requesters.foreach(_.sendFailure(new SparkException(message)))
-  }
-
-  /**
-   * Finish all the blocking barrier sync requests from a stage attempt successfully if we
-   * have received all the sync requests.
-   */
-  private def maybeFinishAllRequesters(
-      requesters: ArrayBuffer[RpcCallContext],
-      numTasks: Int): Boolean = {
-    if (requesters.size == numTasks) {
-      requesters.foreach(_.reply(()))
-      true
-    } else {
-      false
-    }
-  }
-
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case RequestToSync(numTasks, stageId, stageAttemptId, taskAttemptId, barrierEpoch) =>
+    case request @ RequestToSync(numTasks, stageId, stageAttemptId, _, _) =>
       // Get or init the ContextBarrierState correspond to the stage attempt.
       val barrierId = ContextBarrierId(stageId, stageAttemptId)
       states.putIfAbsent(barrierId, new ContextBarrierState(barrierId, numTasks))
       val barrierState = states.get(barrierId)
 
-      // Require the number of tasks is correctly set from the BarrierTaskContext.
-      require(barrierState.numTasks == numTasks, s"Number of tasks of $barrierId is $numTasks " +
-        s"from Task $taskAttemptId, previously it was ${barrierState.numTasks}.")
-
-      barrierState.handleRequest(context, barrierEpoch, taskAttemptId)
+      barrierState.handleRequest(context, request)
   }
 
-  private val stateConsumer = new Consumer[ContextBarrierState] {
+  private val clearStateConsumer = new Consumer[ContextBarrierState] {
     override def accept(state: ContextBarrierState) = state.clear()
   }
 
   override def onStop(): Unit = {
-    states.forEachValue(1, stateConsumer)
+    states.forEachValue(1, clearStateConsumer)
     states.clear()
   }
 }
