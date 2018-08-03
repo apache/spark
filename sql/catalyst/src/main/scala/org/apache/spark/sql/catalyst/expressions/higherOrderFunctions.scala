@@ -255,7 +255,7 @@ case class ArrayFilter(
       null
     } else {
       val f = functionForEval
-      val buffer = new mutable.ArrayBuffer[Any](arr.numElements)
+      val buffer = new mutable.ArrayBuffer[Any]
       var i = 0
       while (i < arr.numElements) {
         elementVar.value.set(arr.get(i, elementVar.dataType))
@@ -268,5 +268,5 @@ case class ArrayFilter(
     }
   }
 
-  override def prettyName: String = "array_filter"
+  override def prettyName: String = "filter"
 }

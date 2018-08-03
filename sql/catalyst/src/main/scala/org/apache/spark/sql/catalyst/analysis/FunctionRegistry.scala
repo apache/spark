@@ -441,7 +441,7 @@ object FunctionRegistry {
     expression[ArrayRemove]("array_remove"),
     expression[ArrayDistinct]("array_distinct"),
     expression[ArrayTransform]("transform"),
-    expression[ArrayFilter]("array_filter"),
+    expression[ArrayFilter]("filter"),
     CreateStruct.registryEntry,
 
     // misc functions

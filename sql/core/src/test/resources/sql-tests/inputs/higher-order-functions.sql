@@ -26,10 +26,10 @@ select transform(ys, 0) as v from nested;
 select transform(cast(null as array<int>), x -> x + 1) as v;
 
 -- Filter.
-select array_filter(ys, y -> y > 30) as v from nested;
+select filter(ys, y -> y > 30) as v from nested;
 
 -- Filter a null array
-select array_filter(cast(null as array<int>), y -> true) as v;
+select filter(cast(null as array<int>), y -> true) as v;
 
 -- Filter nested arrays
-select transform(zs, z -> array_filter(z, zz -> zz > 50)) as v from nested;
+select transform(zs, z -> filter(z, zz -> zz > 50)) as v from nested;
