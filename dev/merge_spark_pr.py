@@ -154,7 +154,7 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
         # to people every time someone creates a public fork of Spark.
         merge_message_flags += ["-m", body.replace("@", "")]
 
-    authors = "\n".join(["Author: %s" % a for a in distinct_authors])
+    authors = "\n".join(["Co-Authored-By: %s" % a for a in distinct_authors])
 
     merge_message_flags += ["-m", authors]
 
