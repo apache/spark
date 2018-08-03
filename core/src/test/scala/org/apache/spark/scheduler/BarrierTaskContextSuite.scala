@@ -81,7 +81,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { (it, context) =>
       // Task 3 shall sleep 2000ms to ensure barrier() call timeout
-      if (context.taskAttemptId() == 3) {
+      if (context.taskAttemptId == 3) {
         Thread.sleep(2000)
       }
       context.barrier()
@@ -104,7 +104,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext(conf)
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { (it, context) =>
-      if (context.taskAttemptId() != 0) {
+      if (context.taskAttemptId != 0) {
         context.barrier()
       }
       it
@@ -127,7 +127,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { (it, context) =>
       try {
-        if (context.taskAttemptId() == 0) {
+        if (context.taskAttemptId == 0) {
           // Task 0 skip the first barrier() call.
           throw new SparkException("test")
         }
