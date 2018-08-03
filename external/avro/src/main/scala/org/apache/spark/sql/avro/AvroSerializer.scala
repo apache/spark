@@ -21,6 +21,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
 
+import org.apache.avro.LogicalTypes.{TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema
 import org.apache.avro.Schema.Type.NULL
 import org.apache.avro.generic.GenericData.Record
@@ -92,8 +93,15 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
         (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
       case DateType =>
         (getter, ordinal) => getter.getInt(ordinal) * DateTimeUtils.MILLIS_PER_DAY
-      case TimestampType =>
-        (getter, ordinal) => getter.getLong(ordinal) / 1000
+      case TimestampType => avroType.getLogicalType match {
+          case _: TimestampMillis => (getter, ordinal) => getter.getLong(ordinal) / 1000
+          case _: TimestampMicros => (getter, ordinal) => getter.getLong(ordinal)
+          // For backward compatibility, if the Avro type is Long and it is not logical type,
+          // output the timestamp value as with millisecond precision.
+          case null => (getter, ordinal) => getter.getLong(ordinal) / 1000
+          case other => throw new IncompatibleSchemaException(
+            s"Cannot convert Catalyst Timestamp type to Avro logical type ${other}")
+        }
 
       case ArrayType(et, containsNull) =>
         val elementConverter = newConverter(
