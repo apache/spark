@@ -4118,8 +4118,8 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
         val arrayBuilderClassTag = s"scala.reflect.ClassTag$$.MODULE$$.$ptName()"
 
         def withArray2NullCheck(body: String): String =
-          if (left.dataType.asInstanceOf[ArrayType].containsNull) {
-            if (right.dataType.asInstanceOf[ArrayType].containsNull) {
+          if (right.dataType.asInstanceOf[ArrayType].containsNull) {
+            if (left.dataType.asInstanceOf[ArrayType].containsNull) {
               s"""
                  |if ($array2.isNullAt($i)) {
                  |  $notFoundNullElement = false;
@@ -4128,19 +4128,15 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
                  |}
              """.stripMargin
             } else {
-              body
-            }
-          } else {
-            // if array1's element is not nullable, we don't need to track the null element index.
-            if (right.dataType.asInstanceOf[ArrayType].containsNull) {
+              // if array1's element is not nullable, we don't need to track the null element index.
               s"""
                  |if (!$array2.isNullAt($i)) {
                  |  $body
                  |}
                """.stripMargin
-            } else {
-              body
             }
+          } else {
+            body
           }
 
         val writeArray2ToHashSet = withArray2NullCheck(
@@ -4149,11 +4145,11 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
              |$hashSet.add$hsPostFix($hsValueCast$value);
            """.stripMargin)
 
-        // When hitting a null vale, put a null holder in the ArrayBuilder. Finally we will
+        // When hitting a null value, put a null holder in the ArrayBuilder. Finally we will
         // convert ArrayBuilder to ArrayData and setNull on the slot with null holder.
         val nullValueHolder = elementType match {
           case ByteType => "(byte) 0"
-          case ShortType => "(short ) 0"
+          case ShortType => "(short) 0"
           case _ => "0"
         }
 
