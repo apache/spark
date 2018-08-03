@@ -717,4 +717,9 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Row(1, 2, 1) :: Row(2, 2, 2) :: Row(3, 2, 3) :: Nil)
   }
 
+  test("SPARK-24788: toString with unresolved expressions should not throw") {
+    // these should not raise exceptions
+    testData.groupBy('key).toString
+    testData.groupBy(col("key")).toString
+  }
 }
