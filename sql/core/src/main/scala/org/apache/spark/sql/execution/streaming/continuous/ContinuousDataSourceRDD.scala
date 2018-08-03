@@ -19,9 +19,7 @@ package org.apache.spark.sql.execution.streaming.continuous
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.v2.RowToUnsafeInputPartitionReader
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousInputPartitionReader
 import org.apache.spark.util.NextIterator
@@ -104,8 +102,6 @@ object ContinuousDataSourceRDD {
       reader: InputPartitionReader[InternalRow]): ContinuousInputPartitionReader[_] = {
     reader match {
       case r: ContinuousInputPartitionReader[InternalRow] => r
-      case wrapped: RowToUnsafeInputPartitionReader =>
-        wrapped.rowReader.asInstanceOf[ContinuousInputPartitionReader[Row]]
       case _ =>
         throw new IllegalStateException(s"Unknown continuous reader type ${reader.getClass}")
     }

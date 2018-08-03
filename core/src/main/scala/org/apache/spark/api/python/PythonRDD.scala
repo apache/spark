@@ -586,8 +586,9 @@ class BytesToString extends org.apache.spark.api.java.function.Function[Array[By
  */
 private[spark] class PythonAccumulatorV2(
     @transient private val serverHost: String,
-    private val serverPort: Int)
-  extends CollectionAccumulator[Array[Byte]] {
+    private val serverPort: Int,
+    private val secretToken: String)
+  extends CollectionAccumulator[Array[Byte]] with Logging{
 
   Utils.checkHost(serverHost)
 
@@ -602,12 +603,17 @@ private[spark] class PythonAccumulatorV2(
   private def openSocket(): Socket = synchronized {
     if (socket == null || socket.isClosed) {
       socket = new Socket(serverHost, serverPort)
+      logInfo(s"Connected to AccumulatorServer at host: $serverHost port: $serverPort")
+      // send the secret just for the initial authentication when opening a new connection
+      socket.getOutputStream.write(secretToken.getBytes(StandardCharsets.UTF_8))
     }
     socket
   }
 
   // Need to override so the types match with PythonFunction
-  override def copyAndReset(): PythonAccumulatorV2 = new PythonAccumulatorV2(serverHost, serverPort)
+  override def copyAndReset(): PythonAccumulatorV2 = {
+    new PythonAccumulatorV2(serverHost, serverPort, secretToken)
+  }
 
   override def merge(other: AccumulatorV2[Array[Byte], JList[Array[Byte]]]): Unit = synchronized {
     val otherPythonAccumulator = other.asInstanceOf[PythonAccumulatorV2]

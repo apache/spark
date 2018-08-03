@@ -1345,8 +1345,8 @@ the following case-insensitive options:
       These options must all be specified if any of them is specified. In addition,
       <code>numPartitions</code> must be specified. They describe how to partition the table when
       reading in parallel from multiple workers.
-      <code>partitionColumn</code> must be a numeric column from the table in question. Notice
-      that <code>lowerBound</code> and <code>upperBound</code> are just used to decide the
+      <code>partitionColumn</code> must be a numeric, date, or timestamp column from the table in question.
+      Notice that <code>lowerBound</code> and <code>upperBound</code> are just used to decide the
       partition stride, not for filtering the rows in table. So all rows in the table will be
       partitioned and returned. This option applies only to reading.
     </td>
@@ -1811,6 +1811,25 @@ The following example shows how to use `groupby().apply()` to subtract the mean 
 For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/pyspark.sql.html#pyspark.sql.functions.pandas_udf) and
 [`pyspark.sql.GroupedData.apply`](api/python/pyspark.sql.html#pyspark.sql.GroupedData.apply).
 
+### Grouped Aggregate
+
+Grouped aggregate Pandas UDFs are similar to Spark aggregate functions. Grouped aggregate Pandas UDFs are used with `groupBy().agg()` and
+[`pyspark.sql.Window`](api/python/pyspark.sql.html#pyspark.sql.Window). It defines an aggregation from one or more `pandas.Series`
+to a scalar value, where each `pandas.Series` represents a column within the group or window.
+
+Note that this type of UDF does not support partial aggregation and all data for a group or window will be loaded into memory. Also,
+only unbounded window is supported with Grouped aggregate Pandas UDFs currently.
+
+The following example shows how to use this type of UDF to compute mean with groupBy and window operations:
+
+<div class="codetabs">
+<div data-lang="python" markdown="1">
+{% include_example grouped_agg_pandas_udf python/sql/arrow.py %}
+</div>
+</div>
+
+For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/pyspark.sql.html#pyspark.sql.functions.pandas_udf)
+
 ## Usage Notes
 
 ### Supported SQL Types
@@ -1857,6 +1876,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
 
 ## Upgrading From Spark SQL 2.3 to 2.4
 
+  - Since Spark 2.4, Spark will evaluate the set operations referenced in a query by following a precedence rule as per the SQL standard. If the order is not specified by parentheses, set operations are performed from left to right with the exception that all INTERSECT operations are performed before any UNION, EXCEPT or MINUS operations. The old behaviour of giving equal precedence to all the set operations are preserved under a newly added configuaration `spark.sql.legacy.setopsPrecedence.enabled` with a default value of `false`. When this property is set to `true`, spark will evaluate the set operators from left to right as they appear in the query given no explicit ordering is enforced by usage of parenthesis.
   - Since Spark 2.4, Spark will display table description column Last Access value as UNKNOWN when the value was Jan 01 1970.
   - Since Spark 2.4, Spark maximizes the usage of a vectorized ORC reader for ORC files by default. To do that, `spark.sql.orc.impl` and `spark.sql.orc.filterPushdown` change their default values to `native` and `true` respectively.
   - In PySpark, when Arrow optimization is enabled, previously `toPandas` just failed when Arrow optimization is unable to be used whereas `createDataFrame` from Pandas DataFrame allowed the fallback to non-optimization. Now, both `toPandas` and `createDataFrame` from Pandas DataFrame allow the fallback by default, which can be switched off by `spark.sql.execution.arrow.fallback.enabled`.
@@ -3053,3 +3073,10 @@ Specifically:
  - In aggregations, all NaN values are grouped together.
  - NaN is treated as a normal value in join keys.
  - NaN values go last when in ascending order, larger than any other numeric value.
+ 
+ ## Arithmetic operations
+ 
+Operations performed on numeric types (with the exception of `decimal`) are not checked for overflow.
+This means that in case an operation causes an overflow, the result is the same that the same operation
+returns in a Java/Scala program (eg. if the sum of 2 integers is higher than the maximum value representable,
+the result is a negative number).

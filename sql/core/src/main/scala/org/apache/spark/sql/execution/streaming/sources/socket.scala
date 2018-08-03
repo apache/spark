@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.io.{BufferedReader, InputStreamReader, IOException}
 import java.net.Socket
-import java.sql.Timestamp
 import java.text.SimpleDateFormat
 import java.util.{Calendar, List => JList, Locale, Optional}
 import java.util.concurrent.atomic.AtomicBoolean
@@ -31,12 +30,15 @@ import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming.LongOffset
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, MicroBatchReadSupport}
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader, SupportsDeprecatedScanRow}
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
+import org.apache.spark.unsafe.types.UTF8String
 
 object TextSocketMicroBatchReader {
   val SCHEMA_REGULAR = StructType(StructField("value", StringType) :: Nil)
@@ -50,8 +52,7 @@ object TextSocketMicroBatchReader {
  * debugging. This MicroBatchReader will *not* work in production applications due to multiple
  * reasons, including no support for fault recovery.
  */
-class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchReader
-    with SupportsDeprecatedScanRow with Logging {
+class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchReader with Logging {
 
   private var startOffset: Offset = _
   private var endOffset: Offset = _
@@ -70,7 +71,7 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
    * Stored in a ListBuffer to facilitate removing committed batches.
    */
   @GuardedBy("this")
-  private val batches = new ListBuffer[(String, Timestamp)]
+  private val batches = new ListBuffer[(UTF8String, Long)]
 
   @GuardedBy("this")
   private var currentOffset: LongOffset = LongOffset(-1L)
@@ -101,9 +102,9 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
               return
             }
             TextSocketMicroBatchReader.this.synchronized {
-              val newData = (line,
-                Timestamp.valueOf(
-                  TextSocketMicroBatchReader.DATE_FORMAT.format(Calendar.getInstance().getTime()))
+              val newData = (
+                UTF8String.fromString(line),
+                DateTimeUtils.fromMillis(Calendar.getInstance().getTimeInMillis)
               )
               currentOffset += 1
               batches.append(newData)
@@ -142,7 +143,7 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
     }
   }
 
-  override def planRowInputPartitions(): JList[InputPartition[Row]] = {
+  override def planInputPartitions(): JList[InputPartition[InternalRow]] = {
     assert(startOffset != null && endOffset != null,
       "start offset and end offset should already be set before create read tasks.")
 
@@ -164,16 +165,16 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
     val spark = SparkSession.getActiveSession.get
     val numPartitions = spark.sparkContext.defaultParallelism
 
-    val slices = Array.fill(numPartitions)(new ListBuffer[(String, Timestamp)])
+    val slices = Array.fill(numPartitions)(new ListBuffer[(UTF8String, Long)])
     rawList.zipWithIndex.foreach { case (r, idx) =>
       slices(idx % numPartitions).append(r)
     }
 
     (0 until numPartitions).map { i =>
       val slice = slices(i)
-      new InputPartition[Row] {
-        override def createPartitionReader(): InputPartitionReader[Row] =
-          new InputPartitionReader[Row] {
+      new InputPartition[InternalRow] {
+        override def createPartitionReader(): InputPartitionReader[InternalRow] =
+          new InputPartitionReader[InternalRow] {
             private var currentIdx = -1
 
             override def next(): Boolean = {
@@ -181,8 +182,8 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
               currentIdx < slice.size
             }
 
-            override def get(): Row = {
-              Row(slice(currentIdx)._1, slice(currentIdx)._2)
+            override def get(): InternalRow = {
+              InternalRow(slice(currentIdx)._1, slice(currentIdx)._2)
             }
 
             override def close(): Unit = {}
