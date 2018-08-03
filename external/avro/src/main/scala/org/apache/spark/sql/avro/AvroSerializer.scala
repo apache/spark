@@ -155,12 +155,11 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       case (f1, f2) => newConverter(f1.dataType, resolveNullableType(f2.schema(), f1.nullable))
     }
     val numFields = catalystStruct.length
-    val containsNull = catalystStruct.exists(_.nullable)
     (row: InternalRow) =>
       val result = new Record(avroStruct)
       var i = 0
       while (i < numFields) {
-        if (containsNull && row.isNullAt(i)) {
+        if (row.isNullAt(i)) {
           result.put(i, null)
         } else {
           result.put(i, fieldConverters(i).apply(row, i))
