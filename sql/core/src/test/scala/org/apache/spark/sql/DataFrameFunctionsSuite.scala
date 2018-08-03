@@ -1800,7 +1800,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(ex2.getMessage.contains("data type mismatch: argument 1 requires array type"))
   }
 
-  test("filter function - array for primitive type not containing null") {
+  test("array_filter function - array for primitive type not containing null") {
     val df = Seq(
       Seq(1, 9, 8, 7),
       Seq(5, 8, 9, 7, 2),
@@ -1809,7 +1809,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     ).toDF("i")
 
     def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
-      checkAnswer(df.selectExpr("filter(i, x -> x % 2 == 0)"),
+      checkAnswer(df.selectExpr("array_filter(i, x -> x % 2 == 0)"),
         Seq(
           Row(Seq(8)),
           Row(Seq(8, 2)),
@@ -1824,7 +1824,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     testArrayOfPrimitiveTypeNotContainsNull()
   }
 
-  test("filter function - array for primitive type containing null") {
+  test("array_filter function - array for primitive type containing null") {
     val df = Seq[Seq[Integer]](
       Seq(1, 9, 8, null, 7),
       Seq(5, null, 8, 9, 7, 2),
@@ -1833,7 +1833,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     ).toDF("i")
 
     def testArrayOfPrimitiveTypeContainsNull(): Unit = {
-      checkAnswer(df.selectExpr("filter(i, x -> x % 2 == 0)"),
+      checkAnswer(df.selectExpr("array_filter(i, x -> x % 2 == 0)"),
         Seq(
           Row(Seq(8)),
           Row(Seq(8, 2)),
@@ -1848,7 +1848,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     testArrayOfPrimitiveTypeContainsNull()
   }
 
-  test("filter function - array for non-primitive type") {
+  test("array_filter function - array for non-primitive type") {
     val df = Seq(
       Seq("c", "a", "b"),
       Seq("b", null, "c", null),
@@ -1857,7 +1857,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     ).toDF("s")
 
     def testNonPrimitiveType(): Unit = {
-      checkAnswer(df.selectExpr("filter(s, x -> x is not null)"),
+      checkAnswer(df.selectExpr("array_filter(s, x -> x is not null)"),
         Seq(
           Row(Seq("c", "a", "b")),
           Row(Seq("b", "c")),
@@ -1872,7 +1872,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     testNonPrimitiveType()
   }
 
-  test("filter function - invalid") {
+  test("array_filter function - invalid") {
     val df = Seq(
       (Seq("c", "a", "b"), 1),
       (Seq("b", null, "c", null), 2),
@@ -1881,17 +1881,17 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     ).toDF("s", "i")
 
     val ex1 = intercept[AnalysisException] {
-      df.selectExpr("filter(s, (x, y) -> x + y)")
+      df.selectExpr("array_filter(s, (x, y) -> x + y)")
     }
     assert(ex1.getMessage.contains("The number of lambda function arguments '2' does not match"))
 
     val ex2 = intercept[AnalysisException] {
-      df.selectExpr("filter(i, x -> x)")
+      df.selectExpr("array_filter(i, x -> x)")
     }
     assert(ex2.getMessage.contains("data type mismatch: argument 1 requires array type"))
 
     val ex3 = intercept[AnalysisException] {
-      df.selectExpr("filter(s, x -> x)")
+      df.selectExpr("array_filter(s, x -> x)")
     }
     assert(ex3.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
   }

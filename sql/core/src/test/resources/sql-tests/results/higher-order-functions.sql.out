@@ -82,7 +82,7 @@ NULL
 
 
 -- !query 8
-select filter(ys, y -> y > 30) as v from nested
+select array_filter(ys, y -> y > 30) as v from nested
 -- !query 8 schema
 struct<v:array<int>>
 -- !query 8 output
@@ -92,7 +92,7 @@ struct<v:array<int>>
 
 
 -- !query 9
-select filter(cast(null as array<int>), y -> true) as v
+select array_filter(cast(null as array<int>), y -> true) as v
 -- !query 9 schema
 struct<v:array<int>>
 -- !query 9 output
@@ -100,7 +100,7 @@ NULL
 
 
 -- !query 10
-select transform(zs, z -> filter(z, zz -> zz > 50)) as v from nested
+select transform(zs, z -> array_filter(z, zz -> zz > 50)) as v from nested
 -- !query 10 schema
 struct<v:array<array<int>>>
 -- !query 10 output
