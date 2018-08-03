@@ -138,4 +138,16 @@ class CollapseProjectSuite extends PlanTest {
     assert(projects.size === 1)
     assert(hasMetadata(optimized))
   }
+
+  test("do not collapse if number of leave expressions would be too big") {
+    var query: LogicalPlan = testRelation
+    for( a <- 1 to 13) {
+      // after n iterations the number of leaf expressions will be 2^{n+1}
+      // => after 13 iterations we would end up with more than 10000 leaf expressions
+      query = query.select(('a + 'b).as('a), ('a - 'b).as('b))
+    }
+
+    val projects = Optimize.execute(query.analyze).collect { case p: Project => p }
+    assert(projects.size === 2) // everything should be collapsed except the last one
+  }
 }

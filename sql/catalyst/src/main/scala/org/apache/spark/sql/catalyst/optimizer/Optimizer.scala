@@ -631,19 +631,26 @@ object ColumnPruning extends Rule[LogicalPlan] {
 object CollapseProject extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case p1 @ Project(_, p2: Project) =>
-      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)) {
-        p1
-      } else {
-        p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList))
-      }
+    case p1@Project(_, p2: Project) =>
+      getMaybeCollapsedAndCleanedProjectList(p1, p2.projectList)
+        .map(cleanedProjectList => p2.copy(projectList = cleanedProjectList))
+        .getOrElse(p1)
     case p @ Project(_, agg: Aggregate) =>
-      if (haveCommonNonDeterministicOutput(p.projectList, agg.aggregateExpressions)) {
-        p
-      } else {
-        agg.copy(aggregateExpressions = buildCleanedProjectList(
-          p.projectList, agg.aggregateExpressions))
+      getMaybeCollapsedAndCleanedProjectList(p, agg.aggregateExpressions)
+        .map(cleanedProjectList => agg.copy(aggregateExpressions = cleanedProjectList))
+        .getOrElse(p)
+  }
+
+  private def getMaybeCollapsedAndCleanedProjectList(
+      upper: Project,
+      lowerProjectList: Seq[NamedExpression]): Option[Seq[NamedExpression]] = {
+    if (!haveCommonNonDeterministicOutput(upper.projectList, lowerProjectList)) {
+      val cleanedProjectList = buildCleanedProjectList(upper.projectList, lowerProjectList)
+      if (isNumberOfLeafExpressionsBelowLimit(cleanedProjectList)) {
+        return Option.apply(cleanedProjectList)
       }
+    }
+    Option.empty
   }
 
   private def collectAliases(projectList: Seq[NamedExpression]): AttributeMap[Alias] = {
@@ -683,6 +690,18 @@ object CollapseProject extends Rule[LogicalPlan] {
     rewrittenUpper.map { p =>
       CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression]
     }
+  }
+
+  private def isNumberOfLeafExpressionsBelowLimit(projectList: Seq[NamedExpression]): Boolean = {
+    SQLConf.get.optimizerMaxNumOfLeafExpressionsInCollapsedProjects < 0 ||
+      numberOfLeafExpressions(projectList) <
+        SQLConf.get.optimizerMaxNumOfLeafExpressionsInCollapsedProjects
+  }
+
+  private def numberOfLeafExpressions(projectList: Seq[Expression]): Long = {
+    projectList
+      .map(expr => if (expr.children.nonEmpty) numberOfLeafExpressions(expr.children) else 1L)
+      .sum
   }
 }
 

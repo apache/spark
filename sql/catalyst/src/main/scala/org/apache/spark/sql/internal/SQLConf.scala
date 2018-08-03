@@ -143,6 +143,15 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val OPTIMIZER_MAX_NUM_OF_LEAF_EXPRESSIONS_IN_COLLAPSED_PROJECTS =
+    buildConf("spark.sql.optimizer.maxNumOfLeafExpressionsInCollapsedProjects")
+      .internal()
+      .doc("Sets the maximum number of leaf expressions that a project statements is allowed to " +
+        "have after collapsing. If the collapsed project statement would have more leaf " +
+        "expressions then the optimizer won't collapse. Set to -1 to disable.")
+      .longConf
+      .createWithDefault(10000)
+
   val OPTIMIZER_INSET_CONVERSION_THRESHOLD =
     buildConf("spark.sql.optimizer.inSetConversionThreshold")
       .internal()
@@ -1476,6 +1485,9 @@ class SQLConf extends Serializable with Logging {
   def optimizerExcludedRules: Option[String] = getConf(OPTIMIZER_EXCLUDED_RULES)
 
   def optimizerMaxIterations: Int = getConf(OPTIMIZER_MAX_ITERATIONS)
+
+  def optimizerMaxNumOfLeafExpressionsInCollapsedProjects: Long =
+    getConf(OPTIMIZER_MAX_NUM_OF_LEAF_EXPRESSIONS_IN_COLLAPSED_PROJECTS)
 
   def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
 
