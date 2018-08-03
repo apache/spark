@@ -118,14 +118,15 @@ object ResolveHints {
           case "REPARTITION" => true
           case "COALESCE" => false
         }
-        h.parameters match {
+        val numPartitions = h.parameters match {
           case Seq(Literal(numPartitions: Int, IntegerType)) =>
-            Repartition(numPartitions, shuffle, h.child)
+            numPartitions
           case Seq(numPartitions: Int) =>
-            Repartition(numPartitions, shuffle, h.child)
+            numPartitions
           case _ =>
             throw new AnalysisException(s"$hintName Hint expects a partition number as parameter")
         }
+        Repartition(numPartitions, shuffle, h.child)
     }
   }
 
