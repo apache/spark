@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.concurrent.atomic.AtomicReference
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
 /**
@@ -123,7 +125,10 @@ trait HigherOrderFunction extends Expression {
   }
 }
 
-trait ArrayBasedHigherOrderFunction extends HigherOrderFunction with ExpectsInputTypes {
+/**
+ * Trait for functions having as input one argument and one function.
+ */
+trait UnaryHigherOrderFunction extends HigherOrderFunction with ExpectsInputTypes {
 
   def input: Expression
 
@@ -135,9 +140,15 @@ trait ArrayBasedHigherOrderFunction extends HigherOrderFunction with ExpectsInpu
 
   def expectingFunctionType: AbstractDataType = AnyDataType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, expectingFunctionType)
-
   @transient lazy val functionForEval: Expression = functionsForEval.head
+}
+
+trait ArrayBasedUnaryHigherOrderFunction extends UnaryHigherOrderFunction {
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, expectingFunctionType)
+}
+
+trait MapBasedUnaryHigherOrderFunction extends UnaryHigherOrderFunction {
+  override def inputTypes: Seq[AbstractDataType] = Seq(MapType, expectingFunctionType)
 }
 
 /**
@@ -157,7 +168,7 @@ trait ArrayBasedHigherOrderFunction extends HigherOrderFunction with ExpectsInpu
 case class ArrayTransform(
     input: Expression,
     function: Expression)
-  extends ArrayBasedHigherOrderFunction with CodegenFallback {
+  extends ArrayBasedUnaryHigherOrderFunction with CodegenFallback {
 
   override def nullable: Boolean = input.nullable
 
@@ -209,4 +220,67 @@ case class ArrayTransform(
   }
 
   override def prettyName: String = "transform"
+}
+
+/**
+ * Filters entries in a map using the provided function.
+ */
+@ExpressionDescription(
+usage = "_FUNC_(expr, func) - Filters entries in a map using the function.",
+examples = """
+    Examples:
+      > SELECT _FUNC_(map(1, 0, 2, 2, 3, -1), (k, v) -> k > v);
+       [1 -> 0, 3 -> -1]
+  """,
+since = "2.4.0")
+case class MapFilter(
+    input: Expression,
+    function: Expression)
+  extends MapBasedUnaryHigherOrderFunction with CodegenFallback {
+
+  @transient val (keyType, valueType, valueContainsNull) = input.dataType match {
+    case MapType(kType, vType, vContainsNull) => (kType, vType, vContainsNull)
+    case _ =>
+      val MapType(kType, vType, vContainsNull) = MapType.defaultConcreteType
+      (kType, vType, vContainsNull)
+  }
+
+  @transient lazy val (keyVar, valueVar) = {
+    val args = function.asInstanceOf[LambdaFunction].arguments
+    (args.head.asInstanceOf[NamedLambdaVariable], args.tail.head.asInstanceOf[NamedLambdaVariable])
+  }
+
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): MapFilter = {
+    function match {
+      case LambdaFunction(_, _, _) =>
+        copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
+    }
+  }
+
+  override def nullable: Boolean = input.nullable
+
+  override def eval(input: InternalRow): Any = {
+    val m = this.input.eval(input).asInstanceOf[MapData]
+    if (m == null) {
+      null
+    } else {
+      val retKeys = new mutable.ListBuffer[Any]
+      val retValues = new mutable.ListBuffer[Any]
+      m.foreach(keyType, valueType, (k, v) => {
+        keyVar.value.set(k)
+        valueVar.value.set(v)
+        if (functionForEval.eval(input).asInstanceOf[Boolean]) {
+          retKeys += k
+          retValues += v
+        }
+      })
+      ArrayBasedMapData(retKeys.toArray, retValues.toArray)
+    }
+  }
+
+  override def dataType: DataType = input.dataType
+
+  override def expectingFunctionType: AbstractDataType = BooleanType
+
+  override def prettyName: String = "map_filter"
 }
