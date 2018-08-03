@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.SparkException
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util._
