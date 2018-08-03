@@ -49,6 +49,7 @@ private[spark] class BarrierCoordinator(
 
   private val timer = new Timer("BarrierCoordinator barrier epoch increment timer")
 
+  // Listen to StageCompleted event, clear corresponding ContextBarrierState.
   private val listener = new SparkListener {
     override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
       val stageInfo = stageCompleted.stageInfo
@@ -61,6 +62,8 @@ private[spark] class BarrierCoordinator(
     }
   }
 
+  // Remember all active stage attempts that make barrier() call(s), and the corresponding
+  // internal state.
   private val states = new ConcurrentHashMap[ContextBarrierId, ContextBarrierState]
 
   override def onStart(): Unit = {
@@ -92,6 +95,7 @@ private[spark] class BarrierCoordinator(
     // A timer task that ensures we may timeout for a barrier() call.
     private var timerTask: TimerTask = null
 
+    // Init a TimerTask for a barrier() call.
     private def initTimerTask(): TimerTask = new TimerTask {
       override def run(): Unit = {
         // Timeout current barrier() call, fail all the sync requests.
@@ -101,6 +105,7 @@ private[spark] class BarrierCoordinator(
       }
     }
 
+    // Cancel the current active TimerTask and release resources.
     private def cancelTimerTask(): Unit = {
       if (timerTask != null) {
         timerTask.cancel()
@@ -108,6 +113,8 @@ private[spark] class BarrierCoordinator(
       }
     }
 
+    // Process the global sync request. The barrier() call succeed if collected enough requests
+    // within a configured time, otherwise fail all the pending requests.
     def handleRequest(requester: RpcCallContext, epoch: Int, taskId: Long): Unit = synchronized {
       // Check whether the epoch from the barrier tasks matches current barrierEpoch.
       logInfo(s"Current barrier epoch for $barrierId is $barrierEpoch.")
@@ -138,6 +145,7 @@ private[spark] class BarrierCoordinator(
       }
     }
 
+    // Cleanup the internal state of a barrier stage attempt.
     def clear(): Unit = synchronized {
       // The global sync fails so the stage is expected to retry another attempt, all sync
       // messages come from current stage attempt shall fail.

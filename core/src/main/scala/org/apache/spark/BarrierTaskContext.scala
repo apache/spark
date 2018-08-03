@@ -44,6 +44,7 @@ class BarrierTaskContext(
   extends TaskContextImpl(stageId, stageAttemptNumber, partitionId, taskAttemptId, attemptNumber,
       taskMemoryManager, localProperties, metricsSystem, taskMetrics) {
 
+  // Find the driver side RPCEndpointRef of the coordinator that handles all the barrier() calls.
   private val barrierCoordinator: RpcEndpointRef = {
     val env = SparkEnv.get
     RpcUtils.makeDriverRef("barrierSync", env.conf, env.rpcEnv)
@@ -51,8 +52,12 @@ class BarrierTaskContext(
 
   private val timer = new Timer("Barrier task timer for barrier() calls.")
 
+  // Local barrierEpoch that identify a barrier() call from current task, it shall be identical
+  // with the driver side epoch.
   private var barrierEpoch = 0
 
+  // Number of tasks of the current barrier stage, a barrier() call must collect enough requests
+  // from different tasks within the same barrier stage attempt to succeed.
   private lazy val numTasks = getTaskInfos().size
 
   /**
