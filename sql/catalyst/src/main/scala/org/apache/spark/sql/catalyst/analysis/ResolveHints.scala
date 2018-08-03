@@ -108,15 +108,8 @@ object ResolveHints {
    * COALESCE Hint accepts name "COALESCE" and "REPARTITION".
    * Its parameter includes a partition number.
    */
-  class ResolveCoalesceHints(conf: SQLConf) extends Rule[LogicalPlan] {
+  object ResolveCoalesceHints extends Rule[LogicalPlan] {
     private val COALESCE_HINT_NAMES = Set("COALESCE", "REPARTITION")
-
-    private def applyCoalesceHint(
-      plan: LogicalPlan,
-      numPartitions: Int,
-      shuffle: Boolean): LogicalPlan = {
-      Repartition(numPartitions, shuffle, plan)
-    }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case h: UnresolvedHint if COALESCE_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
@@ -127,9 +120,9 @@ object ResolveHints {
         }
         h.parameters match {
           case Seq(Literal(numPartitions: Int, IntegerType)) =>
-            applyCoalesceHint(h.child, numPartitions, shuffle)
+            Repartition(numPartitions, shuffle, h.child)
           case Seq(numPartitions: Int) =>
-            applyCoalesceHint(h.child, numPartitions, shuffle)
+            Repartition(numPartitions, shuffle, h.child)
           case _ =>
             throw new AnalysisException(s"$hintName Hint expects a partition number as parameter")
         }
