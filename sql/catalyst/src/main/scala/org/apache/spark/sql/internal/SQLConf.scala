@@ -20,12 +20,14 @@ package org.apache.spark.sql.internal
 import java.util.{Locale, NoSuchElementException, Properties, TimeZone}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import java.util.zip.Deflater
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
+import org.tukaani.xz.LZMA2Options
 
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
@@ -1434,6 +1436,46 @@ object SQLConf {
       "This only takes effect when spark.sql.repl.eagerEval.enabled is set to true.")
     .intConf
     .createWithDefault(20)
+
+  object AvroOutputTimestampType extends Enumeration {
+    val TIMESTAMP_MICROS, TIMESTAMP_MILLIS = Value
+  }
+
+  val AVRO_OUTPUT_TIMESTAMP_TYPE = buildConf("spark.sql.avro.outputTimestampType")
+    .doc("Sets which Avro timestamp type to use when Spark writes data to Avro files. " +
+      "TIMESTAMP_MICROS is a logical timestamp type in Avro, which stores number of " +
+      "microseconds from the Unix epoch. TIMESTAMP_MILLIS is also logical, but with " +
+      "millisecond precision, which means Spark has to truncate the microsecond portion of its " +
+      "timestamp value.")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(AvroOutputTimestampType.values.map(_.toString))
+    .createWithDefault(AvroOutputTimestampType.TIMESTAMP_MICROS.toString)
+
+  val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
+    .doc("Compression codec used in writing of AVRO files. Supported codecs: " +
+      "uncompressed, deflate, snappy, bzip2 and xz. Default codec is snappy.")
+    .stringConf
+    .checkValues(Set("uncompressed", "deflate", "snappy", "bzip2", "xz"))
+    .createWithDefault("snappy")
+
+  val AVRO_DEFLATE_LEVEL = buildConf("spark.sql.avro.deflate.level")
+    .doc("Compression level for the deflate codec used in writing of AVRO files. " +
+      "Valid value must be in the range of from 1 to 9 inclusive or -1. " +
+      "The default value is -1 which corresponds to 6 level in the current implementation.")
+    .intConf
+    .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
+    .createWithDefault(Deflater.DEFAULT_COMPRESSION)
+
+  val LEGACY_SETOPS_PRECEDENCE_ENABLED =
+    buildConf("spark.sql.legacy.setopsPrecedence.enabled")
+      .internal()
+      .doc("When set to true and the order of evaluation is not specified by parentheses, the " +
+        "set operations are performed from left to right as they appear in the query. When set " +
+        "to false and order of evaluation is not specified by parentheses, INTERSECT operations " +
+        "are performed before any UNION, EXCEPT and MINUS operations.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
@@ -1581,6 +1623,8 @@ class SQLConf extends Serializable with Logging {
   def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
 
   def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
+
+  def codegenComments: Boolean = getConf(StaticSQLConf.CODEGEN_COMMENTS)
 
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
@@ -1819,6 +1863,15 @@ class SQLConf extends Serializable with Logging {
   def replEagerEvalMaxNumRows: Int = getConf(SQLConf.REPL_EAGER_EVAL_MAX_NUM_ROWS)
 
   def replEagerEvalTruncate: Int = getConf(SQLConf.REPL_EAGER_EVAL_TRUNCATE)
+
+  def avroOutputTimestampType: AvroOutputTimestampType.Value =
+    AvroOutputTimestampType.withName(getConf(SQLConf.AVRO_OUTPUT_TIMESTAMP_TYPE))
+
+  def avroCompressionCodec: String = getConf(SQLConf.AVRO_COMPRESSION_CODEC)
+
+  def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
+
+  def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

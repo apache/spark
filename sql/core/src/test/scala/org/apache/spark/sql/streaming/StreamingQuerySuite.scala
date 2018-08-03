@@ -21,6 +21,8 @@ import java.{util => ju}
 import java.util.Optional
 import java.util.concurrent.CountDownLatch
 
+import scala.collection.mutable
+
 import org.apache.commons.lang3.RandomStringUtils
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
@@ -29,8 +31,9 @@ import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.TestForeachWriter
 import org.apache.spark.sql.functions._
@@ -832,6 +835,23 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     testStream(otherDf, OutputMode.Complete())(
       AddData(stream, (1, 1), (2, 4)),
       CheckLastBatch(("A", 1)))
+  }
+
+  test("Uuid in streaming query should not produce same uuids in each execution") {
+    val uuids = mutable.ArrayBuffer[String]()
+    def collectUuid: Seq[Row] => Unit = { rows: Seq[Row] =>
+      rows.foreach(r => uuids += r.getString(0))
+    }
+
+    val stream = MemoryStream[Int]
+    val df = stream.toDF().select(new Column(Uuid()))
+    testStream(df)(
+      AddData(stream, 1),
+      CheckAnswer(collectUuid),
+      AddData(stream, 2),
+      CheckAnswer(collectUuid)
+    )
+    assert(uuids.distinct.size == 2)
   }
 
   test("StreamingRelationV2/StreamingExecutionRelation/ContinuousExecutionRelation.toJSON " +

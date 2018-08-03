@@ -268,7 +268,7 @@ private class KafkaRDDIterator[K, V](
   sparkKafkaConsumer: SparkKafkaConsumer[K, V]
 ) extends Iterator[ConsumerRecord[K, V]] {
 
-  context.addTaskCompletionListener(_ => closeIfNeeded())
+  context.addTaskCompletionListener[Unit](_ => closeIfNeeded())
 
   val consumer = {
     KafkaDataConsumer.init(

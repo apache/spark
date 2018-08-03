@@ -222,18 +222,11 @@ private[spark] class TaskSchedulerImpl(
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
     logInfo("Cancelling stage " + stageId)
+    // Kill all running tasks for the stage.
+    killAllTaskAttempts(stageId, interruptThread, reason = "Stage cancelled")
+    // Cancel all attempts for the stage.
     taskSetsByStageIdAndAttempt.get(stageId).foreach { attempts =>
       attempts.foreach { case (_, tsm) =>
-        // There are two possible cases here:
-        // 1. The task set manager has been created and some tasks have been scheduled.
-        //    In this case, send a kill signal to the executors to kill the task and then abort
-        //    the stage.
-        // 2. The task set manager has been created but no tasks have been scheduled. In this case,
-        //    simply abort the stage.
-        tsm.runningTasksSet.foreach { tid =>
-            taskIdToExecutorId.get(tid).foreach(execId =>
-              backend.killTask(tid, execId, interruptThread, reason = "Stage cancelled"))
-        }
         tsm.abort("Stage %s cancelled".format(stageId))
         logInfo("Stage %d was cancelled".format(stageId))
       }
@@ -249,6 +242,27 @@ private[spark] class TaskSchedulerImpl(
     } else {
       logWarning(s"Could not kill task $taskId because no task with that ID was found.")
       false
+    }
+  }
+
+  override def killAllTaskAttempts(
+      stageId: Int,
+      interruptThread: Boolean,
+      reason: String): Unit = synchronized {
+    logInfo(s"Killing all running tasks in stage $stageId: $reason")
+    taskSetsByStageIdAndAttempt.get(stageId).foreach { attempts =>
+      attempts.foreach { case (_, tsm) =>
+        // There are two possible cases here:
+        // 1. The task set manager has been created and some tasks have been scheduled.
+        //    In this case, send a kill signal to the executors to kill the task.
+        // 2. The task set manager has been created but no tasks have been scheduled. In this case,
+        //    simply continue.
+        tsm.runningTasksSet.foreach { tid =>
+          taskIdToExecutorId.get(tid).foreach { execId =>
+            backend.killTask(tid, execId, interruptThread, reason)
+          }
+        }
+      }
     }
   }
 

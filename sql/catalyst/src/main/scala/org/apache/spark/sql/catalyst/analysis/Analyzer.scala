@@ -180,8 +180,10 @@ class Analyzer(
       ResolveAggregateFunctions ::
       TimeWindowing ::
       ResolveInlineTables(conf) ::
+      ResolveHigherOrderFunctions(catalog) ::
+      ResolveLambdaVariables(conf) ::
       ResolveTimeZone(conf) ::
-      ResolvedUuidExpressions ::
+      ResolveRandomSeed ::
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
@@ -529,6 +531,10 @@ class Analyzer(
         || (p.groupByExprsOpt.isDefined && !p.groupByExprsOpt.get.forall(_.resolved))
         || !p.pivotColumn.resolved || !p.pivotValues.forall(_.resolved) => p
       case Pivot(groupByExprsOpt, pivotColumn, pivotValues, aggregates, child) =>
+        if (!RowOrdering.isOrderable(pivotColumn.dataType)) {
+          throw new AnalysisException(
+            s"Invalid pivot column '${pivotColumn}'. Pivot columns must be comparable.")
+        }
         // Check all aggregate expressions.
         aggregates.foreach(checkValidAggregateExpression)
         // Check all pivot values are literal and match pivot column data type.
@@ -574,10 +580,14 @@ class Analyzer(
           // Since evaluating |pivotValues| if statements for each input row can get slow this is an
           // alternate plan that instead uses two steps of aggregation.
           val namedAggExps: Seq[NamedExpression] = aggregates.map(a => Alias(a, a.sql)())
-          val bigGroup = groupByExprs ++ pivotColumn.references
+          val namedPivotCol = pivotColumn match {
+            case n: NamedExpression => n
+            case _ => Alias(pivotColumn, "__pivot_col")()
+          }
+          val bigGroup = groupByExprs :+ namedPivotCol
           val firstAgg = Aggregate(bigGroup, bigGroup ++ namedAggExps, child)
           val pivotAggs = namedAggExps.map { a =>
-            Alias(PivotFirst(pivotColumn, a.toAttribute, evalPivotValues)
+            Alias(PivotFirst(namedPivotCol.toAttribute, a.toAttribute, evalPivotValues)
               .toAggregateExpression()
             , "__pivot_" + a.sql)()
           }
@@ -799,7 +809,6 @@ class Analyzer(
           right
         case Some((oldRelation, newRelation)) =>
           val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
-          // TODO(rxin): Why do we need transformUp here?
           right transformUp {
             case r if r == oldRelation => newRelation
           } transformUp {
@@ -871,6 +880,7 @@ class Analyzer(
     }
 
     private def resolve(e: Expression, q: LogicalPlan): Expression = e match {
+      case f: LambdaFunction if !f.bound => f
       case u @ UnresolvedAttribute(nameParts) =>
         // Leave unchanged if resolution fails. Hopefully will be resolved next round.
         val result =
@@ -914,11 +924,10 @@ class Analyzer(
       // To resolve duplicate expression IDs for Join and Intersect
       case j @ Join(left, right, _, _) if !j.duplicateResolved =>
         j.copy(right = dedupRight(left, right))
-      case i @ Intersect(left, right) if !i.duplicateResolved =>
+      case i @ Intersect(left, right, _) if !i.duplicateResolved =>
         i.copy(right = dedupRight(left, right))
-      case i @ Except(left, right) if !i.duplicateResolved =>
-        i.copy(right = dedupRight(left, right))
-
+      case e @ Except(left, right, _) if !e.duplicateResolved =>
+        e.copy(right = dedupRight(left, right))
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on its descendants
       case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
@@ -2100,15 +2109,16 @@ class Analyzer(
   }
 
   /**
-   * Set the seed for random number generation in Uuid expressions.
+   * Set the seed for random number generation.
    */
-  object ResolvedUuidExpressions extends Rule[LogicalPlan] {
+  object ResolveRandomSeed extends Rule[LogicalPlan] {
     private lazy val random = new Random()
 
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case p if p.resolved => p
       case p => p transformExpressionsUp {
         case Uuid(None) => Uuid(Some(random.nextLong()))
+        case Shuffle(child, None) => Shuffle(child, Some(random.nextLong()))
       }
     }
   }
