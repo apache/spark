@@ -213,7 +213,9 @@ class SparkSession(object):
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
         if jsparkSession is None:
-            jsparkSession = self._jvm.SparkSession(self._jsc.sc())
+            jsparkSession = self._jvm.SparkSession.builder() \
+                .sparkContext(self._jsc.sc()) \
+                .getOrCreate()
         self._jsparkSession = jsparkSession
         self._jwrapped = self._jsparkSession.sqlContext()
         self._wrapped = SQLContext(self._sc, self, self._jwrapped)
