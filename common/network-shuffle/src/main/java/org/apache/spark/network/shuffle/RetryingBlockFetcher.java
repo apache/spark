@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
+import io.netty.util.internal.OutOfDirectMemoryError;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -171,14 +172,21 @@ public class RetryingBlockFetcher {
   }
 
   /**
-   * Returns true if we should retry due a block fetch failure. We will retry if and only if
-   * the exception was an IOException and we haven't retried 'maxRetries' times already.
+   * Returns true if we should retry due a block fetch failure. We will retry if the
+   * exception was an IOException or {@link io.netty.util.internal.OutOfDirectMemoryError},
+   * and we haven't retried 'maxRetries' times already.
    */
   private synchronized boolean shouldRetry(Throwable e) {
     boolean isIOException = e instanceof IOException
       || (e.getCause() != null && e.getCause() instanceof IOException);
+    boolean isOutOfDirectMemoryError = e instanceof OutOfDirectMemoryError;
+    if (isOutOfDirectMemoryError) {
+      logger.warn("Got an io.netty.util.internal.OutOfDirectMemoryError, you could consider " +
+        "about bumping up java option io.netty.maxDirectMemory or trying lager " +
+        "spark.shuffle.io.retryWait, see more detail in SPARK-24989.");
+    }
     boolean hasRemainingRetries = retryCount < maxRetries;
-    return isIOException && hasRemainingRetries;
+    return (isOutOfDirectMemoryError || isIOException) && hasRemainingRetries;
   }
 
   /**
