@@ -71,7 +71,7 @@ private[spark] class SerializerManager(
   // Whether to compress shuffle output temporarily spilled to disk
   private[this] val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", true)
   // Size of the chunks to be used in the ChunkedByteBuffer
-  private[this] val chunkSizeMb = conf.getSizeAsMb("spark.memory.chunkSize", "4m").toInt
+  private[this] val chunkSizeMb = conf.getSizeAsMb("spark.memory.serializer.chunkSize", "4m").toInt
 
   /* The compression codec to use. Note that the "lazy" val is necessary because we want to delay
    * the initialization of the compression codec until it is first used. The reason is that a Spark
