@@ -174,7 +174,8 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               // sure the test is configured correctly.
               assert(parts.size == 2)
               parts.foreach { part =>
-                val oneFooter = ParquetUtils.readFooter(hadoopConf, part.getPath, NO_FILTER)
+                val oneFooter =
+                  ParquetFileReader.readFooter(hadoopConf, part.getPath, NO_FILTER)
                 assert(oneFooter.getFileMetaData.getSchema.getColumns.size === 1)
                 val typeName = oneFooter
                   .getFileMetaData.getSchema.getColumns.get(0).getPrimitiveType.getPrimitiveTypeName
