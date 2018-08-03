@@ -325,11 +325,11 @@ object TypeCoercion {
         assert(newChildren.length == 2)
         Except(newChildren.head, newChildren.last, isAll)
 
-      case s @ Intersect(left, right) if s.childrenResolved &&
+      case s @ Intersect(left, right, isAll) if s.childrenResolved &&
         left.output.length == right.output.length && !s.resolved =>
         val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
         assert(newChildren.length == 2)
-        Intersect(newChildren.head, newChildren.last)
+        Intersect(newChildren.head, newChildren.last, isAll)
 
       case s: Union if s.childrenResolved &&
           s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>

@@ -130,7 +130,7 @@ object TextInputJsonDataSource extends JsonDataSource {
       parser: JacksonParser,
       schema: StructType): Iterator[InternalRow] = {
     val linesReader = new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
-    Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
+    Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
     val textParser = parser.options.encoding
       .map(enc => CreateJacksonParser.text(enc, _: JsonFactory, _: Text))
       .getOrElse(CreateJacksonParser.text(_: JsonFactory, _: Text))
