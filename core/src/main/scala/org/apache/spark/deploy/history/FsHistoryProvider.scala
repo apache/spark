@@ -80,8 +80,8 @@ import org.apache.spark.util.kvstore._
  * break. Simple streaming of JSON-formatted events, as is implemented today, implicitly
  * maintains this invariant.
  */
-private[history] class FsHistoryProvider(conf: SparkConf, protected val clock: Clock)
-  extends ApplicationHistoryProvider with LogFilesBlacklisting with Logging {
+private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
+  extends ApplicationHistoryProvider with Logging {
 
   def this(conf: SparkConf) = {
     this(conf, new SystemClock())
@@ -160,6 +160,29 @@ private[history] class FsHistoryProvider(conf: SparkConf, protected val clock: C
 
   private val diskManager = storePath.map { path =>
     new HistoryServerDiskManager(conf, path, listing, clock)
+  }
+
+  private val blacklist = new ConcurrentHashMap[String, Long]
+
+  // Visible for testing
+  private[history] def isBlacklisted(path: Path): Boolean = {
+    blacklist.containsKey(path.getName)
+  }
+
+  private def blacklist(path: Path): Unit = {
+    blacklist.put(path.getName, clock.getTimeMillis())
+  }
+
+  /**
+   * Removes expired entries in the blacklist, according to the provided `expireTimeInSeconds`.
+   */
+  private def clearBlacklist(expireTimeInSeconds: Long): Unit = {
+    val expiredThreshold = clock.getTimeMillis() - expireTimeInSeconds * 1000
+    val expired = new mutable.ArrayBuffer[String]
+    blacklist.asScala.foreach {
+      case (path, creationTime) if creationTime < expiredThreshold => expired += path
+    }
+    expired.foreach(blacklist.remove(_))
   }
 
   private val activeUIs = new mutable.HashMap[(String, Option[String]), LoadedAppUI]()
@@ -983,38 +1006,6 @@ private[history] object FsHistoryProvider {
    * all data and re-generate the listing data from the event logs.
    */
   private[history] val CURRENT_LISTING_VERSION = 1L
-}
-
-/**
- * Manages a blacklist containing the files which cannot be read due to lack of access permissions.
- */
-private[history] trait LogFilesBlacklisting extends Logging {
-  protected def clock: Clock
-
-  /**
-   * Contains the name of blacklisted files and their insertion time.
-   */
-  private val blacklist = new ConcurrentHashMap[String, Long]
-
-  private[history] def isBlacklisted(path: Path): Boolean = {
-    blacklist.containsKey(path.getName)
-  }
-
-  private[history] def blacklist(path: Path): Unit = {
-    blacklist.put(path.getName, clock.getTimeMillis())
-  }
-
-  /**
-   * Removes expired entries in the blacklist, according to the provided `expireTimeInSeconds`.
-   */
-  protected def clearBlacklist(expireTimeInSeconds: Long): Unit = {
-    val expiredThreshold = clock.getTimeMillis() - expireTimeInSeconds * 1000
-    val expired = new mutable.ArrayBuffer[String]
-    blacklist.asScala.foreach {
-      case (path, creationTime) if creationTime < expiredThreshold => expired += path
-    }
-    expired.foreach(blacklist.remove(_))
-  }
 }
 
 private[history] case class FsHistoryProviderMetadata(
