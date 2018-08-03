@@ -21,6 +21,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
 
+import org.apache.avro.LogicalTypes.{TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema
 import org.apache.avro.Schema.Type.NULL
 import org.apache.avro.generic.GenericData.Record
@@ -92,25 +93,35 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
         (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
       case DateType =>
         (getter, ordinal) => getter.getInt(ordinal) * DateTimeUtils.MILLIS_PER_DAY
-      case TimestampType =>
-        (getter, ordinal) => getter.getLong(ordinal) / 1000
+      case TimestampType => avroType.getLogicalType match {
+          case _: TimestampMillis => (getter, ordinal) => getter.getLong(ordinal) / 1000
+          case _: TimestampMicros => (getter, ordinal) => getter.getLong(ordinal)
+          // For backward compatibility, if the Avro type is Long and it is not logical type,
+          // output the timestamp value as with millisecond precision.
+          case null => (getter, ordinal) => getter.getLong(ordinal) / 1000
+          case other => throw new IncompatibleSchemaException(
+            s"Cannot convert Catalyst Timestamp type to Avro logical type ${other}")
+        }
 
       case ArrayType(et, containsNull) =>
         val elementConverter = newConverter(
           et, resolveNullableType(avroType.getElementType, containsNull))
         (getter, ordinal) => {
           val arrayData = getter.getArray(ordinal)
-          val result = new java.util.ArrayList[Any]
+          val len = arrayData.numElements()
+          val result = new Array[Any](len)
           var i = 0
-          while (i < arrayData.numElements()) {
-            if (arrayData.isNullAt(i)) {
-              result.add(null)
+          while (i < len) {
+            if (containsNull && arrayData.isNullAt(i)) {
+              result(i) = null
             } else {
-              result.add(elementConverter(arrayData, i))
+              result(i) = elementConverter(arrayData, i)
             }
             i += 1
           }
-          result
+          // avro writer is expecting a Java Collection, so we convert it into
+          // `ArrayList` backed by the specified array without data copying.
+          java.util.Arrays.asList(result: _*)
         }
 
       case st: StructType =>
@@ -123,13 +134,14 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
           vt, resolveNullableType(avroType.getValueType, valueContainsNull))
         (getter, ordinal) =>
           val mapData = getter.getMap(ordinal)
-          val result = new java.util.HashMap[String, Any](mapData.numElements())
+          val len = mapData.numElements()
+          val result = new java.util.HashMap[String, Any](len)
           val keyArray = mapData.keyArray()
           val valueArray = mapData.valueArray()
           var i = 0
-          while (i < mapData.numElements()) {
+          while (i < len) {
             val key = keyArray.getUTF8String(i).toString
-            if (valueArray.isNullAt(i)) {
+            if (valueContainsNull && valueArray.isNullAt(i)) {
               result.put(key, null)
             } else {
               result.put(key, valueConverter(valueArray, i))
