@@ -142,6 +142,18 @@ trait ArrayBasedHigherOrderFunction extends HigherOrderFunction with ExpectsInpu
   @transient lazy val functionForEval: Expression = functionsForEval.head
 }
 
+object ArrayBasedHigherOrderFunction {
+
+  def elementArgumentType(dt: DataType): (DataType, Boolean) = {
+    dt match {
+      case ArrayType(elementType, containsNull) => (elementType, containsNull)
+      case _ =>
+        val ArrayType(elementType, containsNull) = ArrayType.defaultConcreteType
+        (elementType, containsNull)
+    }
+  }
+}
+
 /**
  * Transform elements in an array using the transform function. This is similar to
  * a `map` in functional programming.
@@ -166,17 +178,12 @@ case class ArrayTransform(
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayTransform = {
-    val (elementType, containsNull) = input.dataType match {
-      case ArrayType(elementType, containsNull) => (elementType, containsNull)
-      case _ =>
-        val ArrayType(elementType, containsNull) = ArrayType.defaultConcreteType
-        (elementType, containsNull)
-    }
+    val elem = ArrayBasedHigherOrderFunction.elementArgumentType(input.dataType)
     function match {
       case LambdaFunction(_, arguments, _) if arguments.size == 2 =>
-        copy(function = f(function, (elementType, containsNull) :: (IntegerType, false) :: Nil))
+        copy(function = f(function, elem :: (IntegerType, false) :: Nil))
       case _ =>
-        copy(function = f(function, (elementType, containsNull) :: Nil))
+        copy(function = f(function, elem :: Nil))
     }
   }
 
@@ -236,13 +243,8 @@ case class ArrayFilter(
   override def expectingFunctionType: AbstractDataType = BooleanType
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayFilter = {
-    val (elementType, containsNull) = input.dataType match {
-      case ArrayType(elementType, containsNull) => (elementType, containsNull)
-      case _ =>
-        val ArrayType(elementType, containsNull) = ArrayType.defaultConcreteType
-        (elementType, containsNull)
-    }
-    copy(function = f(function, (elementType, containsNull) :: Nil))
+    val elem = ArrayBasedHigherOrderFunction.elementArgumentType(input.dataType)
+    copy(function = f(function, elem :: Nil))
   }
 
   @transient lazy val LambdaFunction(_, Seq(elementVar: NamedLambdaVariable), _) = function
