@@ -23,15 +23,16 @@ import java.io.IOException;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * An input partition reader returned by {@link InputPartition#createPartitionReader()} and is
- * responsible for outputting data for a RDD partition.
+ * A partition reader returned by {@link PartitionReaderFactory#createReader(InputPartition)} or
+ * {@link PartitionReaderFactory#createColumnarReader(InputPartition)}. It's responsible for
+ * outputting data for a RDD partition.
  *
  * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.catalyst.InternalRow}
- * for normal data source readers, {@link org.apache.spark.sql.vectorized.ColumnarBatch} for data
- * source readers that mix in {@link SupportsScanColumnarBatch}.
+ * for normal data sources, or {@link org.apache.spark.sql.vectorized.ColumnarBatch} for columnar
+ * data sources(whose {@link PartitionReaderFactory#supportColumnarReads()} returns true).
  */
 @InterfaceStability.Evolving
-public interface InputPartitionReader<T> extends Closeable {
+public interface PartitionReader<T> extends Closeable {
 
   /**
    * Proceed to next record, returns false if there is no more records.

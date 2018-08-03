@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
-import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, SupportsPushDownCatalystFilters, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReader
+import org.apache.spark.sql.sources.v2.reader.{ScanConfigBuilder, SupportsPushDownCatalystFilters, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReadSupport
 
 object DataSourceV2Strategy extends Strategy {
 
@@ -37,9 +37,9 @@ object DataSourceV2Strategy extends Strategy {
    * @return pushed filter and post-scan filters.
    */
   private def pushFilters(
-      reader: DataSourceReader,
+      configBuilder: ScanConfigBuilder,
       filters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
-    reader match {
+    configBuilder match {
       case r: SupportsPushDownCatalystFilters =>
         val postScanFilters = r.pushCatalystFilters(filters.toArray)
         val pushedFilters = r.pushedCatalystFilters()
@@ -80,17 +80,17 @@ object DataSourceV2Strategy extends Strategy {
    */
   // TODO: nested column pruning.
   private def pruneColumns(
-      reader: DataSourceReader,
+      configBuilder: ScanConfigBuilder,
       relation: DataSourceV2Relation,
       exprs: Seq[Expression]): Seq[AttributeReference] = {
-    reader match {
+    configBuilder match {
       case r: SupportsPushDownRequiredColumns =>
         val requiredColumns = AttributeSet(exprs.flatMap(_.references))
         val neededOutput = relation.output.filter(requiredColumns.contains)
         if (neededOutput != relation.output) {
           r.pruneColumns(neededOutput.toStructType)
           val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
-          r.readSchema().toAttributes.map {
+          r.prunedSchema().toAttributes.map {
             // We have to keep the attribute id during transformation.
             a => a.withExprId(nameToAttr(a.name).exprId)
           }
@@ -105,12 +105,12 @@ object DataSourceV2Strategy extends Strategy {
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters, relation: DataSourceV2Relation) =>
-      val reader = relation.newReader()
+      val configBuilder = relation.readSupport.newScanConfigBuilder()
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
       // `postScanFilters` need to be evaluated after the scan.
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
-      val (pushedFilters, postScanFilters) = pushFilters(reader, filters)
-      val output = pruneColumns(reader, relation, project ++ postScanFilters)
+      val (pushedFilters, postScanFilters) = pushFilters(configBuilder, filters)
+      val output = pruneColumns(configBuilder, relation, project ++ postScanFilters)
       logInfo(
         s"""
            |Pushing operators to ${relation.source.getClass}
@@ -120,7 +120,12 @@ object DataSourceV2Strategy extends Strategy {
          """.stripMargin)
 
       val scan = DataSourceV2ScanExec(
-        output, relation.source, relation.options, pushedFilters, reader)
+        output,
+        relation.source,
+        relation.options,
+        pushedFilters,
+        relation.readSupport,
+        configBuilder.build())
 
       val filterCondition = postScanFilters.reduceLeftOption(And)
       val withFilter = filterCondition.map(FilterExec(_, scan)).getOrElse(scan)
@@ -129,9 +134,12 @@ object DataSourceV2Strategy extends Strategy {
       ProjectExec(project, withFilter) :: Nil
 
     case r: StreamingDataSourceV2Relation =>
+      // TODO: support operator pushdown for streaming data sources.
+      val scanConfig = r.scanConfigBuilder.build()
       // ensure there is a projection, which will produce unsafe rows required by some operators
       ProjectExec(r.output,
-        DataSourceV2ScanExec(r.output, r.source, r.options, r.pushedFilters, r.reader)) :: Nil
+        DataSourceV2ScanExec(
+          r.output, r.source, r.options, r.pushedFilters, r.readSupport, scanConfig)) :: Nil
 
     case WriteToDataSourceV2(writer, query) =>
       WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
@@ -140,8 +148,9 @@ object DataSourceV2Strategy extends Strategy {
       WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil
 
     case Repartition(1, false, child) =>
-      val isContinuous = child.collectFirst {
-        case StreamingDataSourceV2Relation(_, _, _, r: ContinuousReader) => r
+      val isContinuous = child.find {
+        case s: StreamingDataSourceV2Relation => s.readSupport.isInstanceOf[ContinuousReadSupport]
+        case _ => false
       }.isDefined
 
       if (isContinuous) {

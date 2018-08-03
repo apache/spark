@@ -21,10 +21,10 @@ import java.util.Optional
 
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousReader
+import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousReadSupport
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReader, MicroBatchReader}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, MicroBatchReadSupport}
 import org.apache.spark.sql.types._
 
 /**
@@ -42,13 +42,13 @@ import org.apache.spark.sql.types._
  *    be resource constrained, and `numPartitions` can be tweaked to help reach the desired speed.
  */
 class RateStreamProvider extends DataSourceV2
-  with MicroBatchReadSupport with ContinuousReadSupport with DataSourceRegister {
+  with MicroBatchReadSupportProvider with ContinuousReadSupportProvider with DataSourceRegister {
   import RateStreamProvider._
 
-  override def createMicroBatchReader(
+  override def createMicroBatchReadSupport(
       schema: Optional[StructType],
       checkpointLocation: String,
-      options: DataSourceOptions): MicroBatchReader = {
+      options: DataSourceOptions): MicroBatchReadSupport = {
       if (options.get(ROWS_PER_SECOND).isPresent) {
       val rowsPerSecond = options.get(ROWS_PER_SECOND).get().toLong
       if (rowsPerSecond <= 0) {
@@ -78,13 +78,15 @@ class RateStreamProvider extends DataSourceV2
       throw new AnalysisException("The rate source does not support a user-specified schema.")
     }
 
-    new RateStreamMicroBatchReader(options, checkpointLocation)
+    new RateStreamMicroBatchReadSupport(options, checkpointLocation)
   }
 
-  override def createContinuousReader(
+  override def createContinuousReadSupport(
      schema: Optional[StructType],
      checkpointLocation: String,
-     options: DataSourceOptions): ContinuousReader = new RateStreamContinuousReader(options)
+     options: DataSourceOptions): ContinuousReadSupport = {
+    new RateStreamContinuousReadSupport(options)
+  }
 
   override def shortName(): String = "rate"
 }

@@ -28,8 +28,8 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
 import org.apache.spark.sql.sources.StreamSourceProvider
-import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceOptions, MicroBatchReadSupport}
-import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader
+import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceOptions, MicroBatchReadSupportProvider}
+import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReadSupport
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -172,19 +172,19 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       case _ => None
     }
     ds match {
-      case s: MicroBatchReadSupport =>
-        var tempReader: MicroBatchReader = null
+      case s: MicroBatchReadSupportProvider =>
+        var tempReadSupport: MicroBatchReadSupport = null
         val schema = try {
-          tempReader = s.createMicroBatchReader(
+          tempReadSupport = s.createMicroBatchReadSupport(
             Optional.ofNullable(userSpecifiedSchema.orNull),
             Utils.createTempDir(namePrefix = s"temporaryReader").getCanonicalPath,
             options)
-          tempReader.readSchema()
+          tempReadSupport.fullSchema()
         } finally {
           // Stop tempReader to avoid side-effect thing
-          if (tempReader != null) {
-            tempReader.stop()
-            tempReader = null
+          if (tempReadSupport != null) {
+            tempReadSupport.stop()
+            tempReadSupport = null
           }
         }
         Dataset.ofRows(
@@ -192,16 +192,16 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
           StreamingRelationV2(
             s, source, extraOptions.toMap,
             schema.toAttributes, v1Relation)(sparkSession))
-      case s: ContinuousReadSupport =>
-        val tempReader = s.createContinuousReader(
+      case s: ContinuousReadSupportProvider =>
+        val schema = s.createContinuousReadSupport(
           Optional.ofNullable(userSpecifiedSchema.orNull),
           Utils.createTempDir(namePrefix = s"temporaryReader").getCanonicalPath,
-          options)
+          options).fullSchema()
         Dataset.ofRows(
           sparkSession,
           StreamingRelationV2(
             s, source, extraOptions.toMap,
-            tempReader.readSchema().toAttributes, v1Relation)(sparkSession))
+            schema.toAttributes, v1Relation)(sparkSession))
       case _ =>
         // Code path for data source v1.
         Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))

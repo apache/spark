@@ -21,25 +21,25 @@ import java.util.Optional;
 
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.SaveMode;
-import org.apache.spark.sql.sources.v2.writer.DataSourceWriter;
+import org.apache.spark.sql.sources.v2.writer.BatchWriteSupport;
 import org.apache.spark.sql.types.StructType;
 
 /**
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
- * provide data writing ability and save the data to the data source.
+ * provide data writing ability for batch processing.
  */
 @InterfaceStability.Evolving
-public interface WriteSupport extends DataSourceV2 {
+public interface BatchWriteSupportProvider extends DataSourceV2 {
 
   /**
-   * Creates an optional {@link DataSourceWriter} to save the data to this data source. Data
+   * Creates an optional {@link BatchWriteSupport} to save the data to this data source. Data
    * sources can return None if there is no writing needed to be done according to the save mode.
    *
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    *
    * @param jobId A unique string for the writing job. It's possible that there are many writing
-   *              jobs running at the same time, and the returned {@link DataSourceWriter} can
+   *              jobs running at the same time, and the returned {@link BatchWriteSupport} can
    *              use this job id to distinguish itself from other jobs.
    * @param schema the schema of the data to be written.
    * @param mode the save mode which determines what to do when the data are already in this data
@@ -47,6 +47,6 @@ public interface WriteSupport extends DataSourceV2 {
    * @param options the options for the returned data source writer, which is an immutable
    *                case-insensitive string-to-string map.
    */
-  Optional<DataSourceWriter> createWriter(
+  Optional<BatchWriteSupport> createBatchWriteSupport(
       String jobId, StructType schema, SaveMode mode, DataSourceOptions options);
 }

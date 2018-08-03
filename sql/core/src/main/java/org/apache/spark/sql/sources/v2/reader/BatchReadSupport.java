@@ -18,18 +18,23 @@
 package org.apache.spark.sql.sources.v2.reader;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset;
 
 /**
- * A mix-in interface for {@link InputPartition}. Continuous input partitions can
- * implement this interface to provide creating {@link InputPartitionReader} with particular offset.
+ * An interface which defines how to scan the data from data source for batch processing.
  */
 @InterfaceStability.Evolving
-public interface ContinuousInputPartition<T> extends InputPartition<T> {
+public interface BatchReadSupport extends ReadSupport {
+
   /**
-   * Create an input partition reader with particular offset as its startOffset.
+   * Returns a builder of {@link ScanConfig}. The builder can take some query specific information
+   * like which operators to pushdown, streaming offsets, etc., and keep these information in the
+   * created {@link ScanConfig}.
    *
-   * @param offset offset want to set as the input partition reader's startOffset.
+   * This is the first step of the data scan. All other methods in {@link BatchReadSupport} needs
+   * to take {@link ScanConfig} as an input.
+   *
+   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
+   * submitted.
    */
-  InputPartitionReader<T> createContinuousReader(PartitionOffset offset);
+  ScanConfigBuilder newScanConfigBuilder();
 }

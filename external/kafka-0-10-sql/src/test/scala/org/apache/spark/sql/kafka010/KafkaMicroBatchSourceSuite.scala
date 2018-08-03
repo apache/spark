@@ -120,11 +120,11 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
       val sources = {
         query.get.logicalPlan.collect {
           case StreamingExecutionRelation(source: KafkaSource, _) => source
-          case StreamingExecutionRelation(source: KafkaMicroBatchReader, _) => source
+          case StreamingExecutionRelation(source: KafkaMicroBatchReadSupport, _) => source
         } ++ (query.get.lastExecution match {
           case null => Seq()
           case e => e.logical.collect {
-            case StreamingDataSourceV2Relation(_, _, _, reader: KafkaContinuousReader) => reader
+            case StreamingDataSourceV2Relation(_, _, _, reader: KafkaContinuousReadSupport) => reader
           }
         })
       }.distinct
@@ -649,7 +649,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
       makeSureGetOffsetCalled,
       AssertOnQuery { query =>
         query.logicalPlan.collect {
-          case StreamingExecutionRelation(_: KafkaMicroBatchReader, _) => true
+          case StreamingExecutionRelation(_: KafkaMicroBatchReadSupport, _) => true
         }.nonEmpty
       }
     )

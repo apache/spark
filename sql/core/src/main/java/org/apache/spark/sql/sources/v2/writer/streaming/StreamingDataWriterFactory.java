@@ -15,23 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.writer;
+package org.apache.spark.sql.sources.v2.writer.streaming;
 
 import java.io.Serializable;
 
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.sources.v2.writer.DataWriter;
 
 /**
- * A factory of {@link DataWriter} returned by {@link BatchWriteSupport#createBatchWriterFactory()},
- * which is responsible for creating and initializing the actual data writer at executor side.
+ * A factory of {@link DataWriter} returned by
+ * {@link StreamingWriteSupport#createStreamingWriterFactory()}, which is responsible for creating
+ * and initializing the actual data writer at executor side.
  *
  * Note that, the writer factory will be serialized and sent to executors, then the data writer
  * will be created on executors and do the actual writing. So this interface must be
  * serializable and {@link DataWriter} doesn't need to be.
  */
 @InterfaceStability.Evolving
-public interface DataWriterFactory extends Serializable {
+public interface StreamingDataWriterFactory extends Serializable {
 
   /**
    * Returns a data writer to do the actual writing work. Note that, Spark will reuse the same data
@@ -49,6 +51,8 @@ public interface DataWriterFactory extends Serializable {
    * @param taskId A unique identifier for a task that is performing the write of the partition
    *               data. Spark may run multiple tasks for the same partition (due to speculation
    *               or task failures, for example).
+   * @param epochId A monotonically increasing id for streaming queries that are split in to
+   *                discrete periods of execution.
    */
-  DataWriter<InternalRow> createWriter(int partitionId, long taskId);
+  DataWriter<InternalRow> createWriter(int partitionId, long taskId, long epochId);
 }

@@ -24,36 +24,34 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, ReadSupport}
-import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, SupportsReportStatistics}
+import org.apache.spark.sql.sources.v2.{BatchReadSupportProvider, DataSourceOptions, DataSourceV2}
+import org.apache.spark.sql.sources.v2.reader.{BatchReadSupport, ReadSupport, ScanConfigBuilder, SupportsReportStatistics}
 import org.apache.spark.sql.types.StructType
 
 /**
  * A logical plan representing a data source v2 scan.
  *
  * @param source An instance of a [[DataSourceV2]] implementation.
- * @param options The options for this scan. Used to create fresh [[DataSourceReader]].
+ * @param options The options for this scan. Used to create fresh [[BatchReadSupport]].
  * @param userSpecifiedSchema The user-specified schema for this scan. Used to create fresh
- *                            [[DataSourceReader]].
+ *                            [[BatchReadSupport]].
  */
 case class DataSourceV2Relation(
     source: DataSourceV2,
+    readSupport: BatchReadSupport,
     output: Seq[AttributeReference],
     options: Map[String, String],
     userSpecifiedSchema: Option[StructType])
   extends LeafNode with MultiInstanceRelation with DataSourceV2StringFormat {
 
-  import DataSourceV2Relation._
-
   override def pushedFilters: Seq[Expression] = Seq.empty
 
   override def simpleString: String = "RelationV2 " + metadataString
 
-  def newReader(): DataSourceReader = source.createReader(options, userSpecifiedSchema)
-
-  override def computeStats(): Statistics = newReader match {
+  override def computeStats(): Statistics = readSupport match {
     case r: SupportsReportStatistics =>
-      Statistics(sizeInBytes = r.getStatistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
+      val statistics = r.estimateStatistics(readSupport.newScanConfigBuilder().build())
+      Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
@@ -74,7 +72,8 @@ case class StreamingDataSourceV2Relation(
     output: Seq[AttributeReference],
     source: DataSourceV2,
     options: Map[String, String],
-    reader: DataSourceReader)
+    readSupport: ReadSupport,
+    scanConfigBuilder: ScanConfigBuilder)
   extends LeafNode with MultiInstanceRelation with DataSourceV2StringFormat {
 
   override def isStreaming: Boolean = true
@@ -88,7 +87,8 @@ case class StreamingDataSourceV2Relation(
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
     case other: StreamingDataSourceV2Relation =>
-      output == other.output && reader.getClass == other.reader.getClass && options == other.options
+      output == other.output && readSupport.getClass == other.readSupport.getClass &&
+        options == other.options
     case _ => false
   }
 
@@ -96,9 +96,10 @@ case class StreamingDataSourceV2Relation(
     Seq(output, source, options).hashCode()
   }
 
-  override def computeStats(): Statistics = reader match {
+  override def computeStats(): Statistics = readSupport match {
     case r: SupportsReportStatistics =>
-      Statistics(sizeInBytes = r.getStatistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
+      val statistics = r.estimateStatistics(scanConfigBuilder.build())
+      Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
@@ -106,10 +107,10 @@ case class StreamingDataSourceV2Relation(
 
 object DataSourceV2Relation {
   private implicit class SourceHelpers(source: DataSourceV2) {
-    def asReadSupport: ReadSupport = {
+    def asReadSupportProvider: BatchReadSupportProvider = {
       source match {
-        case support: ReadSupport =>
-          support
+        case provider: BatchReadSupportProvider =>
+          provider
         case _ =>
           throw new AnalysisException(s"Data source is not readable: $name")
       }
@@ -124,15 +125,15 @@ object DataSourceV2Relation {
       }
     }
 
-    def createReader(
+    def createReadSupport(
         options: Map[String, String],
-        userSpecifiedSchema: Option[StructType]): DataSourceReader = {
+        userSpecifiedSchema: Option[StructType]): BatchReadSupport = {
       val v2Options = new DataSourceOptions(options.asJava)
       userSpecifiedSchema match {
         case Some(s) =>
-          asReadSupport.createReader(s, v2Options)
+          asReadSupportProvider.createBatchReadSupport(s, v2Options)
         case _ =>
-          asReadSupport.createReader(v2Options)
+          asReadSupportProvider.createBatchReadSupport(v2Options)
       }
     }
   }
@@ -141,8 +142,8 @@ object DataSourceV2Relation {
       source: DataSourceV2,
       options: Map[String, String],
       userSpecifiedSchema: Option[StructType]): DataSourceV2Relation = {
-    val reader = source.createReader(options, userSpecifiedSchema)
+    val readSupport = source.createReadSupport(options, userSpecifiedSchema)
     DataSourceV2Relation(
-      source, reader.readSchema().toAttributes, options, userSpecifiedSchema)
+      source, readSupport, readSupport.fullSchema().toAttributes, options, userSpecifiedSchema)
   }
 }

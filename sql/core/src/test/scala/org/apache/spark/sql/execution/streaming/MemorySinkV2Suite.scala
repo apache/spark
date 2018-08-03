@@ -43,8 +43,9 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
 
   test("continuous writer") {
     val sink = new MemorySinkV2
-    val writer = new MemoryStreamWriter(sink, OutputMode.Append(), new StructType().add("i", "int"))
-    writer.commit(0,
+    val writeSupport = new MemoryStreamingWriteSupport(
+      sink, OutputMode.Append(), new StructType().add("i", "int"))
+    writeSupport.commit(0,
       Array(
         MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))),
         MemoryWriterCommitMessage(1, Seq(Row(3), Row(4))),
@@ -52,7 +53,7 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
       ))
     assert(sink.latestBatchId.contains(0))
     assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7))
-    writer.commit(19,
+    writeSupport.commit(19,
       Array(
         MemoryWriterCommitMessage(3, Seq(Row(11), Row(22))),
         MemoryWriterCommitMessage(0, Seq(Row(33)))
@@ -66,7 +67,7 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
   test("microbatch writer") {
     val sink = new MemorySinkV2
     val schema = new StructType().add("i", "int")
-    new MemoryWriter(sink, 0, OutputMode.Append(), schema).commit(
+    new MemoryBatchWriteSupport(sink, 0, OutputMode.Append(), schema).commit(
       Array(
         MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))),
         MemoryWriterCommitMessage(1, Seq(Row(3), Row(4))),
@@ -74,7 +75,7 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
       ))
     assert(sink.latestBatchId.contains(0))
     assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7))
-    new MemoryWriter(sink, 19, OutputMode.Append(), schema).commit(
+    new MemoryBatchWriteSupport(sink, 19, OutputMode.Append(), schema).commit(
       Array(
         MemoryWriterCommitMessage(3, Seq(Row(11), Row(22))),
         MemoryWriterCommitMessage(0, Seq(Row(33)))

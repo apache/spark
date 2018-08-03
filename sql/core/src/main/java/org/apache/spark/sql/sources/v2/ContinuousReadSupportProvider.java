@@ -20,17 +20,21 @@ package org.apache.spark.sql.sources.v2;
 import java.util.Optional;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReader;
+import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReadSupport;
 import org.apache.spark.sql.types.StructType;
 
 /**
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
- * provide data reading ability for continuous stream processing.
+ * provide data reading ability for stream processing(continuous mode).
  */
 @InterfaceStability.Evolving
-public interface ContinuousReadSupport extends DataSourceV2 {
+public interface ContinuousReadSupportProvider extends DataSourceV2 {
+
   /**
-   * Creates a {@link ContinuousReader} to scan the data from this data source.
+   * Creates a {@link ContinuousReadSupport} to scan the data from this streaming data source.
+   *
+   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
+   * submitted.
    *
    * @param schema the user provided schema, or empty() if none was provided
    * @param checkpointLocation a path to Hadoop FS scratch space that can be used for failure
@@ -39,7 +43,7 @@ public interface ContinuousReadSupport extends DataSourceV2 {
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.
    */
-  ContinuousReader createContinuousReader(
+  ContinuousReadSupport createContinuousReadSupport(
     Optional<StructType> schema,
     String checkpointLocation,
     DataSourceOptions options);

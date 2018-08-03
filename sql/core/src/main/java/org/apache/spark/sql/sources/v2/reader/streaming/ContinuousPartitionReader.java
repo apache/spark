@@ -15,27 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader.partitioning;
+package org.apache.spark.sql.sources.v2.reader.streaming;
 
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.sources.v2.reader.PartitionReader;
 
 /**
- * An interface to represent data distribution requirement, which specifies how the records should
- * be distributed among the data partitions (one {@link PartitionReader} outputs data for one
- * partition).
- * Note that this interface has nothing to do with the data ordering inside one
- * partition(the output records of a single {@link PartitionReader}).
- *
- * The instance of this interface is created and provided by Spark, then consumed by
- * {@link Partitioning#satisfy(Distribution)}. This means data source developers don't need to
- * implement this interface, but need to catch as more concrete implementations of this interface
- * as possible in {@link Partitioning#satisfy(Distribution)}.
- *
- * Concrete implementations until now:
- * <ul>
- *   <li>{@link ClusteredDistribution}</li>
- * </ul>
+ * A variation on {@link PartitionReader} for use with streaming in continuous processing mode.
  */
 @InterfaceStability.Evolving
-public interface Distribution {}
+public interface ContinuousPartitionReader<T> extends PartitionReader<T> {
+
+  /**
+   * Get the offset of the current record, or the start offset if no records have been read.
+   *
+   * The execution engine will call this method along with get() to keep track of the current
+   * offset. When an epoch ends, the offset of the previous record in each partition will be saved
+   * as a restart checkpoint.
+   */
+  PartitionOffset getOffset();
+}

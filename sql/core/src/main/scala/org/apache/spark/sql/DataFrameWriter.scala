@@ -242,7 +242,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
       val ds = cls.newInstance()
       ds match {
-        case ws: WriteSupport =>
+        case ws: BatchWriteSupportProvider =>
           val options = new DataSourceOptions((extraOptions ++
             DataSourceV2Utils.extractSessionConfigs(
               ds = ds.asInstanceOf[DataSourceV2],
@@ -251,7 +251,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           // enough as there won't be tons of writing jobs created at the same second.
           val jobId = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
             .format(new Date()) + "-" + UUID.randomUUID()
-          val writer = ws.createWriter(jobId, df.logicalPlan.schema, mode, options)
+          val writer = ws.createBatchWriteSupport(jobId, df.logicalPlan.schema, mode, options)
           if (writer.isPresent) {
             runCommand(df.sparkSession, "save") {
               WriteToDataSourceV2(writer.get(), df.logicalPlan)

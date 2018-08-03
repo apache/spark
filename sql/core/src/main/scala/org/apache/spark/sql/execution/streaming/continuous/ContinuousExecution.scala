@@ -29,11 +29,11 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, WriteToDataSourceV2}
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming.{ContinuousExecutionRelation, StreamingRelationV2, _}
 import org.apache.spark.sql.sources.v2
-import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceOptions, StreamWriteSupport}
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReader, PartitionOffset}
+import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceOptions, StreamingWriteSupportProvider}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, PartitionOffset}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{Clock, Utils}
@@ -43,7 +43,7 @@ class ContinuousExecution(
     name: String,
     checkpointRoot: String,
     analyzedPlan: LogicalPlan,
-    sink: StreamWriteSupport,
+    sink: StreamingWriteSupportProvider,
     trigger: Trigger,
     triggerClock: Clock,
     outputMode: OutputMode,
@@ -53,7 +53,7 @@ class ContinuousExecution(
     sparkSession, name, checkpointRoot, analyzedPlan, sink,
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
 
-  @volatile protected var continuousSources: Seq[ContinuousReader] = Seq()
+  @volatile protected var continuousSources: Seq[ContinuousReadSupport] = Seq()
   override protected def sources: Seq[BaseStreamingSource] = continuousSources
 
   // For use only in test harnesses.
@@ -63,7 +63,8 @@ class ContinuousExecution(
     val toExecutionRelationMap = MutableMap[StreamingRelationV2, ContinuousExecutionRelation]()
     analyzedPlan.transform {
       case r @ StreamingRelationV2(
-          source: ContinuousReadSupport, _, extraReaderOptions, output, _) =>
+          source: ContinuousReadSupportProvider, _, extraReaderOptions, output, _) =>
+        // TODO: shall we create `ContinuousReadSupport` here instead of each reconfiguration?
         toExecutionRelationMap.getOrElseUpdate(r, {
           ContinuousExecutionRelation(source, extraReaderOptions, output)(sparkSession)
         })
@@ -148,7 +149,7 @@ class ContinuousExecution(
         val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
         nextSourceId += 1
 
-        dataSource.createContinuousReader(
+        dataSource.createContinuousReadSupport(
           java.util.Optional.empty[StructType](),
           metadataPath,
           new DataSourceOptions(extraReaderOptions.asJava))
@@ -160,19 +161,21 @@ class ContinuousExecution(
     var insertedSourceId = 0
     val withNewSources = logicalPlan transform {
       case ContinuousExecutionRelation(source, options, output) =>
-        val reader = continuousSources(insertedSourceId)
+        val readSupport = continuousSources(insertedSourceId)
         insertedSourceId += 1
-        val newOutput = reader.readSchema().toAttributes
+
+        val loggedOffset = offsets.offsets(0)
+        val realOffset = loggedOffset.map(off => readSupport.deserializeOffset(off.json))
+        val startOffset = realOffset.getOrElse(readSupport.initialOffset)
+        val scanConfigBuilder = readSupport.newScanConfigBuilder(startOffset)
+        val newOutput = readSupport.fullSchema().toAttributes
 
         assert(output.size == newOutput.size,
           s"Invalid reader: ${Utils.truncatedString(output, ",")} != " +
             s"${Utils.truncatedString(newOutput, ",")}")
         replacements ++= output.zip(newOutput)
 
-        val loggedOffset = offsets.offsets(0)
-        val realOffset = loggedOffset.map(off => reader.deserializeOffset(off.json))
-        reader.setStartOffset(java.util.Optional.ofNullable(realOffset.orNull))
-        StreamingDataSourceV2Relation(newOutput, source, options, reader)
+        StreamingDataSourceV2Relation(newOutput, source, options, readSupport, scanConfigBuilder)
     }
 
     // Rewire the plan to use the new attributes that were returned by the source.
@@ -185,15 +188,15 @@ class ContinuousExecution(
           "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
     }
 
-    val writer = sink.createStreamWriter(
+    val writer = sink.createStreamingWritSupport(
       s"$runId",
       triggerLogicalPlan.schema,
       outputMode,
       new DataSourceOptions(extraOptions.asJava))
     val withSink = WriteToContinuousDataSource(writer, triggerLogicalPlan)
 
-    val reader = withSink.collect {
-      case StreamingDataSourceV2Relation(_, _, _, r: ContinuousReader) => r
+    val readSupport = withSink.collect {
+      case StreamingDataSourceV2Relation(_, _, _, r: ContinuousReadSupport, _) => r
     }.head
 
     reportTimeTaken("queryPlanning") {
@@ -223,14 +226,14 @@ class ContinuousExecution(
     // Use the parent Spark session for the endpoint since it's where this query ID is registered.
     val epochEndpoint =
       EpochCoordinatorRef.create(
-        writer, reader, this, epochCoordinatorId, currentBatchId, sparkSession, SparkEnv.get)
+        writer, readSupport, this, epochCoordinatorId, currentBatchId, sparkSession, SparkEnv.get)
     val epochUpdateThread = new Thread(new Runnable {
       override def run: Unit = {
         try {
           triggerExecutor.execute(() => {
             startTrigger()
 
-            if (reader.needsReconfiguration() && state.compareAndSet(ACTIVE, RECONFIGURING)) {
+            if (readSupport.needsReconfiguration() && state.compareAndSet(ACTIVE, RECONFIGURING)) {
               if (queryExecutionThread.isAlive) {
                 queryExecutionThread.interrupt()
               }
@@ -280,10 +283,12 @@ class ContinuousExecution(
    * Report ending partition offsets for the given reader at the given epoch.
    */
   def addOffset(
-      epoch: Long, reader: ContinuousReader, partitionOffsets: Seq[PartitionOffset]): Unit = {
+      epoch: Long,
+      readSupport: ContinuousReadSupport,
+      partitionOffsets: Seq[PartitionOffset]): Unit = {
     assert(continuousSources.length == 1, "only one continuous source supported currently")
 
-    val globalOffset = reader.mergeOffsets(partitionOffsets.toArray)
+    val globalOffset = readSupport.mergeOffsets(partitionOffsets.toArray)
     val oldOffset = synchronized {
       offsetLog.add(epoch, OffsetSeq.fill(globalOffset))
       offsetLog.get(epoch - 1)

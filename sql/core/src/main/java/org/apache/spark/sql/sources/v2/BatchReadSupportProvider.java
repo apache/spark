@@ -19,18 +19,18 @@ package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.sources.DataSourceRegister;
-import org.apache.spark.sql.sources.v2.reader.DataSourceReader;
+import org.apache.spark.sql.sources.v2.reader.BatchReadSupport;
 import org.apache.spark.sql.types.StructType;
 
 /**
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
- * provide data reading ability and scan the data from the data source.
+ * provide data reading ability for batch processing.
  */
 @InterfaceStability.Evolving
-public interface ReadSupport extends DataSourceV2 {
+public interface BatchReadSupportProvider extends DataSourceV2 {
 
   /**
-   * Creates a {@link DataSourceReader} to scan the data from this data source.
+   * Creates a {@link BatchReadSupport} to scan the data from this data source.
    *
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
@@ -42,7 +42,7 @@ public interface ReadSupport extends DataSourceV2 {
    * By default this method throws {@link UnsupportedOperationException}, implementations should
    * override this method to handle user specified schema.
    */
-  default DataSourceReader createReader(StructType schema, DataSourceOptions options) {
+  default BatchReadSupport createBatchReadSupport(StructType schema, DataSourceOptions options) {
     String name;
     if (this instanceof DataSourceRegister) {
       name = ((DataSourceRegister) this).shortName();
@@ -53,7 +53,7 @@ public interface ReadSupport extends DataSourceV2 {
   }
 
   /**
-   * Creates a {@link DataSourceReader} to scan the data from this data source.
+   * Creates a {@link BatchReadSupport} to scan the data from this data source.
    *
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
@@ -61,5 +61,5 @@ public interface ReadSupport extends DataSourceV2 {
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.
    */
-  DataSourceReader createReader(DataSourceOptions options);
+  BatchReadSupport createBatchReadSupport(DataSourceOptions options);
 }

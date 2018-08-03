@@ -22,18 +22,16 @@ import java.io.Serializable;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * An input partition returned by {@link DataSourceReader#planInputPartitions()} and is
- * responsible for creating the actual data reader of one RDD partition.
- * The relationship between {@link InputPartition} and {@link InputPartitionReader}
- * is similar to the relationship between {@link Iterable} and {@link java.util.Iterator}.
+ * An input partition returned by {@link ReadSupport#planInputPartitions(ScanConfig)}, which
+ * represents a data split that should be processed by one Spark task.
  *
  * Note that {@link InputPartition}s will be serialized and sent to executors, then
- * {@link InputPartitionReader}s will be created on executors to do the actual reading. So
- * {@link InputPartition} must be serializable while {@link InputPartitionReader} doesn't need to
- * be.
+ * {@link PartitionReader}s will be created by {@link PartitionReaderFactory} on executors to do
+ * the actual reading. So {@link InputPartition} must be serializable while {@link PartitionReader}
+ * doesn't need to be.
  */
 @InterfaceStability.Evolving
-public interface InputPartition<T> extends Serializable {
+public interface InputPartition extends Serializable {
 
   /**
    * The preferred locations where the input partition reader returned by this partition can run
@@ -51,12 +49,4 @@ public interface InputPartition<T> extends Serializable {
   default String[] preferredLocations() {
     return new String[0];
   }
-
-  /**
-   * Returns an input partition reader to do the actual reading work.
-   *
-   * If this method fails (by throwing an exception), the corresponding Spark task would fail and
-   * get retried until hitting the maximum retry times.
-   */
-  InputPartitionReader<T> createPartitionReader();
 }

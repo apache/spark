@@ -17,16 +17,14 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
-import java.util.OptionalLong;
-
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * An interface to represent statistics for a data source, which is returned by
- * {@link SupportsReportStatistics#estimateStatistics(ScanConfig)}.
+ * An interface for building the {@link ScanConfig}. Implementations can mixin those
+ * SupportsPushDownXYZ interfaces to do operator pushdown, and keep the operator pushdown result in
+ * the returned {@link ScanConfig}.
  */
 @InterfaceStability.Evolving
-public interface Statistics {
-  OptionalLong sizeInBytes();
-  OptionalLong numRows();
+public interface ScanConfigBuilder {
+  ScanConfig build();
 }

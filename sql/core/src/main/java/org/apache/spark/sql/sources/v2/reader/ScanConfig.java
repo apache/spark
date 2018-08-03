@@ -17,16 +17,17 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
-import java.util.OptionalLong;
-
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * An interface to represent statistics for a data source, which is returned by
- * {@link SupportsReportStatistics#estimateStatistics(ScanConfig)}.
+ * An interface that carries query specific information for the data scan. Currently it's used to
+ * hold operator pushdown result and streaming offsets. This is defined as an empty interface, and
+ * data sources should define their own {@link ScanConfig} classes.
+ *
+ * For APIs that take a {@link ScanConfig} as input, like
+ * {@link ReadSupport#planInputPartitions(ScanConfig)} and
+ * {@link ReadSupport#createReaderFactory(ScanConfig)}, implementations mostly need to cast the
+ * input {@link ScanConfig} to the concrete {@link ScanConfig} class of the data source.
  */
 @InterfaceStability.Evolving
-public interface Statistics {
-  OptionalLong sizeInBytes();
-  OptionalLong numRows();
-}
+public interface ScanConfig {}

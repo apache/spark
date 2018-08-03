@@ -33,8 +33,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupport}
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupportProvider}
+import org.apache.spark.sql.sources.v2.reader.streaming.Offset
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
@@ -48,14 +48,9 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       serverThread.join()
       serverThread = null
     }
-    if (batchReader != null) {
-      batchReader.stop()
-      batchReader = null
-    }
   }
 
   private var serverThread: ServerThread = null
-  private var batchReader: MicroBatchReader = null
 
   case class AddSocketData(data: String*) extends AddData {
     override def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset) = {
@@ -64,7 +59,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
         "Cannot add data when there is no query for finding the active socket source")
 
       val sources = query.get.logicalPlan.collect {
-        case StreamingExecutionRelation(source: TextSocketMicroBatchReader, _) => source
+        case StreamingExecutionRelation(source: TextSocketMicroBatchReadSupport, _) => source
       }
       if (sources.isEmpty) {
         throw new Exception(
@@ -90,7 +85,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
   test("backward compatibility with old path") {
     DataSource.lookupDataSource("org.apache.spark.sql.execution.streaming.TextSocketSourceProvider",
       spark.sqlContext.conf).newInstance() match {
-      case ds: MicroBatchReadSupport =>
+      case ds: MicroBatchReadSupportProvider =>
         assert(ds.isInstanceOf[TextSocketSourceProvider])
       case _ =>
         throw new IllegalStateException("Could not find socket source")
@@ -180,15 +175,15 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
   test("params not given") {
     val provider = new TextSocketSourceProvider
     intercept[AnalysisException] {
-      provider.createMicroBatchReader(Optional.empty(), "",
+      provider.createMicroBatchReadSupport(Optional.empty(), "",
         new DataSourceOptions(Map.empty[String, String].asJava))
     }
     intercept[AnalysisException] {
-      provider.createMicroBatchReader(Optional.empty(), "",
+      provider.createMicroBatchReadSupport(Optional.empty(), "",
         new DataSourceOptions(Map("host" -> "localhost").asJava))
     }
     intercept[AnalysisException] {
-      provider.createMicroBatchReader(Optional.empty(), "",
+      provider.createMicroBatchReadSupport(Optional.empty(), "",
         new DataSourceOptions(Map("port" -> "1234").asJava))
     }
   }
@@ -198,7 +193,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     val params = Map("host" -> "localhost", "port" -> "1234", "includeTimestamp" -> "fasle")
     intercept[AnalysisException] {
       val a = new DataSourceOptions(params.asJava)
-      provider.createMicroBatchReader(Optional.empty(), "", a)
+      provider.createMicroBatchReadSupport(Optional.empty(), "", a)
     }
   }
 
@@ -209,7 +204,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       StructField("area", StringType) :: Nil)
     val params = Map("host" -> "localhost", "port" -> "1234")
     val exception = intercept[AnalysisException] {
-      provider.createMicroBatchReader(
+      provider.createMicroBatchReadSupport(
         Optional.of(userSpecifiedSchema), "", new DataSourceOptions(params.asJava))
     }
     assert(exception.getMessage.contains(
