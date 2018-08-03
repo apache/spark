@@ -19,7 +19,7 @@ package org.apache.spark.streaming.kafka010.consumer.async
 
 import java.{util => ju}
 import java.util.concurrent.{Executors, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -128,6 +128,7 @@ private[kafka010] class AsyncPollTask[K, V](
   )
   private val lastRequestedAt: AtomicLong = new AtomicLong(System.nanoTime())
   private val shouldClose: AtomicBoolean = new AtomicBoolean(false)
+  private val error: AtomicReference[Throwable] = new AtomicReference[Throwable](null);
 
   private val future = Future {
     var listSize: Int = 0
@@ -136,7 +137,18 @@ private[kafka010] class AsyncPollTask[K, V](
       listSize = bufferList.size()
       logDebug(s"$topicPartition Buffersize is $listSize and maintain buffer is $maintainBufferMin")
       if (listSize < maintainBufferMin) {
-        var records = fetch(currentSeekOffset.get())
+        var records: ju.List[ConsumerRecord[K, V]] = null
+        try {
+          records = fetch(currentSeekOffset.get())
+          if(error.get() != null) {
+            error.set(null)
+          }
+        }
+        catch {
+          case x: Throwable =>
+            logError(s"$topicPartition Exception in fetch", x)
+            error.set(x)
+        }
         var count = if (records == null) 0 else records.size()
         if (count == 0) {
           waitForReactivation(lastRequestedAtBefore)
@@ -169,20 +181,14 @@ private[kafka010] class AsyncPollTask[K, V](
 
   private def fetch(seekOffset: Long): ju.List[ConsumerRecord[K, V]] = {
     var result: ju.List[ConsumerRecord[K, V]] = new ju.ArrayList[ConsumerRecord[K, V]]()
-    try {
-      var count = 0
-      if (seekOffset != AsyncSparkKafkaConsumer.UNKNOWN_OFFSET) {
-        logDebug(s"$topicPartition Polling from offset $seekOffset")
-        kafkaConsumer.seek(topicPartition, seekOffset)
-        val records = kafkaConsumer.poll(pollTimeout)
-        count = records.count()
-        logDebug(s"$topicPartition Received records $count offset $seekOffset " + this.toString)
-        result = records.records(topicPartition)
-      }
-    }
-    catch {
-      case x: Exception =>
-        logError(s"$topicPartition Exception in fetch", x)
+    var count = 0
+    if (seekOffset != AsyncSparkKafkaConsumer.UNKNOWN_OFFSET) {
+      logDebug(s"$topicPartition Polling from offset $seekOffset")
+      kafkaConsumer.seek(topicPartition, seekOffset)
+      val records = kafkaConsumer.poll(pollTimeout)
+      count = records.count()
+      logDebug(s"$topicPartition Received records $count offset $seekOffset " + this.toString)
+      result = records.records(topicPartition)
     }
     result
   }
@@ -209,6 +215,9 @@ private[kafka010] class AsyncPollTask[K, V](
 
   def getNextRecord(timeout: Long): ConsumerRecord[K, V] = {
     ensureAsyncTaskRunning
+    if(error.get() != null) {
+      throw error.get()
+    }
     bufferList.pollFirst(timeout, TimeUnit.MILLISECONDS)
   }
 
@@ -220,8 +229,8 @@ private[kafka010] class AsyncPollTask[K, V](
    */
   def close(): Unit = {
     logDebug(s"$topicPartition Mark consumer for closure")
-    resetOffset(AsyncSparkKafkaConsumer.UNKNOWN_OFFSET)
     shouldClose.set(true)
+    resetOffset(AsyncSparkKafkaConsumer.UNKNOWN_OFFSET)
   }
 
 }

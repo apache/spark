@@ -87,11 +87,11 @@ class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll {
   )
 
   test("KafkaDataConsumer reuse in case of same groupId and TopicPartition") {
-    KafkaDataConsumer.cache.clear()
-
-    val kafkaParams = getKafkaParams()
-
     consumersToTest.foreach { consumerProducer =>
+      beforeAll()
+      KafkaDataConsumer.cache.clear()
+      val kafkaParams = getKafkaParams()
+
       var testName = consumerProducer._1
       val suiteName = this.getClass.getName
       val shortSuiteName = suiteName.replaceAll("org.apache.spark", "o.a.s")
@@ -123,14 +123,17 @@ class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll {
         assert(existingInternalConsumer.eq(consumer2.internalConsumer))
       } finally {
         logInfo(s"\n\n===== FINISHED $shortSuiteName: '$testName' =====\n")
+        afterAll()
       }
     }
   }
 
   test("concurrent use of KafkaDataConsumer") {
-    val kafkaParams = getKafkaParams()
-
     consumersToTest.foreach { consumerProducer =>
+      KafkaDataConsumer.cache.clear()
+      beforeAll()
+      val kafkaParams = getKafkaParams()
+
       var testName = consumerProducer._1
       val suiteName = this.getClass.getName
       val shortSuiteName = suiteName.replaceAll("org.apache.spark", "o.a.s")
@@ -201,6 +204,7 @@ class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll {
         }
       } finally {
         logInfo(s"\n\n===== FINISHED $shortSuiteName: '$testName' =====\n")
+        afterAll()
       }
 
     }
