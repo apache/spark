@@ -178,11 +178,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private def clearBlacklist(expireTimeInSeconds: Long): Unit = {
     val expiredThreshold = clock.getTimeMillis() - expireTimeInSeconds * 1000
-    val expired = new mutable.ArrayBuffer[String]
-    blacklist.asScala.foreach {
-      case (path, creationTime) if creationTime < expiredThreshold => expired += path
-    }
-    expired.foreach(blacklist.remove(_))
+    blacklist.asScala.retain((_, creationTime) => creationTime >= expiredThreshold)
   }
 
   private val activeUIs = new mutable.HashMap[(String, Option[String]), LoadedAppUI]()
