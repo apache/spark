@@ -142,7 +142,11 @@ object SchemaConverters {
         builder.map()
           .values(toAvroType(vt, valueContainsNull, recordName, prevNameSpace, outputTimestampType))
       case st: StructType =>
-        val nameSpace = s"$prevNameSpace.$recordName"
+        val nameSpace = prevNameSpace match {
+          case "" => recordName
+          case _ => s"$prevNameSpace.$recordName"
+        }
+
         val fieldsAssembler = builder.record(recordName).namespace(nameSpace).fields()
         st.foreach { f =>
           val fieldAvroType =
