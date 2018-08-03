@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, InSubquery, TimeZoneAwareExpression}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ListQuery, TimeZoneAwareExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -34,7 +34,7 @@ case class ResolveTimeZone(conf: SQLConf) extends Rule[LogicalPlan] {
     // the types between the value expression and list query expression of IN expression.
     // We need to subject the subquery plan through ResolveTimeZone again to setup timezone
     // information for time zone aware expressions.
-    case e: InSubquery => e.withNewPlan(apply(e.plan))
+    case e: ListQuery => e.withNewPlan(apply(e.plan))
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan =

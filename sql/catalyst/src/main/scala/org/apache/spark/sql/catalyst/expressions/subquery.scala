@@ -19,11 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
-import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -75,7 +73,7 @@ object SubqueryExpression {
    */
   def hasInOrExistsSubquery(e: Expression): Boolean = {
     e.find {
-      case _: InSubquery | _: Exists => true
+      case _: ListQuery | _: Exists => true
       case _ => false
     }.isDefined
   }
@@ -272,6 +270,42 @@ object ScalarSubquery {
 }
 
 /**
+ * A [[ListQuery]] expression defines the query which we want to search in an IN subquery
+ * expression. It should and can only be used in conjunction with an IN expression.
+ *
+ * For example (SQL):
+ * {{{
+ *   SELECT  *
+ *   FROM    a
+ *   WHERE   a.id IN (SELECT  id
+ *                    FROM    b)
+ * }}}
+ */
+case class ListQuery(
+    plan: LogicalPlan,
+    children: Seq[Expression] = Seq.empty,
+    exprId: ExprId = NamedExpression.newExprId,
+    childOutputs: Seq[Attribute] = Seq.empty)
+  extends SubqueryExpression(plan, children, exprId) with Unevaluable {
+  override def dataType: DataType = if (childOutputs.length > 1) {
+    childOutputs.toStructType
+  } else {
+    childOutputs.head.dataType
+  }
+  override lazy val resolved: Boolean = childrenResolved && plan.resolved && childOutputs.nonEmpty
+  override def nullable: Boolean = false
+  override def withNewPlan(plan: LogicalPlan): ListQuery = copy(plan = plan)
+  override def toString: String = s"list#${exprId.id} $conditionString"
+  override lazy val canonicalized: Expression = {
+    ListQuery(
+      plan.canonicalized,
+      children.map(_.canonicalized),
+      ExprId(0),
+      childOutputs.map(_.canonicalized.asInstanceOf[Attribute]))
+  }
+}
+
+/**
  * The [[Exists]] expression checks if a row exists in a subquery given some correlated condition.
  *
  * For example (SQL):
@@ -297,96 +331,4 @@ case class Exists(
       children.map(_.canonicalized),
       ExprId(0))
   }
-}
-
-/**
- * A [[InSubquery]] expression defines a IN expression where the values are searched in the output
- * of a subquery.
- *
- * For example (SQL):
- * {{{
- *   SELECT  *
- *   FROM    a
- *   WHERE   a.id IN (SELECT  id
- *                    FROM    b)
- * }}}
- */
-case class InSubquery(values: Seq[Expression],
-    plan: LogicalPlan,
-    conditions: Seq[Expression] = Seq.empty,
-    exprId: ExprId = NamedExpression.newExprId,
-    queryOutputs: Seq[Attribute] = Seq.empty)
-  extends SubqueryExpression(plan, conditions, exprId) with Predicate with Unevaluable {
-
-  @transient lazy val value: Expression = if (values.length > 1) {
-    CreateNamedStruct(values.zipWithIndex.flatMap {
-      case (v: NamedExpression, _) => Seq(Literal(v.name), v)
-      case (v, idx) => Seq(Literal(s"_$idx"), v)
-    })
-  } else {
-    values.head
-  }
-
-  @transient lazy val queryResultDataType = if (queryOutputs.length > 1) {
-    queryOutputs.toStructType
-  } else {
-    queryOutputs.head.dataType
-  }
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val mismatchOpt = !DataType.equalsStructurally(queryResultDataType, value.dataType,
-      ignoreNullability = true)
-    if (mismatchOpt) {
-      if (values.length != queryOutputs.length) {
-        TypeCheckResult.TypeCheckFailure(
-          s"""
-             |The number of columns in the left hand side of an IN subquery does not match the
-             |number of columns in the output of subquery.
-             |#columns in left hand side: ${values.length}.
-             |#columns in right hand side: ${queryOutputs.length}.
-             |Left side columns:
-             |[${values.map(_.sql).mkString(", ")}].
-             |Right side columns:
-             |[${queryOutputs.map(_.sql).mkString(", ")}].""".stripMargin)
-      } else {
-        val mismatchedColumns = values.zip(queryOutputs).flatMap {
-          case (l, r) if l.dataType != r.dataType =>
-            Seq(s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})")
-          case _ => None
-        }
-        TypeCheckResult.TypeCheckFailure(
-          s"""
-             |The data type of one or more elements in the left hand side of an IN subquery
-             |is not compatible with the data type of the output of the subquery
-             |Mismatched columns:
-             |[${mismatchedColumns.mkString(", ")}]
-             |Left side:
-             |[${values.map(_.dataType.catalogString).mkString(", ")}].
-             |Right side:
-             |[${queryOutputs.map(_.dataType.catalogString).mkString(", ")}].""".stripMargin)
-      }
-    } else {
-      TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
-    }
-  }
-
-  override lazy val resolved: Boolean = childrenResolved && plan.resolved && queryOutputs.nonEmpty
-  override def children: Seq[Expression] = values ++ conditions
-  override def nullable: Boolean = children.exists(_.nullable)
-  override def foldable: Boolean = children.forall(_.foldable)
-  override def toString: String = s"$value IN (list#${exprId.id} $conditionString)"
-  override def sql: String =
-    s"(${value.sql} IN (listquery(${conditions.map(_.sql).mkString(", ")})))"
-  override def withNewPlan(plan: LogicalPlan): InSubquery = copy(plan = plan)
-
-  override lazy val canonicalized: Expression = {
-    InSubquery(
-      values.map(_.canonicalized),
-      plan.canonicalized,
-      conditions.map(_.canonicalized),
-      ExprId(0),
-      queryOutputs.map(_.canonicalized.asInstanceOf[Attribute]))
-  }
-
-  override def prettyName: String = "in"
 }
