@@ -2801,13 +2801,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
 
   test("SPARK-24940: coalesce and repartition hint") {
-    def getNumFiles(tableName: String): Int = {
-      spark.table(tableName).rdd.partitions.map {
-        case fp: FilePartition =>
-          fp.files.size
-      }.sum
-    }
-
     withTempView("nums1") {
       val numPartitionsSrc = 10
       spark.range(0, 100, 1, numPartitionsSrc).createOrReplaceTempView("nums1")
@@ -2823,7 +2816,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
                |SELECT /*+ REPARTITION($numPartitions) */ *
                |FROM nums1
              """.stripMargin)
-          assert(getNumFiles("nums") == numPartitions)
+          assert(spark.table("nums").inputFiles.length == numPartitions)
 
           sql(
             s"""
@@ -2832,7 +2825,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
                |FROM nums1
              """.stripMargin)
           // Coalesce can not increase the number of partitions
-          assert(getNumFiles("nums") == Seq(numPartitions, numPartitionsSrc).min)
+          assert(spark.table("nums").inputFiles.length == Seq(numPartitions, numPartitionsSrc).min)
         }
       }
     }
