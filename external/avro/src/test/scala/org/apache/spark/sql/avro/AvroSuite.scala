@@ -44,12 +44,8 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   val episodesAvro = testFile("episodes.avro")
   val testAvro = testFile("test.avro")
-  val messyAvro = testFile("messy.avro")
-  val multiRecordTypeUnionAvro = testFile("multirecordtypeunion.avro")
   val episodesSchemaFile = testFile("episodes.avsc")
   val testSchemaFile = testFile("test.avsc")
-  val messySchemaFile = testFile("messy.avsc")
-  val multiRecordTypeUnionSchemaFile = testFile("multirecordtypeunion.avsc")
 
   // The test file timestamp.avro is generated via following Python code:
   // import json
@@ -1079,20 +1075,90 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   // Read an avro, write it with converted schema, read it, write it with original avroSchema
-  test("SPARK-24855: support write with compatible user-specified schema") {
+  test("SPARK-24855: support write with compatible user-specified schema, existing avros") {
     checkSpecifySchemaOnWrite(episodesAvro, episodesSchemaFile)
     checkSpecifySchemaOnWrite(testAvro, testSchemaFile)
-    checkSpecifySchemaOnWrite(messyAvro, messySchemaFile)
   }
 
-  // TODO Make this work somehow
-  test("SPARK-24855: multiunion force schema throws exception") {
-    try {
-      checkSpecifySchemaOnWrite(multiRecordTypeUnionAvro, multiRecordTypeUnionSchemaFile)
-      assert(false)
-    } catch {
-      case ex => assert(true)
+  test("SPARK-24855: support write with compatible user-specified schema, nested records") {
+    withTempPath { dir =>
+
+      val writeDf = spark.createDataFrame(List(NestedTop(1, NestedMiddle(2, NestedBottom(3, "1")))))
+      val outputDir = s"${dir}/specenum"
+      // Similar to generated output schema, but I change Ints to union types with default null
+      val schemaString = """{
+                           |  "type": "record",
+                           |  "name": "topLevelRecord",
+                           |  "namespace": "topLevelRecord",
+                           |  "fields": [
+                           |    {
+                           |      "name": "id",
+                           |      "type": ["null", "int"],
+                           |      "default": null
+                           |    },
+                           |    {
+                           |      "name": "data",
+                           |      "type": [
+                           |        {
+                           |          "type": "record",
+                           |          "name": "data",
+                           |          "namespace": "topLevelRecord.data",
+                           |          "fields": [
+                           |            {
+                           |              "name": "id",
+                           |              "type": ["null", "int"],
+                           |              "default": null
+                           |            },
+                           |            {
+                           |              "name": "data",
+                           |              "type": [
+                           |                {
+                           |                  "type": "record",
+                           |                  "name": "data",
+                           |                  "namespace": "topLevelRecord.data.data",
+                           |                  "fields": [
+                           |                    {
+                           |                      "name": "id",
+                           |                      "type": ["null", "int"],
+                           |                      "default": null
+                           |                    },
+                           |                    {
+                           |                      "name": "data",
+                           |                      "type": [
+                           |                        "null",
+                           |                        "string"
+                           |                      ],
+                           |                      "default": null
+                           |                    }
+                           |                  ]
+                           |                },
+                           |                "null"
+                           |              ]
+                           |            }
+                           |          ]
+                           |        },
+                           |        "null"
+                           |      ]
+                           |    }
+                           |  ]
+                           |}""".stripMargin
+      val originalSchema = new Schema.Parser().parse(schemaString)
+
+      writeDf.write.format("avro").option("avroSchema", schemaString).save(outputDir)
+
+      val readDf = spark.read.format("avro").option("avroSchema", schemaString).load(outputDir)
+      checkAnswer(writeDf, readDf)
+
+      // Compare schemas
+      val file = new File(outputDir.toString)
+        .listFiles()
+        .filter(_.isFile)
+        .filter(_.getName.endsWith("avro"))
+        .head
+      val reader = new DataFileReader(file, new GenericDatumReader[Any]())
+      val schema = reader.getSchema.toString()
+      
+      assert(schema.contentEquals(originalSchema.toString))
     }
   }
-
 }
