@@ -115,8 +115,8 @@ package object config {
     .createWithDefault(0)
 
   private[spark] val PYSPARK_EXECUTOR_MEMORY = ConfigBuilder("spark.executor.pyspark.memory")
-      .bytesConf(ByteUnit.MiB)
-      .createOptional
+    .bytesConf(ByteUnit.MiB)
+    .createOptional
 
   private[spark] val IS_PYTHON_APP = ConfigBuilder("spark.yarn.isPython").internal()
     .booleanConf.createWithDefault(false)

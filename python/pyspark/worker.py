@@ -271,9 +271,9 @@ def main(infile, outfile):
         try:
             (total_memory_limit, max_total_memory) = resource.getrlimit(total_memory)
             msg = "Current mem: {0} of max {1}\n".format(total_memory_limit, max_total_memory)
-            sys.stderr.write()
+            sys.stderr.write(msg)
 
-            if memory_limit_mb > 0 and total_memory_limit < 0:
+            if memory_limit_mb > 0 and total_memory_limit == resource.RLIM_INFINITY:
                 # convert to bytes
                 total_memory_limit = memory_limit_mb * 1024 * 1024
 
