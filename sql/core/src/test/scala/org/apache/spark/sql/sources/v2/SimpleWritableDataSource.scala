@@ -45,7 +45,7 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
   class Reader(path: String, conf: Configuration) extends DataSourceReader {
     override def readSchema(): StructType = schema
 
-    override def planInputPartitions(): JList[InputPartition[Row]] = {
+    override def planInputPartitions(): JList[InputPartition[InternalRow]] = {
       val dataPath = new Path(path)
       val fs = dataPath.getFileSystem(conf)
       if (fs.exists(dataPath)) {
@@ -56,7 +56,7 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
           val serializableConf = new SerializableConfiguration(conf)
           new SimpleCSVInputPartitionReader(
             f.getPath.toUri.toString,
-            serializableConf): InputPartition[Row]
+            serializableConf): InputPartition[InternalRow]
         }.toList.asJava
       } else {
         Collections.emptyList()
@@ -157,13 +157,13 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
 }
 
 class SimpleCSVInputPartitionReader(path: String, conf: SerializableConfiguration)
-  extends InputPartition[Row] with InputPartitionReader[Row] {
+  extends InputPartition[InternalRow] with InputPartitionReader[InternalRow] {
 
   @transient private var lines: Iterator[String] = _
   @transient private var currentLine: String = _
   @transient private var inputStream: FSDataInputStream = _
 
-  override def createPartitionReader(): InputPartitionReader[Row] = {
+  override def createPartitionReader(): InputPartitionReader[InternalRow] = {
     val filePath = new Path(path)
     val fs = filePath.getFileSystem(conf.value)
     inputStream = fs.open(filePath)
@@ -181,7 +181,7 @@ class SimpleCSVInputPartitionReader(path: String, conf: SerializableConfiguratio
     }
   }
 
-  override def get(): Row = Row(currentLine.split(",").map(_.trim.toLong): _*)
+  override def get(): InternalRow = InternalRow(currentLine.split(",").map(_.trim.toLong): _*)
 
   override def close(): Unit = {
     inputStream.close()
@@ -209,10 +209,10 @@ class SimpleCSVDataWriterFactory(path: String, jobId: String, conf: Serializable
 
   override def createDataWriter(
       partitionId: Int,
-      attemptNumber: Int,
+      taskId: Long,
       epochId: Long): DataWriter[Row] = {
     val jobPath = new Path(new Path(path, "_temporary"), jobId)
-    val filePath = new Path(jobPath, s"$jobId-$partitionId-$attemptNumber")
+    val filePath = new Path(jobPath, s"$jobId-$partitionId-$taskId")
     val fs = filePath.getFileSystem(conf.value)
     new SimpleCSVDataWriter(fs, filePath)
   }
@@ -245,10 +245,10 @@ class InternalRowCSVDataWriterFactory(path: String, jobId: String, conf: Seriali
 
   override def createDataWriter(
       partitionId: Int,
-      attemptNumber: Int,
+      taskId: Long,
       epochId: Long): DataWriter[InternalRow] = {
     val jobPath = new Path(new Path(path, "_temporary"), jobId)
-    val filePath = new Path(jobPath, s"$jobId-$partitionId-$attemptNumber")
+    val filePath = new Path(jobPath, s"$jobId-$partitionId-$taskId")
     val fs = filePath.getFileSystem(conf.value)
     new InternalRowCSVDataWriter(fs, filePath)
   }

@@ -48,7 +48,7 @@ import org.apache.spark.sql.internal.SQLConf
  * completely resolved during the batch of Resolution.
  */
 case class AliasViewChild(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case v @ View(desc, output, child) if child.resolved && output != child.output =>
       val resolver = conf.resolver
       val queryColumnNames = desc.viewQueryColumnNames
@@ -76,7 +76,8 @@ case class AliasViewChild(conf: SQLConf) extends Rule[LogicalPlan] with CastSupp
           // Will throw an AnalysisException if the cast can't perform or might truncate.
           if (Cast.mayTruncate(originAttr.dataType, attr.dataType)) {
             throw new AnalysisException(s"Cannot up cast ${originAttr.sql} from " +
-              s"${originAttr.dataType.simpleString} to ${attr.simpleString} as it may truncate\n")
+              s"${originAttr.dataType.catalogString} to ${attr.dataType.catalogString} as it " +
+              s"may truncate\n")
           } else {
             Alias(cast(originAttr, attr.dataType), attr.name)(exprId = attr.exprId,
               qualifier = attr.qualifier, explicitMetadata = Some(attr.metadata))

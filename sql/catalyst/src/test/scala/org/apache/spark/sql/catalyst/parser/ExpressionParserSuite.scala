@@ -234,6 +234,11 @@ class ExpressionParserSuite extends PlanTest {
     intercept("foo(a x)", "extraneous input 'x'")
   }
 
+  test("lambda functions") {
+    assertEqual("x -> x + 1", LambdaFunction('x + 1, Seq('x.attr)))
+    assertEqual("(x, y) -> x + y", LambdaFunction('x + 'y, Seq('x.attr, 'y.attr)))
+  }
+
   test("window function expressions") {
     val func = 'foo.function(star())
     def windowed(
@@ -469,7 +474,7 @@ class ExpressionParserSuite extends PlanTest {
       Literal(BigDecimal("90912830918230182310293801923652346786").underlying()))
     assertEqual("123.0E-28BD", Literal(BigDecimal("123.0E-28").underlying()))
     assertEqual("123.08BD", Literal(BigDecimal("123.08").underlying()))
-    intercept("1.20E-38BD", "DecimalType can only support precision up to 38")
+    intercept("1.20E-38BD", "decimal can only support precision up to 38")
   }
 
   test("strings") {

@@ -131,10 +131,13 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
       assert(summary.predictions.columns.contains(c))
     }
     assert(summary.cluster.columns === Array(predictionColName))
+    assert(summary.trainingCost < 0.1)
+    assert(model.computeCost(dataset) == summary.trainingCost)
     val clusterSizes = summary.clusterSizes
     assert(clusterSizes.length === k)
     assert(clusterSizes.sum === numRows)
     assert(clusterSizes.forall(_ >= 0))
+    assert(summary.numIter == 1)
 
     model.setSummary(None)
     assert(!model.hasSummary)

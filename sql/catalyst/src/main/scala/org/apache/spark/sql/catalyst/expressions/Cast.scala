@@ -134,6 +134,26 @@ object Cast {
     toPrecedence > 0 && fromPrecedence > toPrecedence
   }
 
+  /**
+   * Returns true iff we can safely cast the `from` type to `to` type without any truncating or
+   * precision lose, e.g. int -> long, date -> timestamp.
+   */
+  def canSafeCast(from: AtomicType, to: AtomicType): Boolean = (from, to) match {
+    case _ if from == to => true
+    case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
+    case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
+    case (from, to) if legalNumericPrecedence(from, to) => true
+    case (DateType, TimestampType) => true
+    case (_, StringType) => true
+    case _ => false
+  }
+
+  private def legalNumericPrecedence(from: DataType, to: DataType): Boolean = {
+    val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
+    val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
+    fromPrecedence >= 0 && fromPrecedence < toPrecedence
+  }
+
   def forceNullable(from: DataType, to: DataType): Boolean = (from, to) match {
     case (NullType, _) => true
     case (_, _) if from == to => false
@@ -182,7 +202,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(
-        s"cannot cast ${child.dataType.simpleString} to ${dataType.simpleString}")
+        s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}")
     }
   }
 

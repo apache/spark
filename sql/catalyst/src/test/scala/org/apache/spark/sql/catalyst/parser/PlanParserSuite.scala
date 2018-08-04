@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -65,14 +66,14 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select * from a union distinct select * from b", Distinct(a.union(b)))
     assertEqual("select * from a union all select * from b", a.union(b))
     assertEqual("select * from a except select * from b", a.except(b))
-    intercept("select * from a except all select * from b", "EXCEPT ALL is not supported.")
     assertEqual("select * from a except distinct select * from b", a.except(b))
+    assertEqual("select * from a except all select * from b", a.except(b, isAll = true))
     assertEqual("select * from a minus select * from b", a.except(b))
-    intercept("select * from a minus all select * from b", "MINUS ALL is not supported.")
+    assertEqual("select * from a minus all select * from b", a.except(b, isAll = true))
     assertEqual("select * from a minus distinct select * from b", a.except(b))
     assertEqual("select * from a intersect select * from b", a.intersect(b))
-    intercept("select * from a intersect all select * from b", "INTERSECT ALL is not supported.")
     assertEqual("select * from a intersect distinct select * from b", a.intersect(b))
+    assertEqual("select * from a intersect all select * from b", a.intersect(b, isAll = true))
   }
 
   test("common table expressions") {
@@ -677,5 +678,49 @@ class PlanParserSuite extends AnalysisTest {
       "SELECT TRIM(TRAILING 'c&^,.' FROM 'bc...,,,&&&ccc')",
       OneRowRelation().select('rtrim.function("c&^,.", "bc...,,,&&&ccc"))
     )
+  }
+
+  test("precedence of set operations") {
+    val a = table("a").select(star())
+    val b = table("b").select(star())
+    val c = table("c").select(star())
+    val d = table("d").select(star())
+
+    val query1 =
+      """
+        |SELECT * FROM a
+        |UNION
+        |SELECT * FROM b
+        |EXCEPT
+        |SELECT * FROM c
+        |INTERSECT
+        |SELECT * FROM d
+      """.stripMargin
+
+    val query2 =
+      """
+        |SELECT * FROM a
+        |UNION
+        |SELECT * FROM b
+        |EXCEPT ALL
+        |SELECT * FROM c
+        |INTERSECT ALL
+        |SELECT * FROM d
+      """.stripMargin
+
+    assertEqual(query1, Distinct(a.union(b)).except(c.intersect(d)))
+    assertEqual(query2, Distinct(a.union(b)).except(c.intersect(d, isAll = true), isAll = true))
+
+    // Now disable precedence enforcement to verify the old behaviour.
+    withSQLConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED.key -> "true") {
+      assertEqual(query1, Distinct(a.union(b)).except(c).intersect(d))
+      assertEqual(query2, Distinct(a.union(b)).except(c, isAll = true).intersect(d, isAll = true))
+    }
+
+    // Explicitly enable the precedence enforcement
+    withSQLConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED.key -> "false") {
+      assertEqual(query1, Distinct(a.union(b)).except(c.intersect(d)))
+      assertEqual(query2, Distinct(a.union(b)).except(c.intersect(d, isAll = true), isAll = true))
+    }
   }
 }

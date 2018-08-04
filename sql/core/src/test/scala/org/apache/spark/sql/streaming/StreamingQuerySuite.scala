@@ -21,6 +21,8 @@ import java.{util => ju}
 import java.util.Optional
 import java.util.concurrent.CountDownLatch
 
+import scala.collection.mutable
+
 import org.apache.commons.lang3.RandomStringUtils
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
@@ -29,8 +31,9 @@ import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.TestForeachWriter
 import org.apache.spark.sql.functions._
@@ -227,10 +230,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       }
 
       // getBatch should take 100 ms the first time it is called
-      override def planUnsafeInputPartitions(): ju.List[InputPartition[UnsafeRow]] = {
+      override def planInputPartitions(): ju.List[InputPartition[InternalRow]] = {
         synchronized {
           clock.waitTillTime(1350)
-          super.planUnsafeInputPartitions()
+          super.planInputPartitions()
         }
       }
     }
@@ -335,8 +338,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
         assert(progress.sources.length === 1)
         assert(progress.sources(0).description contains "MemoryStream")
-        assert(progress.sources(0).startOffset === "0")
-        assert(progress.sources(0).endOffset !== null)
+        assert(progress.sources(0).startOffset === null)   // no prior offset
+        assert(progress.sources(0).endOffset === "0")
         assert(progress.sources(0).processedRowsPerSecond === 4.0)  // 2 rows processed in 500 ms
 
         assert(progress.stateOperators.length === 1)
@@ -362,6 +365,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         assert(query.lastProgress.batchId === 1)
         assert(query.lastProgress.inputRowsPerSecond === 2.0)
         assert(query.lastProgress.sources(0).inputRowsPerSecond === 2.0)
+        assert(query.lastProgress.sources(0).startOffset === "0")
+        assert(query.lastProgress.sources(0).endOffset === "1")
         true
       },
 
@@ -830,6 +835,23 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     testStream(otherDf, OutputMode.Complete())(
       AddData(stream, (1, 1), (2, 4)),
       CheckLastBatch(("A", 1)))
+  }
+
+  test("Uuid in streaming query should not produce same uuids in each execution") {
+    val uuids = mutable.ArrayBuffer[String]()
+    def collectUuid: Seq[Row] => Unit = { rows: Seq[Row] =>
+      rows.foreach(r => uuids += r.getString(0))
+    }
+
+    val stream = MemoryStream[Int]
+    val df = stream.toDF().select(new Column(Uuid()))
+    testStream(df)(
+      AddData(stream, 1),
+      CheckAnswer(collectUuid),
+      AddData(stream, 2),
+      CheckAnswer(collectUuid)
+    )
+    assert(uuids.distinct.size == 2)
   }
 
   test("StreamingRelationV2/StreamingExecutionRelation/ContinuousExecutionRelation.toJSON " +
