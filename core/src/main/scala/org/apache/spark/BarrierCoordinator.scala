@@ -55,10 +55,7 @@ private[spark] class BarrierCoordinator(
       val stageInfo = stageCompleted.stageInfo
       val barrierId = ContextBarrierId(stageInfo.stageId, stageInfo.attemptNumber)
       // Clear ContextBarrierState from a finished stage attempt.
-      val barrierState = states.remove(barrierId)
-      if (barrierState != null) {
-        barrierState.clear()
-      }
+      cleanupBarrierStage(barrierId)
     }
   }
 
@@ -98,10 +95,11 @@ private[spark] class BarrierCoordinator(
     // Init a TimerTask for a barrier() call.
     private def initTimerTask(): Unit = {
       timerTask = new TimerTask {
-        override def run(): Unit = {
+        override def run(): Unit = synchronized {
           // Timeout current barrier() call, fail all the sync requests.
-          failAllRequesters(requesters, "The coordinator didn't get all barrier sync " +
-            s"requests for barrier epoch $barrierEpoch from $barrierId within ${timeout}s.")
+          requesters.foreach(_.sendFailure(new SparkException("The coordinator didn't get all " +
+            s"barrier sync requests for barrier epoch $barrierEpoch from $barrierId within " +
+            s"$timeout seconds.")))
           cleanupBarrierStage(barrierId)
         }
       }
@@ -152,14 +150,6 @@ private[spark] class BarrierCoordinator(
           cancelTimerTask()
         }
       }
-    }
-
-    // Send failure to all the blocking barrier sync requests from a stage attempt with proper
-    // failure message.
-    private def failAllRequesters(
-        requesters: ArrayBuffer[RpcCallContext],
-        message: String): Unit = {
-      requesters.foreach(_.sendFailure(new SparkException(message)))
     }
 
     // Finish all the blocking barrier sync requests from a stage attempt successfully if we

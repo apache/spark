@@ -128,7 +128,9 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     val rdd2 = rdd.barrier().mapPartitions { (it, context) =>
       try {
         if (context.taskAttemptId == 0) {
-          // Task 0 skip the first barrier() call.
+          // Due to some non-obvious reason, the code can trigger an Exception and skip the
+          // following statements within the try ... catch block, including the first barrier()
+          // call.
           throw new SparkException("test")
         }
         context.barrier()
