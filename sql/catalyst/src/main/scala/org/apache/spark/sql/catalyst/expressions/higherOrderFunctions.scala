@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.concurrent.atomic.AtomicReference
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -140,6 +142,18 @@ trait ArrayBasedHigherOrderFunction extends HigherOrderFunction with ExpectsInpu
   @transient lazy val functionForEval: Expression = functionsForEval.head
 }
 
+object ArrayBasedHigherOrderFunction {
+
+  def elementArgumentType(dt: DataType): (DataType, Boolean) = {
+    dt match {
+      case ArrayType(elementType, containsNull) => (elementType, containsNull)
+      case _ =>
+        val ArrayType(elementType, containsNull) = ArrayType.defaultConcreteType
+        (elementType, containsNull)
+    }
+  }
+}
+
 /**
  * Transform elements in an array using the transform function. This is similar to
  * a `map` in functional programming.
@@ -164,17 +178,12 @@ case class ArrayTransform(
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayTransform = {
-    val (elementType, containsNull) = input.dataType match {
-      case ArrayType(elementType, containsNull) => (elementType, containsNull)
-      case _ =>
-        val ArrayType(elementType, containsNull) = ArrayType.defaultConcreteType
-        (elementType, containsNull)
-    }
+    val elem = ArrayBasedHigherOrderFunction.elementArgumentType(input.dataType)
     function match {
       case LambdaFunction(_, arguments, _) if arguments.size == 2 =>
-        copy(function = f(function, (elementType, containsNull) :: (IntegerType, false) :: Nil))
+        copy(function = f(function, elem :: (IntegerType, false) :: Nil))
       case _ =>
-        copy(function = f(function, (elementType, containsNull) :: Nil))
+        copy(function = f(function, elem :: Nil))
     }
   }
 
@@ -209,4 +218,55 @@ case class ArrayTransform(
   }
 
   override def prettyName: String = "transform"
+}
+
+/**
+ * Filters the input array using the given lambda function.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr, func) - Filters the input array using the given predicate.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 1);
+       array(1, 3)
+  """,
+  since = "2.4.0")
+case class ArrayFilter(
+    input: Expression,
+    function: Expression)
+  extends ArrayBasedHigherOrderFunction with CodegenFallback {
+
+  override def nullable: Boolean = input.nullable
+
+  override def dataType: DataType = input.dataType
+
+  override def expectingFunctionType: AbstractDataType = BooleanType
+
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayFilter = {
+    val elem = ArrayBasedHigherOrderFunction.elementArgumentType(input.dataType)
+    copy(function = f(function, elem :: Nil))
+  }
+
+  @transient lazy val LambdaFunction(_, Seq(elementVar: NamedLambdaVariable), _) = function
+
+  override def eval(input: InternalRow): Any = {
+    val arr = this.input.eval(input).asInstanceOf[ArrayData]
+    if (arr == null) {
+      null
+    } else {
+      val f = functionForEval
+      val buffer = new mutable.ArrayBuffer[Any](arr.numElements)
+      var i = 0
+      while (i < arr.numElements) {
+        elementVar.value.set(arr.get(i, elementVar.dataType))
+        if (f.eval(input).asInstanceOf[Boolean]) {
+          buffer += elementVar.value.get
+        }
+        i += 1
+      }
+      new GenericArrayData(buffer)
+    }
+  }
+
+  override def prettyName: String = "filter"
 }
