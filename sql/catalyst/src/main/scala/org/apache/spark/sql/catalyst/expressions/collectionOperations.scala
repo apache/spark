@@ -4256,3 +4256,46 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
 
   override def prettyName: String = "array_except"
 }
+
+/**
+ *
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) -
+  """,
+  examples = """
+    Examples:
+      >
+  """)
+case class StructFlatten(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  val depth = 1
+  val delimiter = "_"
+
+  def fieldName(prefix: String, name: String): String = {
+    if (prefix.isEmpty) name else prefix + delimiter + name
+  }
+  def flatField(field: StructField, prefix: String): Array[StructField] = field match {
+    case f @ StructField(name, st: StructType, _, _) =>
+      flatStruct(st, fieldName(prefix, field.name))
+    case _ => Array(field.copy(name = fieldName(prefix, field.name)))
+  }
+  def flatStruct(st: StructType, prefix: String): Array[StructField] = {
+    st.fields.flatMap(field => flatField(field, prefix))
+  }
+  override def dataType: DataType = child.dataType match {
+    case st: StructType => st.copy(fields = flatStruct(st, ""))
+    case other => other
+  }
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StructType))
+
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    ???
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    ???
+  }
+}

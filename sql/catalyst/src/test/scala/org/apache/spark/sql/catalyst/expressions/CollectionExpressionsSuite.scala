@@ -23,6 +23,7 @@ import java.util.TimeZone
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
@@ -1617,5 +1618,14 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(ArrayExcept(a04, a05).dataType.asInstanceOf[ArrayType].containsNull === true)
     assert(ArrayExcept(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(ArrayExcept(a24, a22).dataType.asInstanceOf[ArrayType].containsNull === true)
+  }
+
+  test("struct flatten") {
+    val struct = CreateStruct(Seq(CreateStruct(Seq(Literal(1)))))
+    val expectedSchema = StructType(Seq(
+      StructField("col1_col1", IntegerType, false)
+    ))
+
+    assert(StructFlatten(struct).dataType == expectedSchema)
   }
 }
