@@ -23,7 +23,6 @@ import java.util.TimeZone
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
-
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
@@ -1620,7 +1619,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(ArrayExcept(a24, a22).dataType.asInstanceOf[ArrayType].containsNull === true)
   }
 
-  test("struct flatten") {
+  test("flatten structures") {
     // 2 nested structs, depth = default
     val struct1 = CreateStruct(Seq(CreateStruct(Seq(Literal(1)))))
     val expectedSchema1 = StructType(Seq(StructField("col1_col1", IntegerType, false)))
@@ -1657,5 +1656,15 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     ))
     assert(StructFlatten(struct2, depth = 1).dataType == expectedSchema4)
     checkEvaluation(StructFlatten(struct2, depth = 1), Row(Row(1, "a")))
+  }
+
+  test("flatten structures shouldn't change maps and arrays") {
+    val arr = Literal.create(Seq(1, 2), ArrayType(IntegerType))
+    val struct1 = CreateStruct(Seq(arr, CreateStruct(Seq(Literal(3)))))
+    checkEvaluation(StructFlatten(struct1), Row(Seq(1, 2), 3))
+
+    val map = Literal.create(Map("a" -> 1), MapType(StringType, IntegerType))
+    val struct2 = CreateStruct(Seq(map, CreateStruct(Seq(Literal(3)))))
+    checkEvaluation(StructFlatten(struct2), Row(Map("a" -> 1), 3))
   }
 }
