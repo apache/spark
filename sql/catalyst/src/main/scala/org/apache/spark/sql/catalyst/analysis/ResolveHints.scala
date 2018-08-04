@@ -20,10 +20,12 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.IntegerType
 
 
 /**
@@ -99,6 +101,32 @@ object ResolveHints {
               s"an identifier or string but was $unsupported (${unsupported.getClass}")
           }.toSet)
         }
+    }
+  }
+
+  /**
+   * COALESCE Hint accepts name "COALESCE" and "REPARTITION".
+   * Its parameter includes a partition number.
+   */
+  object ResolveCoalesceHints extends Rule[LogicalPlan] {
+    private val COALESCE_HINT_NAMES = Set("COALESCE", "REPARTITION")
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+      case h: UnresolvedHint if COALESCE_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
+        val hintName = h.name.toUpperCase(Locale.ROOT)
+        val shuffle = hintName match {
+          case "REPARTITION" => true
+          case "COALESCE" => false
+        }
+        val numPartitions = h.parameters match {
+          case Seq(Literal(numPartitions: Int, IntegerType)) =>
+            numPartitions
+          case Seq(numPartitions: Int) =>
+            numPartitions
+          case _ =>
+            throw new AnalysisException(s"$hintName Hint expects a partition number as parameter")
+        }
+        Repartition(numPartitions, shuffle, h.child)
     }
   }
 
