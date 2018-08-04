@@ -267,7 +267,7 @@ public class TransportCipher {
         int copied = byteRawChannel.write(buf.nioBuffer());
         buf.skipBytes(copied);
       } else {
-        region.transferTo(byteRawChannel, region.transfered());
+        region.transferTo(byteRawChannel, region.transferred());
       }
       cos.write(byteRawChannel.getData(), 0, byteRawChannel.length());
       cos.flush();
