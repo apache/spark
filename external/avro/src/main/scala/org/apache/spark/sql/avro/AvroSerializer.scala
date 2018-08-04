@@ -87,23 +87,18 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
         (getter, ordinal) => getter.getDouble(ordinal)
       case d: DecimalType =>
         (getter, ordinal) => getter.getDecimal(ordinal, d.precision, d.scale).toString
-      case StringType =>
-        if (avroType.getType == Type.ENUM) {
-          (getter, ordinal) =>
-            new EnumSymbol(avroType, getter.getUTF8String(ordinal).toString)
-        } else {
-          (getter, ordinal) =>
-            new Utf8(getter.getUTF8String(ordinal).getBytes)
-        }
-      case BinaryType =>
-        if (avroType.getType == Type.FIXED) {
-          // Handles fixed-type fields in output schema.  Test case is included in test.avro
-          // as it includes several fixed fields that would fail if we specify schema
-          // on-write without this condition
+      case StringType => avroType.getType match {
+        case Type.ENUM =>
+          (getter, ordinal) => new EnumSymbol(avroType, getter.getUTF8String(ordinal).toString)
+        case _ =>
+          (getter, ordinal) => new Utf8(getter.getUTF8String(ordinal).getBytes)
+      }
+      case BinaryType => avroType.getType match {
+        case Type.FIXED =>
           (getter, ordinal) => new Fixed(avroType, getter.getBinary(ordinal))
-        } else {
+        case _ =>
           (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
-        }
+      }
       case DateType =>
         (getter, ordinal) => getter.getInt(ordinal) * DateTimeUtils.MILLIS_PER_DAY
       case TimestampType => avroType.getLogicalType match {
