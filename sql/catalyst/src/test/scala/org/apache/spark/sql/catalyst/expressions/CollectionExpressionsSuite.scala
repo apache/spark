@@ -1621,11 +1621,21 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("struct flatten") {
-    val struct = CreateStruct(Seq(CreateStruct(Seq(Literal(1)))))
-    val expectedSchema = StructType(Seq(
-      StructField("col1_col1", IntegerType, false)
-    ))
+    // level = 2
+    val struct1 = CreateStruct(Seq(CreateStruct(Seq(Literal(1)))))
+    val expectedSchema1 = StructType(Seq(StructField("col1_col1", IntegerType, false)))
+    assert(StructFlatten(struct1).dataType == expectedSchema1)
+    checkEvaluation(StructFlatten(struct1), Row(1))
 
-    assert(StructFlatten(struct).dataType == expectedSchema)
+    // level = 3
+    val struct2 = CreateNamedStruct(Seq(Literal("level0"), CreateNamedStruct(Seq(
+      Literal("level1"), CreateNamedStruct(Seq(
+        Literal("col1"), Literal(1), Literal("col2"), Literal("a")
+      ))))))
+    val expectedSchema2 = StructType(Seq(
+      StructField("level0_level1_col1", IntegerType, false),
+      StructField("level0_level1_col2", StringType, false)))
+    assert(StructFlatten(struct2).dataType == expectedSchema2)
+    checkEvaluation(StructFlatten(struct2), Row(1, "a"))
   }
 }

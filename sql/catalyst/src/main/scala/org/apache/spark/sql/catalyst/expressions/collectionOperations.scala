@@ -4268,34 +4268,38 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
     Examples:
       >
   """)
-case class StructFlatten(child: Expression) extends UnaryExpression with ExpectsInputTypes {
-  val depth = 1
-  val delimiter = "_"
+case class StructFlatten(
+    child: Expression,
+    depth: Int = Int.MaxValue,
+    delimiter: String = "_") extends UnaryExpression with CodegenFallback {
 
   def fieldName(prefix: String, name: String): String = {
     if (prefix.isEmpty) name else prefix + delimiter + name
   }
-  def flatField(field: StructField, prefix: String): Array[StructField] = field match {
-    case f @ StructField(name, st: StructType, _, _) =>
-      flatStruct(st, fieldName(prefix, field.name))
+  def flatStructField(field: StructField, prefix: String): Array[StructField] = field match {
+    case StructField(name, st: StructType, _, _) =>
+      flatStructType(st, fieldName(prefix, name))
     case _ => Array(field.copy(name = fieldName(prefix, field.name)))
   }
-  def flatStruct(st: StructType, prefix: String): Array[StructField] = {
-    st.fields.flatMap(field => flatField(field, prefix))
+  def flatStructType(st: StructType, prefix: String): Array[StructField] = {
+    st.fields.flatMap(field => flatStructField(field, prefix))
   }
   override def dataType: DataType = child.dataType match {
-    case st: StructType => st.copy(fields = flatStruct(st, ""))
+    case st: StructType => st.copy(fields = flatStructType(st, ""))
     case other => other
   }
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StructType))
 
-  override def eval(input: InternalRow): Any = {
-    val value = child.eval(input)
-    ???
+  def flatColumn(column: Any): Array[Any] = column match {
+    case row: GenericInternalRow => flatRow(row).values
+    case _ => Array(column)
   }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ???
+  def flatRow(st: GenericInternalRow): GenericInternalRow = {
+    val values = st.values.flatMap(column => flatColumn(column))
+    new GenericInternalRow(values)
+  }
+  override def nullSafeEval(input: Any): Any = input match {
+    case row: GenericInternalRow => flatRow(row)
+    case other => other
   }
 }
