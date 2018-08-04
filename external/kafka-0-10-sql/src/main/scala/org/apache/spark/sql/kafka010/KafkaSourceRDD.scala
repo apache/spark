@@ -124,8 +124,6 @@ private[kafka010] class KafkaSourceRDD(
       thePart: Partition,
       context: TaskContext): Iterator[ConsumerRecord[Array[Byte], Array[Byte]]] = {
     val sourcePartition = thePart.asInstanceOf[KafkaSourceRDDPartition]
-    val topic = sourcePartition.offsetRange.topic
-    val kafkaPartition = sourcePartition.offsetRange.partition
     val consumer = KafkaDataConsumer.acquire(
       sourcePartition.offsetRange.topicPartition, executorKafkaParams, reuseKafkaConsumer)
 
@@ -138,6 +136,7 @@ private[kafka010] class KafkaSourceRDD(
     if (range.fromOffset == range.untilOffset) {
       logInfo(s"Beginning offset ${range.fromOffset} is the same as ending offset " +
         s"skipping ${range.topic} ${range.partition}")
+      consumer.release()
       Iterator.empty
     } else {
       val underlying = new NextIterator[ConsumerRecord[Array[Byte], Array[Byte]]]() {
