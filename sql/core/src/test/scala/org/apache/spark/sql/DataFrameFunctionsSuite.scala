@@ -1896,6 +1896,127 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(ex3.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
   }
 
+  test("aggregate function - array for primitive type not containing null") {
+    val df = Seq(
+      Seq(1, 9, 8, 7),
+      Seq(5, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
+      checkAnswer(df.selectExpr("aggregate(i, 0, (acc, x) -> acc + x)"),
+        Seq(
+          Row(25),
+          Row(31),
+          Row(0),
+          Row(null)))
+      checkAnswer(df.selectExpr("aggregate(i, 0, (acc, x) -> acc + x, acc -> acc * 10)"),
+        Seq(
+          Row(250),
+          Row(310),
+          Row(0),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeNotContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testArrayOfPrimitiveTypeNotContainsNull()
+  }
+
+  test("aggregate function - array for primitive type containing null") {
+    val df = Seq[Seq[Integer]](
+      Seq(1, 9, 8, 7),
+      Seq(5, null, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeContainsNull(): Unit = {
+      checkAnswer(df.selectExpr("aggregate(i, 0, (acc, x) -> acc + x)"),
+        Seq(
+          Row(25),
+          Row(null),
+          Row(0),
+          Row(null)))
+      checkAnswer(
+        df.selectExpr("aggregate(i, 0, (acc, x) -> acc + x, acc -> coalesce(acc, 0) * 10)"),
+        Seq(
+          Row(250),
+          Row(0),
+          Row(0),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testArrayOfPrimitiveTypeContainsNull()
+  }
+
+  test("aggregate function - array for non-primitive type") {
+    val df = Seq(
+      (Seq("c", "a", "b"), "a"),
+      (Seq("b", null, "c", null), "b"),
+      (Seq.empty, "c"),
+      (null, "d")
+    ).toDF("ss", "s")
+
+    def testNonPrimitiveType(): Unit = {
+      checkAnswer(df.selectExpr("aggregate(ss, s, (acc, x) -> concat(acc, x))"),
+        Seq(
+          Row("acab"),
+          Row(null),
+          Row("c"),
+          Row(null)))
+      checkAnswer(
+        df.selectExpr("aggregate(ss, s, (acc, x) -> concat(acc, x), acc -> coalesce(acc , ''))"),
+        Seq(
+          Row("acab"),
+          Row(""),
+          Row("c"),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testNonPrimitiveType()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testNonPrimitiveType()
+  }
+
+  test("aggregate function - invalid") {
+    val df = Seq(
+      (Seq("c", "a", "b"), 1),
+      (Seq("b", null, "c", null), 2),
+      (Seq.empty, 3),
+      (null, 4)
+    ).toDF("s", "i")
+
+    val ex1 = intercept[AnalysisException] {
+      df.selectExpr("aggregate(s, '', x -> x)")
+    }
+    assert(ex1.getMessage.contains("The number of lambda function arguments '1' does not match"))
+
+    val ex2 = intercept[AnalysisException] {
+      df.selectExpr("aggregate(s, '', (acc, x) -> x, (acc, x) -> x)")
+    }
+    assert(ex2.getMessage.contains("The number of lambda function arguments '2' does not match"))
+
+    val ex3 = intercept[AnalysisException] {
+      df.selectExpr("aggregate(i, 0, (acc, x) -> x)")
+    }
+    assert(ex3.getMessage.contains("data type mismatch: argument 1 requires array type"))
+
+    val ex4 = intercept[AnalysisException] {
+      df.selectExpr("aggregate(s, 0, (acc, x) -> x)")
+    }
+    assert(ex4.getMessage.contains("data type mismatch: argument 3 requires int type"))
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {

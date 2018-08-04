@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
@@ -74,6 +75,13 @@ case class LambdaFunction(
   lazy val bound: Boolean = arguments.forall(_.resolved)
 
   override def eval(input: InternalRow): Any = function.eval(input)
+}
+
+object LambdaFunction {
+  val identity: LambdaFunction = {
+    val id = UnresolvedAttribute.quoted("id")
+    LambdaFunction(id, Seq(id))
+  }
 }
 
 /**
@@ -269,4 +277,91 @@ case class ArrayFilter(
   }
 
   override def prettyName: String = "filter"
+}
+
+/**
+ * Applies a binary operator to a start value and all elements in the array.
+ */
+@ExpressionDescription(
+  usage =
+    """
+      _FUNC_(expr, start, merge, finish) - Applies a binary operator to an initial state and all
+      elements in the array, and reduces this to a single state. The final state is converted
+      into the final result by applying a finish function.
+    """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), (acc, x) -> acc + x);
+       6
+      > SELECT _FUNC_(array(1, 2, 3), (acc, x) -> acc + x, acc -> acc * 10);
+       60
+  """,
+  since = "2.4.0")
+case class ArrayAggregate(
+    input: Expression,
+    zero: Expression,
+    merge: Expression,
+    finish: Expression)
+  extends HigherOrderFunction with CodegenFallback {
+
+  def this(input: Expression, zero: Expression, merge: Expression) = {
+    this(input, zero, merge, LambdaFunction.identity)
+  }
+
+  override def inputs: Seq[Expression] = input :: zero :: Nil
+
+  override def functions: Seq[Expression] = merge :: finish :: Nil
+
+  override def nullable: Boolean = input.nullable || finish.nullable
+
+  override def dataType: DataType = finish.dataType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!ArrayType.acceptsType(input.dataType)) {
+      TypeCheckResult.TypeCheckFailure(
+        s"argument 1 requires ${ArrayType.simpleString} type, " +
+          s"however, '${input.sql}' is of ${input.dataType.catalogString} type.")
+    } else if (!DataType.equalsStructurally(
+        zero.dataType, merge.dataType, ignoreNullability = true)) {
+      TypeCheckResult.TypeCheckFailure(
+        s"argument 3 requires ${zero.dataType.simpleString} type, " +
+          s"however, '${merge.sql}' is of ${merge.dataType.catalogString} type.")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayAggregate = {
+    // Be very conservative with nullable. We cannot be sure that the accumulator does not
+    // evaluate to null. So we always set nullable to true here.
+    val elem = ArrayBasedHigherOrderFunction.elementArgumentType(input.dataType)
+    val acc = zero.dataType -> true
+    val newMerge = f(merge, acc :: elem :: Nil)
+    val newFinish = f(finish, acc :: Nil)
+    copy(merge = newMerge, finish = newFinish)
+  }
+
+  @transient lazy val LambdaFunction(_,
+    Seq(accForMergeVar: NamedLambdaVariable, elementVar: NamedLambdaVariable), _) = merge
+  @transient lazy val LambdaFunction(_, Seq(accForFinishVar: NamedLambdaVariable), _) = finish
+
+  override def eval(input: InternalRow): Any = {
+    val arr = this.input.eval(input).asInstanceOf[ArrayData]
+    if (arr == null) {
+      null
+    } else {
+      val Seq(mergeForEval, finishForEval) = functionsForEval
+      accForMergeVar.value.set(zero.eval(input))
+      var i = 0
+      while (i < arr.numElements()) {
+        elementVar.value.set(arr.get(i, elementVar.dataType))
+        accForMergeVar.value.set(mergeForEval.eval(input))
+        i += 1
+      }
+      accForFinishVar.value.set(accForMergeVar.value.get)
+      finishForEval.eval(input)
+    }
+  }
+
+  override def prettyName: String = "aggregate"
 }

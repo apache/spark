@@ -59,6 +59,27 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     ArrayFilter(expr, createLambda(at.elementType, at.containsNull, f))
   }
 
+  def aggregate(
+      expr: Expression,
+      zero: Expression,
+      merge: (Expression, Expression) => Expression,
+      finish: Expression => Expression): Expression = {
+    val at = expr.dataType.asInstanceOf[ArrayType]
+    val zeroType = zero.dataType
+    ArrayAggregate(
+      expr,
+      zero,
+      createLambda(zeroType, true, at.elementType, at.containsNull, merge),
+      createLambda(zeroType, true, finish))
+  }
+
+  def aggregate(
+      expr: Expression,
+      zero: Expression,
+      merge: (Expression, Expression) => Expression): Expression = {
+    aggregate(expr, zero, merge, identity)
+  }
+
   test("ArrayTransform") {
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
     val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
@@ -130,5 +151,34 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       ArrayType(ArrayType(IntegerType, containsNull = false), containsNull = true))
     checkEvaluation(transform(aai, ix => filter(ix, isNullOrOdd)),
       Seq(Seq(1, 3), null, Seq(5)))
+  }
+
+  test("ArrayAggregate") {
+    val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
+    val ai2 = Literal.create(Seq.empty[Int], ArrayType(IntegerType, containsNull = false))
+    val ain = Literal.create(null, ArrayType(IntegerType, containsNull = false))
+
+    checkEvaluation(aggregate(ai0, 0, (acc, elem) => acc + elem, acc => acc * 10), 60)
+    checkEvaluation(aggregate(ai1, 0, (acc, elem) => acc + coalesce(elem, 0), acc => acc * 10), 40)
+    checkEvaluation(aggregate(ai2, 0, (acc, elem) => acc + elem, acc => acc * 10), 0)
+    checkEvaluation(aggregate(ain, 0, (acc, elem) => acc + elem, acc => acc * 10), null)
+
+    val as0 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType, containsNull = false))
+    val as1 = Literal.create(Seq("a", null, "c"), ArrayType(StringType, containsNull = true))
+    val as2 = Literal.create(Seq.empty[String], ArrayType(StringType, containsNull = false))
+    val asn = Literal.create(null, ArrayType(StringType, containsNull = false))
+
+    checkEvaluation(aggregate(as0, "", (acc, elem) => Concat(Seq(acc, elem))), "abc")
+    checkEvaluation(aggregate(as1, "", (acc, elem) => Concat(Seq(acc, coalesce(elem, "x")))), "axc")
+    checkEvaluation(aggregate(as2, "", (acc, elem) => Concat(Seq(acc, elem))), "")
+    checkEvaluation(aggregate(asn, "", (acc, elem) => Concat(Seq(acc, elem))), null)
+
+    val aai = Literal.create(Seq[Seq[Integer]](Seq(1, 2, 3), null, Seq(4, 5)),
+      ArrayType(ArrayType(IntegerType, containsNull = false), containsNull = true))
+    checkEvaluation(
+      aggregate(aai, 0,
+        (acc, array) => coalesce(aggregate(array, acc, (acc, elem) => acc + elem), acc)),
+      15)
   }
 }
