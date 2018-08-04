@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 /**
  * Print the result of an expression to stderr (used for debugging codegen).
@@ -126,9 +127,12 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
   """,
   note = "The function is non-deterministic.")
 // scalastyle:on line.size.limit
-case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Stateful {
+case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Stateful
+    with ExpressionWithRandomSeed {
 
   def this() = this(None)
+
+  override def withNewSeed(): Uuid = Uuid(Some(Utils.random.nextLong()))
 
   override lazy val resolved: Boolean = randomSeed.isDefined
 

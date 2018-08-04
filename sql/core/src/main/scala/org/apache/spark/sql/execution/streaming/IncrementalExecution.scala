@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, Literal, Rand, Randn, Uuid}
+import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -31,7 +31,6 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.LongType
-import org.apache.spark.util.Utils
 
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
@@ -79,11 +78,7 @@ class IncrementalExecution(
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
         logInfo(s"Current batch timestamp = $timestamp")
         ts.toLiteral
-      // SPARK-24896: Set the seed for random number generation in Uuid expressions.
-      case _: Uuid => Uuid(Some(Utils.random.nextLong()))
-      // SPARK-25010: Set the seed for random number generation in rand/randn expressions.
-      case _: Rand => Rand(Literal(Utils.random.nextLong(), LongType))
-      case _: Randn => Randn(Literal(Utils.random.nextLong(), LongType))
+      case e: ExpressionWithRandomSeed => e.withNewSeed
     }
   }
 
