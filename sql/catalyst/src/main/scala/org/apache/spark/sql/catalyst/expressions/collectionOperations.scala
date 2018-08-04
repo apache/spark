@@ -4283,8 +4283,8 @@ case class StructFlatten(
       case _ => Array(field.copy(name = fieldName(prefix, field.name)))
     }
   }
-  def flatStructType(st: StructType, prefix: String, d: Int): Array[StructField] = {
-    st.fields.flatMap(field => flatStructField(field, prefix, d))
+  def flatStructType(struct: StructType, prefix: String, d: Int): Array[StructField] = {
+    struct.fields.flatMap(field => flatStructField(field, prefix, d))
   }
   override def dataType: DataType = child.dataType match {
     case st: StructType if depth > 0 => st.copy(fields = flatStructType(st, "", depth))
