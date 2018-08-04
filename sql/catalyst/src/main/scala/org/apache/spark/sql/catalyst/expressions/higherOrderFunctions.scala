@@ -220,20 +220,18 @@ case class ArrayTransform(
   override def prettyName: String = "transform"
 }
 
-/**
-  * Transform elements in an array using the transform function. This is similar to
-  * a `map` in functional programming.
-  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr, func) - Transforms elements in an array using the function.",
+  usage = "_FUNC_(expr, func) - Merges the two given arrays, element-wise, into a single array using function. If one array is shorter, nulls are appended at the end to match the length of the longer array, before applying function.",
   examples = """
     Examples:
-      > SELECT _FUNC_(array(1, 2, 3), x -> x + 1);
-       array(2, 3, 4)
-      > SELECT _FUNC_(array(1, 2, 3), (x, i) -> x + i);
-       array(1, 3, 5)
+      > SELECT _FUNC_(array(1, 2, 3), array('a', 'b', 'c'), (x, y) -> (y,x));
+       array(('a', 1), ('b', 2), ('c', 3))
+      > SELECT _FUNC_(array(1, 2, 3), array(100, 200, null), (x, y) -> x + y);
+       array(101, 202, null)
   """,
   since = "2.4.0")
+// scalastyle:on line.size.limit
 case class ArraysZipWith(
     left: Expression,
     right: Expression,
