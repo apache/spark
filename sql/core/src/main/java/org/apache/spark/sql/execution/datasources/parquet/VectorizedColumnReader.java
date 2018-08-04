@@ -167,6 +167,8 @@ public class VectorizedColumnReader {
         leftInPage = (int) (endOfPageValueCount - valuesRead);
       }
       int num = Math.min(total, leftInPage);
+      PrimitiveType.PrimitiveTypeName typeName =
+        descriptor.getPrimitiveType().getPrimitiveTypeName();
       if (isCurrentPageDictionaryEncoded) {
         // Read and decode dictionary ids.
         defColumn.readIntegers(
@@ -174,8 +176,6 @@ public class VectorizedColumnReader {
 
         // TIMESTAMP_MILLIS encoded as INT64 can't be lazily decoded as we need to post process
         // the values to add microseconds precision.
-        PrimitiveType.PrimitiveTypeName typeName =
-          descriptor.getPrimitiveType().getPrimitiveTypeName();
         if (column.hasDictionary() || (rowId == 0 &&
             (typeName == PrimitiveType.PrimitiveTypeName.INT32 ||
             (typeName == PrimitiveType.PrimitiveTypeName.INT64 &&
@@ -197,7 +197,7 @@ public class VectorizedColumnReader {
           decodeDictionaryIds(0, rowId, column, column.getDictionaryIds());
         }
         column.setDictionary(null);
-        switch (descriptor.getPrimitiveType().getPrimitiveTypeName()) {
+        switch (typeName) {
           case BOOLEAN:
             readBooleanBatch(rowId, num, column);
             break;
@@ -224,8 +224,7 @@ public class VectorizedColumnReader {
               rowId, num, column, descriptor.getPrimitiveType().getTypeLength());
             break;
           default:
-            throw new IOException(
-              "Unsupported type: " + descriptor.getPrimitiveType().getPrimitiveTypeName());
+            throw new IOException("Unsupported type: " + typeName);
         }
       }
 
