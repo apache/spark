@@ -4285,21 +4285,21 @@ case class StructFlatten(
     st.fields.flatMap(field => flatStructField(field, prefix))
   }
   override def dataType: DataType = child.dataType match {
-    case st: StructType => st.copy(fields = flatStructType(st, ""))
+    case st: StructType if depth > 0 => st.copy(fields = flatStructType(st, ""))
     case other => other
   }
 
 
-  def flatColumn(column: Any): Array[Any] = column match {
+  def flatValue(value: Any): Array[Any] = value match {
     case row: GenericInternalRow => flatRow(row).values
-    case _ => Array(column)
+    case _ => Array(value)
   }
   def flatRow(st: GenericInternalRow): GenericInternalRow = {
-    val values = st.values.flatMap(column => flatColumn(column))
+    val values = st.values.flatMap(column => flatValue(column))
     new GenericInternalRow(values)
   }
   override def nullSafeEval(input: Any): Any = input match {
-    case row: GenericInternalRow => flatRow(row)
+    case row: GenericInternalRow if depth > 0 => flatRow(row)
     case other => other
   }
 }

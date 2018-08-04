@@ -1621,21 +1621,38 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("struct flatten") {
-    // level = 2
+    // 2 nested structs, depth = default
     val struct1 = CreateStruct(Seq(CreateStruct(Seq(Literal(1)))))
     val expectedSchema1 = StructType(Seq(StructField("col1_col1", IntegerType, false)))
     assert(StructFlatten(struct1).dataType == expectedSchema1)
     checkEvaluation(StructFlatten(struct1), Row(1))
 
-    // level = 3
+    // 3 nested structs, depth = default, delimiter = "-"
     val struct2 = CreateNamedStruct(Seq(Literal("level0"), CreateNamedStruct(Seq(
       Literal("level1"), CreateNamedStruct(Seq(
         Literal("col1"), Literal(1), Literal("col2"), Literal("a")
       ))))))
     val expectedSchema2 = StructType(Seq(
-      StructField("level0_level1_col1", IntegerType, false),
-      StructField("level0_level1_col2", StringType, false)))
-    assert(StructFlatten(struct2).dataType == expectedSchema2)
+      StructField("level0-level1-col1", IntegerType, false),
+      StructField("level0-level1-col2", StringType, false)))
+    assert(StructFlatten(struct2, delimiter = "-").dataType == expectedSchema2)
     checkEvaluation(StructFlatten(struct2), Row(1, "a"))
+
+    // 3 nested structs, depth = 0
+    val expectedSchema3 = StructType(Seq(StructField("level0",
+      StructType(Seq(StructField("level1",
+        StructType(Seq(
+          StructField("col1", IntegerType, false), StructField("col2", StringType, false)
+        )), false)
+      )), false)
+    ))
+    assert(StructFlatten(struct2, depth = 0).dataType == expectedSchema3)
+    checkEvaluation(StructFlatten(struct2, depth = 0), Row(Row(Row(1, "a"))))
+
+    // 3 nested structs, depth = 1
+//    val expectedSchema3 = StructType(Seq(StructField("level0_level1", StructType(Seq(
+//      StructField("col1", IntegerType, false),
+//      StructField("col2", StringType, false))), false)))
+//    assert(StructFlatten(struct2, depth = 1).dataType == expectedSchema3)
   }
 }
