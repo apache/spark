@@ -98,8 +98,7 @@ private[spark] class SparkSubmit extends Logging {
    * Kill an existing submission using the REST protocol. Standalone and Mesos cluster mode only.
    */
   private def kill(args: SparkSubmitArguments): Unit = {
-    new RestSubmissionClient(args.master)
-      .killSubmission(args.submissionToKill)
+    createRestSubmissionClient(args).killSubmission(args.submissionToKill)
   }
 
   /**
@@ -107,8 +106,16 @@ private[spark] class SparkSubmit extends Logging {
    * Standalone and Mesos cluster mode only.
    */
   private def requestStatus(args: SparkSubmitArguments): Unit = {
-    new RestSubmissionClient(args.master)
-      .requestSubmissionStatus(args.submissionToRequestStatusFor)
+    createRestSubmissionClient(args).requestSubmissionStatus(args.submissionToRequestStatusFor)
+  }
+
+  /**
+   * Creates RestSubmissionClient with overridden logInfo()
+   */
+  private def createRestSubmissionClient(args: SparkSubmitArguments): RestSubmissionClient = {
+    new RestSubmissionClient(args.master) {
+      override protected def logInfo(msg: => String): Unit = printMessage(msg)
+    }
   }
 
   /** Print version information to the log. */
