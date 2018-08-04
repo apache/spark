@@ -54,6 +54,11 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     ArrayTransform(expr, createLambda(at.elementType, at.containsNull, IntegerType, false, f))
   }
 
+  def filter(expr: Expression, f: Expression => Expression): Expression = {
+    val at = expr.dataType.asInstanceOf[ArrayType]
+    ArrayFilter(expr, createLambda(at.elementType, at.containsNull, f))
+  }
+
   test("ArrayTransform") {
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
     val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
@@ -93,5 +98,37 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       Seq("[2, 3, 4]", null, "[5, 6]"))
     checkEvaluation(transform(aai, array => Cast(transform(array, plusIndex), StringType)),
       Seq("[1, 3, 5]", null, "[4, 6]"))
+  }
+
+  test("ArrayFilter") {
+    val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
+    val ain = Literal.create(null, ArrayType(IntegerType, containsNull = false))
+
+    val isEven: Expression => Expression = x => x % 2 === 0
+    val isNullOrOdd: Expression => Expression = x => x.isNull || x % 2 === 1
+
+    checkEvaluation(filter(ai0, isEven), Seq(2))
+    checkEvaluation(filter(ai0, isNullOrOdd), Seq(1, 3))
+    checkEvaluation(filter(ai1, isEven), Seq.empty)
+    checkEvaluation(filter(ai1, isNullOrOdd), Seq(1, null, 3))
+    checkEvaluation(filter(ain, isEven), null)
+    checkEvaluation(filter(ain, isNullOrOdd), null)
+
+    val as0 =
+      Literal.create(Seq("a0", "b1", "a2", "c3"), ArrayType(StringType, containsNull = false))
+    val as1 = Literal.create(Seq("a", null, "c"), ArrayType(StringType, containsNull = true))
+    val asn = Literal.create(null, ArrayType(StringType, containsNull = false))
+
+    val startsWithA: Expression => Expression = x => x.startsWith("a")
+
+    checkEvaluation(filter(as0, startsWithA), Seq("a0", "a2"))
+    checkEvaluation(filter(as1, startsWithA), Seq("a"))
+    checkEvaluation(filter(asn, startsWithA), null)
+
+    val aai = Literal.create(Seq(Seq(1, 2, 3), null, Seq(4, 5)),
+      ArrayType(ArrayType(IntegerType, containsNull = false), containsNull = true))
+    checkEvaluation(transform(aai, ix => filter(ix, isNullOrOdd)),
+      Seq(Seq(1, 3), null, Seq(5)))
   }
 }
