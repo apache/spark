@@ -884,6 +884,23 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   case class NestedTop(id: Int, data: NestedMiddle)
 
+  test("Validate namespace in avro file that has nested records with the same name") {
+    withTempPath { dir =>
+      val writeDf = spark.createDataFrame(List(NestedTop(1, NestedMiddle(2, NestedBottom(3, "1")))))
+      writeDf.write.format("avro").save(dir.toString)
+      val file = new File(dir.toString)
+        .listFiles()
+        .filter(_.isFile)
+        .filter(_.getName.endsWith("avro"))
+        .head
+      val reader = new DataFileReader(file, new GenericDatumReader[Any]())
+      val schema = reader.getSchema.toString()
+      assert(schema.contains("\"namespace\":\"topLevelRecord\""))
+      assert(schema.contains("\"namespace\":\"topLevelRecord.data\""))
+      assert(schema.contains("\"namespace\":\"topLevelRecord.data.data\""))
+    }
+  }
+
   test("saving avro that has nested records with the same name") {
     withTempPath { tempDir =>
       // Save avro file on output folder path

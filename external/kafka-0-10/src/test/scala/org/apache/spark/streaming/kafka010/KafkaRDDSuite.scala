@@ -23,11 +23,11 @@ import java.io.File
 import scala.collection.JavaConverters._
 import scala.util.Random
 
-import kafka.common.TopicAndPartition
-import kafka.log._
-import kafka.message._
+import kafka.log.{CleanerConfig, Log, LogCleaner, LogConfig, ProducerStateManager}
+import kafka.server.{BrokerTopicStats, LogDirFailureChannel}
 import kafka.utils.Pool
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.record.{CompressionType, MemoryRecords, SimpleRecord}
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.scalatest.BeforeAndAfterAll
 
@@ -72,33 +72,39 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   private def compactLogs(topic: String, partition: Int, messages: Array[(String, String)]) {
     val mockTime = new MockTime()
-    // LogCleaner in 0.10 version of Kafka is still expecting the old TopicAndPartition api
-    val logs = new Pool[TopicAndPartition, Log]()
+    val logs = new Pool[TopicPartition, Log]()
     val logDir = kafkaTestUtils.brokerLogDir
     val dir = new File(logDir, topic + "-" + partition)
     dir.mkdirs()
     val logProps = new ju.Properties()
     logProps.put(LogConfig.CleanupPolicyProp, LogConfig.Compact)
     logProps.put(LogConfig.MinCleanableDirtyRatioProp, java.lang.Float.valueOf(0.1f))
+    val logDirFailureChannel = new LogDirFailureChannel(1)
+    val topicPartition = new TopicPartition(topic, partition)
     val log = new Log(
       dir,
       LogConfig(logProps),
       0L,
+      0L,
       mockTime.scheduler,
-      mockTime
+      new BrokerTopicStats(),
+      mockTime,
+      Int.MaxValue,
+      Int.MaxValue,
+      topicPartition,
+      new ProducerStateManager(topicPartition, dir),
+      logDirFailureChannel
     )
     messages.foreach { case (k, v) =>
-      val msg = new ByteBufferMessageSet(
-        NoCompressionCodec,
-        new Message(v.getBytes, k.getBytes, Message.NoTimestamp, Message.CurrentMagicValue))
-      log.append(msg)
+      val record = new SimpleRecord(k.getBytes, v.getBytes)
+      log.appendAsLeader(MemoryRecords.withRecords(CompressionType.NONE, record), 0);
     }
     log.roll()
-    logs.put(TopicAndPartition(topic, partition), log)
+    logs.put(topicPartition, log)
 
-    val cleaner = new LogCleaner(CleanerConfig(), logDirs = Array(dir), logs = logs)
+    val cleaner = new LogCleaner(CleanerConfig(), Array(dir), logs, logDirFailureChannel)
     cleaner.startup()
-    cleaner.awaitCleaned(topic, partition, log.activeSegment.baseOffset, 1000)
+    cleaner.awaitCleaned(new TopicPartition(topic, partition), log.activeSegment.baseOffset, 1000)
 
     cleaner.shutdown()
     mockTime.scheduler.shutdown()
