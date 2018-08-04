@@ -1392,7 +1392,7 @@ object SQLConf {
         "reading unnecessary nested column data. Currently Parquet is the only data source that " +
         "implements this optimization.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
