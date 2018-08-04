@@ -220,7 +220,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
                     dt.datetime(2019, 12, 31, 23, 57),
                     dt.datetime(2019, 12, 31, 23, 58),
                     dt.datetime(2019, 12, 31, 23, 59),
-                    dt.datetime(2020, 1, 1)]  # fat lady sings...
+                    dt.datetime(2020, 1, 1)]
         self._test_func(input, func, expected)
 
     def test_reduce(self):
