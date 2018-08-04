@@ -117,7 +117,7 @@ class ParquetSchemaPruningSuite
     checkAnswer(query, Row("X.", 1) :: Row("Y.", 1) :: Row(null, 2) :: Row(null, 2) :: Nil)
   }
 
-  ignore("partial schema intersection - select missing subfield") {
+  testSchemaPruning("partial schema intersection - select missing subfield") {
     val query = sql("select name.middle, address from contacts where p=2 order by id")
     checkScanSchemata(query, "struct<id:int,name:struct<middle:string>,address:string>")
     checkAnswer(query,
