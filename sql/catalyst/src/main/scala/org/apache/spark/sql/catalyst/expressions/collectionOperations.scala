@@ -4276,30 +4276,36 @@ case class StructFlatten(
   def fieldName(prefix: String, name: String): String = {
     if (prefix.isEmpty) name else prefix + delimiter + name
   }
-  def flatStructField(field: StructField, prefix: String): Array[StructField] = field match {
-    case StructField(name, st: StructType, _, _) =>
-      flatStructType(st, fieldName(prefix, name))
-    case _ => Array(field.copy(name = fieldName(prefix, field.name)))
+  def flatStructField(field: StructField, prefix: String, d: Int): Array[StructField] = {
+    field match {
+      case StructField(name, st: StructType, _, _) if d > 0 =>
+        flatStructType(st, fieldName(prefix, name), d - 1)
+      case _ => Array(field.copy(name = fieldName(prefix, field.name)))
+    }
   }
-  def flatStructType(st: StructType, prefix: String): Array[StructField] = {
-    st.fields.flatMap(field => flatStructField(field, prefix))
+  def flatStructType(st: StructType, prefix: String, d: Int): Array[StructField] = {
+    st.fields.flatMap(field => flatStructField(field, prefix, d))
   }
   override def dataType: DataType = child.dataType match {
-    case st: StructType if depth > 0 => st.copy(fields = flatStructType(st, ""))
+    case st: StructType if depth > 0 => st.copy(fields = flatStructType(st, "", depth))
     case other => other
   }
 
 
-  def flatValue(value: Any): Array[Any] = value match {
-    case row: GenericInternalRow => flatRow(row).values
+  def flatValue(value: Any, d: Int): Array[Any] = value match {
+    case row: GenericInternalRow if d > 0 => flatRow(row, d - 1).values
     case _ => Array(value)
   }
-  def flatRow(st: GenericInternalRow): GenericInternalRow = {
-    val values = st.values.flatMap(column => flatValue(column))
-    new GenericInternalRow(values)
+  def flatRow(struct: GenericInternalRow, d: Int): GenericInternalRow = {
+    if (d > 0 ) {
+      val values = struct.values.flatMap(column => flatValue(column, d))
+      new GenericInternalRow(values)
+    } else {
+      struct
+    }
   }
   override def nullSafeEval(input: Any): Any = input match {
-    case row: GenericInternalRow if depth > 0 => flatRow(row)
+    case row: GenericInternalRow => flatRow(row, depth)
     case other => other
   }
 }

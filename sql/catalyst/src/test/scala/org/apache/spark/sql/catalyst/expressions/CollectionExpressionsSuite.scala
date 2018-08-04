@@ -1650,9 +1650,12 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(StructFlatten(struct2, depth = 0), Row(Row(Row(1, "a"))))
 
     // 3 nested structs, depth = 1
-//    val expectedSchema3 = StructType(Seq(StructField("level0_level1", StructType(Seq(
-//      StructField("col1", IntegerType, false),
-//      StructField("col2", StringType, false))), false)))
-//    assert(StructFlatten(struct2, depth = 1).dataType == expectedSchema3)
+    val expectedSchema4 = StructType(Seq(StructField("level0_level1",
+      StructType(Seq(
+        StructField("col1", IntegerType, false), StructField("col2", StringType, false)
+      )), false)
+    ))
+    assert(StructFlatten(struct2, depth = 1).dataType == expectedSchema4)
+    checkEvaluation(StructFlatten(struct2, depth = 1), Row(Row(1, "a")))
   }
 }
