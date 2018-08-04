@@ -4273,6 +4273,8 @@ case class StructFlatten(
     depth: Int = Int.MaxValue,
     delimiter: String = "_") extends UnaryExpression with CodegenFallback {
 
+  def this(child: Expression) = this(child, Int.MaxValue, "_")
+
   def fieldName(prefix: String, name: String): String = {
     if (prefix.isEmpty) name else prefix + delimiter + name
   }

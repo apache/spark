@@ -1879,6 +1879,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
     assert(ex.getMessage.contains("Cannot use null as map key"))
   }
+
+  test("struct_flatten function") {
+    val df = spark.range(0, 10)
+      .select(struct(
+        'id as "col1",
+        struct(('id + 1) as "col3") as "col2"
+      ) as "st")
+    val flatten = df.selectExpr("struct_flatten(st)")
+    val expected = spark.range(0, 10)
+      .select(struct(
+        'id as "col1",
+        ('id + 1) as "col2_col3"
+      ) as "st")
+
+    checkAnswer(flatten, expected)
+  }
 }
 
 object DataFrameFunctionsSuite {
