@@ -33,3 +33,15 @@ select filter(cast(null as array<int>), y -> true) as v;
 
 -- Filter nested arrays
 select transform(zs, z -> filter(z, zz -> zz > 50)) as v from nested;
+
+-- Aggregate.
+select aggregate(ys, 0, (y, a) -> y + a + x) as v from nested;
+
+-- Aggregate average.
+select aggregate(ys, (0 as sum, 0 as n), (acc, x) -> (acc.sum + x, acc.n + 1), acc -> acc.sum / acc.n) as v from nested;
+
+-- Aggregate nested arrays
+select transform(zs, z -> aggregate(z, 1, (acc, val) -> acc * val * size(z))) as v from nested;
+
+-- Aggregate a null array
+select aggregate(cast(null as array<int>), 0, (a, y) -> a + y + 1, a -> a + 2) as v;
