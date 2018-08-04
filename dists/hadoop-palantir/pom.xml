@@ -175,6 +175,10 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
+      <artifactId>spark-avro_2.11</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-hadoop-cloud_${scala.binary.version}</artifactId>
     </dependency>
     <dependency>
