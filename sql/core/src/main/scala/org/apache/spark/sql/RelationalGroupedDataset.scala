@@ -469,8 +469,11 @@ class RelationalGroupedDataset protected[sql](
   override def toString: String = {
     val builder = new StringBuilder
     builder.append("RelationalGroupedDataset: [grouping expressions: [")
-    val kFields = groupingExprs.map(_.asInstanceOf[NamedExpression]).map {
-      case f => s"${f.name}: ${f.dataType.simpleString(2)}"
+    val kFields = groupingExprs.collect {
+      case expr: NamedExpression if expr.resolved =>
+        s"${expr.name}: ${expr.dataType.simpleString(2)}"
+      case expr: NamedExpression => expr.name
+      case o => o.toString
     }
     builder.append(kFields.take(2).mkString(", "))
     if (kFields.length > 2) {

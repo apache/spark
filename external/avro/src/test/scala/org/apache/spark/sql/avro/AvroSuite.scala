@@ -39,8 +39,33 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
 class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
+  import testImplicits._
+
   val episodesAvro = testFile("episodes.avro")
   val testAvro = testFile("test.avro")
+
+  // The test file timestamp.avro is generated via following Python code:
+  // import json
+  // import avro.schema
+  // from avro.datafile import DataFileWriter
+  // from avro.io import DatumWriter
+  //
+  // write_schema = avro.schema.parse(json.dumps({
+  //   "namespace": "logical",
+  //   "type": "record",
+  //   "name": "test",
+  //   "fields": [
+  //   {"name": "timestamp_millis", "type": {"type": "long","logicalType": "timestamp-millis"}},
+  //   {"name": "timestamp_micros", "type": {"type": "long","logicalType": "timestamp-micros"}},
+  //   {"name": "long", "type": "long"}
+  //   ]
+  // }))
+  //
+  // writer = DataFileWriter(open("timestamp.avro", "wb"), DatumWriter(), write_schema)
+  // writer.append({"timestamp_millis": 1000, "timestamp_micros": 2000000, "long": 3000})
+  // writer.append({"timestamp_millis": 666000, "timestamp_micros": 999000000, "long": 777000})
+  // writer.close()
+  val timestampAvro = testFile("timestamp.avro")
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -331,6 +356,77 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  test("Logical type: timestamp_millis") {
+    val expected = Seq(1000L, 666000L).map(t => Row(new Timestamp(t)))
+    val df = spark.read.format("avro").load(timestampAvro).select('timestamp_millis)
+
+    checkAnswer(df, expected)
+
+    withTempPath { dir =>
+      df.write.format("avro").save(dir.toString)
+      checkAnswer(spark.read.format("avro").load(dir.toString), expected)
+    }
+  }
+
+  test("Logical type: timestamp_micros") {
+    val expected = Seq(2000L, 999000L).map(t => Row(new Timestamp(t)))
+    val df = spark.read.format("avro").load(timestampAvro).select('timestamp_micros)
+
+    checkAnswer(df, expected)
+
+    withTempPath { dir =>
+      df.write.format("avro").save(dir.toString)
+      checkAnswer(spark.read.format("avro").load(dir.toString), expected)
+    }
+  }
+
+  test("Logical type: specify different output timestamp types") {
+    val df =
+      spark.read.format("avro").load(timestampAvro).select('timestamp_millis, 'timestamp_micros)
+
+    val expected = Seq((1000L, 2000L), (666000L, 999000L))
+      .map(t => Row(new Timestamp(t._1), new Timestamp(t._2)))
+
+    Seq("TIMESTAMP_MILLIS", "TIMESTAMP_MICROS").foreach { timestampType =>
+      withSQLConf(SQLConf.AVRO_OUTPUT_TIMESTAMP_TYPE.key -> timestampType) {
+        withTempPath { dir =>
+          df.write.format("avro").save(dir.toString)
+          checkAnswer(spark.read.format("avro").load(dir.toString), expected)
+        }
+      }
+    }
+  }
+
+  test("Read Long type as Timestamp") {
+    val schema = StructType(StructField("long", TimestampType, true) :: Nil)
+    val df = spark.read.format("avro").schema(schema).load(timestampAvro).select('long)
+
+    val expected = Seq(3000L, 777000L).map(t => Row(new Timestamp(t)))
+
+    checkAnswer(df, expected)
+  }
+
+  test("Logical type: user specified schema") {
+    val expected = Seq((1000L, 2000L, 3000L), (666000L, 999000L, 777000L))
+      .map(t => Row(new Timestamp(t._1), new Timestamp(t._2), t._3))
+
+    val avroSchema = s"""
+      {
+        "namespace": "logical",
+        "type": "record",
+        "name": "test",
+        "fields": [
+          {"name": "timestamp_millis", "type": {"type": "long","logicalType": "timestamp-millis"}},
+          {"name": "timestamp_micros", "type": {"type": "long","logicalType": "timestamp-micros"}},
+          {"name": "long", "type": "long"}
+        ]
+      }
+    """
+    val df = spark.read.format("avro").option("avroSchema", avroSchema).load(timestampAvro)
+
+    checkAnswer(df, expected)
+  }
+
   test("Array data types") {
     withTempPath { dir =>
       val testSchema = StructType(Seq(
@@ -521,7 +617,8 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       // TimesStamps are converted to longs
       val times = spark.read.format("avro").load(avroDir).select("Time").collect()
-      assert(times.map(_(0)).toSet == Set(666, 777, 42))
+      assert(times.map(_(0)).toSet ==
+        Set(new Timestamp(666), new Timestamp(777), new Timestamp(42)))
 
       // DecimalType should be converted to string
       val decimals = spark.read.format("avro").load(avroDir).select("Decimal").collect()
@@ -540,9 +637,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   test("correctly read long as date/timestamp type") {
     withTempPath { tempDir =>
-      val sparkSession = spark
-      import sparkSession.implicits._
-
       val currentTime = new Timestamp(System.currentTimeMillis())
       val currentDate = new Date(System.currentTimeMillis())
       val schema = StructType(Seq(
@@ -570,9 +664,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   test("does not coerce null date/timestamp value to 0 epoch.") {
     withTempPath { tempDir =>
-      val sparkSession = spark
-      import sparkSession.implicits._
-
       val nullTime: Timestamp = null
       val nullDate: Date = null
       val schema = StructType(Seq(
@@ -778,8 +869,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   test("read avro file partitioned") {
     withTempPath { dir =>
-      val sparkSession = spark
-      import sparkSession.implicits._
       val df = (0 to 1024 * 3).toDS.map(i => s"record${i}").toDF("records")
       val outputDir = s"$dir/${UUID.randomUUID}"
       df.write.format("avro").save(outputDir)
@@ -794,6 +883,23 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   case class NestedMiddle(id: Int, data: NestedBottom)
 
   case class NestedTop(id: Int, data: NestedMiddle)
+
+  test("Validate namespace in avro file that has nested records with the same name") {
+    withTempPath { dir =>
+      val writeDf = spark.createDataFrame(List(NestedTop(1, NestedMiddle(2, NestedBottom(3, "1")))))
+      writeDf.write.format("avro").save(dir.toString)
+      val file = new File(dir.toString)
+        .listFiles()
+        .filter(_.isFile)
+        .filter(_.getName.endsWith("avro"))
+        .head
+      val reader = new DataFileReader(file, new GenericDatumReader[Any]())
+      val schema = reader.getSchema.toString()
+      assert(schema.contains("\"namespace\":\"topLevelRecord\""))
+      assert(schema.contains("\"namespace\":\"topLevelRecord.data\""))
+      assert(schema.contains("\"namespace\":\"topLevelRecord.data.data\""))
+    }
+  }
 
   test("saving avro that has nested records with the same name") {
     withTempPath { tempDir =>

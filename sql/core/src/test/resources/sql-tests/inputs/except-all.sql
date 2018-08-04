@@ -17,12 +17,17 @@ CREATE TEMPORARY VIEW tab4 AS SELECT * FROM VALUES
     (2, 20)
     AS tab4(k, v);
 
--- Basic ExceptAll
+-- Basic EXCEPT ALL
 SELECT * FROM tab1
 EXCEPT ALL
 SELECT * FROM tab2;
 
--- ExceptAll same table in both branches
+-- MINUS ALL (synonym for EXCEPT)
+SELECT * FROM tab1
+MINUS ALL
+SELECT * FROM tab2;
+
+-- EXCEPT ALL same table in both branches
 SELECT * FROM tab1
 EXCEPT ALL
 SELECT * FROM tab2 WHERE c1 IS NOT NULL;
@@ -57,14 +62,14 @@ SELECT * FROM tab4
 EXCEPT ALL
 SELECT * FROM tab3;
 
--- ExceptAll + Intersect
+-- EXCEPT ALL + INTERSECT
 SELECT * FROM tab4
 EXCEPT ALL
 SELECT * FROM tab3
 INTERSECT DISTINCT
 SELECT * FROM tab4;
 
--- ExceptAll + Except
+-- EXCEPT ALL + EXCEPT
 SELECT * FROM tab4
 EXCEPT ALL
 SELECT * FROM tab3
@@ -92,6 +97,15 @@ SELECT * FROM tab4
 UNION
 SELECT * FROM tab3
 EXCEPT DISTINCT
+SELECT * FROM tab4;
+
+-- Using MINUS ALL
+SELECT * FROM tab3
+MINUS ALL
+SELECT * FROM tab4
+UNION
+SELECT * FROM tab3
+MINUS DISTINCT
 SELECT * FROM tab4;
 
 -- Chain of set operations
