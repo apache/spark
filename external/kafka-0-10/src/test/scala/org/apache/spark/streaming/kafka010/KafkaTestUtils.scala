@@ -32,6 +32,7 @@ import kafka.api.Request
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.utils.ZkUtils
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
+import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.serialization.StringSerializer
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 
@@ -109,7 +110,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
       brokerConf = new KafkaConfig(brokerConfiguration, doLog = false)
       server = new KafkaServer(brokerConf)
       server.startup()
-      brokerPort = server.boundPort(brokerConf.interBrokerListenerName)
+      brokerPort = server.boundPort(new ListenerName("PLAINTEXT"))
       (server, brokerPort)
     }, new SparkConf(), "KafkaBroker")
 
@@ -220,8 +221,11 @@ private[kafka010] class KafkaTestUtils extends Logging {
     props.put("port", brokerPort.toString)
     props.put("log.dir", brokerLogDir)
     props.put("zookeeper.connect", zkAddress)
+    props.put("zookeeper.connection.timeout.ms", "60000")
     props.put("log.flush.interval.messages", "1")
     props.put("replica.socket.timeout.ms", "1500")
+    props.put("delete.topic.enable", "true")
+    props.put("offsets.topic.num.partitions", "1")
     props.put("offsets.topic.replication.factor", "1")
     props.put("group.initial.rebalance.delay.ms", "10")
     props
