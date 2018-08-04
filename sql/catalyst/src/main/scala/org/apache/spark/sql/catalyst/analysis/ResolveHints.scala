@@ -20,12 +20,11 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.IntegerLiteral
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
 
 
 /**
@@ -119,7 +118,7 @@ object ResolveHints {
           case "COALESCE" => false
         }
         val numPartitions = h.parameters match {
-          case Seq(Literal(numPartitions: Int, IntegerType)) =>
+          case Seq(IntegerLiteral(numPartitions)) =>
             numPartitions
           case Seq(numPartitions: Int) =>
             numPartitions
