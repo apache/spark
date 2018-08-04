@@ -692,11 +692,9 @@ class SessionCatalog(
     synchronized {
       val db = formatDatabaseName(name.database.getOrElse(currentDb))
       val table = formatTableName(name.table)
-      // To keep track of the name and database of the table/view
-      val alias = AliasIdentifier(table, Some(db))
       if (db == globalTempViewManager.database) {
         globalTempViewManager.get(table).map { viewDef =>
-          SubqueryAlias(alias, viewDef)
+          SubqueryAlias(table, Some(db), viewDef)
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempViews.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
@@ -709,9 +707,9 @@ class SessionCatalog(
             desc = metadata,
             output = metadata.schema.toAttributes,
             child = parser.parsePlan(viewText))
-          SubqueryAlias(alias, child)
+          SubqueryAlias(table, Some(db), child)
         } else {
-          SubqueryAlias(alias, UnresolvedCatalogRelation(metadata))
+          SubqueryAlias(table, Some(db), UnresolvedCatalogRelation(metadata))
         }
       } else {
         SubqueryAlias(table, tempViews(table))

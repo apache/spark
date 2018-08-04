@@ -345,8 +345,8 @@ case class UnresolvedRegex(regexPattern: String, table: Option[String], caseSens
       // If there is no table specified, use all input attributes that match expr
       case None => input.output.filter(_.name.matches(pattern))
       // If there is a table, pick out attributes that are part of this table that match expr
-      case Some(t) => input.output.filter(a => resolver(a.qualifier.last, t)).
-        filter(_.name.matches(pattern))
+      case Some(t) => input.output.filter(a => a.qualifier.nonEmpty &&
+        resolver(a.qualifier.last, t)).filter(_.name.matches(pattern))
     }
   }
 

@@ -818,6 +818,13 @@ object SubqueryAlias {
       child: LogicalPlan): SubqueryAlias = {
     SubqueryAlias(AliasIdentifier(identifier), child)
   }
+
+  def apply(
+      identifier: String,
+      database: Option[String],
+      child: LogicalPlan): SubqueryAlias = {
+    SubqueryAlias(AliasIdentifier(identifier, database), child)
+  }
 }
 /**
  * Sample the dataset.
