@@ -21,10 +21,11 @@ import org.scalactic.Equality
 import org.scalatest.Assertions
 
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.catalyst.SchemaPruningTest
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types.StructType
 
-private[sql] trait FileSchemaPruningTest {
+private[sql] trait FileSchemaPruningTest extends SchemaPruningTest {
   _: Assertions =>
 
   private val schemaEquality = new Equality[StructType] {
