@@ -496,6 +496,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     executorDataMap.keySet.toSeq
   }
 
+  override def getNumSlots(): Int = {
+    executorDataMap.values.foldLeft(0) { (num, executor) =>
+      num + executor.totalCores / scheduler.CPUS_PER_TASK
+    }
+  }
+
   /**
    * Request an additional number of executors from the cluster manager.
    * @return whether the request is acknowledged.

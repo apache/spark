@@ -453,4 +453,8 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       super.applicationId
     }
 
+  override def getNumSlots(): Int = {
+    // TODO support this method for MesosFineGrainedSchedulerBackend
+    0
+  }
 }

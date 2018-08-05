@@ -185,4 +185,56 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     testSubmitJob(sc, rdd,
       message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
   }
+
+  test("submit a barrier ResultStage that requires more slots than current total under local " +
+      "mode") {
+    sc = createSparkContext()
+    val rdd = sc.parallelize(1 to 10, 5)
+      .barrier()
+      .mapPartitions((iter, context) => iter)
+    testSubmitJob(sc, rdd,
+      message = DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+  }
+
+  test("submit a barrier ShuffleMapStage that requires more slots than current total under " +
+    "local mode") {
+    sc = createSparkContext()
+    val rdd = sc.parallelize(1 to 10, 5)
+      .barrier()
+      .mapPartitions((iter, context) => iter)
+      .repartition(2)
+      .map(x => x + 1)
+    testSubmitJob(sc, rdd,
+      message = DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+  }
+
+  test("submit a barrier ResultStage that requires more slots than current total under " +
+    "local-cluster mode") {
+    val conf = new SparkConf()
+      .set("spark.task.cpus", "2")
+      .setMaster("local-cluster[4, 3, 1024]")
+      .setAppName("test")
+    sc = createSparkContext(Some(conf))
+    val rdd = sc.parallelize(1 to 10, 5)
+      .barrier()
+      .mapPartitions((iter, context) => iter)
+    testSubmitJob(sc, rdd,
+      message = DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+  }
+
+  test("submit a barrier ShuffleMapStage that requires more slots than current total under " +
+    "local-cluster mode") {
+    val conf = new SparkConf()
+      .set("spark.task.cpus", "2")
+      .setMaster("local-cluster[4, 3, 1024]")
+      .setAppName("test")
+    sc = createSparkContext(Some(conf))
+    val rdd = sc.parallelize(1 to 10, 5)
+      .barrier()
+      .mapPartitions((iter, context) => iter)
+      .repartition(2)
+      .map(x => x + 1)
+    testSubmitJob(sc, rdd,
+      message = DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+  }
 }

@@ -69,4 +69,13 @@ private[spark] trait SchedulerBackend {
    */
   def getDriverLogUrls: Option[Map[String, String]] = None
 
+  /**
+   * Get the number of currently active slots (total number of tasks can be launched currently).
+   * Note that please don't cache the value returned by this method, because the number can change
+   * due to add/remove executors.
+   *
+   * @return The number of tasks can be launched currently.
+   */
+  def getNumSlots(): Int
+
 }

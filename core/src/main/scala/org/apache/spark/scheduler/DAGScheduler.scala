@@ -365,6 +365,7 @@ class DAGScheduler(
   def createShuffleMapStage(shuffleDep: ShuffleDependency[_, _, _], jobId: Int): ShuffleMapStage = {
     val rdd = shuffleDep.rdd
     checkBarrierStageWithDynamicAllocation(rdd)
+    checkBarrierStageWithNumSlots(rdd)
     checkBarrierStageWithRDDChainPattern(rdd, rdd.getNumPartitions)
     val numTasks = rdd.partitions.length
     val parents = getOrCreateParentStages(rdd, jobId)
@@ -403,6 +404,18 @@ class DAGScheduler(
   }
 
   /**
+   * Check whether the barrier stage requires more slots (to be able to launch all tasks in the
+   * barrier stage together) than the total number of active slots currently. Fail fast if trying
+   * to submit a barrier stage that requires more slots than current total number.
+   */
+  private def checkBarrierStageWithNumSlots(rdd: RDD[_]): Unit = {
+    if (rdd.isBarrier() && rdd.getNumPartitions > sc.getNumSlots) {
+      throw new SparkException(
+        DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+    }
+  }
+
+  /**
    * Create a ResultStage associated with the provided jobId.
    */
   private def createResultStage(
@@ -412,6 +425,7 @@ class DAGScheduler(
       jobId: Int,
       callSite: CallSite): ResultStage = {
     checkBarrierStageWithDynamicAllocation(rdd)
+    checkBarrierStageWithNumSlots(rdd)
     checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
@@ -2026,4 +2040,11 @@ private[spark] object DAGScheduler {
     "[SPARK-24942]: Barrier execution mode does not support dynamic resource allocation for " +
       "now. You can disable dynamic resource allocation by setting Spark conf " +
       "\"spark.dynamicAllocation.enabled\" to \"false\"."
+
+  // Error message when running a barrier stage that requires more slots than current total number.
+  val ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER =
+    "[SPARK-24819]: Barrier execution mode does not allow run a barrier stage that requires " +
+      "more slots than the total number of slots in the cluster currently. Please init a new " +
+      "cluster with more CPU cores or repartition the input RDD(s) to reduce the number of " +
+      "slots required to run this barrier stage."
 }
