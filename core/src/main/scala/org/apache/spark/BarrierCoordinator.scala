@@ -49,7 +49,7 @@ private[spark] class BarrierCoordinator(
     listenerBus: LiveListenerBus,
     override val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint with Logging {
 
-  private val timer = new Timer("BarrierCoordinator barrier epoch increment timer")
+  private lazy val timer = new Timer("BarrierCoordinator barrier epoch increment timer")
 
   // Listen to StageCompleted event, clear corresponding ContextBarrierState.
   private val listener = new SparkListener {
