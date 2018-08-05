@@ -284,7 +284,7 @@ private[spark] object ThreadUtils {
     try {
       implicit val ec = ExecutionContext.fromExecutor(pool)
 
-      parmap(in, prefix, maxThreads)(f)
+      parmap(in)(f)
     } finally {
       pool.shutdownNow()
     }
