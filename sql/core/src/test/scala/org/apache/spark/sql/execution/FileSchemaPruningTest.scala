@@ -36,7 +36,14 @@ private[sql] trait FileSchemaPruningTest extends SchemaPruningTest {
       }
   }
 
-  protected def checkScanSchemata(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
+  protected def checkScan(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
+    checkScanSchemata(df, expectedSchemaCatalogStrings: _*)
+    // We check here that we can execute the query without throwing an exception. The results
+    // themselves are irrelevant, and should be checked elsewhere as needed
+    df.collect()
+  }
+
+  private def checkScanSchemata(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
     val fileSourceScanSchemata =
       df.queryExecution.executedPlan.collect {
         case scan: FileSourceScanExec => scan.requiredSchema
