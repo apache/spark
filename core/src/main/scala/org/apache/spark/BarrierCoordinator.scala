@@ -99,7 +99,7 @@ private[spark] class BarrierCoordinator(
           // Timeout current barrier() call, fail all the sync requests.
           requesters.foreach(_.sendFailure(new SparkException("The coordinator didn't get all " +
             s"barrier sync requests for barrier epoch $barrierEpoch from $barrierId within " +
-            s"$timeout seconds.")))
+            s"$timeout second(s).")))
           cleanupBarrierStage(barrierId)
         }
       }
@@ -200,6 +200,8 @@ private[spark] class BarrierCoordinator(
   override def onStop(): Unit = {
     states.forEachValue(1, clearStateConsumer)
     states.clear()
+    listenerBus.removeListener(listener)
+    super.onStop()
   }
 }
 

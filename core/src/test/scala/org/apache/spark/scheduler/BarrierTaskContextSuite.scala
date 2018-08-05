@@ -92,7 +92,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       rdd2.collect()
     }.getMessage
     assert(error.contains("The coordinator didn't get all barrier sync requests"))
-    assert(error.contains("within 1s"))
+    assert(error.contains("within 1 second(s)"))
   }
 
   test("throw exception if barrier() call doesn't happen on every task") {
@@ -114,7 +114,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       rdd2.collect()
     }.getMessage
     assert(error.contains("The coordinator didn't get all barrier sync requests"))
-    assert(error.contains("within 1s"))
+    assert(error.contains("within 1 second(s)"))
   }
 
   test("throw exception if the number of barrier() calls are not the same on every task") {
@@ -145,6 +145,6 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       rdd2.collect()
     }.getMessage
     assert(error.contains("The coordinator didn't get all barrier sync requests"))
-    assert(error.contains("within 1s"))
+    assert(error.contains("within 1 second(s)"))
   }
 }
