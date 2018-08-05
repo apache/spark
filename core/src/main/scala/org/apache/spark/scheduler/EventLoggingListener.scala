@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets
 import java.util.EnumSet
 import java.util.Locale
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.{ArrayBuffer, Map}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
@@ -96,7 +96,7 @@ private[spark] class EventLoggingListener(
   private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
 
   // map of (stageId, stageAttempt), to peak executor metrics for the stage
-  private val liveStageExecutorMetrics = HashMap[(Int, Int), HashMap[String, ExecutorMetrics]]()
+  private val liveStageExecutorMetrics = Map.empty[(Int, Int), Map[String, ExecutorMetrics]]
 
   /**
    * Creates the log file in the configured log directory.
@@ -165,7 +165,7 @@ private[spark] class EventLoggingListener(
     if (shouldLogStageExecutorMetrics) {
       // record the peak metrics for the new stage
       liveStageExecutorMetrics.put((event.stageInfo.stageId, event.stageInfo.attemptNumber()),
-        new HashMap[String, ExecutorMetrics]())
+        Map.empty[String, ExecutorMetrics])
     }
   }
 
@@ -338,7 +338,7 @@ private[spark] object EventLoggingListener extends Logging {
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
   // A cache for compression codecs to avoid creating the same codec many times
-  private val codecMap = new HashMap[String, CompressionCodec]
+  private val codecMap = Map.empty[String, CompressionCodec]
 
   /**
    * Write metadata about an event log to the given stream.

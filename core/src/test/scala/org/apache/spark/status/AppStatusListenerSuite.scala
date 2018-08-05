@@ -1291,7 +1291,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("stage executor metrics") {
     // simulate reading in StageExecutorMetrics events from the history log
-    val listener = new AppStatusListener(store, conf, true)
+    val listener = new AppStatusListener(store, conf, false)
     val driver = BlockManagerId(SparkContext.DRIVER_IDENTIFIER, "localhost", 42)
 
     listener.onExecutorAdded(createExecutorAddedEvent(1))

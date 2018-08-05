@@ -706,13 +706,10 @@ private[spark] class AppStatusListener(
     // while reading from the log. SparkListenerStageExecutorMetrics are only processed
     // when reading logs.
     liveExecutors.get(executorMetrics.execId)
-      .orElse(deadExecutors.get(executorMetrics.execId)) match {
-      case Some(exec) =>
-         if (exec.peakExecutorMetrics.compareAndUpdatePeakValues(executorMetrics.executorMetrics)) {
-          maybeUpdate(exec, now)
-        }
-      case None =>
-        logWarning("unable to find executor " + executorMetrics.execId)
+      .orElse(deadExecutors.get(executorMetrics.execId)).map { exec =>
+      if (exec.peakExecutorMetrics.compareAndUpdatePeakValues(executorMetrics.executorMetrics)) {
+        update(exec, now)
+      }
     }
   }
 
