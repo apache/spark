@@ -261,6 +261,8 @@ private[spark] object ThreadUtils {
 
   /**
    * Transforms input collection by applying the given function to each element in parallel fashion.
+   * Comparing to the map() method of Scala parallel collections, this method can be interrupted
+   * at any time. This is useful on canceling of task execution, for example.
    *
    * @param in - the input collection which should be transformed in parallel.
    * @param prefix - the prefix assigned to the underlying thread pool.
@@ -290,6 +292,8 @@ private[spark] object ThreadUtils {
 
   /**
    * Transforms input collection by applying the given function to each element in parallel fashion.
+   * Comparing to the map() method of Scala parallel collections, this method can be interrupted
+   * at any time. This is useful on canceling of task execution, for example.
    *
    * @param in - the input collection which should be transformed in parallel.
    * @param f - the lambda function will be applied to each element of `in`.
