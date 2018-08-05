@@ -20,8 +20,6 @@ package org.apache.spark
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.rdd.{PartitionPruningRDD, RDD}
 import org.apache.spark.scheduler.DAGScheduler
 import org.apache.spark.util.ThreadUtils
@@ -30,16 +28,13 @@ import org.apache.spark.util.ThreadUtils
  * This test suite covers all the cases that shall fail fast on job submitted that contains one
  * of more barrier stages.
  */
-class BarrierStageOnSubmittedSuite extends SparkFunSuite with BeforeAndAfterEach
-    with LocalSparkContext {
+class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext {
 
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-
-    val conf = new SparkConf()
-      .setMaster("local[4]")
-      .setAppName("test")
-    sc = new SparkContext(conf)
+  private def createSparkContext(conf: Option[SparkConf] = None): SparkContext = {
+    new SparkContext(conf.getOrElse(
+      new SparkConf()
+        .setMaster("local[4]")
+        .setAppName("test")))
   }
 
   private def testSubmitJob(
@@ -62,6 +57,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with BeforeAndAfterEach
   }
 
   test("submit a barrier ResultStage that contains PartitionPruningRDD") {
+    sc = createSparkContext()
     val prunedRdd = new PartitionPruningRDD(sc.parallelize(1 to 10, 4), index => index > 1)
     val rdd = prunedRdd
       .barrier()
@@ -71,6 +67,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with BeforeAndAfterEach
   }
 
   test("submit a barrier ShuffleMapStage that contains PartitionPruningRDD") {
+    sc = createSparkContext()
     val prunedRdd = new PartitionPruningRDD(sc.parallelize(1 to 10, 4), index => index > 1)
     val rdd = prunedRdd
       .barrier()
@@ -82,6 +79,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with BeforeAndAfterEach
   }
 
   test("submit a barrier stage that doesn't contain PartitionPruningRDD") {
+    sc = createSparkContext()
     val prunedRdd = new PartitionPruningRDD(sc.parallelize(1 to 10, 4), index => index > 1)
     val rdd = prunedRdd
       .repartition(2)
@@ -93,6 +91,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with BeforeAndAfterEach
   }
 
   test("submit a barrier stage with partial partitions") {
+    sc = createSparkContext()
     val rdd = sc.parallelize(1 to 10, 4)
       .barrier()
       .mapPartitions((iter, context) => iter)
@@ -101,6 +100,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with BeforeAndAfterEach
   }
 
   test("submit a barrier stage with union()") {
+    sc = createSparkContext()
     val rdd1 = sc.parallelize(1 to 10, 2)
       .barrier()
       .mapPartitions((iter, context) => iter)
@@ -114,6 +114,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with BeforeAndAfterEach
   }
 
   test("submit a barrier stage with coalesce()") {
+    sc = createSparkContext()
     val rdd = sc.parallelize(1 to 10, 4)
       .barrier()
       .mapPartitions((iter, context) => iter)
@@ -125,6 +126,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with BeforeAndAfterEach
   }
 
   test("submit a barrier stage that contains an RDD that depends on multiple barrier RDDs") {
+    sc = createSparkContext()
     val rdd1 = sc.parallelize(1 to 10, 4)
       .barrier()
       .mapPartitions((iter, context) => iter)
@@ -139,6 +141,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with BeforeAndAfterEach
   }
 
   test("submit a barrier stage with zip()") {
+    sc = createSparkContext()
     val rdd1 = sc.parallelize(1 to 10, 4)
       .barrier()
       .mapPartitions((iter, context) => iter)
@@ -149,5 +152,37 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with BeforeAndAfterEach
     // Should be able to submit job and run successfully.
     val result = rdd3.collect().sorted
     assert(result === Seq(12, 14, 16, 18, 20, 22, 24, 26, 28, 30))
+  }
+
+  test("submit a barrier ResultStage with dynamic resource allocation enabled") {
+    val conf = new SparkConf()
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.dynamicAllocation.testing", "true")
+      .setMaster("local[4]")
+      .setAppName("test")
+    sc = createSparkContext(Some(conf))
+
+    val rdd = sc.parallelize(1 to 10, 4)
+      .barrier()
+      .mapPartitions((iter, context) => iter)
+    testSubmitJob(sc, rdd,
+      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
+  }
+
+  test("submit a barrier ShuffleMapStage with dynamic resource allocation enabled") {
+    val conf = new SparkConf()
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.dynamicAllocation.testing", "true")
+      .setMaster("local[4]")
+      .setAppName("test")
+    sc = createSparkContext(Some(conf))
+
+    val rdd = sc.parallelize(1 to 10, 4)
+      .barrier()
+      .mapPartitions((iter, context) => iter)
+      .repartition(2)
+      .map(x => x + 1)
+    testSubmitJob(sc, rdd,
+      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
   }
 }
