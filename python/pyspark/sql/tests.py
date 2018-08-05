@@ -3355,8 +3355,8 @@ class SQLTests(ReusedSQLTestCase):
         path = tempfile.mkdtemp()
         shutil.rmtree(path)
         try:
-            df = self.spark.createDataFrame([["""{"a":null, "b":1, "c":3.0}"""],\
-                                             ["""{"a":null, "b":null, "c":"string"}"""],\
+            df = self.spark.createDataFrame([["""{"a":null, "b":1, "c":3.0}"""],
+                                             ["""{"a":null, "b":null, "c":"string"}"""],
                                              ["""{"a":null, "b":null, "c":null}"""]])
             df.write.text(path)
             schema = StructType([
