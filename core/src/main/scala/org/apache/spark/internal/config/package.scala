@@ -574,7 +574,7 @@ package object config {
         "coordinator didn't receive all the sync messages from barrier tasks within the " +
         "configed time, throw a SparkException to fail all the tasks. The default value is set " +
         "to 31536000(3600 * 24 * 365) so the barrier() call shall wait for one year.")
-      .intConf
+      .timeConf(TimeUnit.SECONDS)
       .checkValue(v => v > 0, "The value should be a positive int value.")
-      .createWithDefault(31536000)
+      .createWithDefaultString("365d")
 }
