@@ -442,6 +442,7 @@ object FunctionRegistry {
     expression[ArrayDistinct]("array_distinct"),
     expression[ArrayTransform]("transform"),
     expression[ArrayFilter]("filter"),
+    expression[ArrayAggregate]("aggregate"),
     expression[StructFlatten]("struct_flatten"),
     CreateStruct.registryEntry,
 
