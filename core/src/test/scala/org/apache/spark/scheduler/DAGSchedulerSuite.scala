@@ -2369,39 +2369,12 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(scheduler.getShuffleDependencies(rddE) === Set(shuffleDepA, shuffleDepC))
   }
 
-  test("SPARK-17644: After one stage is aborted for too many failed attempts, subsequent stages" +
+  test("SPARK-17644: After one stage is aborted for too many failed attempts, subsequent stages " +
     "still behave correctly on fetch failures") {
-    // Runs a job that always encounters a fetch failure, so should eventually be aborted
-    def runJobWithPersistentFetchFailure: Unit = {
-      val rdd1 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
-      val shuffleHandle =
-        rdd1.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
-      rdd1.map {
-        case (x, _) if (x == 1) =>
-          throw new FetchFailedException(
-            BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
-        case (x, _) => x
-      }.count()
-    }
-
-    // Runs a job that encounters a single fetch failure but succeeds on the second attempt
-    def runJobWithTemporaryFetchFailure: Unit = {
-      object FailThisAttempt {
-        val _fail = new AtomicBoolean(true)
-      }
-      val rdd1 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
-      val shuffleHandle =
-        rdd1.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
-      rdd1.map {
-        case (x, _) if (x == 1) && FailThisAttempt._fail.getAndSet(false) =>
-          throw new FetchFailedException(
-            BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
-      }
-    }
 
     failAfter(10.seconds) {
       val e = intercept[SparkException] {
-        runJobWithPersistentFetchFailure
+        runJobWithPersistentFetchFailure(sc)
       }
       assert(e.getMessage.contains("org.apache.spark.shuffle.FetchFailedException"))
     }
@@ -2410,16 +2383,16 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // This job will hang without the fix for SPARK-17644.
     failAfter(10.seconds) {
       val e = intercept[SparkException] {
-        runJobWithPersistentFetchFailure
+        runJobWithPersistentFetchFailure(sc)
       }
       assert(e.getMessage.contains("org.apache.spark.shuffle.FetchFailedException"))
     }
 
     failAfter(10.seconds) {
       try {
-        runJobWithTemporaryFetchFailure
+        runJobWithTemporaryFetchFailure(sc)
       } catch {
-        case e: Throwable => fail("A job with one fetch failure should eventually succeed")
+        case e: Throwable => fail("A job with one fetch failure should eventually succeed", e)
       }
     }
   }
@@ -2583,4 +2556,32 @@ object DAGSchedulerSuite {
 
   def makeBlockManagerId(host: String): BlockManagerId =
     BlockManagerId("exec-" + host, host, 12345)
+
+  // Runs a job that always encounters a fetch failure, so should eventually be aborted
+  def runJobWithPersistentFetchFailure(sc: SparkContext): Unit = {
+    val rdd1 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
+    val shuffleHandle =
+      rdd1.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
+    rdd1.map {
+      case (x, _) if x == 1 =>
+        throw new FetchFailedException(
+          BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
+      case (x, _) => x
+    }.count()
+  }
+
+  // Runs a job that encounters a single fetch failure but succeeds on the second attempt
+  def runJobWithTemporaryFetchFailure(sc: SparkContext): Unit = {
+    object FailThisAttempt {
+      val _fail = new AtomicBoolean(true)
+    }
+    val rdd1 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
+    val shuffleHandle =
+      rdd1.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
+    rdd1.map {
+      case (x, _) if (x == 1) && FailThisAttempt._fail.getAndSet(false) =>
+        throw new FetchFailedException(
+          BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
+    }
+  }
 }
