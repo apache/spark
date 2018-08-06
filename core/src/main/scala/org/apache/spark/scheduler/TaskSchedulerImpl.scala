@@ -141,11 +141,15 @@ private[spark] class TaskSchedulerImpl(
 
   private lazy val barrierSyncTimeout = conf.get(config.BARRIER_SYNC_TIMEOUT)
 
-  private[scheduler] lazy val barrierCoordinator: RpcEndpoint = {
-    val coordinator = new BarrierCoordinator(barrierSyncTimeout, sc.listenerBus, sc.env.rpcEnv)
-    sc.env.rpcEnv.setupEndpoint("barrierSync", coordinator)
-    logInfo("Registered BarrierCoordinator endpoint")
-    coordinator
+  private[scheduler] var barrierCoordinator: RpcEndpoint = null
+
+  private def maybeInitBarrierCoordinator(): Unit = {
+    if (barrierCoordinator == null) {
+      barrierCoordinator = new BarrierCoordinator(barrierSyncTimeout, sc.listenerBus,
+        sc.env.rpcEnv)
+      sc.env.rpcEnv.setupEndpoint("barrierSync", barrierCoordinator)
+      logInfo("Registered BarrierCoordinator endpoint")
+    }
   }
 
   override def setDAGScheduler(dagScheduler: DAGScheduler) {
@@ -424,7 +428,7 @@ private[spark] class TaskSchedulerImpl(
               "been blacklisted or cannot fulfill task locality requirements.")
 
           // materialize the barrier coordinator.
-          barrierCoordinator
+          maybeInitBarrierCoordinator()
 
           // Update the taskInfos into all the barrier task properties.
           val addressesStr = addressesWithDescs

@@ -101,10 +101,9 @@ class BarrierTaskContext(
   @Experimental
   @Since("2.4.0")
   def barrier(): Unit = {
-    val callSite = Utils.getCallSite()
     logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) has entered " +
       s"the global sync, current barrier epoch is $barrierEpoch.")
-    logTrace(s"Current callSite: $callSite")
+    logTrace("Current callSite: " + Utils.getCallSite())
 
     val startTime = System.currentTimeMillis()
     val timerTask = new TimerTask {

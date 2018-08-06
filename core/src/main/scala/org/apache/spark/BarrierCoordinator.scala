@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.util.{Timer, TimerTask}
 import java.util.concurrent.ConcurrentHashMap
-import java.util.function.Consumer
+import java.util.function.{Consumer, Function}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -93,8 +93,8 @@ private[spark] class BarrierCoordinator(
       val numTasks: Int) {
 
     // There may be multiple barrier() calls from a barrier stage attempt, `barrierEpoch` is used
-    // to identify each barrier() call. It shall get increased when a barrier() call succeed, or
-    // reset when a barrier() call fail due to timeout.
+    // to identify each barrier() call. It shall get increased when a barrier() call succeeds, or
+    // reset when a barrier() call fails due to timeout.
     private var barrierEpoch: Int = 0
 
     // An array of RPCCallContexts for barrier tasks that are waiting for reply of a barrier()
@@ -199,7 +199,10 @@ private[spark] class BarrierCoordinator(
     case request @ RequestToSync(numTasks, stageId, stageAttemptId, _, _) =>
       // Get or init the ContextBarrierState correspond to the stage attempt.
       val barrierId = ContextBarrierId(stageId, stageAttemptId)
-      states.putIfAbsent(barrierId, new ContextBarrierState(barrierId, numTasks))
+      states.computeIfAbsent(barrierId, new Function[ContextBarrierId, ContextBarrierState] {
+        override def apply(key: ContextBarrierId): ContextBarrierState =
+          new ContextBarrierState(key, numTasks)
+      })
       val barrierState = states.get(barrierId)
 
       barrierState.handleRequest(context, request)
@@ -220,7 +223,7 @@ private[spark] sealed trait BarrierCoordinatorMessage extends Serializable
  * @param stageId ID of current stage
  * @param stageAttemptId ID of current stage attempt
  * @param taskAttemptId Unique ID of current task
- * @param barrierEpoch ID of the `barrier()` call, a task may consists multiple `barrier()` calls.
+ * @param barrierEpoch ID of the `barrier()` call, a task may consist multiple `barrier()` calls.
  */
 private[spark] case class RequestToSync(
     numTasks: Int,

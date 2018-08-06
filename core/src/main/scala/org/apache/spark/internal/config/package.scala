@@ -575,6 +575,6 @@ package object config {
         "configed time, throw a SparkException to fail all the tasks. The default value is set " +
         "to 31536000(3600 * 24 * 365) so the barrier() call shall wait for one year.")
       .timeConf(TimeUnit.SECONDS)
-      .checkValue(v => v > 0, "The value should be a positive int value.")
+      .checkValue(v => v > 0, "The value should be a positive time value.")
       .createWithDefaultString("365d")
 }
