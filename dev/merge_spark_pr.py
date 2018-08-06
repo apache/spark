@@ -142,6 +142,9 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
         distinct_authors[0])
     if primary_author == "":
         primary_author = distinct_authors[0]
+    else:
+        # When primary author is specified manually, put it at the head of author list.
+        distinct_authors.insert(0, primary_author)
 
     commits = run_cmd(['git', 'log', 'HEAD..%s' % pr_branch_name,
                       '--pretty=format:%h [%an] %s']).split("\n\n")
