@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.kafka010.KafkaWriter.validateQuery
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteSupport}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -63,7 +63,7 @@ class KafkaStreamingWriteSupport(
  */
 case class KafkaStreamWriterFactory(
     topic: Option[String], producerParams: Map[String, String], schema: StructType)
-  extends DataWriterFactory[InternalRow] {
+  extends StreamingDataWriterFactory {
 
   override def createWriter(
       partitionId: Int,

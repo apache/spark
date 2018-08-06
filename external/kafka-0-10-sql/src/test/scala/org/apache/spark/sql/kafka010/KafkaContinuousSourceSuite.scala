@@ -61,7 +61,9 @@ class KafkaContinuousSourceTopicDeletionSuite extends KafkaContinuousTest {
         eventually(timeout(streamingTimeout)) {
           assert(
             query.lastExecution.logical.collectFirst {
-              case StreamingDataSourceV2Relation(_, _, _, r: KafkaContinuousReadSupport) => r
+              case r: StreamingDataSourceV2Relation
+                  if r.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
+                r.readSupport.asInstanceOf[KafkaContinuousReadSupport]
             }.exists { r =>
               // Ensure the new topic is present and the old topic is gone.
               r.knownPartitions.exists(_.topic == topic2)
