@@ -158,8 +158,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ConvertToLocalRelation,
       PropagateEmptyRelation) :+
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
-    Batch("Check Cartesian Products", Once,
-      CheckCartesianProducts) :+
+    Batch("Check and Optimize Cartesian Products", Once,
+      CheckCartesianProducts,
+      ReorderCrossJoinOperands) :+
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
       ColumnPruning,
@@ -1252,20 +1253,7 @@ object CombineLimits extends Rule[LogicalPlan] {
  * This rule must be run AFTER the batch "LocalRelation", since a join with empty relation should
  * not be a cartesian product.
  */
-object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
-  /**
-   * Check if a join is a cartesian product. Returns true if
-   * there are no join conditions involving references from both left and right.
-   */
-  def isCartesianProduct(join: Join): Boolean = {
-    val conditions = join.condition.map(splitConjunctivePredicates).getOrElse(Nil)
-
-    conditions match {
-      case Seq(Literal.FalseLiteral) | Seq(Literal(null, BooleanType)) => false
-      case _ => !conditions.map(_.references).exists(refs =>
-        refs.exists(join.left.outputSet.contains) && refs.exists(join.right.outputSet.contains))
-    }
-  }
+object CheckCartesianProducts extends Rule[LogicalPlan] with JoinHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan =
     if (SQLConf.get.crossJoinEnabled) {

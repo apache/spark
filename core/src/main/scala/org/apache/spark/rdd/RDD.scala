@@ -673,6 +673,10 @@ abstract class RDD[T: ClassTag](
   /**
    * Return the Cartesian product of this RDD and another one, that is, the RDD of all pairs of
    * elements (a, b) where a is in `this` and b is in `other`.
+   *
+   * @note This operation performs a nested loop. The order of the operands can affect performance,
+   *       if the two [[RDD]]s involved have very different size. Thus it is recommended to call
+   *       the method on the smaller [[RDD]] and use the bigger as an argument.
    */
   def cartesian[U: ClassTag](other: RDD[U]): RDD[(T, U)] = withScope {
     new CartesianRDD(sc, this, other)

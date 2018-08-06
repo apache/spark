@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.BooleanType
 
 /**
  * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
@@ -150,5 +151,47 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _)) =>
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
+  }
+}
+
+/**
+ * Swaps right and left logical plans of a join when left is bigger than right. This is useful
+ * because underlying cartesian product performs a nested loop, thus if the outer table is
+ * smaller there are less iterator initialization.
+ */
+object ReorderCrossJoinOperands extends Rule[LogicalPlan] with JoinHelper {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case j @ Join(left, right, Cross, _) if SQLConf.get.cboEnabled =>
+      reorderOperands(j, left, right)
+    case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _)
+      if SQLConf.get.cboEnabled && isCartesianProduct(j) =>
+      reorderOperands(j, left, right)
+  }
+
+  def reorderOperands(join: Join, left: LogicalPlan, right: LogicalPlan): Join = {
+    if (left.stats.rowCount.isDefined && right.stats.rowCount.isDefined
+      && left.stats.rowCount.get > right.stats.rowCount.get) {
+      join.copy(left = right, right = left)
+    } else {
+      join
+    }
+  }
+}
+
+
+trait JoinHelper extends PredicateHelper {
+  /**
+   * Check if a join is a cartesian product. Returns true if
+   * there are no join conditions involving references from both left and right.
+   */
+  def isCartesianProduct(join: Join): Boolean = {
+    val conditions = join.condition.map(splitConjunctivePredicates).getOrElse(Nil)
+
+    conditions match {
+      case Seq(Literal.FalseLiteral) | Seq(Literal(null, BooleanType)) => false
+      case _ => !conditions.map(_.references).exists(refs =>
+        refs.exists(join.left.outputSet.contains) && refs.exists(join.right.outputSet.contains))
+    }
   }
 }
