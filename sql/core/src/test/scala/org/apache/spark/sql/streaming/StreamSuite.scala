@@ -567,8 +567,6 @@ class StreamSuite extends StreamTest {
   }
 
   test("codegen-microbatch") {
-    import org.apache.spark.sql.execution.debug._
-
     val inputData = MemoryStream[Int]
     val df = inputData.toDS().map(_ * 2).filter(_ > 5)
 
@@ -580,29 +578,20 @@ class StreamSuite extends StreamTest {
       .start()
 
     try {
+      import org.apache.spark.sql.execution.debug._
       assert("No physical plan. Waiting for data." === codegenString(q))
       assert(codegenStringSeq(q).isEmpty)
 
       inputData.addData(1, 2, 3, 4, 5)
       q.processAllAvailable()
 
-      val codegenStr = codegenString(q)
-      assert(codegenStr.contains("Found 1 WholeStageCodegen subtrees."))
-      // assuming that code is generated for the test query
-      assert(codegenStr.contains("Generated code:"))
-
-      val codegenStrSeq = codegenStringSeq(q)
-      assert(codegenStrSeq.nonEmpty)
-      assert(codegenStrSeq.head._1.contains("*(1)"))
-      assert(codegenStrSeq.head._2.contains("codegenStageId=1"))
+      assertDebugCodegenResult(q)
     } finally {
       q.stop()
     }
   }
 
   test("codegen-continuous") {
-    import org.apache.spark.sql.execution.debug._
-
     val inputData = ContinuousMemoryStream[Int]
     val df = inputData.toDS().map(_ * 2).filter(_ > 5)
 
@@ -620,18 +609,24 @@ class StreamSuite extends StreamTest {
         assert(q.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution != null)
       }
 
-      val codegenStr = codegenString(q)
-      assert(codegenStr.contains("Found 1 WholeStageCodegen subtrees."))
-      // assuming that code is generated for the test query
-      assert(codegenStr.contains("Generated code:"))
-
-      val codegenStrSeq = codegenStringSeq(q)
-      assert(codegenStrSeq.nonEmpty)
-      assert(codegenStrSeq.head._1.contains("*(1)"))
-      assert(codegenStrSeq.head._2.contains("codegenStageId=1"))
+      assertDebugCodegenResult(q)
     } finally {
       q.stop()
     }
+  }
+
+  private def assertDebugCodegenResult(query: StreamingQuery): Unit = {
+    import org.apache.spark.sql.execution.debug._
+
+    val codegenStr = codegenString(query)
+    assert(codegenStr.contains("Found 1 WholeStageCodegen subtrees."))
+    // assuming that code is generated for the test query
+    assert(codegenStr.contains("Generated code:"))
+
+    val codegenStrSeq = codegenStringSeq(query)
+    assert(codegenStrSeq.nonEmpty)
+    assert(codegenStrSeq.head._1.contains("*(1)"))
+    assert(codegenStrSeq.head._2.contains("codegenStageId=1"))
   }
 
   test("SPARK-19065: dropDuplicates should not create expressions using the same id") {
