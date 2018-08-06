@@ -237,8 +237,7 @@ class BlockManagerMaster(
     if (driverEndpoint != null && isDriver) {
       tell(StopBlockManagerMaster)
       driverEndpoint = null
-      if(conf.getBoolean("spark.alluxio.shuffle.enabled",false)){
-        logInfo("Test log: AlluxioBlockManagerMaster delete tmp file")
+      if (conf.getBoolean("spark.alluxio.shuffle.enabled", false)) {
         alluxioBlockManagerMaster.delete()
       }
       logInfo("BlockManagerMaster stopped")

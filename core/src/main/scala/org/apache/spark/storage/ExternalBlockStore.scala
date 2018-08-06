@@ -17,17 +17,16 @@
 
 package org.apache.spark.storage
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
-import scala.util.control.NonFatal
-
-
-/**
-  * Stores BlockManager blocks on ExternalBlockStore.
-  * We capture any potential exception from underlying implementation
-  * and return with the expected failure value
-  */
+/*
+ * Stores BlockManager blocks on ExternalBlockStore.
+ * We capture any potential exception from underlying implementation
+ * and return with the expected failure value
+ */
 private[spark] class ExternalBlockStore(blockManager: BlockManager) extends Logging {
 
   lazy val externalBlockManager: Option[ExternalBlockManager] = createBlkManager()

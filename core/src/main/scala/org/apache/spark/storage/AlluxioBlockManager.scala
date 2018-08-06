@@ -1,24 +1,35 @@
-package org.apache.spark.storage
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-/**
-  * Created by Chopin on 2017/12/22.
-  */
+package org.apache.spark.storage
 
 import java.io.{File, FileInputStream, InputStream}
 import java.nio.ByteBuffer
 
-import com.google.common.io.ByteStreams
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
-import org.apache.spark.internal.Logging
-import org.apache.spark.util.{ByteBufferInputStream, Utils}
-
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-/**
-  * @see org.apache.spark.storage.TachyonBlockManager
-  */
+import com.google.common.io.ByteStreams
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.{ByteBufferInputStream, Utils}
+
 private[spark] class AlluxioBlockManager extends ExternalBlockManager with Logging {
 
   private var chroot: Path = _
@@ -27,7 +38,7 @@ private[spark] class AlluxioBlockManager extends ExternalBlockManager with Loggi
   private var hdfsroot: Path = _
   private var usehdfs: Boolean = _
 
-  override def toString = "ExternalBlockStore-Alluxio"
+  override def toString: String = "ExternalBlockStore-Alluxio"
 
   override def init(blockManager: BlockManager): Unit = {
     super.init(blockManager)
@@ -55,7 +66,7 @@ private[spark] class AlluxioBlockManager extends ExternalBlockManager with Loggi
 
   }
 
-  override def putBytes(blockId: BlockId, bytes: ByteBuffer): Unit ={
+  override def putBytes(blockId: BlockId, bytes: ByteBuffer): Unit = {
     val path = getFile(blockId)
     val output = fs.create(path, true)
     try {
@@ -73,9 +84,6 @@ private[spark] class AlluxioBlockManager extends ExternalBlockManager with Loggi
     }
   }
 
-  /**
-    * this method must be override, alluxio not support write append.
-    */
   override def putValues(blockId: BlockId, values: Iterator[_]): Unit = {
     val output = fs.create(getFile(blockId), true)
     try {
@@ -93,7 +101,7 @@ private[spark] class AlluxioBlockManager extends ExternalBlockManager with Loggi
     }
   }
 
-  override def putFile(shuffleId : Int, blockId: BlockId, file : File): Unit ={
+  override def putFile(shuffleId : Int, blockId: BlockId, file : File): Unit = {
 
     val in = new FileInputStream(file)
     val bytes = new Array[Byte](file.length().toInt)
@@ -106,12 +114,10 @@ private[spark] class AlluxioBlockManager extends ExternalBlockManager with Loggi
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     val path = getFile(blockId)
     if (!fs.exists(path)) {
-      logInfo("Test-log path is " + path.getName + "is not exsist ")
       None
     } else {
       val size = fs.getFileStatus(path).getLen
       if (size == 0) {
-        logInfo("Test-log path size is " + size  )
         None
       } else {
         val input = fs.open(path)
@@ -121,13 +127,12 @@ private[spark] class AlluxioBlockManager extends ExternalBlockManager with Loggi
           ByteStreams.readFully(input, buffer)
           Some(ByteBuffer.wrap(buffer))
         } catch {
-          case _ => {
+          case _ =>
             logWarning(s"Failed to get bytes of block $blockId from Alluxio")
             flag = false
             getBytesFromHdfs(blockId)
-          }
         } finally {
-          if(flag){
+          if (flag) {
             try {
               input.close()
             } catch {
@@ -144,7 +149,6 @@ private[spark] class AlluxioBlockManager extends ExternalBlockManager with Loggi
     usehdfs = true
     val path = changePathToHDFS(getFile(blockId))
     if (!hdfsFs.exists(path)) {
-      logInfo("Test-log path is " + path.getName + "is not exsist ")
       None
     } else {
       val size = hdfsFs.getFileStatus(path).getLen
@@ -158,10 +162,9 @@ private[spark] class AlluxioBlockManager extends ExternalBlockManager with Loggi
           ByteStreams.readFully(input, buffer)
           Some(ByteBuffer.wrap(buffer))
         } catch {
-          case NonFatal(e) => {
+          case NonFatal(e) =>
             logWarning(s"Failed to get bytes of block $blockId from HDFS", e)
             None
-          }
         } finally {
           try {
             input.close()
@@ -175,12 +178,9 @@ private[spark] class AlluxioBlockManager extends ExternalBlockManager with Loggi
   }
 
   override def createInputStream(path: Path): Option[InputStream] = {
-    if(usehdfs){
-      logInfo("Test-log Use HDFS createInputStream")
+    if (usehdfs) {
       createInputStreamFromHDFS(path)
-    }
-    else{
-      logInfo("Test-log Use Alluxio createInputStream")
+    } else {
       createInputStreamFromAlluxio(path)
     }
   }
@@ -188,12 +188,10 @@ private[spark] class AlluxioBlockManager extends ExternalBlockManager with Loggi
   def createInputStreamFromAlluxio(path: Path): Option[InputStream] = {
 
     if (!fs.exists(path)) {
-      logInfo("Test-log path is " + path.toString + "is not exsist ")
       None
     } else {
       val size = fs.getFileStatus(path).getLen
       if (size == 0) {
-        logInfo("Test-log path size is " + size  )
         None
       } else {
         try {
@@ -211,12 +209,10 @@ private[spark] class AlluxioBlockManager extends ExternalBlockManager with Loggi
   def createInputStreamFromHDFS(path: Path): Option[InputStream] = {
     val hdfsPath = changePathToHDFS(path)
     if (!hdfsFs.exists(hdfsPath)) {
-      logInfo("Test-log HDFS path is " + hdfsPath.toString + "is not exsist ")
       None
     } else {
       val size = hdfsFs.getFileStatus(hdfsPath).getLen
       if (size == 0) {
-        logInfo("Test-log path size is " + size  )
         None
       } else {
         try {
@@ -237,9 +233,9 @@ private[spark] class AlluxioBlockManager extends ExternalBlockManager with Loggi
   }
 
   override def getSize(path: Path): Long = {
-    val size = if(!fs.exists(path)){
+    val size = if (!fs.exists(path)) {
       fs.getFileStatus(path).getLen
-    }else 0L
+    } else 0L
     size
   }
 
@@ -249,7 +245,8 @@ private[spark] class AlluxioBlockManager extends ExternalBlockManager with Loggi
     bytes.map(bs =>
       // alluxio.hadoop.HdfsFileInputStream#available unsupport!
       // blockManager.dataDeserialize(blockId, input)
-      blockManager.serializerManager.dataDeserializeStream(blockId, inputStream = new ByteBufferInputStream(bs))(ct)
+      blockManager.serializerManager.dataDeserializeStream(blockId,
+        inputStream = new ByteBufferInputStream(bs))(ct)
     )
   }
 
@@ -275,12 +272,12 @@ private[spark] class AlluxioBlockManager extends ExternalBlockManager with Loggi
 
     val subDir = subDirs(dirId).synchronized {
       val old = subDirs(dirId)(subDirId)
-      if (old != null)
-        old
-      else  {
-        val path = new Path(chroot, s"$dirId/"+subDirId.toString)
+      if (old != null) {
+          old
+      } else {
+        val path = new Path(chroot, s"$dirId/" + subDirId.toString)
         subDirs(dirId)(subDirId) = path
-        hdfsDirs(dirId)(subDirId) = new Path(hdfsroot, s"$dirId/"+subDirId.toString)
+        hdfsDirs(dirId)(subDirId) = new Path(hdfsroot, s"$dirId/" + subDirId.toString)
         path
       }
     }
