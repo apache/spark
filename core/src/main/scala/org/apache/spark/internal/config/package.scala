@@ -572,7 +572,7 @@ package object config {
     ConfigBuilder("spark.executor.plugins")
       .internal()
       .doc("Comma-separated list of class names for \"plugins\" implementing " +
-        "org.apache.spark.AbstractExecutorPlugin.  Plugins have the same privileges as any task " +
+        "org.apache.spark.ExecutorPlugin.  Plugins have the same privileges as any task " +
         "in a spark executor.  They can also interfere with task execution and fail in " +
         "unexpected ways.  So be sure to only use this for trusted plugins.")
       .stringConf
