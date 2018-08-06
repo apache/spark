@@ -65,14 +65,15 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select * from a union select * from b", Distinct(a.union(b)))
     assertEqual("select * from a union distinct select * from b", Distinct(a.union(b)))
     assertEqual("select * from a union all select * from b", a.union(b))
-    assertEqual("select * from a except select * from b", a.except(b))
-    assertEqual("select * from a except distinct select * from b", a.except(b))
+    assertEqual("select * from a except select * from b", a.except(b, isAll = false))
+    assertEqual("select * from a except distinct select * from b", a.except(b, isAll = false))
     assertEqual("select * from a except all select * from b", a.except(b, isAll = true))
-    assertEqual("select * from a minus select * from b", a.except(b))
+    assertEqual("select * from a minus select * from b", a.except(b, isAll = false))
     assertEqual("select * from a minus all select * from b", a.except(b, isAll = true))
-    assertEqual("select * from a minus distinct select * from b", a.except(b))
-    assertEqual("select * from a intersect select * from b", a.intersect(b))
-    assertEqual("select * from a intersect distinct select * from b", a.intersect(b))
+    assertEqual("select * from a minus distinct select * from b", a.except(b, isAll = false))
+    assertEqual("select * from a " +
+      "intersect select * from b", a.intersect(b, isAll = false))
+    assertEqual("select * from a intersect distinct select * from b", a.intersect(b, isAll = false))
     assertEqual("select * from a intersect all select * from b", a.intersect(b, isAll = true))
   }
 
@@ -735,18 +736,20 @@ class PlanParserSuite extends AnalysisTest {
         |SELECT * FROM d
       """.stripMargin
 
-    assertEqual(query1, Distinct(a.union(b)).except(c.intersect(d)))
+    assertEqual(query1, Distinct(a.union(b)).except(c.intersect(d, isAll = false), isAll = false))
     assertEqual(query2, Distinct(a.union(b)).except(c.intersect(d, isAll = true), isAll = true))
 
     // Now disable precedence enforcement to verify the old behaviour.
     withSQLConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED.key -> "true") {
-      assertEqual(query1, Distinct(a.union(b)).except(c).intersect(d))
+      assertEqual(query1,
+        Distinct(a.union(b)).except(c, isAll = false).intersect(d, isAll = false))
       assertEqual(query2, Distinct(a.union(b)).except(c, isAll = true).intersect(d, isAll = true))
     }
 
     // Explicitly enable the precedence enforcement
     withSQLConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED.key -> "false") {
-      assertEqual(query1, Distinct(a.union(b)).except(c.intersect(d)))
+      assertEqual(query1,
+        Distinct(a.union(b)).except(c.intersect(d, isAll = false), isAll = false))
       assertEqual(query2, Distinct(a.union(b)).except(c.intersect(d, isAll = true), isAll = true))
     }
   }
