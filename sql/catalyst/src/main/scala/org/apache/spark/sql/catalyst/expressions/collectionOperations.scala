@@ -3667,10 +3667,8 @@ abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
   @transient protected lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(elementType)
 
-  @transient protected lazy val elementTypeSupportEquals = elementType match {
-    case BinaryType => false
-    case _: AtomicType => true
-    case _ => false
+  @transient protected lazy val elementTypeSupportEquals = {
+    ArraySetLike.typeSupportsEquals(elementType)
   }
 }
 
@@ -3680,25 +3678,21 @@ object ArraySetLike {
       s"elements due to exceeding the array size limit " +
       s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
   }
+
+  def typeSupportsEquals(dateType: DataType): Boolean = dateType match {
+    case BinaryType => false
+    case _: AtomicType => true
+    case _ => false
+  }
 }
 
-
 /**
- * Returns an array of the elements in the union of x and y, without duplicates
+ * The class performs union operation with two [[ArrayData]] objects.
  */
-@ExpressionDescription(
-  usage = """
-    _FUNC_(array1, array2) - Returns an array of the elements in the union of array1 and array2,
-      without duplicates.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
-       array(1, 2, 3, 5)
-  """,
-  since = "2.4.0")
-case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
-    with ComplexTypeMergingExpression {
+class ArrayDataMerger(elementType: DataType) {
+  lazy val ordering: Ordering[Any] = TypeUtils.getInterpretedOrdering(elementType)
+  lazy val elementTypeSupportEquals = ArraySetLike.typeSupportsEquals(elementType)
+
   var hsInt: OpenHashSet[Int] = _
   var hsLong: OpenHashSet[Long] = _
 
@@ -3767,10 +3761,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
     pos
   }
 
-  override def nullSafeEval(input1: Any, input2: Any): Any = {
-    val array1 = input1.asInstanceOf[ArrayData]
-    val array2 = input2.asInstanceOf[ArrayData]
-
+  def merge(array1: ArrayData, array2: ArrayData): ArrayData = {
     if (elementTypeSupportEquals) {
       elementType match {
         case IntegerType =>
@@ -3833,6 +3824,32 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
     } else {
       ArrayUnion.unionOrdering(array1, array2, elementType, ordering)
     }
+  }
+}
+
+/**
+ * Returns an array of the elements in the union of x and y, without duplicates
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array1, array2) - Returns an array of the elements in the union of array1 and array2,
+      without duplicates.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
+       array(1, 2, 3, 5)
+  """,
+  since = "2.4.0")
+case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
+  with ComplexTypeMergingExpression {
+
+  @transient lazy val merger = new ArrayDataMerger(elementType)
+
+  override def nullSafeEval(input1: Any, input2: Any): Any = {
+    val array1 = input1.asInstanceOf[ArrayData]
+    val array2 = input2.asInstanceOf[ArrayData]
+    merger.merge(array1, array2)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

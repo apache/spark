@@ -24,8 +24,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 
 /**
@@ -364,4 +363,100 @@ case class ArrayAggregate(
   }
 
   override def prettyName: String = "aggregate"
+}
+
+/**
+ * Merges two given maps into a single map by applying function to the pair of values with
+ * the same key.
+ */
+@ExpressionDescription(
+  usage =
+    """
+      _FUNC_(map1, map2, function) - Merges two given maps into a single map by applying
+      function to the pair of values with the same key. For keys only presented in one map,
+      NULL will be passed as the value for the missing key. If an input map contains duplicated
+      keys, only the first entry of the duplicated key is passed into the lambda function.
+    """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(1, 'x', 2, 'y'), (k, v1, v2) -> concat(v1, v2));
+       {1:"ax",2:"by"}
+  """,
+  since = "2.4.0")
+case class MapZipWith(left: Expression, right: Expression, function: Expression)
+  extends HigherOrderFunction with CodegenFallback {
+
+  @transient lazy val functionForEval: Expression = functionsForEval.head
+
+  @transient lazy val MapType(keyType, leftValueType, _) = getMapType(left)
+
+  @transient lazy val MapType(_, rightValueType, _) = getMapType(right)
+
+  @transient lazy val merger = new ArrayDataMerger(keyType)
+
+  override def inputs: Seq[Expression] = left :: right :: Nil
+
+  override def functions: Seq[Expression] = function :: Nil
+
+  override def nullable: Boolean = left.nullable || right.nullable
+
+  override def dataType: DataType = MapType(keyType, function.dataType, function.nullable)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (MapType(k1, _, _), MapType(k2, _, _)) if k1.sameType(k2) =>
+        TypeUtils.checkForOrderingExpr(k1, s"function $prettyName")
+      case _ => TypeCheckResult.TypeCheckFailure(s"The input to function $prettyName should have " +
+        s"been two ${MapType.simpleString}s with the same key type, but it's " +
+        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+    }
+  }
+
+  private def getMapType(expr: Expression) = expr.dataType match {
+    case m: MapType => m
+    case _ => MapType.defaultConcreteType
+  }
+
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): MapZipWith = {
+    val arguments = Seq((keyType, false), (leftValueType, true), (rightValueType, true))
+    copy(function = f(function, arguments))
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val value1 = left.eval(input)
+    if (value1 == null) {
+      null
+    } else {
+      val value2 = right.eval(input)
+      if (value2 == null) {
+        null
+      } else {
+        nullSafeEval(input, value1, value2)
+      }
+    }
+  }
+
+  @transient lazy val LambdaFunction(_, Seq(
+    keyVar: NamedLambdaVariable,
+    value1Var: NamedLambdaVariable,
+    value2Var: NamedLambdaVariable),
+    _) = function
+
+  private def nullSafeEval(inputRow: InternalRow, value1: Any, value2: Any): Any = {
+    val mapData1 = value1.asInstanceOf[MapData]
+    val mapData2 = value2.asInstanceOf[MapData]
+    val keys = merger.merge(mapData1.keyArray(), mapData2.keyArray())
+    val values = new GenericArrayData(new Array[Any](keys.numElements()))
+    keys.foreach(keyType, (idx: Int, key: Any) => {
+      val v1 = GetMapValueUtil.getValueEval(mapData1, key, keyType, leftValueType, merger.ordering)
+      val v2 = GetMapValueUtil.getValueEval(mapData2, key, keyType, rightValueType, merger.ordering)
+      keyVar.value.set(key)
+      value1Var.value.set(v1)
+      value2Var.value.set(v2)
+      values.update(idx, functionForEval.eval(inputRow))
+    })
+    new ArrayBasedMapData(keys, values)
+  }
+
+  override def prettyName: String = "map_zip_with"
 }

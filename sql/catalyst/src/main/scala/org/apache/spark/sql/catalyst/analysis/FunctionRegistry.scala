@@ -443,6 +443,7 @@ object FunctionRegistry {
     expression[ArrayTransform]("transform"),
     expression[ArrayFilter]("filter"),
     expression[ArrayAggregate]("aggregate"),
+    expression[MapZipWith]("map_zip_with"),
     CreateStruct.registryEntry,
 
     // misc functions

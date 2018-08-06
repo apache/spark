@@ -44,6 +44,21 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     LambdaFunction(function, Seq(lv1, lv2))
   }
 
+  private def createLambda(
+    dt1: DataType,
+    nullable1: Boolean,
+    dt2: DataType,
+    nullable2: Boolean,
+    dt3: DataType,
+    nullable3: Boolean,
+    f: (Expression, Expression, Expression) => Expression): Expression = {
+    val lv1 = NamedLambdaVariable("arg1", dt1, nullable1)
+    val lv2 = NamedLambdaVariable("arg2", dt2, nullable2)
+    val lv3 = NamedLambdaVariable("arg3", dt3, nullable3)
+    val function = f(lv1, lv2, lv3)
+    LambdaFunction(function, Seq(lv1, lv2, lv3))
+  }
+
   def transform(expr: Expression, f: Expression => Expression): Expression = {
     val at = expr.dataType.asInstanceOf[ArrayType]
     ArrayTransform(expr, createLambda(at.elementType, at.containsNull, f))
@@ -180,5 +195,86 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       aggregate(aai, 0,
         (acc, array) => coalesce(aggregate(array, acc, (acc, elem) => acc + elem), acc)),
       15)
+  }
+
+  test("MapZipWith") {
+    def map_zip_with(
+        left: Expression,
+        right: Expression,
+        f: (Expression, Expression, Expression) => Expression): Expression = {
+      val MapType(kt, vt1, vcn1) = left.dataType.asInstanceOf[MapType]
+      val MapType(_, vt2, vcn2) = right.dataType.asInstanceOf[MapType]
+      MapZipWith(left, right, createLambda(kt, false, vt1, vcn1, vt2, vcn2, f))
+    }
+
+    val mii0 = Literal.create(Map(1 -> 10, 2 -> 20, 3 -> 30),
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val mii1 = Literal.create(Map(1 -> -1, 2 -> -2, 4 -> -4),
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val mii2 = Literal.create(Map(1 -> null, 2 -> -2, 3 -> null),
+      MapType(IntegerType, IntegerType, valueContainsNull = true))
+    val mii3 = Literal.create(Map(), MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val mii4 = MapFromArrays(
+      Literal.create(Seq(2, 2), ArrayType(IntegerType, false)),
+      Literal.create(Seq(20, 200), ArrayType(IntegerType, false)))
+    val miin = Literal.create(null, MapType(IntegerType, IntegerType, valueContainsNull = false))
+
+    val multiplyKeyWithValues: (Expression, Expression, Expression) => Expression = {
+      (k, v1, v2) => k * v1 * v2
+    }
+
+    checkEvaluation(
+      map_zip_with(mii0, mii1, multiplyKeyWithValues),
+      Map(1 -> -10, 2 -> -80, 3 -> null, 4 -> null))
+    checkEvaluation(
+      map_zip_with(mii0, mii2, multiplyKeyWithValues),
+      Map(1 -> null, 2 -> -80, 3 -> null))
+    checkEvaluation(
+      map_zip_with(mii0, mii3, multiplyKeyWithValues),
+      Map(1 -> null, 2 -> null, 3 -> null))
+    checkEvaluation(
+      map_zip_with(mii0, mii4, multiplyKeyWithValues),
+      Map(1 -> null, 2 -> 800, 3 -> null))
+    checkEvaluation(
+      map_zip_with(mii4, mii0, multiplyKeyWithValues),
+      Map(2 -> 800, 1 -> null, 3 -> null))
+    checkEvaluation(
+      map_zip_with(mii0, miin, multiplyKeyWithValues),
+      null)
+
+    val mss0 = Literal.create(Map("a" -> "x", "b" -> "y", "d" -> "z"),
+      MapType(StringType, StringType, valueContainsNull = false))
+    val mss1 = Literal.create(Map("d" -> "b", "b" -> "d"),
+      MapType(StringType, StringType, valueContainsNull = false))
+    val mss2 = Literal.create(Map("c" -> null, "b" -> "t", "a" -> null),
+      MapType(StringType, StringType, valueContainsNull = true))
+    val mss3 = Literal.create(Map(), MapType(StringType, StringType, valueContainsNull = false))
+    val mss4 = MapFromArrays(
+      Literal.create(Seq("a", "a"), ArrayType(StringType, false)),
+      Literal.create(Seq("a", "n"), ArrayType(StringType, false)))
+    val mssn = Literal.create(null, MapType(StringType, StringType, valueContainsNull = false))
+
+    val concat: (Expression, Expression, Expression) => Expression = {
+      (k, v1, v2) => Concat(Seq(k, v1, v2))
+    }
+
+    checkEvaluation(
+      map_zip_with(mss0, mss1, concat),
+      Map("a" -> null, "b" -> "byd", "d" -> "dzb"))
+    checkEvaluation(
+      map_zip_with(mss1, mss2, concat),
+      Map("d" -> null, "b" -> "bdt", "c" -> null, "a" -> null))
+    checkEvaluation(
+      map_zip_with(mss0, mss3, concat),
+      Map("a" -> null, "b" -> null, "d" -> null))
+    checkEvaluation(
+      map_zip_with(mss0, mss4, concat),
+      Map("a" -> "axa", "b" -> null, "d" -> null))
+    checkEvaluation(
+      map_zip_with(mss4, mss0, concat),
+      Map("a" -> "aax", "b" -> null, "d" -> null))
+    checkEvaluation(
+      map_zip_with(mss0, mssn, concat),
+      null)
   }
 }
