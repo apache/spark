@@ -62,7 +62,7 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful 
  * Usually the random seed needs to be renewed at each execution under streaming queries.
  */
 trait ExpressionWithRandomSeed {
-  def withNewSeed(): Expression
+  def withNewSeed(seed: Long): Expression
 }
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
@@ -84,7 +84,7 @@ case class Rand(child: Expression) extends RDG with ExpressionWithRandomSeed {
 
   def this() = this(Literal(Utils.random.nextLong(), LongType))
 
-  override def withNewSeed(): Rand = Rand(Literal(Utils.random.nextLong(), LongType))
+  override def withNewSeed(seed: Long): Rand = Rand(Literal(seed, LongType))
 
   override protected def evalInternal(input: InternalRow): Double = rng.nextDouble()
 
@@ -124,7 +124,7 @@ case class Randn(child: Expression) extends RDG with ExpressionWithRandomSeed {
 
   def this() = this(Literal(Utils.random.nextLong(), LongType))
 
-  override def withNewSeed(): Randn = Randn(Literal(Utils.random.nextLong(), LongType))
+  override def withNewSeed(seed: Long): Randn = Randn(Literal(seed, LongType))
 
   override protected def evalInternal(input: InternalRow): Double = rng.nextGaussian()
 

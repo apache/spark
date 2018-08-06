@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, 
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.util.Utils
 
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
@@ -78,7 +78,7 @@ class IncrementalExecution(
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
         logInfo(s"Current batch timestamp = $timestamp")
         ts.toLiteral
-      case e: ExpressionWithRandomSeed => e.withNewSeed
+      case e: ExpressionWithRandomSeed => e.withNewSeed(Utils.random.nextLong())
     }
   }
 

@@ -854,7 +854,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     assert(uuids.distinct.size == 2)
   }
 
-  test("Rand/Randn in streaming query should not produce results in each execution") {
+  test("Rand/Randn in streaming query should not produce same results in each execution") {
     val rands = mutable.ArrayBuffer[Double]()
     def collectRand: Seq[Row] => Unit = { rows: Seq[Row] =>
       rows.foreach { r =>

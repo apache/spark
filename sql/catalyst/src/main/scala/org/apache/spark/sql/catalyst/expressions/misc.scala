@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
 
 /**
  * Print the result of an expression to stderr (used for debugging codegen).
@@ -132,7 +131,7 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
 
   def this() = this(None)
 
-  override def withNewSeed(): Uuid = Uuid(Some(Utils.random.nextLong()))
+  override def withNewSeed(seed: Long): Uuid = Uuid(Some(seed))
 
   override lazy val resolved: Boolean = randomSeed.isDefined
 
