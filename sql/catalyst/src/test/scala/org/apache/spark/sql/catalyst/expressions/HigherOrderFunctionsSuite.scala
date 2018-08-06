@@ -59,6 +59,12 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     ArrayFilter(expr, createLambda(at.elementType, at.containsNull, f))
   }
 
+  def transformKeys(expr: Expression, f: (Expression, Expression) => Expression): Expression = {
+    val valueType = expr.dataType.asInstanceOf[MapType].valueType
+    val keyType = expr.dataType.asInstanceOf[MapType].keyType
+    TransformKeys(expr, createLambda(keyType, false, valueType, true, f))
+  }
+
   def aggregate(
       expr: Expression,
       zero: Expression,
@@ -180,5 +186,47 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       aggregate(aai, 0,
         (acc, array) => coalesce(aggregate(array, acc, (acc, elem) => acc + elem), acc)),
       15)
+  }
+
+  test("TransformKeys") {
+    val ai0 = Literal.create(
+      Map(1 -> 1, 2 -> 2, 3 -> 3),
+      MapType(IntegerType, IntegerType))
+    val ai1 = Literal.create(
+      Map.empty[Int, Int],
+      MapType(IntegerType, IntegerType))
+
+    val plusOne: (Expression, Expression) => Expression = (k, v) => k + 1
+    val plusValue: (Expression, Expression) => Expression = (k, v) => k + v
+
+    checkEvaluation(transformKeys(ai0, plusOne), Map(2 -> 1, 3 -> 2, 4 -> 3))
+    checkEvaluation(transformKeys(ai0, plusValue), Map(2 -> 1, 4 -> 2, 6 -> 3))
+    checkEvaluation(
+      transformKeys(transformKeys(ai0, plusOne), plusValue), Map(3 -> 1, 5 -> 2, 7 -> 3))
+    checkEvaluation(transformKeys(ai1, plusOne), Map.empty[Int, Int])
+    checkEvaluation(transformKeys(ai1, plusOne), Map.empty[Int, Int])
+    checkEvaluation(
+      transformKeys(transformKeys(ai1, plusOne), plusValue), Map.empty[Int, Int])
+
+    val as0 = Literal.create(
+      Map("a" -> "xy", "bb" -> "yz", "ccc" -> "zx"), MapType(StringType, StringType))
+    val asn = Literal.create(Map.empty[StringType, StringType], MapType(StringType, StringType))
+
+    val concatValue: (Expression, Expression) => Expression = (k, v) => Concat(Seq(k, v))
+    val convertKeyAndConcatValue: (Expression, Expression) => Expression =
+      (k, v) => Length(k) + 1
+
+    checkEvaluation(
+      transformKeys(as0, concatValue), Map("axy" -> "xy", "bbyz" -> "yz", "ccczx" -> "zx"))
+    checkEvaluation(
+      transformKeys(transformKeys(as0, concatValue), concatValue),
+      Map("axyxy" -> "xy", "bbyzyz" -> "yz", "ccczxzx" -> "zx"))
+    checkEvaluation(transformKeys(asn, concatValue), Map.empty[String, String])
+    checkEvaluation(
+      transformKeys(transformKeys(asn, concatValue), convertKeyAndConcatValue),
+      Map.empty[Int, String])
+    checkEvaluation(transformKeys(as0, convertKeyAndConcatValue),
+      Map(2 -> "xy", 3 -> "yz", 4 -> "zx"))
+    checkEvaluation(transformKeys(asn, convertKeyAndConcatValue), Map.empty[Int, String])
   }
 }
