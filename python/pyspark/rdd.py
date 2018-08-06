@@ -2406,6 +2406,17 @@ class RDD(object):
             sock_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
         return _load_from_socket(sock_info, self._jrdd_deserializer)
 
+    def barrier(self):
+        """
+        Indicates that Spark must launch the tasks together for the current stage.
+        """
+        return RDDBarrier(self)
+
+    def isBarrier(self):
+        """
+        Whether this RDD is in a barrier stage.
+        """
+        return self._jrdd.isBarrier()
 
 def _prepare_for_python_RDD(sc, command):
     # the serialized command will be compressed by broadcast
@@ -2428,6 +2439,27 @@ def _wrap_function(sc, func, deserializer, serializer, profiler=None):
     return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)
 
+class RDDBarrier(object):
+
+    """
+    .. note:: Experimental
+
+    An RDDBarrier turns an RDD into a barrier RDD, which forces Spark to launch tasks of the stage
+    contains this RDD together.
+    """
+
+    def __init__(self, rdd):
+        self.rdd = rdd
+        self._jrdd = rdd._jrdd
+
+    def mapPartitions(self, f, preservesPartitioning=False):
+        """
+        Return a new RDD by applying a function to each partition of this RDD.
+        """
+        def func(s, iterator):
+            return f(iterator)
+        jrdd = self._jrdd.barrier().mapPartitions(f, preservesPartitioning)
+        return RDD(jrdd, self.rdd.ctx, self.rdd._jrdd_deserializer)
 
 class PipelinedRDD(RDD):
 
