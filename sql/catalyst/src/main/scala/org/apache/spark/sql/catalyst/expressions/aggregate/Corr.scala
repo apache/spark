@@ -100,7 +100,7 @@ case class Corr(x: Expression, y: Expression)
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === 1.0, Literal(Double.NaN), ck / sqrt(xMk * yMk)))
+      If(n === 1.0, Double.NaN, ck / sqrt(xMk * yMk)))
   }
 
   override def prettyName: String = "corr"
