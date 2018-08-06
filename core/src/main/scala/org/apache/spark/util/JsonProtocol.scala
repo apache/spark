@@ -723,9 +723,8 @@ private[spark] object JsonProtocol {
         (json \ "Accumulator Updates").extract[List[JValue]].map(accumulableInfoFromJson)
       (taskId, stageId, stageAttemptId, updates)
     }
-    val executorUpdates = jsonOption(json \ "Executor Metrics Updated") match {
-      case None => None
-      case Some(executorUpdate) => Some(executorMetricsFromJson(executorUpdate))
+    val executorUpdates = jsonOption(json \ "Executor Metrics Updated").map {
+      executorUpdate => executorMetricsFromJson(executorUpdate)
     }
     SparkListenerExecutorMetricsUpdate(execInfo, accumUpdates, executorUpdates)
   }

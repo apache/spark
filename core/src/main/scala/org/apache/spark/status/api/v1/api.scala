@@ -116,33 +116,27 @@ class MemoryMetrics private[spark](
 
 /** deserializer for peakMemoryMetrics: convert map to ExecutorMetrics */
 private[spark] class ExecutorMetricsJsonDeserializer
-  extends JsonDeserializer[Option[ExecutorMetrics]] {
+    extends JsonDeserializer[Option[ExecutorMetrics]] {
   override def deserialize(
       jsonParser: JsonParser,
       deserializationContext: DeserializationContext): Option[ExecutorMetrics] = {
     val metricsMap = jsonParser.readValueAs[Option[Map[String, Long]]](
       new TypeReference[Option[Map[String, java.lang.Long]]] {})
-    metricsMap match {
-      case Some(metrics) =>
-        Some(new ExecutorMetrics(metrics))
-      case None => None
-    }
+    metricsMap.map(metrics => new ExecutorMetrics(metrics))
   }
 }
 /** serializer for peakMemoryMetrics: convert ExecutorMetrics to map with metric name as key */
 private[spark] class ExecutorMetricsJsonSerializer
-  extends JsonSerializer[Option[ExecutorMetrics]] {
+    extends JsonSerializer[Option[ExecutorMetrics]] {
   override def serialize(
       metrics: Option[ExecutorMetrics],
       jsonGenerator: JsonGenerator,
       serializerProvider: SerializerProvider): Unit = {
-    metrics match {
-      case Some(m) =>
-        val metricsMap = ExecutorMetricType.values.map { metricType =>
+    metrics.foreach { m: ExecutorMetrics =>
+      val metricsMap = ExecutorMetricType.values.map { metricType =>
             metricType.name -> m.getMetricValue(metricType)
-        }.toMap
-        jsonGenerator.writeObject(metricsMap)
-      case None =>
+      }.toMap
+      jsonGenerator.writeObject(metricsMap)
     }
   }
 }
