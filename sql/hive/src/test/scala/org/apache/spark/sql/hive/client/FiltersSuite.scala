@@ -26,13 +26,15 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
  * A set of tests for the filter conversion logic used when pushing partition pruning into the
  * metastore
  */
-class FiltersSuite extends SparkFunSuite with Logging {
+class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
   private val shim = new Shim_v0_13
 
   private val testTable = new org.apache.hadoop.hive.ql.metadata.Table("default", "test")
@@ -70,12 +72,44 @@ class FiltersSuite extends SparkFunSuite with Logging {
       (Literal("p2\" and q=\"q2") === a("stringcol", StringType)) :: Nil,
     """stringcol = 'p1" and q="q1' and 'p2" and q="q2' = stringcol""")
 
+  filterTest("SPARK-24879 null literals should be ignored for IN constructs",
+    (a("intcol", IntegerType) in (Literal(1), Literal(null))) :: Nil,
+    "(intcol = 1)")
+
+  // Applying the predicate `x IN (NULL)` should return an empty set, but since this optimization
+  // will be applied by Catalyst, this filter converter does not need to account for this.
+  filterTest("SPARK-24879 IN predicates with only NULLs will not cause a NPE",
+    (a("intcol", IntegerType) in Literal(null)) :: Nil,
+    "")
+
+  filterTest("typecast null literals should not be pushed down in simple predicates",
+    (a("intcol", IntegerType) === Literal(null, IntegerType)) :: Nil,
+    "")
+
   private def filterTest(name: String, filters: Seq[Expression], result: String) = {
     test(name) {
-      val converted = shim.convertFilters(testTable, filters)
-      if (converted != result) {
-        fail(
-          s"Expected filters ${filters.mkString(",")} to convert to '$result' but got '$converted'")
+      withSQLConf(SQLConf.ADVANCED_PARTITION_PREDICATE_PUSHDOWN.key -> "true") {
+        val converted = shim.convertFilters(testTable, filters)
+        if (converted != result) {
+          fail(s"Expected ${filters.mkString(",")} to convert to '$result' but got '$converted'")
+        }
+      }
+    }
+  }
+
+  test("turn on/off ADVANCED_PARTITION_PREDICATE_PUSHDOWN") {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(SQLConf.ADVANCED_PARTITION_PREDICATE_PUSHDOWN.key -> enabled.toString) {
+        val filters =
+          (Literal(1) === a("intcol", IntegerType) ||
+            Literal(2) === a("intcol", IntegerType)) :: Nil
+        val converted = shim.convertFilters(testTable, filters)
+        if (enabled) {
+          assert(converted == "(1 = intcol or 2 = intcol)")
+        } else {
+          assert(converted.isEmpty)
+        }
       }
     }
   }

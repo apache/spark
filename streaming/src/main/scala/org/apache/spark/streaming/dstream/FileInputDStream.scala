@@ -164,6 +164,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
 
   /** Clear the old time-to-files mappings along with old RDDs */
   protected[streaming] override def clearMetadata(time: Time) {
+    super.clearMetadata(time)
     batchTimeToSelectedFiles.synchronized {
       val oldFiles = batchTimeToSelectedFiles.filter(_._1 < (time - rememberDuration))
       batchTimeToSelectedFiles --= oldFiles.keys

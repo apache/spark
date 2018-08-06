@@ -22,22 +22,24 @@ import java.nio.channels.ClosedChannelException;
 
 import io.netty.buffer.ByteBuf;
 
+import org.apache.spark.network.protocol.Message;
+import org.apache.spark.network.server.MessageHandler;
 import org.apache.spark.network.util.TransportFrameDecoder;
 
 /**
  * An interceptor that is registered with the frame decoder to feed stream data to a
  * callback.
  */
-class StreamInterceptor implements TransportFrameDecoder.Interceptor {
+public class StreamInterceptor<T extends Message> implements TransportFrameDecoder.Interceptor {
 
-  private final TransportResponseHandler handler;
+  private final MessageHandler<T> handler;
   private final String streamId;
   private final long byteCount;
   private final StreamCallback callback;
   private long bytesRead;
 
-  StreamInterceptor(
-      TransportResponseHandler handler,
+  public StreamInterceptor(
+      MessageHandler<T> handler,
       String streamId,
       long byteCount,
       StreamCallback callback) {
@@ -50,14 +52,22 @@ class StreamInterceptor implements TransportFrameDecoder.Interceptor {
 
   @Override
   public void exceptionCaught(Throwable cause) throws Exception {
-    handler.deactivateStream();
+    deactivateStream();
     callback.onFailure(streamId, cause);
   }
 
   @Override
   public void channelInactive() throws Exception {
-    handler.deactivateStream();
+    deactivateStream();
     callback.onFailure(streamId, new ClosedChannelException());
+  }
+
+  private void deactivateStream() {
+    if (handler instanceof TransportResponseHandler) {
+      // we only have to do this for TransportResponseHandler as it exposes numOutstandingFetches
+      // (there is no extra cleanup that needs to happen)
+      ((TransportResponseHandler) handler).deactivateStream();
+    }
   }
 
   @Override
@@ -72,10 +82,10 @@ class StreamInterceptor implements TransportFrameDecoder.Interceptor {
       RuntimeException re = new IllegalStateException(String.format(
         "Read too many bytes? Expected %d, but read %d.", byteCount, bytesRead));
       callback.onFailure(streamId, re);
-      handler.deactivateStream();
+      deactivateStream();
       throw re;
     } else if (bytesRead == byteCount) {
-      handler.deactivateStream();
+      deactivateStream();
       callback.onComplete(streamId);
     }
 

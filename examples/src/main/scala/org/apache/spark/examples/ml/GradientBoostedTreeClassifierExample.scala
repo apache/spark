@@ -59,6 +59,7 @@ object GradientBoostedTreeClassifierExample {
       .setLabelCol("indexedLabel")
       .setFeaturesCol("indexedFeatures")
       .setMaxIter(10)
+      .setFeatureSubsetStrategy("auto")
 
     // Convert indexed labels back to original labels.
     val labelConverter = new IndexToString()
@@ -85,10 +86,10 @@ object GradientBoostedTreeClassifierExample {
       .setPredictionCol("prediction")
       .setMetricName("accuracy")
     val accuracy = evaluator.evaluate(predictions)
-    println("Test Error = " + (1.0 - accuracy))
+    println(s"Test Error = ${1.0 - accuracy}")
 
     val gbtModel = model.stages(2).asInstanceOf[GBTClassificationModel]
-    println("Learned classification GBT model:\n" + gbtModel.toDebugString)
+    println(s"Learned classification GBT model:\n ${gbtModel.toDebugString}")
     // $example off$
 
     spark.stop()

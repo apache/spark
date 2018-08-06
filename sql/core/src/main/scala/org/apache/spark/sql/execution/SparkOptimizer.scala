@@ -22,20 +22,21 @@ import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.execution.datasources.PruneFileSourcePartitions
 import org.apache.spark.sql.execution.python.ExtractPythonUDFFromAggregate
-import org.apache.spark.sql.internal.SQLConf
 
 class SparkOptimizer(
     catalog: SessionCatalog,
-    conf: SQLConf,
     experimentalMethods: ExperimentalMethods)
-  extends Optimizer(catalog, conf) {
+  extends Optimizer(catalog) {
 
-  override def batches: Seq[Batch] = (preOptimizationBatches ++ super.batches :+
-    Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog, conf)) :+
+  override def defaultBatches: Seq[Batch] = (preOptimizationBatches ++ super.defaultBatches :+
+    Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
     Batch("Extract Python UDF from Aggregate", Once, ExtractPythonUDFFromAggregate) :+
     Batch("Prune File Source Table Partitions", Once, PruneFileSourcePartitions)) ++
     postHocOptimizationBatches :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
+
+  override def nonExcludableRules: Seq[String] =
+    super.nonExcludableRules :+ ExtractPythonUDFFromAggregate.ruleName
 
   /**
    * Optimization batches that are executed before the regular optimization batches (also before

@@ -63,7 +63,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
     this(sc, new SystemClock)
   }
 
-  sc.addSparkListener(this)
+  sc.listenerBus.addToManagementQueue(this)
 
   override val rpcEnv: RpcEnv = sc.env.rpcEnv
 
@@ -74,10 +74,9 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 
   // "spark.network.timeout" uses "seconds", while `spark.storage.blockManagerSlaveTimeoutMs` uses
   // "milliseconds"
-  private val slaveTimeoutMs =
-    sc.conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs", "120s")
   private val executorTimeoutMs =
-    sc.conf.getTimeAsSeconds("spark.network.timeout", s"${slaveTimeoutMs}ms") * 1000
+    sc.conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
+      s"${sc.conf.getTimeAsSeconds("spark.network.timeout", "120s")}s")
 
   // "spark.network.timeoutInterval" uses "seconds", while
   // "spark.storage.blockManagerTimeoutIntervalMs" uses "milliseconds"

@@ -191,6 +191,7 @@ class KafkaRDD[
 
     private def fetchBatch: Iterator[MessageAndOffset] = {
       val req = new FetchRequestBuilder()
+        .clientId(consumer.clientId)
         .addFetch(part.topic, part.partition, requestOffset, kc.config.fetchMessageMaxBytes)
         .build()
       val resp = consumer.fetch(req)
@@ -259,8 +260,8 @@ object KafkaRDD {
       messageHandler: MessageAndMetadata[K, V] => R
     ): KafkaRDD[K, V, U, T, R] = {
     val leaders = untilOffsets.map { case (tp, lo) =>
-        tp -> (lo.host, lo.port)
-    }.toMap
+        tp -> ((lo.host, lo.port))
+    }
 
     val offsetRanges = fromOffsets.map { case (tp, fo) =>
         val uo = untilOffsets(tp)

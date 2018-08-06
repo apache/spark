@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql.execution.python
 
@@ -83,72 +83,134 @@ object EvaluatePython {
   }
 
   /**
-   * Converts `obj` to the type specified by the data type, or returns null if the type of obj is
-   * unexpected. Because Python doesn't enforce the type.
+   * Make a converter that converts `obj` to the type specified by the data type, or returns
+   * null if the type of obj is unexpected. Because Python doesn't enforce the type.
    */
-  def fromJava(obj: Any, dataType: DataType): Any = (obj, dataType) match {
-    case (null, _) => null
+  def makeFromJava(dataType: DataType): Any => Any = dataType match {
+    case BooleanType => (obj: Any) => nullSafeConvert(obj) {
+      case b: Boolean => b
+    }
 
-    case (c: Boolean, BooleanType) => c
+    case ByteType => (obj: Any) => nullSafeConvert(obj) {
+      case c: Byte => c
+      case c: Short => c.toByte
+      case c: Int => c.toByte
+      case c: Long => c.toByte
+    }
 
-    case (c: Int, ByteType) => c.toByte
-    case (c: Long, ByteType) => c.toByte
+    case ShortType => (obj: Any) => nullSafeConvert(obj) {
+      case c: Byte => c.toShort
+      case c: Short => c
+      case c: Int => c.toShort
+      case c: Long => c.toShort
+    }
 
-    case (c: Int, ShortType) => c.toShort
-    case (c: Long, ShortType) => c.toShort
+    case IntegerType => (obj: Any) => nullSafeConvert(obj) {
+      case c: Byte => c.toInt
+      case c: Short => c.toInt
+      case c: Int => c
+      case c: Long => c.toInt
+    }
 
-    case (c: Int, IntegerType) => c
-    case (c: Long, IntegerType) => c.toInt
+    case LongType => (obj: Any) => nullSafeConvert(obj) {
+      case c: Byte => c.toLong
+      case c: Short => c.toLong
+      case c: Int => c.toLong
+      case c: Long => c
+    }
 
-    case (c: Int, LongType) => c.toLong
-    case (c: Long, LongType) => c
+    case FloatType => (obj: Any) => nullSafeConvert(obj) {
+      case c: Float => c
+      case c: Double => c.toFloat
+    }
 
-    case (c: Double, FloatType) => c.toFloat
+    case DoubleType => (obj: Any) => nullSafeConvert(obj) {
+      case c: Float => c.toDouble
+      case c: Double => c
+    }
 
-    case (c: Double, DoubleType) => c
+    case dt: DecimalType => (obj: Any) => nullSafeConvert(obj) {
+      case c: java.math.BigDecimal => Decimal(c, dt.precision, dt.scale)
+    }
 
-    case (c: java.math.BigDecimal, dt: DecimalType) => Decimal(c, dt.precision, dt.scale)
+    case DateType => (obj: Any) => nullSafeConvert(obj) {
+      case c: Int => c
+    }
 
-    case (c: Int, DateType) => c
+    case TimestampType => (obj: Any) => nullSafeConvert(obj) {
+      case c: Long => c
+      // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
+      case c: Int => c.toLong
+    }
 
-    case (c: Long, TimestampType) => c
-    // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
-    case (c: Int, TimestampType) => c.toLong
+    case StringType => (obj: Any) => nullSafeConvert(obj) {
+      case _ => UTF8String.fromString(obj.toString)
+    }
 
-    case (c, StringType) => UTF8String.fromString(c.toString)
+    case BinaryType => (obj: Any) => nullSafeConvert(obj) {
+      case c: String => c.getBytes(StandardCharsets.UTF_8)
+      case c if c.getClass.isArray && c.getClass.getComponentType.getName == "byte" => c
+    }
 
-    case (c: String, BinaryType) => c.getBytes(StandardCharsets.UTF_8)
-    case (c, BinaryType) if c.getClass.isArray && c.getClass.getComponentType.getName == "byte" => c
+    case ArrayType(elementType, _) =>
+      val elementFromJava = makeFromJava(elementType)
 
-    case (c: java.util.List[_], ArrayType(elementType, _)) =>
-      new GenericArrayData(c.asScala.map { e => fromJava(e, elementType)}.toArray)
-
-    case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
-      new GenericArrayData(c.asInstanceOf[Array[_]].map(e => fromJava(e, elementType)))
-
-    case (javaMap: java.util.Map[_, _], MapType(keyType, valueType, _)) =>
-      ArrayBasedMapData(
-        javaMap,
-        (key: Any) => fromJava(key, keyType),
-        (value: Any) => fromJava(value, valueType))
-
-    case (c, StructType(fields)) if c.getClass.isArray =>
-      val array = c.asInstanceOf[Array[_]]
-      if (array.length != fields.length) {
-        throw new IllegalStateException(
-          s"Input row doesn't have expected number of values required by the schema. " +
-            s"${fields.length} fields are required while ${array.length} values are provided."
-        )
+      (obj: Any) => nullSafeConvert(obj) {
+        case c: java.util.List[_] =>
+          new GenericArrayData(c.asScala.map { e => elementFromJava(e) }.toArray)
+        case c if c.getClass.isArray =>
+          new GenericArrayData(c.asInstanceOf[Array[_]].map(e => elementFromJava(e)))
       }
-      new GenericInternalRow(array.zip(fields).map {
-        case (e, f) => fromJava(e, f.dataType)
+
+    case MapType(keyType, valueType, _) =>
+      val keyFromJava = makeFromJava(keyType)
+      val valueFromJava = makeFromJava(valueType)
+
+      (obj: Any) => nullSafeConvert(obj) {
+        case javaMap: java.util.Map[_, _] =>
+          ArrayBasedMapData(
+            javaMap,
+            (key: Any) => keyFromJava(key),
+            (value: Any) => valueFromJava(value))
+      }
+
+    case StructType(fields) =>
+      val fieldsFromJava = fields.map(f => makeFromJava(f.dataType)).toArray
+
+      (obj: Any) => nullSafeConvert(obj) {
+        case c if c.getClass.isArray =>
+          val array = c.asInstanceOf[Array[_]]
+          if (array.length != fields.length) {
+            throw new IllegalStateException(
+              s"Input row doesn't have expected number of values required by the schema. " +
+                s"${fields.length} fields are required while ${array.length} values are provided."
+            )
+          }
+
+          val row = new GenericInternalRow(fields.length)
+          var i = 0
+          while (i < fields.length) {
+            row(i) = fieldsFromJava(i)(array(i))
+            i += 1
+          }
+          row
+      }
+
+    case udt: UserDefinedType[_] => makeFromJava(udt.sqlType)
+
+    case other => (obj: Any) => nullSafeConvert(other)(PartialFunction.empty)
+  }
+
+  private def nullSafeConvert(input: Any)(f: PartialFunction[Any, Any]): Any = {
+    if (input == null) {
+      null
+    } else {
+      f.applyOrElse(input, {
+        // all other unexpected type should be null, or we will have runtime exception
+        // TODO(davies): we could improve this by try to cast the object to expected type
+        _: Any => null
       })
-
-    case (_, udt: UserDefinedType[_]) => fromJava(obj, udt.sqlType)
-
-    // all other unexpected type should be null, or we will have runtime exception
-    // TODO(davies): we could improve this by try to cast the object to expected type
-    case (c, _) => null
+    }
   }
 
   private val module = "pyspark.sql.types"

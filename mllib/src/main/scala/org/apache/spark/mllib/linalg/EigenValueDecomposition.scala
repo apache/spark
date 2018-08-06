@@ -78,13 +78,13 @@ private[mllib] object EigenValueDecomposition {
     require(n * ncv.toLong <= Integer.MAX_VALUE && ncv * (ncv.toLong + 8) <= Integer.MAX_VALUE,
       s"k = $k and/or n = $n are too large to compute an eigendecomposition")
 
-    var ido = new intW(0)
-    var info = new intW(0)
-    var resid = new Array[Double](n)
-    var v = new Array[Double](n * ncv)
-    var workd = new Array[Double](n * 3)
-    var workl = new Array[Double](ncv * (ncv + 8))
-    var ipntr = new Array[Int](11)
+    val ido = new intW(0)
+    val info = new intW(0)
+    val resid = new Array[Double](n)
+    val v = new Array[Double](n * ncv)
+    val workd = new Array[Double](n * 3)
+    val workl = new Array[Double](ncv * (ncv + 8))
+    val ipntr = new Array[Int](11)
 
     // call ARPACK's reverse communication, first iteration with ido = 0
     arpack.dsaupd(ido, bmat, n, which, nev.`val`, tolW, resid, ncv, v, n, iparam, ipntr, workd,

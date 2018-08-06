@@ -52,9 +52,9 @@ object ChiSquareTestExample {
 
     val df = data.toDF("label", "features")
     val chi = ChiSquareTest.test(df, "features", "label").head
-    println("pValues = " + chi.getAs[Vector](0))
-    println("degreesOfFreedom = " + chi.getSeq[Int](1).mkString("[", ",", "]"))
-    println("statistics = " + chi.getAs[Vector](2))
+    println(s"pValues = ${chi.getAs[Vector](0)}")
+    println(s"degreesOfFreedom ${chi.getSeq[Int](1).mkString("[", ",", "]")}")
+    println(s"statistics ${chi.getAs[Vector](2)}")
     // $example off$
 
     spark.stop()

@@ -130,8 +130,8 @@ abstract class BaseSessionStateBuilder(
    */
   protected lazy val catalog: SessionCatalog = {
     val catalog = new SessionCatalog(
-      session.sharedState.externalCatalog,
-      session.sharedState.globalTempViewManager,
+      () => session.sharedState.externalCatalog,
+      () => session.sharedState.globalTempViewManager,
       functionRegistry,
       conf,
       SessionState.newHadoopConf(session.sparkContext.hadoopConfiguration, conf),
@@ -168,6 +168,7 @@ abstract class BaseSessionStateBuilder(
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
       PreWriteCheck +:
+        PreReadCheck +:
         HiveOnlyCheck +:
         customCheckRules
   }
@@ -205,10 +206,10 @@ abstract class BaseSessionStateBuilder(
   /**
    * Logical query plan optimizer.
    *
-   * Note: this depends on the `conf`, `catalog` and `experimentalMethods` fields.
+   * Note: this depends on `catalog` and `experimentalMethods` fields.
    */
   protected def optimizer: Optimizer = {
-    new SparkOptimizer(catalog, conf, experimentalMethods) {
+    new SparkOptimizer(catalog, experimentalMethods) {
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
     }
@@ -262,10 +263,11 @@ abstract class BaseSessionStateBuilder(
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
    * that listen for execution metrics.
    *
-   * This gets cloned from parent if available, otherwise is a new instance is created.
+   * This gets cloned from parent if available, otherwise a new instance is created.
    */
   protected def listenerManager: ExecutionListenerManager = {
-    parentState.map(_.listenerManager.clone()).getOrElse(new ExecutionListenerManager)
+    parentState.map(_.listenerManager.clone()).getOrElse(
+      new ExecutionListenerManager(session.sparkContext.conf))
   }
 
   /**
@@ -286,14 +288,14 @@ abstract class BaseSessionStateBuilder(
       experimentalMethods,
       functionRegistry,
       udfRegistration,
-      catalog,
+      () => catalog,
       sqlParser,
-      analyzer,
-      optimizer,
+      () => analyzer,
+      () => optimizer,
       planner,
       streamingQueryManager,
       listenerManager,
-      resourceLoader,
+      () => resourceLoader,
       createQueryExecution,
       createClone)
   }

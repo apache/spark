@@ -365,7 +365,7 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
     this.writeTo(out);
   }
 
-  private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+  private void readObject(ObjectInputStream in) throws IOException {
     this.readFrom0(in);
   }
 }

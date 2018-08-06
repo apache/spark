@@ -27,7 +27,7 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
 
   test("time window is unevaluable") {
     intercept[UnsupportedOperationException] {
-      evaluate(TimeWindow(Literal(10L), "1 second", "1 second", "0 second"))
+      evaluateWithoutCodegen(TimeWindow(Literal(10L), "1 second", "1 second", "0 second"))
     }
   }
 
@@ -73,6 +73,19 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
       ("2 hours", 7200000000L))) { // 72e9
       assert(TimeWindow(Literal(10L), text, validDuration, "0 seconds").windowDuration === seconds)
       assert(TimeWindow(Literal(10L), "interval " + text, validDuration, "0 seconds").windowDuration
+        === seconds)
+    }
+  }
+
+  test("SPARK-21590: Start time works with negative values and return microseconds") {
+    val validDuration = "10 minutes"
+    for ((text, seconds) <- Seq(
+      ("-10 seconds", -10000000), // -1e7
+      ("-1 minute", -60000000),
+      ("-1 hour", -3600000000L))) { // -6e7
+      assert(TimeWindow(Literal(10L), validDuration, validDuration, "interval " + text).startTime
+        === seconds)
+      assert(TimeWindow(Literal(10L), validDuration, validDuration, text).startTime
         === seconds)
     }
   }

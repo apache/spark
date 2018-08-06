@@ -1,22 +1,23 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.InterfaceStability
@@ -26,7 +27,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.usePrettyExpression
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
@@ -44,7 +45,7 @@ private[sql] object Column {
     e match {
       case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
         a.aggregateFunction.toString
-      case expr => usePrettyExpression(expr).sql
+      case expr => toPrettySQL(expr)
     }
   }
 }
@@ -103,7 +104,7 @@ class TypedColumn[-T, U](
  *
  * {{{
  *   df("columnName")            // On a specific `df` DataFrame.
- *   col("columnName")           // A generic column no yet associated with a DataFrame.
+ *   col("columnName")           // A generic column not yet associated with a DataFrame.
  *   col("columnName.field")     // Extracting a struct field
  *   col("`a.column.with.dots`") // Escape `.` in column names.
  *   $"columnName"               // Scala short hand for a named column.
@@ -137,7 +138,7 @@ class Column(val expr: Expression) extends Logging {
     case _ => UnresolvedAttribute.quotedString(name)
   })
 
-  override def toString: String = usePrettyExpression(expr).sql
+  override def toString: String = toPrettySQL(expr)
 
   override def equals(that: Any): Boolean = that match {
     case that: Column => that.expr.equals(this.expr)
@@ -175,7 +176,7 @@ class Column(val expr: Expression) extends Logging {
         case c @ Cast(_: NamedExpression, _, _) => UnresolvedAlias(c)
       } match {
         case ne: NamedExpression => ne
-        case other => Alias(expr, usePrettyExpression(expr).sql)()
+        case _ => Alias(expr, toPrettySQL(expr))()
       }
 
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
@@ -184,7 +185,7 @@ class Column(val expr: Expression) extends Logging {
     // Wait until the struct is resolved. This will generate a nicer looking alias.
     case struct: CreateNamedStructLike => UnresolvedAlias(struct)
 
-    case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
+    case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 
   /**
@@ -464,7 +465,15 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def <=> (other: Any): Column = withExpr { EqualNullSafe(expr, lit(other).expr) }
+  def <=> (other: Any): Column = withExpr {
+    val right = lit(other).expr
+    if (this.expr == right) {
+      logWarning(
+        s"Constructing trivially true equals predicate, '${this.expr} <=> $right'. " +
+          "Perhaps you need to use aliases.")
+    }
+    EqualNullSafe(expr, right)
+  }
 
   /**
    * Equality test that is safe for null values.
@@ -497,7 +506,7 @@ class Column(val expr: Expression) extends Logging {
    */
   def when(condition: Column, value: Any): Column = this.expr match {
     case CaseWhen(branches, None) =>
-      withExpr { CaseWhen(branches :+ (condition.expr, lit(value).expr)) }
+      withExpr { CaseWhen(branches :+ ((condition.expr, lit(value).expr))) }
     case CaseWhen(branches, Some(_)) =>
       throw new IllegalArgumentException(
         "when() cannot be applied once otherwise() is applied")
@@ -772,11 +781,53 @@ class Column(val expr: Expression) extends Logging {
    * A boolean expression that is evaluated to true if the value of this expression is contained
    * by the evaluated values of the arguments.
    *
+   * Note: Since the type of the elements in the list are inferred only during the run time,
+   * the elements will be "up-casted" to the most common type for comparison.
+   * For eg:
+   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
+   * comparison will look like "String vs String".
+   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
+   * comparison will look like "Double vs Double"
+   *
    * @group expr_ops
    * @since 1.5.0
    */
   @scala.annotation.varargs
   def isin(list: Any*): Column = withExpr { In(expr, list.map(lit(_).expr)) }
+
+  /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the provided collection.
+   *
+   * Note: Since the type of the elements in the collection are inferred only during the run time,
+   * the elements will be "up-casted" to the most common type for comparison.
+   * For eg:
+   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
+   * comparison will look like "String vs String".
+   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
+   * comparison will look like "Double vs Double"
+   *
+   * @group expr_ops
+   * @since 2.4.0
+   */
+  def isInCollection(values: scala.collection.Iterable[_]): Column = isin(values.toSeq: _*)
+
+  /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the provided collection.
+   *
+   * Note: Since the type of the elements in the collection are inferred only during the run time,
+   * the elements will be "up-casted" to the most common type for comparison.
+   * For eg:
+   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
+   * comparison will look like "String vs String".
+   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
+   * comparison will look like "Double vs Double"
+   *
+   * @group java_expr_ops
+   * @since 2.4.0
+   */
+  def isInCollection(values: java.lang.Iterable[_]): Column = isInCollection(values.asScala)
 
   /**
    * SQL like expression. Returns a boolean column based on a SQL LIKE match.
@@ -1075,10 +1126,10 @@ class Column(val expr: Expression) extends Logging {
    * and null values return before non-null values.
    * {{{
    *   // Scala: sort a DataFrame by age column in ascending order and null values appearing first.
-   *   df.sort(df("age").asc_nulls_last)
+   *   df.sort(df("age").asc_nulls_first)
    *
    *   // Java
-   *   df.sort(df.col("age").asc_nulls_last());
+   *   df.sort(df.col("age").asc_nulls_first());
    * }}}
    *
    * @group expr_ops

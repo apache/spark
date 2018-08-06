@@ -89,6 +89,16 @@ object SubqueryExpression {
       case _ => false
     }.isDefined
   }
+
+  /**
+   * Returns true when an expression contains a subquery
+   */
+  def hasSubquery(e: Expression): Boolean = {
+    e.find {
+      case _: SubqueryExpression => true
+      case _ => false
+    }.isDefined
+  }
 }
 
 object SubExprUtils extends PredicateHelper {
@@ -274,9 +284,15 @@ object ScalarSubquery {
 case class ListQuery(
     plan: LogicalPlan,
     children: Seq[Expression] = Seq.empty,
-    exprId: ExprId = NamedExpression.newExprId)
+    exprId: ExprId = NamedExpression.newExprId,
+    childOutputs: Seq[Attribute] = Seq.empty)
   extends SubqueryExpression(plan, children, exprId) with Unevaluable {
-  override def dataType: DataType = plan.schema.fields.head.dataType
+  override def dataType: DataType = if (childOutputs.length > 1) {
+    childOutputs.toStructType
+  } else {
+    childOutputs.head.dataType
+  }
+  override lazy val resolved: Boolean = childrenResolved && plan.resolved && childOutputs.nonEmpty
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): ListQuery = copy(plan = plan)
   override def toString: String = s"list#${exprId.id} $conditionString"
@@ -284,7 +300,8 @@ case class ListQuery(
     ListQuery(
       plan.canonicalized,
       children.map(_.canonicalized),
-      ExprId(0))
+      ExprId(0),
+      childOutputs.map(_.canonicalized.asInstanceOf[Attribute]))
   }
 }
 

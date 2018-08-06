@@ -5,7 +5,7 @@ CREATE OR REPLACE TEMPORARY VIEW t2 AS VALUES (1.0, 1), (2.0, 4) tbl(c1, c2);
 SELECT *
 FROM   (SELECT * FROM t1
         UNION ALL
-        SELECT * FROM t1) T;
+        SELECT * FROM t1);
 
 -- Type Coerced Union
 SELECT *
@@ -13,7 +13,7 @@ FROM   (SELECT * FROM t1
         UNION ALL
         SELECT * FROM t2
         UNION ALL
-        SELECT * FROM t2) T;
+        SELECT * FROM t2);
 
 -- Regression test for SPARK-18622
 SELECT a
@@ -34,6 +34,17 @@ FROM   (SELECT col AS col
               UNION ALL
               SELECT col
               FROM p3) T1) T2;
+
+-- SPARK-24012 Union of map and other compatible columns.
+SELECT map(1, 2), 'str'
+UNION ALL
+SELECT map(1, 2, 3, NULL), 1;
+
+-- SPARK-24012 Union of array and other compatible columns.
+SELECT array(1, 2), 'str'
+UNION ALL
+SELECT array(1, 2, 3, NULL), 1;
+
 
 -- Clean-up
 DROP VIEW IF EXISTS t1;

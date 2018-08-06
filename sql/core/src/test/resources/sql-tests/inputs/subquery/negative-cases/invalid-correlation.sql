@@ -23,7 +23,7 @@ AND    t2b = (SELECT max(avg)
               FROM   (SELECT   t2b, avg(t2b) avg
                       FROM     t2
                       WHERE    t2a = t1.t1b
-                     ) T
+                     )
              )
 ;
 

@@ -19,22 +19,22 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.tree.impl.TreeTests
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.tree.impl.{GradientBoostedTrees, TreeTests}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.util.Utils
 
 /**
  * Test suite for [[GBTRegressor]].
  */
-class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
-  with DefaultReadWriteTest {
+class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
 
   import GBTRegressorSuite.compareAPIs
   import testImplicits._
@@ -91,11 +91,22 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
     val model = gbt.fit(df)
 
     MLTestingUtils.checkCopyAndUids(gbt, model)
-    val preds = model.transform(df)
-    val predictions = preds.select("prediction").rdd.map(_.getDouble(0))
-    // Checks based on SPARK-8736 (to ensure it is not doing classification)
-    assert(predictions.max() > 2)
-    assert(predictions.min() < -1)
+
+    testTransformerByGlobalCheckFunc[(Double, Vector)](df, model, "prediction") {
+      case rows: Seq[Row] =>
+        val predictions = rows.map(_.getDouble(0))
+        // Checks based on SPARK-8736 (to ensure it is not doing classification)
+        assert(predictions.max > 2)
+        assert(predictions.min < -1)
+    }
+  }
+
+  test("prediction on single instance") {
+    val gbt = new GBTRegressor()
+      .setMaxDepth(2)
+      .setMaxIter(2)
+    val model = gbt.fit(trainData.toDF())
+    testPredictionModelSinglePrediction(model, validationData.toDF)
   }
 
   test("Checkpointing") {
@@ -166,6 +177,107 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   /////////////////////////////////////////////////////////////////////////////
+  // Tests of feature subset strategy
+  /////////////////////////////////////////////////////////////////////////////
+  test("Tests of feature subset strategy") {
+    val numClasses = 2
+    val gbt = new GBTRegressor()
+      .setMaxDepth(3)
+      .setMaxIter(5)
+      .setSeed(123)
+      .setFeatureSubsetStrategy("all")
+
+    // In this data, feature 1 is very important.
+    val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
+    val categoricalFeatures = Map.empty[Int, Int]
+    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
+
+    val importances = gbt.fit(df).featureImportances
+    val mostImportantFeature = importances.argmax
+    assert(mostImportantFeature === 1)
+
+    // GBT with different featureSubsetStrategy
+    val gbtWithFeatureSubset = gbt.setFeatureSubsetStrategy("1")
+    val importanceFeatures = gbtWithFeatureSubset.fit(df).featureImportances
+    val mostIF = importanceFeatures.argmax
+    assert(mostImportantFeature !== mostIF)
+  }
+
+  test("model evaluateEachIteration") {
+    for (lossType <- GBTRegressor.supportedLossTypes) {
+      val gbt = new GBTRegressor()
+        .setSeed(1L)
+        .setMaxDepth(2)
+        .setMaxIter(3)
+        .setLossType(lossType)
+      val model3 = gbt.fit(trainData.toDF)
+      val model1 = new GBTRegressionModel("gbt-reg-model-test1",
+        model3.trees.take(1), model3.treeWeights.take(1), model3.numFeatures)
+      val model2 = new GBTRegressionModel("gbt-reg-model-test2",
+        model3.trees.take(2), model3.treeWeights.take(2), model3.numFeatures)
+
+      for (evalLossType <- GBTRegressor.supportedLossTypes) {
+        val evalArr = model3.evaluateEachIteration(validationData.toDF, evalLossType)
+        val lossErr1 = GradientBoostedTrees.computeError(validationData,
+          model1.trees, model1.treeWeights, model1.convertToOldLossType(evalLossType))
+        val lossErr2 = GradientBoostedTrees.computeError(validationData,
+          model2.trees, model2.treeWeights, model2.convertToOldLossType(evalLossType))
+        val lossErr3 = GradientBoostedTrees.computeError(validationData,
+          model3.trees, model3.treeWeights, model3.convertToOldLossType(evalLossType))
+
+        assert(evalArr(0) ~== lossErr1 relTol 1E-3)
+        assert(evalArr(1) ~== lossErr2 relTol 1E-3)
+        assert(evalArr(2) ~== lossErr3 relTol 1E-3)
+      }
+    }
+  }
+
+  test("runWithValidation stops early and performs better on a validation dataset") {
+    val validationIndicatorCol = "validationIndicator"
+    val trainDF = trainData.toDF().withColumn(validationIndicatorCol, lit(false))
+    val validationDF = validationData.toDF().withColumn(validationIndicatorCol, lit(true))
+
+    val numIter = 20
+    for (lossType <- GBTRegressor.supportedLossTypes) {
+      val gbt = new GBTRegressor()
+        .setSeed(123)
+        .setMaxDepth(2)
+        .setLossType(lossType)
+        .setMaxIter(numIter)
+      val modelWithoutValidation = gbt.fit(trainDF)
+
+      gbt.setValidationIndicatorCol(validationIndicatorCol)
+      val modelWithValidation = gbt.fit(trainDF.union(validationDF))
+
+      assert(modelWithoutValidation.numTrees === numIter)
+      // early stop
+      assert(modelWithValidation.numTrees < numIter)
+
+      val errorWithoutValidation = GradientBoostedTrees.computeError(validationData,
+        modelWithoutValidation.trees, modelWithoutValidation.treeWeights,
+        modelWithoutValidation.getOldLossType)
+      val errorWithValidation = GradientBoostedTrees.computeError(validationData,
+        modelWithValidation.trees, modelWithValidation.treeWeights,
+        modelWithValidation.getOldLossType)
+
+      assert(errorWithValidation < errorWithoutValidation)
+
+      val evaluationArray = GradientBoostedTrees
+        .evaluateEachIteration(validationData, modelWithoutValidation.trees,
+          modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType,
+          OldAlgo.Regression)
+      assert(evaluationArray.length === numIter)
+      assert(evaluationArray(modelWithValidation.numTrees) >
+        evaluationArray(modelWithValidation.numTrees - 1))
+      var i = 1
+      while (i < modelWithValidation.numTrees) {
+        assert(evaluationArray(i) <= evaluationArray(i - 1))
+        i += 1
+      }
+    }
+  }
+
+    /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 

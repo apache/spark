@@ -17,19 +17,20 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, CharArrayWriter, InputStreamReader, StringWriter}
+import java.io._
 
 import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, BadRecordException, FailFastMode, GenericArrayData}
+import org.apache.spark.sql.catalyst.json.JsonInferSchema.inferField
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -112,7 +113,7 @@ private[this] object SharedFactory {
  */
 @ExpressionDescription(
   usage = "_FUNC_(json_txt, path) - Extracts a json object from `path`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('{"a":"b"}', '$.a');
        b
@@ -335,7 +336,7 @@ case class GetJsonObject(json: Expression, path: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Returns a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
        1  2
@@ -362,9 +363,9 @@ case class JsonTuple(children: Seq[Expression])
   @transient private lazy val fieldExpressions: Seq[Expression] = children.tail
 
   // eagerly evaluate any foldable the field names
-  @transient private lazy val foldableFieldNames: IndexedSeq[String] = {
+  @transient private lazy val foldableFieldNames: IndexedSeq[Option[String]] = {
     fieldExpressions.map {
-      case expr if expr.foldable => expr.eval().asInstanceOf[UTF8String].toString
+      case expr if expr.foldable => Option(expr.eval()).map(_.asInstanceOf[UTF8String].toString)
       case _ => null
     }.toIndexedSeq
   }
@@ -417,7 +418,7 @@ case class JsonTuple(children: Seq[Expression])
     val fieldNames = if (constantFields == fieldExpressions.length) {
       // typically the user will provide the field names as foldable expressions
       // so we can use the cached copy
-      foldableFieldNames
+      foldableFieldNames.map(_.orNull)
     } else if (constantFields == 0) {
       // none are foldable so all field names need to be evaluated from the input row
       fieldExpressions.map(_.eval(input).asInstanceOf[UTF8String].toString)
@@ -426,7 +427,7 @@ case class JsonTuple(children: Seq[Expression])
       // prefer the cached copy when available
       foldableFieldNames.zip(fieldExpressions).map {
         case (null, expr) => expr.eval(input).asInstanceOf[UTF8String].toString
-        case (fieldName, _) => fieldName
+        case (fieldName, _) => fieldName.orNull
       }
     }
 
@@ -436,7 +437,8 @@ case class JsonTuple(children: Seq[Expression])
     while (parser.nextToken() != JsonToken.END_OBJECT) {
       if (parser.getCurrentToken == JsonToken.FIELD_NAME) {
         // check to see if this field is desired in the output
-        val idx = fieldNames.indexOf(parser.getCurrentName)
+        val jsonField = parser.getCurrentName
+        var idx = fieldNames.indexOf(jsonField)
         if (idx >= 0) {
           // it is, copy the child tree to the correct location in the output row
           val output = new ByteArrayOutputStream()
@@ -447,7 +449,14 @@ case class JsonTuple(children: Seq[Expression])
               generator => copyCurrentStructure(generator, parser)
             }
 
-            row(idx) = UTF8String.fromBytes(output.toByteArray)
+            val jsonValue = UTF8String.fromBytes(output.toByteArray)
+
+            // SPARK-21804: json_tuple returns null values within repeated columns
+            // except the first one; so that we need to check the remaining fields.
+            do {
+              row(idx) = jsonValue
+              idx = fieldNames.indexOf(jsonField, idx + 1)
+            } while (idx >= 0)
           }
         }
       }
@@ -492,13 +501,14 @@ case class JsonTuple(children: Seq[Expression])
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, schema[, options]) - Returns a struct value with the given `jsonStr` and `schema`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":0.8}', 'a INT, b DOUBLE');
        {"a":1, "b":0.8}
       > SELECT _FUNC_('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
        {"time":"2015-08-26 00:00:00.0"}
-  """)
+  """,
+  since = "2.2.0")
 // scalastyle:on line.size.limit
 case class JsonToStructs(
     schema: DataType,
@@ -506,46 +516,56 @@ case class JsonToStructs(
     child: Expression,
     timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
+
+  val forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA)
+
+  // The JSON input data might be missing certain fields. We force the nullability
+  // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
+  // can generate incorrect files if values are missing in columns declared as non-nullable.
+  val nullableSchema = if (forceNullableSchema) schema.asNullable else schema
+
   override def nullable: Boolean = true
 
-  def this(schema: DataType, options: Map[String, String], child: Expression) =
-    this(schema, options, child, None)
-
   // Used in `FunctionRegistry`
-  def this(child: Expression, schema: Expression) =
+  def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
-      schema = JsonExprUtils.validateSchemaLiteral(schema),
-      options = Map.empty[String, String],
+      schema = JsonExprUtils.evalSchemaExpr(schema),
+      options = options,
       child = child,
       timeZoneId = None)
 
+  def this(child: Expression, schema: Expression) = this(child, schema, Map.empty[String, String])
+
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
-      schema = JsonExprUtils.validateSchemaLiteral(schema),
+      schema = JsonExprUtils.evalSchemaExpr(schema),
       options = JsonExprUtils.convertToMapData(options),
       child = child,
       timeZoneId = None)
 
-  override def checkInputDataTypes(): TypeCheckResult = schema match {
-    case _: StructType | ArrayType(_: StructType, _) =>
+  override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
+    case _: StructType | ArrayType(_: StructType, _) | _: MapType =>
       super.checkInputDataTypes()
     case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input schema ${schema.simpleString} must be a struct or an array of structs.")
+      s"Input schema ${nullableSchema.catalogString} must be a struct or an array of structs.")
   }
 
   @transient
-  lazy val rowSchema = schema match {
+  lazy val rowSchema = nullableSchema match {
     case st: StructType => st
     case ArrayType(st: StructType, _) => st
+    case mt: MapType => mt
   }
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
-  lazy val converter = schema match {
+  lazy val converter = nullableSchema match {
     case _: StructType =>
       (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
     case ArrayType(_: StructType, _) =>
       (rows: Seq[InternalRow]) => new GenericArrayData(rows)
+    case _: MapType =>
+      (rows: Seq[InternalRow]) => rows.head.getMap(0)
   }
 
   @transient
@@ -554,7 +574,7 @@ case class JsonToStructs(
       rowSchema,
       new JSONOptions(options + ("mode" -> FailFastMode.name), timeZoneId.get))
 
-  override def dataType: DataType = schema
+  override def dataType: DataType = nullableSchema
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -592,15 +612,21 @@ case class JsonToStructs(
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
+
+  override def sql: String = schema match {
+    case _: MapType => "entries"
+    case _ => super.sql
+  }
 }
 
 /**
- * Converts a [[StructType]] or [[ArrayType]] of [[StructType]]s to a json output string.
+ * Converts a [[StructType]], [[ArrayType]] of [[StructType]]s, [[MapType]]
+ * or [[ArrayType]] of [[MapType]]s to a json output string.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr[, options]) - Returns a json string with a given struct value",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
        {"a":1,"b":2}
@@ -608,7 +634,16 @@ case class JsonToStructs(
        {"time":"26/08/2015"}
       > SELECT _FUNC_(array(named_struct('a', 1, 'b', 2));
        [{"a":1,"b":2}]
-  """)
+      > SELECT _FUNC_(map('a', named_struct('b', 1)));
+       {"a":{"b":1}}
+      > SELECT _FUNC_(map(named_struct('a', 1),named_struct('b', 2)));
+       {"[1]":{"b":2}}
+      > SELECT _FUNC_(map('a', 1));
+       {"a":1}
+      > SELECT _FUNC_(array((map('a', 1))));
+       [{"a":1}]
+  """,
+  since = "2.2.0")
 // scalastyle:on line.size.limit
 case class StructsToJson(
     options: Map[String, String],
@@ -638,6 +673,8 @@ case class StructsToJson(
   lazy val rowSchema = child.dataType match {
     case st: StructType => st
     case ArrayType(st: StructType, _) => st
+    case mt: MapType => mt
+    case ArrayType(mt: MapType, _) => mt
   }
 
   // This converts rows to the JSON output according to the given schema.
@@ -659,6 +696,14 @@ case class StructsToJson(
         (arr: Any) =>
           gen.write(arr.asInstanceOf[ArrayData])
           getAndReset()
+      case _: MapType =>
+        (map: Any) =>
+          gen.write(map.asInstanceOf[MapData])
+          getAndReset()
+      case ArrayType(_: MapType, _) =>
+        (arr: Any) =>
+          gen.write(arr.asInstanceOf[ArrayData])
+          getAndReset()
     }
   }
 
@@ -667,14 +712,25 @@ case class StructsToJson(
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case _: StructType | ArrayType(_: StructType, _) =>
       try {
-        JacksonUtils.verifySchema(rowSchema)
+        JacksonUtils.verifySchema(rowSchema.asInstanceOf[StructType])
+        TypeCheckResult.TypeCheckSuccess
+      } catch {
+        case e: UnsupportedOperationException =>
+          TypeCheckResult.TypeCheckFailure(e.getMessage)
+      }
+    case _: MapType | ArrayType(_: MapType, _) =>
+      // TODO: let `JacksonUtils.verifySchema` verify a `MapType`
+      try {
+        val st = StructType(StructField("a", rowSchema.asInstanceOf[MapType]) :: Nil)
+        JacksonUtils.verifySchema(st)
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: UnsupportedOperationException =>
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
     case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input type ${child.dataType.simpleString} must be a struct or array of structs.")
+      s"Input type ${child.dataType.catalogString} must be a struct, array of structs or " +
+          "a map or array of map.")
   }
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -685,11 +741,44 @@ case class StructsToJson(
   override def inputTypes: Seq[AbstractDataType] = TypeCollection(ArrayType, StructType) :: Nil
 }
 
+/**
+ * A function infers schema of JSON string.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(json[, options]) - Returns schema in the DDL format of JSON string.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('[{"col":0}]');
+       array<struct<col:int>>
+  """,
+  since = "2.4.0")
+case class SchemaOfJson(child: Expression)
+  extends UnaryExpression with String2StringExpression with CodegenFallback {
+
+  private val jsonOptions = new JSONOptions(Map.empty, "UTC")
+  private val jsonFactory = new JsonFactory()
+  jsonOptions.setJacksonOptions(jsonFactory)
+
+  override def convert(v: UTF8String): UTF8String = {
+    val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, v)) { parser =>
+      parser.nextToken()
+      inferField(parser, jsonOptions)
+    }
+
+    UTF8String.fromString(dt.catalogString)
+  }
+}
+
 object JsonExprUtils {
 
-  def validateSchemaLiteral(exp: Expression): StructType = exp match {
-    case Literal(s, StringType) => CatalystSqlParser.parseTableSchema(s.toString)
-    case e => throw new AnalysisException(s"Expected a string literal instead of $e")
+  def evalSchemaExpr(exp: Expression): DataType = exp match {
+    case Literal(s, StringType) => DataType.fromDDL(s.toString)
+    case e @ SchemaOfJson(_: Literal) =>
+      val ddlSchema = e.eval().asInstanceOf[UTF8String]
+      DataType.fromDDL(ddlSchema.toString)
+    case e => throw new AnalysisException(
+      "Schema should be specified in DDL format as a string literal" +
+      s" or output of the schema_of_json function instead of ${e.sql}")
   }
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {
@@ -701,7 +790,7 @@ object JsonExprUtils {
       }
     case m: CreateMap =>
       throw new AnalysisException(
-        s"A type of keys and values in map() must be string, but got ${m.dataType}")
+        s"A type of keys and values in map() must be string, but got ${m.dataType.catalogString}")
     case _ =>
       throw new AnalysisException("Must use a map() function for options")
   }

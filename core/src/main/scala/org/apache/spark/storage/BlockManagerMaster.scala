@@ -89,6 +89,12 @@ class BlockManagerMaster(
     driverEndpoint.askSync[Seq[BlockManagerId]](GetLocations(blockId))
   }
 
+  /** Get locations as well as status of the blockId from the driver */
+  def getLocationsAndStatus(blockId: BlockId): Option[BlockLocationsAndStatus] = {
+    driverEndpoint.askSync[Option[BlockLocationsAndStatus]](
+      GetLocationsAndStatus(blockId))
+  }
+
   /** Get locations of multiple blockIds from the driver */
   def getLocations(blockIds: Array[BlockId]): IndexedSeq[Seq[BlockManagerId]] = {
     driverEndpoint.askSync[IndexedSeq[Seq[BlockManagerId]]](
@@ -123,10 +129,9 @@ class BlockManagerMaster(
   /** Remove all blocks belonging to the given RDD. */
   def removeRdd(rddId: Int, blocking: Boolean) {
     val future = driverEndpoint.askSync[Future[Seq[Int]]](RemoveRdd(rddId))
-    future.onFailure {
-      case e: Exception =>
-        logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}", e)
-    }(ThreadUtils.sameThread)
+    future.failed.foreach(e =>
+      logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}", e)
+    )(ThreadUtils.sameThread)
     if (blocking) {
       timeout.awaitResult(future)
     }
@@ -135,10 +140,9 @@ class BlockManagerMaster(
   /** Remove all blocks belonging to the given shuffle. */
   def removeShuffle(shuffleId: Int, blocking: Boolean) {
     val future = driverEndpoint.askSync[Future[Seq[Boolean]]](RemoveShuffle(shuffleId))
-    future.onFailure {
-      case e: Exception =>
-        logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}", e)
-    }(ThreadUtils.sameThread)
+    future.failed.foreach(e =>
+      logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}", e)
+    )(ThreadUtils.sameThread)
     if (blocking) {
       timeout.awaitResult(future)
     }
@@ -148,11 +152,10 @@ class BlockManagerMaster(
   def removeBroadcast(broadcastId: Long, removeFromMaster: Boolean, blocking: Boolean) {
     val future = driverEndpoint.askSync[Future[Seq[Int]]](
       RemoveBroadcast(broadcastId, removeFromMaster))
-    future.onFailure {
-      case e: Exception =>
-        logWarning(s"Failed to remove broadcast $broadcastId" +
-          s" with removeFromMaster = $removeFromMaster - ${e.getMessage}", e)
-    }(ThreadUtils.sameThread)
+    future.failed.foreach(e =>
+      logWarning(s"Failed to remove broadcast $broadcastId" +
+        s" with removeFromMaster = $removeFromMaster - ${e.getMessage}", e)
+    )(ThreadUtils.sameThread)
     if (blocking) {
       timeout.awaitResult(future)
     }

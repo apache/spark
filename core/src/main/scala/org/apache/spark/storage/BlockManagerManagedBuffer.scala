@@ -22,7 +22,6 @@ import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * This [[ManagedBuffer]] wraps a [[BlockData]] instance retrieved from the [[BlockManager]]

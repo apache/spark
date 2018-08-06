@@ -232,31 +232,4 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         Row("Manufacturer#5", "almond azure blanched chiffon midnight", 23, 315.9225931564038, 315.9225931564038, 46, 99807.08486666666, -0.9978877469246935, -5664.856666666666)))
       // scalastyle:on
   }
-
-  test("null arguments") {
-    checkAnswer(sql("""
-        |select  p_mfgr, p_name, p_size,
-        |sum(null) over(distribute by p_mfgr sort by p_name) as sum,
-        |avg(null) over(distribute by p_mfgr sort by p_name) as avg
-        |from part
-      """.stripMargin),
-      sql("""
-        |select  p_mfgr, p_name, p_size,
-        |null as sum,
-        |null as avg
-        |from part
-        """.stripMargin))
-  }
-
-  test("SPARK-16646: LAST_VALUE(FALSE) OVER ()") {
-    checkAnswer(sql("SELECT LAST_VALUE(FALSE) OVER ()"), Row(false))
-    checkAnswer(sql("SELECT LAST_VALUE(FALSE, FALSE) OVER ()"), Row(false))
-    checkAnswer(sql("SELECT LAST_VALUE(TRUE, TRUE) OVER ()"), Row(true))
-  }
-
-  test("SPARK-16646: FIRST_VALUE(FALSE) OVER ()") {
-    checkAnswer(sql("SELECT FIRST_VALUE(FALSE) OVER ()"), Row(false))
-    checkAnswer(sql("SELECT FIRST_VALUE(FALSE, FALSE) OVER ()"), Row(false))
-    checkAnswer(sql("SELECT FIRST_VALUE(TRUE, TRUE) OVER ()"), Row(true))
-  }
 }

@@ -23,6 +23,8 @@ import java.nio.channels.{FileChannel, ReadableByteChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Paths, StandardOpenOption}
 import java.util
+import java.util.Collections
+import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import scala.io.Source
 import scala.language.implicitConversions
@@ -33,7 +35,7 @@ import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -75,6 +77,50 @@ class ExecutorClassLoaderSuite
     } finally {
       super.afterAll()
     }
+  }
+
+  test("child over system classloader") {
+    // JavaFileObject for scala.Option class
+    val scalaOptionFile = new SimpleJavaFileObject(
+      URI.create(s"string:///scala/Option.java"),
+      JavaFileObject.Kind.SOURCE) {
+
+      override def getCharContent(ignoreEncodingErrors: Boolean): CharSequence = {
+        "package scala; class Option {}"
+      }
+    }
+    // compile fake scala.Option class
+    ToolProvider
+      .getSystemJavaCompiler
+      .getTask(null, null, null, null, null, Collections.singletonList(scalaOptionFile)).call()
+
+    // create 'scala' dir in tempDir1
+    val scalaDir = new File(tempDir1, "scala")
+    assert(scalaDir.mkdir(), s"Failed to create 'scala' directory in $tempDir1")
+
+    // move the generated class into scala dir
+    val filename = "Option.class"
+    val result = new File(filename)
+    assert(result.exists(), "Compiled file not found: " + result.getAbsolutePath)
+
+    val out = new File(scalaDir, filename)
+    Files.move(result, out)
+    assert(out.exists(), "Destination file not moved: " + out.getAbsolutePath)
+
+    // construct class loader tree
+    val parentLoader = new URLClassLoader(urls2, null)
+    val classLoader = new ExecutorClassLoader(
+      new SparkConf(), null, url1, parentLoader, true)
+
+    // load 'scala.Option', using ClassforName to do the exact same behavior as
+    // what JavaDeserializationStream does
+
+    // scalastyle:off classforname
+    val optionClass = Class.forName("scala.Option", false, classLoader)
+    // scalastyle:on classforname
+
+    assert(optionClass.getClassLoader == classLoader,
+      "scala.Option didn't come from ExecutorClassLoader")
   }
 
   test("child first") {

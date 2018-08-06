@@ -161,6 +161,37 @@ class MergerTests(unittest.TestCase):
             self.assertEqual(k, len(vs))
             self.assertEqual(list(range(k)), list(vs))
 
+    def test_stopiteration_is_raised(self):
+
+        def stopit(*args, **kwargs):
+            raise StopIteration()
+
+        def legit_create_combiner(x):
+            return [x]
+
+        def legit_merge_value(x, y):
+            return x.append(y) or x
+
+        def legit_merge_combiners(x, y):
+            return x.extend(y) or x
+
+        data = [(x % 2, x) for x in range(100)]
+
+        # wrong create combiner
+        m = ExternalMerger(Aggregator(stopit, legit_merge_value, legit_merge_combiners), 20)
+        with self.assertRaises((Py4JJavaError, RuntimeError)) as cm:
+            m.mergeValues(data)
+
+        # wrong merge value
+        m = ExternalMerger(Aggregator(legit_create_combiner, stopit, legit_merge_combiners), 20)
+        with self.assertRaises((Py4JJavaError, RuntimeError)) as cm:
+            m.mergeValues(data)
+
+        # wrong merge combiners
+        m = ExternalMerger(Aggregator(legit_create_combiner, legit_merge_value, stopit), 20)
+        with self.assertRaises((Py4JJavaError, RuntimeError)) as cm:
+            m.mergeCombiners(map(lambda x_y1: (x_y1[0], [x_y1[1]]), data))
+
 
 class SorterTests(unittest.TestCase):
     def test_in_memory_sort(self):
@@ -543,6 +574,20 @@ class TaskContextTests(PySparkTestCase):
         tc = TaskContext.get()
         self.assertTrue(tc is None)
 
+    def test_get_local_property(self):
+        """Verify that local properties set on the driver are available in TaskContext."""
+        key = "testkey"
+        value = "testvalue"
+        self.sc.setLocalProperty(key, value)
+        try:
+            rdd = self.sc.parallelize(range(1), 1)
+            prop1 = rdd.map(lambda _: TaskContext.get().getLocalProperty(key)).collect()[0]
+            self.assertEqual(prop1, value)
+            prop2 = rdd.map(lambda _: TaskContext.get().getLocalProperty("otherkey")).collect()[0]
+            self.assertTrue(prop2 is None)
+        finally:
+            self.sc.setLocalProperty(key, None)
+
 
 class RDDTests(ReusedPySparkTestCase):
 
@@ -642,6 +687,18 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertSetEqual(
             set(rdd.cartesian(rdd.zip(rdd)).collect()),
             set([(x, (y, y)) for x in range(10) for y in range(10)])
+        )
+
+    def test_zip_chaining(self):
+        # Tests for SPARK-21985
+        rdd = self.sc.parallelize('abc', 2)
+        self.assertSetEqual(
+            set(rdd.zip(rdd).zip(rdd).collect()),
+            set([((x, x), x) for x in 'abc'])
+        )
+        self.assertSetEqual(
+            set(rdd.zip(rdd.zip(rdd)).collect()),
+            set([(x, (x, x)) for x in 'abc'])
         )
 
     def test_deleting_input_files(self):
@@ -858,6 +915,50 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual(N, size)
         self.assertEqual(checksum, csum)
 
+    def test_multithread_broadcast_pickle(self):
+        import threading
+
+        b1 = self.sc.broadcast(list(range(3)))
+        b2 = self.sc.broadcast(list(range(3)))
+
+        def f1():
+            return b1.value
+
+        def f2():
+            return b2.value
+
+        funcs_num_pickled = {f1: None, f2: None}
+
+        def do_pickle(f, sc):
+            command = (f, None, sc.serializer, sc.serializer)
+            ser = CloudPickleSerializer()
+            ser.dumps(command)
+
+        def process_vars(sc):
+            broadcast_vars = list(sc._pickled_broadcast_vars)
+            num_pickled = len(broadcast_vars)
+            sc._pickled_broadcast_vars.clear()
+            return num_pickled
+
+        def run(f, sc):
+            do_pickle(f, sc)
+            funcs_num_pickled[f] = process_vars(sc)
+
+        # pickle f1, adds b1 to sc._pickled_broadcast_vars in main thread local storage
+        do_pickle(f1, self.sc)
+
+        # run all for f2, should only add/count/clear b2 from worker thread local storage
+        t = threading.Thread(target=run, args=(f2, self.sc))
+        t.start()
+        t.join()
+
+        # count number of vars pickled in main thread, only b1 should be counted and cleared
+        funcs_num_pickled[f1] = process_vars(self.sc)
+
+        self.assertEqual(funcs_num_pickled[f1], 1)
+        self.assertEqual(funcs_num_pickled[f2], 1)
+        self.assertEqual(len(list(self.sc._pickled_broadcast_vars)), 0)
+
     def test_large_closure(self):
         N = 200000
         data = [float(i) for i in xrange(N)]
@@ -1019,13 +1120,21 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual((["ab", "ef"], [5]), rdd.histogram(1))
         self.assertRaises(TypeError, lambda: rdd.histogram(2))
 
-    def test_repartitionAndSortWithinPartitions(self):
+    def test_repartitionAndSortWithinPartitions_asc(self):
         rdd = self.sc.parallelize([(0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)], 2)
 
-        repartitioned = rdd.repartitionAndSortWithinPartitions(2, lambda key: key % 2)
+        repartitioned = rdd.repartitionAndSortWithinPartitions(2, lambda key: key % 2, True)
         partitions = repartitioned.glom().collect()
         self.assertEqual(partitions[0], [(0, 5), (0, 8), (2, 6)])
         self.assertEqual(partitions[1], [(1, 3), (3, 8), (3, 8)])
+
+    def test_repartitionAndSortWithinPartitions_desc(self):
+        rdd = self.sc.parallelize([(0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)], 2)
+
+        repartitioned = rdd.repartitionAndSortWithinPartitions(2, lambda key: key % 2, False)
+        partitions = repartitioned.glom().collect()
+        self.assertEqual(partitions[0], [(2, 6), (0, 5), (0, 8)])
+        self.assertEqual(partitions[1], [(3, 8), (3, 8), (1, 3)])
 
     def test_repartition_no_skewed(self):
         num_partitions = 20
@@ -1175,6 +1284,42 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertRaises(Py4JJavaError, rdd.pipe('grep 4', checkCode=True).collect)
         self.assertEqual([], rdd.pipe('grep 4').collect())
 
+    def test_pipe_unicode(self):
+        # Regression test for SPARK-20947
+        data = [u'\u6d4b\u8bd5', '1']
+        rdd = self.sc.parallelize(data)
+        result = rdd.pipe('cat').collect()
+        self.assertEqual(data, result)
+
+    def test_stopiteration_in_user_code(self):
+
+        def stopit(*x):
+            raise StopIteration()
+
+        seq_rdd = self.sc.parallelize(range(10))
+        keyed_rdd = self.sc.parallelize((x % 2, x) for x in range(10))
+        msg = "Caught StopIteration thrown from user's code; failing the task"
+
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.map(stopit).collect)
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.filter(stopit).collect)
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.foreach, stopit)
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.reduce, stopit)
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.fold, 0, stopit)
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.foreach, stopit)
+        self.assertRaisesRegexp(Py4JJavaError, msg,
+                                seq_rdd.cartesian(seq_rdd).flatMap(stopit).collect)
+
+        # these methods call the user function both in the driver and in the executor
+        # the exception raised is different according to where the StopIteration happens
+        # RuntimeError is raised if in the driver
+        # Py4JJavaError is raised if in the executor (wraps the RuntimeError raised in the worker)
+        self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
+                                keyed_rdd.reduceByKeyLocally, stopit)
+        self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
+                                seq_rdd.aggregate, 0, stopit, lambda *x: 1)
+        self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
+                                seq_rdd.aggregate, 0, lambda *x: 1, stopit)
+
 
 class ProfilerTests(PySparkTestCase):
 
@@ -1230,6 +1375,22 @@ class ProfilerTests(PySparkTestCase):
 
         rdd = self.sc.parallelize(range(100))
         rdd.foreach(heavy_foo)
+
+
+class ProfilerTests2(unittest.TestCase):
+    def test_profiler_disabled(self):
+        sc = SparkContext(conf=SparkConf().set("spark.python.profile", "false"))
+        try:
+            self.assertRaisesRegexp(
+                RuntimeError,
+                "'spark.python.profile' configuration must be set",
+                lambda: sc.show_profiles())
+            self.assertRaisesRegexp(
+                RuntimeError,
+                "'spark.python.profile' configuration must be set",
+                lambda: sc.dump_profiles("/tmp/abc"))
+        finally:
+            sc.stop()
 
 
 class InputFormatTests(ReusedPySparkTestCase):
@@ -1864,7 +2025,12 @@ class SparkSubmitTests(unittest.TestCase):
 
     def setUp(self):
         self.programDir = tempfile.mkdtemp()
-        self.sparkSubmit = os.path.join(os.environ.get("SPARK_HOME"), "bin", "spark-submit")
+        tmp_dir = tempfile.gettempdir()
+        self.sparkSubmit = [
+            os.path.join(os.environ.get("SPARK_HOME"), "bin", "spark-submit"),
+            "--conf", "spark.driver.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
+            "--conf", "spark.executor.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
+        ]
 
     def tearDown(self):
         shutil.rmtree(self.programDir)
@@ -1930,7 +2096,7 @@ class SparkSubmitTests(unittest.TestCase):
             |sc = SparkContext()
             |print(sc.parallelize([1, 2, 3]).map(lambda x: x * 2).collect())
             """)
-        proc = subprocess.Popen([self.sparkSubmit, script], stdout=subprocess.PIPE)
+        proc = subprocess.Popen(self.sparkSubmit + [script], stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 4, 6]", out.decode('utf-8'))
@@ -1946,7 +2112,7 @@ class SparkSubmitTests(unittest.TestCase):
             |sc = SparkContext()
             |print(sc.parallelize([1, 2, 3]).map(foo).collect())
             """)
-        proc = subprocess.Popen([self.sparkSubmit, script], stdout=subprocess.PIPE)
+        proc = subprocess.Popen(self.sparkSubmit + [script], stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[3, 6, 9]", out.decode('utf-8'))
@@ -1964,7 +2130,7 @@ class SparkSubmitTests(unittest.TestCase):
             |def myfunc(x):
             |    return x + 1
             """)
-        proc = subprocess.Popen([self.sparkSubmit, "--py-files", zip, script],
+        proc = subprocess.Popen(self.sparkSubmit + ["--py-files", zip, script],
                                 stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
@@ -1983,7 +2149,7 @@ class SparkSubmitTests(unittest.TestCase):
             |def myfunc(x):
             |    return x + 1
             """)
-        proc = subprocess.Popen([self.sparkSubmit, "--py-files", zip, "--master",
+        proc = subprocess.Popen(self.sparkSubmit + ["--py-files", zip, "--master",
                                 "local-cluster[1,1,1024]", script],
                                 stdout=subprocess.PIPE)
         out, err = proc.communicate()
@@ -2000,8 +2166,10 @@ class SparkSubmitTests(unittest.TestCase):
             |print(sc.parallelize([1, 2, 3]).map(myfunc).collect())
             """)
         self.create_spark_package("a:mylib:0.1")
-        proc = subprocess.Popen([self.sparkSubmit, "--packages", "a:mylib:0.1", "--repositories",
-                                 "file:" + self.programDir, script], stdout=subprocess.PIPE)
+        proc = subprocess.Popen(
+            self.sparkSubmit + ["--packages", "a:mylib:0.1", "--repositories",
+                                "file:" + self.programDir, script],
+            stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 3, 4]", out.decode('utf-8'))
@@ -2016,9 +2184,11 @@ class SparkSubmitTests(unittest.TestCase):
             |print(sc.parallelize([1, 2, 3]).map(myfunc).collect())
             """)
         self.create_spark_package("a:mylib:0.1")
-        proc = subprocess.Popen([self.sparkSubmit, "--packages", "a:mylib:0.1", "--repositories",
-                                 "file:" + self.programDir, "--master",
-                                 "local-cluster[1,1,1024]", script], stdout=subprocess.PIPE)
+        proc = subprocess.Popen(
+            self.sparkSubmit + ["--packages", "a:mylib:0.1", "--repositories",
+                                "file:" + self.programDir, "--master", "local-cluster[1,1,1024]",
+                                script],
+            stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 3, 4]", out.decode('utf-8'))
@@ -2037,7 +2207,7 @@ class SparkSubmitTests(unittest.TestCase):
         # this will fail if you have different spark.executor.memory
         # in conf/spark-defaults.conf
         proc = subprocess.Popen(
-            [self.sparkSubmit, "--master", "local-cluster[1,1,1024]", script],
+            self.sparkSubmit + ["--master", "local-cluster[1,1,1024]", script],
             stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
@@ -2057,7 +2227,7 @@ class SparkSubmitTests(unittest.TestCase):
             |    sc.stop()
             """)
         proc = subprocess.Popen(
-            [self.sparkSubmit, "--master", "local", script],
+            self.sparkSubmit + ["--master", "local", script],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT)
         out, err = proc.communicate()
@@ -2206,6 +2376,21 @@ class KeywordOnlyTests(unittest.TestCase):
         self.assertEqual(b._x, 2)
 
 
+class UtilTests(PySparkTestCase):
+    def test_py4j_exception_message(self):
+        from pyspark.util import _exception_message
+
+        with self.assertRaises(Py4JJavaError) as context:
+            # This attempts java.lang.String(null) which throws an NPE.
+            self.sc._jvm.java.lang.String(None)
+
+        self.assertTrue('NullPointerException' in _exception_message(context.exception))
+
+    def test_parsing_version_string(self):
+        from pyspark.util import VersionUtils
+        self.assertRaises(ValueError, lambda: VersionUtils.majorMinorVersion("abced"))
+
+
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
 class SciPyTests(PySparkTestCase):
 
@@ -2255,15 +2440,7 @@ class NumPyTests(PySparkTestCase):
 
 if __name__ == "__main__":
     from pyspark.tests import *
-    if not _have_scipy:
-        print("NOTE: Skipping SciPy tests as it does not seem to be installed")
-    if not _have_numpy:
-        print("NOTE: Skipping NumPy tests as it does not seem to be installed")
     if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
     else:
-        unittest.main()
-    if not _have_scipy:
-        print("NOTE: SciPy tests were skipped as it does not seem to be installed")
-    if not _have_numpy:
-        print("NOTE: NumPy tests were skipped as it does not seem to be installed")
+        unittest.main(verbosity=2)

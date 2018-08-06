@@ -34,6 +34,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.streaming.kinesis.KinesisInitialPositions.Latest
 import org.apache.spark.streaming.kinesis.KinesisReadConfigurations._
 import org.apache.spark.streaming.kinesis.KinesisTestUtils._
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
@@ -178,7 +179,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       .streamName(testUtils.streamName)
       .endpointUrl(testUtils.endpointUrl)
       .regionName(testUtils.regionName)
-      .initialPositionInStream(InitialPositionInStream.LATEST)
+      .initialPosition(new Latest())
       .checkpointInterval(Seconds(10))
       .storageLevel(StorageLevel.MEMORY_ONLY)
       .build()
@@ -209,7 +210,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       .streamName(testUtils.streamName)
       .endpointUrl(testUtils.endpointUrl)
       .regionName(testUtils.regionName)
-      .initialPositionInStream(InitialPositionInStream.LATEST)
+      .initialPosition(new Latest())
       .checkpointInterval(Seconds(10))
       .storageLevel(StorageLevel.MEMORY_ONLY)
       .buildWithMessageHandler(addFive(_))
@@ -245,7 +246,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       .streamName("dummyStream")
       .endpointUrl(dummyEndpointUrl)
       .regionName(dummyRegionName)
-      .initialPositionInStream(InitialPositionInStream.LATEST)
+      .initialPosition(new Latest())
       .checkpointInterval(Seconds(10))
       .storageLevel(StorageLevel.MEMORY_ONLY)
       .build()
@@ -293,7 +294,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
         .streamName(localTestUtils.streamName)
         .endpointUrl(localTestUtils.endpointUrl)
         .regionName(localTestUtils.regionName)
-        .initialPositionInStream(InitialPositionInStream.LATEST)
+        .initialPosition(new Latest())
         .checkpointInterval(Seconds(10))
         .storageLevel(StorageLevel.MEMORY_ONLY)
         .build()
@@ -369,7 +370,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       .streamName(testUtils.streamName)
       .endpointUrl(testUtils.endpointUrl)
       .regionName(testUtils.regionName)
-      .initialPositionInStream(InitialPositionInStream.LATEST)
+      .initialPosition(new Latest())
       .checkpointInterval(Seconds(10))
       .storageLevel(StorageLevel.MEMORY_ONLY)
       .build()

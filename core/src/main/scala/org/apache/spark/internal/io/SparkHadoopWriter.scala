@@ -60,29 +60,33 @@ object SparkHadoopWriter extends Logging {
       config: HadoopWriteConfigUtil[K, V]): Unit = {
     // Extract context and configuration from RDD.
     val sparkContext = rdd.context
-    val stageId = rdd.id
+    val commitJobId = rdd.id
 
     // Set up a job.
     val jobTrackerId = createJobTrackerID(new Date())
-    val jobContext = config.createJobContext(jobTrackerId, stageId)
+    val jobContext = config.createJobContext(jobTrackerId, commitJobId)
     config.initOutputFormat(jobContext)
 
     // Assert the output format/key/value class is set in JobConf.
     config.assertConf(jobContext, rdd.conf)
 
-    val committer = config.createCommitter(stageId)
+    val committer = config.createCommitter(commitJobId)
     committer.setupJob(jobContext)
 
     // Try to write all RDD partitions as a Hadoop OutputFormat.
     try {
       val ret = sparkContext.runJob(rdd, (context: TaskContext, iter: Iterator[(K, V)]) => {
+        // SPARK-24552: Generate a unique "attempt ID" based on the stage and task attempt numbers.
+        // Assumes that there won't be more than Short.MaxValue attempts, at least not concurrently.
+        val attemptId = (context.stageAttemptNumber << 16) | context.attemptNumber
+
         executeTask(
           context = context,
           config = config,
           jobTrackerId = jobTrackerId,
-          sparkStageId = context.stageId,
+          commitJobId = commitJobId,
           sparkPartitionId = context.partitionId,
-          sparkAttemptNumber = context.attemptNumber,
+          sparkAttemptNumber = attemptId,
           committer = committer,
           iterator = iter)
       })
@@ -102,14 +106,14 @@ object SparkHadoopWriter extends Logging {
       context: TaskContext,
       config: HadoopWriteConfigUtil[K, V],
       jobTrackerId: String,
-      sparkStageId: Int,
+      commitJobId: Int,
       sparkPartitionId: Int,
       sparkAttemptNumber: Int,
       committer: FileCommitProtocol,
       iterator: Iterator[(K, V)]): TaskCommitMessage = {
     // Set up a task.
     val taskContext = config.createTaskAttemptContext(
-      jobTrackerId, sparkStageId, sparkPartitionId, sparkAttemptNumber)
+      jobTrackerId, commitJobId, sparkPartitionId, sparkAttemptNumber)
     committer.setupTask(taskContext)
 
     val (outputMetrics, callback) = initHadoopOutputMetrics(context)
@@ -197,8 +201,8 @@ class HadoopMapRedWriteConfigUtil[K, V: ClassTag](conf: SerializableJobConf)
     FileCommitProtocol.instantiate(
       className = classOf[HadoopMapRedCommitProtocol].getName,
       jobId = jobId.toString,
-      outputPath = getConf.get("mapred.output.dir"),
-      isAppend = false).asInstanceOf[HadoopMapReduceCommitProtocol]
+      outputPath = getConf.get("mapred.output.dir")
+    ).asInstanceOf[HadoopMapReduceCommitProtocol]
   }
 
   // --------------------------------------------------------------------------
@@ -325,8 +329,8 @@ class HadoopMapReduceWriteConfigUtil[K, V: ClassTag](conf: SerializableConfigura
     FileCommitProtocol.instantiate(
       className = classOf[HadoopMapReduceCommitProtocol].getName,
       jobId = jobId.toString,
-      outputPath = getConf.get("mapreduce.output.fileoutputformat.outputdir"),
-      isAppend = false).asInstanceOf[HadoopMapReduceCommitProtocol]
+      outputPath = getConf.get("mapreduce.output.fileoutputformat.outputdir")
+    ).asInstanceOf[HadoopMapReduceCommitProtocol]
   }
 
   // --------------------------------------------------------------------------

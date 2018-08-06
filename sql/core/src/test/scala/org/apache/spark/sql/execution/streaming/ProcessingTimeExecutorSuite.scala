@@ -22,16 +22,18 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.mutable
 
 import org.eclipse.jetty.util.ConcurrentHashSet
-import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.{Eventually, Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
-import org.scalatest.concurrent.Timeouts._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.streaming.ProcessingTime
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
-class ProcessingTimeExecutorSuite extends SparkFunSuite {
+class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {
+
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
+  implicit val defaultSignaler: Signaler = ThreadSignaler
 
   val timeout = 10.seconds
 

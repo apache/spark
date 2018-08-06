@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator}
 import org.apache.spark.sql.types._
 
 /**
@@ -47,26 +47,26 @@ class RowBasedHashMapGenerator(
     val generatedKeySchema: String =
       s"new org.apache.spark.sql.types.StructType()" +
         groupingKeySchema.map { key =>
-          val keyName = ctx.addReferenceMinorObj(key.name)
+          val keyName = ctx.addReferenceObj("keyName", key.name)
           key.dataType match {
             case d: DecimalType =>
-              s""".add("$keyName", org.apache.spark.sql.types.DataTypes.createDecimalType(
+              s""".add($keyName, org.apache.spark.sql.types.DataTypes.createDecimalType(
                   |${d.precision}, ${d.scale}))""".stripMargin
             case _ =>
-              s""".add("$keyName", org.apache.spark.sql.types.DataTypes.${key.dataType})"""
+              s""".add($keyName, org.apache.spark.sql.types.DataTypes.${key.dataType})"""
           }
         }.mkString("\n").concat(";")
 
     val generatedValueSchema: String =
       s"new org.apache.spark.sql.types.StructType()" +
         bufferSchema.map { key =>
-          val keyName = ctx.addReferenceMinorObj(key.name)
+          val keyName = ctx.addReferenceObj("keyName", key.name)
           key.dataType match {
             case d: DecimalType =>
-              s""".add("$keyName", org.apache.spark.sql.types.DataTypes.createDecimalType(
+              s""".add($keyName, org.apache.spark.sql.types.DataTypes.createDecimalType(
                   |${d.precision}, ${d.scale}))""".stripMargin
             case _ =>
-              s""".add("$keyName", org.apache.spark.sql.types.DataTypes.${key.dataType})"""
+              s""".add($keyName, org.apache.spark.sql.types.DataTypes.${key.dataType})"""
           }
         }.mkString("\n").concat(";")
 
@@ -114,7 +114,7 @@ class RowBasedHashMapGenerator(
 
     def genEqualsForKeys(groupingKeys: Seq[Buffer]): String = {
       groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        s"""(${ctx.genEqual(key.dataType, ctx.getValue("row",
+        s"""(${ctx.genEqual(key.dataType, CodeGenerator.getValue("row",
           key.dataType, ordinal.toString()), key.name)})"""
       }.mkString(" && ")
     }
@@ -147,7 +147,7 @@ class RowBasedHashMapGenerator(
         case t: DecimalType =>
           s"agg_rowWriter.write(${ordinal}, ${key.name}, ${t.precision}, ${t.scale})"
         case t: DataType =>
-          if (!t.isInstanceOf[StringType] && !ctx.isPrimitiveType(t)) {
+          if (!t.isInstanceOf[StringType] && !CodeGenerator.isPrimitiveType(t)) {
             throw new IllegalArgumentException(s"cannot generate code for unsupported type: $t")
           }
           s"agg_rowWriter.write(${ordinal}, ${key.name})"
@@ -165,18 +165,14 @@ class RowBasedHashMapGenerator(
        |    if (buckets[idx] == -1) {
        |      if (numRows < capacity && !isBatchFull) {
        |        // creating the unsafe for new entry
-       |        UnsafeRow agg_result = new UnsafeRow(${groupingKeySchema.length});
-       |        org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder agg_holder
-       |          = new org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder(agg_result,
-       |            ${numVarLenFields * 32});
        |        org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter agg_rowWriter
        |          = new org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter(
-       |              agg_holder,
-       |              ${groupingKeySchema.length});
-       |        agg_holder.reset(); //TODO: investigate if reset or zeroout are actually needed
+       |              ${groupingKeySchema.length}, ${numVarLenFields * 32});
+       |        agg_rowWriter.reset(); //TODO: investigate if reset or zeroout are actually needed
        |        agg_rowWriter.zeroOutNullBytes();
        |        ${createUnsafeRowForKey};
-       |        agg_result.setTotalSize(agg_holder.totalSize());
+       |        org.apache.spark.sql.catalyst.expressions.UnsafeRow agg_result
+       |          = agg_rowWriter.getRow();
        |        Object kbase = agg_result.getBaseObject();
        |        long koff = agg_result.getBaseOffset();
        |        int klen = agg_result.getSizeInBytes();

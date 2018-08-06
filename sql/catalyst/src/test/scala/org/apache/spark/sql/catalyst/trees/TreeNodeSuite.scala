@@ -22,23 +22,21 @@ import java.util.UUID
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.json4s.jackson.JsonMethods
-import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource, JarResource}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions.DslString
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, NaturalJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Union}
 import org.apache.spark.sql.catalyst.plans.physical.{IdentityBroadcastMode, RoundRobinPartitioning, SinglePartition}
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.types.{BooleanType, DoubleType, FloatType, IntegerType, Metadata, NullType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
 case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFallback {
@@ -436,21 +434,22 @@ class TreeNodeSuite extends SparkFunSuite {
         "bucketColumnNames" -> "[bucket]",
         "sortColumnNames" -> "[sort]"))
 
-    // Converts FrameBoundary to JSON
-    assertJSON(
-      ValueFollowing(3),
-      JObject(
-        "product-class" -> classOf[ValueFollowing].getName,
-        "value" -> 3))
-
     // Converts WindowFrame to JSON
     assertJSON(
-      SpecifiedWindowFrame(RowFrame, UnboundedFollowing, CurrentRow),
-      JObject(
-        "product-class" -> classOf[SpecifiedWindowFrame].getName,
-        "frameType" -> JObject("object" -> JString(RowFrame.getClass.getName)),
-        "frameStart" -> JObject("object" -> JString(UnboundedFollowing.getClass.getName)),
-        "frameEnd" -> JObject("object" -> JString(CurrentRow.getClass.getName))))
+      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow),
+      List(
+        JObject(
+          "class" -> classOf[SpecifiedWindowFrame].getName,
+          "num-children" -> 2,
+          "frameType" -> JObject("object" -> JString(RowFrame.getClass.getName)),
+          "lower" -> 0,
+          "upper" -> 1),
+        JObject(
+          "class" -> UnboundedPreceding.getClass.getName,
+          "num-children" -> 0),
+        JObject(
+          "class" -> CurrentRow.getClass.getName,
+          "num-children" -> 0)))
 
     // Converts Partitioning to JSON
     assertJSON(
@@ -479,7 +478,8 @@ class TreeNodeSuite extends SparkFunSuite {
         CatalogTableType.MANAGED,
         CatalogStorageFormat.empty,
         StructType(StructField("a", IntegerType, true) :: Nil),
-        createTime = 0L),
+        createTime = 0L,
+        createVersion = "2.x"),
 
       JObject(
         "product-class" -> classOf[CatalogTable].getName,
@@ -508,6 +508,7 @@ class TreeNodeSuite extends SparkFunSuite {
         "owner" -> "",
         "createTime" -> 0,
         "lastAccessTime" -> -1,
+        "createVersion" -> "2.x",
         "tracksPartitionsInCatalog" -> false,
         "properties" -> JNull,
         "unsupportedFeatures" -> List.empty[String],
@@ -572,5 +573,26 @@ class TreeNodeSuite extends SparkFunSuite {
     val left = JsonMethods.parse(leftJson)
     val right = JsonMethods.parse(rightJson)
     assert(left == right)
+  }
+
+  test("transform works on stream of children") {
+    val before = Coalesce(Stream(Literal(1), Literal(2)))
+    // Note it is a bit tricky to exhibit the broken behavior. Basically we want to create the
+    // situation in which the TreeNode.mapChildren function's change detection is not triggered. A
+    // stream's first element is typically materialized, so in order to not trip the TreeNode change
+    // detection logic, we should not change the first element in the sequence.
+    val result = before.transform {
+      case Literal(v: Int, IntegerType) if v != 1 =>
+        Literal(v + 1, IntegerType)
+    }
+    val expected = Coalesce(Stream(Literal(1), Literal(3)))
+    assert(result === expected)
+  }
+
+  test("withNewChildren on stream of children") {
+    val before = Coalesce(Stream(Literal(1), Literal(2)))
+    val result = before.withNewChildren(Stream(Literal(1), Literal(3)))
+    val expected = Coalesce(Stream(Literal(1), Literal(3)))
+    assert(result === expected)
   }
 }

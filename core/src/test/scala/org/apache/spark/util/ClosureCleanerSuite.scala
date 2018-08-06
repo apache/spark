@@ -19,6 +19,8 @@ package org.apache.spark.util
 
 import java.io.NotSerializableException
 
+import scala.language.reflectiveCalls
+
 import org.apache.spark.{SparkContext, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.partial.CountEvaluator
@@ -118,6 +120,66 @@ class ClosureCleanerSuite extends SparkFunSuite {
 
   test("createNullValue") {
     new TestCreateNullValue().run()
+  }
+
+  test("SPARK-22328: ClosureCleaner misses referenced superclass fields: case 1") {
+    assume(!ClosureCleanerSuite2.supportsLMFs)
+    val concreteObject = new TestAbstractClass {
+      val n2 = 222
+      val s2 = "bbb"
+      val d2 = 2.0d
+
+      def run(): Seq[(Int, Int, String, String, Double, Double)] = {
+        withSpark(new SparkContext("local", "test")) { sc =>
+          val rdd = sc.parallelize(1 to 1)
+          body(rdd)
+        }
+      }
+
+      def body(rdd: RDD[Int]): Seq[(Int, Int, String, String, Double, Double)] = rdd.map { _ =>
+        (n1, n2, s1, s2, d1, d2)
+      }.collect()
+    }
+    assert(concreteObject.run() === Seq((111, 222, "aaa", "bbb", 1.0d, 2.0d)))
+  }
+
+  test("SPARK-22328: ClosureCleaner misses referenced superclass fields: case 2") {
+    assume(!ClosureCleanerSuite2.supportsLMFs)
+    val concreteObject = new TestAbstractClass2 {
+      val n2 = 222
+      val s2 = "bbb"
+      val d2 = 2.0d
+      def getData: Int => (Int, Int, String, String, Double, Double) = _ => (n1, n2, s1, s2, d1, d2)
+    }
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val rdd = sc.parallelize(1 to 1).map(concreteObject.getData)
+      assert(rdd.collect() === Seq((111, 222, "aaa", "bbb", 1.0d, 2.0d)))
+    }
+  }
+
+  test("SPARK-22328: multiple outer classes have the same parent class") {
+    assume(!ClosureCleanerSuite2.supportsLMFs)
+    val concreteObject = new TestAbstractClass2 {
+
+      val innerObject = new TestAbstractClass2 {
+        override val n1 = 222
+        override val s1 = "bbb"
+      }
+
+      val innerObject2 = new TestAbstractClass2 {
+        override val n1 = 444
+        val n3 = 333
+        val s3 = "ccc"
+        val d3 = 3.0d
+
+        def getData: Int => (Int, Int, String, String, Double, Double, Int, String) =
+          _ => (n1, n3, s1, s3, d1, d3, innerObject.n1, innerObject.s1)
+      }
+    }
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val rdd = sc.parallelize(1 to 1).map(concreteObject.innerObject2.getData)
+      assert(rdd.collect() === Seq((444, 333, "aaa", "ccc", 1.0d, 3.0d, 222, "bbb")))
+    }
   }
 }
 
@@ -376,4 +438,19 @@ class TestCreateNullValue {
     }
     nestedClosure()
   }
+}
+
+abstract class TestAbstractClass extends Serializable {
+  val n1 = 111
+  val s1 = "aaa"
+  protected val d1 = 1.0d
+
+  def run(): Seq[(Int, Int, String, String, Double, Double)]
+  def body(rdd: RDD[Int]): Seq[(Int, Int, String, String, Double, Double)]
+}
+
+abstract class TestAbstractClass2 extends Serializable {
+  val n1 = 111
+  val s1 = "aaa"
+  protected val d1 = 1.0d
 }

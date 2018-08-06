@@ -21,7 +21,8 @@ import java.io.{File, IOException}
 import java.nio.charset.StandardCharsets
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.io.Text
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
@@ -71,14 +72,10 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
 
   test("Yarn configuration override") {
     val key = "yarn.nodemanager.hostname"
-    val default = new YarnConfiguration()
-
     val sparkConf = new SparkConf()
       .set("spark.hadoop." + key, "someHostName")
-    val yarnConf = new YarnSparkHadoopUtil().newConfiguration(sparkConf)
-
-    yarnConf.getClass() should be (classOf[YarnConfiguration])
-    yarnConf.get(key) should not be default.get(key)
+    val yarnConf = new YarnConfiguration(SparkHadoopUtil.get.newConfiguration(sparkConf))
+    yarnConf.get(key) should be ("someHostName")
   }
 
 
@@ -145,45 +142,66 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
 
   }
 
-  test("check different hadoop utils based on env variable") {
-    try {
-      System.setProperty("SPARK_YARN_MODE", "true")
-      assert(SparkHadoopUtil.get.getClass === classOf[YarnSparkHadoopUtil])
-      System.setProperty("SPARK_YARN_MODE", "false")
-      assert(SparkHadoopUtil.get.getClass === classOf[SparkHadoopUtil])
-    } finally {
-      System.clearProperty("SPARK_YARN_MODE")
-    }
+  test("SPARK-24149: retrieve all namenodes from HDFS") {
+    val sparkConf = new SparkConf()
+    val basicFederationConf = new Configuration()
+    basicFederationConf.set("fs.defaultFS", "hdfs://localhost:8020")
+    basicFederationConf.set("dfs.nameservices", "ns1,ns2")
+    basicFederationConf.set("dfs.namenode.rpc-address.ns1", "localhost:8020")
+    basicFederationConf.set("dfs.namenode.rpc-address.ns2", "localhost:8021")
+    val basicFederationExpected = Set(
+      new Path("hdfs://localhost:8020").getFileSystem(basicFederationConf),
+      new Path("hdfs://localhost:8021").getFileSystem(basicFederationConf))
+    val basicFederationResult = YarnSparkHadoopUtil.hadoopFSsToAccess(
+      sparkConf, basicFederationConf)
+    basicFederationResult should be (basicFederationExpected)
+
+    // when viewfs is enabled, namespaces are handled by it, so we don't need to take care of them
+    val viewFsConf = new Configuration()
+    viewFsConf.addResource(basicFederationConf)
+    viewFsConf.set("fs.defaultFS", "viewfs://clusterX/")
+    viewFsConf.set("fs.viewfs.mounttable.clusterX.link./home", "hdfs://localhost:8020/")
+    val viewFsExpected = Set(new Path("viewfs://clusterX/").getFileSystem(viewFsConf))
+    YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, viewFsConf) should be (viewFsExpected)
+
+    // invalid config should not throw NullPointerException
+    val invalidFederationConf = new Configuration()
+    invalidFederationConf.addResource(basicFederationConf)
+    invalidFederationConf.unset("dfs.namenode.rpc-address.ns2")
+    val invalidFederationExpected = Set(
+      new Path("hdfs://localhost:8020").getFileSystem(invalidFederationConf))
+    val invalidFederationResult = YarnSparkHadoopUtil.hadoopFSsToAccess(
+      sparkConf, invalidFederationConf)
+    invalidFederationResult should be (invalidFederationExpected)
+
+    // no namespaces defined, ie. old case
+    val noFederationConf = new Configuration()
+    noFederationConf.set("fs.defaultFS", "hdfs://localhost:8020")
+    val noFederationExpected = Set(
+      new Path("hdfs://localhost:8020").getFileSystem(noFederationConf))
+    val noFederationResult = YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, noFederationConf)
+    noFederationResult should be (noFederationExpected)
+
+    // federation and HA enabled
+    val federationAndHAConf = new Configuration()
+    federationAndHAConf.set("fs.defaultFS", "hdfs://clusterXHA")
+    federationAndHAConf.set("dfs.nameservices", "clusterXHA,clusterYHA")
+    federationAndHAConf.set("dfs.ha.namenodes.clusterXHA", "x-nn1,x-nn2")
+    federationAndHAConf.set("dfs.ha.namenodes.clusterYHA", "y-nn1,y-nn2")
+    federationAndHAConf.set("dfs.namenode.rpc-address.clusterXHA.x-nn1", "localhost:8020")
+    federationAndHAConf.set("dfs.namenode.rpc-address.clusterXHA.x-nn2", "localhost:8021")
+    federationAndHAConf.set("dfs.namenode.rpc-address.clusterYHA.y-nn1", "localhost:8022")
+    federationAndHAConf.set("dfs.namenode.rpc-address.clusterYHA.y-nn2", "localhost:8023")
+    federationAndHAConf.set("dfs.client.failover.proxy.provider.clusterXHA",
+      "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider")
+    federationAndHAConf.set("dfs.client.failover.proxy.provider.clusterYHA",
+      "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider")
+
+    val federationAndHAExpected = Set(
+      new Path("hdfs://clusterXHA").getFileSystem(federationAndHAConf),
+      new Path("hdfs://clusterYHA").getFileSystem(federationAndHAConf))
+    val federationAndHAResult = YarnSparkHadoopUtil.hadoopFSsToAccess(
+      sparkConf, federationAndHAConf)
+    federationAndHAResult should be (federationAndHAExpected)
   }
-
-
-
-  // This test needs to live here because it depends on isYarnMode returning true, which can only
-  // happen in the YARN module.
-  test("security manager token generation") {
-    try {
-      System.setProperty("SPARK_YARN_MODE", "true")
-      val initial = SparkHadoopUtil.get
-        .getSecretKeyFromUserCredentials(SecurityManager.SECRET_LOOKUP_KEY)
-      assert(initial === null || initial.length === 0)
-
-      val conf = new SparkConf()
-        .set(SecurityManager.SPARK_AUTH_CONF, "true")
-        .set(SecurityManager.SPARK_AUTH_SECRET_CONF, "unused")
-      val sm = new SecurityManager(conf)
-
-      val generated = SparkHadoopUtil.get
-        .getSecretKeyFromUserCredentials(SecurityManager.SECRET_LOOKUP_KEY)
-      assert(generated != null)
-      val genString = new Text(generated).toString()
-      assert(genString != "unused")
-      assert(sm.getSecretKey() === genString)
-    } finally {
-      // removeSecretKey() was only added in Hadoop 2.6, so instead we just set the secret
-      // to an empty string.
-      SparkHadoopUtil.get.addSecretKeyToUserCredentials(SecurityManager.SECRET_LOOKUP_KEY, "")
-      System.clearProperty("SPARK_YARN_MODE")
-    }
-  }
-
 }

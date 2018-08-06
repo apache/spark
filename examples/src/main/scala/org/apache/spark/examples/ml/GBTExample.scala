@@ -190,7 +190,7 @@ object GBTExample {
           .setCacheNodeIds(params.cacheNodeIds)
           .setCheckpointInterval(params.checkpointInterval)
           .setMaxIter(params.maxIter)
-      case _ => throw new IllegalArgumentException("Algo ${params.algo} not supported.")
+      case _ => throw new IllegalArgumentException(s"Algo ${params.algo} not supported.")
     }
     stages += dt
     val pipeline = new Pipeline().setStages(stages.toArray)
@@ -217,7 +217,7 @@ object GBTExample {
         } else {
           println(rfModel) // Print model summary.
         }
-      case _ => throw new IllegalArgumentException("Algo ${params.algo} not supported.")
+      case _ => throw new IllegalArgumentException(s"Algo ${params.algo} not supported.")
     }
 
     // Evaluate model on training, test data.
@@ -233,7 +233,7 @@ object GBTExample {
         println("Test data results:")
         DecisionTreeExample.evaluateRegressionModel(pipelineModel, test, labelColName)
       case _ =>
-        throw new IllegalArgumentException("Algo ${params.algo} not supported.")
+        throw new IllegalArgumentException(s"Algo ${params.algo} not supported.")
     }
 
     spark.stop()

@@ -15,6 +15,7 @@ il
 je
 la
 le
+les
 leur
 lui
 ma

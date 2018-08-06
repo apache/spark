@@ -258,6 +258,18 @@ class MathFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("round/bround with table columns") {
+    withTable("t") {
+      Seq(BigDecimal("5.9")).toDF("i").write.saveAsTable("t")
+      checkAnswer(
+        sql("select i, round(i) from t"),
+        Seq(Row(BigDecimal("5.9"), BigDecimal("6"))))
+      checkAnswer(
+        sql("select i, bround(i) from t"),
+        Seq(Row(BigDecimal("5.9"), BigDecimal("6"))))
+    }
+  }
+
   test("exp") {
     testOneToOneMathFunction(exp, math.exp)
   }

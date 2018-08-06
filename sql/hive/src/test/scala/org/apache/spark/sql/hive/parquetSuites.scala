@@ -21,7 +21,7 @@ import java.io.File
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogRelation
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
@@ -180,15 +180,18 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   }
 
   override def afterAll(): Unit = {
-    dropTables("partitioned_parquet",
-      "partitioned_parquet_with_key",
-      "partitioned_parquet_with_complextypes",
-      "partitioned_parquet_with_key_and_complextypes",
-      "normal_parquet",
-      "jt",
-      "jt_array",
-      "test_parquet")
-    super.afterAll()
+    try {
+      dropTables("partitioned_parquet",
+        "partitioned_parquet_with_key",
+        "partitioned_parquet_with_complextypes",
+        "partitioned_parquet_with_key_and_complextypes",
+        "normal_parquet",
+        "jt",
+        "jt_array",
+        "test_parquet")
+    } finally {
+      super.afterAll()
+    }
   }
 
   test(s"conversion is working") {
@@ -285,7 +288,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       )
 
       table("test_parquet_ctas").queryExecution.optimizedPlan match {
-        case LogicalRelation(_: HadoopFsRelation, _, _) => // OK
+        case LogicalRelation(_: HadoopFsRelation, _, _, _) => // OK
         case _ => fail(
           "test_parquet_ctas should be converted to " +
               s"${classOf[HadoopFsRelation ].getCanonicalName }")
@@ -370,7 +373,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
       assertResult(2) {
         analyzed.collect {
-          case r @ LogicalRelation(_: HadoopFsRelation, _, _) => r
+          case r @ LogicalRelation(_: HadoopFsRelation, _, _, _) => r
         }.size
       }
     }
@@ -379,7 +382,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   def collectHadoopFsRelation(df: DataFrame): HadoopFsRelation = {
     val plan = df.queryExecution.analyzed
     plan.collectFirst {
-      case LogicalRelation(r: HadoopFsRelation, _, _) => r
+      case LogicalRelation(r: HadoopFsRelation, _, _, _) => r
     }.getOrElse {
       fail(s"Expecting a HadoopFsRelation 2, but got:\n$plan")
     }
@@ -459,7 +462,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       // Converted test_parquet should be cached.
       getCachedDataSourceTable(tableIdentifier) match {
         case null => fail("Converted test_parquet should be cached in the cache.")
-        case LogicalRelation(_: HadoopFsRelation, _, _) => // OK
+        case LogicalRelation(_: HadoopFsRelation, _, _, _) => // OK
         case other =>
           fail(
             "The cached test_parquet should be a Parquet Relation. " +
@@ -812,7 +815,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
               }
             } else {
               queryExecution.analyzed.collectFirst {
-                case _: CatalogRelation =>
+                case _: HiveTableRelation =>
               }.getOrElse {
                 fail(s"Expecting no conversion from parquet to data sources, " +
                   s"but got:\n$queryExecution")
@@ -931,11 +934,15 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
   }
 
   override protected def afterAll(): Unit = {
-    partitionedTableDir.delete()
-    normalTableDir.delete()
-    partitionedTableDirWithKey.delete()
-    partitionedTableDirWithComplexTypes.delete()
-    partitionedTableDirWithKeyAndComplexTypes.delete()
+    try {
+      partitionedTableDir.delete()
+      normalTableDir.delete()
+      partitionedTableDirWithKey.delete()
+      partitionedTableDirWithComplexTypes.delete()
+      partitionedTableDirWithKeyAndComplexTypes.delete()
+    } finally {
+      super.afterAll()
+    }
   }
 
   /**

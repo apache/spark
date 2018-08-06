@@ -74,7 +74,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   override def getCheckpointFiles: Seq[String] = {
     Seq(vertices.getCheckpointFile, replicatedVertexView.edges.getCheckpointFile).flatMap {
       case Some(path) => Seq(path)
-      case None => Seq()
+      case None => Seq.empty
     }
   }
 

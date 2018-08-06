@@ -268,7 +268,7 @@ object TypedImperativeAggregateSuite {
       }
     }
 
-    override def deterministic: Boolean = true
+    override lazy val deterministic: Boolean = true
 
     override def children: Seq[Expression] = Seq(child)
 

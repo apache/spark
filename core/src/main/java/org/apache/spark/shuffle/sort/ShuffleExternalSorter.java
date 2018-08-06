@@ -31,8 +31,11 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.MemoryConsumer;
+import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
+import org.apache.spark.memory.TooLargePageException;
 import org.apache.spark.serializer.DummySerializerInstance;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.storage.BlockManager;
@@ -74,13 +77,15 @@ final class ShuffleExternalSorter extends MemoryConsumer {
   private final ShuffleWriteMetrics writeMetrics;
 
   /**
-   * Force this sorter to spill when there are this many elements in memory. The default value is
-   * 1024 * 1024 * 1024, which allows the maximum size of the pointer array to be 8G.
+   * Force this sorter to spill when there are this many elements in memory.
    */
-  private final long numElementsForSpillThreshold;
+  private final int numElementsForSpillThreshold;
 
   /** The buffer size to use when writing spills using DiskBlockObjectWriter */
   private final int fileBufferSizeBytes;
+
+  /** The buffer size to use when writing the sorted records to an on-disk file */
+  private final int diskWriteBufferSize;
 
   /**
    * Memory pages that hold the records being sorted. The pages in this list are freed when
@@ -116,13 +121,16 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     this.taskContext = taskContext;
     this.numPartitions = numPartitions;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
-    this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
+    this.fileBufferSizeBytes =
+        (int) (long) conf.get(package$.MODULE$.SHUFFLE_FILE_BUFFER_SIZE()) * 1024;
     this.numElementsForSpillThreshold =
-      conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold", 1024 * 1024 * 1024);
+        (int) conf.get(package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD());
     this.writeMetrics = writeMetrics;
     this.inMemSorter = new ShuffleInMemorySorter(
       this, initialSize, conf.getBoolean("spark.shuffle.sort.useRadixSort", true));
     this.peakMemoryUsedBytes = getMemoryUsage();
+    this.diskWriteBufferSize =
+        (int) (long) conf.get(package$.MODULE$.SHUFFLE_DISK_WRITE_BUFFER_SIZE());
   }
 
   /**
@@ -133,7 +141,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
    *                   bytes written should be counted towards shuffle spill metrics rather than
    *                   shuffle write metrics.
    */
-  private void writeSortedFile(boolean isLastFile) throws IOException {
+  private void writeSortedFile(boolean isLastFile) {
 
     final ShuffleWriteMetrics writeMetricsToUse;
 
@@ -155,7 +163,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     // be an API to directly transfer bytes from managed memory to the disk writer, we buffer
     // data through a byte array. This array does not need to be large enough to hold a single
     // record;
-    final byte[] writeBuffer = new byte[DISK_WRITE_BUFFER_SIZE];
+    final byte[] writeBuffer = new byte[diskWriteBufferSize];
 
     // Because this output will be read during shuffle, its compression codec must be controlled by
     // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
@@ -195,7 +203,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       int dataRemaining = Platform.getInt(recordPage, recordOffsetInPage);
       long recordReadPosition = recordOffsetInPage + 4; // skip over record length
       while (dataRemaining > 0) {
-        final int toTransfer = Math.min(DISK_WRITE_BUFFER_SIZE, dataRemaining);
+        final int toTransfer = Math.min(diskWriteBufferSize, dataRemaining);
         Platform.copyMemory(
           recordPage, recordReadPosition, writeBuffer, Platform.BYTE_ARRAY_OFFSET, toTransfer);
         writer.write(writeBuffer, 0, toTransfer);
@@ -326,7 +334,11 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       try {
         // could trigger spilling
         array = allocateArray(used / 8 * 2);
-      } catch (OutOfMemoryError e) {
+      } catch (TooLargePageException e) {
+        // The pointer array is too big to fix in a single page, spill.
+        spill();
+        return;
+      } catch (SparkOutOfMemoryError e) {
         // should have trigger spilling
         if (!inMemSorter.hasSpaceForAnotherRecord()) {
           logger.error("Unable to grow the pointer array");
@@ -399,19 +411,14 @@ final class ShuffleExternalSorter extends MemoryConsumer {
    * @throws IOException
    */
   public SpillInfo[] closeAndGetSpills() throws IOException {
-    try {
-      if (inMemSorter != null) {
-        // Do not count the final file towards the spill count.
-        writeSortedFile(true);
-        freeMemory();
-        inMemSorter.free();
-        inMemSorter = null;
-      }
-      return spills.toArray(new SpillInfo[spills.size()]);
-    } catch (IOException e) {
-      cleanupResources();
-      throw e;
+    if (inMemSorter != null) {
+      // Do not count the final file towards the spill count.
+      writeSortedFile(true);
+      freeMemory();
+      inMemSorter.free();
+      inMemSorter = null;
     }
+    return spills.toArray(new SpillInfo[spills.size()]);
   }
 
 }
