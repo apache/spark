@@ -396,7 +396,16 @@ abstract class RDD[T: ClassTag](
    * Return a new RDD containing the distinct elements in this RDD.
    */
   def distinct(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] = withScope {
-    map(x => (x, null)).reduceByKey((x, y) => x, numPartitions).map(_._1)
+    // If the data is already approriately partioned with a known partioner we can work locally.
+    def removeDuplicatesInPartition(itr: Iterator[T]): Iterator[T] = {
+      val set = new mutable.HashSet[T]() ++= itr
+      set.toIterator
+    }
+    partitioner match {
+      case Some(p) if numPartitions == partitions.length =>
+        mapPartitions(removeDuplicatesInPartition, preservesPartitioning = true)
+      case _ => map(x => (x, null)).reduceByKey((x, y) => x, numPartitions).map(_._1)
+    }
   }
 
   /**

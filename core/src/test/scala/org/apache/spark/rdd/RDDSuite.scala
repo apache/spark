@@ -95,6 +95,18 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(!deserial.toString().isEmpty())
   }
 
+  test("distinct with known partioner does not cause shuffle") {
+    val rdd = sc.parallelize(1.to(100), 10).map(x => (x % 10, x % 10)).sortByKey()
+    val initialPartioner = rdd.partitioner
+    val distinctRdd = rdd.distinct()
+    val resultingPartioner = distinctRdd.partitioner
+    assert(initialPartioner === resultingPartioner)
+    val distinctRddDifferent = rdd.distinct(5)
+    val distinctRddDifferentPartioner = distinctRddDifferent.partitioner
+    assert(initialPartioner != distinctRddDifferentPartioner)
+    assert(distinctRdd.collect().sorted === distinctRddDifferent.collect().sorted)
+  }
+
   test("countApproxDistinct") {
 
     def error(est: Long, size: Long): Double = math.abs(est - size) / size.toDouble
