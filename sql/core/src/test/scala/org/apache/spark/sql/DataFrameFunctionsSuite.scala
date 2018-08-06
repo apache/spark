@@ -1677,28 +1677,28 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df5.selectExpr("array_intersect(a, b)"), ans5)
 
     val df6 = Seq((null, null)).toDF("a", "b")
-    intercept[AnalysisException] {
+    assert(intercept[AnalysisException] {
       df6.select(array_intersect($"a", $"b"))
-    }.getMessage.contains("data type mismatch")
-    intercept[AnalysisException] {
+    }.getMessage.contains("data type mismatch"))
+    assert(intercept[AnalysisException] {
       df6.selectExpr("array_intersect(a, b)")
-    }.getMessage.contains("data type mismatch")
+    }.getMessage.contains("data type mismatch"))
 
     val df7 = Seq((Array(1), Array("a"))).toDF("a", "b")
-    intercept[AnalysisException] {
+    assert(intercept[AnalysisException] {
       df7.select(array_intersect($"a", $"b"))
-    }.getMessage.contains("data type mismatch")
-    intercept[AnalysisException] {
+    }.getMessage.contains("data type mismatch"))
+    assert(intercept[AnalysisException] {
       df7.selectExpr("array_intersect(a, b)")
-    }.getMessage.contains("data type mismatch")
+    }.getMessage.contains("data type mismatch"))
 
     val df8 = Seq((null, Array("a"))).toDF("a", "b")
-    intercept[AnalysisException] {
+    assert(intercept[AnalysisException] {
       df8.select(array_intersect($"a", $"b"))
-    }.getMessage.contains("data type mismatch")
-    intercept[AnalysisException] {
+    }.getMessage.contains("data type mismatch"))
+    assert(intercept[AnalysisException] {
       df8.selectExpr("array_intersect(a, b)")
-    }.getMessage.contains("data type mismatch")
+    }.getMessage.contains("data type mismatch"))
   }
 
   test("transform function - array for primitive type not containing null") {

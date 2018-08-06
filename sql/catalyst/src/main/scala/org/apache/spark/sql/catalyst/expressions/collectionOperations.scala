@@ -4093,7 +4093,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
           }
           new GenericArrayData(arrayBuffer)
         } else {
-          new GenericArrayData(Seq.empty)
+          new GenericArrayData(Array.emptyObjectArray)
         }
     } else {
       (array1, array2) =>
@@ -4141,7 +4141,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
           }
           new GenericArrayData(arrayBuffer)
         } else {
-          new GenericArrayData(Seq.empty)
+          new GenericArrayData(Array.emptyObjectArray)
         }
     }
   }
