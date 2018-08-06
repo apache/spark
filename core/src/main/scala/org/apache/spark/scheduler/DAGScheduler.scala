@@ -364,6 +364,7 @@ class DAGScheduler(
    */
   def createShuffleMapStage(shuffleDep: ShuffleDependency[_, _, _], jobId: Int): ShuffleMapStage = {
     val rdd = shuffleDep.rdd
+    checkBarrierStageWithDynamicAllocation(rdd)
     checkBarrierStageWithRDDChainPattern(rdd, rdd.getNumPartitions)
     val numTasks = rdd.partitions.length
     val parents = getOrCreateParentStages(rdd, jobId)
@@ -385,6 +386,23 @@ class DAGScheduler(
   }
 
   /**
+   * We don't support run a barrier stage with dynamic resource allocation enabled, it shall lead
+   * to some confusing behaviors (eg. with dynamic resource allocation enabled, it may happen that
+   * we acquire some executors (but not enough to launch all the tasks in a barrier stage) and
+   * later release them due to executor idle time expire, and then acquire again).
+   *
+   * We perform the check on job submit and fail fast if running a barrier stage with dynamic
+   * resource allocation enabled.
+   *
+   * TODO SPARK-24942 Improve cluster resource management with jobs containing barrier stage
+   */
+  private def checkBarrierStageWithDynamicAllocation(rdd: RDD[_]): Unit = {
+    if (rdd.isBarrier() && Utils.isDynamicAllocationEnabled(sc.getConf)) {
+      throw new SparkException(DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
+    }
+  }
+
+  /**
    * Create a ResultStage associated with the provided jobId.
    */
   private def createResultStage(
@@ -393,6 +411,7 @@ class DAGScheduler(
       partitions: Array[Int],
       jobId: Int,
       callSite: CallSite): ResultStage = {
+    checkBarrierStageWithDynamicAllocation(rdd)
     checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
@@ -2001,4 +2020,10 @@ private[spark] object DAGScheduler {
       "PartitionPruningRDD). A workaround for first()/take() can be barrierRdd.collect().head " +
       "(scala) or barrierRdd.collect()[0] (python).\n" +
       "2. An RDD that depends on multiple barrier RDDs (eg. barrierRdd1.zip(barrierRdd2))."
+
+  // Error message when running a barrier stage with dynamic resource allocation enabled.
+  val ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION =
+    "[SPARK-24942]: Barrier execution mode does not support dynamic resource allocation for " +
+      "now. You can disable dynamic resource allocation by setting Spark conf " +
+      "\"spark.dynamicAllocation.enabled\" to \"false\"."
 }

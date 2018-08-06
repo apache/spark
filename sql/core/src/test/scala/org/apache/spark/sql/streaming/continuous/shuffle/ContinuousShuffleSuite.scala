@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming.continuous.shuffle
 
 import java.util.UUID
 
+import scala.language.implicitConversions
+
 import org.apache.spark.{HashPartitioner, Partition, TaskContext, TaskContextImpl}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}

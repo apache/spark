@@ -242,13 +242,6 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         assert(e2.getMessage.contains("Writing job aborted"))
         // make sure we don't have partial data.
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
-
-        // test internal row writer
-        spark.range(5).select('id, -'id).write.format(cls.getName)
-          .option("path", path).option("internal", "true").mode("overwrite").save()
-        checkAnswer(
-          spark.read.format(cls.getName).option("path", path).load(),
-          spark.range(5).select('id, -'id))
       }
     }
   }
