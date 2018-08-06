@@ -87,8 +87,8 @@ class KafkaContinuousReadSupport(
     KafkaSourceOffset(JsonUtils.partitionOffsets(json))
   }
 
-  override def planInputPartitions(scanConfig: ScanConfig): Array[InputPartition] = {
-    val startOffset = scanConfig.asInstanceOf[OffsetsOnlyScanConfigBuilder].start
+  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
+    val startOffset = config.asInstanceOf[OffsetsOnlyScanConfigBuilder].start
     val oldStartPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(startOffset)
 
     val currentPartitionSet = offsetReader.fetchEarliestOffsets().keySet
@@ -112,7 +112,7 @@ class KafkaContinuousReadSupport(
   }
 
   override def createReaderFactory(config: ScanConfig): ContinuousPartitionReaderFactory = {
-    KafkaContinuousPartitionReaderFactory
+    KafkaContinuousReaderFactory
   }
 
   /** Stop this source and free any resources it has allocated. */
@@ -166,7 +166,7 @@ case class KafkaContinuousInputPartition(
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean) extends InputPartition
 
-object KafkaContinuousPartitionReaderFactory extends ContinuousPartitionReaderFactory {
+object KafkaContinuousReaderFactory extends ContinuousPartitionReaderFactory {
   override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[KafkaContinuousInputPartition]
     new KafkaContinuousPartitionReader(

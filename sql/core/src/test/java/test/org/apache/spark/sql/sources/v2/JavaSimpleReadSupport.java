@@ -38,7 +38,7 @@ abstract class JavaSimpleReadSupport implements BatchReadSupport {
 
   @Override
   public PartitionReaderFactory createReaderFactory(ScanConfig config) {
-    return new JavaSimplePartitionReaderFactory();
+    return new JavaSimpleReaderFactory();
   }
 }
 
@@ -50,7 +50,7 @@ class JavaNoopScanConfigBuilder implements ScanConfigBuilder, ScanConfig {
   }
 }
 
-class JavaSimplePartitionReaderFactory implements PartitionReaderFactory {
+class JavaSimpleReaderFactory implements PartitionReaderFactory {
 
   @Override
   public PartitionReader<InternalRow> createReader(InputPartition partition) {

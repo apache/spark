@@ -64,7 +64,7 @@ class SimpleWritableDataSource extends DataSourceV2
 
     override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
       val serializableConf = new SerializableConfiguration(conf)
-      new CSVPartitionReaderFactory(serializableConf)
+      new CSVReaderFactory(serializableConf)
     }
   }
 
@@ -140,7 +140,7 @@ class SimpleWritableDataSource extends DataSourceV2
 
 case class CSVInputPartitionReader(path: String) extends InputPartition
 
-class CSVPartitionReaderFactory(conf: SerializableConfiguration)
+class CSVReaderFactory(conf: SerializableConfiguration)
   extends PartitionReaderFactory {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {

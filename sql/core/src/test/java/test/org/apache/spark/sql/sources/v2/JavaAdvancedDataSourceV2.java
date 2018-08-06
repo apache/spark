@@ -70,7 +70,7 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, BatchReadSupportP
     @Override
     public PartitionReaderFactory createReaderFactory(ScanConfig config) {
       StructType requiredSchema = ((AdvancedScanConfigBuilder) config).requiredSchema;
-      return new AdvancedPartitionReaderFactory(requiredSchema);
+      return new AdvancedReaderFactory(requiredSchema);
     }
   }
 
@@ -126,10 +126,10 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, BatchReadSupportP
     }
   }
 
-  static class AdvancedPartitionReaderFactory implements PartitionReaderFactory {
+  static class AdvancedReaderFactory implements PartitionReaderFactory {
     StructType requiredSchema;
 
-    public AdvancedPartitionReaderFactory(StructType requiredSchema) {
+    public AdvancedReaderFactory(StructType requiredSchema) {
       this.requiredSchema = requiredSchema;
     }
 

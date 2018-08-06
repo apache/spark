@@ -131,8 +131,8 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     OffsetsOnlyScanConfigBuilder(start, Some(end))
   }
 
-  override def planInputPartitions(scanConfig: ScanConfig): Array[InputPartition] = {
-    val sc = scanConfig.asInstanceOf[OffsetsOnlyScanConfigBuilder]
+  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
+    val sc = config.asInstanceOf[OffsetsOnlyScanConfigBuilder]
     val startOffset = sc.start.asInstanceOf[LongOffset]
     val endOffset = sc.end.get.asInstanceOf[LongOffset]
     synchronized {
@@ -157,7 +157,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
-    MemoryStreamPartitionReaderFactory
+    MemoryStreamReaderFactory
   }
 
   private def generateDebugString(
@@ -202,7 +202,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
 class MemoryStreamInputPartition(val records: Array[UnsafeRow]) extends InputPartition
 
-object MemoryStreamPartitionReaderFactory extends PartitionReaderFactory {
+object MemoryStreamReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val records = partition.asInstanceOf[MemoryStreamInputPartition].records
     new PartitionReader[InternalRow] {

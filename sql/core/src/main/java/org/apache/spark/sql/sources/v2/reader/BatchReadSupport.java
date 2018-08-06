@@ -27,8 +27,7 @@ public interface BatchReadSupport extends ReadSupport {
 
   /**
    * Returns a builder of {@link ScanConfig}. The builder can take some query specific information
-   * like which operators to pushdown, streaming offsets, etc., and keep these information in the
-   * created {@link ScanConfig}.
+   * like which operators to pushdown, and keep these information in the created {@link ScanConfig}.
    *
    * This is the first step of the data scan. All other methods in {@link BatchReadSupport} needs
    * to take {@link ScanConfig} as an input.

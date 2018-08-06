@@ -62,8 +62,8 @@ class RateStreamContinuousReadSupport(options: DataSourceOptions) extends Contin
 
   override def initialOffset: Offset = createInitialOffset(numPartitions, creationTime)
 
-  override def planInputPartitions(scanConfig: ScanConfig): Array[InputPartition] = {
-    val startOffset = scanConfig.asInstanceOf[OffsetsOnlyScanConfigBuilder].start
+  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
+    val startOffset = config.asInstanceOf[OffsetsOnlyScanConfigBuilder].start
 
     val partitionStartMap = startOffset match {
       case off: RateStreamOffset => off.partitionToValueAndRunTimeMs
@@ -92,7 +92,7 @@ class RateStreamContinuousReadSupport(options: DataSourceOptions) extends Contin
   }
 
   override def createReaderFactory(config: ScanConfig): ContinuousPartitionReaderFactory = {
-    RateStreamContinuousPartitionReaderFactory
+    RateStreamContinuousReaderFactory
   }
 
   override def commit(end: Offset): Unit = {}
@@ -121,7 +121,7 @@ case class RateStreamContinuousInputPartition(
     rowsPerSecond: Double)
   extends InputPartition
 
-object RateStreamContinuousPartitionReaderFactory extends ContinuousPartitionReaderFactory {
+object RateStreamContinuousReaderFactory extends ContinuousPartitionReaderFactory {
   override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[RateStreamContinuousInputPartition]
     new RateStreamContinuousPartitionReader(

@@ -42,7 +42,7 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, BatchReadSupp
 
     @Override
     public PartitionReaderFactory createReaderFactory(ScanConfig config) {
-      return new SpecificPartitionReaderFactory();
+      return new SpecificReaderFactory();
     }
 
     @Override
@@ -80,7 +80,7 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, BatchReadSupp
     }
   }
 
-  static class SpecificPartitionReaderFactory implements PartitionReaderFactory {
+  static class SpecificReaderFactory implements PartitionReaderFactory {
 
     @Override
     public PartitionReader<InternalRow> createReader(InputPartition partition) {

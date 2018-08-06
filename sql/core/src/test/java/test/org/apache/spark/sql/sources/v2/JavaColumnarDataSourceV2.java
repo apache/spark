@@ -44,11 +44,11 @@ public class JavaColumnarDataSourceV2 implements DataSourceV2, BatchReadSupportP
 
     @Override
     public PartitionReaderFactory createReaderFactory(ScanConfig config) {
-      return new ColumnarPartitionReaderFactory();
+      return new ColumnarReaderFactory();
     }
   }
 
-  static class ColumnarPartitionReaderFactory implements PartitionReaderFactory {
+  static class ColumnarReaderFactory implements PartitionReaderFactory {
     private static final int BATCH_SIZE = 20;
 
     @Override

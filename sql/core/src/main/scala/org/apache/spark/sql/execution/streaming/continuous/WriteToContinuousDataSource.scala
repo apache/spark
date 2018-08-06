@@ -25,7 +25,7 @@ import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
  * The logical plan for writing data in a continuous stream.
  */
 case class WriteToContinuousDataSource(
-    writer: StreamingWriteSupport, query: LogicalPlan) extends LogicalPlan {
+    writeSupport: StreamingWriteSupport, query: LogicalPlan) extends LogicalPlan {
   override def children: Seq[LogicalPlan] = Seq(query)
   override def output: Seq[Attribute] = Nil
 }

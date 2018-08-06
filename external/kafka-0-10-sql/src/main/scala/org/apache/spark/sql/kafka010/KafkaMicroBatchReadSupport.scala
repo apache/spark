@@ -96,8 +96,8 @@ private[kafka010] class KafkaMicroBatchReadSupport(
     OffsetsOnlyScanConfigBuilder(start, Some(end))
   }
 
-  override def planInputPartitions(scanConfig: ScanConfig): Array[InputPartition] = {
-    val sc = scanConfig.asInstanceOf[OffsetsOnlyScanConfigBuilder]
+  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
+    val sc = config.asInstanceOf[OffsetsOnlyScanConfigBuilder]
     val startPartitionOffsets = sc.start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
     val endPartitionOffsets = sc.end.get.asInstanceOf[KafkaSourceOffset].partitionToOffsets
 
@@ -148,7 +148,7 @@ private[kafka010] class KafkaMicroBatchReadSupport(
   }
 
   override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
-    KafkaMicroBatchPartitionReaderFactory
+    KafkaMicroBatchReaderFactory
   }
 
   override def deserializeOffset(json: String): Offset = {
@@ -299,7 +299,7 @@ private[kafka010] case class KafkaMicroBatchInputPartition(
     failOnDataLoss: Boolean,
     reuseKafkaConsumer: Boolean) extends InputPartition
 
-private[kafka010] object KafkaMicroBatchPartitionReaderFactory extends PartitionReaderFactory {
+private[kafka010] object KafkaMicroBatchReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[KafkaMicroBatchInputPartition]
     KafkaMicroBatchPartitionReader(p.offsetRange, p.executorKafkaParams, p.pollTimeoutMs,

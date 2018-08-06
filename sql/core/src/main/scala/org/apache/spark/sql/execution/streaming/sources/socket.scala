@@ -135,8 +135,8 @@ class TextSocketMicroBatchReadSupport(options: DataSourceOptions)
     OffsetsOnlyScanConfigBuilder(start, Some(end))
   }
 
-  override def planInputPartitions(scanConfig: ScanConfig): Array[InputPartition] = {
-    val sc = scanConfig.asInstanceOf[OffsetsOnlyScanConfigBuilder]
+  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
+    val sc = config.asInstanceOf[OffsetsOnlyScanConfigBuilder]
     val startOrdinal = sc.start.asInstanceOf[LongOffset].offset.toInt + 1
     val endOrdinal = sc.end.get.asInstanceOf[LongOffset].offset.toInt + 1
 

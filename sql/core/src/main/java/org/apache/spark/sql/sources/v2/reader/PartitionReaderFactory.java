@@ -31,7 +31,10 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 public interface PartitionReaderFactory extends Serializable {
 
   /**
-   * Returns a row-based partition reader to do the actual data reading work.
+   * Returns a row-based partition reader to read data from the given {@link InputPartition}.
+   *
+   * Implementations probably need to cast the input partition to the concrete
+   * {@link InputPartition} class defined for the data source.
    *
    * If this method fails (by throwing an exception), the corresponding Spark task would fail and
    * get retried until hitting the maximum retry times.
@@ -39,7 +42,10 @@ public interface PartitionReaderFactory extends Serializable {
   PartitionReader<InternalRow> createReader(InputPartition partition);
 
   /**
-   * Returns a columnar partition reader to do the actual data reading work.
+   * Returns a columnar partition reader to read data from the given {@link InputPartition}.
+   *
+   * Implementations probably need to cast the input partition to the concrete
+   * {@link InputPartition} class defined for the data source.
    *
    * If this method fails (by throwing an exception), the corresponding Spark task would fail and
    * get retried until hitting the maximum retry times.

@@ -123,8 +123,8 @@ class RateStreamMicroBatchReadSupport(options: DataSourceOptions, checkpointLoca
     OffsetsOnlyScanConfigBuilder(start, Some(end))
   }
 
-  override def planInputPartitions(scanConfig: ScanConfig): Array[InputPartition] = {
-    val sc = scanConfig.asInstanceOf[OffsetsOnlyScanConfigBuilder]
+  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
+    val sc = config.asInstanceOf[OffsetsOnlyScanConfigBuilder]
     val startSeconds = sc.start.asInstanceOf[LongOffset].offset
     val endSeconds = sc.end.get.asInstanceOf[LongOffset].offset
     assert(startSeconds <= endSeconds, s"startSeconds($startSeconds) > endSeconds($endSeconds)")
@@ -163,7 +163,7 @@ class RateStreamMicroBatchReadSupport(options: DataSourceOptions, checkpointLoca
   }
 
   override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
-    RateStreamMicroBatchPartitionReaderFactory
+    RateStreamMicroBatchReaderFactory
   }
 
   override def commit(end: Offset): Unit = {}
@@ -183,7 +183,7 @@ case class RateStreamMicroBatchInputPartition(
     localStartTimeMs: Long,
     relativeMsPerValue: Double) extends InputPartition
 
-object RateStreamMicroBatchPartitionReaderFactory extends PartitionReaderFactory {
+object RateStreamMicroBatchReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[RateStreamMicroBatchInputPartition]
     new RateStreamMicroBatchPartitionReader(p.partitionId, p.numPartitions, p.rangeStart,

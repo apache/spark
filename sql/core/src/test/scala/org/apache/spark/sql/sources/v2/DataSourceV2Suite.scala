@@ -326,7 +326,7 @@ object NoopScanConfigBuilder extends ScanConfigBuilder with ScanConfig {
   override def build(): ScanConfig = this
 }
 
-object SimplePartitionReaderFactory extends PartitionReaderFactory {
+object SimpleReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val RangeInputPartition(start, end) = partition
     new PartitionReader[InternalRow] {
@@ -352,7 +352,7 @@ abstract class SimpleReadSupport extends BatchReadSupport {
   }
 
   override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
-    SimplePartitionReaderFactory
+    SimpleReaderFactory
   }
 }
 
@@ -360,7 +360,7 @@ abstract class SimpleReadSupport extends BatchReadSupport {
 class SimpleSinglePartitionSource extends DataSourceV2 with BatchReadSupportProvider {
 
   class ReadSupport extends SimpleReadSupport {
-    override def planInputPartitions(scanConfig: ScanConfig): Array[InputPartition] = {
+    override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
       Array(RangeInputPartition(0, 5))
     }
   }
@@ -390,8 +390,8 @@ class AdvancedDataSourceV2 extends DataSourceV2 with BatchReadSupportProvider {
   class ReadSupport extends SimpleReadSupport {
     override def newScanConfigBuilder(): ScanConfigBuilder = new AdvancedScanConfigBuilder()
 
-    override def planInputPartitions(scanConfig: ScanConfig): Array[InputPartition] = {
-      val filters = scanConfig.asInstanceOf[AdvancedScanConfigBuilder].filters
+    override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
+      val filters = config.asInstanceOf[AdvancedScanConfigBuilder].filters
 
       val lowerBound = filters.collectFirst {
         case GreaterThan("i", v: Int) => v
@@ -414,7 +414,7 @@ class AdvancedDataSourceV2 extends DataSourceV2 with BatchReadSupportProvider {
 
     override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
       val requiredSchema = config.asInstanceOf[AdvancedScanConfigBuilder].requiredSchema
-      new AdvancedPartitionReaderFactory(requiredSchema)
+      new AdvancedReaderFactory(requiredSchema)
     }
   }
 
@@ -449,7 +449,7 @@ class AdvancedScanConfigBuilder extends ScanConfigBuilder with ScanConfig
   override def build(): ScanConfig = this
 }
 
-class AdvancedPartitionReaderFactory(requiredSchema: StructType) extends PartitionReaderFactory {
+class AdvancedReaderFactory(requiredSchema: StructType) extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val RangeInputPartition(start, end) = partition
     new PartitionReader[InternalRow] {
@@ -501,7 +501,7 @@ class ColumnarDataSourceV2 extends DataSourceV2 with BatchReadSupportProvider {
     }
 
     override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
-      ColumnarPartitionReaderFactory
+      ColumnarReaderFactory
     }
   }
 
@@ -510,7 +510,7 @@ class ColumnarDataSourceV2 extends DataSourceV2 with BatchReadSupportProvider {
   }
 }
 
-object ColumnarPartitionReaderFactory extends PartitionReaderFactory {
+object ColumnarReaderFactory extends PartitionReaderFactory {
   private final val BATCH_SIZE = 20
 
   override def supportColumnarReads(): Boolean = true
@@ -567,7 +567,7 @@ class PartitionAwareDataSource extends DataSourceV2 with BatchReadSupportProvide
     }
 
     override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
-      SpecificPartitionReaderFactory
+      SpecificReaderFactory
     }
 
     override def outputPartitioning(config: ScanConfig): Partitioning = new MyPartitioning
@@ -589,7 +589,7 @@ class PartitionAwareDataSource extends DataSourceV2 with BatchReadSupportProvide
 
 case class SpecificInputPartition(i: Array[Int], j: Array[Int]) extends InputPartition
 
-object SpecificPartitionReaderFactory extends PartitionReaderFactory {
+object SpecificReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[SpecificInputPartition]
     new PartitionReader[InternalRow] {
