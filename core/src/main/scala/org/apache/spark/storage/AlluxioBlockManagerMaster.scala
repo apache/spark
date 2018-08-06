@@ -17,6 +17,8 @@
 
 package org.apache.spark.storage
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
@@ -54,8 +56,8 @@ private[spark] class AlluxioBlockManagerMaster extends Logging {
         fs.delete(chroot, true)
       }
     } catch {
-      case _ =>
-        logWarning(s"$chroot has been deleted")
+      case NonFatal(e) =>
+        logWarning(s"$chroot has been deleted", e)
     } finally
       fs.close()
   }

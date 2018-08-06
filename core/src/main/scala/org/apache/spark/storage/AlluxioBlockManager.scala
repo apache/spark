@@ -127,8 +127,8 @@ private[spark] class AlluxioBlockManager extends ExternalBlockManager with Loggi
           ByteStreams.readFully(input, buffer)
           Some(ByteBuffer.wrap(buffer))
         } catch {
-          case _ =>
-            logWarning(s"Failed to get bytes of block $blockId from Alluxio")
+          case NonFatal(e) =>
+            logWarning(s"Failed to get bytes of block $blockId from Alluxio", e)
             flag = false
             getBytesFromHdfs(blockId)
         } finally {

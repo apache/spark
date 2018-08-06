@@ -31,7 +31,6 @@ import org.apache.spark.{AlluxioManagedBuffer, SparkEnv, SparkException, TaskCon
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient, TempFileManager}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
 import org.apache.spark.shuffle.{FetchFailedException, IndexShuffleBlockResolver}
 import org.apache.spark.util.{ByteBufferInputStream, Utils}
