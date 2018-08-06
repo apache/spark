@@ -3351,6 +3351,22 @@ class SQLTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(path)
 
+    def test_ignore_column_of_all_nulls(self):
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+        try:
+            df = self.spark.createDataFrame([["""{"a":null, "b":1, "c":3.0}"""],
+                                             ["""{"a":null, "b":null, "c":"string"}"""],
+                                             ["""{"a":null, "b":null, "c":null}"""]])
+            df.write.text(path)
+            schema = StructType([
+                StructField('b', LongType(), nullable=True),
+                StructField('c', StringType(), nullable=True)])
+            readback = self.spark.read.json(path, dropFieldIfAllNull=True)
+            self.assertEquals(readback.schema, schema)
+        finally:
+            shutil.rmtree(path)
+
     def test_repr_behaviors(self):
         import re
         pattern = re.compile(r'^ *\|', re.MULTILINE)
