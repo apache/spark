@@ -4247,3 +4247,58 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
 
   override def prettyName: String = "array_except"
 }
+
+/**
+ *
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) -
+  """,
+  examples = """
+    Examples:
+      >
+  """)
+case class StructFlatten(
+    child: Expression,
+    depth: Int = Int.MaxValue,
+    delimiter: String = "_") extends UnaryExpression with CodegenFallback {
+
+  def this(child: Expression) = this(child, Int.MaxValue, "_")
+
+  def fieldName(prefix: String, name: String): String = {
+    if (prefix.isEmpty) name else prefix + delimiter + name
+  }
+  def flatStructField(field: StructField, prefix: String, d: Int): Array[StructField] = {
+    field match {
+      case StructField(name, st: StructType, _, _) if d > 0 =>
+        flatStructType(st, fieldName(prefix, name), d - 1)
+      case _ => Array(field.copy(name = fieldName(prefix, field.name)))
+    }
+  }
+  def flatStructType(struct: StructType, prefix: String, d: Int): Array[StructField] = {
+    struct.fields.flatMap(field => flatStructField(field, prefix, d))
+  }
+  override def dataType: DataType = child.dataType match {
+    case st: StructType if depth > 0 => st.copy(fields = flatStructType(st, "", depth))
+    case other => other
+  }
+
+
+  def flatValue(value: Any, d: Int): Array[Any] = value match {
+    case row: GenericInternalRow if d > 0 => flatRow(row, d - 1).values
+    case _ => Array(value)
+  }
+  def flatRow(struct: GenericInternalRow, d: Int): GenericInternalRow = {
+    if (d > 0 ) {
+      val values = struct.values.flatMap(column => flatValue(column, d))
+      new GenericInternalRow(values)
+    } else {
+      struct
+    }
+  }
+  override def nullSafeEval(input: Any): Any = input match {
+    case row: GenericInternalRow => flatRow(row, depth)
+    case other => other
+  }
+}

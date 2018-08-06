@@ -1618,4 +1618,53 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(ArrayExcept(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(ArrayExcept(a24, a22).dataType.asInstanceOf[ArrayType].containsNull === true)
   }
+
+  test("flatten structures") {
+    // 2 nested structs, depth = default
+    val struct1 = CreateStruct(Seq(CreateStruct(Seq(Literal(1)))))
+    val expectedSchema1 = StructType(Seq(StructField("col1_col1", IntegerType, false)))
+    assert(StructFlatten(struct1).dataType == expectedSchema1)
+    checkEvaluation(StructFlatten(struct1), Row(1))
+
+    // 3 nested structs, depth = default, delimiter = "-"
+    val struct2 = CreateNamedStruct(Seq(Literal("level0"), CreateNamedStruct(Seq(
+      Literal("level1"), CreateNamedStruct(Seq(
+        Literal("col1"), Literal(1), Literal("col2"), Literal("a")
+      ))))))
+    val expectedSchema2 = StructType(Seq(
+      StructField("level0-level1-col1", IntegerType, false),
+      StructField("level0-level1-col2", StringType, false)))
+    assert(StructFlatten(struct2, delimiter = "-").dataType == expectedSchema2)
+    checkEvaluation(StructFlatten(struct2), Row(1, "a"))
+
+    // 3 nested structs, depth = 0
+    val expectedSchema3 = StructType(Seq(StructField("level0",
+      StructType(Seq(StructField("level1",
+        StructType(Seq(
+          StructField("col1", IntegerType, false), StructField("col2", StringType, false)
+        )), false)
+      )), false)
+    ))
+    assert(StructFlatten(struct2, depth = 0).dataType == expectedSchema3)
+    checkEvaluation(StructFlatten(struct2, depth = 0), Row(Row(Row(1, "a"))))
+
+    // 3 nested structs, depth = 1
+    val expectedSchema4 = StructType(Seq(StructField("level0_level1",
+      StructType(Seq(
+        StructField("col1", IntegerType, false), StructField("col2", StringType, false)
+      )), false)
+    ))
+    assert(StructFlatten(struct2, depth = 1).dataType == expectedSchema4)
+    checkEvaluation(StructFlatten(struct2, depth = 1), Row(Row(1, "a")))
+  }
+
+  test("flatten structures shouldn't change maps and arrays") {
+    val arr = Literal.create(Seq(1, 2), ArrayType(IntegerType))
+    val struct1 = CreateStruct(Seq(arr, CreateStruct(Seq(Literal(3)))))
+    checkEvaluation(StructFlatten(struct1), Row(Seq(1, 2), 3))
+
+    val map = Literal.create(Map("a" -> 1), MapType(StringType, IntegerType))
+    val struct2 = CreateStruct(Seq(map, CreateStruct(Seq(Literal(3)))))
+    checkEvaluation(StructFlatten(struct2), Row(Map("a" -> 1), 3))
+  }
 }

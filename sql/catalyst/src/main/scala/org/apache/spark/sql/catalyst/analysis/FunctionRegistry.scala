@@ -443,6 +443,7 @@ object FunctionRegistry {
     expression[ArrayTransform]("transform"),
     expression[ArrayFilter]("filter"),
     expression[ArrayAggregate]("aggregate"),
+    expression[StructFlatten]("struct_flatten"),
     CreateStruct.registryEntry,
 
     // misc functions
