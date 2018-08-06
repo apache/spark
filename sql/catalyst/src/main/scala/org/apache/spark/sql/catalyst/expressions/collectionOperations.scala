@@ -3857,9 +3857,8 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
         val openHashSet = classOf[OpenHashSet[_]].getName
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
         val hashSet = ctx.freshName("hashSet")
-        val arrayBuilder = "scala.collection.mutable.ArrayBuilder"
+        val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
-        val arrayBuilderClassTag = s"scala.reflect.ClassTag$$.MODULE$$.$ptName()"
 
         def withArrayNullAssignment(body: String) =
           if (dataType.asInstanceOf[ArrayType].containsNull) {
@@ -3905,8 +3904,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
            |$openHashSet $hashSet = new $openHashSet$hsPostFix($classTag);
            |$declareNullTrackVariables
            |int $size = 0;
-           |$arrayBuilderClass $builder =
-           |  ($arrayBuilderClass)$arrayBuilder.make($arrayBuilderClassTag);
+           |$arrayBuilderClass $builder = new $arrayBuilderClass();
            |$arrayData[] $arrays = new $arrayData[]{$array1, $array2};
            |for (int $arrayDataIdx = 0; $arrayDataIdx < 2; $arrayDataIdx++) {
            |  $arrayData $array = $arrays[$arrayDataIdx];
