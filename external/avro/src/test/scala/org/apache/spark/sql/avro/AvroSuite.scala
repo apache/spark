@@ -18,13 +18,12 @@
 package org.apache.spark.sql.avro
 
 import java.io._
-import java.net.{URI, URL}
+import java.net.URL
 import java.nio.file.{Files, Paths}
 import java.sql.{Date, Timestamp}
 import java.util.{TimeZone, UUID}
 
 import scala.collection.JavaConverters._
-import scala.io.Source
 
 import org.apache.avro.Schema
 import org.apache.avro.Schema.{Field, Type}
@@ -33,6 +32,7 @@ import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWri
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
@@ -44,8 +44,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   val episodesAvro = testFile("episodes.avro")
   val testAvro = testFile("test.avro")
-  val episodesSchemaFile = testFile("episodes.avsc")
-  val testSchemaFile = testFile("test.avsc")
 
   // The test file timestamp.avro is generated via following Python code:
   // import json
@@ -75,32 +73,29 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     spark.conf.set("spark.sql.files.maxPartitionBytes", 1024)
   }
 
-  def checkSpecifySchemaOnWrite(inputPath: String, schemaFile: String): Unit = {
-    withTempPath { tempDir =>
-      val df = spark.read.format("avro").load(inputPath)
-
-      val tempSaveDir1 = s"$tempDir/test1/"
-      val tempSaveDir2 = s"$tempDir/test2/"
-
-      df.write.format("avro").save(tempSaveDir1)
-
-      val newDf = spark.read.format("avro").load(tempSaveDir1)
-      checkAnswer(df, newDf)
-
-      newDf.write
-        .format("avro")
-        .option("avroSchema", readFileToString(schemaFile))
-        .save(tempSaveDir2)
-
-      val readNewDf = spark.read.format("avro").load(tempSaveDir2)
-      checkAnswer(df, readNewDf)
-    }
-  }
-
   def checkReloadMatchesSaved(originalFile: String, newFile: String): Unit = {
     val originalEntries = spark.read.format("avro").load(testAvro).collect()
     val newEntries = spark.read.format("avro").load(newFile)
     checkAnswer(newEntries, originalEntries)
+  }
+
+  def checkAvroSchemaEquals(avroSchema: String, expectedAvroSchema: String): Unit = {
+    assert(new Schema.Parser().parse(avroSchema) ==
+      new Schema.Parser().parse(expectedAvroSchema))
+  }
+
+  def getAvroSchemaStringFromFiles(filePath: String): String = {
+    new DataFileReader({
+      val file = new File(filePath)
+      if (file.isFile) {
+        file
+      } else {
+        file.listFiles()
+          .filter(_.isFile)
+          .filter(_.getName.endsWith("avro"))
+          .head
+      }
+    }, new GenericDatumReader[Any]()).getSchema.toString(false)
   }
 
   test("resolve avro data source") {
@@ -108,13 +103,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       assert(DataSource.lookupDataSource(provider, spark.sessionState.conf) ===
         classOf[org.apache.spark.sql.avro.AvroFileFormat])
     }
-  }
-
-  def readFileToString(file: String): String = {
-    val s = Source.fromURI(
-      new URI(file)
-    )
-    try s.mkString finally s.close
   }
 
   test("reading from multiple paths") {
@@ -455,7 +443,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       }
     """
     val df = spark.read.format("avro").option("avroSchema", avroSchema).load(timestampAvro)
-
     checkAnswer(df, expected)
   }
 
@@ -755,6 +742,80 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .option("avroSchema", avroSchema)
       .format("avro").load(testAvro).select("missingField").first
     assert(result === Row("foo"))
+  }
+
+  test("support user provided avro schema for writing nullable enum type") {
+    withTempPath { tempDir =>
+      val avroSchema =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [{
+          |    "name": "enum",
+          |    "type": [{ "type": "enum",
+          |              "name": "Suit",
+          |              "symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
+          |            }, "null"]
+          |  }]
+          |}
+        """.stripMargin
+
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+        Row("SPADES"), Row(null), Row("HEARTS"), Row("DIAMONDS"),
+        Row(null), Row("CLUBS"), Row("HEARTS"), Row("SPADES"))),
+        StructType(Seq(StructField("Suit", StringType, true))))
+
+      val tempSaveDir = s"$tempDir/save/"
+
+      df.write.format("avro").option("avroSchema", avroSchema).save(tempSaveDir)
+
+      checkAnswer(df, spark.read.format("avro").load(tempSaveDir))
+      checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
+    }
+  }
+
+  test("support user provided avro schema for writing non-nullable enum type") {
+    withTempPath { tempDir =>
+      val avroSchema =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [{
+          |    "name": "enum",
+          |    "type": { "type": "enum",
+          |              "name": "Suit",
+          |              "symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
+          |            }
+          |  }]
+          |}
+        """.stripMargin
+
+      val dfWithNull = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+        Row("SPADES"), Row(null), Row("HEARTS"), Row("DIAMONDS"),
+        Row(null), Row("CLUBS"), Row("HEARTS"), Row("SPADES"))),
+        StructType(Seq(StructField("Suit", StringType, true))))
+
+      val df = spark.createDataFrame(dfWithNull.na.drop().rdd,
+        StructType(Seq(StructField("Suit", StringType, false))))
+
+      val tempSaveDir = s"$tempDir/save1/"
+
+      df.write.format("avro")
+        .option("avroSchema", avroSchema).save(tempSaveDir)
+
+      checkAnswer(df, spark.read.format("avro").load(tempSaveDir))
+      checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
+
+      // Writing df containing nulls without using avro union type will
+      // throw exception as avro uses union type to handle null.
+      val message = intercept[SparkException] {
+        dfWithNull.write.format("avro")
+          .option("avroSchema", avroSchema).save(s"$tempDir/${UUID.randomUUID()}")
+      }.getCause.getMessage
+      assert(message.contains("org.apache.avro.AvroRuntimeException: Not a union:"))
+    }
   }
 
   test("reading from invalid path throws exception") {
@@ -1071,94 +1132,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       checkCodec(df, path, "snappy")
       checkCodec(df, path, "bzip2")
       checkCodec(df, path, "xz")
-    }
-  }
-
-  // Read an avro, write it with converted schema, read it, write it with original avroSchema
-  test("SPARK-24855: support write with compatible user-specified schema, existing avros") {
-    checkSpecifySchemaOnWrite(episodesAvro, episodesSchemaFile)
-    checkSpecifySchemaOnWrite(testAvro, testSchemaFile)
-  }
-
-  test("SPARK-24855: support write with compatible user-specified schema, nested records") {
-    withTempPath { dir =>
-
-      val writeDf = spark.createDataFrame(List(NestedTop(1, NestedMiddle(2, NestedBottom(3, "1")))))
-      val outputDir = s"${dir}/specenum"
-      // Similar to generated output schema, but I change Ints to union types with default null
-      val schemaString = """{
-                           |  "type": "record",
-                           |  "name": "topLevelRecord",
-                           |  "namespace": "topLevelRecord",
-                           |  "fields": [
-                           |    {
-                           |      "name": "id",
-                           |      "type": ["null", "int"],
-                           |      "default": null
-                           |    },
-                           |    {
-                           |      "name": "data",
-                           |      "type": [
-                           |        {
-                           |          "type": "record",
-                           |          "name": "data",
-                           |          "namespace": "topLevelRecord.data",
-                           |          "fields": [
-                           |            {
-                           |              "name": "id",
-                           |              "type": ["null", "int"],
-                           |              "default": null
-                           |            },
-                           |            {
-                           |              "name": "data",
-                           |              "type": [
-                           |                {
-                           |                  "type": "record",
-                           |                  "name": "data",
-                           |                  "namespace": "topLevelRecord.data.data",
-                           |                  "fields": [
-                           |                    {
-                           |                      "name": "id",
-                           |                      "type": ["null", "int"],
-                           |                      "default": null
-                           |                    },
-                           |                    {
-                           |                      "name": "data",
-                           |                      "type": [
-                           |                        "null",
-                           |                        "string"
-                           |                      ],
-                           |                      "default": null
-                           |                    }
-                           |                  ]
-                           |                },
-                           |                "null"
-                           |              ]
-                           |            }
-                           |          ]
-                           |        },
-                           |        "null"
-                           |      ]
-                           |    }
-                           |  ]
-                           |}""".stripMargin
-      val originalSchema = new Schema.Parser().parse(schemaString)
-
-      writeDf.write.format("avro").option("avroSchema", schemaString).save(outputDir)
-
-      val readDf = spark.read.format("avro").option("avroSchema", schemaString).load(outputDir)
-      checkAnswer(writeDf, readDf)
-
-      // Compare schemas
-      val file = new File(outputDir.toString)
-        .listFiles()
-        .filter(_.isFile)
-        .filter(_.getName.endsWith("avro"))
-        .head
-      val reader = new DataFileReader(file, new GenericDatumReader[Any]())
-      val schema = reader.getSchema.toString()
-      
-      assert(schema.contentEquals(originalSchema.toString))
     }
   }
 }

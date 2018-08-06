@@ -42,7 +42,7 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
   }
 
   private val converter: Any => Any = {
-    val actualAvroType = resolveUnionType(rootAvroType, rootCatalystType, nullable)
+    val actualAvroType = resolveNullableType(rootAvroType, nullable)
     val baseConverter = rootCatalystType match {
       case st: StructType =>
         newStructConverter(st, actualAvroType).asInstanceOf[Any => Any]
@@ -113,7 +113,7 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
 
       case ArrayType(et, containsNull) =>
         val elementConverter = newConverter(
-          et, resolveUnionType(avroType.getElementType, et, containsNull))
+          et, resolveNullableType(avroType.getElementType, containsNull))
         (getter, ordinal) => {
           val arrayData = getter.getArray(ordinal)
           val len = arrayData.numElements()
@@ -139,7 +139,7 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
 
       case MapType(kt, vt, valueContainsNull) if kt == StringType =>
         val valueConverter = newConverter(
-          vt, resolveUnionType(avroType.getValueType, vt, valueContainsNull))
+          vt, resolveNullableType(avroType.getValueType, valueContainsNull))
         (getter, ordinal) =>
           val mapData = getter.getMap(ordinal)
           val len = mapData.numElements()
@@ -166,16 +166,10 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
   private def newStructConverter(
       catalystStruct: StructType, avroStruct: Schema): InternalRow => Record = {
     val avroFields = avroStruct.getFields
-    if (avroFields.size != catalystStruct.length) {
-      throw new IncompatibleSchemaException(
-        s"""Field list length ${catalystStruct.size} of SparkSQL record does not
-           |correspond to field list length of avro schema ${avroStruct.getFields.size()}"""
-          .stripMargin.replaceAll("\n", " "))
-    }
+    assert(avroFields.size() == catalystStruct.length)
     val fieldConverters = catalystStruct.zip(avroFields.asScala).map {
-      case (f1, f2) =>
-        newConverter(f1.dataType, resolveUnionType(f2.schema(), f1.dataType, f1.nullable))
-    }.toArray
+      case (f1, f2) => newConverter(f1.dataType, resolveNullableType(f2.schema(), f1.nullable))
+    }
     val numFields = catalystStruct.length
     (row: InternalRow) =>
       val result = new Record(avroStruct)
@@ -191,117 +185,16 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       result
   }
 
-  // Resolve an Avro union against a supplied DataType, i.e. a LongType compared against
-  // a ["null", "long"] should return a schema of type Schema.Type.LONG
-  // This function also handles resolving a DataType against unions of 2 or more types, i.e.
-  // an IntType resolves against a ["int", "long", "null"] will correctly return a schema of
-  // type Schema.Type.LONG
-  private def resolveUnionType(avroType: Schema, catalystType: DataType,
-      nullable: Boolean): Schema = {
-    if (avroType.getType == Type.UNION) {
+  private def resolveNullableType(avroType: Schema, nullable: Boolean): Schema = {
+    if (nullable) {
       // avro uses union to represent nullable type.
-      val fieldTypes = avroType.getTypes.asScala
-
-      // If we're nullable, we need to have at least two types.  Cases with more than two types
-      // are captured in test("read read-write, read-write w/ schema, read") w/ test.avro input
-      if (nullable && fieldTypes.length < 2) {
-        throw new IncompatibleSchemaException(
-          s"Cannot resolve nullable ${catalystType} against union type ${avroType}")
-      }
-
-      val actualType = catalystType match {
-        case NullType => fieldTypes.filter(_.getType == Type.NULL)
-        case BooleanType => fieldTypes.filter(_.getType == Type.BOOLEAN)
-        case ByteType => fieldTypes.filter(_.getType == Type.INT)
-        case BinaryType => fieldTypes
-          .filter(x => x.getType == Type.BYTES || x.getType == Type.FIXED)
-        case ShortType | IntegerType => fieldTypes.filter(_.getType == Type.INT)
-        case LongType => fieldTypes.filter(_.getType == Type.LONG)
-        case FloatType => fieldTypes.filter(_.getType == Type.FLOAT)
-        case DoubleType => fieldTypes.filter(_.getType == Type.DOUBLE)
-        case d: DecimalType => fieldTypes.filter(_.getType == Type.STRING)
-        case StringType => fieldTypes
-          .filter(x => x.getType == Type.STRING || x.getType == Type.ENUM)
-        case DateType => fieldTypes
-          .filter(x => x.getType == Type.INT || x.getType == Type.LONG)
-        case TimestampType => fieldTypes.filter(_.getType == Type.LONG)
-        case ArrayType(et, containsNull) =>
-          // Find array that matches the element type specified
-          fieldTypes.filter(x => x.getType == Type.ARRAY
-            && typeMatchesSchema(et, x.getElementType))
-        case st: StructType =>
-          val recordTypes = fieldTypes.filter(x => x.getType == Type.RECORD)
-          if (recordTypes.length > 1) {
-            throw new IncompatibleSchemaException(
-              "Unions of multiple record types are NOT supported with user-specified schema")
-          }
-          recordTypes
-        case MapType(kt, vt, valueContainsNull) =>
-          // Find the map that matches the value type.  Maps in Avro are always key type string
-          if (kt != StringType) {
-            throw new IncompatibleSchemaException(
-              "Non-string Map keys are unsupported"
-            )
-          }
-          fieldTypes.filter(x => x.getType == Type.MAP && typeMatchesSchema(vt, x.getValueType))
-        case other =>
-          throw new IncompatibleSchemaException(s"Unexpected type: $other")
-      }
-
-      if (actualType.length != 1) {
-        throw new IncompatibleSchemaException(
-          s"Failed to resolve schema ${catalystType} against Avro schema ${avroType}")
-      }
+      val fields = avroType.getTypes.asScala
+      assert(fields.length == 2)
+      val actualType = fields.filter(_.getType != Type.NULL)
+      assert(actualType.length == 1)
       actualType.head
     } else {
       avroType
-    }
-  }
-
-  // Given a Schema and a DataType, do they match?
-  private def typeMatchesSchema(catalystType: DataType, avroSchema: Schema): Boolean = {
-    if (catalystType.isInstanceOf[StructType]) {
-      val avroFields = resolveUnionType(avroSchema, catalystType,
-        avroSchema.getType == Type.UNION)
-        .getFields
-      if (avroFields.size() == catalystType.asInstanceOf[StructType].length) {
-        catalystType.asInstanceOf[StructType].zip(avroFields.asScala).forall {
-          case (f1, f2) => typeMatchesSchema(f1.dataType, f2.schema)
-        }
-      } else {
-        false
-      }
-    } else {
-      val isTypeCompatible = (a: Schema, b: DataType, c: Type) =>
-        resolveUnionType(a, b, a.getType == Type.UNION).getType == c
-
-      catalystType match {
-        case ByteType | ShortType | IntegerType =>
-          isTypeCompatible(avroSchema, catalystType, Type.INT)
-        case BooleanType => isTypeCompatible(avroSchema, catalystType, Type.BOOLEAN)
-        case BinaryType => isTypeCompatible(avroSchema, catalystType, Type.BYTES)
-        case LongType | TimestampType => isTypeCompatible(avroSchema, catalystType, Type.LONG)
-        case FloatType => isTypeCompatible(avroSchema, catalystType, Type.FLOAT)
-        case DoubleType => isTypeCompatible(avroSchema, catalystType, Type.DOUBLE)
-        case d: DecimalType =>
-          // newConverter always returns a string representation for DecimalType, so we honor
-          // that here, since we don't yet support Avro's logical types
-          isTypeCompatible(avroSchema, catalystType, Type.STRING)
-        case StringType => isTypeCompatible(avroSchema, catalystType, Type.STRING) ||
-          isTypeCompatible(avroSchema, catalystType, Type.ENUM)
-        case DateType => isTypeCompatible(avroSchema, catalystType, Type.INT) ||
-          isTypeCompatible(avroSchema, catalystType, Type.LONG)
-        case ArrayType(et, containsNull) =>
-          isTypeCompatible(avroSchema, catalystType, Type.ARRAY) &&
-            typeMatchesSchema(et,
-              resolveUnionType(avroSchema, catalystType, avroSchema.getType == Type.UNION)
-                .getElementType)
-        case MapType(kt, vt, valueContainsNull) =>
-          isTypeCompatible(avroSchema, catalystType, Type.MAP) &&
-            typeMatchesSchema(vt,
-              resolveUnionType(avroSchema, catalystType, avroSchema.getType == Type.UNION)
-                .getValueType)
-      }
     }
   }
 }
