@@ -1927,7 +1927,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def intersect(other: Dataset[T]): Dataset[T] = withSetOperator {
-    Intersect(logicalPlan, other.logicalPlan)
+    Intersect(logicalPlan, other.logicalPlan, isAll = false)
   }
 
   /**
@@ -1958,7 +1958,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def except(other: Dataset[T]): Dataset[T] = withSetOperator {
-    Except(logicalPlan, other.logicalPlan)
+    Except(logicalPlan, other.logicalPlan, isAll = false)
   }
 
   /**

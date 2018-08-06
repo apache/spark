@@ -277,13 +277,13 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "intersect with unequal number of columns",
-    testRelation.intersect(testRelation2),
+    testRelation.intersect(testRelation2, isAll = false),
     "intersect" :: "number of columns" :: testRelation2.output.length.toString ::
       testRelation.output.length.toString :: Nil)
 
   errorTest(
     "except with unequal number of columns",
-    testRelation.except(testRelation2),
+    testRelation.except(testRelation2, isAll = false),
     "except" :: "number of columns" :: testRelation2.output.length.toString ::
       testRelation.output.length.toString :: Nil)
 
@@ -299,22 +299,22 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "intersect with incompatible column types",
-    testRelation.intersect(nestedRelation),
+    testRelation.intersect(nestedRelation, isAll = false),
     "intersect" :: "the compatible column types" :: Nil)
 
   errorTest(
     "intersect with a incompatible column type and compatible column types",
-    testRelation3.intersect(testRelation4),
+    testRelation3.intersect(testRelation4, isAll = false),
     "intersect" :: "the compatible column types" :: "map" :: "decimal" :: Nil)
 
   errorTest(
     "except with incompatible column types",
-    testRelation.except(nestedRelation),
+    testRelation.except(nestedRelation, isAll = false),
     "except" :: "the compatible column types" :: Nil)
 
   errorTest(
     "except with a incompatible column type and compatible column types",
-    testRelation3.except(testRelation4),
+    testRelation3.except(testRelation4, isAll = false),
     "except" :: "the compatible column types" :: "map" :: "decimal" :: Nil)
 
   errorTest(

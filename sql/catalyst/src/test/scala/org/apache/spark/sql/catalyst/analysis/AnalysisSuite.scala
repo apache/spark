@@ -273,7 +273,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("self intersect should resolve duplicate expression IDs") {
-    val plan = testRelation.intersect(testRelation)
+    val plan = testRelation.intersect(testRelation, isAll = false)
     assertAnalysisSuccess(plan)
   }
 
@@ -439,8 +439,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val unionPlan = Union(firstTable, secondTable)
     assertAnalysisSuccess(unionPlan)
 
-    val r1 = Except(firstTable, secondTable)
-    val r2 = Intersect(firstTable, secondTable)
+    val r1 = Except(firstTable, secondTable, isAll = false)
+    val r2 = Intersect(firstTable, secondTable, isAll = false)
 
     assertAnalysisSuccess(r1)
     assertAnalysisSuccess(r2)
