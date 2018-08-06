@@ -73,7 +73,7 @@ class NettyBlockRpcServer(
         }
         val data = new NioManagedBuffer(ByteBuffer.wrap(uploadBlock.blockData))
         val blockId = BlockId(uploadBlock.blockId)
-        logInfo(s"Receiving replicated block $blockId with level ${level} " +
+        logDebug(s"Receiving replicated block $blockId with level ${level} " +
           s"from ${client.getSocketAddress}")
         blockManager.putBlockData(blockId, data, level, classTag)
         responseContext.onSuccess(ByteBuffer.allocate(0))
@@ -83,7 +83,7 @@ class NettyBlockRpcServer(
   override def receiveStream(
       client: TransportClient,
       messageHeader: ByteBuffer,
-    responseContext: RpcResponseCallback): StreamCallbackWithID = {
+      responseContext: RpcResponseCallback): StreamCallbackWithID = {
     val message =
       BlockTransferMessage.Decoder.fromByteBuffer(messageHeader).asInstanceOf[UploadBlockStream]
     val (level: StorageLevel, classTag: ClassTag[_]) = {
@@ -93,7 +93,7 @@ class NettyBlockRpcServer(
         .asInstanceOf[(StorageLevel, ClassTag[_])]
     }
     val blockId = BlockId(message.blockId)
-    logInfo(s"Receiving replicated block $blockId with level ${level} as stream " +
+    logDebug(s"Receiving replicated block $blockId with level ${level} as stream " +
       s"from ${client.getSocketAddress}")
     // This will return immediately, but will setup a callback on streamData which will still
     // do all the processing in the netty thread.

@@ -429,9 +429,9 @@ private[spark] class BlockManager(
         // Note this is all happening inside the netty thread as soon as it reads the end of the
         // stream.
         channel.close()
-        // TODO Even if we're only going to write the data to disk after this, we end up using a lot
-        // of memory here.  We wont' get a jvm OOM, but might get killed by the OS / cluster
-        // manager.  We could at least read the tmp file as a stream.
+        // TODO SPARK-25035 Even if we're only going to write the data to disk after this, we end up
+        // using a lot of memory here.  We won't get a jvm OOM, but might get killed by the
+        // OS / cluster manager.  We could at least read the tmp file as a stream.
         val buffer = ChunkedByteBuffer.map(tmpFile,
           conf.get(config.MEMORY_MAP_LIMIT_FOR_TESTS).toInt)
         putBytes(blockId, buffer, level)(classTag)

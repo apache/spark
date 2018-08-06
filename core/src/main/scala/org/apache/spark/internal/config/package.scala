@@ -571,6 +571,7 @@ package object config {
   private[spark] val MEMORY_MAP_LIMIT_FOR_TESTS =
     ConfigBuilder("spark.storage.memoryMapLimitForTests")
       .internal()
+      .doc("For testing only, controls the size of chunks when memory mapping a file")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(Int.MaxValue)
 }
