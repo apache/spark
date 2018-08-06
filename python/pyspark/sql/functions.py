@@ -2035,6 +2035,25 @@ def array_distinct(col):
 
 @ignore_unicode_prefix
 @since(2.4)
+def array_intersect(col1, col2):
+    """
+    Collection function: returns an array of the elements in the intersection of col1 and col2,
+    without duplicates.
+
+    :param col1: name of column containing array
+    :param col2: name of column containing array
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
+    >>> df.select(array_intersect(df.c1, df.c2)).collect()
+    [Row(array_intersect(c1, c2)=[u'a', u'c'])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_intersect(_to_java_column(col1), _to_java_column(col2)))
+
+
+@ignore_unicode_prefix
+@since(2.4)
 def array_union(col1, col2):
     """
     Collection function: returns an array of the elements in the union of col1 and col2,
