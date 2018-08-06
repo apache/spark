@@ -87,8 +87,9 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
 
   test("writer metrics") {
     val sink = new MemorySinkV2
+    val schema = new StructType().add("i", "int")
     // batch 0
-    var writer = new MemoryWriter(sink, 0, OutputMode.Append())
+    var writer = new MemoryWriter(sink, 0, OutputMode.Append(), schema)
     writer.commit(
       Array(
         MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))),
@@ -97,7 +98,8 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
       ))
     assert(writer.getCustomMetrics.json() == "{\"numRows\":6}")
     // batch 1
-    writer = new MemoryWriter(sink, 1, OutputMode.Append())
+    writer = new MemoryWriter(sink, 1, OutputMode.Append(), schema
+    )
     writer.commit(
       Array(
         MemoryWriterCommitMessage(0, Seq(Row(7), Row(8)))
