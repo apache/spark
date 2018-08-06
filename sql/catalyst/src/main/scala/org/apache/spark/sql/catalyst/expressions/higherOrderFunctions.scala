@@ -173,6 +173,13 @@ trait ArrayBasedUnaryHigherOrderFunction extends UnaryHigherOrderFunction {
 
 trait MapBasedUnaryHigherOrderFunction extends UnaryHigherOrderFunction {
   override def inputTypes: Seq[AbstractDataType] = Seq(MapType, expectingFunctionType)
+
+  @transient val (keyType, valueType, valueContainsNull) = input.dataType match {
+    case MapType(kType, vType, vContainsNull) => (kType, vType, vContainsNull)
+    case _ =>
+      val MapType(kType, vType, vContainsNull) = MapType.defaultConcreteType
+      (kType, vType, vContainsNull)
+  }
 }
 
 object ArrayBasedHigherOrderFunction {
@@ -264,13 +271,6 @@ case class MapFilter(
     input: Expression,
     function: Expression)
   extends MapBasedUnaryHigherOrderFunction with CodegenFallback {
-
-  @transient val (keyType, valueType, valueContainsNull) = input.dataType match {
-    case MapType(kType, vType, vContainsNull) => (kType, vType, vContainsNull)
-    case _ =>
-      val MapType(kType, vType, vContainsNull) = MapType.defaultConcreteType
-      (kType, vType, vContainsNull)
-  }
 
   @transient lazy val (keyVar, valueVar) = {
     val args = function.asInstanceOf[LambdaFunction].arguments
