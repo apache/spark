@@ -600,28 +600,48 @@ private[spark] class ExecutorAllocationManager(
    * the executor is not already marked as idle.
    */
   private def onExecutorIdle(executorId: String): Unit = synchronized {
-    if (executorIds.contains(executorId)) {
-      if (!removeTimes.contains(executorId) && !executorsPendingToRemove.contains(executorId)) {
-        // Note that it is not necessary to query the executors since all the cached
-        // blocks we are concerned with are reported to the driver. Note that this
-        // does not include broadcast blocks.
-        val hasCachedBlocks = blockManagerMaster.hasCachedBlocks(executorId)
-        val now = clock.getTimeMillis()
-        val timeout = {
-          if (hasCachedBlocks) {
-            // Use a different timeout if the executor has cached blocks.
-            now + cachedExecutorIdleTimeoutS * 1000
-          } else {
-            now + executorIdleTimeoutS * 1000
+    onExecutorIdle(Seq(executorId))
+  }
+
+  private def onExecutorIdle(executorIds: Seq[String], onUnpersist: Boolean = false): Unit =
+    synchronized {
+      executorIds.foreach(executorId => {
+        if (executorIds.contains(executorId)) {
+          if (!executorsPendingToRemove.contains(executorId)) {
+            if (!removeTimes.contains(executorId)) {
+              val hasCachedBlocks = blockManagerMaster.hasCachedBlocks(executorId)
+              updateRemovalTime(executorId, hasCachedBlocks)
+            } else {
+              // Check if this was called when an RDD was unpersisted.
+              if (onUnpersist) {
+                // If the executor other RDDs cached on them, do not update its removal time.
+                // If not, we can update the removal time to executorIdleTimeout.
+                val hasCachedBlocks = blockManagerMaster.hasCachedBlocks(executorId)
+                if (!hasCachedBlocks) {
+                  updateRemovalTime(executorId, false)
+                }
+              }
+            }
           }
+        } else {
+          logWarning(s"Attempted to mark unknown executor $executorId idle")
         }
-        val realTimeout = if (timeout <= 0) Long.MaxValue else timeout // overflow
-        removeTimes(executorId) = realTimeout
-        logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
-          s"scheduled to run on the executor (to expire in ${(realTimeout - now)/1000} seconds)")
+      })
+
+    def updateRemovalTime(executorId: String, hasCachedBlocks: Boolean): Unit = {
+      val now = clock.getTimeMillis()
+      val timeout = {
+        if (hasCachedBlocks) {
+          // Use a different timeout if the executor has cached blocks.
+          now + cachedExecutorIdleTimeoutS * 1000
+        } else {
+          now + executorIdleTimeoutS * 1000
+        }
       }
-    } else {
-      logWarning(s"Attempted to mark unknown executor $executorId idle")
+      val realTimeout = if (timeout <= 0) Long.MaxValue else timeout // overflow
+      removeTimes(executorId) = realTimeout
+      logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
+        s"scheduled to run on the executor (to expire in ${(realTimeout - now)/1000} seconds)")
     }
   }
 
@@ -802,6 +822,14 @@ private[spark] class ExecutorAllocationManager(
           stageIdToNumSpeculativeTasks.getOrElse(stageId, 0) + 1
         allocationManager.onSchedulerBacklogged()
       }
+    }
+
+    override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD): Unit = {
+      // Check if the executors have any tasks running on them.
+      val idleExecutorCandidates = unpersistRDD.executorIds.filter(executorId =>
+        !(executorIdToTaskIds.contains(executorId) && executorIdToTaskIds(executorId).nonEmpty))
+
+      allocationManager.onExecutorIdle(idleExecutorCandidates, true)
     }
 
     /**

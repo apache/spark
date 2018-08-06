@@ -196,7 +196,8 @@ private[spark] object JsonProtocol {
 
   def unpersistRDDToJson(unpersistRDD: SparkListenerUnpersistRDD): JValue = {
     ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.unpersistRDD) ~
-    ("RDD ID" -> unpersistRDD.rddId)
+    ("RDD ID" -> unpersistRDD.rddId) ~
+    ("Executor IDs" -> unpersistRDD.executorIds)
   }
 
   def applicationStartToJson(applicationStart: SparkListenerApplicationStart): JValue = {
@@ -645,7 +646,10 @@ private[spark] object JsonProtocol {
   }
 
   def unpersistRDDFromJson(json: JValue): SparkListenerUnpersistRDD = {
-    SparkListenerUnpersistRDD((json \ "RDD ID").extract[Int])
+    SparkListenerUnpersistRDD(
+      (json \ "RDD ID").extract[Int],
+      (json \ "Executor IDs").extract[Seq[String]]
+    )
   }
 
   def applicationStartFromJson(json: JValue): SparkListenerApplicationStart = {

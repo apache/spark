@@ -144,16 +144,22 @@ class BlockManagerMasterEndpoint(
       }
   }
 
-  private def removeRdd(rddId: Int): Future[Seq[Int]] = {
+  private def removeRdd(rddId: Int): (Future[Seq[Int]], Seq[String]) = {
     // First remove the metadata for the given RDD, and then asynchronously remove the blocks
     // from the slaves.
 
     // Find all blocks for the given RDD, remove the block from both blockLocations and
     // the blockManagerInfo that is tracking the blocks.
     val blocks = blockLocations.asScala.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
+
+    val executorIds: mutable.HashSet[String] = new mutable.HashSet[String]
+
     blocks.foreach { blockId =>
       val bms: mutable.HashSet[BlockManagerId] = blockLocations.get(blockId)
-      bms.foreach(bm => blockManagerInfo.get(bm).foreach(_.removeBlock(blockId)))
+      bms.foreach(bm => {
+        blockManagerInfo.get(bm).foreach(_.removeBlock(blockId))
+        executorIds.add(bm.executorId)
+      })
       blockLocations.remove(blockId)
     }
 
@@ -170,7 +176,7 @@ class BlockManagerMasterEndpoint(
       }
     }.toSeq
 
-    Future.sequence(futures)
+    (Future.sequence(futures), executorIds.toList)
   }
 
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {

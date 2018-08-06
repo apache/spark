@@ -121,15 +121,19 @@ class BlockManagerMaster(
     driverEndpoint.askSync[Boolean](RemoveBlock(blockId))
   }
 
-  /** Remove all blocks belonging to the given RDD. */
-  def removeRdd(rddId: Int, blocking: Boolean) {
-    val future = driverEndpoint.askSync[Future[Seq[Int]]](RemoveRdd(rddId))
+  /** Remove all blocks belonging to the given RDD and return the list of executorIds where the RDD
+   * was cached if at all.
+   */
+  def removeRdd(rddId: Int, blocking: Boolean): Seq[String] = {
+    val (future, executorIds) =
+      driverEndpoint.askSync[(Future[Seq[Int]], Seq[String])](RemoveRdd(rddId))
     future.failed.foreach(e =>
       logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
       timeout.awaitResult(future)
     }
+    executorIds
   }
 
   /** Remove all blocks belonging to the given shuffle. */

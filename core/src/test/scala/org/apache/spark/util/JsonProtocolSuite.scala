@@ -72,7 +72,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       BlockManagerId("Stars", "In your multitude...", 300), 500)
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
       BlockManagerId("Scarce", "to be counted...", 100))
-    val unpersistRdd = SparkListenerUnpersistRDD(12345)
+    val unpersistRdd = SparkListenerUnpersistRDD(12345, Seq.empty[String])
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     val applicationStart = SparkListenerApplicationStart("The winner of all", Some("appId"),
       42L, "Garfield", Some("appAttempt"))

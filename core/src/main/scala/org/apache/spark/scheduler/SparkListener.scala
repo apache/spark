@@ -103,7 +103,8 @@ case class SparkListenerBlockManagerRemoved(time: Long, blockManagerId: BlockMan
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
+case class SparkListenerUnpersistRDD(rddId: Int, executorIds: Seq[String])
+  extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerExecutorAdded(time: Long, executorId: String, executorInfo: ExecutorInfo)
