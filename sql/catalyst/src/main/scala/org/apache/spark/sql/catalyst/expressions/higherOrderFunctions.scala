@@ -278,10 +278,7 @@ case class MapFilter(
   }
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): MapFilter = {
-    function match {
-      case LambdaFunction(_, _, _) =>
-        copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
-    }
+    copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
   }
 
   override def nullable: Boolean = input.nullable
