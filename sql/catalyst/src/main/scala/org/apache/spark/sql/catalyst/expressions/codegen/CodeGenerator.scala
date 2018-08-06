@@ -471,6 +471,7 @@ class CodegenContext {
       case NewFunctionSpec(functionName, None, None) => functionName
       case NewFunctionSpec(functionName, Some(_), Some(innerClassInstance)) =>
         innerClassInstance + "." + functionName
+      case _ => null // nothing to do since addNewFunctionInteral() must return one of them
     }
   }
 

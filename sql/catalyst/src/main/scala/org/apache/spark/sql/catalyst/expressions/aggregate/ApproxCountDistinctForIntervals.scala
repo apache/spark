@@ -67,6 +67,7 @@ case class ApproxCountDistinctForIntervals(
     (endpointsExpression.dataType, endpointsExpression.eval()) match {
       case (ArrayType(elementType, _), arrayData: ArrayData) =>
         arrayData.toObjectArray(elementType).map(_.toString.toDouble)
+      case _ => throw new RuntimeException("not found at endpoints")
     }
 
   override def checkInputDataTypes(): TypeCheckResult = {
