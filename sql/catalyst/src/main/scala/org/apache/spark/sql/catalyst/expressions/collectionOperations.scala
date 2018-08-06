@@ -3839,7 +3839,6 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val arrayData = classOf[ArrayData].getName
     val i = ctx.freshName("i")
     val value = ctx.freshName("value")
     val size = ctx.freshName("size")
@@ -3905,9 +3904,9 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
            |$declareNullTrackVariables
            |int $size = 0;
            |$arrayBuilderClass $builder = new $arrayBuilderClass();
-           |$arrayData[] $arrays = new $arrayData[]{$array1, $array2};
+           |ArrayData[] $arrays = new ArrayData[]{$array1, $array2};
            |for (int $arrayDataIdx = 0; $arrayDataIdx < 2; $arrayDataIdx++) {
-           |  $arrayData $array = $arrays[$arrayDataIdx];
+           |  ArrayData $array = $arrays[$arrayDataIdx];
            |  for (int $i = 0; $i < $array.numElements(); $i++) {
            |    $processArray
            |  }
@@ -3918,7 +3917,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
     } else {
       nullSafeCodeGen(ctx, ev, (array1, array2) => {
         val expr = ctx.addReferenceObj("arrayUnionExpr", this)
-        s"${ev.value} = ($arrayData)$expr.nullSafeEval($array1, $array2);"
+        s"${ev.value} = (ArrayData)$expr.nullSafeEval($array1, $array2);"
       })
     }
   }
@@ -4084,7 +4083,6 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val arrayData = classOf[ArrayData].getName
     val i = ctx.freshName("i")
     val value = ctx.freshName("value")
     val size = ctx.freshName("size")
@@ -4198,7 +4196,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
     } else {
       nullSafeCodeGen(ctx, ev, (array1, array2) => {
         val expr = ctx.addReferenceObj("arrayIntersectExpr", this)
-        s"${ev.value} = ($arrayData)$expr.nullSafeEval($array1, $array2);"
+        s"${ev.value} = (ArrayData)$expr.nullSafeEval($array1, $array2);"
       })
     }
   }
@@ -4317,7 +4315,6 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val arrayData = classOf[ArrayData].getName
     val i = ctx.freshName("i")
     val value = ctx.freshName("value")
     val size = ctx.freshName("size")
@@ -4420,7 +4417,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
     } else {
       nullSafeCodeGen(ctx, ev, (array1, array2) => {
         val expr = ctx.addReferenceObj("arrayExceptExpr", this)
-        s"${ev.value} = ($arrayData)$expr.nullSafeEval($array1, $array2);"
+        s"${ev.value} = (ArrayData)$expr.nullSafeEval($array1, $array2);"
       })
     }
   }
