@@ -2418,6 +2418,7 @@ class RDD(object):
         """
         return self._jrdd.isBarrier()
 
+
 def _prepare_for_python_RDD(sc, command):
     # the serialized command will be compressed by broadcast
     ser = CloudPickleSerializer()
@@ -2438,6 +2439,7 @@ def _wrap_function(sc, func, deserializer, serializer, profiler=None):
     pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
     return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)
+
 
 class RDDBarrier(object):
 
@@ -2460,6 +2462,7 @@ class RDDBarrier(object):
             return f(iterator)
         jrdd = self._jrdd.barrier().mapPartitions(f, preservesPartitioning)
         return RDD(jrdd, self.rdd.ctx, self.rdd._jrdd_deserializer)
+
 
 class PipelinedRDD(RDD):
 
