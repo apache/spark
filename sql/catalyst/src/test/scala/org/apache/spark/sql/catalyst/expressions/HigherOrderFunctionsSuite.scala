@@ -112,11 +112,11 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(mapFilter(mii1, kGreaterThanV), Map())
     checkEvaluation(mapFilter(miin, kGreaterThanV), null)
 
-    val valueNull: (Expression, Expression) => Expression = (_, v) => v.isNull
+    val valueIsNull: (Expression, Expression) => Expression = (_, v) => v.isNull
 
-    checkEvaluation(mapFilter(mii0, valueNull), Map())
-    checkEvaluation(mapFilter(mii1, valueNull), Map(1 -> null, 3 -> null))
-    checkEvaluation(mapFilter(miin, valueNull), null)
+    checkEvaluation(mapFilter(mii0, valueIsNull), Map())
+    checkEvaluation(mapFilter(mii1, valueIsNull), Map(1 -> null, 3 -> null))
+    checkEvaluation(mapFilter(miin, valueIsNull), null)
 
     val msi0 = Literal.create(Map("abcdf" -> 5, "abc" -> 10, "" -> 0),
       MapType(StringType, IntegerType, valueContainsNull = false))

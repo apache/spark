@@ -141,6 +141,22 @@ trait UnaryHigherOrderFunction extends HigherOrderFunction with ExpectsInputType
   def expectingFunctionType: AbstractDataType = AnyDataType
 
   @transient lazy val functionForEval: Expression = functionsForEval.head
+
+  /**
+   * Called by [[eval]]. If a subclass keeps the default nullability, it can override this method
+   * in order to save null-check code.
+   */
+  protected def nullSafeEval(inputRow: InternalRow, input: Any): Any =
+    sys.error(s"UnaryHigherOrderFunction must override either eval or nullSafeEval")
+
+  override def eval(inputRow: InternalRow): Any = {
+    val value = input.eval(inputRow)
+    if (value == null) {
+      null
+    } else {
+      nullSafeEval(inputRow, value)
+    }
+  }
 }
 
 trait ArrayBasedUnaryHigherOrderFunction extends UnaryHigherOrderFunction {
@@ -199,24 +215,20 @@ case class ArrayTransform(
     (elementVar, indexVar)
   }
 
-  override def eval(input: InternalRow): Any = {
-    val arr = this.input.eval(input).asInstanceOf[ArrayData]
-    if (arr == null) {
-      null
-    } else {
-      val f = functionForEval
-      val result = new GenericArrayData(new Array[Any](arr.numElements))
-      var i = 0
-      while (i < arr.numElements) {
-        elementVar.value.set(arr.get(i, elementVar.dataType))
-        if (indexVar.isDefined) {
-          indexVar.get.value.set(i)
-        }
-        result.update(i, f.eval(input))
-        i += 1
+  override def nullSafeEval(inputRow: InternalRow, inputValue: Any): Any = {
+    val arr = inputValue.asInstanceOf[ArrayData]
+    val f = functionForEval
+    val result = new GenericArrayData(new Array[Any](arr.numElements))
+    var i = 0
+    while (i < arr.numElements) {
+      elementVar.value.set(arr.get(i, elementVar.dataType))
+      if (indexVar.isDefined) {
+        indexVar.get.value.set(i)
       }
-      result
+      result.update(i, f.eval(inputRow))
+      i += 1
     }
+    result
   }
 
   override def prettyName: String = "transform"
@@ -259,23 +271,20 @@ case class MapFilter(
 
   override def nullable: Boolean = input.nullable
 
-  override def eval(input: InternalRow): Any = {
-    val m = this.input.eval(input).asInstanceOf[MapData]
-    if (m == null) {
-      null
-    } else {
-      val retKeys = new mutable.ListBuffer[Any]
-      val retValues = new mutable.ListBuffer[Any]
-      m.foreach(keyType, valueType, (k, v) => {
-        keyVar.value.set(k)
-        valueVar.value.set(v)
-        if (functionForEval.eval(input).asInstanceOf[Boolean]) {
-          retKeys += k
-          retValues += v
-        }
-      })
-      ArrayBasedMapData(retKeys.toArray, retValues.toArray)
-    }
+  override def nullSafeEval(inputRow: InternalRow, value: Any): Any = {
+    val m = value.asInstanceOf[MapData]
+    val f = functionForEval
+    val retKeys = new mutable.ListBuffer[Any]
+    val retValues = new mutable.ListBuffer[Any]
+    m.foreach(keyType, valueType, (k, v) => {
+      keyVar.value.set(k)
+      valueVar.value.set(v)
+      if (f.eval(inputRow).asInstanceOf[Boolean]) {
+        retKeys += k
+        retValues += v
+      }
+    })
+    ArrayBasedMapData(retKeys.toArray, retValues.toArray)
   }
 
   override def dataType: DataType = input.dataType
