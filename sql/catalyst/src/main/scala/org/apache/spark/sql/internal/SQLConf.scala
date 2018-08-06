@@ -582,7 +582,7 @@ object SQLConf {
 
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed. Defaults to 100000")
-    .longConf
+    .intConf
     .createWithDefault(100000)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")

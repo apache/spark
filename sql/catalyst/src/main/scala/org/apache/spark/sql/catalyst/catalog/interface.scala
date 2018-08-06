@@ -162,7 +162,7 @@ case class CatalogTablePartition(
  * @param sortColumnNames the names of the columns that used to sort data in each bucket.
  */
 case class BucketSpec(
-    numBuckets: Long,
+    numBuckets: Int,
     bucketColumnNames: Seq[String],
     sortColumnNames: Seq[String]) {
   def conf: SQLConf = SQLConf.get
