@@ -1148,28 +1148,28 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df5.selectExpr("array_union(a, b)"), ans5)
 
     val df6 = Seq((null, Array("a"))).toDF("a", "b")
-    intercept[AnalysisException] {
+    assert(intercept[AnalysisException] {
       df6.select(array_union($"a", $"b"))
-    }
-    intercept[AnalysisException] {
+    }.getMessage.contains("data type mismatch"))
+    assert(intercept[AnalysisException] {
       df6.selectExpr("array_union(a, b)")
-    }
+    }.getMessage.contains("data type mismatch"))
 
     val df7 = Seq((null, null)).toDF("a", "b")
-    intercept[AnalysisException] {
+    assert(intercept[AnalysisException] {
       df7.select(array_union($"a", $"b"))
-    }
-    intercept[AnalysisException] {
+    }.getMessage.contains("data type mismatch"))
+    assert(intercept[AnalysisException] {
       df7.selectExpr("array_union(a, b)")
-    }
+    }.getMessage.contains("data type mismatch"))
 
     val df8 = Seq((Array(Array(1)), Array("a"))).toDF("a", "b")
-    intercept[AnalysisException] {
+    assert(intercept[AnalysisException] {
       df8.select(array_union($"a", $"b"))
-    }
-    intercept[AnalysisException] {
+    }.getMessage.contains("data type mismatch"))
+    assert(intercept[AnalysisException] {
       df8.selectExpr("array_union(a, b)")
-    }
+    }.getMessage.contains("data type mismatch"))
   }
 
   test("concat function - arrays") {
