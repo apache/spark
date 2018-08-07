@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.catalyst.{AliasIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
@@ -113,7 +114,7 @@ case class Generate(
   def qualifiedGeneratorOutput: Seq[Attribute] = {
     val qualifiedOutput = qualifier.map { q =>
       // prepend the new qualifier to the existed one
-      generatorOutput.map(a => a.withQualifier(Some(q)))
+      generatorOutput.map(a => a.withQualifier(Seq(q)))
     }.getOrElse(generatorOutput)
     val nullableOutput = qualifiedOutput.map {
       // if outer, make all attributes nullable, otherwise keep existing nullability
@@ -794,19 +795,37 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
 /**
  * Aliased subquery.
  *
- * @param alias the alias name for this subquery.
+ * @param name the alias identifier for this subquery.
  * @param child the logical plan of this subquery.
  */
 case class SubqueryAlias(
-    alias: String,
+    name: AliasIdentifier,
     child: LogicalPlan)
   extends OrderPreservingUnaryNode {
 
-  override def doCanonicalize(): LogicalPlan = child.canonicalized
+  def alias: String = name.identifier
 
-  override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
+  override def output: Seq[Attribute] = {
+    val qualifierList = name.database.map(Seq(_, alias)).getOrElse(Seq(alias))
+    child.output.map(_.withQualifier(qualifierList))
+  }
+  override def doCanonicalize(): LogicalPlan = child.canonicalized
 }
 
+object SubqueryAlias {
+  def apply(
+      identifier: String,
+      child: LogicalPlan): SubqueryAlias = {
+    SubqueryAlias(AliasIdentifier(identifier), child)
+  }
+
+  def apply(
+      identifier: String,
+      database: String,
+      child: LogicalPlan): SubqueryAlias = {
+    SubqueryAlias(AliasIdentifier(identifier, Some(database)), child)
+  }
+}
 /**
  * Sample the dataset.
  *
