@@ -41,7 +41,7 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
     assert(writer.commit().data.isEmpty)
   }
 
-  test("continuous writer") {
+  test("streaming writer") {
     val sink = new MemorySinkV2
     val writeSupport = new MemoryStreamingWriteSupport(
       sink, OutputMode.Append(), new StructType().add("i", "int"))
@@ -64,47 +64,24 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
     assert(sink.allData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7, 11, 22, 33))
   }
 
-  test("microbatch writer") {
-    val sink = new MemorySinkV2
-    val schema = new StructType().add("i", "int")
-    new MemoryBatchWriteSupport(sink, 0, OutputMode.Append(), schema).commit(
-      Array(
-        MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))),
-        MemoryWriterCommitMessage(1, Seq(Row(3), Row(4))),
-        MemoryWriterCommitMessage(2, Seq(Row(6), Row(7)))
-      ))
-    assert(sink.latestBatchId.contains(0))
-    assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7))
-    new MemoryBatchWriteSupport(sink, 19, OutputMode.Append(), schema).commit(
-      Array(
-        MemoryWriterCommitMessage(3, Seq(Row(11), Row(22))),
-        MemoryWriterCommitMessage(0, Seq(Row(33)))
-      ))
-    assert(sink.latestBatchId.contains(19))
-    assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(11, 22, 33))
-
-    assert(sink.allData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7, 11, 22, 33))
-  }
-
   test("writer metrics") {
     val sink = new MemorySinkV2
     val schema = new StructType().add("i", "int")
+    val writeSupport = new MemoryStreamingWriteSupport(
+      sink, OutputMode.Append(), schema)
     // batch 0
-    var writer = new MemoryWriter(sink, 0, OutputMode.Append(), schema)
-    writer.commit(
+    writeSupport.commit(0,
       Array(
         MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))),
         MemoryWriterCommitMessage(1, Seq(Row(3), Row(4))),
         MemoryWriterCommitMessage(2, Seq(Row(5), Row(6)))
       ))
-    assert(writer.getCustomMetrics.json() == "{\"numRows\":6}")
+    assert(writeSupport.getCustomMetrics.json() == "{\"numRows\":6}")
     // batch 1
-    writer = new MemoryWriter(sink, 1, OutputMode.Append(), schema
-    )
-    writer.commit(
+    writeSupport.commit(1,
       Array(
         MemoryWriterCommitMessage(0, Seq(Row(7), Row(8)))
       ))
-    assert(writer.getCustomMetrics.json() == "{\"numRows\":8}")
+    assert(writeSupport.getCustomMetrics.json() == "{\"numRows\":8}")
   }
 }

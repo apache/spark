@@ -134,26 +134,6 @@ class MemoryV2CustomMetrics(sink: MemorySinkV2) extends CustomMetrics {
   override def json(): String = Serialization.write(Map("numRows" -> sink.numRows))
 }
 
-class MemoryBatchWriteSupport(
-    sink: MemorySinkV2, batchId: Long, outputMode: OutputMode, schema: StructType)
-  extends BatchWriteSupport with Logging {
-
-  override def createBatchWriterFactory: MemoryWriterFactory = {
-    MemoryWriterFactory(outputMode, schema)
-  }
-
-  def commit(messages: Array[WriterCommitMessage]): Unit = {
-    val newRows = messages.flatMap {
-      case message: MemoryWriterCommitMessage => message.data
-    }
-    sink.write(batchId, outputMode, newRows)
-  }
-
-  override def abort(messages: Array[WriterCommitMessage]): Unit = {
-    // Don't accept any of the new input.
-  }
-}
-
 class MemoryStreamingWriteSupport(
     val sink: MemorySinkV2, outputMode: OutputMode, schema: StructType)
   extends StreamingWriteSupport with SupportsCustomWriterMetrics {
