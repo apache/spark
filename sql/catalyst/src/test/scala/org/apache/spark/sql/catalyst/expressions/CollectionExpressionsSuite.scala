@@ -1489,7 +1489,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Shuffle(as7, Some(0)), null)
     checkEvaluation(Shuffle(aa, Some(0)), Seq(Seq("e"), Seq("a", "b"), Seq("c", "d")))
 
-    val r = new Random()
+    val r = new Random(1234)
     val seed1 = Some(r.nextLong())
     assert(evaluateWithoutCodegen(Shuffle(ai0, seed1)) ===
       evaluateWithoutCodegen(Shuffle(ai0, seed1)))
