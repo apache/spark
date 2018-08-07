@@ -295,9 +295,9 @@ object ShuffleExchangeExec {
           sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
         }
       } else if (part.isInstanceOf[RangePartitioner[InternalRow, Null]] &&
-        part.asInstanceOf[RangePartitioner[InternalRow, Null]].hasSampledAll) {
+        part.asInstanceOf[RangePartitioner[InternalRow, Null]].getSampledArray != null) {
         sparkContext.
-          parallelize(part.asInstanceOf[RangePartitioner[InternalRow, Null]].sampledArray.toSeq)
+          parallelize(part.asInstanceOf[RangePartitioner[InternalRow, Null]].getSampledArray.toSeq)
       } else {
         rdd
       }

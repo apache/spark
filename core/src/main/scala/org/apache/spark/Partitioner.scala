@@ -155,9 +155,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
 
   private var ordering = implicitly[Ordering[K]]
 
-  var sampledArray: Array[K] = Array.empty
-
-  var hasSampledAll = false
+  private var sampledArray: Array[K] = _
 
   // An array of upper bounds for the first (partitions - 1) partitions
   private var rangeBounds: Array[K] = {
@@ -170,13 +168,13 @@ class RangePartitioner[K : Ordering : ClassTag, V](
       // Assume the input partitions are roughly balanced and over-sample a little bit.
       val sampleSizePerPartition = math.ceil(3.0 * sampleSize / rdd.partitions.length).toInt
       val (numItems, sketched) = RangePartitioner.sketch(rdd.map(_._1), sampleSizePerPartition)
-      // get the sampled data
-      sampledArray = sketched.foldLeft(sampledArray)((total, sample) => {
-        total ++ sample._3
-      })
+      val numSampled = sketched.map(_._3.length).sum
       // already got the whole data
-      if (numItems == sampledArray.length) {
-        hasSampledAll = true
+      if (numItems == numSampled) {
+        // get the sampled data
+        sampledArray = sketched.foldLeft(Array.empty[K])((total, sample) => {
+          total ++ sample._3
+        })
         Array.empty
       } else {
         // If a partition contains much more than the average number of items, we re-sample from it
@@ -209,6 +207,8 @@ class RangePartitioner[K : Ordering : ClassTag, V](
   }
 
   def numPartitions: Int = rangeBounds.length + 1
+
+  def getSampledArray: Array[K] = sampledArray
 
   private var binarySearch: ((Array[K], K) => Int) = CollectionsUtils.makeBinarySearch[K]
 
