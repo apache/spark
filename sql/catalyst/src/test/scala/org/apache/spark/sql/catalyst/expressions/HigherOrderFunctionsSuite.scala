@@ -121,6 +121,55 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       Seq("[1, 3, 5]", null, "[4, 6]"))
   }
 
+  test("MapFilter") {
+    def mapFilter(expr: Expression, f: (Expression, Expression) => Expression): Expression = {
+      val mt = expr.dataType.asInstanceOf[MapType]
+      MapFilter(expr, createLambda(mt.keyType, false, mt.valueType, mt.valueContainsNull, f))
+    }
+    val mii0 = Literal.create(Map(1 -> 0, 2 -> 10, 3 -> -1),
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val mii1 = Literal.create(Map(1 -> null, 2 -> 10, 3 -> null),
+      MapType(IntegerType, IntegerType, valueContainsNull = true))
+    val miin = Literal.create(null, MapType(IntegerType, IntegerType, valueContainsNull = false))
+
+    val kGreaterThanV: (Expression, Expression) => Expression = (k, v) => k > v
+
+    checkEvaluation(mapFilter(mii0, kGreaterThanV), Map(1 -> 0, 3 -> -1))
+    checkEvaluation(mapFilter(mii1, kGreaterThanV), Map())
+    checkEvaluation(mapFilter(miin, kGreaterThanV), null)
+
+    val valueIsNull: (Expression, Expression) => Expression = (_, v) => v.isNull
+
+    checkEvaluation(mapFilter(mii0, valueIsNull), Map())
+    checkEvaluation(mapFilter(mii1, valueIsNull), Map(1 -> null, 3 -> null))
+    checkEvaluation(mapFilter(miin, valueIsNull), null)
+
+    val msi0 = Literal.create(Map("abcdf" -> 5, "abc" -> 10, "" -> 0),
+      MapType(StringType, IntegerType, valueContainsNull = false))
+    val msi1 = Literal.create(Map("abcdf" -> 5, "abc" -> 10, "" -> null),
+      MapType(StringType, IntegerType, valueContainsNull = true))
+    val msin = Literal.create(null, MapType(StringType, IntegerType, valueContainsNull = false))
+
+    val isLengthOfKey: (Expression, Expression) => Expression = (k, v) => Length(k) === v
+
+    checkEvaluation(mapFilter(msi0, isLengthOfKey), Map("abcdf" -> 5, "" -> 0))
+    checkEvaluation(mapFilter(msi1, isLengthOfKey), Map("abcdf" -> 5))
+    checkEvaluation(mapFilter(msin, isLengthOfKey), null)
+
+    val mia0 = Literal.create(Map(1 -> Seq(0, 1, 2), 2 -> Seq(10), -3 -> Seq(-1, 0, -2, 3)),
+      MapType(IntegerType, ArrayType(IntegerType), valueContainsNull = false))
+    val mia1 = Literal.create(Map(1 -> Seq(0, 1, 2), 2 -> null, -3 -> Seq(-1, 0, -2, 3)),
+      MapType(IntegerType, ArrayType(IntegerType), valueContainsNull = true))
+    val mian = Literal.create(
+      null, MapType(IntegerType, ArrayType(IntegerType), valueContainsNull = false))
+
+    val customFunc: (Expression, Expression) => Expression = (k, v) => Size(v) + k > 3
+
+    checkEvaluation(mapFilter(mia0, customFunc), Map(1 -> Seq(0, 1, 2)))
+    checkEvaluation(mapFilter(mia1, customFunc), Map(1 -> Seq(0, 1, 2)))
+    checkEvaluation(mapFilter(mian, customFunc), null)
+  }
+
   test("ArrayFilter") {
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
     val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
