@@ -20,14 +20,16 @@ package org.apache.spark.sql.types
 import org.apache.spark.SparkFunSuite
 
 class MapTypeSuite extends SparkFunSuite {
-  test("SPARK-25031") {
+  test("SPARK-25031: MapType should produce current formatted string for complex types") {
 
-    val keyType: DataType = StructType(
-      Seq(StructField("a", DataTypes.IntegerType),
-          StructField("b", DataTypes.IntegerType)))
-    val valueType: DataType = StructType(
-      Seq(StructField("c", DataTypes.IntegerType),
-          StructField("d", DataTypes.IntegerType)))
+    val keyType: DataType = StructType(Seq(
+      StructField("a", DataTypes.IntegerType),
+      StructField("b", DataTypes.IntegerType)))
+
+    val valueType: DataType = StructType(Seq(
+      StructField("c", DataTypes.IntegerType),
+      StructField("d", DataTypes.IntegerType)))
+
     val builder = new StringBuilder
 
     MapType(keyType, valueType).buildFormattedString(prefix = "", builder = builder)
