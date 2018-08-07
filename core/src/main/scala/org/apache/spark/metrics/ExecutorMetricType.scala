@@ -19,6 +19,7 @@ package org.apache.spark.metrics
 import java.lang.management.{BufferPoolMXBean, ManagementFactory}
 import javax.management.ObjectName
 
+import org.apache.spark.executor.{ProcessTreeMetrics, ProcfsBasedSystems}
 import org.apache.spark.memory.MemoryManager
 
 /**
@@ -61,13 +62,13 @@ case object JVMOffHeapMemory extends ExecutorMetricType {
 
 case object ProcessTreeRSSMemory extends ExecutorMetricType {
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
-    memoryManager.pTreeInfo.getRSSInfo()
+    ExecutorMetricType.pTreeInfo.getRSSInfo()
   }
 }
 
 case object ProcessTreeVMemory extends ExecutorMetricType {
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
-    memoryManager.pTreeInfo.getVirtualMemInfo()
+    ExecutorMetricType.pTreeInfo.getVirtualMemInfo()
   }
 }
 
@@ -96,6 +97,8 @@ case object MappedPoolMemory extends MBeanExecutorMetricType(
   "java.nio:type=BufferPool,name=mapped")
 
 private[spark] object ExecutorMetricType {
+  final val pTreeInfo: ProcessTreeMetrics = new ProcfsBasedSystems
+
   // List of all executor metric types
   val values = IndexedSeq(
     JVMHeapMemory,
