@@ -64,9 +64,19 @@ object SmallDataSortBenchmark {
         .option("encoding", "UTF-8")
         .json(path.getAbsolutePath)
 
-      benchmark.addCase("sort", 10) { _ =>
-        val dataset = spark.read.json(path.getAbsolutePath)
-        dataset.createOrReplaceTempView("src")
+      val dataset = spark.read.json(path.getAbsolutePath)
+
+      dataset.createOrReplaceTempView("src")
+
+      benchmark.addCase("sort with optimization", 10) { _ =>
+        spark.conf.set("spark.sql.execution.rangeExchange.sampleCache.enabled", "true")
+        val result = spark.
+          sql(s"select * from src where key = $key order by value").collectAsList().size()
+
+      }
+
+      benchmark.addCase("sort without optimization", 10) { _ =>
+        spark.conf.set("spark.sql.execution.rangeExchange.sampleCache.enabled", "false")
         val result = spark.
           sql(s"select * from src where key = $key order by value").collectAsList().size()
 
