@@ -139,7 +139,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     rdd: RDD[_ <: Product2[K, V]],
     private var ascending: Boolean = true,
     val samplePointsPerPartitionHint: Int = 20,
-    val sampleCacheEnabled: Boolean = true)
+    val sampleCacheEnabled: Boolean = false)
   extends Partitioner {
 
   // A constructor declared in order to maintain backward compatibility for Java, when we add the
