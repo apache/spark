@@ -267,15 +267,13 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
   }
 }
 
-object GetMapValueUtil
-{
+/**
+ * Common base class for [[GetMapValue]] and [[ElementAt]].
+ */
+abstract class GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
   // todo: current search is O(n), improve it.
-  def getValueEval(
-      map: MapData,
-      key: Any,
-      keyType: DataType,
-      valueType: DataType,
-      ordering: Ordering[Any]): Any = {
+  def getValueEval(value: Any, ordinal: Any, keyType: DataType, ordering: Ordering[Any]): Any = {
+    val map = value.asInstanceOf[MapData]
     val length = map.numElements()
     val keys = map.keyArray()
     val values = map.valueArray()
@@ -283,7 +281,7 @@ object GetMapValueUtil
     var i = 0
     var found = false
     while (i < length && !found) {
-      if (ordering.equiv(keys.get(i, keyType), key)) {
+      if (ordering.equiv(keys.get(i, keyType), ordinal)) {
         found = true
       } else {
         i += 1
@@ -293,19 +291,8 @@ object GetMapValueUtil
     if (!found || values.isNullAt(i)) {
       null
     } else {
-      values.get(i, valueType)
+      values.get(i, dataType)
     }
-  }
-}
-
-
-/**
- * Common base class for [[GetMapValue]] and [[ElementAt]].
- */
-abstract class GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
-  // todo: current search is O(n), improve it.
-  def getValueEval(value: Any, ordinal: Any, keyType: DataType, ordering: Ordering[Any]): Any = {
-    GetMapValueUtil.getValueEval(value.asInstanceOf[MapData], ordinal, keyType, dataType, ordering)
   }
 
   def doGetValueGenCode(ctx: CodegenContext, ev: ExprCode, mapType: MapType): ExprCode = {

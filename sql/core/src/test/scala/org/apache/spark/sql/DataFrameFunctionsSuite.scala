@@ -2103,8 +2103,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(null)))
   }
 
-  test("map_zip_with function - invalid")
-  {
+  test("map_zip_with function - invalid") {
     val df = Seq(
       (Map(1 -> 2), Map(1 -> "a"), Map("a" -> "b"), Map(Map(1 -> 2) -> 2), 1)
     ).toDF("mii", "mis", "mss", "mmi", "i")

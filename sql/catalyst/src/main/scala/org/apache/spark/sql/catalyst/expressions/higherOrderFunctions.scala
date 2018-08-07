@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttrib
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.array.ByteArrayMethods
 
 /**
  * A named lambda variable.
@@ -392,8 +393,6 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 
   @transient lazy val MapType(_, rightValueType, _) = getMapType(right)
 
-  @transient lazy val arrayDataUnion = new ArrayDataUnion(keyType)
-
   @transient lazy val ordering = TypeUtils.getInterpretedOrdering(keyType)
 
   override def inputs: Seq[Expression] = left :: right :: Nil
@@ -444,19 +443,114 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     value2Var: NamedLambdaVariable),
     _) = function
 
+  private def keyTypeSupportsEquals = keyType match {
+    case BinaryType => false
+    case _: AtomicType => true
+    case _ => false
+  }
+
+  @transient private lazy val getKeysWithValueIndexes:
+      (ArrayData, ArrayData) => Seq[(Any, Array[Option[Int]])] = {
+    if (keyTypeSupportsEquals) {
+      getKeysWithIndexesFast
+    } else {
+      getKeysWithIndexesBruteForce
+    }
+  }
+
+  private def assertSizeOfArrayBuffer(size: Int): Unit = {
+    if (size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+      throw new RuntimeException(s"Unsuccessful try to zip maps with $size " +
+        s"unique keys due to exceeding the array size limit " +
+        s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+    }
+  }
+
+  private def getKeysWithIndexesFast(keys1: ArrayData, keys2: ArrayData) = {
+    val arrayBuffer = new mutable.ArrayBuffer[(Any, Array[Option[Int]])]
+    val hashMap = new mutable.OpenHashMap[Any, Array[Option[Int]]]
+    val keys = Array(keys1, keys2)
+    var z = 0
+    while(z < 2) {
+      var i = 0
+      val array = keys(z)
+      while (i < array.numElements()) {
+        val key = array.get(i, keyType)
+        hashMap.get(key) match {
+          case Some(indexes) =>
+            if (indexes(z).isEmpty) indexes(z) = Some(i)
+          case None =>
+            assertSizeOfArrayBuffer(arrayBuffer.size)
+            val indexes = Array[Option[Int]](None, None)
+            indexes(z) = Some(i)
+            hashMap.put(key, indexes)
+            arrayBuffer += Tuple2(key, indexes)
+        }
+        i += 1
+      }
+      z += 1
+    }
+    arrayBuffer
+  }
+
+  private def getKeysWithIndexesBruteForce(keys1: ArrayData, keys2: ArrayData) = {
+    val arrayBuffer = new mutable.ArrayBuffer[(Any, Array[Option[Int]])]
+    val keys = Array(keys1, keys2)
+    var z = 0
+    while(z < 2) {
+      var i = 0
+      val array = keys(z)
+      while (i < array.numElements()) {
+        val key = array.get(i, keyType)
+        var found = false
+        var j = 0
+        while (!found && j < arrayBuffer.size) {
+          val (bufferKey, indexes) = arrayBuffer(j)
+          if (ordering.equiv(bufferKey, key)) {
+            found = true
+            if(indexes(z).isEmpty) indexes(z) = Some(i)
+          }
+          j += 1
+        }
+        if (!found) {
+          assertSizeOfArrayBuffer(arrayBuffer.size)
+          val indexes = Array[Option[Int]](None, None)
+          indexes(z) = Some(i)
+          arrayBuffer += Tuple2(key, indexes)
+        }
+        i += 1
+      }
+      z += 1
+    }
+    arrayBuffer
+  }
+
+  private def getValue(valueData: ArrayData, eType: DataType, index: Option[Int]) = index match {
+    case Some(i) => valueData.get(i, eType)
+    case None => null
+  }
+
   private def nullSafeEval(inputRow: InternalRow, value1: Any, value2: Any): Any = {
     val mapData1 = value1.asInstanceOf[MapData]
     val mapData2 = value2.asInstanceOf[MapData]
-    val keys = arrayDataUnion(mapData1.keyArray(), mapData2.keyArray())
-    val values = new GenericArrayData(new Array[Any](keys.numElements()))
-    keys.foreach(keyType, (idx: Int, key: Any) => {
-      val v1 = GetMapValueUtil.getValueEval(mapData1, key, keyType, leftValueType, ordering)
-      val v2 = GetMapValueUtil.getValueEval(mapData2, key, keyType, rightValueType, ordering)
+    val keysWithIndexes = getKeysWithValueIndexes(mapData1.keyArray(), mapData2.keyArray())
+    val length = keysWithIndexes.length
+    val keys = new GenericArrayData(new Array[Any](length))
+    val values = new GenericArrayData(new Array[Any](length))
+    val valueData1 = mapData1.valueArray()
+    val valueData2 = mapData2.valueArray()
+    var i = 0
+    while(i < length) {
+      val (key, indexes) = keysWithIndexes(i)
+      val v1 = getValue(valueData1, leftValueType, indexes(0))
+      val v2 = getValue(valueData2, rightValueType, indexes(1))
       keyVar.value.set(key)
       value1Var.value.set(v1)
       value2Var.value.set(v2)
-      values.update(idx, functionForEval.eval(inputRow))
-    })
+      keys.update(i, key)
+      values.update(i, functionForEval.eval(inputRow))
+      i += 1
+    }
     new ArrayBasedMapData(keys, values)
   }
 

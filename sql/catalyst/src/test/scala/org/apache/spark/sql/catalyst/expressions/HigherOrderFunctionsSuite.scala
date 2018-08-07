@@ -45,13 +45,13 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   private def createLambda(
-    dt1: DataType,
-    nullable1: Boolean,
-    dt2: DataType,
-    nullable2: Boolean,
-    dt3: DataType,
-    nullable3: Boolean,
-    f: (Expression, Expression, Expression) => Expression): Expression = {
+      dt1: DataType,
+      nullable1: Boolean,
+      dt2: DataType,
+      nullable2: Boolean,
+      dt3: DataType,
+      nullable3: Boolean,
+      f: (Expression, Expression, Expression) => Expression): Expression = {
     val lv1 = NamedLambdaVariable("arg1", dt1, nullable1)
     val lv2 = NamedLambdaVariable("arg2", dt2, nullable2)
     val lv3 = NamedLambdaVariable("arg3", dt3, nullable3)
@@ -275,6 +275,39 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       Map("a" -> "aax", "b" -> null, "d" -> null))
     checkEvaluation(
       map_zip_with(mss0, mssn, concat),
+      null)
+
+    def b(data: Byte*): Array[Byte] = Array[Byte](data: _*)
+
+    val mbb0 = Literal.create(Map(b(1, 2) -> b(4), b(2, 1) -> b(5), b(1, 3) -> b(8)),
+      MapType(BinaryType, BinaryType, valueContainsNull = false))
+    val mbb1 = Literal.create(Map(b(2, 1) -> b(7), b(1, 2) -> b(3), b(1, 1) -> b(6)),
+      MapType(BinaryType, BinaryType, valueContainsNull = false))
+    val mbb2 = Literal.create(Map(b(1, 3) -> null, b(1, 2) -> b(2), b(2, 1) -> null),
+      MapType(BinaryType, BinaryType, valueContainsNull = true))
+    val mbb3 = Literal.create(Map(), MapType(BinaryType, BinaryType, valueContainsNull = false))
+    val mbb4 = MapFromArrays(
+      Literal.create(Seq(b(2, 1), b(2, 1)), ArrayType(BinaryType, false)),
+      Literal.create(Seq(b(1), b(9)), ArrayType(BinaryType, false)))
+    val mbbn = Literal.create(null, MapType(BinaryType, BinaryType, valueContainsNull = false))
+
+    checkEvaluation(
+      map_zip_with(mbb0, mbb1, concat),
+      Map(b(1, 2) -> b(1, 2, 4, 3), b(2, 1) -> b(2, 1, 5, 7), b(1, 3) -> null, b(1, 1) -> null))
+    checkEvaluation(
+      map_zip_with(mbb1, mbb2, concat),
+      Map(b(2, 1) -> null, b(1, 2) -> b(1, 2, 3, 2), b(1, 1) -> null, b(1, 3) -> null))
+    checkEvaluation(
+      map_zip_with(mbb0, mbb3, concat),
+      Map(b(1, 2) -> null, b(2, 1) -> null, b(1, 3) -> null))
+    checkEvaluation(
+      map_zip_with(mbb0, mbb4, concat),
+      Map(b(1, 2) -> null, b(2, 1) -> b(2, 1, 5, 1), b(1, 3) -> null))
+    checkEvaluation(
+      map_zip_with(mbb4, mbb0, concat),
+      Map(b(2, 1) -> b(2, 1, 1, 5), b(1, 2) -> null, b(1, 3) -> null))
+    checkEvaluation(
+      map_zip_with(mbb0, mbbn, concat),
       null)
   }
 }
