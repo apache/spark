@@ -1437,6 +1437,21 @@ object SQLConf {
     .intConf
     .createWithDefault(20)
 
+  object AvroOutputTimestampType extends Enumeration {
+    val TIMESTAMP_MICROS, TIMESTAMP_MILLIS = Value
+  }
+
+  val AVRO_OUTPUT_TIMESTAMP_TYPE = buildConf("spark.sql.avro.outputTimestampType")
+    .doc("Sets which Avro timestamp type to use when Spark writes data to Avro files. " +
+      "TIMESTAMP_MICROS is a logical timestamp type in Avro, which stores number of " +
+      "microseconds from the Unix epoch. TIMESTAMP_MILLIS is also logical, but with " +
+      "millisecond precision, which means Spark has to truncate the microsecond portion of its " +
+      "timestamp value.")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(AvroOutputTimestampType.values.map(_.toString))
+    .createWithDefault(AvroOutputTimestampType.TIMESTAMP_MICROS.toString)
+
   val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
     .doc("Compression codec used in writing of AVRO files. Supported codecs: " +
       "uncompressed, deflate, snappy, bzip2 and xz. Default codec is snappy.")
@@ -1451,6 +1466,16 @@ object SQLConf {
     .intConf
     .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
     .createWithDefault(Deflater.DEFAULT_COMPRESSION)
+
+  val LEGACY_SETOPS_PRECEDENCE_ENABLED =
+    buildConf("spark.sql.legacy.setopsPrecedence.enabled")
+      .internal()
+      .doc("When set to true and the order of evaluation is not specified by parentheses, the " +
+        "set operations are performed from left to right as they appear in the query. When set " +
+        "to false and order of evaluation is not specified by parentheses, INTERSECT operations " +
+        "are performed before any UNION, EXCEPT and MINUS operations.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
@@ -1598,6 +1623,8 @@ class SQLConf extends Serializable with Logging {
   def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
 
   def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
+
+  def codegenComments: Boolean = getConf(StaticSQLConf.CODEGEN_COMMENTS)
 
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
@@ -1837,9 +1864,14 @@ class SQLConf extends Serializable with Logging {
 
   def replEagerEvalTruncate: Int = getConf(SQLConf.REPL_EAGER_EVAL_TRUNCATE)
 
+  def avroOutputTimestampType: AvroOutputTimestampType.Value =
+    AvroOutputTimestampType.withName(getConf(SQLConf.AVRO_OUTPUT_TIMESTAMP_TYPE))
+
   def avroCompressionCodec: String = getConf(SQLConf.AVRO_COMPRESSION_CODEC)
 
   def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
+
+  def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

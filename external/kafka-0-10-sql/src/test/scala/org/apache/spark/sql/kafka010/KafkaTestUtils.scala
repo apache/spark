@@ -304,6 +304,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     props.put("port", brokerPort.toString)
     props.put("log.dir", Utils.createTempDir().getAbsolutePath)
     props.put("zookeeper.connect", zkAddress)
+    props.put("zookeeper.connection.timeout.ms", "60000")
     props.put("log.flush.interval.messages", "1")
     props.put("replica.socket.timeout.ms", "1500")
     props.put("delete.topic.enable", "true")

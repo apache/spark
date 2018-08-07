@@ -180,10 +180,10 @@ class ColumnPruningSuite extends PlanTest {
 
   test("Column pruning on except/intersect/distinct") {
     val input = LocalRelation('a.int, 'b.string, 'c.double)
-    val query = Project('a :: Nil, Except(input, input)).analyze
+    val query = Project('a :: Nil, Except(input, input, isAll = false)).analyze
     comparePlans(Optimize.execute(query), query)
 
-    val query2 = Project('a :: Nil, Intersect(input, input)).analyze
+    val query2 = Project('a :: Nil, Intersect(input, input, isAll = false)).analyze
     comparePlans(Optimize.execute(query2), query2)
     val query3 = Project('a :: Nil, Distinct(input)).analyze
     comparePlans(Optimize.execute(query3), query3)

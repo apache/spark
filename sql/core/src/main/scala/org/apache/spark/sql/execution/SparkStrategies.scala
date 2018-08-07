@@ -535,14 +535,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Intersect(left, right, true) =>
         throw new IllegalStateException(
           "logical intersect operator should have been replaced by union, aggregate" +
-            "and generate operators in the optimizer")
+            " and generate operators in the optimizer")
       case logical.Except(left, right, false) =>
         throw new IllegalStateException(
           "logical except operator should have been replaced by anti-join in the optimizer")
       case logical.Except(left, right, true) =>
         throw new IllegalStateException(
           "logical except (all) operator should have been replaced by union, aggregate" +
-            "and generate operators in the optimizer")
+            " and generate operators in the optimizer")
 
       case logical.DeserializeToObject(deserializer, objAttr, child) =>
         execution.DeserializeToObjectExec(deserializer, objAttr, planLater(child)) :: Nil

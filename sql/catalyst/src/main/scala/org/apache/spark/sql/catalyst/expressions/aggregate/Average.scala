@@ -68,7 +68,7 @@ abstract class AverageLike(child: Expression) extends DeclarativeAggregate {
     Add(
       sum,
       coalesce(child.cast(sumDataType), Literal(0).cast(sumDataType))),
-    /* count = */ If(IsNull(child), count, count + 1L)
+    /* count = */ If(child.isNull, count, count + 1L)
   )
 
   override lazy val updateExpressions = updateExpressionsDef

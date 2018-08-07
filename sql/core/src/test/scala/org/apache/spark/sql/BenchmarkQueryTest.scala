@@ -54,7 +54,7 @@ abstract class BenchmarkQueryTest extends QueryTest with SharedSQLContext with B
     plan foreach {
       case s: WholeStageCodegenExec =>
         codegenSubtrees += s
-      case s => s
+      case _ =>
     }
     codegenSubtrees.toSeq.foreach { subtree =>
       val code = subtree.doCodeGen()._2
