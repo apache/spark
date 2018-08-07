@@ -91,7 +91,7 @@ case class ConcatWs(children: Seq[Expression])
       val args = ctx.freshName("args")
 
       val inputs = strings.zipWithIndex.map { case (eval, index) =>
-        if (eval.isNull != "true") {
+        if (eval.isNull != TrueLiteral) {
           s"""
              ${eval.code}
              if (!${eval.isNull}) {
@@ -123,14 +123,14 @@ case class ConcatWs(children: Seq[Expression])
         child.dataType match {
           case StringType =>
             ("", // we count all the StringType arguments num at once below.
-             if (eval.isNull == "true") {
+             if (eval.isNull == TrueLiteral) {
                ""
              } else {
                s"$array[$idxVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.value};"
              })
           case _: ArrayType =>
             val size = ctx.freshName("n")
-            if (eval.isNull == "true") {
+            if (eval.isNull == TrueLiteral) {
               ("", "")
             } else {
               (s"""

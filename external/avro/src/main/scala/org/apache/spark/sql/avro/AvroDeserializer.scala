@@ -84,6 +84,9 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
       case (INT, IntegerType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[Int])
 
+      case (INT, DateType) => (updater, ordinal, value) =>
+        updater.setInt(ordinal, value.asInstanceOf[Int])
+
       case (LONG, LongType) => (updater, ordinal, value) =>
         updater.setLong(ordinal, value.asInstanceOf[Long])
 
@@ -100,6 +103,8 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
           s"Cannot convert Avro logical type ${other} to Catalyst Timestamp type.")
       }
 
+      // Before we upgrade Avro to 1.8 for logical type support, spark-avro converts Long to Date.
+      // For backward compatibility, we still keep this conversion.
       case (LONG, DateType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, (value.asInstanceOf[Long] / DateTimeUtils.MILLIS_PER_DAY).toInt)
 

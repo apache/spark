@@ -33,6 +33,7 @@ import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
@@ -66,6 +67,27 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   // writer.append({"timestamp_millis": 666000, "timestamp_micros": 999000000, "long": 777000})
   // writer.close()
   val timestampAvro = testFile("timestamp.avro")
+
+  // The test file date.avro is generated via following Python code:
+  // import json
+  // import avro.schema
+  // from avro.datafile import DataFileWriter
+  // from avro.io import DatumWriter
+  //
+  // write_schema = avro.schema.parse(json.dumps({
+  //   "namespace": "logical",
+  //   "type": "record",
+  //   "name": "test",
+  //   "fields": [
+  //   {"name": "date", "type": {"type": "int", "logicalType": "date"}}
+  //   ]
+  // }))
+  //
+  // writer = DataFileWriter(open("date.avro", "wb"), DatumWriter(), write_schema)
+  // writer.append({"date": 7})
+  // writer.append({"date": 365})
+  // writer.close()
+  val dateAvro = testFile("date.avro")
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -350,9 +372,35 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val df = spark.createDataFrame(rdd, schema)
       df.write.format("avro").save(dir.toString)
       assert(spark.read.format("avro").load(dir.toString).count == rdd.count)
-      assert(
-        spark.read.format("avro").load(dir.toString).select("date").collect().map(_(0)).toSet ==
-        Array(null, 1451865600000L, 1459987200000L).toSet)
+      checkAnswer(
+        spark.read.format("avro").load(dir.toString).select("date"),
+        Seq(Row(null), Row(new Date(1451865600000L)), Row(new Date(1459987200000L))))
+    }
+  }
+
+  test("Logical type: date") {
+    val expected = Seq(7, 365).map(t => Row(DateTimeUtils.toJavaDate(t)))
+    val df = spark.read.format("avro").load(dateAvro)
+
+    checkAnswer(df, expected)
+
+    val avroSchema = s"""
+      {
+        "namespace": "logical",
+        "type": "record",
+        "name": "test",
+        "fields": [
+          {"name": "date", "type": {"type": "int", "logicalType": "date"}}
+        ]
+      }
+    """
+
+    checkAnswer(spark.read.format("avro").option("avroSchema", avroSchema).load(dateAvro),
+      expected)
+
+    withTempPath { dir =>
+      df.write.format("avro").save(dir.toString)
+      checkAnswer(spark.read.format("avro").load(dir.toString), expected)
     }
   }
 
