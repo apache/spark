@@ -136,7 +136,7 @@ trait HigherOrderFunction extends Expression {
 /**
  * Trait for functions having as input one argument and one function.
  */
-trait UnaryHigherOrderFunction extends HigherOrderFunction with ExpectsInputTypes {
+trait SimpleHigherOrderFunction extends HigherOrderFunction with ExpectsInputTypes {
 
   def input: Expression
 
@@ -167,14 +167,14 @@ trait UnaryHigherOrderFunction extends HigherOrderFunction with ExpectsInputType
   }
 }
 
-trait ArrayBasedUnaryHigherOrderFunction extends UnaryHigherOrderFunction {
+trait ArrayBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, expectingFunctionType)
 }
 
-trait MapBasedUnaryHigherOrderFunction extends UnaryHigherOrderFunction {
+trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
   override def inputTypes: Seq[AbstractDataType] = Seq(MapType, expectingFunctionType)
 
-  @transient val (keyType, valueType, valueContainsNull) = input.dataType match {
+  def keyValueArgumentType(dt: DataType): (DataType, DataType, Boolean) = dt match {
     case MapType(kType, vType, vContainsNull) => (kType, vType, vContainsNull)
     case _ =>
       val MapType(kType, vType, vContainsNull) = MapType.defaultConcreteType
@@ -211,7 +211,7 @@ object ArrayBasedHigherOrderFunction {
 case class ArrayTransform(
     input: Expression,
     function: Expression)
-  extends ArrayBasedUnaryHigherOrderFunction with CodegenFallback {
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
   override def nullable: Boolean = input.nullable
 
@@ -270,12 +270,14 @@ since = "2.4.0")
 case class MapFilter(
     input: Expression,
     function: Expression)
-  extends MapBasedUnaryHigherOrderFunction with CodegenFallback {
+  extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
 
   @transient lazy val (keyVar, valueVar) = {
     val args = function.asInstanceOf[LambdaFunction].arguments
     (args.head.asInstanceOf[NamedLambdaVariable], args.tail.head.asInstanceOf[NamedLambdaVariable])
   }
+
+  @transient val (keyType, valueType, valueContainsNull) = keyValueArgumentType(input.dataType)
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): MapFilter = {
     copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
@@ -320,7 +322,7 @@ case class MapFilter(
 case class ArrayFilter(
     input: Expression,
     function: Expression)
-  extends ArrayBasedUnaryHigherOrderFunction with CodegenFallback {
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
   override def nullable: Boolean = input.nullable
 
