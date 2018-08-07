@@ -318,12 +318,18 @@ object TypeCoercion {
    */
   object WidenSetOperationTypes extends Rule[LogicalPlan] {
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-      case s @ SetOperation(left, right) if s.childrenResolved &&
-          left.output.length == right.output.length && !s.resolved =>
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case s @ Except(left, right, isAll) if s.childrenResolved &&
+        left.output.length == right.output.length && !s.resolved =>
         val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
         assert(newChildren.length == 2)
-        s.makeCopy(Array(newChildren.head, newChildren.last))
+        Except(newChildren.head, newChildren.last, isAll)
+
+      case s @ Intersect(left, right, isAll) if s.childrenResolved &&
+        left.output.length == right.output.length && !s.resolved =>
+        val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
+        assert(newChildren.length == 2)
+        Intersect(newChildren.head, newChildren.last, isAll)
 
       case s: Union if s.childrenResolved &&
           s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
@@ -391,7 +397,7 @@ object TypeCoercion {
     }
 
     override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -443,27 +449,16 @@ object TypeCoercion {
    *    Analysis Exception will be raised at the type checking phase.
    */
   case class InConversion(conf: SQLConf) extends TypeCoercionRule {
-    private def flattenExpr(expr: Expression): Seq[Expression] = {
-      expr match {
-        // Multi columns in IN clause is represented as a CreateNamedStruct.
-        // flatten the named struct to get the list of expressions.
-        case cns: CreateNamedStruct => cns.valExprs
-        case expr => Seq(expr)
-      }
-    }
-
     override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
       // Handle type casting required between value expression and subquery output
       // in IN subquery.
-      case i @ In(a, Seq(ListQuery(sub, children, exprId, _)))
-        if !i.resolved && flattenExpr(a).length == sub.output.length =>
-        // LHS is the value expression of IN subquery.
-        val lhs = flattenExpr(a)
-
+      case i @ InSubquery(lhs, ListQuery(sub, children, exprId, _))
+          if !i.resolved && lhs.length == sub.output.length =>
+        // LHS is the value expressions of IN subquery.
         // RHS is the subquery output.
         val rhs = sub.output
 
@@ -479,20 +474,13 @@ object TypeCoercion {
             case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
             case (e, _) => e
           }
-          val castedLhs = lhs.zip(commonTypes).map {
+          val newLhs = lhs.zip(commonTypes).map {
             case (e, dt) if e.dataType != dt => Cast(e, dt)
             case (e, _) => e
           }
 
-          // Before constructing the In expression, wrap the multi values in LHS
-          // in a CreatedNamedStruct.
-          val newLhs = castedLhs match {
-            case Seq(lhs) => lhs
-            case _ => CreateStruct(castedLhs)
-          }
-
           val newSub = Project(castedRhs, sub)
-          In(newLhs, Seq(ListQuery(newSub, children, exprId, newSub.output)))
+          InSubquery(newLhs, ListQuery(newSub, children, exprId, newSub.output))
         } else {
           i
         }
@@ -512,7 +500,7 @@ object TypeCoercion {
     private val trueValues = Seq(1.toByte, 1.toShort, 1, 1L, Decimal.ONE)
     private val falseValues = Seq(0.toByte, 0.toShort, 0, 0L, Decimal.ZERO)
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -555,7 +543,7 @@ object TypeCoercion {
   object FunctionArgumentConversion extends TypeCoercionRule {
 
     override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -670,7 +658,7 @@ object TypeCoercion {
    */
   object Division extends TypeCoercionRule {
     override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who has not been resolved yet,
       // as this is an extra rule which should be applied at last.
       case e if !e.childrenResolved => e
@@ -693,7 +681,7 @@ object TypeCoercion {
    */
   object CaseWhenCoercion extends TypeCoercionRule {
     override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case c: CaseWhen if c.childrenResolved && !haveSameType(c.inputTypesForMerging) =>
         val maybeCommonType = findWiderCommonType(c.inputTypesForMerging)
         maybeCommonType.map { commonType =>
@@ -711,7 +699,7 @@ object TypeCoercion {
    */
   object IfCoercion extends TypeCoercionRule {
     override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case e if !e.childrenResolved => e
       // Find tightest common type for If, if the true value and false value have different types.
       case i @ If(pred, left, right) if !haveSameType(i.inputTypesForMerging) =>
@@ -731,7 +719,7 @@ object TypeCoercion {
    * Coerces NullTypes in the Stack expression to the column types of the corresponding positions.
    */
   object StackCoercion extends TypeCoercionRule {
-    override def coerceTypes(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    override def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case s @ Stack(children) if s.childrenResolved && s.hasFoldableNumRows =>
         Stack(children.zipWithIndex.map {
           // The first child is the number of rows for stack.
@@ -751,7 +739,8 @@ object TypeCoercion {
    */
   case class ConcatCoercion(conf: SQLConf) extends TypeCoercionRule {
 
-    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan transform { case p =>
+    override protected def coerceTypes(
+      plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown { case p =>
       p transformExpressionsUp {
         // Skip nodes if unresolved or empty children
         case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
@@ -773,7 +762,8 @@ object TypeCoercion {
    */
   case class EltCoercion(conf: SQLConf) extends TypeCoercionRule {
 
-    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan transform { case p =>
+    override protected def coerceTypes(
+      plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown { case p =>
       p transformExpressionsUp {
         // Skip nodes if unresolved or not enough children
         case c @ Elt(children) if !c.childrenResolved || children.size < 2 => c
@@ -801,7 +791,7 @@ object TypeCoercion {
 
     private val acceptedTypes = Seq(DateType, TimestampType, StringType)
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -822,7 +812,7 @@ object TypeCoercion {
     private def rejectTzInString = conf.getConf(SQLConf.REJECT_TIMEZONE_IN_STRING)
 
     override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -961,7 +951,7 @@ object TypeCoercion {
    */
   object WindowFrameCoercion extends TypeCoercionRule {
     override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case s @ WindowSpecDefinition(_, Seq(order), SpecifiedWindowFrame(RangeFrame, lower, upper))
           if order.resolved =>
         s.copy(frameSpecification = SpecifiedWindowFrame(
@@ -999,7 +989,7 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
 
   protected def coerceTypes(plan: LogicalPlan): LogicalPlan
 
-  private def propagateTypes(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  private def propagateTypes(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // No propagation required for leaf nodes.
     case q: LogicalPlan if q.children.isEmpty => q
 

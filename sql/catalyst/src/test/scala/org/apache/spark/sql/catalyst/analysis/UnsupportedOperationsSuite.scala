@@ -575,14 +575,14 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   // Except: *-stream not supported
   testBinaryOperationInStreamingPlan(
     "except",
-    _.except(_),
+    _.except(_, isAll = false),
     streamStreamSupported = false,
     batchStreamSupported = false)
 
   // Intersect: stream-stream not supported
   testBinaryOperationInStreamingPlan(
     "intersect",
-    _.intersect(_),
+    _.intersect(_, isAll = false),
     streamStreamSupported = false)
 
   // Sort: supported only on batch subplans and after aggregation on streaming plan + complete mode

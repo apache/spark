@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExc
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
-import org.apache.spark.sql.test.SQLTestData.TestData2
+import org.apache.spark.sql.test.SQLTestData.{NullInts, NullStrings, TestData2}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -629,6 +629,74 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df4.schema.forall(!_.nullable))
   }
 
+  test("except all") {
+    checkAnswer(
+      lowerCaseData.exceptAll(upperCaseData),
+      Row(1, "a") ::
+      Row(2, "b") ::
+      Row(3, "c") ::
+      Row(4, "d") :: Nil)
+    checkAnswer(lowerCaseData.exceptAll(lowerCaseData), Nil)
+    checkAnswer(upperCaseData.exceptAll(upperCaseData), Nil)
+
+    // check null equality
+    checkAnswer(
+      nullInts.exceptAll(nullInts.filter("0 = 1")),
+      nullInts)
+    checkAnswer(
+      nullInts.exceptAll(nullInts),
+      Nil)
+
+    // check that duplicate values are preserved
+    checkAnswer(
+      allNulls.exceptAll(allNulls.filter("0 = 1")),
+      Row(null) :: Row(null) :: Row(null) :: Row(null) :: Nil)
+    checkAnswer(
+      allNulls.exceptAll(allNulls.limit(2)),
+      Row(null) :: Row(null) :: Nil)
+
+    // check that duplicates are retained.
+    val df = spark.sparkContext.parallelize(
+      NullStrings(1, "id1") ::
+      NullStrings(1, "id1") ::
+      NullStrings(2, "id1") ::
+      NullStrings(3, null) :: Nil).toDF("id", "value")
+
+    checkAnswer(
+      df.exceptAll(df.filter("0 = 1")),
+      Row(1, "id1") ::
+      Row(1, "id1") ::
+      Row(2, "id1") ::
+      Row(3, null) :: Nil)
+
+    // check if the empty set on the left side works
+    checkAnswer(
+      allNulls.filter("0 = 1").exceptAll(allNulls),
+      Nil)
+
+  }
+
+  test("exceptAll - nullability") {
+    val nonNullableInts = Seq(Tuple1(11), Tuple1(3)).toDF()
+    assert(nonNullableInts.schema.forall(!_.nullable))
+
+    val df1 = nonNullableInts.exceptAll(nullInts)
+    checkAnswer(df1, Row(11) :: Nil)
+    assert(df1.schema.forall(!_.nullable))
+
+    val df2 = nullInts.exceptAll(nonNullableInts)
+    checkAnswer(df2, Row(1) :: Row(2) :: Row(null) :: Nil)
+    assert(df2.schema.forall(_.nullable))
+
+    val df3 = nullInts.exceptAll(nullInts)
+    checkAnswer(df3, Nil)
+    assert(df3.schema.forall(_.nullable))
+
+    val df4 = nonNullableInts.exceptAll(nonNullableInts)
+    checkAnswer(df4, Nil)
+    assert(df4.schema.forall(!_.nullable))
+  }
+
   test("intersect") {
     checkAnswer(
       lowerCaseData.intersect(lowerCaseData),
@@ -677,6 +745,60 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df3.schema.forall(_.nullable))
 
     val df4 = nonNullableInts.intersect(nonNullableInts)
+    checkAnswer(df4, Row(1) :: Row(3) :: Nil)
+    assert(df4.schema.forall(!_.nullable))
+  }
+
+  test("intersectAll") {
+    checkAnswer(
+      lowerCaseDataWithDuplicates.intersectAll(lowerCaseDataWithDuplicates),
+      Row(1, "a") ::
+      Row(2, "b") ::
+      Row(2, "b") ::
+      Row(3, "c") ::
+      Row(3, "c") ::
+      Row(3, "c") ::
+      Row(4, "d") :: Nil)
+    checkAnswer(lowerCaseData.intersectAll(upperCaseData), Nil)
+
+    // check null equality
+    checkAnswer(
+      nullInts.intersectAll(nullInts),
+      Row(1) ::
+      Row(2) ::
+      Row(3) ::
+      Row(null) :: Nil)
+
+    // Duplicate nulls are preserved.
+    checkAnswer(
+      allNulls.intersectAll(allNulls),
+      Row(null) :: Row(null) :: Row(null) :: Row(null) :: Nil)
+
+    val df_left = Seq(1, 2, 2, 3, 3, 4).toDF("id")
+    val df_right = Seq(1, 2, 2, 3).toDF("id")
+
+    checkAnswer(
+      df_left.intersectAll(df_right),
+      Row(1) :: Row(2) :: Row(2) :: Row(3) :: Nil)
+  }
+
+  test("intersectAll - nullability") {
+    val nonNullableInts = Seq(Tuple1(1), Tuple1(3)).toDF()
+    assert(nonNullableInts.schema.forall(!_.nullable))
+
+    val df1 = nonNullableInts.intersectAll(nullInts)
+    checkAnswer(df1, Row(1) :: Row(3) :: Nil)
+    assert(df1.schema.forall(!_.nullable))
+
+    val df2 = nullInts.intersectAll(nonNullableInts)
+    checkAnswer(df2, Row(1) :: Row(3) :: Nil)
+    assert(df2.schema.forall(!_.nullable))
+
+    val df3 = nullInts.intersectAll(nullInts)
+    checkAnswer(df3, Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
+    assert(df3.schema.forall(_.nullable))
+
+    val df4 = nonNullableInts.intersectAll(nonNullableInts)
     checkAnswer(df4, Row(1) :: Row(3) :: Nil)
     assert(df4.schema.forall(!_.nullable))
   }

@@ -58,4 +58,6 @@ private[spark] object KubernetesUtils {
       case _ => uri
     }
   }
+
+  def parseMasterUrl(url: String): String = url.substring("k8s://".length)
 }

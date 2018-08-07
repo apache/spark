@@ -11,10 +11,10 @@ create temporary view years as select * from values
   (2013, 2)
   as years(y, s);
 
-create temporary view yearsWithArray as select * from values
-  (2012, array(1, 1)),
-  (2013, array(2, 2))
-  as yearsWithArray(y, a);
+create temporary view yearsWithComplexTypes as select * from values
+  (2012, array(1, 1), map('1', 1), struct(1, 'a')),
+  (2013, array(2, 2), map('2', 2), struct(2, 'b'))
+  as yearsWithComplexTypes(y, a, m, s);
 
 -- pivot courses
 SELECT * FROM (
@@ -204,7 +204,7 @@ PIVOT (
 SELECT * FROM (
   SELECT course, year, a
   FROM courseSales
-  JOIN yearsWithArray ON year = y
+  JOIN yearsWithComplexTypes ON year = y
 )
 PIVOT (
   min(a)
@@ -215,9 +215,75 @@ PIVOT (
 SELECT * FROM (
   SELECT course, year, y, a
   FROM courseSales
-  JOIN yearsWithArray ON year = y
+  JOIN yearsWithComplexTypes ON year = y
 )
 PIVOT (
   max(a)
   FOR (y, course) IN ((2012, 'dotNET'), (2013, 'Java'))
+);
+
+-- pivot on pivot column of array type
+SELECT * FROM (
+  SELECT earnings, year, a
+  FROM courseSales
+  JOIN yearsWithComplexTypes ON year = y
+)
+PIVOT (
+  sum(earnings)
+  FOR a IN (array(1, 1), array(2, 2))
+);
+
+-- pivot on multiple pivot columns containing array type
+SELECT * FROM (
+  SELECT course, earnings, year, a
+  FROM courseSales
+  JOIN yearsWithComplexTypes ON year = y
+)
+PIVOT (
+  sum(earnings)
+  FOR (course, a) IN (('dotNET', array(1, 1)), ('Java', array(2, 2)))
+);
+
+-- pivot on pivot column of struct type
+SELECT * FROM (
+  SELECT earnings, year, s
+  FROM courseSales
+  JOIN yearsWithComplexTypes ON year = y
+)
+PIVOT (
+  sum(earnings)
+  FOR s IN ((1, 'a'), (2, 'b'))
+);
+
+-- pivot on multiple pivot columns containing struct type
+SELECT * FROM (
+  SELECT course, earnings, year, s
+  FROM courseSales
+  JOIN yearsWithComplexTypes ON year = y
+)
+PIVOT (
+  sum(earnings)
+  FOR (course, s) IN (('dotNET', (1, 'a')), ('Java', (2, 'b')))
+);
+
+-- pivot on pivot column of map type
+SELECT * FROM (
+  SELECT earnings, year, m
+  FROM courseSales
+  JOIN yearsWithComplexTypes ON year = y
+)
+PIVOT (
+  sum(earnings)
+  FOR m IN (map('1', 1), map('2', 2))
+);
+
+-- pivot on multiple pivot columns containing map type
+SELECT * FROM (
+  SELECT course, earnings, year, m
+  FROM courseSales
+  JOIN yearsWithComplexTypes ON year = y
+)
+PIVOT (
+  sum(earnings)
+  FOR (course, m) IN (('dotNET', map('1', 1)), ('Java', map('2', 2)))
 );
