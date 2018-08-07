@@ -363,7 +363,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         for (file <- logInfos) {
           tasks += replayExecutor.submit(new Runnable {
             override def run(): Unit = mergeApplicationListing(file)
-          }, Unit)
+          })
         }
       } catch {
         // let the iteration over logInfos break, since an exception on
