@@ -1976,6 +1976,40 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /**
+   * Returns a qualified path object. API ported from org.apache.hadoop.fs.Path class.
+   *
+   * @param defaultUri default uri corresponding to the filesystem provided.
+   * @param workingDir the working directory for the particular child path wd-relative names.
+   * @param path Path instance based on the path string specified by the user.
+   * @return qualified path object
+   */
+  def makeQualified(defaultUri: URI, workingDir: Path, path: Path): Path = {
+    val pathUri = {
+      if (!path.isAbsolute()) new Path(workingDir, path).toUri() else path.toUri()
+    }
+    if (pathUri.getScheme == null || pathUri.getAuthority == null &&
+          defaultUri.getAuthority != null) {
+        val scheme = if (pathUri.getScheme == null) defaultUri.getScheme else pathUri.getScheme
+        val authority = {
+          if (pathUri.getAuthority == null) {
+            if (defaultUri.getAuthority == null) "" else defaultUri.getAuthority
+          } else {
+            pathUri.getAuthority
+          }
+        }
+        try {
+          val newUri = new URI(scheme, authority, pathUri.getPath, pathUri.getFragment)
+          new Path(newUri)
+        } catch {
+          case e: URISyntaxException =>
+            throw new IllegalArgumentException(e)
+        }
+      } else {
+        path
+      }
+  }
+
   /** Return all non-local paths from a comma-separated list of paths. */
   def nonLocalPaths(paths: String, testWindows: Boolean = false): Array[String] = {
     val windows = isWindows || testWindows

@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.{FileContext, Path}
+import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -306,7 +306,7 @@ case class LoadDataCommand(
     val loadPath = {
       if (isLocal) {
         val localFS = FileContext.getLocalFSFileContext()
-        localFS.makeQualified(new Path(path))
+        Utils.makeQualified(FsConstants.LOCAL_FS_URI, localFS.getWorkingDirectory(), new Path(path))
       } else {
         val loadPath = new Path(path)
         // Follow Hive's behavior:
@@ -323,7 +323,7 @@ case class LoadDataCommand(
         // by considering the wild card scenario in mind.as per old logic query param  is
         // been considered while creating URI instance and if path contains wild card char '?'
         // the remaining charecters after '?' will be removed while forming URI instance
-        loadPath.makeQualified(defaultFS, uriPath)
+        Utils.makeQualified(defaultFS, uriPath, loadPath)
       }
     }
     val fs = loadPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
