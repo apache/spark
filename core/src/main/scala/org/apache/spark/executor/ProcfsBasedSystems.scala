@@ -37,6 +37,8 @@ class ProcfsBasedSystems  extends ProcessTreeMetrics with Logging {
   val ptree: scala.collection.mutable.Map[ Int, Set[Int]] =
     scala.collection.mutable.Map[ Int, Set[Int]]()
   val PROCFS_STAT_FILE = "stat"
+  var latestVmemTotal: Long = 0
+  var latestRSSTotal: Long = 0
 
   createProcessTree
 
@@ -53,7 +55,10 @@ class ProcfsBasedSystems  extends ProcessTreeMetrics with Logging {
     catch {
       case f: FileNotFoundException => return false
     }
-    true
+
+    val shouldLogStageExecutorProcessTreeMetrics = org.apache.spark.SparkEnv.get.conf.
+      getBoolean("spark.eventLog.logStageExecutorProcessTreeMetrics.enabled", true)
+    true && shouldLogStageExecutorProcessTreeMetrics
   }
 
 
@@ -62,6 +67,8 @@ class ProcfsBasedSystems  extends ProcessTreeMetrics with Logging {
       return -1;
     }
     try {
+      // This can be simplified in java9:
+      // https://docs.oracle.com/javase/9/docs/api/java/lang/ProcessHandle.html
       val cmd = Array("bash", "-c", "echo $PPID")
       val length = 10
       var out: Array[Byte] = Array.fill[Byte](length)(0)
@@ -136,7 +143,7 @@ class ProcfsBasedSystems  extends ProcessTreeMetrics with Logging {
    * instead. The computation of RSS and Vmem are based on proc(5):
    * http://man7.org/linux/man-pages/man5/proc.5.html
    */
-  def getProcessInfo(pid: Int): String = {
+  def getProcessInfo(pid: Int): Unit = {
     try {
       val pidDir: File = new File(procfsDir, pid.toString)
       val fReader = new InputStreamReader(
@@ -146,11 +153,14 @@ class ProcfsBasedSystems  extends ProcessTreeMetrics with Logging {
       val procInfo = in.readLine
       in.close
       fReader.close
-      return procInfo
+      val procInfoSplit = procInfo.split(" ")
+      if ( procInfoSplit != null ) {
+        latestVmemTotal += procInfoSplit(22).toLong
+        latestRSSTotal += procInfoSplit(23).toLong
+      }
     } catch {
       case f: FileNotFoundException => return null
     }
-    null
   }
 
 
@@ -160,46 +170,22 @@ class ProcfsBasedSystems  extends ProcessTreeMetrics with Logging {
     }
     updateProcessTree
     val pids = ptree.keySet
-    var totalRss = 0L
+    latestRSSTotal = 0
+    latestVmemTotal = 0
     for (p <- pids) {
-      totalRss += getProcessRSSInfo(p)
+       getProcessInfo(p)
     }
-    totalRss
+    latestRSSTotal
   }
 
-  def getProcessRSSInfo(pid: Int): Long = {
-    val  pInfo = getProcessInfo(pid)
-    if (pInfo != null) {
-      val pInfoSplit = pInfo.split(" ")
-      // According to proc(5) RSS is the 24th value when we read first line of /proc/[pid]/stat
-      return pInfoSplit(23).toLong
-    }
-    0
-  }
 
   def getVirtualMemInfo(): Long = {
     if (!isAvailable) {
       return -1
     }
-    // We won't call updateProcessTree here since we already did that when we
-    // computed RSS info
-    val pids = ptree.keySet
-    var totalVMem = 0L
-    for (p <- pids) {
-      totalVMem += getProcessVirtualMemInfo(p)
-    }
-    totalVMem
-  }
-
-
-  def getProcessVirtualMemInfo(pid: Int): Long = {
-    val pInfo = getProcessInfo(pid)
-    if (pInfo != null) {
-      val pInfoSplit = pInfo.split(" ")
-      // According to proc(5) Vmem is the 23rd value when we read first line of /proc/[pid]/stat
-      return pInfoSplit(22).toLong
-    }
-    0L
+    // We won't call updateProcessTree and also compute total virtual memory here
+    // since we already did all of this when we computed RSS info
+    latestVmemTotal
   }
 
 
@@ -233,5 +219,4 @@ class ProcfsBasedSystems  extends ProcessTreeMetrics with Logging {
       return new mutable.ArrayBuffer()
     }
   }
-
 }
