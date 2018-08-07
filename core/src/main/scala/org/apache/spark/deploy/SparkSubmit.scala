@@ -164,7 +164,15 @@ private[spark] class SparkSubmit extends Logging {
             }
         }
       } else {
-        runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose)
+        if (sparkConf.getOption("spark.kubernetes.kerberos.proxyUser").isDefined) {
+          // scalastyle:off println
+          printStream.println("Running as proxy user in k8s cluster mode...")
+          // scalastyle:on println
+          SparkHadoopUtil.get.runAsSparkUser(
+            () => runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose))
+        } else {
+          runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose)
+        }
       }
     }
 

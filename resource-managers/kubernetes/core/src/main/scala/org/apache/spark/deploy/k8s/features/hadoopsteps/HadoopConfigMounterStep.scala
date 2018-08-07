@@ -37,38 +37,7 @@ private[spark] class HadoopConfigMounterStep(
 
   override def configureHadoopSpec(hSpec: HadoopConfigSpec) : HadoopConfigSpec = {
     logInfo("HADOOP_CONF_DIR defined. Mounting Hadoop specific files")
-    val keyPaths = hadoopConfigFiles.map { file =>
-      val fileStringPath = file.toPath.getFileName.toString
-      new KeyToPathBuilder()
-          .withKey(fileStringPath)
-          .withPath(fileStringPath)
-        .build() }
-
-    val hadoopFileVolume =
-      new VolumeBuilder()
-        .withName(HADOOP_FILE_VOLUME)
-        .withNewConfigMap()
-          .withName(hadoopConfConfigMapName)
-          .withItems(keyPaths.asJava)
-          .endConfigMap()
-      .build()
-
-    val hadoopEnvVals =
-      new EnvVarBuilder()
-        .withName(ENV_HADOOP_CONF_DIR)
-        .withValue(HADOOP_CONF_DIR_PATH)
-      .build()
-
-    val hadoopVolumeMount =
-      new VolumeMountBuilder()
-      .withName(HADOOP_FILE_VOLUME)
-      .withMountPath(HADOOP_CONF_DIR_PATH)
-      .build()
-
      hSpec.copy(
-       podVolumes = hSpec.podVolumes :+ hadoopFileVolume,
-       containerEnvs = hSpec.containerEnvs :+ hadoopEnvVals,
-       containerVMs = hSpec.containerVMs :+ hadoopVolumeMount,
        configMapProperties = hSpec.configMapProperties ++
          hadoopConfigFiles.map(file =>
            (file.toPath.getFileName.toString, Files.toString(file, Charsets.UTF_8))).toMap)

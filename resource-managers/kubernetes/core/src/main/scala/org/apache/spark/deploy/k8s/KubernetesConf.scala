@@ -67,6 +67,8 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
 
   def getHadoopConfigMapName: String = s"$appResourceNamePrefix-hadoop-config"
 
+  def getKRBConfigMapName: String = s"$appResourceNamePrefix-krb5-file"
+
   def getHadoopStepsOrchestrator : Option[HadoopStepsOrchestrator] = hadoopConfDir.map {
     hConf => new HadoopStepsOrchestrator(
       sparkConf,

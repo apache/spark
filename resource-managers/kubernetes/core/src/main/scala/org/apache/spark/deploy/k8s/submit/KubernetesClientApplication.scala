@@ -22,6 +22,7 @@ import java.util.Properties
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.KubernetesClient
+import org.apache.hadoop.security.UserGroupInformation
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
@@ -109,14 +110,8 @@ private[spark] class Client(
   def run(): Unit = {
     val resolvedDriverSpec = builder.buildFromFeatures(kubernetesConf)
     val configMapName = s"$kubernetesResourceNamePrefix-driver-conf-map"
-    val isKerberosEnabled = kubernetesConf.getTokenManager.isSecurityEnabled
-    // HADOOP_SECURITY_AUTHENTICATION is defined as simple for the driver and executors as
-    // they need only the delegation token to access secure HDFS, no need to sign in to Kerberos
-    val maybeSimpleAuthentication =
-      if (isKerberosEnabled) Some((s"-D$HADOOP_SECURITY_AUTHENTICATION", "simple")) else None
     val configMap =
-      buildConfigMap(configMapName,
-        resolvedDriverSpec.systemProperties ++ maybeSimpleAuthentication)
+      buildConfigMap(configMapName, resolvedDriverSpec.systemProperties)
     // The include of the ENV_VAR for "SPARK_CONF_DIR" is to allow for the
     // Spark command builder to pickup on the Java Options present in the ConfigMap
     val resolvedDriverContainer = new ContainerBuilder(resolvedDriverSpec.pod.container)
@@ -204,7 +199,7 @@ private[spark] class Client(
 /**
  * Main class and entry point of application submission in KUBERNETES mode.
  */
-private[spark] class KubernetesClientApplication extends SparkApplication {
+private[spark] class KubernetesClientApplication extends SparkApplication with Logging {
 
   override def start(args: Array[String], conf: SparkConf): Unit = {
     val parsedArguments = ClientArguments.fromCommandLineArgs(args)
@@ -224,6 +219,11 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
     }
     sparkConf.set(KUBERNETES_PYSPARK_PY_FILES, clientArguments.maybePyFiles.getOrElse(""))
+    // Run driver as proxy user for Kerberos login by the HadoopUGI
+    if (UserGroupInformation.isSecurityEnabled) {
+      logInfo("Because Kerberos is enabled we should run driver as proxy user")
+      sparkConf.set(KUBERNETES_KERBEROS_PROXY_USER, "true")
+    }
     val kubernetesConf = KubernetesConf.createDriverConf(
       sparkConf,
       appName,

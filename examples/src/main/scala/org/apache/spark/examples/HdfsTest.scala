@@ -41,6 +41,8 @@ object HdfsTest {
       val end = System.currentTimeMillis()
       println(s"Iteration $iter took ${end-start} ms")
     }
+    println(s"File contents: ${file.map(s => s.toString).collect().mkString(",")}")
+    println(s"Returned length(s) of: ${file.map(s => s.length).collect().mkString(",")}")
     spark.stop()
   }
 }

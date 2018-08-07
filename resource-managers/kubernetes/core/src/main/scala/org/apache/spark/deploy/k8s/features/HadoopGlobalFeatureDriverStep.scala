@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model.{ConfigMapBuilder, ContainerBuilder, HasMetadata, PodBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
+import org.apache.spark.deploy.k8s.Config.{KUBERNETES_KERBEROS_KRB5_FILE, KUBERNETES_KERBEROS_PROXY_USER}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesDriverSpecificConf
 import org.apache.spark.deploy.k8s.features.hadoopsteps.{HadoopBootstrapUtil, HadoopConfigSpec, HadoopConfigurationStep}
@@ -79,11 +80,14 @@ private[spark] class HadoopGlobalFeatureDriverStep(
       for {
         secretItemKey <- currentHadoopSpec.dtSecretItemKey
         userName <- currentHadoopSpec.jobUserName
+        krb5fileLocation <- kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
       } yield {
         HadoopBootstrapUtil.bootstrapKerberosPod(
           currentHadoopSpec.dtSecretName,
           secretItemKey,
           userName,
+          krb5fileLocation,
+          kubernetesConf.getKRBConfigMapName,
           hadoopBasedSparkPod)
       }
     maybeKerberosModification.getOrElse(
@@ -111,6 +115,10 @@ private[spark] class HadoopGlobalFeatureDriverStep(
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
+    val krb5ConfigMap = kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
+      .map(fileLocation => HadoopBootstrapUtil.buildkrb5ConfigMap(
+        kubernetesConf.getKRBConfigMapName,
+        fileLocation))
     val configMap =
       new ConfigMapBuilder()
         .withNewMetadata()
@@ -118,6 +126,8 @@ private[spark] class HadoopGlobalFeatureDriverStep(
           .endMetadata()
         .addToData(currentHadoopSpec.configMapProperties.asJava)
         .build()
-    Seq(configMap) ++ currentHadoopSpec.dtSecret.toSeq
+    Seq(configMap) ++
+      krb5ConfigMap.toSeq ++
+      currentHadoopSpec.dtSecret.toSeq
   }
 }

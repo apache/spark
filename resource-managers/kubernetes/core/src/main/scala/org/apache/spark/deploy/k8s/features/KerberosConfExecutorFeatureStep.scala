@@ -18,7 +18,9 @@ package org.apache.spark.deploy.k8s.features
 
 import io.fabric8.kubernetes.api.model.HasMetadata
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_KERBEROS_KRB5_FILE
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesExecutorSpecificConf
 import org.apache.spark.deploy.k8s.features.hadoopsteps.HadoopBootstrapUtil
@@ -35,16 +37,25 @@ private[spark] class KerberosConfExecutorFeatureStep(
     val sparkConf = kubernetesConf.sparkConf
     val dTSecretName = sparkConf.get(KERBEROS_KEYTAB_SECRET_NAME)
     val dTDataItemKey = sparkConf.get(KERBEROS_KEYTAB_SECRET_KEY)
+    val krb5Location = sparkConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
+      .getOrElse(throw new SparkException("Must specify krb5 file location"))
     val sparkUserName = sparkConf.get(KERBEROS_SPARK_USER_NAME)
     logInfo(s"Mounting HDFS DT from Secret $dTSecretName for Secure HDFS")
     HadoopBootstrapUtil.bootstrapKerberosPod(
       dTSecretName,
       dTDataItemKey,
       sparkUserName,
+      krb5Location,
+      kubernetesConf.getKRBConfigMapName,
       pod)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
 
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
+  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
+    kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
+      .map(fileLocation => HadoopBootstrapUtil.buildkrb5ConfigMap(
+        kubernetesConf.getKRBConfigMapName,
+        fileLocation)).toSeq
+  }
 }

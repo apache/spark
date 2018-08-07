@@ -16,9 +16,13 @@
  */
 package org.apache.spark.deploy.k8s.features.hadoopsteps
 
+import java.io.File
+
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, KeyToPathBuilder, PodBuilder}
+import com.google.common.base.Charsets
+import com.google.common.io.Files
+import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, ContainerBuilder, KeyToPathBuilder, PodBuilder}
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.SparkPod
@@ -32,6 +36,8 @@ private[spark] object HadoopBootstrapUtil {
     * @param dtSecretName Name of the secret that stores the Delegation Token
     * @param dtSecretItemKey Name of the Item Key storing the Delegation Token
     * @param userName Name of the SparkUser to set SPARK_USER
+    * @param fileLocation Location of the krb5 file
+    * @param krb5ConfName Name of the ConfigMap for Krb5
     * @param pod Input pod to be appended to
     * @return a modified SparkPod
     */
@@ -39,7 +45,11 @@ private[spark] object HadoopBootstrapUtil {
       dtSecretName: String,
       dtSecretItemKey: String,
       userName: String,
+      fileLocation: String,
+      krb5ConfName: String,
       pod: SparkPod) : SparkPod = {
+      val krb5File = new File(fileLocation)
+      val fileStringPath = krb5File.toPath.getFileName.toString
       val kerberizedPod = new PodBuilder(pod.pod)
         .editOrNewSpec()
           .addNewVolume()
@@ -48,6 +58,16 @@ private[spark] object HadoopBootstrapUtil {
               .withSecretName(dtSecretName)
               .endSecret()
             .endVolume()
+          .addNewVolume()
+            .withName(KRB_FILE_VOLUME)
+              .withNewConfigMap()
+                .withName(krb5ConfName)
+                .withItems(new KeyToPathBuilder()
+                  .withKey(fileStringPath)
+                  .withPath(fileStringPath)
+                  .build())
+                .endConfigMap()
+              .endVolume()
           .endSpec()
         .build()
       val kerberizedContainer = new ContainerBuilder(pod.container)
@@ -55,13 +75,21 @@ private[spark] object HadoopBootstrapUtil {
           .withName(SPARK_APP_HADOOP_SECRET_VOLUME_NAME)
           .withMountPath(SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR)
           .endVolumeMount()
+        .addNewVolumeMount()
+          .withName(KRB_FILE_VOLUME)
+          .withMountPath(KRB_FILE_DIR_PATH)
+          .endVolumeMount()
         .addNewEnv()
           .withName(ENV_HADOOP_TOKEN_FILE_LOCATION)
           .withValue(s"$SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR/$dtSecretItemKey")
           .endEnv()
+        // TODO (ifilonenko): This has the correct user as ` userName` however
+        // since the user to which the keytab has access to might not be on the k8s
+        // nodes, this atm leaves us with the option to use `root`. Next step is to
+        // support customization of the UNIX username.
         .addNewEnv()
           .withName(ENV_SPARK_USER)
-          .withValue(userName)
+          .withValue("root")
           .endEnv()
         .build()
     SparkPod(kerberizedPod, kerberizedContainer)
@@ -87,8 +115,8 @@ private[spark] object HadoopBootstrapUtil {
   }
 
    /**
-    * bootstraping the container with ConfigMaps that store
-    * Hadoop conifiguration files
+    * Bootstraping the container with ConfigMaps that store
+    * Hadoop configuration files
     *
     * @param hadoopConfDir location of HADOOP_CONF_DIR
     * @param hadoopConfigMapName name of the configMap for HADOOP_CONF_DIR
@@ -133,5 +161,25 @@ private[spark] object HadoopBootstrapUtil {
         .endEnv()
       .build()
     SparkPod(hadoopSupportedPod, hadoopSupportedContainer)
+  }
+   /**
+    * bootstraping the container with ConfigMaps that store
+    * Hadoop configuration files
+    *
+    * @param configMapName name of configMap for krb5
+    * @param fileLocation location of krb5 file
+    * @return a ConfigMap
+    */
+  def buildkrb5ConfigMap(
+    configMapName: String,
+    fileLocation: String) : ConfigMap = {
+    val file = new File(fileLocation)
+    new ConfigMapBuilder()
+      .withNewMetadata()
+      .withName(configMapName)
+      .endMetadata()
+      .addToData(
+        Map(file.toPath.getFileName.toString -> Files.toString(file, Charsets.UTF_8)).asJava)
+      .build()
   }
 }

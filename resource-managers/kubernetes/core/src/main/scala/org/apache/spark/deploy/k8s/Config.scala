@@ -212,6 +212,21 @@ private[spark] object Config extends Logging {
         "Ensure that major Python version is either Python2 or Python3")
       .createWithDefault("2")
 
+  val KUBERNETES_KERBEROS_PROXY_USER =
+    ConfigBuilder("spark.kubernetes.kerberos.proxyUser")
+      .doc("Specify the proxy user " +
+        "for HadoopUGI login for the Driver + Executors")
+      .internal()
+      .stringConf
+      .createWithDefault("false")
+
+  val KUBERNETES_KERBEROS_KRB5_FILE =
+    ConfigBuilder("spark.kubernetes.kerberos.krb5location")
+      .doc("Specify the location of the krb5 file " +
+        "to be mounted on the driver and executors for Secure HDFS")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_KERBEROS_KEYTAB =
     ConfigBuilder("spark.kubernetes.kerberos.keytab")
       .doc("Specify the location of keytab " +
