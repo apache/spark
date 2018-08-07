@@ -15,27 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.writer;
+package org.apache.spark.sql.sources.v2.reader;
 
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
 
+import java.util.List;
+
 /**
- * A mix-in interface for {@link DataSourceWriter}. Data source writers can implement this
- * interface to write {@link InternalRow} directly and avoid the row conversion at Spark side.
- * This is an experimental and unstable interface, as {@link InternalRow} is not public and may get
- * changed in the future Spark versions.
+ * A mix-in interface for {@link DataSourceReader}. Data source readers can implement this
+ * interface to output {@link Row} instead of {@link InternalRow}.
+ * This is an experimental and unstable interface.
  */
-
 @InterfaceStability.Unstable
-public interface SupportsWriteInternalRow extends DataSourceWriter {
-
-  @Override
-  default DataWriterFactory<Row> createWriterFactory() {
+public interface SupportsDeprecatedScanRow extends DataSourceReader {
+  default List<InputPartition<InternalRow>> planInputPartitions() {
     throw new IllegalStateException(
-      "createWriterFactory should not be called with SupportsWriteInternalRow.");
+        "planInputPartitions not supported by default within SupportsDeprecatedScanRow");
   }
 
-  DataWriterFactory<InternalRow> createInternalRowWriterFactory();
+  List<InputPartition<Row>> planRowInputPartitions();
 }

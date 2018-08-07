@@ -20,7 +20,7 @@ package org.apache.spark.sql.sources.v2.reader;
 import java.util.List;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.Row;
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 
 /**
@@ -30,7 +30,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 @InterfaceStability.Evolving
 public interface SupportsScanColumnarBatch extends DataSourceReader {
   @Override
-  default List<InputPartition<Row>> planInputPartitions() {
+  default List<InputPartition<InternalRow>> planInputPartitions() {
     throw new IllegalStateException(
       "planInputPartitions not supported by default within SupportsScanColumnarBatch.");
   }

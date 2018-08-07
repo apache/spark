@@ -34,16 +34,15 @@ import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBacke
 
 private[spark] class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
-  with PythonTestsSuite {
+  with PythonTestsSuite with ClientModeTestsSuite {
 
   import KubernetesSuite._
 
-  private var testBackend: IntegrationTestBackend = _
-  private var sparkHomeDir: Path = _
-  private var image: String = _
-  private var pyImage: String = _
-  private var driverPodName: String = _
-
+  protected var testBackend: IntegrationTestBackend = _
+  protected var sparkHomeDir: Path = _
+  protected var image: String = _
+  protected var pyImage: String = _
+  protected var driverPodName: String = _
   protected var kubernetesTestComponents: KubernetesTestComponents = _
   protected var sparkAppConf: SparkAppConf = _
   protected var containerLocalSparkDistroExamplesJar: String = _

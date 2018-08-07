@@ -26,9 +26,9 @@ import org.apache.spark.annotation.InterfaceStability;
  * An input partition reader returned by {@link InputPartition#createPartitionReader()} and is
  * responsible for outputting data for a RDD partition.
  *
- * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.Row} for normal input
- * partition readers, or {@link org.apache.spark.sql.catalyst.expressions.UnsafeRow} for input
- * partition readers that mix in {@link SupportsScanUnsafeRow}.
+ * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.catalyst.InternalRow}
+ * for normal data source readers, {@link org.apache.spark.sql.vectorized.ColumnarBatch} for data
+ * source readers that mix in {@link SupportsScanColumnarBatch}.
  */
 @InterfaceStability.Evolving
 public interface InputPartitionReader<T> extends Closeable {
