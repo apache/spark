@@ -1458,6 +1458,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
+    // ALTER VIEW ... AS INSERT INTO is not allowed.
+    ctx.query.queryNoWith match {
+      case s: SingleInsertQueryContext if s.insertInto != null =>
+        operationNotAllowed("ALTER VIEW ... AS INSERT INTO", ctx)
+      case _: MultiInsertQueryContext =>
+        operationNotAllowed("ALTER VIEW ... AS FROM ... [INSERT INTO ...]+", ctx)
+      case _ => // OK
+    }
     AlterViewAsCommand(
       name = visitTableIdentifier(ctx.tableIdentifier),
       originalText = source(ctx.query),
