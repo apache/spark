@@ -373,6 +373,12 @@ class RelationalGroupedDataset protected[sql](
    *   df.groupBy($"year").pivot($"course").sum($"earnings");
    * }}}
    *
+   * For pivoting by multiple columns, use the `struct` function to combine the columns:
+   *
+   * {{{
+   *   df.groupBy($"year").pivot(struct($"course", $"training")).agg(sum($"earnings"))
+   * }}}
+   *
    * @param pivotColumn he column to pivot.
    * @since 2.4.0
    */
@@ -410,6 +416,15 @@ class RelationalGroupedDataset protected[sql](
    * {{{
    *   // Compute the sum of earnings for each year by course with each course as a separate column
    *   df.groupBy($"year").pivot($"course", Seq(lit("dotNET"), lit("Java"))).sum($"earnings")
+   * }}}
+   *
+   * For pivoting by multiple columns, use the `struct` function to combine the columns and values:
+   *
+   * {{{
+   *   df
+   *     .groupBy($"year")
+   *     .pivot(struct($"course", $"training"), Seq(struct(lit("java"), lit("Experts"))))
+   *     .agg(sum($"earnings"))
    * }}}
    *
    * @param pivotColumn the column to pivot.
