@@ -30,6 +30,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.rpc.RpcEndpoint
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.storage.BlockManagerId
@@ -137,6 +138,19 @@ private[spark] class TaskSchedulerImpl(
 
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
+
+  private lazy val barrierSyncTimeout = conf.get(config.BARRIER_SYNC_TIMEOUT)
+
+  private[scheduler] var barrierCoordinator: RpcEndpoint = null
+
+  private def maybeInitBarrierCoordinator(): Unit = {
+    if (barrierCoordinator == null) {
+      barrierCoordinator = new BarrierCoordinator(barrierSyncTimeout, sc.listenerBus,
+        sc.env.rpcEnv)
+      sc.env.rpcEnv.setupEndpoint("barrierSync", barrierCoordinator)
+      logInfo("Registered BarrierCoordinator endpoint")
+    }
+  }
 
   override def setDAGScheduler(dagScheduler: DAGScheduler) {
     this.dagScheduler = dagScheduler
@@ -413,6 +427,9 @@ private[spark] class TaskSchedulerImpl(
               s"${taskSet.numTasks} tasks got resource offers. The resource offers may have " +
               "been blacklisted or cannot fulfill task locality requirements.")
 
+          // materialize the barrier coordinator.
+          maybeInitBarrierCoordinator()
+
           // Update the taskInfos into all the barrier task properties.
           val addressesStr = addressesWithDescs
             // Addresses ordered by partitionId
@@ -565,6 +582,9 @@ private[spark] class TaskSchedulerImpl(
     }
     if (taskResultGetter != null) {
       taskResultGetter.stop()
+    }
+    if (barrierCoordinator != null) {
+      barrierCoordinator.stop()
     }
     starvationTimer.cancel()
   }
