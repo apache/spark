@@ -52,10 +52,11 @@ object DataSourceUtils {
     }
   }
 
-  // SPARK-15895: Metadata files (e.g. Parquet summary files) and temporary files should not be
-  // counted as data files, so that they shouldn't participate partition discovery.
+  // SPARK-24626: Metadata files and temporary files should not be
+  // counted as data files, so that they shouldn't participate in tasks like
+  // location size calculation.
   private[sql] def isDataPath(path: Path): Boolean = {
     val name = path.getName
-    !((name.startsWith("_") && !name.contains("=")) || name.startsWith("."))
+    !(name.startsWith("_") || name.startsWith("."))
   }
 }
