@@ -297,7 +297,7 @@ object InMemoryFileIndex extends Logging {
     val missingFiles = mutable.ArrayBuffer.empty[String]
     val filteredLeafStatuses = allLeafStatuses.filterNot(
       status => shouldFilterOut(status.getPath.getName))
-    val resolvedLeafStatuses = filteredLeafStatuses.flatMap {
+    val resolvedLeafStatuses = filteredLeafStatuses.par.flatMap {
       case f: LocatedFileStatus =>
         Some(f)
 
@@ -307,9 +307,9 @@ object InMemoryFileIndex extends Logging {
       //   operations, calling `getFileBlockLocations` does no harm here since these file system
       //   implementations don't actually issue RPC for this method.
       //
-      // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should not
-      //   be a big deal since we always use to `listLeafFilesInParallel` when the number of
-      //   paths exceeds threshold.
+      // - Here we are calling `getFileBlockLocations` in a parallel manner with ParArray.
+      //   And a dedicated job will be launched to do this in the cluster when the number
+      //   of paths exceeds threshold.
       case f =>
         // The other constructor of LocatedFileStatus will call FileStatus.getPermission(),
         // which is very slow on some file system (RawLocalFileSystem, which is launch a
@@ -327,7 +327,7 @@ object InMemoryFileIndex extends Logging {
             missingFiles += f.getPath.toString
             None
         }
-    }
+    }.arrayseq
 
     if (missingFiles.nonEmpty) {
       logWarning(
