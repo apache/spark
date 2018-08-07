@@ -454,7 +454,6 @@ class DataTypeSuite extends SparkFunSuite {
     false)
 
   test("SPARK-25031: MapType should produce current formatted string for complex types") {
-
     val keyType: DataType = StructType(Seq(
       StructField("a", DataTypes.IntegerType),
       StructField("b", DataTypes.IntegerType)))
