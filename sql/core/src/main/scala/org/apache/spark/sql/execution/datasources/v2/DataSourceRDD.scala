@@ -40,7 +40,7 @@ class DataSourceRDD[T: ClassTag](
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     val reader = split.asInstanceOf[DataSourceRDDPartition[T]].inputPartition
         .createPartitionReader()
-    context.addTaskCompletionListener(_ => reader.close())
+    context.addTaskCompletionListener[Unit](_ => reader.close())
     val iter = new Iterator[T] {
       private[this] var valuePrepared = false
 

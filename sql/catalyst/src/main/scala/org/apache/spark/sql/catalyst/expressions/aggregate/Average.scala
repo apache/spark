@@ -46,7 +46,7 @@ abstract class AverageLike(child: Expression) extends DeclarativeAggregate {
   override lazy val aggBufferAttributes = sum :: count :: Nil
 
   override lazy val initialValues = Seq(
-    /* sum = */ Cast(Literal(0), sumDataType),
+    /* sum = */ Literal(0).cast(sumDataType),
     /* count = */ Literal(0L)
   )
 
@@ -58,19 +58,17 @@ abstract class AverageLike(child: Expression) extends DeclarativeAggregate {
   // If all input are nulls, count will be 0 and we will get null after the division.
   override lazy val evaluateExpression = child.dataType match {
     case _: DecimalType =>
-      Cast(
-        DecimalPrecision.decimalAndDecimal(sum / Cast(count, DecimalType.LongDecimal)),
-        resultType)
+      DecimalPrecision.decimalAndDecimal(sum / count.cast(DecimalType.LongDecimal)).cast(resultType)
     case _ =>
-      Cast(sum, resultType) / Cast(count, resultType)
+      sum.cast(resultType) / count.cast(resultType)
   }
 
   protected def updateExpressionsDef: Seq[Expression] = Seq(
     /* sum = */
     Add(
       sum,
-      Coalesce(Cast(child, sumDataType) :: Cast(Literal(0), sumDataType) :: Nil)),
-    /* count = */ If(IsNull(child), count, count + 1L)
+      coalesce(child.cast(sumDataType), Literal(0).cast(sumDataType))),
+    /* count = */ If(child.isNull, count, count + 1L)
   )
 
   override lazy val updateExpressions = updateExpressionsDef

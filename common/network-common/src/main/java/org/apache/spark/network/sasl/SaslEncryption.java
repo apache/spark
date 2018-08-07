@@ -301,7 +301,7 @@ class SaslEncryption {
         int copied = byteChannel.write(buf.nioBuffer());
         buf.skipBytes(copied);
       } else {
-        region.transferTo(byteChannel, region.transfered());
+        region.transferTo(byteChannel, region.transferred());
       }
 
       byte[] encrypted = backend.wrap(byteChannel.getData(), 0, byteChannel.length());
