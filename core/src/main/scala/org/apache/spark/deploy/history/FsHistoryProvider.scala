@@ -24,7 +24,6 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.concurrent.ExecutionException
 import scala.xml.Node
 
 import com.google.common.io.ByteStreams
@@ -358,14 +357,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         logDebug(s"New/updated attempts found: ${logInfos.size} ${logInfos.map(_.getPath)}")
       }
 
-      var tasks = mutable.ListBuffer[(Future[Unit], Path)]()
+      var tasks = mutable.ListBuffer[Future[_]]()
 
       try {
         for (file <- logInfos) {
-          val task: Future[Unit] = replayExecutor.submit(new Runnable {
+          tasks += replayExecutor.submit(new Runnable {
             override def run(): Unit = mergeApplicationListing(file)
           }, Unit)
-          tasks += (task -> file.getPath)
         }
       } catch {
         // let the iteration over logInfos break, since an exception on
@@ -378,7 +376,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
       pendingReplayTasksCount.addAndGet(tasks.size)
 
-      tasks.foreach { case (task, path) =>
+      tasks.foreach { task =>
         try {
           // Wait for all tasks to finish. This makes sure that checkForLogs
           // is not scheduled again while some tasks are already running in
@@ -387,10 +385,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         } catch {
           case e: InterruptedException =>
             throw e
-          case e: ExecutionException if e.getCause.isInstanceOf[AccessControlException] =>
-            // We don't have read permissions on the log file
-            logWarning(s"Unable to read log $path", e.getCause)
-            blacklist(path)
           case e: Exception =>
             logError("Exception while merging application listings", e)
         } finally {
@@ -507,6 +501,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
 
     } catch {
+      case e: AccessControlException =>
+        // We don't have read permissions on the log file
+        logWarning(s"Unable to read log ${fileStatus.getPath}", e.getCause)
+        blacklist(fileStatus.getPath)
+        None
       case e: Exception =>
         logError(
           s"Exception encountered when attempting to load application log ${fileStatus.getPath}",

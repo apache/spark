@@ -137,14 +137,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     // setReadable(...) does not work on Windows. Please refer JDK-6728842.
     assume(!Utils.isWindows)
 
-    class TestFsHistoryProvider extends FsHistoryProvider(createTestConf()) {
-      var mergeApplicationListingCall = 0
-      override protected def mergeApplicationListing(fileStatus: FileStatus): Unit = {
-        super.mergeApplicationListing(fileStatus)
-        mergeApplicationListingCall += 1
-      }
-    }
-    val provider = new TestFsHistoryProvider
+    val provider = new FsHistoryProvider(createTestConf())
 
     val logFile1 = newLogFile("new1", None, inProgress = false)
     writeFile(logFile1, true, None,
@@ -161,8 +154,6 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     updateAndCheck(provider) { list =>
       list.size should be (1)
     }
-
-    provider.mergeApplicationListingCall should be (1)
   }
 
   test("history file is renamed from inprogress to completed") {
