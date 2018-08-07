@@ -129,7 +129,7 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, BatchReadSupportP
   static class AdvancedReaderFactory implements PartitionReaderFactory {
     StructType requiredSchema;
 
-    public AdvancedReaderFactory(StructType requiredSchema) {
+    AdvancedReaderFactory(StructType requiredSchema) {
       this.requiredSchema = requiredSchema;
     }
 

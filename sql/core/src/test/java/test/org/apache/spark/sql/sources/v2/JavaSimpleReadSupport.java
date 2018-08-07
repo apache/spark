@@ -81,7 +81,7 @@ class JavaRangeInputPartition implements InputPartition {
   int start;
   int end;
 
-  public JavaRangeInputPartition(int start, int end) {
+  JavaRangeInputPartition(int start, int end) {
     this.start = start;
     this.end = end;
   }
