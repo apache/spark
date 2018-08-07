@@ -53,9 +53,7 @@ import org.apache.spark.annotation.InterfaceStability;
  * successfully, and have a way to revert committed data writers without the commit message, because
  * Spark only accepts the commit message that arrives first and ignore others.
  *
- * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.Row} for normal data
- * source writers, or {@link org.apache.spark.sql.catalyst.InternalRow} for data source writers
- * that mix in {@link SupportsWriteInternalRow}.
+ * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.catalyst.InternalRow}.
  */
 @InterfaceStability.Evolving
 public interface DataWriter<T> {

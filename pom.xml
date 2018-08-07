@@ -1744,6 +1744,10 @@
             <artifactId>hadoop-common</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-hdfs</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.apache.hive</groupId>
             <artifactId>hive-storage-api</artifactId>
           </exclusion>
@@ -2681,7 +2685,7 @@
     <profile>
       <id>hadoop-2.7</id>
       <properties>
-        <hadoop.version>2.7.3</hadoop.version>
+        <hadoop.version>2.7.7</hadoop.version>
         <curator.version>2.7.1</curator.version>
       </properties>
     </profile>

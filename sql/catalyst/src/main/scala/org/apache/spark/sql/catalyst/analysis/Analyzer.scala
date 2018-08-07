@@ -145,6 +145,7 @@ class Analyzer(
   lazy val batches: Seq[Batch] = Seq(
     Batch("Hints", fixedPoint,
       new ResolveHints.ResolveBroadcastHints(conf),
+      ResolveHints.ResolveCoalesceHints,
       ResolveHints.RemoveAllHints),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
@@ -180,6 +181,8 @@ class Analyzer(
       ResolveAggregateFunctions ::
       TimeWindowing ::
       ResolveInlineTables(conf) ::
+      ResolveHigherOrderFunctions(catalog) ::
+      ResolveLambdaVariables(conf) ::
       ResolveTimeZone(conf) ::
       ResolveRandomSeed ::
       TypeCoercion.typeCoercionRules(conf) ++
@@ -529,6 +532,10 @@ class Analyzer(
         || (p.groupByExprsOpt.isDefined && !p.groupByExprsOpt.get.forall(_.resolved))
         || !p.pivotColumn.resolved || !p.pivotValues.forall(_.resolved) => p
       case Pivot(groupByExprsOpt, pivotColumn, pivotValues, aggregates, child) =>
+        if (!RowOrdering.isOrderable(pivotColumn.dataType)) {
+          throw new AnalysisException(
+            s"Invalid pivot column '${pivotColumn}'. Pivot columns must be comparable.")
+        }
         // Check all aggregate expressions.
         aggregates.foreach(checkValidAggregateExpression)
         // Check all pivot values are literal and match pivot column data type.
@@ -574,10 +581,14 @@ class Analyzer(
           // Since evaluating |pivotValues| if statements for each input row can get slow this is an
           // alternate plan that instead uses two steps of aggregation.
           val namedAggExps: Seq[NamedExpression] = aggregates.map(a => Alias(a, a.sql)())
-          val bigGroup = groupByExprs ++ pivotColumn.references
+          val namedPivotCol = pivotColumn match {
+            case n: NamedExpression => n
+            case _ => Alias(pivotColumn, "__pivot_col")()
+          }
+          val bigGroup = groupByExprs :+ namedPivotCol
           val firstAgg = Aggregate(bigGroup, bigGroup ++ namedAggExps, child)
           val pivotAggs = namedAggExps.map { a =>
-            Alias(PivotFirst(pivotColumn, a.toAttribute, evalPivotValues)
+            Alias(PivotFirst(namedPivotCol.toAttribute, a.toAttribute, evalPivotValues)
               .toAggregateExpression()
             , "__pivot_" + a.sql)()
           }
@@ -799,7 +810,6 @@ class Analyzer(
           right
         case Some((oldRelation, newRelation)) =>
           val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
-          // TODO(rxin): Why do we need transformUp here?
           right transformUp {
             case r if r == oldRelation => newRelation
           } transformUp {
@@ -871,6 +881,7 @@ class Analyzer(
     }
 
     private def resolve(e: Expression, q: LogicalPlan): Expression = e match {
+      case f: LambdaFunction if !f.bound => f
       case u @ UnresolvedAttribute(nameParts) =>
         // Leave unchanged if resolution fails. Hopefully will be resolved next round.
         val result =
@@ -1422,11 +1433,26 @@ class Analyzer(
           resolveSubQuery(s, plans)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, _, exprId) if !sub.resolved =>
           resolveSubQuery(e, plans)(Exists(_, _, exprId))
-        case In(value, Seq(l @ ListQuery(sub, _, exprId, _))) if value.resolved && !l.resolved =>
+        case InSubquery(values, l @ ListQuery(_, _, exprId, _))
+            if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, plans)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output)
           })
-          In(value, Seq(expr))
+          val subqueryOutput = expr.plan.output
+          val resolvedIn = InSubquery(values, expr.asInstanceOf[ListQuery])
+          if (values.length != subqueryOutput.length) {
+            throw new AnalysisException(
+              s"""Cannot analyze ${resolvedIn.sql}.
+                 |The number of columns in the left hand side of an IN subquery does not match the
+                 |number of columns in the output of subquery.
+                 |#columns in left hand side: ${values.length}
+                 |#columns in right hand side: ${subqueryOutput.length}
+                 |Left side columns:
+                 |[${values.map(_.sql).mkString(", ")}]
+                 |Right side columns:
+                 |[${subqueryOutput.map(_.sql).mkString(", ")}]""".stripMargin)
+          }
+          resolvedIn
       }
     }
 

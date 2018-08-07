@@ -83,7 +83,7 @@ private[spark] abstract class Task[T](
     // TODO SPARK-24874 Allow create BarrierTaskContext based on partitions, instead of whether
     // the stage is barrier.
     context = if (isBarrier) {
-      new BarrierTaskContextImpl(
+      new BarrierTaskContext(
         stageId,
         stageAttemptId, // stageAttemptId and stageAttemptNumber are semantically equal
         partitionId,

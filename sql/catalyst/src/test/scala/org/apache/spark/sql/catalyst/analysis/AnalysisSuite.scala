@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.TimeZone
 
+import scala.reflect.ClassTag
+
 import org.scalatest.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
@@ -271,7 +273,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("self intersect should resolve duplicate expression IDs") {
-    val plan = testRelation.intersect(testRelation)
+    val plan = testRelation.intersect(testRelation, isAll = false)
     assertAnalysisSuccess(plan)
   }
 
@@ -437,8 +439,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val unionPlan = Union(firstTable, secondTable)
     assertAnalysisSuccess(unionPlan)
 
-    val r1 = Except(firstTable, secondTable)
-    val r2 = Intersect(firstTable, secondTable)
+    val r1 = Except(firstTable, secondTable, isAll = false)
+    val r2 = Intersect(firstTable, secondTable, isAll = false)
 
     assertAnalysisSuccess(r1)
     assertAnalysisSuccess(r2)
@@ -529,9 +531,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-22614 RepartitionByExpression partitioning") {
-    def checkPartitioning[T <: Partitioning](numPartitions: Int, exprs: Expression*): Unit = {
+    def checkPartitioning[T <: Partitioning: ClassTag](
+        numPartitions: Int, exprs: Expression*): Unit = {
       val partitioning = RepartitionByExpression(exprs, testRelation2, numPartitions).partitioning
-      assert(partitioning.isInstanceOf[T])
+      val clazz = implicitly[ClassTag[T]].runtimeClass
+      assert(clazz.isInstance(partitioning))
     }
 
     checkPartitioning[HashPartitioning](numPartitions = 10, exprs = Literal(20))

@@ -449,15 +449,6 @@ object TypeCoercion {
    *    Analysis Exception will be raised at the type checking phase.
    */
   case class InConversion(conf: SQLConf) extends TypeCoercionRule {
-    private def flattenExpr(expr: Expression): Seq[Expression] = {
-      expr match {
-        // Multi columns in IN clause is represented as a CreateNamedStruct.
-        // flatten the named struct to get the list of expressions.
-        case cns: CreateNamedStruct => cns.valExprs
-        case expr => Seq(expr)
-      }
-    }
-
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
@@ -465,11 +456,9 @@ object TypeCoercion {
 
       // Handle type casting required between value expression and subquery output
       // in IN subquery.
-      case i @ In(a, Seq(ListQuery(sub, children, exprId, _)))
-        if !i.resolved && flattenExpr(a).length == sub.output.length =>
-        // LHS is the value expression of IN subquery.
-        val lhs = flattenExpr(a)
-
+      case i @ InSubquery(lhs, ListQuery(sub, children, exprId, _))
+          if !i.resolved && lhs.length == sub.output.length =>
+        // LHS is the value expressions of IN subquery.
         // RHS is the subquery output.
         val rhs = sub.output
 
@@ -485,20 +474,13 @@ object TypeCoercion {
             case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
             case (e, _) => e
           }
-          val castedLhs = lhs.zip(commonTypes).map {
+          val newLhs = lhs.zip(commonTypes).map {
             case (e, dt) if e.dataType != dt => Cast(e, dt)
             case (e, _) => e
           }
 
-          // Before constructing the In expression, wrap the multi values in LHS
-          // in a CreatedNamedStruct.
-          val newLhs = castedLhs match {
-            case Seq(lhs) => lhs
-            case _ => CreateStruct(castedLhs)
-          }
-
           val newSub = Project(castedRhs, sub)
-          In(newLhs, Seq(ListQuery(newSub, children, exprId, newSub.output)))
+          InSubquery(newLhs, ListQuery(newSub, children, exprId, newSub.output))
         } else {
           i
         }

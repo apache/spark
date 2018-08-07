@@ -30,6 +30,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.rpc.RpcEndpoint
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.storage.BlockManagerId
@@ -138,6 +139,19 @@ private[spark] class TaskSchedulerImpl(
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
 
+  private lazy val barrierSyncTimeout = conf.get(config.BARRIER_SYNC_TIMEOUT)
+
+  private[scheduler] var barrierCoordinator: RpcEndpoint = null
+
+  private def maybeInitBarrierCoordinator(): Unit = {
+    if (barrierCoordinator == null) {
+      barrierCoordinator = new BarrierCoordinator(barrierSyncTimeout, sc.listenerBus,
+        sc.env.rpcEnv)
+      sc.env.rpcEnv.setupEndpoint("barrierSync", barrierCoordinator)
+      logInfo("Registered BarrierCoordinator endpoint")
+    }
+  }
+
   override def setDAGScheduler(dagScheduler: DAGScheduler) {
     this.dagScheduler = dagScheduler
   }
@@ -222,18 +236,11 @@ private[spark] class TaskSchedulerImpl(
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
     logInfo("Cancelling stage " + stageId)
+    // Kill all running tasks for the stage.
+    killAllTaskAttempts(stageId, interruptThread, reason = "Stage cancelled")
+    // Cancel all attempts for the stage.
     taskSetsByStageIdAndAttempt.get(stageId).foreach { attempts =>
       attempts.foreach { case (_, tsm) =>
-        // There are two possible cases here:
-        // 1. The task set manager has been created and some tasks have been scheduled.
-        //    In this case, send a kill signal to the executors to kill the task and then abort
-        //    the stage.
-        // 2. The task set manager has been created but no tasks have been scheduled. In this case,
-        //    simply abort the stage.
-        tsm.runningTasksSet.foreach { tid =>
-            taskIdToExecutorId.get(tid).foreach(execId =>
-              backend.killTask(tid, execId, interruptThread, reason = "Stage cancelled"))
-        }
         tsm.abort("Stage %s cancelled".format(stageId))
         logInfo("Stage %d was cancelled".format(stageId))
       }
@@ -249,6 +256,27 @@ private[spark] class TaskSchedulerImpl(
     } else {
       logWarning(s"Could not kill task $taskId because no task with that ID was found.")
       false
+    }
+  }
+
+  override def killAllTaskAttempts(
+      stageId: Int,
+      interruptThread: Boolean,
+      reason: String): Unit = synchronized {
+    logInfo(s"Killing all running tasks in stage $stageId: $reason")
+    taskSetsByStageIdAndAttempt.get(stageId).foreach { attempts =>
+      attempts.foreach { case (_, tsm) =>
+        // There are two possible cases here:
+        // 1. The task set manager has been created and some tasks have been scheduled.
+        //    In this case, send a kill signal to the executors to kill the task.
+        // 2. The task set manager has been created but no tasks have been scheduled. In this case,
+        //    simply continue.
+        tsm.runningTasksSet.foreach { tid =>
+          taskIdToExecutorId.get(tid).foreach { execId =>
+            backend.killTask(tid, execId, interruptThread, reason)
+          }
+        }
+      }
     }
   }
 
@@ -398,6 +426,9 @@ private[spark] class TaskSchedulerImpl(
               s"because only ${addressesWithDescs.size} out of a total number of " +
               s"${taskSet.numTasks} tasks got resource offers. The resource offers may have " +
               "been blacklisted or cannot fulfill task locality requirements.")
+
+          // materialize the barrier coordinator.
+          maybeInitBarrierCoordinator()
 
           // Update the taskInfos into all the barrier task properties.
           val addressesStr = addressesWithDescs
@@ -551,6 +582,9 @@ private[spark] class TaskSchedulerImpl(
     }
     if (taskResultGetter != null) {
       taskResultGetter.stop()
+    }
+    if (barrierCoordinator != null) {
+      barrierCoordinator.stop()
     }
     starvationTimer.cancel()
   }

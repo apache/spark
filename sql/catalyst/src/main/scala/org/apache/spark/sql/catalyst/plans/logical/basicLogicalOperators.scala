@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.catalyst.{AliasIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
@@ -113,7 +114,7 @@ case class Generate(
   def qualifiedGeneratorOutput: Seq[Attribute] = {
     val qualifiedOutput = qualifier.map { q =>
       // prepend the new qualifier to the existed one
-      generatorOutput.map(a => a.withQualifier(Some(q)))
+      generatorOutput.map(a => a.withQualifier(Seq(q)))
     }.getOrElse(generatorOutput)
     val nullableOutput = qualifiedOutput.map {
       // if outer, make all attributes nullable, otherwise keep existing nullability
@@ -165,9 +166,9 @@ object SetOperation {
 }
 
 case class Intersect(
-   left: LogicalPlan,
-   right: LogicalPlan,
-   isAll: Boolean = false) extends SetOperation(left, right) {
+    left: LogicalPlan,
+    right: LogicalPlan,
+    isAll: Boolean) extends SetOperation(left, right) {
 
   override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
 
@@ -191,7 +192,7 @@ case class Intersect(
 case class Except(
     left: LogicalPlan,
     right: LogicalPlan,
-    isAll: Boolean = false) extends SetOperation(left, right) {
+    isAll: Boolean) extends SetOperation(left, right) {
   override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
@@ -794,19 +795,37 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
 /**
  * Aliased subquery.
  *
- * @param alias the alias name for this subquery.
+ * @param name the alias identifier for this subquery.
  * @param child the logical plan of this subquery.
  */
 case class SubqueryAlias(
-    alias: String,
+    name: AliasIdentifier,
     child: LogicalPlan)
   extends OrderPreservingUnaryNode {
 
-  override def doCanonicalize(): LogicalPlan = child.canonicalized
+  def alias: String = name.identifier
 
-  override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
+  override def output: Seq[Attribute] = {
+    val qualifierList = name.database.map(Seq(_, alias)).getOrElse(Seq(alias))
+    child.output.map(_.withQualifier(qualifierList))
+  }
+  override def doCanonicalize(): LogicalPlan = child.canonicalized
 }
 
+object SubqueryAlias {
+  def apply(
+      identifier: String,
+      child: LogicalPlan): SubqueryAlias = {
+    SubqueryAlias(AliasIdentifier(identifier), child)
+  }
+
+  def apply(
+      identifier: String,
+      database: String,
+      child: LogicalPlan): SubqueryAlias = {
+    SubqueryAlias(AliasIdentifier(identifier, Some(database)), child)
+  }
+}
 /**
  * Sample the dataset.
  *
@@ -923,24 +942,4 @@ case class Deduplicate(
     child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
-}
-
-/**
- * A logical plan for setting a barrier of analysis.
- *
- * The SQL Analyzer goes through a whole query plan even most part of it is analyzed. This
- * increases the time spent on query analysis for long pipelines in ML, especially.
- *
- * This logical plan wraps an analyzed logical plan to prevent it from analysis again. The barrier
- * is applied to the analyzed logical plan in Dataset. It won't change the output of wrapped
- * logical plan and just acts as a wrapper to hide it from analyzer. New operations on the dataset
- * will be put on the barrier, so only the new nodes created will be analyzed.
- *
- * This analysis barrier will be removed at the end of analysis stage.
- */
-case class AnalysisBarrier(child: LogicalPlan) extends LeafNode {
-  override protected def innerChildren: Seq[LogicalPlan] = Seq(child)
-  override def output: Seq[Attribute] = child.output
-  override def isStreaming: Boolean = child.isStreaming
-  override def doCanonicalize(): LogicalPlan = child.canonicalized
 }

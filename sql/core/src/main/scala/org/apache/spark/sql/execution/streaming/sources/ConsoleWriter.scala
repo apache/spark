@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.writer.{DataWriterFactory, WriterCommitMessage}
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
@@ -39,7 +39,7 @@ class ConsoleWriter(schema: StructType, options: DataSourceOptions)
   assert(SparkSession.getActiveSession.isDefined)
   protected val spark = SparkSession.getActiveSession.get
 
-  def createWriterFactory(): DataWriterFactory[Row] = PackedRowWriterFactory
+  def createWriterFactory(): DataWriterFactory[InternalRow] = PackedRowWriterFactory
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
     // We have to print a "Batch" label for the epoch for compatibility with the pre-data source V2
@@ -62,8 +62,7 @@ class ConsoleWriter(schema: StructType, options: DataSourceOptions)
     println(printMessage)
     println("-------------------------------------------")
     // scalastyle:off println
-    spark
-      .createDataFrame(rows.toList.asJava, schema)
+    Dataset.ofRows(spark, LocalRelation(schema.toAttributes, rows))
       .show(numRowsToShow, isTruncated)
   }
 

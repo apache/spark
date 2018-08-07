@@ -411,9 +411,11 @@ object FunctionRegistry {
     expression[CreateArray]("array"),
     expression[ArrayContains]("array_contains"),
     expression[ArraysOverlap]("arrays_overlap"),
+    expression[ArrayIntersect]("array_intersect"),
     expression[ArrayJoin]("array_join"),
     expression[ArrayPosition]("array_position"),
     expression[ArraySort]("array_sort"),
+    expression[ArrayExcept]("array_except"),
     expression[ArrayUnion]("array_union"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
@@ -439,6 +441,9 @@ object FunctionRegistry {
     expression[ArrayRepeat]("array_repeat"),
     expression[ArrayRemove]("array_remove"),
     expression[ArrayDistinct]("array_distinct"),
+    expression[ArrayTransform]("transform"),
+    expression[ArrayFilter]("filter"),
+    expression[ArrayAggregate]("aggregate"),
     CreateStruct.registryEntry,
 
     // misc functions

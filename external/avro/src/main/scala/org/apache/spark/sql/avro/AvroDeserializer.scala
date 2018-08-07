@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.avro.{Schema, SchemaBuilder}
+import org.apache.avro.LogicalTypes.{TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.generic._
 import org.apache.avro.util.Utf8
@@ -83,12 +84,27 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
       case (INT, IntegerType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[Int])
 
+      case (INT, DateType) => (updater, ordinal, value) =>
+        updater.setInt(ordinal, value.asInstanceOf[Int])
+
       case (LONG, LongType) => (updater, ordinal, value) =>
         updater.setLong(ordinal, value.asInstanceOf[Long])
 
-      case (LONG, TimestampType) => (updater, ordinal, value) =>
-        updater.setLong(ordinal, value.asInstanceOf[Long] * 1000)
+      case (LONG, TimestampType) => avroType.getLogicalType match {
+        case _: TimestampMillis => (updater, ordinal, value) =>
+          updater.setLong(ordinal, value.asInstanceOf[Long] * 1000)
+        case _: TimestampMicros => (updater, ordinal, value) =>
+          updater.setLong(ordinal, value.asInstanceOf[Long])
+        case null => (updater, ordinal, value) =>
+          // For backward compatibility, if the Avro type is Long and it is not logical type,
+          // the value is processed as timestamp type with millisecond precision.
+          updater.setLong(ordinal, value.asInstanceOf[Long] * 1000)
+        case other => throw new IncompatibleSchemaException(
+          s"Cannot convert Avro logical type ${other} to Catalyst Timestamp type.")
+      }
 
+      // Before we upgrade Avro to 1.8 for logical type support, spark-avro converts Long to Date.
+      // For backward compatibility, we still keep this conversion.
       case (LONG, DateType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, (value.asInstanceOf[Long] / DateTimeUtils.MILLIS_PER_DAY).toInt)
 

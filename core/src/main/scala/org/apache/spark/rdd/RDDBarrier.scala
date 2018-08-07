@@ -28,7 +28,7 @@ class RDDBarrier[T: ClassTag](rdd: RDD[T]) {
 
   /**
    * :: Experimental ::
-   * Maps partitions together with a provided BarrierTaskContext.
+   * Maps partitions together with a provided [[org.apache.spark.BarrierTaskContext]].
    *
    * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
    * should be `false` unless `rdd` is a pair RDD and the input function doesn't modify the keys.
