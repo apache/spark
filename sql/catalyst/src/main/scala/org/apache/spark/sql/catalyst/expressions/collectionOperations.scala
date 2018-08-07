@@ -3756,24 +3756,14 @@ object ArraySetLike {
 }
 
 /**
- * Returns an array of the elements in the union of x and y, without duplicates
+ * The class performs union operation with two [[ArrayData]] objects.
  */
-@ExpressionDescription(
-  usage = """
-    _FUNC_(array1, array2) - Returns an array of the elements in the union of array1 and array2,
-      without duplicates.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
-       array(1, 2, 3, 5)
-  """,
-  since = "2.4.0")
-case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
-  with ComplexTypeMergingExpression {
+class ArrayDataUnion(elementType: DataType) extends ((ArrayData, ArrayData) => ArrayData) {
 
-  @transient lazy val evalUnion: (ArrayData, ArrayData) => ArrayData = {
-    if (elementTypeSupportEquals) {
+  private lazy val ordering: Ordering[Any] = TypeUtils.getInterpretedOrdering(elementType)
+
+  private lazy val evalFunc: (ArrayData, ArrayData) => ArrayData = {
+    if (ArraySetLike.typeSupportsEquals(elementType)) {
       (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
         val hs = new OpenHashSet[Any]
@@ -3833,6 +3823,28 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
         new GenericArrayData(arrayBuffer)
     }
   }
+
+  def apply(array1: ArrayData, array2: ArrayData): ArrayData = evalFunc(array1, array2)
+}
+
+/**
+ * Returns an array of the elements in the union of x and y, without duplicates
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array1, array2) - Returns an array of the elements in the union of array1 and array2,
+      without duplicates.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
+       array(1, 2, 3, 5)
+  """,
+  since = "2.4.0")
+case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
+  with ComplexTypeMergingExpression {
+
+  @transient lazy val evalUnion = new ArrayDataUnion(elementType)
 
   override def nullSafeEval(input1: Any, input2: Any): Any = {
     val array1 = input1.asInstanceOf[ArrayData]

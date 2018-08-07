@@ -392,7 +392,9 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 
   @transient lazy val MapType(_, rightValueType, _) = getMapType(right)
 
-  @transient lazy val merger = new ArrayDataMerger(keyType)
+  @transient lazy val arrayDataUnion = new ArrayDataUnion(keyType)
+
+  @transient lazy val ordering = TypeUtils.getInterpretedOrdering(keyType)
 
   override def inputs: Seq[Expression] = left :: right :: Nil
 
@@ -445,11 +447,11 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   private def nullSafeEval(inputRow: InternalRow, value1: Any, value2: Any): Any = {
     val mapData1 = value1.asInstanceOf[MapData]
     val mapData2 = value2.asInstanceOf[MapData]
-    val keys = merger.merge(mapData1.keyArray(), mapData2.keyArray())
+    val keys = arrayDataUnion(mapData1.keyArray(), mapData2.keyArray())
     val values = new GenericArrayData(new Array[Any](keys.numElements()))
     keys.foreach(keyType, (idx: Int, key: Any) => {
-      val v1 = GetMapValueUtil.getValueEval(mapData1, key, keyType, leftValueType, merger.ordering)
-      val v2 = GetMapValueUtil.getValueEval(mapData2, key, keyType, rightValueType, merger.ordering)
+      val v1 = GetMapValueUtil.getValueEval(mapData1, key, keyType, leftValueType, ordering)
+      val v2 = GetMapValueUtil.getValueEval(mapData2, key, keyType, rightValueType, ordering)
       keyVar.value.set(key)
       value1Var.value.set(v1)
       value2Var.value.set(v2)
