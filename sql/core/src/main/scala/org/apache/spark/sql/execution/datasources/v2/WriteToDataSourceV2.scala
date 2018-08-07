@@ -77,7 +77,9 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
       case cause: Throwable =>
         logError(s"Data source writer $writer is aborting.")
         try {
-          writer.abort(messages)
+          if (!writer.isInstanceOf[StreamWriter]) {
+            writer.abort(messages)
+          }
         } catch {
           case t: Throwable =>
             logError(s"Data source writer $writer failed to abort.")
