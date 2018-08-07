@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions.{lit, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NumericType, StructType}
 
@@ -386,6 +386,10 @@ class RelationalGroupedDataset protected[sql](
       .sort(pivotColumn)  // ensure that the output columns are in a consistent logical order
       .collect()
       .map(_.get(0))
+      .collect {
+        case row: GenericRow => struct(row.values.map(lit): _*)
+        case value => lit(value)
+      }
       .toSeq
 
     if (values.length > maxValues) {
@@ -396,7 +400,7 @@ class RelationalGroupedDataset protected[sql](
           "to at least the number of distinct values of the pivot column.")
     }
 
-    pivot(pivotColumn, values.map(lit))
+    pivot(pivotColumn, values)
   }
 
   /**
