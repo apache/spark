@@ -41,13 +41,13 @@ case class NamedLambdaVariable(
   with NamedExpression
   with CodegenFallback {
 
-  override def qualifier: Option[String] = None
+  override def qualifier: Seq[String] = Seq.empty
 
   override def newInstance(): NamedExpression =
     copy(value = new AtomicReference(), exprId = NamedExpression.newExprId)
 
   override def toAttribute: Attribute = {
-    AttributeReference(name, dataType, nullable, Metadata.empty)(exprId, None)
+    AttributeReference(name, dataType, nullable, Metadata.empty)(exprId, Seq.empty)
   }
 
   override def eval(input: InternalRow): Any = value.get

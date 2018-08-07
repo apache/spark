@@ -20,7 +20,7 @@ package org.apache.spark.sql.avro
 import scala.collection.JavaConverters._
 
 import org.apache.avro.{LogicalType, LogicalTypes, Schema, SchemaBuilder}
-import org.apache.avro.LogicalTypes.{TimestampMicros, TimestampMillis}
+import org.apache.avro.LogicalTypes.{Date, TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 
 import org.apache.spark.sql.internal.SQLConf.AvroOutputTimestampType
@@ -38,7 +38,10 @@ object SchemaConverters {
    */
   def toSqlType(avroSchema: Schema): SchemaType = {
     avroSchema.getType match {
-      case INT => SchemaType(IntegerType, nullable = false)
+      case INT => avroSchema.getLogicalType match {
+        case _: Date => SchemaType(DateType, nullable = false)
+        case _ => SchemaType(IntegerType, nullable = false)
+      }
       case STRING => SchemaType(StringType, nullable = false)
       case BOOLEAN => SchemaType(BooleanType, nullable = false)
       case BYTES => SchemaType(BinaryType, nullable = false)
@@ -121,7 +124,10 @@ object SchemaConverters {
       case BooleanType => builder.booleanType()
       case ByteType | ShortType | IntegerType => builder.intType()
       case LongType => builder.longType()
-      case DateType => builder.longType()
+      case DateType => builder
+        .intBuilder()
+        .prop(LogicalType.LOGICAL_TYPE_PROP, LogicalTypes.date().getName)
+        .endInt()
       case TimestampType =>
         val timestampType = outputTimestampType match {
           case AvroOutputTimestampType.TIMESTAMP_MILLIS => LogicalTypes.timestampMillis()

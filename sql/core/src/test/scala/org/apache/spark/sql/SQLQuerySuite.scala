@@ -2689,7 +2689,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         val m = intercept[AnalysisException] {
           sql("SELECT * FROM t, S WHERE c = C")
         }.message
-        assert(m.contains("cannot resolve '(t.`c` = S.`C`)' due to data type mismatch"))
+        assert(
+          m.contains("cannot resolve '(default.t.`c` = default.S.`C`)' due to data type mismatch"))
       }
     }
   }

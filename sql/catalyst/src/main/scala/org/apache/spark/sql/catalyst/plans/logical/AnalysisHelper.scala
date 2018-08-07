@@ -61,6 +61,19 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   def analyzed: Boolean = _analyzed
 
   /**
+   * Returns a copy of this node where `rule` has been recursively applied to the tree. When
+   * `rule` does not apply to a given node, it is left unchanged. This function is similar to
+   * `transform`, but skips sub-trees that have already been marked as analyzed.
+   * Users should not expect a specific directionality. If a specific directionality is needed,
+   * [[resolveOperatorsUp]] or [[resolveOperatorsDown]] should be used.
+   *
+   * @param rule the function use to transform this nodes children
+   */
+  def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
+    resolveOperatorsDown(rule)
+  }
+
+  /**
    * Returns a copy of this node where `rule` has been recursively applied first to all of its
    * children and then itself (post-order, bottom-up). When `rule` does not apply to a given node,
    * it is left unchanged.  This function is similar to `transformUp`, but skips sub-trees that
@@ -68,10 +81,10 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    *
    * @param rule the function use to transform this nodes children
    */
-  def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
+  def resolveOperatorsUp(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     if (!analyzed) {
       AnalysisHelper.allowInvokingTransformsInAnalyzer {
-        val afterRuleOnChildren = mapChildren(_.resolveOperators(rule))
+        val afterRuleOnChildren = mapChildren(_.resolveOperatorsUp(rule))
         if (self fastEquals afterRuleOnChildren) {
           CurrentOrigin.withOrigin(origin) {
             rule.applyOrElse(self, identity[LogicalPlan])
@@ -87,7 +100,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
     }
   }
 
-  /** Similar to [[resolveOperators]], but does it top-down. */
+  /** Similar to [[resolveOperatorsUp]], but does it top-down. */
   def resolveOperatorsDown(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     if (!analyzed) {
       AnalysisHelper.allowInvokingTransformsInAnalyzer {
