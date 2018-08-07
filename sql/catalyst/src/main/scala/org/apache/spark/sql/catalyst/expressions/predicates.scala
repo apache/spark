@@ -22,9 +22,11 @@ import scala.collection.immutable.TreeSet
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, GenerateSafeProjection, GenerateUnsafeProjection, Predicate => BasePredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -240,20 +242,25 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   lazy val inSetConvertible = list.forall(_.isInstanceOf[Literal])
   private lazy val ordering = TypeUtils.getInterpretedOrdering(value.dataType)
 
-  override def nullable: Boolean = children.exists(_.nullable)
+  override def nullable: Boolean = value.dataType match {
+    case _: StructType if !SQLConf.get.inFalseForNullField =>
+      children.exists(_.nullable) ||
+        children.exists(_.dataType.asInstanceOf[StructType].exists(_.nullable))
+    case _ => children.exists(_.nullable)
+  }
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
 
   override def eval(input: InternalRow): Any = {
     val evaluatedValue = value.eval(input)
-    if (evaluatedValue == null) {
+    if (checkNullEval(evaluatedValue)) {
       null
     } else {
       var hasNull = false
       list.foreach { e =>
         val v = e.eval(input)
-        if (v == null) {
+        if (checkNullEval(v)) {
           hasNull = true
         } else if (ordering.equiv(v, evaluatedValue)) {
           return true
@@ -265,6 +272,18 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
         false
       }
     }
+  }
+
+  @transient lazy val checkNullGenCode: (ExprCode) => Block = value.dataType match {
+    case _: StructType if !SQLConf.get.inFalseForNullField =>
+      e => code"${e.isNull} || ${e.value}.anyNull()"
+    case _ => e => code"${e.isNull}"
+  }
+
+  @transient lazy val checkNullEval: (Any) => Boolean = value.dataType match {
+    case _: StructType if !SQLConf.get.inFalseForNullField =>
+      input => input == null || input.asInstanceOf[InternalRow].anyNull
+    case _ => input => input == null
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -285,7 +304,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     val listCode = listGen.map(x =>
       s"""
          |${x.code}
-         |if (${x.isNull}) {
+         |if (${checkNullGenCode(x)}) {
          |  $tmpResult = $HAS_NULL; // ${ev.isNull} = true;
          |} else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
          |  $tmpResult = $MATCHED; // ${ev.isNull} = false; ${ev.value} = true;
@@ -318,7 +337,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
       code"""
          |${valueGen.code}
          |byte $tmpResult = $HAS_NULL;
-         |if (!${valueGen.isNull}) {
+         |if (!(${checkNullGenCode(valueGen)})) {
          |  $tmpResult = $NOT_MATCHED;
          |  $javaDataType $valueArg = ${valueGen.value};
          |  do {

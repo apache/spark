@@ -1476,6 +1476,16 @@ object SQLConf {
         "are performed before any UNION, EXCEPT and MINUS operations.")
       .booleanConf
       .createWithDefault(false)
+
+  val LEGACY_IN_FALSE_FOR_NULL_FIELD =
+    buildConf("spark.sql.legacy.inOperator.falseForNullField")
+      .internal()
+      .doc("When set to true, the IN operator returns false when comparing literal structs " +
+        "containing a null field. When set to false (default), it returns null, instead. This is " +
+        "important especially when using NOT IN as in the second case, it filters out the rows " +
+        "when a null is present in a filed; while in the first one, those rows are returned.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
@@ -1872,6 +1882,8 @@ class SQLConf extends Serializable with Logging {
   def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
 
   def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
+
+  def inFalseForNullField: Boolean = getConf(SQLConf.LEGACY_IN_FALSE_FOR_NULL_FIELD)
 
   /** ********************** SQLConf functionality methods ************ */
 
