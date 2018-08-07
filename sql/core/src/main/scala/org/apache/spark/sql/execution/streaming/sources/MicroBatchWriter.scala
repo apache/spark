@@ -26,7 +26,7 @@ import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
  * the non-streaming interface, forwarding the batch ID determined at construction to a wrapped
  * streaming writer.
  */
-class MicroBatchWriter(batchId: Long, writer: StreamWriter) extends DataSourceWriter {
+class MicroBatchWriter(batchId: Long, val writer: StreamWriter) extends DataSourceWriter {
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
     writer.commit(batchId, messages)
   }
