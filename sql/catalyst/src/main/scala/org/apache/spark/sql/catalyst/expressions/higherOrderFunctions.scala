@@ -133,6 +133,25 @@ trait HigherOrderFunction extends Expression {
   }
 }
 
+object HigherOrderFunctionHelper {
+
+  def arrayArgumentType(dt: DataType): (DataType, Boolean) = {
+    dt match {
+      case ArrayType(elementType, containsNull) => (elementType, containsNull)
+      case _ =>
+        val ArrayType(elementType, containsNull) = ArrayType.defaultConcreteType
+        (elementType, containsNull)
+    }
+  }
+
+  def mapKeyValueArgumentType(dt: DataType): (DataType, DataType, Boolean) = dt match {
+    case MapType(kType, vType, vContainsNull) => (kType, vType, vContainsNull)
+    case _ =>
+      val MapType(kType, vType, vContainsNull) = MapType.defaultConcreteType
+      (kType, vType, vContainsNull)
+  }
+}
+
 /**
  * Trait for functions having as input one argument and one function.
  */
@@ -173,25 +192,6 @@ trait ArrayBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
 
 trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
   override def inputTypes: Seq[AbstractDataType] = Seq(MapType, expectingFunctionType)
-
-  def keyValueArgumentType(dt: DataType): (DataType, DataType, Boolean) = dt match {
-    case MapType(kType, vType, vContainsNull) => (kType, vType, vContainsNull)
-    case _ =>
-      val MapType(kType, vType, vContainsNull) = MapType.defaultConcreteType
-      (kType, vType, vContainsNull)
-  }
-}
-
-object ArrayBasedHigherOrderFunction {
-
-  def elementArgumentType(dt: DataType): (DataType, Boolean) = {
-    dt match {
-      case ArrayType(elementType, containsNull) => (elementType, containsNull)
-      case _ =>
-        val ArrayType(elementType, containsNull) = ArrayType.defaultConcreteType
-        (elementType, containsNull)
-    }
-  }
 }
 
 /**
@@ -218,7 +218,7 @@ case class ArrayTransform(
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayTransform = {
-    val elem = ArrayBasedHigherOrderFunction.elementArgumentType(input.dataType)
+    val elem = HigherOrderFunctionHelper.arrayArgumentType(input.dataType)
     function match {
       case LambdaFunction(_, arguments, _) if arguments.size == 2 =>
         copy(function = f(function, elem :: (IntegerType, false) :: Nil))
@@ -277,7 +277,8 @@ case class MapFilter(
     (args.head.asInstanceOf[NamedLambdaVariable], args.tail.head.asInstanceOf[NamedLambdaVariable])
   }
 
-  @transient val (keyType, valueType, valueContainsNull) = keyValueArgumentType(input.dataType)
+  @transient val (keyType, valueType, valueContainsNull) =
+    HigherOrderFunctionHelper.mapKeyValueArgumentType(input.dataType)
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): MapFilter = {
     copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
@@ -331,7 +332,7 @@ case class ArrayFilter(
   override def expectingFunctionType: AbstractDataType = BooleanType
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayFilter = {
-    val elem = ArrayBasedHigherOrderFunction.elementArgumentType(input.dataType)
+    val elem = HigherOrderFunctionHelper.arrayArgumentType(input.dataType)
     copy(function = f(function, elem :: Nil))
   }
 
@@ -410,7 +411,7 @@ case class ArrayAggregate(
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayAggregate = {
     // Be very conservative with nullable. We cannot be sure that the accumulator does not
     // evaluate to null. So we always set nullable to true here.
-    val elem = ArrayBasedHigherOrderFunction.elementArgumentType(input.dataType)
+    val elem = HigherOrderFunctionHelper.arrayArgumentType(input.dataType)
     val acc = zero.dataType -> true
     val newMerge = f(merge, acc :: elem :: Nil)
     val newFinish = f(finish, acc :: Nil)
