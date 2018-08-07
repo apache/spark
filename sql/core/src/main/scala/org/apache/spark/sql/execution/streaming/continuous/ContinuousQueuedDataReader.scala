@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader}
 import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset
 import org.apache.spark.util.ThreadUtils
@@ -52,7 +52,7 @@ class ContinuousQueuedDataReader(
    */
   sealed trait ContinuousRecord
   case object EpochMarker extends ContinuousRecord
-  case class ContinuousRow(row: UnsafeRow, offset: PartitionOffset) extends ContinuousRecord
+  case class ContinuousRow(row: InternalRow, offset: PartitionOffset) extends ContinuousRecord
 
   private val queue = new ArrayBlockingQueue[ContinuousRecord](dataQueueSize)
 
@@ -70,7 +70,7 @@ class ContinuousQueuedDataReader(
   dataReaderThread.setDaemon(true)
   dataReaderThread.start()
 
-  context.addTaskCompletionListener(_ => {
+  context.addTaskCompletionListener[Unit](_ => {
     this.close()
   })
 
@@ -79,12 +79,12 @@ class ContinuousQueuedDataReader(
   }
 
   /**
-   * Return the next UnsafeRow to be read in the current epoch, or null if the epoch is done.
+   * Return the next row to be read in the current epoch, or null if the epoch is done.
    *
    * After returning null, the [[ContinuousDataSourceRDD]] compute() for the following epoch
    * will call next() again to start getting rows.
    */
-  def next(): UnsafeRow = {
+  def next(): InternalRow = {
     val POLL_TIMEOUT_MS = 1000
     var currentEntry: ContinuousRecord = null
 

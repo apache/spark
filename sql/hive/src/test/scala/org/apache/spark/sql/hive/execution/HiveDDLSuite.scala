@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
+import java.util.Date
 
 import scala.language.existentials
 
@@ -782,7 +783,7 @@ class HiveDDLSuite
     val part1 = Map("a" -> "1", "b" -> "5")
     val part2 = Map("a" -> "2", "b" -> "6")
     val root = new Path(catalog.getTableMetadata(tableIdent).location)
-    val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
+    val fs = root.getFileSystem(spark.sessionState.newHadoopConf())
     // valid
     fs.mkdirs(new Path(new Path(root, "a=1"), "b=5"))
     fs.createNewFile(new Path(new Path(root, "a=1/b=5"), "a.csv"))  // file
@@ -2247,6 +2248,18 @@ class HiveDDLSuite
       spark.range(1).select('id, 'id as 'col1, 'id as 'col2).write.saveAsTable("t3")
       spark.sql("select COL1, COL2 from t3").write.format("hive").saveAsTable("t4")
       checkAnswer(spark.table("t4"), Row(0, 0))
+    }
+  }
+
+  test("SPARK-24812: desc formatted table for last access verification") {
+    withTable("t1") {
+      sql(
+        "CREATE TABLE IF NOT EXISTS t1 (c1_int INT, c2_string STRING, c3_float FLOAT)")
+      val desc = sql("DESC FORMATTED t1").filter($"col_name".startsWith("Last Access"))
+        .select("data_type")
+      // check if the last access time doesnt have the default date of year
+      // 1970 as its a wrong access time
+      assert(!(desc.first.toString.contains("1970")))
     }
   }
 

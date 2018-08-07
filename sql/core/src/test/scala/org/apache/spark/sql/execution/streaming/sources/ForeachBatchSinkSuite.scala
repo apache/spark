@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming.sources
 
 import scala.collection.mutable
+import scala.language.implicitConversions
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming.MemoryStream

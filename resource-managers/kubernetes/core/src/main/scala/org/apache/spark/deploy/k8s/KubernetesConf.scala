@@ -43,7 +43,7 @@ private[spark] case class KubernetesDriverSpecificConf(
  */
 private[spark] case class KubernetesExecutorSpecificConf(
     executorId: String,
-    driverPod: Pod)
+    driverPod: Option[Pod])
   extends KubernetesRoleSpecificConf
 
 /**
@@ -186,7 +186,7 @@ private[spark] object KubernetesConf {
       sparkConf: SparkConf,
       executorId: String,
       appId: String,
-      driverPod: Pod): KubernetesConf[KubernetesExecutorSpecificConf] = {
+      driverPod: Option[Pod]): KubernetesConf[KubernetesExecutorSpecificConf] = {
     val executorCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_EXECUTOR_LABEL_PREFIX)
     require(

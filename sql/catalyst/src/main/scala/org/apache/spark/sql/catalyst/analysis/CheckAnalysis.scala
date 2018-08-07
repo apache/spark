@@ -68,10 +68,14 @@ trait CheckAnalysis extends PredicateHelper {
       case e if e.dataType != IntegerType => failAnalysis(
         s"The limit expression must be integer type, but got " +
           e.dataType.catalogString)
-      case e if e.eval().asInstanceOf[Int] < 0 => failAnalysis(
-        "The limit expression must be equal to or greater than 0, but got " +
-          e.eval().asInstanceOf[Int])
-      case e => // OK
+      case e =>
+        e.eval() match {
+          case null => failAnalysis(
+            s"The evaluated limit expression must not be null, but got ${limitExpr.sql}")
+          case v: Int if v < 0 => failAnalysis(
+            s"The limit expression must be equal to or greater than 0, but got $v")
+          case _ => // OK
+        }
     }
   }
 
@@ -79,6 +83,9 @@ trait CheckAnalysis extends PredicateHelper {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
+
+      case p if p.analyzed => // Skip already analyzed sub-plans
+
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.tableIdentifier}")
 
@@ -364,10 +371,11 @@ trait CheckAnalysis extends PredicateHelper {
     }
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
-      case AnalysisBarrier(child) if !child.resolved => checkAnalysis(child)
       case o if !o.resolved => failAnalysis(s"unresolved operator ${o.simpleString}")
       case _ =>
     }
+
+    plan.setAnalyzed()
   }
 
   /**
@@ -531,9 +539,8 @@ trait CheckAnalysis extends PredicateHelper {
 
     var foundNonEqualCorrelatedPred: Boolean = false
 
-    // Simplify the predicates before validating any unsupported correlation patterns
-    // in the plan.
-    BooleanSimplification(sub).foreachUp {
+    // Simplify the predicates before validating any unsupported correlation patterns in the plan.
+    AnalysisHelper.allowInvokingTransformsInAnalyzer { BooleanSimplification(sub).foreachUp {
       // Whitelist operators allowed in a correlated subquery
       // There are 4 categories:
       // 1. Operators that are allowed anywhere in a correlated subquery, and,
@@ -635,6 +642,6 @@ trait CheckAnalysis extends PredicateHelper {
       // are not allowed to have any correlated expressions.
       case p =>
         failOnOuterReferenceInSubTree(p)
-    }
+    }}
   }
 }

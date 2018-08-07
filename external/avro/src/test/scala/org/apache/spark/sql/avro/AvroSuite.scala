@@ -19,7 +19,7 @@ package org.apache.spark.sql.avro
 
 import java.io._
 import java.net.URL
-import java.nio.file.{Files, Path, Paths}
+import java.nio.file.{Files, Paths}
 import java.sql.{Date, Timestamp}
 import java.util.{TimeZone, UUID}
 
@@ -27,18 +27,45 @@ import scala.collection.JavaConverters._
 
 import org.apache.avro.Schema
 import org.apache.avro.Schema.{Field, Type}
-import org.apache.avro.file.DataFileWriter
-import org.apache.avro.generic.{GenericData, GenericDatumWriter, GenericRecord}
+import org.apache.avro.file.{DataFileReader, DataFileWriter}
+import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
 class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
+  import testImplicits._
+
   val episodesAvro = testFile("episodes.avro")
   val testAvro = testFile("test.avro")
+
+  // The test file timestamp.avro is generated via following Python code:
+  // import json
+  // import avro.schema
+  // from avro.datafile import DataFileWriter
+  // from avro.io import DatumWriter
+  //
+  // write_schema = avro.schema.parse(json.dumps({
+  //   "namespace": "logical",
+  //   "type": "record",
+  //   "name": "test",
+  //   "fields": [
+  //   {"name": "timestamp_millis", "type": {"type": "long","logicalType": "timestamp-millis"}},
+  //   {"name": "timestamp_micros", "type": {"type": "long","logicalType": "timestamp-micros"}},
+  //   {"name": "long", "type": "long"}
+  //   ]
+  // }))
+  //
+  // writer = DataFileWriter(open("timestamp.avro", "wb"), DatumWriter(), write_schema)
+  // writer.append({"timestamp_millis": 1000, "timestamp_micros": 2000000, "long": 3000})
+  // writer.append({"timestamp_millis": 666000, "timestamp_micros": 999000000, "long": 777000})
+  // writer.close()
+  val timestampAvro = testFile("timestamp.avro")
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -49,6 +76,13 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     val originalEntries = spark.read.format("avro").load(testAvro).collect()
     val newEntries = spark.read.format("avro").load(newFile)
     checkAnswer(newEntries, originalEntries)
+  }
+
+  test("resolve avro data source") {
+    Seq("avro", "com.databricks.spark.avro").foreach { provider =>
+      assert(DataSource.lookupDataSource(provider, spark.sessionState.conf) ===
+        classOf[org.apache.spark.sql.avro.AvroFileFormat])
+    }
   }
 
   test("reading from multiple paths") {
@@ -322,6 +356,77 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  test("Logical type: timestamp_millis") {
+    val expected = Seq(1000L, 666000L).map(t => Row(new Timestamp(t)))
+    val df = spark.read.format("avro").load(timestampAvro).select('timestamp_millis)
+
+    checkAnswer(df, expected)
+
+    withTempPath { dir =>
+      df.write.format("avro").save(dir.toString)
+      checkAnswer(spark.read.format("avro").load(dir.toString), expected)
+    }
+  }
+
+  test("Logical type: timestamp_micros") {
+    val expected = Seq(2000L, 999000L).map(t => Row(new Timestamp(t)))
+    val df = spark.read.format("avro").load(timestampAvro).select('timestamp_micros)
+
+    checkAnswer(df, expected)
+
+    withTempPath { dir =>
+      df.write.format("avro").save(dir.toString)
+      checkAnswer(spark.read.format("avro").load(dir.toString), expected)
+    }
+  }
+
+  test("Logical type: specify different output timestamp types") {
+    val df =
+      spark.read.format("avro").load(timestampAvro).select('timestamp_millis, 'timestamp_micros)
+
+    val expected = Seq((1000L, 2000L), (666000L, 999000L))
+      .map(t => Row(new Timestamp(t._1), new Timestamp(t._2)))
+
+    Seq("TIMESTAMP_MILLIS", "TIMESTAMP_MICROS").foreach { timestampType =>
+      withSQLConf(SQLConf.AVRO_OUTPUT_TIMESTAMP_TYPE.key -> timestampType) {
+        withTempPath { dir =>
+          df.write.format("avro").save(dir.toString)
+          checkAnswer(spark.read.format("avro").load(dir.toString), expected)
+        }
+      }
+    }
+  }
+
+  test("Read Long type as Timestamp") {
+    val schema = StructType(StructField("long", TimestampType, true) :: Nil)
+    val df = spark.read.format("avro").schema(schema).load(timestampAvro).select('long)
+
+    val expected = Seq(3000L, 777000L).map(t => Row(new Timestamp(t)))
+
+    checkAnswer(df, expected)
+  }
+
+  test("Logical type: user specified schema") {
+    val expected = Seq((1000L, 2000L, 3000L), (666000L, 999000L, 777000L))
+      .map(t => Row(new Timestamp(t._1), new Timestamp(t._2), t._3))
+
+    val avroSchema = s"""
+      {
+        "namespace": "logical",
+        "type": "record",
+        "name": "test",
+        "fields": [
+          {"name": "timestamp_millis", "type": {"type": "long","logicalType": "timestamp-millis"}},
+          {"name": "timestamp_micros", "type": {"type": "long","logicalType": "timestamp-micros"}},
+          {"name": "long", "type": "long"}
+        ]
+      }
+    """
+    val df = spark.read.format("avro").option("avroSchema", avroSchema).load(timestampAvro)
+
+    checkAnswer(df, expected)
+  }
+
   test("Array data types") {
     withTempPath { dir =>
       val testSchema = StructType(Seq(
@@ -356,34 +461,49 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("write with compression") {
+  test("write with compression - sql configs") {
     withTempPath { dir =>
-      val AVRO_COMPRESSION_CODEC = "spark.sql.avro.compression.codec"
-      val AVRO_DEFLATE_LEVEL = "spark.sql.avro.deflate.level"
       val uncompressDir = s"$dir/uncompress"
+      val bzip2Dir = s"$dir/bzip2"
+      val xzDir = s"$dir/xz"
       val deflateDir = s"$dir/deflate"
       val snappyDir = s"$dir/snappy"
 
       val df = spark.read.format("avro").load(testAvro)
-      spark.conf.set(AVRO_COMPRESSION_CODEC, "uncompressed")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "uncompressed")
       df.write.format("avro").save(uncompressDir)
-      spark.conf.set(AVRO_COMPRESSION_CODEC, "deflate")
-      spark.conf.set(AVRO_DEFLATE_LEVEL, "9")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "bzip2")
+      df.write.format("avro").save(bzip2Dir)
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "xz")
+      df.write.format("avro").save(xzDir)
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "deflate")
+      spark.conf.set(SQLConf.AVRO_DEFLATE_LEVEL.key, "9")
       df.write.format("avro").save(deflateDir)
-      spark.conf.set(AVRO_COMPRESSION_CODEC, "snappy")
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "snappy")
       df.write.format("avro").save(snappyDir)
 
       val uncompressSize = FileUtils.sizeOfDirectory(new File(uncompressDir))
+      val bzip2Size = FileUtils.sizeOfDirectory(new File(bzip2Dir))
+      val xzSize = FileUtils.sizeOfDirectory(new File(xzDir))
       val deflateSize = FileUtils.sizeOfDirectory(new File(deflateDir))
       val snappySize = FileUtils.sizeOfDirectory(new File(snappyDir))
 
       assert(uncompressSize > deflateSize)
       assert(snappySize > deflateSize)
+      assert(snappySize > bzip2Size)
+      assert(bzip2Size > xzSize)
     }
   }
 
   test("dsl test") {
     val results = spark.read.format("avro").load(episodesAvro).select("title").collect()
+    assert(results.length === 8)
+  }
+
+  test("old avro data source name works") {
+    val results =
+      spark.read.format("com.databricks.spark.avro")
+        .load(episodesAvro).select("title").collect()
     assert(results.length === 8)
   }
 
@@ -456,7 +576,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     // get the same values back.
     withTempPath { tempDir =>
       val name = "AvroTest"
-      val namespace = "com.databricks.spark.avro"
+      val namespace = "org.apache.spark.avro"
       val parameters = Map("recordName" -> name, "recordNamespace" -> namespace)
 
       val avroDir = tempDir + "/namedAvro"
@@ -497,7 +617,8 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       // TimesStamps are converted to longs
       val times = spark.read.format("avro").load(avroDir).select("Time").collect()
-      assert(times.map(_(0)).toSet == Set(666, 777, 42))
+      assert(times.map(_(0)).toSet ==
+        Set(new Timestamp(666), new Timestamp(777), new Timestamp(42)))
 
       // DecimalType should be converted to string
       val decimals = spark.read.format("avro").load(avroDir).select("Decimal").collect()
@@ -516,9 +637,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   test("correctly read long as date/timestamp type") {
     withTempPath { tempDir =>
-      val sparkSession = spark
-      import sparkSession.implicits._
-
       val currentTime = new Timestamp(System.currentTimeMillis())
       val currentDate = new Date(System.currentTimeMillis())
       val schema = StructType(Seq(
@@ -546,9 +664,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   test("does not coerce null date/timestamp value to 0 epoch.") {
     withTempPath { tempDir =>
-      val sparkSession = spark
-      import sparkSession.implicits._
-
       val nullTime: Timestamp = null
       val nullDate: Date = null
       val schema = StructType(Seq(
@@ -630,12 +745,8 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     intercept[FileNotFoundException] {
       withTempPath { dir =>
         FileUtils.touch(new File(dir, "test"))
-        val hadoopConf = spark.sqlContext.sparkContext.hadoopConfiguration
-        try {
-          hadoopConf.set(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
+        withSQLConf(AvroFileFormat.IgnoreFilesWithoutExtensionProperty -> "true") {
           spark.read.format("avro").load(dir.toString)
-        } finally {
-          hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)
         }
       }
     }
@@ -709,15 +820,10 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       Files.createFile(new File(tempSaveDir, "non-avro").toPath)
 
-      val hadoopConf = spark.sqlContext.sparkContext.hadoopConfiguration
-      val count = try {
-        hadoopConf.set(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
+      withSQLConf(AvroFileFormat.IgnoreFilesWithoutExtensionProperty -> "true") {
         val newDf = spark.read.format("avro").load(tempSaveDir)
-        newDf.count()
-      } finally {
-        hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)
+        assert(newDf.count() == 8)
       }
-      assert(count == 8)
     }
   }
 
@@ -763,8 +869,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   test("read avro file partitioned") {
     withTempPath { dir =>
-      val sparkSession = spark
-      import sparkSession.implicits._
       val df = (0 to 1024 * 3).toDS.map(i => s"record${i}").toDF("records")
       val outputDir = s"$dir/${UUID.randomUUID}"
       df.write.format("avro").save(outputDir)
@@ -779,6 +883,23 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   case class NestedMiddle(id: Int, data: NestedBottom)
 
   case class NestedTop(id: Int, data: NestedMiddle)
+
+  test("Validate namespace in avro file that has nested records with the same name") {
+    withTempPath { dir =>
+      val writeDf = spark.createDataFrame(List(NestedTop(1, NestedMiddle(2, NestedBottom(3, "1")))))
+      writeDf.write.format("avro").save(dir.toString)
+      val file = new File(dir.toString)
+        .listFiles()
+        .filter(_.isFile)
+        .filter(_.getName.endsWith("avro"))
+        .head
+      val reader = new DataFileReader(file, new GenericDatumReader[Any]())
+      val schema = reader.getSchema.toString()
+      assert(schema.contains("\"namespace\":\"topLevelRecord\""))
+      assert(schema.contains("\"namespace\":\"topLevelRecord.data\""))
+      assert(schema.contains("\"namespace\":\"topLevelRecord.data.data\""))
+    }
+  }
 
   test("saving avro that has nested records with the same name") {
     withTempPath { tempDir =>
@@ -880,20 +1001,44 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         Paths.get(new URL(episodesAvro).toURI),
         Paths.get(dir.getCanonicalPath, "episodes"))
 
-      val hadoopConf = spark.sqlContext.sparkContext.hadoopConfiguration
-      val count = try {
-        hadoopConf.set(AvroFileFormat.IgnoreFilesWithoutExtensionProperty, "true")
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      withSQLConf(AvroFileFormat.IgnoreFilesWithoutExtensionProperty -> "true") {
         val newDf = spark
           .read
           .option("ignoreExtension", "true")
           .format("avro")
           .load(s"${dir.getCanonicalPath}/episodes")
-        newDf.count()
-      } finally {
-        hadoopConf.unset(AvroFileFormat.IgnoreFilesWithoutExtensionProperty)
+        assert(newDf.count() == 8)
       }
+    }
+  }
 
-      assert(count == 8)
+  test("SPARK-24881: write with compression - avro options") {
+    def getCodec(dir: String): Option[String] = {
+      val files = new File(dir)
+        .listFiles()
+        .filter(_.isFile)
+        .filter(_.getName.endsWith("avro"))
+      files.map { file =>
+        val reader = new DataFileReader(file, new GenericDatumReader[Any]())
+        val r = reader.getMetaString("avro.codec")
+        r
+      }.map(v => if (v == "null") "uncompressed" else v).headOption
+    }
+    def checkCodec(df: DataFrame, dir: String, codec: String): Unit = {
+      val subdir = s"$dir/$codec"
+      df.write.option("compression", codec).format("avro").save(subdir)
+      assert(getCodec(subdir) == Some(codec))
+    }
+    withTempPath { dir =>
+      val path = dir.toString
+      val df = spark.read.format("avro").load(testAvro)
+
+      checkCodec(df, path, "uncompressed")
+      checkCodec(df, path, "deflate")
+      checkCodec(df, path, "snappy")
+      checkCodec(df, path, "bzip2")
+      checkCodec(df, path, "xz")
     }
   }
 }

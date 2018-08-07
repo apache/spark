@@ -20,9 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
@@ -31,7 +29,6 @@ import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReader
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
@@ -75,12 +72,8 @@ case class DataSourceV2ScanExec(
     case _ => super.outputPartitioning
   }
 
-  private lazy val partitions: Seq[InputPartition[UnsafeRow]] = reader match {
-    case r: SupportsScanUnsafeRow => r.planUnsafeInputPartitions().asScala
-    case _ =>
-      reader.planInputPartitions().asScala.map {
-        new RowToUnsafeRowInputPartition(_, reader.readSchema()): InputPartition[UnsafeRow]
-      }
+  private lazy val partitions: Seq[InputPartition[InternalRow]] = {
+    reader.planInputPartitions().asScala
   }
 
   private lazy val batchPartitions: Seq[InputPartition[ColumnarBatch]] = reader match {
@@ -129,28 +122,4 @@ case class DataSourceV2ScanExec(
       }
     }
   }
-}
-
-class RowToUnsafeRowInputPartition(partition: InputPartition[Row], schema: StructType)
-  extends InputPartition[UnsafeRow] {
-
-  override def preferredLocations: Array[String] = partition.preferredLocations
-
-  override def createPartitionReader: InputPartitionReader[UnsafeRow] = {
-    new RowToUnsafeInputPartitionReader(
-      partition.createPartitionReader, RowEncoder.apply(schema).resolveAndBind())
-  }
-}
-
-class RowToUnsafeInputPartitionReader(
-    val rowReader: InputPartitionReader[Row],
-    encoder: ExpressionEncoder[Row])
-
-  extends InputPartitionReader[UnsafeRow] {
-
-  override def next: Boolean = rowReader.next
-
-  override def get: UnsafeRow = encoder.toRow(rowReader.get).asInstanceOf[UnsafeRow]
-
-  override def close(): Unit = rowReader.close()
 }

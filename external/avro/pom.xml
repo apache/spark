@@ -25,7 +25,7 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-sql-avro_2.11</artifactId>
+  <artifactId>spark-avro_2.11</artifactId>
   <properties>
     <sbt.project.name>avro</sbt.project.name>
   </properties>
