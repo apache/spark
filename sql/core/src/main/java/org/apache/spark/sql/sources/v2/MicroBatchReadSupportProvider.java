@@ -20,7 +20,9 @@ package org.apache.spark.sql.sources.v2;
 import java.util.Optional;
 
 import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.sources.v2.reader.ScanConfig;
 import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReadSupport;
+import org.apache.spark.sql.sources.v2.reader.streaming.Offset;
 import org.apache.spark.sql.types.StructType;
 
 /**
@@ -32,6 +34,12 @@ public interface MicroBatchReadSupportProvider extends DataSourceV2 {
 
   /**
    * Creates a {@link MicroBatchReadSupport} to scan the data from this streaming data source.
+   *
+   * The execution engine will create a {@link MicroBatchReadSupport} at the start of a streaming
+   * query, alternate calls to {@link MicroBatchReadSupport#newScanConfigBuilder(Offset, Offset)}
+   * and {@link MicroBatchReadSupport#planInputPartitions(ScanConfig)} for each micro-batch to
+   * process, and then call stop() when the execution is complete. Note that a single query may
+   * have multiple executions due to restart or failure recovery.
    *
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.

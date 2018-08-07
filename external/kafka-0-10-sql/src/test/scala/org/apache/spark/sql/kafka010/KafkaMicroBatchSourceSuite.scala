@@ -679,11 +679,11 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
         val config = readSupport.newScanConfigBuilder(
           KafkaSourceOffset(Map(tp -> 0L)),
           KafkaSourceOffset(Map(tp -> 100L))).build()
-        val factories = readSupport.planInputPartitions(config)
+        val inputPartitions = readSupport.planInputPartitions(config)
           .map(_.asInstanceOf[KafkaMicroBatchInputPartition])
-        withClue(s"minPartitions = $minPartitions generated factories $factories\n\t") {
-          assert(factories.size == numPartitionsGenerated)
-          factories.foreach { f => assert(f.reuseKafkaConsumer == reusesConsumers) }
+        withClue(s"minPartitions = $minPartitions generated factories $inputPartitions\n\t") {
+          assert(inputPartitions.size == numPartitionsGenerated)
+          inputPartitions.foreach { f => assert(f.reuseKafkaConsumer == reusesConsumers) }
         }
       }
     }
