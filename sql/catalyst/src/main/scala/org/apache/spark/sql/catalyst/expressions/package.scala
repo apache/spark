@@ -208,19 +208,17 @@ package object expressions  {
       // For example, consider an example where "a" is the table name, "b" is the column name,
       // and "c" is the struct field name, i.e. "a.b.c". In this case, Attribute will be "a.b",
       // and the second element will be List("c").
-      matches = matches match {
-        case (Seq(), _) =>
-          nameParts match {
-            case qualifier +: name +: nestedFields =>
-              val key = (qualifier.toLowerCase(Locale.ROOT), name.toLowerCase(Locale.ROOT))
-              val attributes = collectMatches(name, qualified.get(key)).filter { a =>
-                resolver(qualifier, a.qualifier.last)
-              }
-              (attributes, nestedFields)
-            case all =>
-              (Seq.empty, Seq.empty)
-          }
-        case other => other
+      if (matches._1.isEmpty) {
+        matches = nameParts match {
+          case qualifier +: name +: nestedFields =>
+            val key = (qualifier.toLowerCase(Locale.ROOT), name.toLowerCase(Locale.ROOT))
+            val attributes = collectMatches(name, qualified.get(key)).filter { a =>
+              resolver(qualifier, a.qualifier.last)
+            }
+            (attributes, nestedFields)
+          case all =>
+            (Seq.empty[Attribute], Seq.empty[String])
+        }
       }
 
       // If none of attributes match database.table.column pattern or

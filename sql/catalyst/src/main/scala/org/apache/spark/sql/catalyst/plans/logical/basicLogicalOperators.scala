@@ -821,9 +821,9 @@ object SubqueryAlias {
 
   def apply(
       identifier: String,
-      database: Option[String],
+      database: String,
       child: LogicalPlan): SubqueryAlias = {
-    SubqueryAlias(AliasIdentifier(identifier, database), child)
+    SubqueryAlias(AliasIdentifier(identifier, Some(database)), child)
   }
 }
 /**
