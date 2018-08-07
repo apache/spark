@@ -77,7 +77,7 @@ import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
  * the heaviest part of the computation.  In general, this implementation is bound by either
  * the cost of statistics computation on workers or by communicating the sufficient statistics.
  */
-private[spark] object RandomForest extends Logging {
+private[spark] object RandomForest extends Logging with Serializable {
 
   /**
    * Train a random forest.
