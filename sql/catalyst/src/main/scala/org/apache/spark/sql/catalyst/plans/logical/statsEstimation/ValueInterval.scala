@@ -69,7 +69,8 @@ object ValueInterval {
       false
     case (n1: NumericValueInterval, n2: NumericValueInterval) =>
       n1.min.compareTo(n2.max) <= 0 && n1.max.compareTo(n2.min) >= 0
-    case _ => throw new RuntimeException(s"Not supported pair: $r1, $r2 at isIntersected()")
+    case _ =>
+      throw new UnsupportedOperationException(s"Not supported pair: $r1, $r2 at isIntersected()")
   }
 
   /**
@@ -87,7 +88,8 @@ object ValueInterval {
         val newMax = if (n1.max <= n2.max) n1.max else n2.max
         (Some(EstimationUtils.fromDouble(newMin, dt)),
           Some(EstimationUtils.fromDouble(newMax, dt)))
-      case _ => throw new RuntimeException(s"Not supported pair: $r1, $r2 at intersect()")
+      case _ =>
+        throw new UnsupportedOperationException(s"Not supported pair: $r1, $r2 at intersect()")
     }
   }
 }
