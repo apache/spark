@@ -270,6 +270,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 /**
  * Common base class for [[GetMapValue]] and [[ElementAt]].
  */
+
 abstract class GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
   // todo: current search is O(n), improve it.
   def getValueEval(value: Any, ordinal: Any, keyType: DataType, ordering: Ordering[Any]): Any = {
