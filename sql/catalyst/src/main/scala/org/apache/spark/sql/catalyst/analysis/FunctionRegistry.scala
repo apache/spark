@@ -441,7 +441,6 @@ object FunctionRegistry {
     expression[ArrayRemove]("array_remove"),
     expression[ArrayDistinct]("array_distinct"),
     expression[ArrayTransform]("transform"),
-    expression[ArraysZipWith]("zip_with"),
     CreateStruct.registryEntry,
 
     // misc functions

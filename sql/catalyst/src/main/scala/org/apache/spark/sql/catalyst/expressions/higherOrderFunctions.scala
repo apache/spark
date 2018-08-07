@@ -113,27 +113,25 @@ trait HigherOrderFunction extends Expression {
    */
   def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): HigherOrderFunction
 
-  @transient lazy val functionsForEval: Seq[Expression] = {
-    val x = functions.map {
-      case LambdaFunction(function, arguments, hidden) =>
-        val argumentMap = arguments.map { arg => arg.exprId -> arg }.toMap
-        println((1, argumentMap)) // scalastyle:off
-        function.transformUp {
-          case variable: NamedLambdaVariable if argumentMap.contains(variable.exprId) =>
-            println((2, variable)) // scalastyle:off
-            argumentMap(variable.exprId)
-        }
-    }
-    println((3, x)) // scalastyle:off
-    x
+  @transient lazy val functionsForEval: Seq[Expression] = functions.map {
+    case LambdaFunction(function, arguments, hidden) =>
+      val argumentMap = arguments.map { arg => arg.exprId -> arg }.toMap
+      function.transformUp {
+        case variable: NamedLambdaVariable if argumentMap.contains(variable.exprId) =>
+          argumentMap(variable.exprId)
+      }
   }
 }
 
 trait ArrayBasedHigherOrderFunction extends HigherOrderFunction with ExpectsInputTypes {
 
-  override def inputs: Seq[Expression]
+  def input: Expression
 
-  override def functions: Seq[Expression]
+  override def inputs: Seq[Expression] = input :: Nil
+
+  def function: Expression
+
+  override def functions: Seq[Expression] = function :: Nil
 
   def expectingFunctionType: AbstractDataType = AnyDataType
 
@@ -161,10 +159,6 @@ case class ArrayTransform(
     function: Expression)
   extends ArrayBasedHigherOrderFunction with CodegenFallback {
 
-  override val inputs = input :: Nil
-
-  override val functions = function :: Nil
-
   override def nullable: Boolean = input.nullable
 
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
@@ -178,10 +172,8 @@ case class ArrayTransform(
     }
     function match {
       case LambdaFunction(_, arguments, _) if arguments.size == 2 =>
-        println("args1"); println(arguments) // scalastyle:off
         copy(function = f(function, (elementType, containsNull) :: (IntegerType, false) :: Nil))
-      case x =>
-        println("fn"); println(x) // scalastyle:off
+      case _ =>
         copy(function = f(function, (elementType, containsNull) :: Nil))
     }
   }
@@ -193,7 +185,6 @@ case class ArrayTransform(
     } else {
       None
     }
-    println((elementVar, indexVar)) // scalastyle:off
     (elementVar, indexVar)
   }
 
@@ -218,88 +209,4 @@ case class ArrayTransform(
   }
 
   override def prettyName: String = "transform"
-}
-
-/**
-  * Transform elements in an array using the transform function. This is similar to
-  * a `map` in functional programming.
-  */
-@ExpressionDescription(
-  usage = "_FUNC_(expr, func) - Transforms elements in an array using the function.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(array(1, 2, 3), x -> x + 1);
-       array(2, 3, 4)
-      > SELECT _FUNC_(array(1, 2, 3), (x, i) -> x + i);
-       array(1, 3, 5)
-  """,
-  since = "2.4.0")
-case class ArraysZipWith(
-    left: Expression,
-    right: Expression,
-    function: Expression)
-  extends ArrayBasedHigherOrderFunction with CodegenFallback {
-
-  override def inputs: Seq[Expression] = List(left, right)
-
-  override def functions: Seq[Expression] = List(function)
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType, expectingFunctionType)
-
-  override def nullable: Boolean = inputs.exists(_.nullable)
-
-  override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
-
-  println(this.children)
-  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArraysZipWith = {
-    val (leftElementType, leftContainsNull) = left.dataType match {
-      case ArrayType(elementType, containsNull) => (elementType, containsNull)
-      case _ =>
-        val ArrayType(elementType, containsNull) = ArrayType.defaultConcreteType
-        (elementType, containsNull)
-    }
-    val (rightElementType, rightContainsNull) = right.dataType match {
-      case ArrayType(elementType, containsNull) => (elementType, containsNull)
-      case _ =>
-        val ArrayType(elementType, containsNull) = ArrayType.defaultConcreteType
-        (elementType, containsNull)
-    }
-    copy(function = f(function, (leftElementType, leftContainsNull) :: (rightElementType, rightContainsNull) :: Nil))
-  }
-
-  @transient lazy val (arr1Var, arr2Var) = {
-    val LambdaFunction(_, (arr1Var: NamedLambdaVariable) :: (arr2Var: NamedLambdaVariable) :: Nil, _) = function
-    (arr1Var, arr2Var)
-  }
-
-  override def eval(input: InternalRow): Any = {
-    val leftArr = left.eval(input).asInstanceOf[ArrayData]
-    val rightArr = right.eval(input).asInstanceOf[ArrayData]
-
-    if (leftArr == null || rightArr == null) {
-      null
-    } else {
-      val resultLength = math.max(leftArr.numElements(), rightArr.numElements())
-      val f = functionForEval
-      val result = new GenericArrayData(new Array[Any](resultLength))
-      var i = 0
-      while (i < resultLength) {
-        if(i < leftArr.numElements()) {
-          arr1Var.value.set(leftArr.get(i, arr1Var.dataType))
-        } else {
-          arr1Var.value.set(null)
-        }
-        if(i < rightArr.numElements()) {
-          arr2Var.value.set(rightArr.get(i, arr2Var.dataType))
-        } else {
-          arr2Var.value.set(null)
-        }
-        result.update(i, f.eval(input))
-        i += 1
-      }
-      result
-    }
-  }
-
-  override def prettyName: String = "zip_with"
 }
