@@ -133,7 +133,7 @@ trait HigherOrderFunction extends Expression {
   }
 }
 
-object HigherOrderFunctionHelper {
+object HigherOrderFunction {
 
   def arrayArgumentType(dt: DataType): (DataType, Boolean) = {
     dt match {
@@ -218,7 +218,7 @@ case class ArrayTransform(
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayTransform = {
-    val elem = HigherOrderFunctionHelper.arrayArgumentType(input.dataType)
+    val elem = HigherOrderFunction.arrayArgumentType(input.dataType)
     function match {
       case LambdaFunction(_, arguments, _) if arguments.size == 2 =>
         copy(function = f(function, elem :: (IntegerType, false) :: Nil))
@@ -278,7 +278,7 @@ case class MapFilter(
   }
 
   @transient val (keyType, valueType, valueContainsNull) =
-    HigherOrderFunctionHelper.mapKeyValueArgumentType(input.dataType)
+    HigherOrderFunction.mapKeyValueArgumentType(input.dataType)
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): MapFilter = {
     copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
@@ -332,7 +332,7 @@ case class ArrayFilter(
   override def expectingFunctionType: AbstractDataType = BooleanType
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayFilter = {
-    val elem = HigherOrderFunctionHelper.arrayArgumentType(input.dataType)
+    val elem = HigherOrderFunction.arrayArgumentType(input.dataType)
     copy(function = f(function, elem :: Nil))
   }
 
@@ -411,7 +411,7 @@ case class ArrayAggregate(
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayAggregate = {
     // Be very conservative with nullable. We cannot be sure that the accumulator does not
     // evaluate to null. So we always set nullable to true here.
-    val elem = HigherOrderFunctionHelper.arrayArgumentType(input.dataType)
+    val elem = HigherOrderFunction.arrayArgumentType(input.dataType)
     val acc = zero.dataType -> true
     val newMerge = f(merge, acc :: elem :: Nil)
     val newFinish = f(finish, acc :: Nil)
