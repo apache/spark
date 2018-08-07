@@ -33,7 +33,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
         .agg(sum($"earnings")),
       expected)
     checkAnswer(
-      courseSales.groupBy($"year").pivot($"course", Seq("dotNET", "Java"))
+      courseSales.groupBy($"year").pivot($"course", Seq(lit("dotNET"), lit("Java")))
         .agg(sum($"earnings")),
       expected)
   }
@@ -44,7 +44,10 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
       courseSales.groupBy("course").pivot("year", Seq(2012, 2013)).agg(sum($"earnings")),
       expected)
     checkAnswer(
-      courseSales.groupBy('course).pivot('year, Seq(2012, 2013)).agg(sum('earnings)),
+      courseSales
+        .groupBy('course)
+        .pivot('year, Seq(lit(2012), lit(2013)))
+        .agg(sum('earnings)),
       expected)
   }
 
@@ -58,7 +61,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
       expected)
     checkAnswer(
       courseSales.groupBy($"year")
-        .pivot($"course", Seq("dotNET", "Java"))
+        .pivot($"course", Seq(lit("dotNET"), lit("Java")))
         .agg(sum($"earnings"), avg($"earnings")),
       expected)
   }
@@ -204,7 +207,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
       complexData.groupBy().pivot("b", Seq(true, false)).agg(max("a")),
       expected)
     checkAnswer(
-      complexData.groupBy().pivot('b, Seq(true, false)).agg(max('a)),
+      complexData.groupBy().pivot('b, Seq(lit(true), lit(false))).agg(max('a)),
       expected)
   }
 
@@ -272,7 +275,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
     val expected = Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
     val df = trainingSales
       .groupBy($"sales.year")
-      .pivot(lower($"sales.course"), Seq("dotNet", "Java").map(_.toLowerCase))
+      .pivot(lower($"sales.course"), Seq("dotNet", "Java").map(_.toLowerCase).map(lit))
       .agg(sum($"sales.earnings"))
 
     checkAnswer(df, expected)
@@ -282,7 +285,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
     val expected = Row(2012, 10000.0) :: Row(2013, 48000.0) :: Nil
     val df = trainingSales
       .groupBy($"sales.year")
-      .pivot(concat_ws("-", $"training", $"sales.course"), Seq("Experts-dotNET"))
+      .pivot(concat_ws("-", $"training", $"sales.course"), Seq(lit("Experts-dotNET")))
       .agg(sum($"sales.earnings"))
 
     checkAnswer(df, expected)
@@ -292,7 +295,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
     val expected = Row(2012, 35000.0) :: Row(2013, 78000.0) :: Nil
     val df1 = trainingSales
       .groupBy($"sales.year")
-      .pivot(lit(123), Seq(123))
+      .pivot(lit(123), Seq(lit(123)))
       .agg(sum($"sales.earnings"))
 
     checkAnswer(df1, expected)
@@ -302,7 +305,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
     val exception = intercept[AnalysisException] {
       trainingSales
         .groupBy($"sales.year")
-        .pivot(min($"training"), Seq("Experts"))
+        .pivot(min($"training"), Seq(lit("Experts")))
         .agg(sum($"sales.earnings"))
     }
 
