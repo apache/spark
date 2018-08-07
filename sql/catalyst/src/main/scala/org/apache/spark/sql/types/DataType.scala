@@ -426,9 +426,9 @@ object DataType {
 
         if (readFields.size > writeFields.size) {
           val missingFieldsStr = readFields.takeRight(readFields.size - writeFields.size)
-                  .filterNot(_.nullable).map(f => s"'${f.name}'").mkString(", ")
+                  .map(f => s"'${f.name}'").mkString(", ")
           if (missingFieldsStr.nonEmpty) {
-            addError(s"Struct '$context' missing required (non-null) fields: $missingFieldsStr")
+            addError(s"Struct '$context' missing fields: $missingFieldsStr")
             fieldCompatible = false
           }
 

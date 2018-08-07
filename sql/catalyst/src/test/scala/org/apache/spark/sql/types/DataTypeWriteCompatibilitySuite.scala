@@ -89,7 +89,7 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
       "Should fail because required field 'y' is missing") { err =>
       assert(err.contains("'t'"), "Should include the struct name for context")
       assert(err.contains("'y'"), "Should include the nested field name")
-      assert(err.contains("missing required (non-null) field"), "Should call out field missing")
+      assert(err.contains("missing field"), "Should call out field missing")
     }
   }
 
@@ -106,7 +106,7 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
 
       assert(errs(1).contains("'t'"), "Should include the struct name for context")
       assert(errs(1).contains("'y'"), "Should include the _last_ nested fields of the read schema")
-      assert(errs(1).contains("missing required (non-null) field"), "Should call out field missing")
+      assert(errs(1).contains("missing field"), "Should call out field missing")
     }
   }
 
@@ -123,11 +123,15 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
     // types are compatible: (req int, req int) => (req int, req int, opt int)
     // but this should still fail because the names do not match.
 
-    assertSingleError(missingMiddleField, expectedStruct, "t",
-      "Should fail because field 'y' is matched to field 'z'") { err =>
-      assert(err.contains("'t'"), "Should include the struct name for context")
-      assert(err.contains("expected 'y', found 'z'"), "Should detect name mismatch")
-      assert(err.contains("field name does not match"), "Should identify name problem")
+    assertNumErrors(missingMiddleField, expectedStruct, "t",
+      "Should fail because field 'y' is matched to field 'z'", 2) { errs =>
+      assert(errs(0).contains("'t'"), "Should include the struct name for context")
+      assert(errs(0).contains("expected 'y', found 'z'"), "Should detect name mismatch")
+      assert(errs(0).contains("field name does not match"), "Should identify name problem")
+
+      assert(errs(1).contains("'t'"), "Should include the struct name for context")
+      assert(errs(1).contains("'z'"), "Should include the nested field name")
+      assert(errs(1).contains("missing field"), "Should call out field missing")
     }
   }
 
@@ -185,7 +189,8 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
       "Should allow widening float fields x and y to double")
   }
 
-  test("Check struct types: missing optional field is allowed") {
+  ignore("Check struct types: missing optional field is allowed") {
+    // built-in data sources do not yet support missing fields when optional
     assertAllowed(point2, point3, "t",
       "Should allow writing point (x,y) to point(x,y,z=null)")
   }
@@ -309,7 +314,7 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
       StructField("y", LongType)
     ))
 
-    assertNumErrors(writeType, readType, "top", "Should catch 13 errors", 13) { errs =>
+    assertNumErrors(writeType, readType, "top", "Should catch 14 errors", 14) { errs =>
       assert(errs(0).contains("'top.a.element'"), "Should identify bad type")
       assert(errs(0).contains("Cannot safely cast"))
       assert(errs(0).contains("StringType to DoubleType"))
@@ -342,20 +347,24 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
       assert(errs(8).contains("expected 'y', found 'z'"), "Should detect name mismatch")
       assert(errs(8).contains("field name does not match"), "Should identify name problem")
 
-      assert(errs(9).contains("'top.map_of_structs'"), "Should identify bad type")
-      assert(errs(9).contains("Cannot write nullable values to map of non-nulls"))
+      assert(errs(9).contains("'top.map_of_structs.value'"), "Should identify bad type")
+      assert(errs(9).contains("'z'"), "Should identify missing field")
+      assert(errs(9).contains("missing fields"), "Should detect missing field")
 
-      assert(errs(10).contains("'top.x'"), "Should identify bad type")
-      assert(errs(10).contains("Cannot safely cast"))
-      assert(errs(10).contains("LongType to IntegerType"))
+      assert(errs(10).contains("'top.map_of_structs'"), "Should identify bad type")
+      assert(errs(10).contains("Cannot write nullable values to map of non-nulls"))
 
-      assert(errs(11).contains("'top'"), "Should identify bad type")
-      assert(errs(11).contains("expected 'x', found 'y'"), "Should detect name mismatch")
-      assert(errs(11).contains("field name does not match"), "Should identify name problem")
+      assert(errs(11).contains("'top.x'"), "Should identify bad type")
+      assert(errs(11).contains("Cannot safely cast"))
+      assert(errs(11).contains("LongType to IntegerType"))
 
       assert(errs(12).contains("'top'"), "Should identify bad type")
-      assert(errs(12).contains("'missing1'"), "Should identify missing field")
-      assert(errs(12).contains("missing required (non-null) fields"), "Should detect missing field")
+      assert(errs(12).contains("expected 'x', found 'y'"), "Should detect name mismatch")
+      assert(errs(12).contains("field name does not match"), "Should identify name problem")
+
+      assert(errs(13).contains("'top'"), "Should identify bad type")
+      assert(errs(13).contains("'missing1'"), "Should identify missing field")
+      assert(errs(13).contains("missing fields"), "Should detect missing field")
     }
   }
 
