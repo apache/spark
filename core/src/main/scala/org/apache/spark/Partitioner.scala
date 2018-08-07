@@ -138,7 +138,8 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     partitions: Int,
     rdd: RDD[_ <: Product2[K, V]],
     private var ascending: Boolean = true,
-    val samplePointsPerPartitionHint: Int = 20)
+    val samplePointsPerPartitionHint: Int = 20,
+    val sampleCacheEnabled: Boolean = true)
   extends Partitioner {
 
   // A constructor declared in order to maintain backward compatibility for Java, when we add the
@@ -169,8 +170,11 @@ class RangePartitioner[K : Ordering : ClassTag, V](
       val sampleSizePerPartition = math.ceil(3.0 * sampleSize / rdd.partitions.length).toInt
       val (numItems, sketched) = RangePartitioner.sketch(rdd.map(_._1), sampleSizePerPartition)
       val numSampled = sketched.map(_._3.length).sum
+      if (numItems == 0) {
+        Array.empty
+      }
       // already got the whole data
-      if (numItems == numSampled) {
+      else if (sampleCacheEnabled && numItems == numSampled) {
         // get the sampled data
         sampledArray = sketched.foldLeft(Array.empty[K])((total, sample) => {
           total ++ sample._3

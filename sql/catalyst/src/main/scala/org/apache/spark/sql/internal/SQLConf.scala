@@ -1205,6 +1205,13 @@ object SQLConf {
       .intConf
       .createWithDefault(100)
 
+  val RANGE_EXCHANGE_SAMPLE_CACHE_ENABLE =
+    buildConf("spark.sql.execution.rangeExchange.sampleCache.enabled")
+      .doc("When true, if the sampled data in range partitioning covers the whole data, " +
+        "the sampled data will be cached for the next sort.")
+      .booleanConf
+      .createWithDefault(true)
+
   val ARROW_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.enabled")
       .doc("When true, make use of Apache Arrow for columnar data transfers. Currently available " +
@@ -1770,6 +1777,8 @@ class SQLConf extends Serializable with Logging {
   def supportQuotedRegexColumnName: Boolean = getConf(SUPPORT_QUOTED_REGEX_COLUMN_NAME)
 
   def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
+
+  def rangeExchangeSampleCacheEnabled: Boolean = getConf(RANGE_EXCHANGE_SAMPLE_CACHE_ENABLE)
 
   def arrowEnabled: Boolean = getConf(ARROW_EXECUTION_ENABLED)
 
