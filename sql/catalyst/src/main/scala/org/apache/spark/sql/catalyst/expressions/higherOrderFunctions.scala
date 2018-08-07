@@ -24,8 +24,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
 
@@ -467,9 +466,11 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 
   @transient lazy val functionForEval: Expression = functionsForEval.head
 
-  @transient lazy val MapType(keyType, leftValueType, _) = getMapType(left)
+  @transient lazy val (keyType, leftValueType, _) =
+    HigherOrderFunction.mapKeyValueArgumentType(left.dataType)
 
-  @transient lazy val MapType(_, rightValueType, _) = getMapType(right)
+  @transient lazy val (_, rightValueType, _) =
+    HigherOrderFunction.mapKeyValueArgumentType(right.dataType)
 
   @transient lazy val ordering = TypeUtils.getInterpretedOrdering(keyType)
 
@@ -489,11 +490,6 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
         s"been two ${MapType.simpleString}s with the same key type, but it's " +
         s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
     }
-  }
-
-  private def getMapType(expr: Expression) = expr.dataType match {
-    case m: MapType => m
-    case _ => MapType.defaultConcreteType
   }
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): MapZipWith = {
