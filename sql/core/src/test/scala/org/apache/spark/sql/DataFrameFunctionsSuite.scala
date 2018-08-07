@@ -1854,6 +1854,52 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(ex2.getMessage.contains("data type mismatch: argument 1 requires array type"))
   }
 
+  test("map_filter") {
+    val dfInts = Seq(
+      Map(1 -> 10, 2 -> 20, 3 -> 30),
+      Map(1 -> -1, 2 -> -2, 3 -> -3),
+      Map(1 -> 10, 2 -> 5, 3 -> -3)).toDF("m")
+
+    checkAnswer(dfInts.selectExpr(
+      "map_filter(m, (k, v) -> k * 10 = v)", "map_filter(m, (k, v) -> k = -v)"),
+      Seq(
+        Row(Map(1 -> 10, 2 -> 20, 3 -> 30), Map()),
+        Row(Map(), Map(1 -> -1, 2 -> -2, 3 -> -3)),
+        Row(Map(1 -> 10), Map(3 -> -3))))
+
+    val dfComplex = Seq(
+      Map(1 -> Seq(Some(1)), 2 -> Seq(Some(1), Some(2)), 3 -> Seq(Some(1), Some(2), Some(3))),
+      Map(1 -> null, 2 -> Seq(Some(-2), Some(-2)), 3 -> Seq[Option[Int]](None))).toDF("m")
+
+    checkAnswer(dfComplex.selectExpr(
+      "map_filter(m, (k, v) -> k = v[0])", "map_filter(m, (k, v) -> k = size(v))"),
+      Seq(
+        Row(Map(1 -> Seq(1)), Map(1 -> Seq(1), 2 -> Seq(1, 2), 3 -> Seq(1, 2, 3))),
+        Row(Map(), Map(2 -> Seq(-2, -2)))))
+
+    // Invalid use cases
+    val df = Seq(
+      (Map(1 -> "a"), 1),
+      (Map.empty[Int, String], 2),
+      (null, 3)
+    ).toDF("s", "i")
+
+    val ex1 = intercept[AnalysisException] {
+      df.selectExpr("map_filter(s, (x, y, z) -> x + y + z)")
+    }
+    assert(ex1.getMessage.contains("The number of lambda function arguments '3' does not match"))
+
+    val ex2 = intercept[AnalysisException] {
+      df.selectExpr("map_filter(s, x -> x)")
+    }
+    assert(ex2.getMessage.contains("The number of lambda function arguments '1' does not match"))
+
+    val ex3 = intercept[AnalysisException] {
+      df.selectExpr("map_filter(i, (k, v) -> k > v)")
+    }
+    assert(ex3.getMessage.contains("data type mismatch: argument 1 requires map type"))
+  }
+
   test("filter function - array for primitive type not containing null") {
     val df = Seq(
       Seq(1, 9, 8, 7),
