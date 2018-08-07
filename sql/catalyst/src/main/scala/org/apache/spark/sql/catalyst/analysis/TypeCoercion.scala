@@ -318,7 +318,7 @@ object TypeCoercion {
    */
   object WidenSetOperationTypes extends Rule[LogicalPlan] {
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
       case s @ Except(left, right, isAll) if s.childrenResolved &&
         left.output.length == right.output.length && !s.resolved =>
         val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
@@ -739,17 +739,18 @@ object TypeCoercion {
    */
   case class ConcatCoercion(conf: SQLConf) extends TypeCoercionRule {
 
-    override protected def coerceTypes(
-      plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown { case p =>
-      p transformExpressionsUp {
-        // Skip nodes if unresolved or empty children
-        case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
-        case c @ Concat(children) if conf.concatBinaryAsString ||
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = {
+      plan resolveOperators { case p =>
+        p transformExpressionsUp {
+          // Skip nodes if unresolved or empty children
+          case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
+          case c @ Concat(children) if conf.concatBinaryAsString ||
             !children.map(_.dataType).forall(_ == BinaryType) =>
-          val newChildren = c.children.map { e =>
-            ImplicitTypeCasts.implicitCast(e, StringType).getOrElse(e)
-          }
-          c.copy(children = newChildren)
+            val newChildren = c.children.map { e =>
+              ImplicitTypeCasts.implicitCast(e, StringType).getOrElse(e)
+            }
+            c.copy(children = newChildren)
+        }
       }
     }
   }
@@ -762,23 +763,24 @@ object TypeCoercion {
    */
   case class EltCoercion(conf: SQLConf) extends TypeCoercionRule {
 
-    override protected def coerceTypes(
-      plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown { case p =>
-      p transformExpressionsUp {
-        // Skip nodes if unresolved or not enough children
-        case c @ Elt(children) if !c.childrenResolved || children.size < 2 => c
-        case c @ Elt(children) =>
-          val index = children.head
-          val newIndex = ImplicitTypeCasts.implicitCast(index, IntegerType).getOrElse(index)
-          val newInputs = if (conf.eltOutputAsString ||
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = {
+      plan resolveOperators { case p =>
+        p transformExpressionsUp {
+          // Skip nodes if unresolved or not enough children
+          case c @ Elt(children) if !c.childrenResolved || children.size < 2 => c
+          case c @ Elt(children) =>
+            val index = children.head
+            val newIndex = ImplicitTypeCasts.implicitCast(index, IntegerType).getOrElse(index)
+            val newInputs = if (conf.eltOutputAsString ||
               !children.tail.map(_.dataType).forall(_ == BinaryType)) {
-            children.tail.map { e =>
-              ImplicitTypeCasts.implicitCast(e, StringType).getOrElse(e)
+              children.tail.map { e =>
+                ImplicitTypeCasts.implicitCast(e, StringType).getOrElse(e)
+              }
+            } else {
+              children.tail
             }
-          } else {
-            children.tail
-          }
-          c.copy(children = newIndex +: newInputs)
+            c.copy(children = newIndex +: newInputs)
+        }
       }
     }
   }
@@ -989,7 +991,7 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
 
   protected def coerceTypes(plan: LogicalPlan): LogicalPlan
 
-  private def propagateTypes(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  private def propagateTypes(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
     // No propagation required for leaf nodes.
     case q: LogicalPlan if q.children.isEmpty => q
 
