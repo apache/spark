@@ -29,7 +29,8 @@ import org.apache.spark.annotation.InterfaceStability;
  *
  * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.catalyst.InternalRow}
  * for normal data sources, or {@link org.apache.spark.sql.vectorized.ColumnarBatch} for columnar
- * data sources(whose {@link PartitionReaderFactory#supportColumnarReads()} returns true).
+ * data sources(whose {@link PartitionReaderFactory#supportColumnarReads(InputPartition)}
+ * returns true).
  */
 @InterfaceStability.Evolving
 public interface PartitionReader<T> extends Closeable {
