@@ -20,7 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.io.{File, IOException}
 import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
-import java.util.{Map => JMap, Properties}
+import java.util.{Map => JMap, Properties, UUID}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -308,9 +308,14 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     props.put("log.flush.interval.messages", "1")
     props.put("replica.socket.timeout.ms", "1500")
     props.put("delete.topic.enable", "true")
+    props.put("group.initial.rebalance.delay.ms", "10")
+
+    // Change the following settings as we have only 1 broker
     props.put("offsets.topic.num.partitions", "1")
     props.put("offsets.topic.replication.factor", "1")
-    props.put("group.initial.rebalance.delay.ms", "10")
+    props.put("transaction.state.log.replication.factor", "1")
+    props.put("transaction.state.log.min.isr", "1")
+
     // Can not use properties.putAll(propsMap.asJava) in scala-2.12
     // See https://github.com/scala/bug/issues/10418
     withBrokerProps.foreach { case (k, v) => props.put(k, v) }
@@ -325,6 +330,14 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     // wait for all in-sync replicas to ack sends
     props.put("acks", "all")
     props
+  }
+
+  def createProducer(usingTrascation: Boolean): KafkaProducer[String, String] = {
+    val props = producerConfiguration
+    if (usingTrascation) {
+      props.put("transactional.id", UUID.randomUUID().toString)
+    }
+    new KafkaProducer[String, String](props)
   }
 
   private def consumerConfiguration: Properties = {

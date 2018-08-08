@@ -31,6 +31,17 @@ import org.apache.spark.sql.kafka010.KafkaDataConsumer.AvailableOffsetRange
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.util.UninterruptibleThread
 
+/**
+ * An exception to indicate there is a missing offset in the records returned by Kafka consumer.
+ * This means it's either a transaction (commit or abort) marker, or an aborted message if
+ * "isolation.level" is "read_committed". The offsets in the range [offset, nextOffsetToFetch) are
+ * missing. In order words, `nextOffsetToFetch` indicates the next offset to fetch.
+ */
+private[kafka010] class MissingOffsetException(
+    val offset: Long,
+    val nextOffsetToFetch: Long) extends Exception(
+  s"Offset $offset is missing. The next offset to fetch is: $nextOffsetToFetch")
+
 private[kafka010] sealed trait KafkaDataConsumer {
   /**
    * Get the record for the given offset if available. Otherwise it will either throw error
@@ -94,6 +105,10 @@ private[kafka010] case class InternalKafkaConsumer(
   @volatile private var fetchedData =
     ju.Collections.emptyIterator[ConsumerRecord[Array[Byte], Array[Byte]]]
   @volatile private var nextOffsetInFetchedData = UNKNOWN_OFFSET
+
+  @volatile private var offsetBeforePoll: Long = UNKNOWN_OFFSET
+
+  @volatile private var offsetAfterPoll: Long = UNKNOWN_OFFSET
 
   /** Create a KafkaConsumer to fetch records for `topicPartition` */
   private def createConsumer: KafkaConsumer[Array[Byte], Array[Byte]] = {
@@ -170,6 +185,14 @@ private[kafka010] case class InternalKafkaConsumer(
           resetConsumer()
           reportDataLoss(failOnDataLoss, s"Cannot fetch offset $toFetchOffset", e)
           toFetchOffset = getEarliestAvailableOffsetBetween(toFetchOffset, untilOffset)
+        case e: MissingOffsetException =>
+          toFetchOffset = e.nextOffsetToFetch
+          if (toFetchOffset >= untilOffset) {
+            resetFetchedData()
+            toFetchOffset = UNKNOWN_OFFSET
+          } else {
+            logDebug(s"Skipped offsets [$offset, $toFetchOffset]")
+          }
       }
     }
 
@@ -251,25 +274,38 @@ private[kafka010] case class InternalKafkaConsumer(
       untilOffset: Long,
       pollTimeoutMs: Long,
       failOnDataLoss: Boolean): ConsumerRecord[Array[Byte], Array[Byte]] = {
-    if (offset != nextOffsetInFetchedData || !fetchedData.hasNext()) {
+    if (offset != nextOffsetInFetchedData) {
       // This is the first fetch, or the last pre-fetched data has been drained.
       // Seek to the offset because we may call seekToBeginning or seekToEnd before this.
       seek(offset)
       poll(pollTimeoutMs)
     }
+    if (!fetchedData.hasNext) {
+      if (offset < offsetAfterPoll) {
+        resetFetchedData()
+        throw new MissingOffsetException(offset, offsetAfterPoll)
+      } else {
+        seek(offset)
+        poll(pollTimeoutMs)
+      }
+    }
 
     if (!fetchedData.hasNext()) {
-      // We cannot fetch anything after `poll`. Two possible cases:
+      // We cannot fetch anything after `poll`. Three possible cases:
       // - `offset` is out of range so that Kafka returns nothing. Just throw
       // `OffsetOutOfRangeException` to let the caller handle it.
       // - Cannot fetch any data before timeout. TimeoutException will be thrown.
+      // - Fetched something but all of them are not valid date messages. In this case, the position
+      //   will be changed and we can use it to determine this case.
       val range = getAvailableOffsetRange()
       if (offset < range.earliest || offset >= range.latest) {
         throw new OffsetOutOfRangeException(
           Map(topicPartition -> java.lang.Long.valueOf(offset)).asJava)
-      } else {
+      } else if (offsetBeforePoll == offsetAfterPoll) {
         throw new TimeoutException(
           s"Cannot fetch record for offset $offset in $pollTimeoutMs milliseconds")
+      } else {
+        throw new MissingOffsetException(offset, offsetAfterPoll)
       }
     } else {
       val record = fetchedData.next()
@@ -277,6 +313,11 @@ private[kafka010] case class InternalKafkaConsumer(
       // In general, Kafka uses the specified offset as the start point, and tries to fetch the next
       // available offset. Hence we need to handle offset mismatch.
       if (record.offset > offset) {
+        val range = getAvailableOffsetRange()
+        if (range.earliest <= offset) {
+          resetFetchedData()
+          throw new MissingOffsetException(offset, record.offset)
+        }
         // This may happen when some records aged out but their offsets already got verified
         if (failOnDataLoss) {
           reportDataLoss(true, s"Cannot fetch records in [$offset, ${record.offset})")
@@ -347,9 +388,12 @@ private[kafka010] case class InternalKafkaConsumer(
   }
 
   private def poll(pollTimeoutMs: Long): Unit = {
+    offsetBeforePoll = consumer.position(topicPartition)
     val p = consumer.poll(pollTimeoutMs)
     val r = p.records(topicPartition)
     logDebug(s"Polled $groupId ${p.partitions()}  ${r.size}")
+    offsetAfterPoll = consumer.position(topicPartition)
+    logDebug(s"Offset changed from $offsetBeforePoll to $offsetAfterPoll after polling")
     fetchedData = r.iterator
   }
 }

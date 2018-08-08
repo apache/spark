@@ -327,6 +327,7 @@ private[kafka010] case class KafkaMicroBatchInputPartitionReader(
     offsetRange.topicPartition, executorKafkaParams, reuseKafkaConsumer)
 
   private val rangeToRead = resolveRange(offsetRange)
+
   private val converter = new KafkaRecordToUnsafeRowConverter
 
   private var nextOffset = rangeToRead.fromOffset
@@ -337,6 +338,7 @@ private[kafka010] case class KafkaMicroBatchInputPartitionReader(
       val record = consumer.get(nextOffset, rangeToRead.untilOffset, pollTimeoutMs, failOnDataLoss)
       if (record != null) {
         nextRow = converter.toUnsafeRow(record)
+        nextOffset = record.offset + 1
         true
       } else {
         false
@@ -348,7 +350,6 @@ private[kafka010] case class KafkaMicroBatchInputPartitionReader(
 
   override def get(): UnsafeRow = {
     assert(nextRow != null)
-    nextOffset += 1
     nextRow
   }
 
