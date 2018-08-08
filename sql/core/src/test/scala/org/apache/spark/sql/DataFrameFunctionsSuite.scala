@@ -2271,8 +2271,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         dfExample3.selectExpr("transform_keys(x, (k, v) -> v)").show()
       }
       assert(ex3.getMessage.contains("Cannot use null as map key!"))
-
-
     }
 
     testInvalidLambdaFunctions()
