@@ -273,6 +273,9 @@ class SymmetricHashJoinStateManager(
           s.copy(desc = newDesc(desc)) -> value
         case (s @ StateStoreCustomTimingMetric(_, desc), value) =>
           s.copy(desc = newDesc(desc)) -> value
+        case (s, _) =>
+          throw new IllegalArgumentException(
+            s"Unknown state store custom metric is found at metrics: $s")
       }
     )
   }
