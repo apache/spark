@@ -22,11 +22,12 @@ import java.sql.{Date, Timestamp}
 import scala.collection.immutable.HashSet
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.RandomDataGenerator
+import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -155,7 +156,16 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("IN with different types") {
-    def testWithRandomDataGeneration(dataType: DataType, nullable: Boolean): Unit = {
+    def testWithRandomDataGeneration(dataType: DataType,
+        nullable: Boolean,
+        legacyNullHandling: Boolean = false): Unit = {
+      def isNull(e: Any): Boolean = {
+        if (!legacyNullHandling && dataType.isInstanceOf[StructType]) {
+          e == null || e.asInstanceOf[Row].anyNull
+        } else {
+          e == null
+        }
+      }
       val maybeDataGen = RandomDataGenerator.forType(dataType, nullable = nullable)
       // Actually we won't pass in unsupported data types, this is a safety check.
       val dataGen = maybeDataGen.getOrElse(
@@ -178,11 +188,11 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
       val input = inputData.map(NonFoldableLiteral.create(_, dataType))
-      val expected = if (inputData(0) == null) {
+      val expected = if (isNull(inputData.head)) {
         null
       } else if (inputData.slice(1, 10).contains(inputData(0))) {
         true
-      } else if (inputData.slice(1, 10).contains(null)) {
+      } else if (inputData.slice(1, 10).exists(isNull)) {
         null
       } else {
         false
@@ -218,7 +228,13 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
         nullable <- Seq(true, false)) {
       val structType = StructType(
         StructField("a", colOneType) :: StructField("b", colTwoType) :: Nil)
-      testWithRandomDataGeneration(structType, nullable)
+      if (nullable) {
+        Seq("true", "false").foreach { legacyNullHandling =>
+          withSQLConf((SQLConf.LEGACY_IN_FALSE_FOR_NULL_FIELD.key, legacyNullHandling)) {
+            testWithRandomDataGeneration(structType, nullable, legacyNullHandling.toBoolean)
+          }
+        }
+      }
     }
 
     // Map types: not supported
