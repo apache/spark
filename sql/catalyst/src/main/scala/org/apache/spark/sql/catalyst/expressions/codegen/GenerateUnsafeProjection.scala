@@ -72,7 +72,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
        |  // Remember the current cursor so that we can calculate how many bytes are
        |  // written later.
        |  final int $previousCursor = $rowWriter.cursor();
-       |  ${writeExpressionsToBuffer(ctx, tmpInput, fieldEvals, fieldTypeAndNullables, structRowWriter)}
+       |  ${writeExpressionsToBuffer(
+                ctx, tmpInput, fieldEvals, fieldTypeAndNullables.map(_._1), structRowWriter)}
        |  $rowWriter.setOffsetAndSizeFromPreviousCursor($index, $previousCursor);
        |}
      """.stripMargin
@@ -82,7 +83,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       ctx: CodegenContext,
       row: String,
       inputs: Seq[ExprCode],
-      inputTypeAndNullables: Seq[(DataType, Boolean)],
+      inputType: Seq[DataType],
       rowWriter: String,
       isTopLevel: Boolean = false): String = {
     val resetWriter = if (isTopLevel) {
@@ -100,8 +101,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       s"$rowWriter.resetRowWriter();"
     }
 
-    val writeFields = inputs.zip(inputTypeAndNullables).zipWithIndex.map {
-      case ((input, (dataType, nullable)), index) =>
+    val writeFields = inputs.zip(inputType).zipWithIndex.map {
+      case ((input, dataType), index) =>
         val dt = UserDefinedType.sqlType(dataType)
 
         val setNull = dt match {
@@ -112,7 +113,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         }
 
         val writeField = writeElement(ctx, input.value, index.toString, dt, rowWriter)
-        if (input.isNull == FalseLiteral || !nullable) {
+        if (input.isNull == FalseLiteral) {
           s"""
              |${input.code}
              |${writeField.trim}
@@ -234,7 +235,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
        |  // Remember the current cursor so that we can write numBytes of key array later.
        |  final int $tmpCursor = $rowWriter.cursor();
        |
-       |  ${writeArrayToBuffer(ctx, s"$tmpInput.keyArray()", keyType, false, rowWriter)}
+       |  ${writeArrayToBuffer(
+               ctx, s"$tmpInput.keyArray()", keyType, false, rowWriter)}
        |
        |  // Write the numBytes of key array into the first 8 bytes.
        |  Platform.putLong(
@@ -242,7 +244,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
        |    $tmpCursor - 8,
        |    $rowWriter.cursor() - $tmpCursor);
        |
-       |  ${writeArrayToBuffer(ctx, s"$tmpInput.valueArray()", valueType, valueNullable, rowWriter)}
+       |  ${writeArrayToBuffer(
+               ctx, s"$tmpInput.valueArray()", valueType, valueNullable, rowWriter)}
        |  $rowWriter.setOffsetAndSizeFromPreviousCursor($index, $previousCursor);
        |}
      """.stripMargin
@@ -283,12 +286,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       expressions: Seq[Expression],
       useSubexprElimination: Boolean = false): ExprCode = {
     val exprEvals = ctx.generateExpressions(expressions, useSubexprElimination)
-    val exprTypeAndNullables = expressions.map(e => (e.dataType, e.nullable))
+    val exprType = expressions.map(_.dataType)
 
-    val numVarLenFields = exprTypeAndNullables.count {
-      case (dt, _) if UnsafeRow.isFixedLength(dt) => false
+    val numVarLenFields = exprType.count {
+      case dt => !UnsafeRow.isFixedLength(dt)
       // TODO: consider large decimal and interval type
-      case _ => true
     }
 
     val rowWriterClass = classOf[UnsafeRowWriter].getName
@@ -299,7 +301,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val evalSubexpr = ctx.subexprFunctions.mkString("\n")
 
     val writeExpressions = writeExpressionsToBuffer(
-      ctx, ctx.INPUT_ROW, exprEvals, exprTypeAndNullables, rowWriter, isTopLevel = true)
+      ctx, ctx.INPUT_ROW, exprEvals, exprType, rowWriter, isTopLevel = true)
 
     val code =
       code"""
