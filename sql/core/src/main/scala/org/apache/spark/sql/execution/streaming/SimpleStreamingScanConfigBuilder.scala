@@ -18,13 +18,23 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.sources.v2.reader.{ScanConfig, ScanConfigBuilder}
+import org.apache.spark.sql.types.StructType
 
 /**
- * A very simple [[ScanConfigBuilder]] and [[ScanConfig]] implementation that carries offsets for
- * streaming data sources.
+ * A very simple [[ScanConfigBuilder]] implementation that creates a simple [[ScanConfig]] to
+ * carry schema and offsets for streaming data sources.
  */
-case class OffsetsOnlyScanConfigBuilder(start: Offset, end: Option[Offset] = None)
-  extends ScanConfigBuilder with ScanConfig {
+class SimpleStreamingScanConfigBuilder(
+    schema: StructType,
+    start: Offset,
+    end: Option[Offset] = None)
+  extends ScanConfigBuilder {
 
-  override def build(): ScanConfig = this
+  override def build(): ScanConfig = SimpleStreamingScanConfig(schema, start, end)
 }
+
+case class SimpleStreamingScanConfig(
+    readSchema: StructType,
+    start: Offset,
+    end: Option[Offset])
+  extends ScanConfig

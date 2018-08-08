@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import java.util.Optional
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
@@ -30,12 +29,11 @@ import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.{Encoder, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.streaming.{MemoryStreamBase, OffsetsOnlyScanConfigBuilder, StreamingRelationV2}
+import org.apache.spark.sql.execution.streaming.{MemoryStreamBase, SimpleStreamingScanConfig, SimpleStreamingScanConfigBuilder, StreamingRelationV2}
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream.GetRecord
 import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceOptions}
 import org.apache.spark.sql.sources.v2.reader.{InputPartition, ScanConfig, ScanConfigBuilder}
 import org.apache.spark.sql.sources.v2.reader.streaming._
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.RpcUtils
 
 /**
@@ -90,11 +88,11 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPa
   }
 
   override def newScanConfigBuilder(start: Offset): ScanConfigBuilder = {
-    OffsetsOnlyScanConfigBuilder(start)
+    new SimpleStreamingScanConfigBuilder(fullSchema(), start)
   }
 
   override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
-    val startOffset = config.asInstanceOf[OffsetsOnlyScanConfigBuilder]
+    val startOffset = config.asInstanceOf[SimpleStreamingScanConfig]
       .start.asInstanceOf[ContinuousMemoryStreamOffset]
     synchronized {
       val endpointName = s"ContinuousMemoryStreamRecordEndpoint-${java.util.UUID.randomUUID()}-$id"
@@ -120,7 +118,6 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPa
   // ContinuousReadSupportProvider implementation
   // This is necessary because of how StreamTest finds the source for AddDataMemory steps.
   override def createContinuousReadSupport(
-      schema: Optional[StructType],
       checkpointLocation: String,
       options: DataSourceOptions): ContinuousReadSupport = this
 

@@ -42,7 +42,7 @@ case class ForeachWriteSupportProvider[T](
     converter: Either[ExpressionEncoder[T], InternalRow => T])
   extends StreamingWriteSupportProvider {
 
-  override def createStreamingWritSupport(
+  override def createStreamingWriteSupport(
       queryId: String,
       schema: StructType,
       mode: OutputMode,

@@ -128,11 +128,11 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   override def newScanConfigBuilder(start: OffsetV2, end: OffsetV2): ScanConfigBuilder = {
-    OffsetsOnlyScanConfigBuilder(start, Some(end))
+    new SimpleStreamingScanConfigBuilder(fullSchema(), start, Some(end))
   }
 
   override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
-    val sc = config.asInstanceOf[OffsetsOnlyScanConfigBuilder]
+    val sc = config.asInstanceOf[SimpleStreamingScanConfig]
     val startOffset = sc.start.asInstanceOf[LongOffset]
     val endOffset = sc.end.get.asInstanceOf[LongOffset]
     synchronized {

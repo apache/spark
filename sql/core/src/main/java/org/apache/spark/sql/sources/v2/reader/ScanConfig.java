@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources.v2.reader;
 
 import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.types.StructType;
 
 /**
  * An interface that carries query specific information for the data scan. Currently it's used to
@@ -30,4 +31,14 @@ import org.apache.spark.annotation.InterfaceStability;
  * input {@link ScanConfig} to the concrete {@link ScanConfig} class of the data source.
  */
 @InterfaceStability.Evolving
-public interface ScanConfig {}
+public interface ScanConfig {
+
+  /**
+   * Returns the actual schema of this data source reader, which may be different from the physical
+   * schema of the underlying storage, as column pruning or other optimizations may happen.
+   *
+   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
+   * submitted.
+   */
+  StructType readSchema();
+}

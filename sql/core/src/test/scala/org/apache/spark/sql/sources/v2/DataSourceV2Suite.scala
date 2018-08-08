@@ -322,7 +322,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
 
 case class RangeInputPartition(start: Int, end: Int) extends InputPartition
 
-object NoopScanConfigBuilder extends ScanConfigBuilder with ScanConfig {
+case class NoopScanConfigBuilder(readSchema: StructType) extends ScanConfigBuilder with ScanConfig {
   override def build(): ScanConfig = this
 }
 
@@ -348,7 +348,7 @@ abstract class SimpleReadSupport extends BatchReadSupport {
   override def fullSchema(): StructType = new StructType().add("i", "int").add("j", "int")
 
   override def newScanConfigBuilder(): ScanConfigBuilder = {
-    NoopScanConfigBuilder
+    NoopScanConfigBuilder(fullSchema())
   }
 
   override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
@@ -433,7 +433,7 @@ class AdvancedScanConfigBuilder extends ScanConfigBuilder with ScanConfig
     this.requiredSchema = requiredSchema
   }
 
-  override def prunedSchema(): StructType = requiredSchema
+  override def readSchema(): StructType = requiredSchema
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     val (supported, unsupported) = filters.partition {
@@ -513,7 +513,7 @@ class ColumnarDataSourceV2 extends DataSourceV2 with BatchReadSupportProvider {
 object ColumnarReaderFactory extends PartitionReaderFactory {
   private final val BATCH_SIZE = 20
 
-  override def supportColumnarReads(): Boolean = true
+  override def doColumnarReads(partition: InputPartition): Boolean = true
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     throw new UnsupportedOperationException

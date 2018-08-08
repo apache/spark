@@ -52,7 +52,7 @@ public class JavaColumnarDataSourceV2 implements DataSourceV2, BatchReadSupportP
     private static final int BATCH_SIZE = 20;
 
     @Override
-    public boolean supportColumnarReads() {
+    public boolean doColumnarReads(InputPartition partition) {
       return true;
     }
 

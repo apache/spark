@@ -22,7 +22,7 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.streaming.{OffsetsOnlyScanConfigBuilder, RateStreamOffset, ValueRunTimeMsPair}
+import org.apache.spark.sql.execution.streaming.{RateStreamOffset, SimpleStreamingScanConfig, SimpleStreamingScanConfigBuilder, ValueRunTimeMsPair}
 import org.apache.spark.sql.execution.streaming.sources.RateStreamProvider
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader._
@@ -57,13 +57,13 @@ class RateStreamContinuousReadSupport(options: DataSourceOptions) extends Contin
   override def fullSchema(): StructType = RateStreamProvider.SCHEMA
 
   override def newScanConfigBuilder(start: Offset): ScanConfigBuilder = {
-    OffsetsOnlyScanConfigBuilder(start)
+    new SimpleStreamingScanConfigBuilder(fullSchema(), start)
   }
 
   override def initialOffset: Offset = createInitialOffset(numPartitions, creationTime)
 
   override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
-    val startOffset = config.asInstanceOf[OffsetsOnlyScanConfigBuilder].start
+    val startOffset = config.asInstanceOf[SimpleStreamingScanConfig].start
 
     val partitionStartMap = startOffset match {
       case off: RateStreamOffset => off.partitionToValueAndRunTimeMs

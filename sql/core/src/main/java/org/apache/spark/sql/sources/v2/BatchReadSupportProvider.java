@@ -18,13 +18,16 @@
 package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.DataSourceRegister;
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils;
 import org.apache.spark.sql.sources.v2.reader.BatchReadSupport;
 import org.apache.spark.sql.types.StructType;
 
 /**
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
  * provide data reading ability for batch processing.
+ *
+ * This interface is used when end users want to use a data source implementation directly, e.g.
+ * {@code SparkSession.read.format(...).option(...).load()}.
  */
 @InterfaceStability.Evolving
 public interface BatchReadSupportProvider extends DataSourceV2 {
@@ -43,13 +46,7 @@ public interface BatchReadSupportProvider extends DataSourceV2 {
    * override this method to handle user specified schema.
    */
   default BatchReadSupport createBatchReadSupport(StructType schema, DataSourceOptions options) {
-    String name;
-    if (this instanceof DataSourceRegister) {
-      name = ((DataSourceRegister) this).shortName();
-    } else {
-      name = this.getClass().getName();
-    }
-    throw new UnsupportedOperationException(name + " does not support user specified schema");
+    return DataSourceV2Utils.failForUserSpecifiedSchema(this);
   }
 
   /**

@@ -23,15 +23,22 @@ import org.apache.spark.sql.sources.v2.reader.ScanConfig;
 import org.apache.spark.sql.sources.v2.reader.ScanConfigBuilder;
 
 /**
- * An interface which defines how to scan the data from data source for streaming processing with
- * micro-batch mode.
+ * An interface that defines how to scan the data from data source for micro-batch streaming
+ * processing.
+ *
+ * The execution engine will create an instance of this interface at the start of a streaming query,
+ * then call {@link #newScanConfigBuilder(Offset, Offset)} and create an instance of
+ * {@link ScanConfig} for each micro-batch. The {@link ScanConfig} will be used to create input
+ * partitions and reader factory to process a micro-batch. At the end {@link #stop()} will be called
+ * when the streaming execution is completed. Note that a single query may have multiple executions
+ * due to restart or failure recovery.
  */
 @InterfaceStability.Evolving
 public interface MicroBatchReadSupport extends StreamingReadSupport, BaseStreamingSource {
 
   /**
    * Returns a builder of {@link ScanConfig}. The builder can take some query specific information
-   * like which operators to pushdown, streaming offsets, etc., and keep these information in the
+   * to do operators pushdown, take streaming offsets, etc., and keep these information in the
    * created {@link ScanConfig}.
    *
    * This is the first step of the data scan. All other methods in {@link MicroBatchReadSupport}

@@ -87,7 +87,7 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, BatchReadSupportP
     }
 
     @Override
-    public StructType prunedSchema() {
+    public StructType readSchema() {
       return requiredSchema;
     }
 

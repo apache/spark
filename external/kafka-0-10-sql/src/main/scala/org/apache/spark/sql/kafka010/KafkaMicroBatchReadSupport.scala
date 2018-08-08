@@ -29,7 +29,7 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, OffsetsOnlyScanConfigBuilder, SerializedOffset}
+import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset, SimpleStreamingScanConfig, SimpleStreamingScanConfigBuilder}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader._
@@ -93,11 +93,11 @@ private[kafka010] class KafkaMicroBatchReadSupport(
   override def fullSchema(): StructType = KafkaOffsetReader.kafkaSchema
 
   override def newScanConfigBuilder(start: Offset, end: Offset): ScanConfigBuilder = {
-    OffsetsOnlyScanConfigBuilder(start, Some(end))
+    new SimpleStreamingScanConfigBuilder(fullSchema(), start, Some(end))
   }
 
   override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
-    val sc = config.asInstanceOf[OffsetsOnlyScanConfigBuilder]
+    val sc = config.asInstanceOf[SimpleStreamingScanConfig]
     val startPartitionOffsets = sc.start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
     val endPartitionOffsets = sc.end.get.asInstanceOf[KafkaSourceOffset].partitionToOffsets
 

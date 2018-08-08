@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.UUID
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
@@ -161,9 +159,8 @@ object DataSourceV2Relation {
     def createWriteSupport(
         options: Map[String, String],
         schema: StructType): BatchWriteSupport = {
-      val v2Options = new DataSourceOptions(options.asJava)
-      asWriteSupportProvider.createWriter(
-        UUID.randomUUID.toString, schema, SaveMode.Append, v2Options).get
+      asWriteSupportProvider.createBatchWriteSupport(
+        schema, SaveMode.Append, new DataSourceOptions(options.asJava)).get
     }
   }
 

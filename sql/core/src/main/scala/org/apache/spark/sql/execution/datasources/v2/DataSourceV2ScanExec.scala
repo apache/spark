@@ -67,11 +67,19 @@ case class DataSourceV2ScanExec(
 
   private lazy val partitions: Seq[InputPartition] = readSupport.planInputPartitions(scanConfig)
 
-  private lazy val partitionReaderFactory = readSupport.createReaderFactory(scanConfig)
+  private lazy val readerFactory = readSupport.createReaderFactory(scanConfig)
+
+  override val supportsBatch: Boolean = {
+    require(partitions.forall(readerFactory.doColumnarReads) ||
+      !partitions.exists(readerFactory.doColumnarReads),
+      "Cannot mix row-based and columnar input partitions.")
+
+    partitions.exists(readerFactory.doColumnarReads)
+  }
 
   private lazy val inputRDD: RDD[InternalRow] = readSupport match {
     case _: ContinuousReadSupport =>
-      assert(!partitionReaderFactory.supportColumnarReads(),
+      assert(!supportsBatch,
         "continuous stream reader does not support columnar read yet.")
       EpochCoordinatorRef.get(
           sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
@@ -83,15 +91,13 @@ case class DataSourceV2ScanExec(
         sqlContext.conf.continuousStreamingExecutorPollIntervalMs,
         partitions,
         schema,
-        partitionReaderFactory.asInstanceOf[ContinuousPartitionReaderFactory])
+        readerFactory.asInstanceOf[ContinuousPartitionReaderFactory])
 
     case _ =>
-      new DataSourceRDD(sparkContext, partitions, partitionReaderFactory)
+      new DataSourceRDD(sparkContext, partitions, readerFactory, supportsBatch)
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
-
-  override val supportsBatch: Boolean = partitionReaderFactory.supportColumnarReads
 
   override protected def needsUnsafeRowConversion: Boolean = false
 

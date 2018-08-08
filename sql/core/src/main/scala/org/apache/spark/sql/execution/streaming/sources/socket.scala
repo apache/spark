@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming.sources
 import java.io.{BufferedReader, InputStreamReader, IOException}
 import java.net.Socket
 import java.text.SimpleDateFormat
-import java.util.{Calendar, Locale, Optional}
+import java.util.{Calendar, Locale}
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.concurrent.GuardedBy
 
@@ -31,7 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.streaming.{LongOffset, OffsetsOnlyScanConfigBuilder}
+import org.apache.spark.sql.execution.streaming.{LongOffset, SimpleStreamingScanConfig, SimpleStreamingScanConfigBuilder}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, MicroBatchReadSupportProvider}
 import org.apache.spark.sql.sources.v2.reader._
@@ -132,11 +132,11 @@ class TextSocketMicroBatchReadSupport(options: DataSourceOptions)
   }
 
   override def newScanConfigBuilder(start: Offset, end: Offset): ScanConfigBuilder = {
-    OffsetsOnlyScanConfigBuilder(start, Some(end))
+    new SimpleStreamingScanConfigBuilder(fullSchema(), start, Some(end))
   }
 
   override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
-    val sc = config.asInstanceOf[OffsetsOnlyScanConfigBuilder]
+    val sc = config.asInstanceOf[SimpleStreamingScanConfig]
     val startOrdinal = sc.start.asInstanceOf[LongOffset].offset.toInt + 1
     val endOrdinal = sc.end.get.asInstanceOf[LongOffset].offset.toInt + 1
 
@@ -242,14 +242,9 @@ class TextSocketSourceProvider extends DataSourceV2
   }
 
   override def createMicroBatchReadSupport(
-      schema: Optional[StructType],
       checkpointLocation: String,
       options: DataSourceOptions): MicroBatchReadSupport = {
     checkParameters(options)
-    if (schema.isPresent) {
-      throw new AnalysisException("The socket source does not support a user-specified schema.")
-    }
-
     new TextSocketMicroBatchReadSupport(options)
   }
 

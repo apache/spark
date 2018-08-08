@@ -21,7 +21,6 @@ import java.net.{InetSocketAddress, SocketException}
 import java.nio.ByteBuffer
 import java.nio.channels.ServerSocketChannel
 import java.sql.Timestamp
-import java.util.Optional
 import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.JavaConverters._
@@ -175,16 +174,16 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
   test("params not given") {
     val provider = new TextSocketSourceProvider
     intercept[AnalysisException] {
-      provider.createMicroBatchReadSupport(Optional.empty(), "",
-        new DataSourceOptions(Map.empty[String, String].asJava))
+      provider.createMicroBatchReadSupport(
+        "", new DataSourceOptions(Map.empty[String, String].asJava))
     }
     intercept[AnalysisException] {
-      provider.createMicroBatchReadSupport(Optional.empty(), "",
-        new DataSourceOptions(Map("host" -> "localhost").asJava))
+      provider.createMicroBatchReadSupport(
+        "", new DataSourceOptions(Map("host" -> "localhost").asJava))
     }
     intercept[AnalysisException] {
-      provider.createMicroBatchReadSupport(Optional.empty(), "",
-        new DataSourceOptions(Map("port" -> "1234").asJava))
+      provider.createMicroBatchReadSupport(
+        "", new DataSourceOptions(Map("port" -> "1234").asJava))
     }
   }
 
@@ -193,7 +192,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     val params = Map("host" -> "localhost", "port" -> "1234", "includeTimestamp" -> "fasle")
     intercept[AnalysisException] {
       val a = new DataSourceOptions(params.asJava)
-      provider.createMicroBatchReadSupport(Optional.empty(), "", a)
+      provider.createMicroBatchReadSupport("", a)
     }
   }
 
@@ -203,12 +202,12 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       StructField("name", StringType) ::
       StructField("area", StringType) :: Nil)
     val params = Map("host" -> "localhost", "port" -> "1234")
-    val exception = intercept[AnalysisException] {
+    val exception = intercept[UnsupportedOperationException] {
       provider.createMicroBatchReadSupport(
-        Optional.of(userSpecifiedSchema), "", new DataSourceOptions(params.asJava))
+        userSpecifiedSchema, "", new DataSourceOptions(params.asJava))
     }
     assert(exception.getMessage.contains(
-      "socket source does not support a user-specified schema"))
+      "socket source does not support user-specified schema"))
   }
 
   test("input row metrics") {

@@ -26,7 +26,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 /**
  * A variation on {@link PartitionReaderFactory} that returns {@link ContinuousPartitionReader}
  * instead of {@link org.apache.spark.sql.sources.v2.reader.PartitionReader}. It's used for
- * streaming in continuous processing mode.
+ * continuous streaming processing.
  */
 @InterfaceStability.Evolving
 public interface ContinuousPartitionReaderFactory extends PartitionReaderFactory {

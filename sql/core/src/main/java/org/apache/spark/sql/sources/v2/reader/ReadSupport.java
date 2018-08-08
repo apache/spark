@@ -38,13 +38,13 @@ public interface ReadSupport {
   StructType fullSchema();
 
   /**
-   * Returns a list of {@link InputPartition}s. Each {@link InputPartition} represents a data split
-   * that can be processed by one Spark task. The number of input partitions returned here is the
-   * same as the number of RDD partitions this scan outputs.
+   * Returns a list of {@link InputPartition input partitions}. Each {@link InputPartition}
+   * represents a data split that can be processed by one Spark task. The number of input
+   * partitions returned here is the same as the number of RDD partitions this scan outputs.
    *
    * Note that, this may not be a full scan if the data source supports optimization like filter
    * push-down. Implementations should check the input {@link ScanConfig} and adjust the resulting
-   * {@link InputPartition}s.
+   * {@link InputPartition input partitions}.
    *
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
@@ -52,7 +52,7 @@ public interface ReadSupport {
   InputPartition[] planInputPartitions(ScanConfig config);
 
   /**
-   * Returns a factory to produce {@link PartitionReader}s for {@link InputPartition}s.
+   * Returns a factory, which produces one {@link PartitionReader} for one {@link InputPartition}.
    *
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.

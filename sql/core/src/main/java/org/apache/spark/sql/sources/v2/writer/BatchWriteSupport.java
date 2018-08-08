@@ -20,7 +20,7 @@ package org.apache.spark.sql.sources.v2.writer;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * An interface which defines how to write the data to data source for batch processing.
+ * An interface that defines how to write the data to data source for batch processing.
  *
  * The writing procedure is:
  *   1. Create a writer factory by {@link #createBatchWriterFactory()}, serialize and send it to all

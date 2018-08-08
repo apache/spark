@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, Rep
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
-import org.apache.spark.sql.sources.v2.reader.{ScanConfigBuilder, SupportsPushDownCatalystFilters, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReadSupport
 
 object DataSourceV2Strategy extends Strategy {
@@ -76,29 +76,31 @@ object DataSourceV2Strategy extends Strategy {
   /**
    * Applies column pruning to the data source, w.r.t. the references of the given expressions.
    *
-   * @return new output attributes after column pruning.
+   * @return the created `ScanConfig`(since column pruning is the last step of operator pushdown),
+   *         and new output attributes after column pruning.
    */
   // TODO: nested column pruning.
   private def pruneColumns(
       configBuilder: ScanConfigBuilder,
       relation: DataSourceV2Relation,
-      exprs: Seq[Expression]): Seq[AttributeReference] = {
+      exprs: Seq[Expression]): (ScanConfig, Seq[AttributeReference]) = {
     configBuilder match {
       case r: SupportsPushDownRequiredColumns =>
         val requiredColumns = AttributeSet(exprs.flatMap(_.references))
         val neededOutput = relation.output.filter(requiredColumns.contains)
         if (neededOutput != relation.output) {
           r.pruneColumns(neededOutput.toStructType)
+          val config = r.build()
           val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
-          r.prunedSchema().toAttributes.map {
+          config -> config.readSchema().toAttributes.map {
             // We have to keep the attribute id during transformation.
             a => a.withExprId(nameToAttr(a.name).exprId)
           }
         } else {
-          relation.output
+          r.build() -> relation.output
         }
 
-      case _ => relation.output
+      case _ => configBuilder.build() -> relation.output
     }
   }
 
@@ -110,7 +112,7 @@ object DataSourceV2Strategy extends Strategy {
       // `postScanFilters` need to be evaluated after the scan.
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
       val (pushedFilters, postScanFilters) = pushFilters(configBuilder, filters)
-      val output = pruneColumns(configBuilder, relation, project ++ postScanFilters)
+      val (config, output) = pruneColumns(configBuilder, relation, project ++ postScanFilters)
       logInfo(
         s"""
            |Pushing operators to ${relation.source.getClass}
@@ -125,7 +127,7 @@ object DataSourceV2Strategy extends Strategy {
         relation.options,
         pushedFilters,
         relation.readSupport,
-        configBuilder.build())
+        config)
 
       val filterCondition = postScanFilters.reduceLeftOption(And)
       val withFilter = filterCondition.map(FilterExec(_, scan)).getOrElse(scan)

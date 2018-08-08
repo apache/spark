@@ -35,7 +35,7 @@ class ConsoleSinkProvider extends DataSourceV2
   with DataSourceRegister
   with CreatableRelationProvider {
 
-  override def createStreamingWritSupport(
+  override def createStreamingWriteSupport(
       queryId: String,
       schema: StructType,
       mode: OutputMode,

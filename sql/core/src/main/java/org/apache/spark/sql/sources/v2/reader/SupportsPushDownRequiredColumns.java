@@ -34,12 +34,9 @@ public interface SupportsPushDownRequiredColumns extends ScanConfigBuilder {
    * Implementation should try its best to prune the unnecessary columns or nested fields, but it's
    * also OK to do the pruning partially, e.g., a data source may not be able to prune nested
    * fields, and only prune top-level columns.
+   *
+   * Note that, {@link ScanConfig#readSchema()} implementation should take care of the column
+   * pruning applied here.
    */
   void pruneColumns(StructType requiredSchema);
-
-  /**
-   * Returns the schema after the column pruning is applied, so that Spark can know if some
-   * columns/nested fields are not pruned.
-   */
-  StructType prunedSchema();
 }

@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import java.util.Optional
-
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousReadSupport
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._
@@ -46,7 +43,6 @@ class RateStreamProvider extends DataSourceV2
   import RateStreamProvider._
 
   override def createMicroBatchReadSupport(
-      schema: Optional[StructType],
       checkpointLocation: String,
       options: DataSourceOptions): MicroBatchReadSupport = {
       if (options.get(ROWS_PER_SECOND).isPresent) {
@@ -74,15 +70,10 @@ class RateStreamProvider extends DataSourceV2
       }
     }
 
-    if (schema.isPresent) {
-      throw new AnalysisException("The rate source does not support a user-specified schema.")
-    }
-
     new RateStreamMicroBatchReadSupport(options, checkpointLocation)
   }
 
   override def createContinuousReadSupport(
-     schema: Optional[StructType],
      checkpointLocation: String,
      options: DataSourceOptions): ContinuousReadSupport = {
     new RateStreamContinuousReadSupport(options)

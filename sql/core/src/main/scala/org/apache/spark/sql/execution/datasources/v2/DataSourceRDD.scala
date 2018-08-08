@@ -30,7 +30,8 @@ class DataSourceRDDPartition(val index: Int, val inputPartition: InputPartition)
 class DataSourceRDD(
     sc: SparkContext,
     @transient private val inputPartitions: Seq[InputPartition],
-    partitionReaderFactory: PartitionReaderFactory)
+    partitionReaderFactory: PartitionReaderFactory,
+    columnarReads: Boolean)
   extends RDD[InternalRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
@@ -41,7 +42,7 @@ class DataSourceRDD(
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val inputPartition = split.asInstanceOf[DataSourceRDDPartition].inputPartition
-    val reader: PartitionReader[_] = if (partitionReaderFactory.supportColumnarReads) {
+    val reader: PartitionReader[_] = if (columnarReads) {
       partitionReaderFactory.createColumnarReader(inputPartition)
     } else {
       partitionReaderFactory.createReader(inputPartition)

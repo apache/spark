@@ -31,8 +31,7 @@ import org.apache.spark.sql.types.StructType;
 public interface StreamingWriteSupportProvider extends DataSourceV2, BaseStreamingSink {
 
   /**
-   * Creates an optional {@link StreamingWriteSupport} to save the data to this data source. Data
-   * sources can return None if there is no writing needed to be done.
+   * Creates a {@link StreamingWriteSupport} to save the data to this data source.
    *
    * @param queryId A unique string for the writing query. It's possible that there are many
    *                writing queries running at the same time, and the returned
@@ -43,9 +42,9 @@ public interface StreamingWriteSupportProvider extends DataSourceV2, BaseStreami
    * @param options the options for the returned data source writer, which is an immutable
    *                case-insensitive string-to-string map.
    */
-  StreamingWriteSupport createStreamingWritSupport(
-    String queryId,
-    StructType schema,
-    OutputMode mode,
-    DataSourceOptions options);
+  StreamingWriteSupport createStreamingWriteSupport(
+      String queryId,
+      StructType schema,
+      OutputMode mode,
+      DataSourceOptions options);
 }

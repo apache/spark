@@ -33,7 +33,7 @@ abstract class JavaSimpleReadSupport implements BatchReadSupport {
 
   @Override
   public ScanConfigBuilder newScanConfigBuilder() {
-    return new JavaNoopScanConfigBuilder();
+    return new JavaNoopScanConfigBuilder(fullSchema());
   }
 
   @Override
@@ -44,9 +44,20 @@ abstract class JavaSimpleReadSupport implements BatchReadSupport {
 
 class JavaNoopScanConfigBuilder implements ScanConfigBuilder, ScanConfig {
 
+  private StructType schema;
+
+  public JavaNoopScanConfigBuilder(StructType schema) {
+    this.schema = schema;
+  }
+
   @Override
   public ScanConfig build() {
     return this;
+  }
+
+  @Override
+  public StructType readSchema() {
+    return schema;
   }
 }
 

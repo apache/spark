@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import java.util.Optional
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
@@ -57,7 +55,7 @@ class RateSourceSuite extends StreamTest {
       DataSource.lookupDataSource("rate", spark.sqlContext.conf).newInstance() match {
         case ds: MicroBatchReadSupportProvider =>
           val readSupport = ds.createMicroBatchReadSupport(
-            Optional.empty(), temp.getCanonicalPath, DataSourceOptions.empty())
+            temp.getCanonicalPath, DataSourceOptions.empty())
           assert(readSupport.isInstanceOf[RateStreamMicroBatchReadSupport])
         case _ =>
           throw new IllegalStateException("Could not find read support for rate")
@@ -279,21 +277,21 @@ class RateSourceSuite extends StreamTest {
   }
 
   test("user-specified schema given") {
-    val exception = intercept[AnalysisException] {
+    val exception = intercept[UnsupportedOperationException] {
       spark.readStream
         .format("rate")
         .schema(spark.range(1).schema)
         .load()
     }
     assert(exception.getMessage.contains(
-      "rate source does not support a user-specified schema"))
+      "rate source does not support user-specified schema"))
   }
 
   test("continuous in registry") {
     DataSource.lookupDataSource("rate", spark.sqlContext.conf).newInstance() match {
       case ds: ContinuousReadSupportProvider =>
         val readSupport = ds.createContinuousReadSupport(
-          Optional.empty(), "", DataSourceOptions.empty())
+          "", DataSourceOptions.empty())
         assert(readSupport.isInstanceOf[RateStreamContinuousReadSupport])
       case _ =>
         throw new IllegalStateException("Could not find read support for continuous rate")

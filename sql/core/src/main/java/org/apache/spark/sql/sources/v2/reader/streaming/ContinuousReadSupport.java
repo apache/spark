@@ -24,15 +24,23 @@ import org.apache.spark.sql.sources.v2.reader.ScanConfig;
 import org.apache.spark.sql.sources.v2.reader.ScanConfigBuilder;
 
 /**
- * An interface which defines how to scan the data from data source for streaming processing with
- * continuous mode.
+ * An interface that defines how to scan the data from data source for continuous streaming
+ * processing.
+ *
+ * The execution engine will create an instance of this interface at the start of a streaming query,
+ * then call {@link #newScanConfigBuilder(Offset)} and create an instance of {@link ScanConfig} for
+ * the duration of the streaming query or until {@link #needsReconfiguration(ScanConfig)} is true.
+ * The {@link ScanConfig} will be used to create input partitions and reader factory to process data
+ * for its duration. At the end {@link #stop()} will be called when the streaming execution is
+ * completed. Note that a single query may have multiple executions due to restart or failure
+ * recovery.
  */
 @InterfaceStability.Evolving
 public interface ContinuousReadSupport extends StreamingReadSupport, BaseStreamingSource {
 
   /**
    * Returns a builder of {@link ScanConfig}. The builder can take some query specific information
-   * like which operators to pushdown, streaming offsets, etc., and keep these information in the
+   * to do operators pushdown, streaming offsets, etc., and keep these information in the
    * created {@link ScanConfig}.
    *
    * This is the first step of the data scan. All other methods in {@link ContinuousReadSupport}
@@ -66,7 +74,7 @@ public interface ContinuousReadSupport extends StreamingReadSupport, BaseStreami
    * If true, the query will be shut down and restarted with a new {@link ContinuousReadSupport}
    * instance.
    */
-  default boolean needsReconfiguration() {
+  default boolean needsReconfiguration(ScanConfig config) {
     return false;
   }
 }

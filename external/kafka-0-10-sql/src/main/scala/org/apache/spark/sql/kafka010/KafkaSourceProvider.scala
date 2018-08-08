@@ -111,7 +111,6 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
    * batches of Kafka data in a micro-batch streaming query.
    */
   override def createMicroBatchReadSupport(
-      schema: Optional[StructType],
       metadataPath: String,
       options: DataSourceOptions): KafkaMicroBatchReadSupport = {
 
@@ -153,7 +152,6 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
    * Kafka data in a continuous streaming query.
    */
   override def createContinuousReadSupport(
-      schema: Optional[StructType],
       metadataPath: String,
       options: DataSourceOptions): KafkaContinuousReadSupport = {
     val parameters = options.asMap().asScala.toMap
@@ -269,7 +267,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
   }
 
-  override def createStreamingWritSupport(
+  override def createStreamingWriteSupport(
       queryId: String,
       schema: StructType,
       mode: OutputMode,

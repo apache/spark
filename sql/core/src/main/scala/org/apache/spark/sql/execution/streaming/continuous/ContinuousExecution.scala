@@ -29,13 +29,12 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExec, StreamingDataSourceV2Relation}
 import org.apache.spark.sql.execution.streaming.{ContinuousExecutionRelation, StreamingRelationV2, _}
 import org.apache.spark.sql.sources.v2
 import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceOptions, StreamingWriteSupportProvider}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, PartitionOffset}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{Clock, Utils}
 
 class ContinuousExecution(
@@ -150,7 +149,6 @@ class ContinuousExecution(
         nextSourceId += 1
 
         dataSource.createContinuousReadSupport(
-          java.util.Optional.empty[StructType](),
           metadataPath,
           new DataSourceOptions(extraReaderOptions.asJava))
     }
@@ -188,16 +186,12 @@ class ContinuousExecution(
           "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
     }
 
-    val writer = sink.createStreamingWritSupport(
+    val writer = sink.createStreamingWriteSupport(
       s"$runId",
       triggerLogicalPlan.schema,
       outputMode,
       new DataSourceOptions(extraOptions.asJava))
     val withSink = WriteToContinuousDataSource(writer, triggerLogicalPlan)
-
-    val readSupport = withSink.collect {
-      case StreamingDataSourceV2Relation(_, _, _, r: ContinuousReadSupport, _) => r
-    }.head
 
     reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
@@ -210,6 +204,11 @@ class ContinuousExecution(
         offsetSeqMetadata)
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
+
+    val (readSupport, scanConfig) = lastExecution.executedPlan.collect {
+      case scan: DataSourceV2ScanExec if scan.readSupport.isInstanceOf[ContinuousReadSupport] =>
+        scan.readSupport.asInstanceOf[ContinuousReadSupport] -> scan.scanConfig
+    }.head
 
     sparkSessionForQuery.sparkContext.setLocalProperty(
       ContinuousExecution.START_EPOCH_KEY, currentBatchId.toString)
@@ -233,7 +232,9 @@ class ContinuousExecution(
           triggerExecutor.execute(() => {
             startTrigger()
 
-            if (readSupport.needsReconfiguration() && state.compareAndSet(ACTIVE, RECONFIGURING)) {
+            val shouldReconfigure = readSupport.needsReconfiguration(scanConfig) &&
+              state.compareAndSet(ACTIVE, RECONFIGURING)
+            if (shouldReconfigure) {
               if (queryExecutionThread.isAlive) {
                 queryExecutionThread.interrupt()
               }

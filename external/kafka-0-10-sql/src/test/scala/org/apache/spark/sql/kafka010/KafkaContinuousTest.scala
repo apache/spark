@@ -49,7 +49,7 @@ trait KafkaContinuousTest extends KafkaSourceTest {
         query.lastExecution.logical.collectFirst {
           case r: StreamingDataSourceV2Relation
               if r.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
-            r.readSupport.asInstanceOf[KafkaContinuousReadSupport]
+            r.scanConfigBuilder.build().asInstanceOf[KafkaContinuousScanConfig]
         }.exists(_.knownPartitions.size == newCount),
         s"query never reconfigured to $newCount partitions")
     }

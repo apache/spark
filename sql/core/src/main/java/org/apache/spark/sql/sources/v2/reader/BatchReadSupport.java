@@ -20,14 +20,14 @@ package org.apache.spark.sql.sources.v2.reader;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * An interface which defines how to scan the data from data source for batch processing.
+ * An interface that defines how to scan the data from data source for batch processing.
  */
 @InterfaceStability.Evolving
 public interface BatchReadSupport extends ReadSupport {
 
   /**
    * Returns a builder of {@link ScanConfig}. The builder can take some query specific information
-   * like which operators to pushdown, and keep these information in the created {@link ScanConfig}.
+   * to do operators pushdown, and keep these information in the created {@link ScanConfig}.
    *
    * This is the first step of the data scan. All other methods in {@link BatchReadSupport} needs
    * to take {@link ScanConfig} as an input.

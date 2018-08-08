@@ -24,8 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 
 /**
- * A factory of {@link PartitionReader}s. Implementations can do either row-based scan or columnar
- * scan, by switching the {@link #supportColumnarReads()} flag.
+ * A factory used to create {@link PartitionReader} instances.
  */
 @InterfaceStability.Evolving
 public interface PartitionReaderFactory extends Serializable {
@@ -55,12 +54,15 @@ public interface PartitionReaderFactory extends Serializable {
   }
 
   /**
-   * If this method returns true, Spark will call {@link #createColumnarReader(InputPartition)} to
-   * create the {@link PartitionReader} and scan the data in a columnar way. This means,
-   * implementations must also implement {@link #createColumnarReader(InputPartition)} when true
-   * is returned here.
+   * Returns true if the given {@link InputPartition} should be read by Spark in a columnar way.
+   * This means, implementations must also implement {@link #createColumnarReader(InputPartition)}
+   * for the input partitions that this method returns true.
+   *
+   * As of Spark 2.4, Spark can only read all input partition in a columnar way, or none of them.
+   * Data source can't mix columnar and row-based partitions. This will be relaxed in future
+   * versions.
    */
-  default boolean supportColumnarReads() {
+  default boolean doColumnarReads(InputPartition partition) {
     return false;
   }
 }

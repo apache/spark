@@ -120,11 +120,11 @@ class RateStreamMicroBatchReadSupport(options: DataSourceOptions, checkpointLoca
   override def fullSchema(): StructType = SCHEMA
 
   override def newScanConfigBuilder(start: Offset, end: Offset): ScanConfigBuilder = {
-    OffsetsOnlyScanConfigBuilder(start, Some(end))
+    new SimpleStreamingScanConfigBuilder(fullSchema(), start, Some(end))
   }
 
   override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
-    val sc = config.asInstanceOf[OffsetsOnlyScanConfigBuilder]
+    val sc = config.asInstanceOf[SimpleStreamingScanConfig]
     val startSeconds = sc.start.asInstanceOf[LongOffset].offset
     val endSeconds = sc.end.get.asInstanceOf[LongOffset].offset
     assert(startSeconds <= endSeconds, s"startSeconds($startSeconds) > endSeconds($endSeconds)")

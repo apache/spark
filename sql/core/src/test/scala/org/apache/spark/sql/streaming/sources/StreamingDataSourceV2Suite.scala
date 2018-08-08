@@ -53,20 +53,18 @@ case class FakeReadSupport() extends MicroBatchReadSupport with ContinuousReadSu
 
 trait FakeMicroBatchReadSupportProvider extends MicroBatchReadSupportProvider {
   override def createMicroBatchReadSupport(
-      schema: Optional[StructType],
       checkpointLocation: String,
       options: DataSourceOptions): MicroBatchReadSupport = FakeReadSupport()
 }
 
 trait FakeContinuousReadSupportProvider extends ContinuousReadSupportProvider {
   override def createContinuousReadSupport(
-      schema: Optional[StructType],
       checkpointLocation: String,
       options: DataSourceOptions): ContinuousReadSupport = FakeReadSupport()
 }
 
 trait FakeStreamingWriteSupportProvider extends StreamingWriteSupportProvider {
-  override def createStreamingWritSupport(
+  override def createStreamingWriteSupport(
       queryId: String,
       schema: StructType,
       mode: OutputMode,

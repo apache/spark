@@ -20,7 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Paths}
-import java.util.{Locale, Optional, Properties}
+import java.util.{Locale, Properties}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -45,7 +45,6 @@ import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
-import org.apache.spark.sql.types.StructType
 
 abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
 
@@ -675,7 +674,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           "subscribe" -> topic
         ) ++ Option(minPartitions).map { p => "minPartitions" -> p}
         val readSupport = provider.createMicroBatchReadSupport(
-          Optional.empty[StructType], dir.getAbsolutePath, new DataSourceOptions(options.asJava))
+          dir.getAbsolutePath, new DataSourceOptions(options.asJava))
         val config = readSupport.newScanConfigBuilder(
           KafkaSourceOffset(Map(tp -> 0L)),
           KafkaSourceOffset(Map(tp -> 100L))).build()

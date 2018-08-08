@@ -18,7 +18,7 @@
 package org.apache.spark.sql.sources.v2
 
 import java.io.{BufferedReader, InputStreamReader, IOException}
-import java.util.Optional
+import java.util.{Optional, UUID}
 
 import scala.collection.JavaConverters._
 
@@ -35,8 +35,8 @@ import org.apache.spark.util.SerializableConfiguration
 
 /**
  * A HDFS based transactional writable data source.
- * Each task writes data to `target/_temporary/jobId/$jobId-$partitionId-$attemptNumber`.
- * Each job moves files from `target/_temporary/jobId/` to `target`.
+ * Each task writes data to `target/_temporary/uuid/$jobId-$partitionId-$attemptNumber`.
+ * Each job moves files from `target/_temporary/uuid/` to `target`.
  */
 class SimpleWritableDataSource extends DataSourceV2
   with BatchReadSupportProvider with BatchWriteSupportProvider {
@@ -68,10 +68,12 @@ class SimpleWritableDataSource extends DataSourceV2
     }
   }
 
-  class WritSupport(jobId: String, path: String, conf: Configuration) extends BatchWriteSupport {
+  class WritSupport(path: String, conf: Configuration) extends BatchWriteSupport {
+    private val uuid = UUID.randomUUID.toString
+
     override def createBatchWriterFactory(): DataWriterFactory = {
       SimpleCounter.resetCounter
-      new CSVDataWriterFactory(path, jobId, new SerializableConfiguration(conf))
+      new CSVDataWriterFactory(path, uuid, new SerializableConfiguration(conf))
     }
 
     override def onDataWriterCommit(message: WriterCommitMessage): Unit = {
@@ -80,7 +82,8 @@ class SimpleWritableDataSource extends DataSourceV2
 
     override def commit(messages: Array[WriterCommitMessage]): Unit = {
       val finalPath = new Path(path)
-      val jobPath = new Path(new Path(finalPath, "_temporary"), jobId)
+      // put a random UUID in the temp path, to avoid conflict with other in progress write support.
+      val jobPath = new Path(new Path(finalPath, "_temporary"), uuid)
       val fs = jobPath.getFileSystem(conf)
       try {
         for (file <- fs.listStatus(jobPath).map(_.getPath)) {
@@ -95,7 +98,7 @@ class SimpleWritableDataSource extends DataSourceV2
     }
 
     override def abort(messages: Array[WriterCommitMessage]): Unit = {
-      val jobPath = new Path(new Path(path, "_temporary"), jobId)
+      val jobPath = new Path(new Path(path, "_temporary"), uuid)
       val fs = jobPath.getFileSystem(conf)
       fs.delete(jobPath, true)
     }
@@ -108,7 +111,6 @@ class SimpleWritableDataSource extends DataSourceV2
   }
 
   override def createBatchWriteSupport(
-      jobId: String,
       schema: StructType,
       mode: SaveMode,
       options: DataSourceOptions): Optional[BatchWriteSupport] = {
@@ -134,7 +136,7 @@ class SimpleWritableDataSource extends DataSourceV2
     }
 
     val pathStr = path.toUri.toString
-    Optional.of(new WritSupport(jobId, pathStr, conf))
+    Optional.of(new WritSupport(pathStr, conf))
   }
 }
 

@@ -21,7 +21,7 @@ import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.sources.v2.reader.PartitionReader;
 
 /**
- * A variation on {@link PartitionReader} for use with streaming in continuous processing mode.
+ * A variation on {@link PartitionReader} for use with continuous streaming processing.
  */
 @InterfaceStability.Evolving
 public interface ContinuousPartitionReader<T> extends PartitionReader<T> {
