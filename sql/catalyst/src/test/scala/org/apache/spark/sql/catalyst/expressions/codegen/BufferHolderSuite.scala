@@ -31,7 +31,7 @@ class BufferHolderSuite extends SparkFunSuite {
     val holder = new BufferHolder(new UnsafeRow(1000))
     holder.reset()
     holder.grow(1000)
-    e = intercept[UnsupportedOperationException] {
+    e = intercept[IllegalArgumentException] {
       holder.grow(Integer.MAX_VALUE)
     }
     assert(e.getMessage.contains("exceeds size limitation"))
