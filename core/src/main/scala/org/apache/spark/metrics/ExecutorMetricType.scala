@@ -60,15 +60,39 @@ case object JVMOffHeapMemory extends ExecutorMetricType {
   }
 }
 
-case object ProcessTreeRSSMemory extends ExecutorMetricType {
+case object ProcessTreeJVMRSSMemory extends ExecutorMetricType {
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
-    ExecutorMetricType.pTreeInfo.getRSSInfo()
+    ExecutorMetricType.pTreeInfo.getJVMRSSInfo()
   }
 }
 
-case object ProcessTreeVMemory extends ExecutorMetricType {
+case object ProcessTreeJVMVMemory extends ExecutorMetricType {
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
-    ExecutorMetricType.pTreeInfo.getVirtualMemInfo()
+    ExecutorMetricType.pTreeInfo.getJVMVirtualMemInfo()
+  }
+}
+
+case object ProcessTreePythonRSSMemory extends ExecutorMetricType {
+  override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
+    ExecutorMetricType.pTreeInfo.getPythonRSSInfo()
+  }
+}
+
+case object ProcessTreePythonVMemory extends ExecutorMetricType {
+  override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
+    ExecutorMetricType.pTreeInfo.getPythonVirtualMemInfo()
+  }
+}
+
+case object ProcessTreeOtherRSSMemory extends ExecutorMetricType {
+  override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
+    ExecutorMetricType.pTreeInfo.getOtherRSSInfo()
+  }
+}
+
+case object ProcessTreeOtherVMemory extends ExecutorMetricType {
+  override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
+    ExecutorMetricType.pTreeInfo.getOtherVirtualMemInfo()
   }
 }
 
@@ -103,8 +127,6 @@ private[spark] object ExecutorMetricType {
   val values = IndexedSeq(
     JVMHeapMemory,
     JVMOffHeapMemory,
-    ProcessTreeRSSMemory,
-    ProcessTreeVMemory,
     OnHeapExecutionMemory,
     OffHeapExecutionMemory,
     OnHeapStorageMemory,
@@ -112,7 +134,13 @@ private[spark] object ExecutorMetricType {
     OnHeapUnifiedMemory,
     OffHeapUnifiedMemory,
     DirectPoolMemory,
-    MappedPoolMemory
+    MappedPoolMemory,
+    ProcessTreeJVMVMemory,
+    ProcessTreeJVMRSSMemory,
+    ProcessTreePythonVMemory,
+    ProcessTreePythonRSSMemory,
+    ProcessTreeOtherVMemory,
+    ProcessTreeOtherRSSMemory
   )
 
   // Map of executor metric type to its index in values.

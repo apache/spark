@@ -37,8 +37,12 @@ class ProcfsBasedSystems  extends ProcessTreeMetrics with Logging {
   val ptree: scala.collection.mutable.Map[ Int, Set[Int]] =
     scala.collection.mutable.Map[ Int, Set[Int]]()
   val PROCFS_STAT_FILE = "stat"
-  var latestVmemTotal: Long = 0
-  var latestRSSTotal: Long = 0
+  var latestJVMVmemTotal: Long = 0
+  var latestJVMRSSTotal: Long = 0
+  var latestPythonVmemTotal: Long = 0
+  var latestPythonRSSTotal: Long = 0
+  var latestOtherVmemTotal: Long = 0
+  var latestOtherRSSTotal: Long = 0
 
   createProcessTree
 
@@ -155,8 +159,17 @@ class ProcfsBasedSystems  extends ProcessTreeMetrics with Logging {
       fReader.close
       val procInfoSplit = procInfo.split(" ")
       if ( procInfoSplit != null ) {
-        latestVmemTotal += procInfoSplit(22).toLong
-        latestRSSTotal += procInfoSplit(23).toLong
+        if (procInfoSplit(1).toLowerCase.contains("java")) {
+          latestJVMVmemTotal += procInfoSplit(22).toLong
+          latestJVMRSSTotal += procInfoSplit(23).toLong
+        }
+        else if (procInfoSplit(1).toLowerCase.contains("python")) {
+          latestPythonVmemTotal += procInfoSplit(22).toLong
+          latestPythonRSSTotal += procInfoSplit(23).toLong
+        }
+        else {
+        latestOtherVmemTotal += procInfoSplit(22).toLong
+        latestOtherRSSTotal += procInfoSplit(23).toLong }
       }
     } catch {
       case f: FileNotFoundException => return null
@@ -164,28 +177,64 @@ class ProcfsBasedSystems  extends ProcessTreeMetrics with Logging {
   }
 
 
-  def getRSSInfo(): Long = {
+  def getOtherRSSInfo(): Long = {
     if (!isAvailable) {
       return -1
     }
     updateProcessTree
     val pids = ptree.keySet
-    latestRSSTotal = 0
-    latestVmemTotal = 0
+    latestJVMRSSTotal = 0
+    latestJVMVmemTotal = 0
+    latestPythonRSSTotal = 0
+    latestPythonVmemTotal = 0
+    latestOtherRSSTotal = 0
+    latestOtherVmemTotal = 0
     for (p <- pids) {
        getProcessInfo(p)
     }
-    latestRSSTotal
+    latestOtherRSSTotal
   }
 
 
-  def getVirtualMemInfo(): Long = {
+  def getOtherVirtualMemInfo(): Long = {
     if (!isAvailable) {
       return -1
     }
     // We won't call updateProcessTree and also compute total virtual memory here
     // since we already did all of this when we computed RSS info
-    latestVmemTotal
+    latestOtherVmemTotal
+  }
+
+
+  def getJVMRSSInfo(): Long = {
+    if (!isAvailable) {
+      return -1
+    }
+    latestJVMRSSTotal
+  }
+
+
+  def getJVMVirtualMemInfo(): Long = {
+    if (!isAvailable) {
+      return -1
+    }
+    latestJVMVmemTotal
+  }
+
+
+  def getPythonRSSInfo(): Long = {
+    if (!isAvailable) {
+      return -1
+    }
+    latestPythonRSSTotal
+  }
+
+
+  def getPythonVirtualMemInfo(): Long = {
+    if (!isAvailable) {
+      return -1
+    }
+    latestPythonVmemTotal
   }
 
 

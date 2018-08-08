@@ -1304,60 +1304,74 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     // receive 3 metric updates from each executor with just stage 0 running,
     // with different peak updates for each executor
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
-      Array(4000L, 50L, 3500L, 7500L, 20L, 0L, 40L, 0L, 60L, 0L, 70L, 20L)))
+      Array(4000L, 50L, 20L, 0L, 40L, 0L, 60L, 0L, 70L, 20L, 7500L, 3500L,
+        6500L, 2500L, 5500L, 1500L)))
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
-      Array(1500L, 50L, 3500L, 8500L, 20L, 0L, 0L, 0L, 20L, 0L, 70L, 0L)))
-    // exec 1: new stage 0 peaks for metrics at indexes: 2, 3, 4, 6, 8
+      Array(1500L, 50L, 20L, 0L, 0L, 0L, 20L, 0L, 70L, 0L, 8500L, 3500L,
+        7500L, 2500L, 6500L, 1500L)))
+    // exec 1: new stage 0 peaks for metrics at indexes: 2, 4, 6
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
-      Array(4000L, 50L, 4000L, 8000L, 50L, 0L, 50L, 0L, 100L, 0L, 70L, 20L)))
-    // exec 2: new stage 0 peaks for metrics at indexes: 0, 2, 3, 6, 8
+      Array(4000L, 50L, 50L, 0L, 50L, 0L, 100L, 0L, 70L, 20L, 8000L, 4000L,
+        7000L, 3000L, 6000L, 2000L)))
+    // exec 2: new stage 0 peaks for metrics at indexes: 0, 4, 6
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
-      Array(2000L, 50L, 4000L, 9000L, 10L, 0L, 10L, 0L, 30L, 0L, 70L, 0L)))
-    // exec 1: new stage 0 peaks for metrics at indexes: 7, 9
+      Array(2000L, 50L, 10L, 0L, 10L, 0L, 30L, 0L, 70L, 0L, 9000L, 4000L,
+        8000L, 3000L, 7000L, 2000L)))
+    // exec 1: new stage 0 peaks for metrics at indexes: 5, 7
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
-      Array(2000L, 40L, 3500L, 8000L, 50L, 0L, 40L, 10L, 90L, 10L, 50L, 0L)))
-    // exec 2: new stage 0 peaks for metrics at indexes: 0, 7, 8, 9, 10
+      Array(2000L, 40L, 50L, 0L, 40L, 10L, 90L, 10L, 50L, 0L, 8000L, 3500L,
+        7000L, 2500L, 6000L, 1500L)))
+    // exec 2: new stage 0 peaks for metrics at indexes: 0, 5, 6, 7, 8
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
-      Array(3500L, 50L, 3500L, 8500L, 15L, 0L, 10L, 10L, 35L, 10L, 80L, 0L)))
+      Array(3500L, 50L, 15L, 0L, 10L, 10L, 35L, 10L, 80L, 0L, 8500L, 3500L,
+        7500L, 2500L, 6500L, 1500L)))
     // now start stage 1, one more metric update for each executor, and new
     // peaks for some stage 1 metrics (as listed), initialize stage 1 peaks
     listener.onStageSubmitted(createStageSubmittedEvent(1))
-    // exec 1: new stage 0 peaks for metrics at indexes: 0, 5, 9
+    // exec 1: new stage 0 peaks for metrics at indexes: 0, 3, 7
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
-      Array(5000L, 30L, 3000L, 5000L, 50L, 20L, 30L, 10L, 80L, 30L, 50L, 0L)))
-    // exec 2: new stage 0 peaks for metrics at indexes: 0, 1, 4, 5, 8, 9, 11
+      Array(5000L, 30L, 50L, 20L, 30L, 10L, 80L, 30L, 50L, 0L, 5000L, 3000L,
+        4000L, 2000L, 3000L, 1000L)))
+    // exec 2: new stage 0 peaks for metrics at indexes: 0, 1, 2, 3, 6, 7, 9
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
-      Array(7000L, 80L, 4000L, 8000L, 50L, 20L, 0L, 10L, 50L, 30L, 10L, 40L)))
+      Array(7000L, 80L, 50L, 20L, 0L, 10L, 50L, 30L, 10L, 40L, 8000L, 4000L,
+        7000L, 3000L, 6000L, 2000L)))
     // complete stage 0, and 3 more updates for each executor with just
     // stage 1 running
     listener.onStageCompleted(createStageCompletedEvent(0))
-    // exec 1: new stage 1 peaks for metrics at indexes: 0, 1, 5
+    // exec 1: new stage 1 peaks for metrics at indexes: 0, 1, 3
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
-      Array(6000L, 70L, 3000L, 5000L, 20L, 30L, 10L, 0L, 30L, 30L, 30L, 0L)))
-    // exec 2: new stage 1 peaks for metrics at indexes: 5, 6, 9, 10
+      Array(6000L, 70L, 20L, 30L, 10L, 0L, 30L, 30L, 30L, 0L, 5000L, 3000L,
+        4000L, 2000L, 3000L, 1000L)))
+    // exec 2: new stage 1 peaks for metrics at indexes: 3, 4, 7, 8
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
-      Array(5500L, 30L, 5000L, 8000L, 20L, 40L, 10L, 0L, 30L, 40L, 40L, 20L)))
-    // exec 1: new stage 1 peaks for metrics at indexes: 0, 6, 7, 9
+      Array(5500L, 30L, 20L, 40L, 10L, 0L, 30L, 40L, 40L, 20L, 8000L, 5000L,
+        7000L, 4000L, 6000L, 3000L)))
+    // exec 1: new stage 1 peaks for metrics at indexes: 0, 4, 5, 7
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
-      Array(7000L, 70L, 2500L, 3000L, 5L, 25L, 60L, 30L, 65L, 55L, 30L, 0L)))
-    // exec 2: new stage 1 peak for metrics at index: 9
+      Array(7000L, 70L, 5L, 25L, 60L, 30L, 65L, 55L, 30L, 0L, 3000L, 2500L, 2000L,
+        1500L, 1000L, 500L)))
+    // exec 2: new stage 1 peak for metrics at index: 7
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
-      Array(5500L, 40L, 3000L, 7000L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 20L)))
+      Array(5500L, 40L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 20L, 7000L, 3000L,
+        6000L, 2000L, 5000L, 1000L)))
     // exec 1: no new stage 1 peaks
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
-      Array(5500L, 70L, 2500L, 4000L, 15L, 20L, 55L, 20L, 70L, 40L, 20L, 0L)))
+      Array(5500L, 70L, 15L, 20L, 55L, 20L, 70L, 40L, 20L, 0L, 4000L, 2500L,
+        3000L, 1500, 2000L, 500L)))
     listener.onExecutorRemoved(createExecutorRemovedEvent(1))
-    // exec 2: new stage 1 peak for metrics at index: 8
+    // exec 2: new stage 1 peak for metrics at index: 6
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
-      Array(4000L, 20L, 4000L, 7000L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 0L)))
+      Array(4000L, 20L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 0L, 7000L, 4000L, 6000L,
+        3000L, 5000L, 2000L)))
     listener.onStageCompleted(createStageCompletedEvent(1))
 
     // expected peak values for each executor
     val expectedValues = Map(
-      "1" -> new ExecutorMetrics(Array(7000L, 70L, 4000L, 8000L, 50L, 30L, 60L, 30L, 100L, 55L,
-        70L, 20L)),
-      "2" -> new ExecutorMetrics(Array(7000L, 80L, 5000L, 9000L, 50L, 40L, 10L, 30L, 50L, 60L,
-        80L, 40L)))
+      "1" -> new ExecutorMetrics(Array(7000L, 70L, 50L, 30L, 60L, 30L, 100L, 55L,
+        70L, 20L, 8000L, 4000L, 7000L, 3000L, 6000L, 2000L)),
+      "2" -> new ExecutorMetrics(Array(7000L, 80L, 50L, 40L, 10L, 30L, 50L, 60L,
+        80L, 40L, 9000L, 5000L, 8000L, 4000L, 7000L, 3000L)))
 
     // check that the stored peak values match the expected values
     expectedValues.foreach { case (id, metrics) =>
@@ -1385,26 +1399,29 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     listener.onStageSubmitted(createStageSubmittedEvent(0))
     listener.onStageSubmitted(createStageSubmittedEvent(1))
     listener.onStageExecutorMetrics(SparkListenerStageExecutorMetrics("1", 0, 0,
-      new ExecutorMetrics(Array(5000L, 50L, 4000L, 8000L, 50L, 20L, 50L, 10L, 100L, 30L,
-        70L, 20L))))
+      new ExecutorMetrics(Array(5000L, 50L, 50L, 20L, 50L, 10L, 100L, 30L,
+        70L, 20L, 8000L, 4000L, 7000L, 3000L, 6000L, 2000L))))
     listener.onStageExecutorMetrics(SparkListenerStageExecutorMetrics("2", 0, 0,
-      new ExecutorMetrics(Array(7000L, 70L, 4000L, 9000L, 50L, 20L, 10L, 10L, 50L, 30L, 80L, 40L))))
+      new ExecutorMetrics(Array(7000L, 70L, 50L, 20L, 10L, 10L, 50L, 30L, 80L, 40L, 9000L,
+        4000L, 8000L, 3000L, 7000L, 2000L))))
      listener.onStageCompleted(createStageCompletedEvent(0))
     // executor 1 is removed before stage 1 has finished, the stage executor metrics
     // are logged afterwards and should still be used to update the executor metrics.
     listener.onExecutorRemoved(createExecutorRemovedEvent(1))
     listener.onStageExecutorMetrics(SparkListenerStageExecutorMetrics("1", 1, 0,
-      new ExecutorMetrics(Array(7000L, 70L, 3000L, 5000L, 50L, 30L, 60L, 30L, 80L, 55L, 50L, 0L))))
+      new ExecutorMetrics(Array(7000L, 70L, 50L, 30L, 60L, 30L, 80L, 55L, 50L, 0L, 5000L, 3000L,
+        4000L, 2000L, 3000L, 1000L))))
     listener.onStageExecutorMetrics(SparkListenerStageExecutorMetrics("2", 1, 0,
-      new ExecutorMetrics(Array(7000L, 80L, 5000L, 8000L, 50L, 40L, 10L, 30L, 50L, 60L, 40L, 40L))))
+      new ExecutorMetrics(Array(7000L, 80L, 50L, 40L, 10L, 30L, 50L, 60L, 40L, 40L, 8000L, 5000L,
+        7000L, 4000L, 6000L, 3000L))))
     listener.onStageCompleted(createStageCompletedEvent(1))
 
     // expected peak values for each executor
     val expectedValues = Map(
-      "1" -> new ExecutorMetrics(Array(7000L, 70L, 4000L, 8000L, 50L, 30L, 60L, 30L, 100L, 55L,
-        70L, 20L)),
-      "2" -> new ExecutorMetrics(Array(7000L, 80L, 5000L, 9000L, 50L, 40L, 10L, 30L, 50L, 60L,
-        80L, 40L)))
+      "1" -> new ExecutorMetrics(Array(7000L, 70L, 50L, 30L, 60L, 30L, 100L, 55L,
+        70L, 20L, 8000L, 4000L, 7000L, 3000L, 6000L, 2000L)),
+      "2" -> new ExecutorMetrics(Array(7000L, 80L, 50L, 40L, 10L, 30L, 50L, 60L,
+        80L, 40L, 9000L, 5000L, 8000L, 4000L, 7000L, 3000L)))
 
     // check that the stored peak values match the expected values
     for ((id, metrics) <- expectedValues) {
