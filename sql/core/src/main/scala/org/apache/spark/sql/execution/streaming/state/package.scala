@@ -86,15 +86,74 @@ package object state {
     }
   }
 
+  /**
+   * Base trait for state manager purposed to be used from streaming aggregations.
+   */
   sealed trait StreamingAggregationStateManager extends Serializable {
+
+    /**
+     * Extract columns consisting key from input row, and return the new row for key columns.
+     *
+     * @param row The input row.
+     * @return The row instance which only contains key columns.
+     */
     def getKey(row: InternalRow): UnsafeRow
+
+    /**
+     * Calculate schema for the value of state. The schema is mainly passed to the StateStoreRDD.
+     *
+     * @return An instance of StructType representing schema for the value of state.
+     */
     def getStateValueSchema: StructType
+
+    /**
+     * Get the current value of a non-null key from the target state store.
+     *
+     * @param store The target StateStore instance.
+     * @param key The key whose associated value is to be returned.
+     * @return A non-null row if the key exists in the store, otherwise null.
+     */
     def get(store: StateStore, key: UnsafeRow): UnsafeRow
+
+    /**
+     * Put a new value for a non-null key to the target state store. Note that key will be
+     * extracted from the input row, and the key would be same as the result of getKey(inputRow).
+     *
+     * @param store The target StateStore instance.
+     * @param row The input row.
+     */
     def put(store: StateStore, row: UnsafeRow): Unit
+
+    /**
+     * Commit all the updates that have been made to the target state store, and return the
+     * new version.
+     *
+     * @param store The target StateStore instance.
+     * @return The new state version.
+     */
     def commit(store: StateStore): Long
+
+    /**
+     * Remove a single non-null key from the target state store.
+     *
+     * @param store The target StateStore instance.
+     * @param key The key whose associated value is to be returned.
+     */
     def remove(store: StateStore, key: UnsafeRow): Unit
+
+    /**
+     * Return an iterator containing all the key-value pairs in target state store.
+     */
     def iterator(store: StateStore): Iterator[UnsafeRowPair]
+
+    /**
+     * Return an iterator containing all the keys in target state store.
+     */
     def keys(store: StateStore): Iterator[UnsafeRow]
+
+    /**
+     * Return an iterator containing all the values in target state store.
+     */
     def values(store: StateStore): Iterator[UnsafeRow]
   }
 
@@ -133,6 +192,18 @@ package object state {
     }
   }
 
+  /**
+   * The implementation of StreamingAggregationStateManager for state version 1.
+   * In state version 1, the schema of key and value in state are follow:
+   *
+   * - key: Same as key expressions.
+   * - value: Same as input row attributes. The schema of value contains key expressions as well.
+   *
+   * This implementation only works when input row attributes contain all the key attributes.
+   *
+   * @param keyExpressions The attributes of keys.
+   * @param inputRowAttributes The attributes of input row.
+   */
   class StreamingAggregationStateManagerImplV1(
       keyExpressions: Seq[Attribute],
       inputRowAttributes: Seq[Attribute])
@@ -157,6 +228,21 @@ package object state {
     }
   }
 
+  /**
+   * The implementation of StreamingAggregationStateManager for state version 2.
+   * In state version 2, the schema of key and value in state are follow:
+   *
+   * - key: Same as key expressions.
+   * - value: The diff between input row attributes and key expressions.
+   *
+   * The schema of value is changed to optimize the memory/space usage in state, via removing
+   * duplicated columns in key-value pair. Hence key columns are excluded from the schema of value.
+   *
+   * This implementation only works when input row attributes contain all the key attributes.
+   *
+   * @param keyExpressions The attributes of keys.
+   * @param inputRowAttributes The attributes of input row.
+   */
   class StreamingAggregationStateManagerImplV2(
       keyExpressions: Seq[Attribute],
       inputRowAttributes: Seq[Attribute])
