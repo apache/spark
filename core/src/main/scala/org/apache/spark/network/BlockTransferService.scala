@@ -101,15 +101,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
           result.failure(exception)
         }
         override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
-          data match {
-            case f: FileSegmentManagedBuffer =>
-              result.success(f)
-            case _ =>
-              val ret = ByteBuffer.allocate(data.size.toInt)
-              ret.put(data.nioByteBuffer())
-              ret.flip()
-              result.success(new NioManagedBuffer(ret))
-          }
+          result.success(data.retain())
         }
       }, tempFileManager)
     ThreadUtils.awaitResult(result.future, Duration.Inf)
