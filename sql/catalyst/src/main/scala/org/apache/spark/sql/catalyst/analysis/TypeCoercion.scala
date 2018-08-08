@@ -486,9 +486,17 @@ object TypeCoercion {
         }
 
       case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
-        findWiderCommonType(i.children.map(_.dataType)) match {
-          case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
-          case None => i
+        if (b.map(_.dataType).distinct.size == 1) {
+          findCommonTypeForBinaryComparison(a.dataType, b.head.dataType, conf)
+            .orElse(findWiderTypeForTwo(a.dataType, b.head.dataType)) match {
+            case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
+            case None => i
+          }
+        } else {
+          findWiderCommonType(i.children.map(_.dataType)) match {
+            case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
+            case None => i
+          }
         }
     }
   }
