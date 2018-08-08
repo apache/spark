@@ -28,7 +28,7 @@ import com.google.common.primitives.UnsignedBytes
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.config
-import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NettyManagedBuffer}
 import org.apache.spark.network.util.ByteArrayWritableChannel
 import org.apache.spark.storage.StorageUtils
 import org.apache.spark.util.Utils
@@ -172,10 +172,16 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
 
 object ChunkedByteBuffer {
   // TODO eliminate this method if we switch BlockManager to getting InputStreams
-  def fromManagedBuffer(data: ManagedBuffer, maxChunkSize: Int): ChunkedByteBuffer = {
+  def fromManagedBuffer(data: ManagedBuffer, maxChunkSizeForFileBuffer: Int): ChunkedByteBuffer = {
     data match {
       case f: FileSegmentManagedBuffer =>
-        map(f.getFile, maxChunkSize, f.getOffset, f.getLength)
+        map(f.getFile, maxChunkSizeForFileBuffer, f.getOffset, f.getLength)
+      case n : NettyManagedBuffer =>
+        // If the underlying Netty object is backed by several ByteBuffers we transfer
+        // the Netty layout to the ChunkedByteBuffer layout.
+        // Note that we may exceed the chunk size in this case but this generates no copy
+        // of the data.
+        new ChunkedByteBuffer(n.nioByteBuffers())
       case other =>
         new ChunkedByteBuffer(other.nioByteBuffer())
     }

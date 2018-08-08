@@ -45,6 +45,10 @@ public class NettyManagedBuffer extends ManagedBuffer {
     return buf.nioBuffer();
   }
 
+  public ByteBuffer[] nioByteBuffers() {
+    return buf.nioBuffers();
+  }
+
   @Override
   public InputStream createInputStream() throws IOException {
     return new ByteBufInputStream(buf);

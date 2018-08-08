@@ -160,7 +160,13 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
           releaseLock(pieceId)
         case None =>
           bm.getRemoteBytes(pieceId) match {
-            case Some(b) =>
+            case Some(splitB) =>
+
+              // Checksum computation and further computations require the data
+              // from the ChunkedByteBuffer to be merged, so we we merge it now.
+              val bMergedData = splitB.toArray
+              val b = new ChunkedByteBuffer(ByteBuffer.wrap(bMergedData))
+
               if (checksumEnabled) {
                 val sum = calcChecksum(b.chunks(0))
                 if (sum != checksums(pid)) {
