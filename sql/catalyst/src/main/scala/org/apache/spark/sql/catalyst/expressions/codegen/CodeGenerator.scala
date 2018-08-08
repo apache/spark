@@ -747,46 +747,26 @@ class CodegenContext {
   }
 
   /**
-   * Generates code creating a [[UnsafeArrayData]].
-   *
-   * @param arrayName name of the array to create
-   * @param numElements code representing the number of elements the array should contain
-   * @param elementType data type of the elements in the array
-   * @param additionalErrorMessage string to include in the error message
-   */
-  def createUnsafeArray(
-      arrayName: String,
-      numElements: String,
-      elementType: DataType,
-      additionalErrorMessage: String): String = {
-    val arraySize = freshName("size")
-    val arrayBytes = freshName("arrayBytes")
-
-    s"""
-       |long $arraySize = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
-       |  $numElements,
-       |  ${elementType.defaultSize});
-       |if ($arraySize > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-       |  throw new RuntimeException("Unsuccessful try create array with " + $arraySize +
-       |    " bytes of data due to exceeding the limit " +
-       |    "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} bytes for UnsafeArrayData." +
-       |    "$additionalErrorMessage");
-       |}
-       |byte[] $arrayBytes = new byte[(int)$arraySize];
-       |UnsafeArrayData $arrayName = new UnsafeArrayData();
-       |Platform.putLong($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, $numElements);
-       |$arrayName.pointTo($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, (int)$arraySize);
-      """.stripMargin
-  }
-
-  /**
    * Generates code and assignment creating a [[UnsafeArrayData]] or [[GenericArrayData]] based on
    * given parameters.
    *
    * @param arrayName name of the array to create
+   * @param dataType data type of the result array
+   * @param elementType data type of the elements in source array
    * @param numElements code representing the number of elements the array should contain
-   * @param elementType data type of the elements in the array
+   * @param srcArray code representing the number of elements the array should contain
    * @param additionalErrorMessage string to include in the error message
+   * @param rhsValue an optionally specified expression for the right-hand side of the returning
+   *                 assignment
+   * @param checkForNull optional value which shows whether a nullcheck is required for
+   *                     the returning assignment
+   * @param elementSize optional value which shows the size of an element of the allocated
+   *                    [[UnsafeArrayData]] or [[GenericArrayData]]
+   *
+   * @return code representing the allocation of ArrayData
+   *         code representing an assignment to each element of the allocated [[UnsafeArrayData]]
+   *         or [[GenericArrayData]], which requires a pair of destination and source loop index
+   *         variables
    */
   def createArrayData(
       arrayName: String,
@@ -848,40 +828,6 @@ class CodegenContext {
        """.stripMargin
 
     (allocation, assignment)
-  }
-
-  /**
-   * Generates code creating a [[UnsafeArrayData]]. The generated code executes
-   * a provided fallback when the size of backing array would exceed the array size limit.
-   * @param arrayName a name of the array to create
-   * @param numElements a piece of code representing the number of elements the array should contain
-   * @param elementSize a size of an element in bytes
-   * @param bodyCode a function generating code that fills up the [[UnsafeArrayData]]
-   *                 and getting the backing array as a parameter
-   * @param fallbackCode a piece of code executed when the array size limit is exceeded
-   */
-  def createUnsafeArrayWithFallback(
-      arrayName: String,
-      numElements: String,
-      elementSize: Int,
-      bodyCode: String => String,
-      fallbackCode: String): String = {
-    val arraySize = freshName("size")
-    val arrayBytes = freshName("arrayBytes")
-    s"""
-       |final long $arraySize = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
-       |  $numElements,
-       |  $elementSize);
-       |if ($arraySize > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-       |  $fallbackCode
-       |} else {
-       |  final byte[] $arrayBytes = new byte[(int)$arraySize];
-       |  UnsafeArrayData $arrayName = new UnsafeArrayData();
-       |  Platform.putLong($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, $numElements);
-       |  $arrayName.pointTo($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, (int)$arraySize);
-       |  ${bodyCode(arrayBytes)}
-       |}
-     """.stripMargin
   }
 
   /**

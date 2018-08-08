@@ -703,7 +703,7 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
          |  int $counter = 0;
          |  for (int $y = 0; $y < ${children.length}; $y++) {
          |    for (int $z = 0; $z < $argsName[$y].numElements(); $z++) {
-         |      ${assignment(z, counter)}
+         |      ${assignment(counter, z)}
          |      $counter++;
          |    }
          |  }
@@ -1255,7 +1255,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
        |int[] $indices = $rand.getNextIndices($numElements);
        |$initialization
        |for (int $i = 0; $i < $numElements; $i++) {
-       |  ${assignment(s"$indices[$i]", i)}
+       |  ${assignment(i, s"$indices[$i]")}
        |}
        |${ev.value} = $arrayData;
      """.stripMargin
@@ -1728,7 +1728,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
        |} else {
        |  $allocation
        |  for (int $i = 0; $i < $resLength; $i ++) {
-       |    ${assignment(s"$i + $startIdx", i)}
+       |    ${assignment(i, s"$i + $startIdx")}
        |  }
        |  ${ev.value} = $values;
        |}
@@ -2404,7 +2404,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
          |  int $counter = 0;
          |  for (int $y = 0; $y < ${children.length}; $y++) {
          |    for (int $z = 0; $z < args[$y].numElements(); $z++) {
-         |      ${assignment(z, counter)}
+         |      ${assignment(counter, z)}
          |      $counter++;
          |    }
          |  }
@@ -2491,11 +2491,6 @@ case class Flatten(child: Expression) extends UnaryExpression {
       |for (int z = 0; z < $childVariableName.numElements(); z++) {
       |  $variableName += $childVariableName.getArray(z).numElements();
       |}
-      |if ($variableName > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-      |  throw new RuntimeException("Unsuccessful try to flatten an array of arrays with " +
-      |    $variableName + " elements due to exceeding the array size limit" +
-      |    " ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
-      |}
       """.stripMargin
     (code, variableName)
   }
@@ -2508,21 +2503,22 @@ case class Flatten(child: Expression) extends UnaryExpression {
     val tempArrayDataName = ctx.freshName("tempArrayData")
     val k = ctx.freshName("k")
     val l = ctx.freshName("l")
+    val arr = ctx.freshName("arr")
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, childVariableName)
 
     val (allocation, assignment) =
       ctx.createArrayData(tempArrayDataName, dataType, elementType, numElemName,
-        "arr", s" $prettyName failed.")
+        arr, s" $prettyName failed.")
 
     s"""
     |$numElemCode
     |$allocation
     |int $counter = 0;
     |for (int $k = 0; $k < $childVariableName.numElements(); $k++) {
-    |  ArrayData arr = $childVariableName.getArray($k);
-    |  for (int $l = 0; $l < arr.numElements(); $l++) {
-    |   ${assignment(l, counter)}
+    |  ArrayData $arr = $childVariableName.getArray($k);
+    |  for (int $l = 0; $l < $arr.numElements(); $l++) {
+    |   ${assignment(counter, l)}
     |   $counter++;
     | }
     |}
@@ -3036,7 +3032,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
        |$allocation
        |if (!$leftIsNull) {
        |  for (int $k = 0; $k < $tempArrayDataName.numElements(); $k++) {
-       |    ${assignment("", k)}
+       |    ${assignment(k, "")}
        |  }
        |} else {
        |  for (int $k = 0; $k < $tempArrayDataName.numElements(); $k++) {
@@ -3413,7 +3409,7 @@ abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
     s"""
        |if ($size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
        |  throw new RuntimeException("Cannot create array with " + $size +
-       |  " bytes of data due to exceeding the limit " +
+       |  " elements of data due to exceeding the limit " +
        |  "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for ArrayData.");
        |}
        |
