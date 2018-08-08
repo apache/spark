@@ -368,9 +368,9 @@ case class ArrayFilter(
     """,
   examples = """
     Examples:
-      > SELECT _FUNC_(array(1, 2, 3), (acc, x) -> acc + x);
+      > SELECT _FUNC_(array(1, 2, 3), 0, (acc, x) -> acc + x);
        6
-      > SELECT _FUNC_(array(1, 2, 3), (acc, x) -> acc + x, acc -> acc * 10);
+      > SELECT _FUNC_(array(1, 2, 3), 0, (acc, x) -> acc + x, acc -> acc * 10);
        60
   """,
   since = "2.4.0")
