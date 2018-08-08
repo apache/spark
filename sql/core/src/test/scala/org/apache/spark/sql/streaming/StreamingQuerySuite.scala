@@ -23,7 +23,6 @@ import scala.collection.mutable
 
 import org.apache.commons.lang3.RandomStringUtils
 import org.json4s.NoTypeHints
-import org.json4s.jackson.JsonMethods._
 import org.json4s.jackson.Serialization
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
@@ -33,7 +32,7 @@ import org.scalatest.mockito.MockitoSugar
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
-import org.apache.spark.sql.catalyst.expressions.Uuid
+import org.apache.spark.sql.catalyst.expressions.{Literal, Rand, Randn, Shuffle, Uuid}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.TestForeachWriter
 import org.apache.spark.sql.functions._
@@ -863,6 +862,45 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       CheckAnswer(collectUuid)
     )
     assert(uuids.distinct.size == 2)
+  }
+
+  test("Rand/Randn in streaming query should not produce same results in each execution") {
+    val rands = mutable.ArrayBuffer[Double]()
+    def collectRand: Seq[Row] => Unit = { rows: Seq[Row] =>
+      rows.foreach { r =>
+        rands += r.getDouble(0)
+        rands += r.getDouble(1)
+      }
+    }
+
+    val stream = MemoryStream[Int]
+    val df = stream.toDF().select(new Column(new Rand()), new Column(new Randn()))
+    testStream(df)(
+      AddData(stream, 1),
+      CheckAnswer(collectRand),
+      AddData(stream, 2),
+      CheckAnswer(collectRand)
+    )
+    assert(rands.distinct.size == 4)
+  }
+
+  test("Shuffle in streaming query should not produce same results in each execution") {
+    val rands = mutable.ArrayBuffer[Seq[Int]]()
+    def collectShuffle: Seq[Row] => Unit = { rows: Seq[Row] =>
+      rows.foreach { r =>
+        rands += r.getSeq[Int](0)
+      }
+    }
+
+    val stream = MemoryStream[Int]
+    val df = stream.toDF().select(new Column(new Shuffle(Literal.create[Seq[Int]](0 until 100))))
+    testStream(df)(
+      AddData(stream, 1),
+      CheckAnswer(collectShuffle),
+      AddData(stream, 2),
+      CheckAnswer(collectShuffle)
+    )
+    assert(rands.distinct.size == 2)
   }
 
   test("StreamingRelationV2/StreamingExecutionRelation/ContinuousExecutionRelation.toJSON " +

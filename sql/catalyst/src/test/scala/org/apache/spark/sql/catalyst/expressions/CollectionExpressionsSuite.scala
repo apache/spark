@@ -90,10 +90,12 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val mi0 = Literal.create(Map(1 -> 1, 2 -> null, 3 -> 2), MapType(IntegerType, IntegerType))
     val mi1 = Literal.create(Map[Int, Int](), MapType(IntegerType, IntegerType))
     val mi2 = Literal.create(null, MapType(IntegerType, IntegerType))
+    val mid0 = Literal.create(Map(1 -> 1.1, 2 -> 2.2), MapType(IntegerType, DoubleType))
 
     checkEvaluation(MapEntries(mi0), Seq(r(1, 1), r(2, null), r(3, 2)))
     checkEvaluation(MapEntries(mi1), Seq.empty)
     checkEvaluation(MapEntries(mi2), null)
+    checkEvaluation(MapEntries(mid0), Seq(r(1, 1.1), r(2, 2.2)))
 
     // Non-primitive-type keys/values
     val ms0 = Literal.create(Map("a" -> "c", "b" -> null), MapType(StringType, StringType))
@@ -1489,7 +1491,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Shuffle(as7, Some(0)), null)
     checkEvaluation(Shuffle(aa, Some(0)), Seq(Seq("e"), Seq("a", "b"), Seq("c", "d")))
 
-    val r = new Random()
+    val r = new Random(1234)
     val seed1 = Some(r.nextLong())
     assert(evaluateWithoutCodegen(Shuffle(ai0, seed1)) ===
       evaluateWithoutCodegen(Shuffle(ai0, seed1)))
