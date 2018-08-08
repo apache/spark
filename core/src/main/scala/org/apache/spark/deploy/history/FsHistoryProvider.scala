@@ -19,16 +19,16 @@ package org.apache.spark.deploy.history
 
 import java.io.{FileNotFoundException, IOException, OutputStream}
 import java.util.UUID
-import java.util.concurrent.{Executors, ExecutorService, Future, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, Executors, ExecutorService, Future, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.xml.Node
 
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
-import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.fs.permission.FsAction
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
@@ -105,7 +105,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     "; groups with admin permissions" + HISTORY_UI_ADMIN_ACLS_GROUPS.toString)
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-  private val fs = new Path(logDir).getFileSystem(hadoopConf)
+  // Visible for testing
+  private[history] val fs: FileSystem = new Path(logDir).getFileSystem(hadoopConf)
 
   // Used by check event thread and clean log thread.
   // Scheduled thread pool size must be one, otherwise it will have concurrent issues about fs
@@ -128,6 +129,25 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private var attemptsToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]
 
   private val pendingReplayTasksCount = new java.util.concurrent.atomic.AtomicInteger(0)
+
+  private val blacklist = new ConcurrentHashMap[String, Long]
+
+  // Visible for testing
+  private[history] def isBlacklisted(path: Path): Boolean = {
+    blacklist.containsKey(path.getName)
+  }
+
+  private def blacklist(path: Path): Unit = {
+    blacklist.put(path.getName, clock.getTimeMillis())
+  }
+
+  /**
+   * Removes expired entries in the blacklist, according to the provided `expireTimeInSeconds`.
+   */
+  private def clearBlacklist(expireTimeInSeconds: Long): Unit = {
+    val expiredThreshold = clock.getTimeMillis() - expireTimeInSeconds * 1000
+    blacklist.asScala.retain((_, creationTime) => creationTime >= expiredThreshold)
+  }
 
   /**
    * Return a runnable that performs the given operation on the event logs.
@@ -326,7 +346,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // the end-user.
             !entry.getPath().getName().startsWith(".") &&
             prevFileSize < entry.getLen() &&
-            SparkHadoopUtil.get.checkAccessPermission(entry, FsAction.READ)
+            !isBlacklisted(entry.getPath)
         }
         .flatMap { entry => Some(entry) }
         .sortWith { case (entry1, entry2) =>
@@ -481,6 +501,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
 
     } catch {
+      case e: AccessControlException =>
+        // We don't have read permissions on the log file
+        logWarning(s"Unable to read log ${fileStatus.getPath}", e.getCause)
+        blacklist(fileStatus.getPath)
+        None
       case e: Exception =>
         logError(
           s"Exception encountered when attempting to load application log ${fileStatus.getPath}",
@@ -587,6 +612,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } catch {
       case t: Exception => logError("Exception in cleaning logs", t)
     }
+    // Clean the blacklist from the expired entries.
+    clearBlacklist(CLEAN_INTERVAL_S)
   }
 
   /**

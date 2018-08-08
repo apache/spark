@@ -27,11 +27,13 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.fs.FileStatus
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hdfs.DistributedFileSystem
+import org.apache.hadoop.security.AccessControlException
 import org.json4s.jackson.JsonMethods._
-import org.mockito.Matchers.any
-import org.mockito.Mockito.{mock, spy, verify}
+import org.mockito.ArgumentMatcher
+import org.mockito.Matchers.{any, argThat}
+import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
@@ -135,14 +137,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     // setReadable(...) does not work on Windows. Please refer JDK-6728842.
     assume(!Utils.isWindows)
 
-    class TestFsHistoryProvider extends FsHistoryProvider(createTestConf()) {
-      var mergeApplicationListingCall = 0
-      override protected def mergeApplicationListing(fileStatus: FileStatus): Unit = {
-        super.mergeApplicationListing(fileStatus)
-        mergeApplicationListingCall += 1
-      }
-    }
-    val provider = new TestFsHistoryProvider
+    val provider = new FsHistoryProvider(createTestConf())
 
     val logFile1 = newLogFile("new1", None, inProgress = false)
     writeFile(logFile1, true, None,
@@ -159,8 +154,6 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     updateAndCheck(provider) { list =>
       list.size should be (1)
     }
-
-    provider.mergeApplicationListingCall should be (1)
   }
 
   test("history file is renamed from inprogress to completed") {
@@ -582,6 +575,42 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       securityManager.checkUIViewPermissions("user5") should be (false)
     }
  }
+
+  test("SPARK-24948: blacklist files we don't have read permission on") {
+    val clock = new ManualClock(1533132471)
+    val provider = new FsHistoryProvider(createTestConf(), clock)
+    val accessDenied = newLogFile("accessDenied", None, inProgress = false)
+    writeFile(accessDenied, true, None,
+      SparkListenerApplicationStart("accessDenied", Some("accessDenied"), 1L, "test", None))
+    val accessGranted = newLogFile("accessGranted", None, inProgress = false)
+    writeFile(accessGranted, true, None,
+      SparkListenerApplicationStart("accessGranted", Some("accessGranted"), 1L, "test", None),
+      SparkListenerApplicationEnd(5L))
+    val mockedFs = spy(provider.fs)
+    doThrow(new AccessControlException("Cannot read accessDenied file")).when(mockedFs).open(
+      argThat(new ArgumentMatcher[Path]() {
+        override def matches(path: Any): Boolean = {
+          path.asInstanceOf[Path].getName.toLowerCase == "accessdenied"
+        }
+      }))
+    val mockedProvider = spy(provider)
+    when(mockedProvider.fs).thenReturn(mockedFs)
+    updateAndCheck(mockedProvider) { list =>
+      list.size should be(1)
+    }
+    writeFile(accessDenied, true, None,
+      SparkListenerApplicationStart("accessDenied", Some("accessDenied"), 1L, "test", None),
+      SparkListenerApplicationEnd(5L))
+    // Doing 2 times in order to check the blacklist filter too
+    updateAndCheck(mockedProvider) { list =>
+      list.size should be(1)
+    }
+    val accessDeniedPath = new Path(accessDenied.getPath)
+    assert(mockedProvider.isBlacklisted(accessDeniedPath))
+    clock.advance(24 * 60 * 60 * 1000 + 1) // add a bit more than 1d
+    mockedProvider.cleanLogs()
+    assert(!mockedProvider.isBlacklisted(accessDeniedPath))
+  }
 
   /**
    * Asks the provider to check for logs and calls a function to perform checks on the updated
