@@ -277,7 +277,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       Map(1 -> -10, 2 -> -80, 3 -> null, 4 -> null))
     checkEvaluation(
       map_zip_with(mii0, mii2, multiplyKeyWithValues),
-      Map(1 -> null, 2 -> -80, 3 -> null))
+      Map(1 -> null, 3 -> null, 2 -> -80))
     checkEvaluation(
       map_zip_with(mii0, mii3, multiplyKeyWithValues),
       Map(1 -> null, 2 -> null, 3 -> null))

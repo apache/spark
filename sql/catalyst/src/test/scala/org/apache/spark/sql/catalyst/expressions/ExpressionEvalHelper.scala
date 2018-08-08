@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.scalacheck.Gen
@@ -97,10 +98,48 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
           isSame
         }
       case (result: MapData, expected: MapData) =>
-        val kt = dataType.asInstanceOf[MapType].keyType
-        val vt = dataType.asInstanceOf[MapType].valueType
-        checkResult(result.keyArray, expected.keyArray, ArrayType(kt)) &&
-          checkResult(result.valueArray, expected.valueArray, ArrayType(vt))
+        // Comparison ignoring order of entries and considering duplicated keys
+        // No hashing applied due to types without support of equals
+        result.numElements == expected.numElements && {
+          val MapType(keyType, valueType, _) = exprDataType
+
+          // Calculate a number of entry occurrences (key, value, numberOfOccurrences)
+          def calculateOccurrences(mapData: MapData): Seq[(Any, Any, Int)] = {
+            var arrayBuffer = new ArrayBuffer[(Any, Any, Int)]()
+            val keys = mapData.keyArray()
+            val values = mapData.valueArray()
+            var i = 0
+            while(i < keys.numElements) {
+              var found = false
+              val key = keys.get(i, keyType)
+              val value = values.get(i, valueType)
+              var j = 0
+              while (!found && j < arrayBuffer.size) {
+                val (bufferKey, bufferValue, numOfOccurrences) = arrayBuffer(j)
+                if (checkResult(key, bufferKey, keyType) &&
+                  checkResult(value, bufferValue, valueType)) {
+                  found = true
+                  arrayBuffer(j) = (bufferKey, bufferValue, numOfOccurrences + 1)
+                }
+                j += 1
+              }
+              if (!found) arrayBuffer += Tuple3(key, value, 1)
+              i += 1
+            }
+            arrayBuffer
+          }
+
+          val resultOccurrences = calculateOccurrences(result)
+          val expectedOccurrences = calculateOccurrences(expected)
+
+          resultOccurrences.map { case (resultKey, resultValue, resultOccurrences) =>
+            expectedOccurrences.exists { case (expectedKey, expectedValue, expectedOccurrences) =>
+              resultOccurrences == expectedOccurrences &&
+              checkResult(resultKey, expectedKey, keyType) &&
+              checkResult(resultValue, expectedValue, valueType)
+            }
+          }.fold(true)(_ && _)
+        }
       case (result: Double, expected: Double) =>
         if (expected.isNaN) result.isNaN else expected == result
       case (result: Float, expected: Float) =>
@@ -225,7 +264,9 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
           val lit = InternalRow(expected, expected)
           val expectedRow =
             UnsafeProjection.create(Array(expression.dataType, expression.dataType)).apply(lit)
-          if (unsafeRow != expectedRow) {
+          val field = StructField("field", expression.dataType)
+          val dataType = StructType(field :: field :: Nil)
+          if (!checkResult(unsafeRow, expectedRow, dataType)) {
             fail("Incorrect evaluation in unsafe mode: " +
               s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
           }
