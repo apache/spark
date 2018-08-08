@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.scalatest.{BeforeAndAfterEach, Matchers}
+import org.scalatest.{Assertions, BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.{SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.SparkSubmitSuite
@@ -39,8 +39,8 @@ class BufferHolderSparkSubmitSuite
     val argsForSparkSubmit = Seq(
       "--class", BufferHolderSparkSubmitSuite.getClass.getName.stripSuffix("$"),
       "--name", "SPARK-22222",
-      "--master", "local-cluster[1,1,7168]",
-      "--driver-memory", "7g",
+      "--master", "local-cluster[1,1,4096]",
+      "--driver-memory", "4g",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--conf", "spark.driver.extraJavaOptions=-ea",
@@ -49,7 +49,7 @@ class BufferHolderSparkSubmitSuite
   }
 }
 
-object BufferHolderSparkSubmitSuite {
+object BufferHolderSparkSubmitSuite extends Assertions {
 
   def main(args: Array[String]): Unit = {
 
@@ -59,6 +59,10 @@ object BufferHolderSparkSubmitSuite {
     val holder = new BufferHolder(unsafeRow)
 
     holder.reset()
+
+    assert(intercept[IllegalArgumentException] {
+      holder.grow(-1)
+    }.getMessage.contains("because the size is negative"))
 
     // while to reuse a buffer may happen, this test checks whether the buffer can be grown
     holder.grow(ARRAY_MAX / 2)
@@ -73,12 +77,8 @@ object BufferHolderSparkSubmitSuite {
     holder.grow(ARRAY_MAX - holder.totalSize())
     assert(unsafeRow.getSizeInBytes % 8 == 0)
 
-    try {
+    assert(intercept[IllegalArgumentException] {
       holder.grow(ARRAY_MAX + 1 - holder.totalSize())
-      assert(false)
-    } catch {
-        case _: UnsupportedOperationException => assert(true)
-        case _: Throwable => assert(false)
-    }
+    }.getMessage.contains("because the size after growing"))
   }
 }
