@@ -202,6 +202,43 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       Seq(Seq(1, 3), null, Seq(5)))
   }
 
+  test("ArrayExists") {
+    def exists(expr: Expression, f: Expression => Expression): Expression = {
+      val at = expr.dataType.asInstanceOf[ArrayType]
+      ArrayExists(expr, createLambda(at.elementType, at.containsNull, f))
+    }
+
+    val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
+    val ain = Literal.create(null, ArrayType(IntegerType, containsNull = false))
+
+    val isEven: Expression => Expression = x => x % 2 === 0
+    val isNullOrOdd: Expression => Expression = x => x.isNull || x % 2 === 1
+
+    checkEvaluation(exists(ai0, isEven), true)
+    checkEvaluation(exists(ai0, isNullOrOdd), true)
+    checkEvaluation(exists(ai1, isEven), false)
+    checkEvaluation(exists(ai1, isNullOrOdd), true)
+    checkEvaluation(exists(ain, isEven), null)
+    checkEvaluation(exists(ain, isNullOrOdd), null)
+
+    val as0 =
+      Literal.create(Seq("a0", "b1", "a2", "c3"), ArrayType(StringType, containsNull = false))
+    val as1 = Literal.create(Seq(null, "b", "c"), ArrayType(StringType, containsNull = true))
+    val asn = Literal.create(null, ArrayType(StringType, containsNull = false))
+
+    val startsWithA: Expression => Expression = x => x.startsWith("a")
+
+    checkEvaluation(exists(as0, startsWithA), true)
+    checkEvaluation(exists(as1, startsWithA), false)
+    checkEvaluation(exists(asn, startsWithA), null)
+
+    val aai = Literal.create(Seq(Seq(1, 2, 3), null, Seq(4, 5)),
+      ArrayType(ArrayType(IntegerType, containsNull = false), containsNull = true))
+    checkEvaluation(transform(aai, ix => exists(ix, isNullOrOdd)),
+      Seq(true, null, true))
+  }
+
   test("ArrayAggregate") {
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
     val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
