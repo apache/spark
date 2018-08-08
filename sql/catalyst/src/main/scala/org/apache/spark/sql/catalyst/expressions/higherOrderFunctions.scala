@@ -496,7 +496,7 @@ case class TransformKeys(
       if (result ==  null) {
         throw new RuntimeException("Cannot use null as map key!")
       }
-      resultKeys.update(i, f.eval(inputRow))
+      resultKeys.update(i, result)
       i += 1
     }
     new ArrayBasedMapData(resultKeys, map.valueArray())
