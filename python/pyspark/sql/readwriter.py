@@ -267,7 +267,7 @@ class DataFrameReader(OptionUtils):
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep,
-            samplingRatio=samplingRatio, encoding=encoding)
+            samplingRatio=samplingRatio, dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:

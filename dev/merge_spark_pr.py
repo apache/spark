@@ -142,6 +142,11 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
         distinct_authors[0])
     if primary_author == "":
         primary_author = distinct_authors[0]
+    else:
+        # When primary author is specified manually, de-dup it from author list and
+        # put it at the head of author list.
+        distinct_authors = list(filter(lambda x: x != primary_author, distinct_authors))
+        distinct_authors.insert(0, primary_author)
 
     commits = run_cmd(['git', 'log', 'HEAD..%s' % pr_branch_name,
                       '--pretty=format:%h [%an] %s']).split("\n\n")
@@ -154,19 +159,24 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
         # to people every time someone creates a public fork of Spark.
         merge_message_flags += ["-m", body.replace("@", "")]
 
-    authors = "\n".join(["Author: %s" % a for a in distinct_authors])
-
-    merge_message_flags += ["-m", authors]
+    committer_name = run_cmd("git config --get user.name").strip()
+    committer_email = run_cmd("git config --get user.email").strip()
 
     if had_conflicts:
-        committer_name = run_cmd("git config --get user.name").strip()
-        committer_email = run_cmd("git config --get user.email").strip()
         message = "This patch had conflicts when merged, resolved by\nCommitter: %s <%s>" % (
             committer_name, committer_email)
         merge_message_flags += ["-m", message]
 
     # The string "Closes #%s" string is required for GitHub to correctly close the PR
     merge_message_flags += ["-m", "Closes #%s from %s." % (pr_num, pr_repo_desc)]
+
+    authors = "Authored-by:" if len(distinct_authors) == 1 else "Lead-authored-by:"
+    authors += " %s" % (distinct_authors.pop(0))
+    if len(distinct_authors) > 0:
+        authors += "\n" + "\n".join(["Co-authored-by: %s" % a for a in distinct_authors])
+    authors += "\n" + "Signed-off-by: %s <%s>" % (committer_name, committer_email)
+
+    merge_message_flags += ["-m", authors]
 
     run_cmd(['git', 'commit', '--author="%s"' % primary_author] + merge_message_flags)
 

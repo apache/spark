@@ -83,6 +83,7 @@ private[spark] object Utils extends Logging {
   val random = new Random()
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
+  @volatile private var cachedLocalDir: String = ""
 
   /**
    * Define a default value for driver memory here since this value is referenced across the code
@@ -462,7 +463,15 @@ private[spark] object Utils extends Logging {
     if (useCache && fetchCacheEnabled) {
       val cachedFileName = s"${url.hashCode}${timestamp}_cache"
       val lockFileName = s"${url.hashCode}${timestamp}_lock"
-      val localDir = new File(getLocalDir(conf))
+      // Set the cachedLocalDir for the first time and re-use it later
+      if (cachedLocalDir.isEmpty) {
+        this.synchronized {
+          if (cachedLocalDir.isEmpty) {
+            cachedLocalDir = getLocalDir(conf)
+          }
+        }
+      }
+      val localDir = new File(cachedLocalDir)
       val lockFile = new File(localDir, lockFileName)
       val lockFileChannel = new RandomAccessFile(lockFile, "rw").getChannel()
       // Only one executor entry.
@@ -767,13 +776,17 @@ private[spark] object Utils extends Logging {
    *   - Otherwise, this will return java.io.tmpdir.
    *
    * Some of these configuration options might be lists of multiple paths, but this method will
-   * always return a single directory.
+   * always return a single directory. The return directory is chosen randomly from the array
+   * of directories it gets from getOrCreateLocalRootDirs.
    */
   def getLocalDir(conf: SparkConf): String = {
-    getOrCreateLocalRootDirs(conf).headOption.getOrElse {
+    val localRootDirs = getOrCreateLocalRootDirs(conf)
+    if (localRootDirs.isEmpty) {
       val configuredLocalDirs = getConfiguredLocalDirs(conf)
       throw new IOException(
         s"Failed to get a temp directory under [${configuredLocalDirs.mkString(",")}].")
+    } else {
+      localRootDirs(scala.util.Random.nextInt(localRootDirs.length))
     }
   }
 
@@ -815,7 +828,7 @@ private[spark] object Utils extends Logging {
       // to what Yarn on this system said was available. Note this assumes that Yarn has
       // created the directories already, and that they are secured so that only the
       // user has access to them.
-      getYarnLocalDirs(conf).split(",")
+      randomizeInPlace(getYarnLocalDirs(conf).split(","))
     } else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
       conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
     } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {

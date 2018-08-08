@@ -2035,6 +2035,25 @@ def array_distinct(col):
 
 @ignore_unicode_prefix
 @since(2.4)
+def array_intersect(col1, col2):
+    """
+    Collection function: returns an array of the elements in the intersection of col1 and col2,
+    without duplicates.
+
+    :param col1: name of column containing array
+    :param col2: name of column containing array
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
+    >>> df.select(array_intersect(df.c1, df.c2)).collect()
+    [Row(array_intersect(c1, c2)=[u'a', u'c'])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_intersect(_to_java_column(col1), _to_java_column(col2)))
+
+
+@ignore_unicode_prefix
+@since(2.4)
 def array_union(col1, col2):
     """
     Collection function: returns an array of the elements in the union of col1 and col2,
@@ -2050,6 +2069,25 @@ def array_union(col1, col2):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_union(_to_java_column(col1), _to_java_column(col2)))
+
+
+@ignore_unicode_prefix
+@since(2.4)
+def array_except(col1, col2):
+    """
+    Collection function: returns an array of the elements in col1 but not in col2,
+    without duplicates.
+
+    :param col1: name of column containing array
+    :param col2: name of column containing array
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
+    >>> df.select(array_except(df.c1, df.c2)).collect()
+    [Row(array_except(c1, c2)=[u'b'])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_except(_to_java_column(col1), _to_java_column(col2)))
 
 
 @since(1.4)
@@ -2810,8 +2848,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        >>> @pandas_udf("double", PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
        ... def mean_udf(v):
        ...     return v.mean()
-       >>> w = Window.partitionBy('id') \\
-       ...           .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+       >>> w = Window \\
+       ...     .partitionBy('id') \\
+       ...     .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
        >>> df.withColumn('mean_v', mean_udf(df['v']).over(w)).show()  # doctest: +SKIP
        +---+----+------+
        | id|   v|mean_v|

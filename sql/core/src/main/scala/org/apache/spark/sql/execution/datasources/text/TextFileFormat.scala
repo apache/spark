@@ -120,7 +120,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
       } else {
         new HadoopFileWholeTextReader(file, confValue)
       }
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => reader.close()))
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => reader.close()))
       if (requiredSchema.isEmpty) {
         val emptyUnsafeRow = new UnsafeRow(0)
         reader.map(_ => emptyUnsafeRow)

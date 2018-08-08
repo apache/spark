@@ -3234,6 +3234,17 @@ object functions {
   def array_distinct(e: Column): Column = withExpr { ArrayDistinct(e.expr) }
 
   /**
+   * Returns an array of the elements in the intersection of the given two arrays,
+   * without duplicates.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_intersect(col1: Column, col2: Column): Column = withExpr {
+    ArrayIntersect(col1.expr, col2.expr)
+  }
+
+  /**
    * Returns an array of the elements in the union of the given two arrays, without duplicates.
    *
    * @group collection_funcs
@@ -3241,6 +3252,17 @@ object functions {
    */
   def array_union(col1: Column, col2: Column): Column = withExpr {
     ArrayUnion(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns an array of the elements in the first array but not in the second array,
+   * without duplicates. The order of elements in the result is not determined
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_except(col1: Column, col2: Column): Column = withExpr {
+    ArrayExcept(col1.expr, col2.expr)
   }
 
   /**

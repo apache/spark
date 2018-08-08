@@ -214,7 +214,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       caseSensitive: Boolean): Iterator[InternalRow] = {
     val lines = {
       val linesReader = new HadoopFileLinesReader(file, conf)
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
       linesReader.map { line =>
         new String(line.getBytes, 0, line.getLength, parser.options.charset)
       }

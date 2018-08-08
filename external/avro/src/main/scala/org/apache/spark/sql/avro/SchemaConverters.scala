@@ -19,9 +19,11 @@ package org.apache.spark.sql.avro
 
 import scala.collection.JavaConverters._
 
-import org.apache.avro.{Schema, SchemaBuilder}
+import org.apache.avro.{LogicalType, LogicalTypes, Schema, SchemaBuilder}
+import org.apache.avro.LogicalTypes.{TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 
+import org.apache.spark.sql.internal.SQLConf.AvroOutputTimestampType
 import org.apache.spark.sql.types._
 
 /**
@@ -42,7 +44,10 @@ object SchemaConverters {
       case BYTES => SchemaType(BinaryType, nullable = false)
       case DOUBLE => SchemaType(DoubleType, nullable = false)
       case FLOAT => SchemaType(FloatType, nullable = false)
-      case LONG => SchemaType(LongType, nullable = false)
+      case LONG => avroSchema.getLogicalType match {
+        case _: TimestampMillis | _: TimestampMicros => SchemaType(TimestampType, nullable = false)
+        case _ => SchemaType(LongType, nullable = false)
+      }
       case FIXED => SchemaType(BinaryType, nullable = false)
       case ENUM => SchemaType(StringType, nullable = false)
 
@@ -103,31 +108,49 @@ object SchemaConverters {
       catalystType: DataType,
       nullable: Boolean = false,
       recordName: String = "topLevelRecord",
-      prevNameSpace: String = ""): Schema = {
+      prevNameSpace: String = "",
+      outputTimestampType: AvroOutputTimestampType.Value = AvroOutputTimestampType.TIMESTAMP_MICROS)
+    : Schema = {
     val builder = if (nullable) {
       SchemaBuilder.builder().nullable()
     } else {
       SchemaBuilder.builder()
     }
+
     catalystType match {
       case BooleanType => builder.booleanType()
       case ByteType | ShortType | IntegerType => builder.intType()
       case LongType => builder.longType()
       case DateType => builder.longType()
-      case TimestampType => builder.longType()
+      case TimestampType =>
+        val timestampType = outputTimestampType match {
+          case AvroOutputTimestampType.TIMESTAMP_MILLIS => LogicalTypes.timestampMillis()
+          case AvroOutputTimestampType.TIMESTAMP_MICROS => LogicalTypes.timestampMicros()
+          case other =>
+            throw new IncompatibleSchemaException(s"Unexpected output timestamp type $other.")
+        }
+        builder.longBuilder().prop(LogicalType.LOGICAL_TYPE_PROP, timestampType.getName).endLong()
+
       case FloatType => builder.floatType()
       case DoubleType => builder.doubleType()
       case _: DecimalType | StringType => builder.stringType()
       case BinaryType => builder.bytesType()
       case ArrayType(et, containsNull) =>
-        builder.array().items(toAvroType(et, containsNull, recordName, prevNameSpace))
+        builder.array()
+          .items(toAvroType(et, containsNull, recordName, prevNameSpace, outputTimestampType))
       case MapType(StringType, vt, valueContainsNull) =>
-        builder.map().values(toAvroType(vt, valueContainsNull, recordName, prevNameSpace))
+        builder.map()
+          .values(toAvroType(vt, valueContainsNull, recordName, prevNameSpace, outputTimestampType))
       case st: StructType =>
-        val nameSpace = s"$prevNameSpace.$recordName"
+        val nameSpace = prevNameSpace match {
+          case "" => recordName
+          case _ => s"$prevNameSpace.$recordName"
+        }
+
         val fieldsAssembler = builder.record(recordName).namespace(nameSpace).fields()
         st.foreach { f =>
-          val fieldAvroType = toAvroType(f.dataType, f.nullable, f.name, nameSpace)
+          val fieldAvroType =
+            toAvroType(f.dataType, f.nullable, f.name, nameSpace, outputTimestampType)
           fieldsAssembler.name(f.name).`type`(fieldAvroType).noDefault()
         }
         fieldsAssembler.endRecord()
