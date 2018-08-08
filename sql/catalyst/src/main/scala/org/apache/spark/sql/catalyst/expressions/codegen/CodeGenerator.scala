@@ -471,6 +471,8 @@ class CodegenContext {
       case NewFunctionSpec(functionName, None, None) => functionName
       case NewFunctionSpec(functionName, Some(_), Some(innerClassInstance)) =>
         innerClassInstance + "." + functionName
+      case _ =>
+        throw new IllegalArgumentException(s"$funcName is not matched at addNewFunction")
     }
   }
 
