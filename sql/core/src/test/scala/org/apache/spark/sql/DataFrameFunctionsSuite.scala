@@ -2233,7 +2233,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("transform values function - test empty") {
     val dfExample1 = Seq(
-      Map.empty[Int, Int]
+      Map.empty[Integer, Integer]
     ).toDF("i")
 
     val dfExample2 = Seq(
@@ -2242,22 +2242,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     def testEmpty(): Unit = {
       checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> NULL)"),
-        Seq(Row(Map.empty[Int, Null])))
+        Seq(Row(Map.empty[Integer, Integer])))
 
       checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> k)"),
-        Seq(Row(Map.empty[Int, Int])))
+        Seq(Row(Map.empty[Integer, Integer])))
 
       checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> v)"),
-        Seq(Row(Map.empty[Int, Int])))
+        Seq(Row(Map.empty[Integer, Integer])))
 
       checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> 0)"),
-        Seq(Row(Map.empty[Int, Int])))
+        Seq(Row(Map.empty[Integer, Integer])))
 
       checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> 'value')"),
-        Seq(Row(Map.empty[Int, String])))
+        Seq(Row(Map.empty[Integer, String])))
 
       checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> true)"),
-        Seq(Row(Map.empty[Int, Boolean])))
+        Seq(Row(Map.empty[Integer, Boolean])))
 
       checkAnswer(dfExample2.selectExpr("transform_values(j, (k, v) -> k + cast(v as BIGINT))"),
         Seq(Row(Map.empty[BigInt, BigInt])))
@@ -2271,7 +2271,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("transform values function - test null values") {
     val dfExample1 = Seq(
-      Map[Int, Int](1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4)
+      Map[Int, Integer](1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4)
     ).toDF("a")
 
     val dfExample2 = Seq(
@@ -2280,7 +2280,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     def testNullValue(): Unit = {
       checkAnswer(dfExample1.selectExpr("transform_values(a, (k, v) -> null)"),
-        Seq(Row(Map(1 -> null, 2 -> null, 3 -> null, 4 -> null))))
+        Seq(Row(Map[Int, Integer](1 -> null, 2 -> null, 3 -> null, 4 -> null))))
 
       checkAnswer(dfExample2.selectExpr(
         "transform_values(b, (k, v) -> IF(v IS NULL, k + 1, k + 2))"),
