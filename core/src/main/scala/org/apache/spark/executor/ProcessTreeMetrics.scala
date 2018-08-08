@@ -23,6 +23,10 @@ private[spark] trait ProcessTreeMetrics {
   def computePid(): Int
   def createProcessTree()
   def updateProcessTree()
-  def getRSSInfo(): Long
-  def getVirtualMemInfo(): Long
+  def getJVMRSSInfo(): Long
+  def getJVMVirtualMemInfo(): Long
+  def getPythonRSSInfo(): Long
+  def getPythonVirtualMemInfo(): Long
+  def getOtherRSSInfo(): Long
+  def getOtherVirtualMemInfo(): Long
 }
