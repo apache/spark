@@ -28,7 +28,7 @@ class RDDBarrier[T: ClassTag](rdd: RDD[T]) {
 
   /**
    * :: Experimental ::
-   * Maps partitions together with a provided [[org.apache.spark.BarrierTaskContext]].
+   * Generate a new barrier RDD by applying a function to each partitions of the prev RDD.
    *
    * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
    * should be `false` unless `rdd` is a pair RDD and the input function doesn't modify the keys.
@@ -36,13 +36,12 @@ class RDDBarrier[T: ClassTag](rdd: RDD[T]) {
   @Experimental
   @Since("2.4.0")
   def mapPartitions[S: ClassTag](
-      f: (Iterator[T], BarrierTaskContext) => Iterator[S],
+      f: Iterator[T] => Iterator[S],
       preservesPartitioning: Boolean = false): RDD[S] = rdd.withScope {
     val cleanedF = rdd.sparkContext.clean(f)
     new MapPartitionsRDD(
       rdd,
-      (context: TaskContext, index: Int, iter: Iterator[T]) =>
-        cleanedF(iter, context.asInstanceOf[BarrierTaskContext]),
+      (context: TaskContext, index: Int, iter: Iterator[T]) => cleanedF(iter),
       preservesPartitioning,
       isFromBarrier = true
     )

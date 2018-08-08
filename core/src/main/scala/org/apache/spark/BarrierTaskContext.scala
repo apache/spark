@@ -72,7 +72,8 @@ class BarrierTaskContext(
    * 1. Only call barrier() function on a subset of all the tasks in the same barrier stage, it
    * shall lead to timeout of the function call.
    * {{{
-   *   rdd.barrier().mapPartitions { (iter, context) =>
+   *   rdd.barrier().mapPartitions { iter =>
+   *       val context = BarrierTaskContext.get()
    *       if (context.partitionId() == 0) {
    *           // Do nothing.
    *       } else {
@@ -85,7 +86,8 @@ class BarrierTaskContext(
    * 2. Include barrier() function in a try-catch code block, this may lead to timeout of the
    * second function call.
    * {{{
-   *   rdd.barrier().mapPartitions { (iter, context) =>
+   *   rdd.barrier().mapPartitions { iter =>
+   *       val context = BarrierTaskContext.get()
    *       try {
    *           // Do something that might throw an Exception.
    *           doSomething()
@@ -151,4 +153,12 @@ class BarrierTaskContext(
     val addressesStr = localProperties.getProperty("addresses", "")
     addressesStr.split(",").map(_.trim()).map(new BarrierTaskInfo(_))
   }
+}
+
+object BarrierTaskContext {
+  /**
+   * Return the currently active BarrierTaskContext. This can be called inside of user functions to
+   * access contextual information about running barrier tasks.
+   */
+  def get(): BarrierTaskContext = TaskContext.get().asInstanceOf[BarrierTaskContext]
 }
