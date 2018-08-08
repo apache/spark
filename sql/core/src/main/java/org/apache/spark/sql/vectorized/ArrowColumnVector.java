@@ -163,7 +163,7 @@ public final class ArrowColumnVector extends ColumnVector {
       ListVector listVector = (ListVector) vector;
       accessor = new ArrayAccessor(listVector);
     } else if (vector instanceof StructVector) {
-      StructVector structVector =  (StructVector) vector;
+      StructVector structVector = (StructVector) vector;
       accessor = new StructAccessor(structVector);
 
       childColumns = new ArrowColumnVector[structVector.size()];
