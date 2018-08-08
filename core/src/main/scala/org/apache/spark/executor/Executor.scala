@@ -34,6 +34,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.ui.ExecutorWebUI
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
@@ -41,6 +42,7 @@ import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, Task, TaskDescription}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
+import org.apache.spark.ui.SparkUI
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
@@ -168,6 +170,19 @@ private[spark] class Executor(
   private var heartbeatFailures = 0
 
   startDriverHeartbeater()
+
+  /**
+   * We add an empty WebUI in executor to enable Executor MetricsServlet sink if needed.
+   */
+  private val executorWebUiEnabled = conf.getBoolean("spark.executor.ui.enabled", false)
+  private[executor] var webUi: ExecutorWebUI = _
+  if (executorWebUiEnabled && !isLocal) {
+     webUi = new ExecutorWebUI(conf, env.securityManager, SparkUI.getUIPort(conf))
+     webUi.bind()
+     env.metricsSystem.getServletHandlers.foreach(webUi.attachHandler)
+     heartbeatReceiverRef.ask[Boolean](ReportExecutorWebUrl(executorId, webUi.webUrl))
+     logInfo(s"Starting executor web ui at ${webUi.webUrl}")
+   }
 
   private[executor] def numRunningTasks: Int = runningTasks.size()
 

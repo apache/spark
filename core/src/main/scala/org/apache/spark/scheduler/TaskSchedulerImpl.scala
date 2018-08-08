@@ -116,6 +116,8 @@ private[spark] class TaskSchedulerImpl(
 
   protected val executorIdToHost = new HashMap[String, String]
 
+  protected val executorIdToHttpPort = new HashMap[String, Option[Int]]
+
   // Listener object to pass upcalls into
   var dagScheduler: DAGScheduler = null
 

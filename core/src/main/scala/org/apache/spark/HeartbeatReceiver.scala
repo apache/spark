@@ -53,6 +53,8 @@ private case class ExecutorRemoved(executorId: String)
 
 private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 
+private[spark] case class ReportExecutorWebUrl(executorId: String, webUrl: String)
+
 /**
  * Lives in the driver to receive heartbeats from executors..
  */
@@ -146,6 +148,9 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
         logWarning(s"Dropping $heartbeat because TaskScheduler is not ready yet")
         context.reply(HeartbeatResponse(reregisterBlockManager = true))
       }
+    case ReportExecutorWebUrl(executorId, webUrl) =>
+      sc.executorToWebUrl(executorId) = webUrl
+      context.reply(true)
   }
 
   /**
