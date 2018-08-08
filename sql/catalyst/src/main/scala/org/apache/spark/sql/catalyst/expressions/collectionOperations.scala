@@ -1218,9 +1218,11 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLi
   note = "The function is non-deterministic.",
   since = "2.4.0")
 case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
-  extends UnaryExpression with ExpectsInputTypes with Stateful {
+  extends UnaryExpression with ExpectsInputTypes with Stateful with ExpressionWithRandomSeed {
 
   def this(child: Expression) = this(child, None)
+
+  override def withNewSeed(seed: Long): Shuffle = copy(randomSeed = Some(seed))
 
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && randomSeed.isDefined
