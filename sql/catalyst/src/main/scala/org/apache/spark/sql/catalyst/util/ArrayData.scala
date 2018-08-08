@@ -22,6 +22,8 @@ import scala.reflect.ClassTag
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, UnsafeArrayData}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.array.ByteArrayMethods
 
 object ArrayData {
   def toArrayData(input: Any): ArrayData = input match {
@@ -33,6 +35,37 @@ object ArrayData {
     case a: Array[Float] => UnsafeArrayData.fromPrimitiveArray(a)
     case a: Array[Double] => UnsafeArrayData.fromPrimitiveArray(a)
     case other => new GenericArrayData(other)
+  }
+
+
+  /**
+   * Allocate [[UnsafeArrayData]] or [[GenericArrayData]] based on given parameters.
+   *
+   * @param elementSize a size of an element in bytes
+   * @param numElements the number of elements the array should contain
+   * @param isPrimitiveType whether the type of an element is primitive type
+   * @param additionalErrorMessage string to include in the error message
+   */
+  def allocateArrayData(
+      elementSize: Int,
+      numElements : Long,
+      isPrimitiveType: Boolean,
+      additionalErrorMessage: String) : ArrayData = {
+    val arraySize = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(numElements, elementSize)
+    if (isPrimitiveType && !UnsafeArrayData.shouldUseGenericArrayData(elementSize, numElements)) {
+      val arrayBytes = new Array[Byte](arraySize.toInt)
+      val arrayName = new UnsafeArrayData()
+      Platform.putLong(arrayBytes, Platform.BYTE_ARRAY_OFFSET, numElements)
+      arrayName.pointTo(arrayBytes, Platform.BYTE_ARRAY_OFFSET, arraySize.toInt)
+      arrayName
+    } else if (numElements <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toLong) {
+      new GenericArrayData(new Array[Any](numElements.toInt))
+    } else {
+      throw new RuntimeException(s"Cannot create array with $numElements " +
+        "elements of data due to exceeding the limit " +
+        s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for ArrayData." +
+        s"$additionalErrorMessage")
+    }
   }
 }
 

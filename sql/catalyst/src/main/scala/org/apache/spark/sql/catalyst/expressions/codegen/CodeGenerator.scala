@@ -793,15 +793,18 @@ class CodegenContext {
       dataType: DataType,
       elementType: DataType,
       numElements: String,
-      srcLoopIndex: String,
-      dstLoopIndex: String,
       srcArray: String,
       additionalErrorMessage: String,
       rhsValue: String = null,
-      checkForNull: Option[Boolean] = None): (String, String) = {
-    val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
+      checkForNull: Option[Boolean] = None,
+      elementSize: Option[Int] = None): (String, (String, String) => String) = {
+    val isPrimitiveType = if (elementSize.isDefined) {
+      false
+    } else {
+      CodeGenerator.isPrimitiveType(elementType)
+    }
 
-    val setValue = if (rhsValue != null) {
+    val setValue = (srcLoopIndex: String) => if (rhsValue != null) {
       rhsValue
     } else {
       CodeGenerator.getValue(srcArray, elementType, srcLoopIndex)
@@ -818,24 +821,30 @@ class CodegenContext {
     } else {
       dataType.asInstanceOf[ArrayType].containsNull
     }
-    val assignment = if (isPrimitiveType && assignmentWithoutNull) {
-      s"""
-         |if ($srcArray.isNullAt($srcLoopIndex)) {
-         |  $arrayName.setNullAt($dstLoopIndex);
-         |} else {
-         |  $arrayName.$setFunc($dstLoopIndex, $setValue);
-         |}
-       """.stripMargin
+
+    val assignment = (dstLoopIndex: String, srcLoopIndex: String) =>
+      if (isPrimitiveType && assignmentWithoutNull) {
+        s"""
+           |if ($srcArray.isNullAt($srcLoopIndex)) {
+           |  $arrayName.setNullAt($dstLoopIndex);
+           |} else {
+           |  $arrayName.$setFunc($dstLoopIndex, ${setValue(srcLoopIndex)});
+           |}
+         """.stripMargin
     } else {
-      s"$arrayName.$setFunc($dstLoopIndex, $setValue);"
+      s"$arrayName.$setFunc($dstLoopIndex, ${setValue(srcLoopIndex)});"
     }
 
-    val codeGenerator = "org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator"
-    val elementSize = elementType.defaultSize
+    val elemSize = if (elementSize.isDefined) {
+      elementSize.get
+    } else {
+      elementType.defaultSize
+    }
+    val arrayData = classOf[ArrayData].getName
     val allocation =
       s"""
-         |ArrayData $arrayName = $codeGenerator$$.MODULE$$.allocateArrayData(
-         |  $elementSize, $numElements, $isPrimitiveType, "$additionalErrorMessage");
+         |ArrayData $arrayName = $arrayData$$.MODULE$$.allocateArrayData(
+         |  $elemSize, $numElements, $isPrimitiveType, "$additionalErrorMessage");
        """.stripMargin
 
     (allocation, assignment)
@@ -1769,30 +1778,5 @@ object CodeGenerator extends Logging {
    */
   def isValidParamLength(paramLength: Int): Boolean = {
     paramLength <= MAX_JVM_METHOD_PARAMS_LENGTH
-  }
-
-  /**
-   * Allocate [[UnsafeArrayData]] or [[GenericArrayData]] based on given parameters.
-   */
-  def allocateArrayData(
-      elementSize: Int,
-      numElements : Long,
-      isPrimitiveType: Boolean,
-      additionalErrorMessage: String) : ArrayData = {
-    val arraySize = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(numElements, elementSize)
-    if (isPrimitiveType && !UnsafeArrayData.shouldUseGenericArrayData(elementSize, numElements)) {
-      val arrayBytes = new Array[Byte](arraySize.toInt)
-      val arrayName = new UnsafeArrayData()
-      Platform.putLong(arrayBytes, Platform.BYTE_ARRAY_OFFSET, numElements)
-      arrayName.pointTo(arrayBytes, Platform.BYTE_ARRAY_OFFSET, arraySize.toInt)
-      arrayName
-    } else if (numElements <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toLong) {
-      new GenericArrayData(new Array[Any](numElements.toInt))
-    } else {
-      throw new RuntimeException(s"Unsuccessful try create array with $arraySize " +
-        "bytes of data due to exceeding the limit " +
-        s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for GenericArrayData." +
-        s"$additionalErrorMessage")
-    }
   }
 }
