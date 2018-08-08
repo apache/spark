@@ -50,12 +50,4 @@ public interface ReadSupport {
    * submitted.
    */
   InputPartition[] planInputPartitions(ScanConfig config);
-
-  /**
-   * Returns a factory, which produces one {@link PartitionReader} for one {@link InputPartition}.
-   *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
-   * submitted.
-   */
-  PartitionReaderFactory createReaderFactory(ScanConfig config);
 }

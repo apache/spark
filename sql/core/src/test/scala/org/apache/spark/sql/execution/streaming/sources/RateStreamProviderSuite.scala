@@ -303,7 +303,7 @@ class RateSourceSuite extends StreamTest {
       new DataSourceOptions(Map("numPartitions" -> "2", "rowsPerSecond" -> "20").asJava))
     val config = readSupport.newScanConfigBuilder(readSupport.initialOffset).build()
     val tasks = readSupport.planInputPartitions(config)
-    val readerFactory = readSupport.createReaderFactory(config)
+    val readerFactory = readSupport.createContinuousReaderFactory(config)
     assert(tasks.size == 2)
 
     val data = scala.collection.mutable.ListBuffer[InternalRow]()
@@ -313,7 +313,8 @@ class RateSourceSuite extends StreamTest {
           .asInstanceOf[RateStreamOffset]
           .partitionToValueAndRunTimeMs(t.partitionIndex)
           .runTimeMs
-        val r = readerFactory.createReader(t).asInstanceOf[RateStreamContinuousPartitionReader]
+        val r = readerFactory.createContinuousReader(t)
+          .asInstanceOf[RateStreamContinuousPartitionReader]
         for (rowIndex <- 0 to 9) {
           r.next()
           data.append(r.get())

@@ -86,7 +86,8 @@ class KafkaContinuousReadSupport(
     }.toArray
   }
 
-  override def createReaderFactory(config: ScanConfig): ContinuousPartitionReaderFactory = {
+  override def createContinuousReaderFactory(
+      config: ScanConfig): ContinuousPartitionReaderFactory = {
     KafkaContinuousReaderFactory
   }
 
@@ -143,7 +144,8 @@ case class KafkaContinuousInputPartition(
     failOnDataLoss: Boolean) extends InputPartition
 
 object KafkaContinuousReaderFactory extends ContinuousPartitionReaderFactory {
-  override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
+  override def createContinuousReader(
+      partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[KafkaContinuousInputPartition]
     new KafkaContinuousPartitionReader(
       p.topicPartition, p.startOffset, p.kafkaParams, p.pollTimeoutMs, p.failOnDataLoss)

@@ -38,6 +38,9 @@ public interface BatchWriteSupportProvider extends DataSourceV2 {
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    *
+   * @param queryId A unique string for the writing query. It's possible that there are many
+   *                writing queries running at the same time, and the returned
+   *                {@link BatchWriteSupport} can use this id to distinguish itself from others.
    * @param schema the schema of the data to be written.
    * @param mode the save mode which determines what to do when the data are already in this data
    *             source, please refer to {@link SaveMode} for more details.
@@ -50,5 +53,8 @@ public interface BatchWriteSupportProvider extends DataSourceV2 {
    * file-based data source can put a random UUID in the file path.
    */
   Optional<BatchWriteSupport> createBatchWriteSupport(
-      StructType schema, SaveMode mode, DataSourceOptions options);
+      String queryId,
+      StructType schema,
+      SaveMode mode,
+      DataSourceOptions options);
 }

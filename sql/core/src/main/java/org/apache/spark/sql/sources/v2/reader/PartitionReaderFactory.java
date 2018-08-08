@@ -62,7 +62,7 @@ public interface PartitionReaderFactory extends Serializable {
    * Data source can't mix columnar and row-based partitions. This will be relaxed in future
    * versions.
    */
-  default boolean doColumnarReads(InputPartition partition) {
+  default boolean supportColumnarReads(InputPartition partition) {
     return false;
   }
 }

@@ -61,6 +61,11 @@ class ContinuousDataSourceRDD(
     }.toArray
   }
 
+  private def castPartition(split: Partition): ContinuousDataSourceRDDPartition = split match {
+    case p: ContinuousDataSourceRDDPartition => p
+    case _ => throw new SparkException(s"[BUG] Not a ContinuousDataSourceRDDPartition: $split")
+  }
+
   /**
    * Initialize the shared reader for this partition if needed, then read rows from it until
    * it returns null to signal the end of the epoch.
@@ -72,9 +77,10 @@ class ContinuousDataSourceRDD(
     }
 
     val readerForPartition = {
-      val partition = split.asInstanceOf[ContinuousDataSourceRDDPartition]
+      val partition = castPartition(split)
       if (partition.queueReader == null) {
-        val partitionReader = partitionReaderFactory.createReader(partition.inputPartition)
+        val partitionReader = partitionReaderFactory.createContinuousReader(
+          partition.inputPartition)
         partition.queueReader = new ContinuousQueuedDataReader(
           partition.index, partitionReader, schema, context, dataQueueSize, epochPollIntervalMs)
       }
@@ -97,6 +103,6 @@ class ContinuousDataSourceRDD(
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    split.asInstanceOf[ContinuousDataSourceRDDPartition].inputPartition.preferredLocations()
+    castPartition(split).inputPartition.preferredLocations()
   }
 }

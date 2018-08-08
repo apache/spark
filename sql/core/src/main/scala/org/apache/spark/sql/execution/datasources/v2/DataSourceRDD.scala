@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
+import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReader, PartitionReaderFactory}
@@ -40,8 +40,13 @@ class DataSourceRDD(
     }.toArray
   }
 
+  private def castPartition(split: Partition): DataSourceRDDPartition = split match {
+    case p: DataSourceRDDPartition => p
+    case _ => throw new SparkException(s"[BUG] Not a DataSourceRDDPartition: $split")
+  }
+
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
-    val inputPartition = split.asInstanceOf[DataSourceRDDPartition].inputPartition
+    val inputPartition = castPartition(split).inputPartition
     val reader: PartitionReader[_] = if (columnarReads) {
       partitionReaderFactory.createColumnarReader(inputPartition)
     } else {
@@ -72,6 +77,6 @@ class DataSourceRDD(
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    split.asInstanceOf[DataSourceRDDPartition].inputPartition.preferredLocations()
+    castPartition(split).inputPartition.preferredLocations()
   }
 }

@@ -57,8 +57,7 @@ public interface ContinuousReadSupport extends StreamingReadSupport, BaseStreami
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    */
-  @Override
-  ContinuousPartitionReaderFactory createReaderFactory(ScanConfig config);
+  ContinuousPartitionReaderFactory createContinuousReaderFactory(ScanConfig config);
 
   /**
    * Merge partitioned offsets coming from {@link ContinuousPartitionReader} instances

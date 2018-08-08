@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeSta
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousPartitionReaderFactory, ContinuousReadSupport}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousPartitionReaderFactory, ContinuousReadSupport, MicroBatchReadSupport}
 
 /**
  * Physical plan node for scanning data from a data source.
@@ -67,14 +67,23 @@ case class DataSourceV2ScanExec(
 
   private lazy val partitions: Seq[InputPartition] = readSupport.planInputPartitions(scanConfig)
 
-  private lazy val readerFactory = readSupport.createReaderFactory(scanConfig)
+  private lazy val readerFactory = readSupport match {
+    case r: BatchReadSupport => r.createReaderFactory(scanConfig)
+    case r: MicroBatchReadSupport => r.createReaderFactory(scanConfig)
+    case r: ContinuousReadSupport => r.createContinuousReaderFactory(scanConfig)
+  }
 
+  // TODO: clean this up when we have dedicated scan plan for continuous streaming.
   override val supportsBatch: Boolean = {
-    require(partitions.forall(readerFactory.doColumnarReads) ||
-      !partitions.exists(readerFactory.doColumnarReads),
+    val isColumnar: InputPartition => Boolean = readerFactory match {
+      case factory: PartitionReaderFactory => factory.supportColumnarReads
+      case factory: ContinuousPartitionReaderFactory => factory.supportColumnarReads
+    }
+
+    require(partitions.forall(isColumnar) || !partitions.exists(isColumnar),
       "Cannot mix row-based and columnar input partitions.")
 
-    partitions.exists(readerFactory.doColumnarReads)
+    partitions.exists(isColumnar)
   }
 
   private lazy val inputRDD: RDD[InternalRow] = readSupport match {
@@ -94,7 +103,8 @@ case class DataSourceV2ScanExec(
         readerFactory.asInstanceOf[ContinuousPartitionReaderFactory])
 
     case _ =>
-      new DataSourceRDD(sparkContext, partitions, readerFactory, supportsBatch)
+      new DataSourceRDD(
+        sparkContext, partitions, readerFactory.asInstanceOf[PartitionReaderFactory], supportsBatch)
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)

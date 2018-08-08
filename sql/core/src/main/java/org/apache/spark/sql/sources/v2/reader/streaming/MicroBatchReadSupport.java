@@ -19,8 +19,7 @@ package org.apache.spark.sql.sources.v2.reader.streaming;
 
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
-import org.apache.spark.sql.sources.v2.reader.ScanConfig;
-import org.apache.spark.sql.sources.v2.reader.ScanConfigBuilder;
+import org.apache.spark.sql.sources.v2.reader.*;
 
 /**
  * An interface that defines how to scan the data from data source for micro-batch streaming
@@ -48,6 +47,14 @@ public interface MicroBatchReadSupport extends StreamingReadSupport, BaseStreami
    * submitted.
    */
   ScanConfigBuilder newScanConfigBuilder(Offset start, Offset end);
+
+  /**
+   * Returns a factory, which produces one {@link PartitionReader} for one {@link InputPartition}.
+   *
+   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
+   * submitted.
+   */
+  PartitionReaderFactory createReaderFactory(ScanConfig config);
 
   /**
    * Returns the most recent offset available.

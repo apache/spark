@@ -105,7 +105,8 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPa
     }
   }
 
-  override def createReaderFactory(config: ScanConfig): ContinuousPartitionReaderFactory = {
+  override def createContinuousReaderFactory(
+      config: ScanConfig): ContinuousPartitionReaderFactory = {
     ContinuousMemoryStreamReaderFactory
   }
 
@@ -159,7 +160,8 @@ case class ContinuousMemoryStreamInputPartition(
     startOffset: Int) extends InputPartition
 
 object ContinuousMemoryStreamReaderFactory extends ContinuousPartitionReaderFactory {
-  override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
+  override def createContinuousReader(
+      partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[ContinuousMemoryStreamInputPartition]
     new ContinuousMemoryStreamPartitionReader(p.driverEndpointName, p.partition, p.startOffset)
   }

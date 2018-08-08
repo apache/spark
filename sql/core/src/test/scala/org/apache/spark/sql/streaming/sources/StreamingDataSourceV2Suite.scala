@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.streaming.sources
 
-import java.util.Optional
-
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{RateStreamOffset, Sink, StreamingQueryWrapper}
@@ -26,7 +24,7 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, ScanConfig, ScanConfigBuilder}
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReaderFactory, ScanConfig, ScanConfigBuilder}
 import org.apache.spark.sql.sources.v2.reader.streaming._
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest, Trigger}
@@ -43,7 +41,11 @@ case class FakeReadSupport() extends MicroBatchReadSupport with ContinuousReadSu
   override def initialOffset(): Offset = RateStreamOffset(Map())
   override def latestOffset(start: Offset): Offset = RateStreamOffset(Map())
   override def newScanConfigBuilder(start: Offset): ScanConfigBuilder = null
-  override def createReaderFactory(config: ScanConfig): ContinuousPartitionReaderFactory = {
+  override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
+    throw new IllegalStateException("fake source - cannot actually read")
+  }
+  override def createContinuousReaderFactory(
+      config: ScanConfig): ContinuousPartitionReaderFactory = {
     throw new IllegalStateException("fake source - cannot actually read")
   }
   override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
