@@ -82,14 +82,20 @@ object SmallDataSortBenchmark {
 
       }
 
+      /*
+       * Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.13.6
+       * Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
+       *
+       * speed up sort when the dataset is small: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+       * ------------------------------------------------------------------------------------------------
+       * sort with optimization                      56695 / 61700          1.8         566.9       1.0X
+       * sort without optimization                 112698 / 115274          0.9        1127.0       0.5X
+       */
       benchmark.run()
     }
-
   }
-
 
   def main(args: Array[String]): Unit = {
     run(100 * 1000)
   }
-
 }
