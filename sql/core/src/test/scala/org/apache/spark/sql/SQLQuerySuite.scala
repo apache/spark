@@ -2802,7 +2802,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-24900: speed up sort when the dataset is small") {
     withTempView("src") {
       // the optimization works
-      Seq((5, 5), (3, 3), (1, 1), (2, 2), (4, 4), (6, 6), (7,7))
+      Seq((5, 5), (3, 3), (1, 1), (2, 2), (4, 4), (6, 6), (7, 7))
         .toDF("key", "value").repartition(2).createOrReplaceTempView("src")
       checkAnswer(sql("SELECT * FROM src ORDER BY key"),
         Seq(Row(1, 1), Row(2, 2), Row(3, 3), Row(4, 4), Row(5, 5), Row(6, 6), Row(7, 7)))

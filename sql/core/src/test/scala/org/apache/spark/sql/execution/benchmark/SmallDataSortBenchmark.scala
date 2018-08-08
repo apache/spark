@@ -23,9 +23,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.{Benchmark, Utils}
 
 /**
-  * The benchmarks aims to measure performance of
-  * [SPARK-24900][SQL]speed up sort when the dataset is small
-  */
+ * The benchmarks aims to measure performance of
+ * [SPARK-24900][SQL]speed up sort when the dataset is small
+ */
 object SmallDataSortBenchmark {
 
   val conf = new SparkConf()
@@ -47,7 +47,7 @@ object SmallDataSortBenchmark {
   def run(rowsNum: Int): Unit = {
     val factor = 1000
     val key = rowsNum / 2
-    val benchmark = new Benchmark("speed up sort when the dataset is small", rowsNum * factor)
+    val benchmark = new Benchmark("small data sort", rowsNum * factor)
     withTempPath { path =>
       // scalastyle:off println
       benchmark.out.println("Preparing data for benchmarking ...")
@@ -68,14 +68,14 @@ object SmallDataSortBenchmark {
 
       dataset.createOrReplaceTempView("src")
 
-      benchmark.addCase("sort with optimization", 10) { _ =>
+      benchmark.addCase("with optimization", 10) { _ =>
         spark.conf.set("spark.sql.execution.rangeExchange.sampleCache.enabled", "true")
         val result = spark.
           sql(s"select * from src where key = $key order by value").collectAsList().size()
 
       }
 
-      benchmark.addCase("sort without optimization", 10) { _ =>
+      benchmark.addCase("without optimization", 10) { _ =>
         spark.conf.set("spark.sql.execution.rangeExchange.sampleCache.enabled", "false")
         val result = spark.
           sql(s"select * from src where key = $key order by value").collectAsList().size()
@@ -86,10 +86,10 @@ object SmallDataSortBenchmark {
        * Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.13.6
        * Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
        *
-       * speed up sort when the dataset is small: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-       * ------------------------------------------------------------------------------------------------
-       * sort with optimization                      56695 / 61700          1.8         566.9       1.0X
-       * sort without optimization                 112698 / 115274          0.9        1127.0       0.5X
+       * small data sort:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+       * ----------------------------------------------------------------------------------
+       * with optimization             54077 / 57989          1.8         540.8       1.0X
+       * without optimization        111780 / 115001          0.9        1117.8       0.5X
        */
       benchmark.run()
     }
