@@ -275,13 +275,14 @@ private[kafka010] case class InternalKafkaConsumer(
       pollTimeoutMs: Long,
       failOnDataLoss: Boolean): ConsumerRecord[Array[Byte], Array[Byte]] = {
     if (offset != nextOffsetInFetchedData) {
-      // This is the first fetch, or the last pre-fetched data has been drained.
+      // This is the first fetch, or the fetched data has been reset.
       // Seek to the offset because we may call seekToBeginning or seekToEnd before this.
       seek(offset)
       poll(pollTimeoutMs)
-    }
-    if (!fetchedData.hasNext) {
+    } else if (!fetchedData.hasNext) {
+      // The last pre-fetched data has been drained.
       if (offset < offsetAfterPoll) {
+        // Offsets in [offset, offsetAfterPoll) are missing. We should skip them.
         resetFetchedData()
         throw new MissingOffsetException(offset, offsetAfterPoll)
       } else {
@@ -305,6 +306,8 @@ private[kafka010] case class InternalKafkaConsumer(
         throw new TimeoutException(
           s"Cannot fetch record for offset $offset in $pollTimeoutMs milliseconds")
       } else {
+        assert(offset <= offsetAfterPoll,
+          s"seek to $offset and poll but the offset was reset to $offsetAfterPoll")
         throw new MissingOffsetException(offset, offsetAfterPoll)
       }
     } else {
