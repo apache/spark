@@ -2266,6 +2266,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       }
       assert(ex2.getMessage.contains(
       "The number of lambda function arguments '3' does not match"))
+
+      val ex3 = intercept[RuntimeException] {
+        dfExample3.selectExpr("transform_keys(x, (k, v) -> v)").show()
+      }
+      assert(ex3.getMessage.contains("Cannot use null as map key!"))
+
+
     }
 
     testInvalidLambdaFunctions()
