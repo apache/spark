@@ -61,7 +61,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     val prunedRdd = new PartitionPruningRDD(sc.parallelize(1 to 10, 4), index => index > 1)
     val rdd = prunedRdd
       .barrier()
-      .mapPartitions((iter, context) => iter)
+      .mapPartitions(iter => iter)
     testSubmitJob(sc, rdd,
       message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
   }
@@ -71,7 +71,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     val prunedRdd = new PartitionPruningRDD(sc.parallelize(1 to 10, 4), index => index > 1)
     val rdd = prunedRdd
       .barrier()
-      .mapPartitions((iter, context) => iter)
+      .mapPartitions(iter => iter)
       .repartition(2)
       .map(x => x + 1)
     testSubmitJob(sc, rdd,
@@ -84,7 +84,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     val rdd = prunedRdd
       .repartition(2)
       .barrier()
-      .mapPartitions((iter, context) => iter)
+      .mapPartitions(iter => iter)
     // Should be able to submit job and run successfully.
     val result = rdd.collect().sorted
     assert(result === Seq(6, 7, 8, 9, 10))
@@ -94,7 +94,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     sc = createSparkContext()
     val rdd = sc.parallelize(1 to 10, 4)
       .barrier()
-      .mapPartitions((iter, context) => iter)
+      .mapPartitions(iter => iter)
     testSubmitJob(sc, rdd, Some(Seq(1, 3)),
       message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
   }
@@ -103,7 +103,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     sc = createSparkContext()
     val rdd1 = sc.parallelize(1 to 10, 2)
       .barrier()
-      .mapPartitions((iter, context) => iter)
+      .mapPartitions(iter => iter)
     val rdd2 = sc.parallelize(1 to 20, 2)
     val rdd3 = rdd1
       .union(rdd2)
@@ -117,7 +117,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     sc = createSparkContext()
     val rdd = sc.parallelize(1 to 10, 4)
       .barrier()
-      .mapPartitions((iter, context) => iter)
+      .mapPartitions(iter => iter)
       .coalesce(1)
     // Fail the job on submit because the barrier RDD requires to run on 4 tasks, but the stage
     // only launches 1 task.
@@ -129,10 +129,10 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     sc = createSparkContext()
     val rdd1 = sc.parallelize(1 to 10, 4)
       .barrier()
-      .mapPartitions((iter, context) => iter)
+      .mapPartitions(iter => iter)
     val rdd2 = sc.parallelize(11 to 20, 4)
       .barrier()
-      .mapPartitions((iter, context) => iter)
+      .mapPartitions(iter => iter)
     val rdd3 = rdd1
       .zip(rdd2)
       .map(x => x._1 + x._2)
@@ -144,7 +144,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     sc = createSparkContext()
     val rdd1 = sc.parallelize(1 to 10, 4)
       .barrier()
-      .mapPartitions((iter, context) => iter)
+      .mapPartitions(iter => iter)
     val rdd2 = sc.parallelize(11 to 20, 4)
     val rdd3 = rdd1
       .zip(rdd2)
@@ -164,7 +164,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
 
     val rdd = sc.parallelize(1 to 10, 4)
       .barrier()
-      .mapPartitions((iter, context) => iter)
+      .mapPartitions(iter => iter)
     testSubmitJob(sc, rdd,
       message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
   }
@@ -179,7 +179,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
 
     val rdd = sc.parallelize(1 to 10, 4)
       .barrier()
-      .mapPartitions((iter, context) => iter)
+      .mapPartitions(iter => iter)
       .repartition(2)
       .map(x => x + 1)
     testSubmitJob(sc, rdd,
