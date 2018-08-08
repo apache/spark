@@ -426,7 +426,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
     val structSize = UnsafeRow.calculateBitSetWidthInBytes(2) + wordSize * 2
     val structSizeAsLong = structSize + "L"
     val keyTypeName = CodeGenerator.primitiveTypeName(childDataType.keyType)
-    val valueTypeName = CodeGenerator.primitiveTypeName(childDataType.keyType)
+    val valueTypeName = CodeGenerator.primitiveTypeName(childDataType.valueType)
 
     val valueAssignment = s"$unsafeRow.set$valueTypeName(1, ${getValue(values)});"
     val valueAssignmentChecked = if (childDataType.valueContainsNull) {
