@@ -45,3 +45,17 @@ select transform(zs, z -> aggregate(z, 1, (acc, val) -> acc * val * size(z))) as
 
 -- Aggregate a null array
 select aggregate(cast(null as array<int>), 0, (a, y) -> a + y + 1, a -> a + 2) as v;
+
+create or replace temporary view nested as values
+  (1, map(1,1,2,2,3,3)),
+  (2, map(4,4,5,5,6,6))
+  as t(x, ys);
+
+-- Identity Transform Keys in a map
+select transform_values(ys, (k, v) -> v) as v from nested;
+
+-- Transform Keys in a map by adding constant
+select transform_values(ys, (k, v) -> v + 1) as v from nested;
+
+-- Transform Keys in a map using values
+select transform_values(ys, (k, v) -> k + v) as v from nested;

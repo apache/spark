@@ -2117,6 +2117,210 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(ex4.getMessage.contains("data type mismatch: argument 3 requires int type"))
   }
 
+  test("transform values function - test various primitive data types combinations") {
+    val dfExample1 = Seq(
+      Map[Int, Int](1 -> 1, 9 -> 9, 8 -> 8, 7 -> 7)
+    ).toDF("i")
+
+    val dfExample2 = Seq(
+      Map[Boolean, String](false -> "abc", true -> "def")
+    ).toDF("x")
+
+    val dfExample3 = Seq(
+      Map[String, Int]("a" -> 1, "b" -> 2, "c" -> 3)
+    ).toDF("y")
+
+    val dfExample4 = Seq(
+      Map[Int, Double](1 -> 1.0E0, 2 -> 1.4E0, 3 -> 1.7E0)
+    ).toDF("z")
+
+    val dfExample5 = Seq(
+      Map[Int, Boolean](25 -> true, 26 -> false)
+    ).toDF("a")
+
+    val dfExample6 = Seq(
+      Map[Int, String](25 -> "ab", 26 -> "cd")
+    ).toDF("b")
+
+    val dfExample7 = Seq(
+      Map[Int, Array[Int]](1 -> Array(1, 2))
+    ).toDF("c")
+
+    val dfExample8 = Seq(
+      Map[Int, Double](25 -> 26.1E0, 26 -> 31.2E0, 27 -> 37.1E0)
+    ).toDF("d")
+
+    val dfExample10 = Seq(
+      Map[String, String]("s0" -> "abc", "s1" -> "def")
+    ).toDF("f")
+
+    def testMapOfPrimitiveTypesCombination(): Unit = {
+      checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> k + v)"),
+        Seq(Row(Map(1 -> 2, 9 -> 18, 8 -> 16, 7 -> 14))))
+
+      checkAnswer(dfExample2.selectExpr(
+        "transform_values(x, (k, v) -> if(k, v, CAST(k AS String)))"),
+        Seq(Row(Map(false -> "false", true -> "def"))))
+
+      checkAnswer(dfExample2.selectExpr("transform_values(x, (k, v) -> NOT k AND v = 'abc')"),
+        Seq(Row(Map(false -> true, true -> false))))
+
+      checkAnswer(dfExample3.selectExpr("transform_values(y, (k, v) -> v * v)"),
+        Seq(Row(Map("a" -> 1, "b" -> 4, "c" -> 9))))
+
+      checkAnswer(dfExample3.selectExpr(
+        "transform_values(y, (k, v) -> k || ':' || CAST(v as String))"),
+        Seq(Row(Map("a" -> "a:1", "b" -> "b:2", "c" -> "c:3"))))
+
+      checkAnswer(
+        dfExample3.selectExpr("transform_values(y, (k, v) -> concat(k, cast(v as String)))"),
+        Seq(Row(Map("a" -> "a1", "b" -> "b2", "c" -> "c3"))))
+
+      checkAnswer(
+        dfExample4.selectExpr(
+          "transform_values(" +
+            "z,(k, v) -> map_from_arrays(ARRAY(1, 2, 3), " +
+            "ARRAY('one', 'two', 'three'))[k] || '_' || CAST(v AS String))"),
+        Seq(Row(Map(1 -> "one_1.0", 2 -> "two_1.4", 3 ->"three_1.7"))))
+
+      checkAnswer(
+        dfExample4.selectExpr("transform_values(z, (k, v) -> k-v)"),
+        Seq(Row(Map(1 -> 0.0, 2 -> 0.6000000000000001, 3 -> 1.3))))
+
+      checkAnswer(
+        dfExample5.selectExpr("transform_values(a, (k, v) -> if(v, k + 1, k + 2))"),
+        Seq(Row(Map(25 -> 26, 26 -> 28))))
+
+      checkAnswer(
+        dfExample5.selectExpr("transform_values(a, (k, v) -> v AND k = 25)"),
+        Seq(Row(Map(25 -> true, 26 -> false))))
+
+      checkAnswer(
+        dfExample5.selectExpr("transform_values(a, (k, v) -> v OR k = 26)"),
+        Seq(Row(Map(25 -> true, 26 -> true))))
+
+      checkAnswer(
+        dfExample6.selectExpr("transform_values(b, (k, v) -> k + length(v))"),
+        Seq(Row(Map(25 -> 27, 26 -> 28))))
+
+      checkAnswer(
+        dfExample7.selectExpr("transform_values(c, (k, v) -> k + cardinality(v))"),
+        Seq(Row(Map(1 -> 3))))
+
+      checkAnswer(
+        dfExample8.selectExpr("transform_values(d, (k, v) -> CAST(v - k AS BIGINT))"),
+        Seq(Row(Map(25 -> 1, 26 -> 5, 27 -> 10))))
+
+      checkAnswer(
+        dfExample10.selectExpr("transform_values(f, (k, v) ->  k || ':' || v)"),
+        Seq(Row(Map("s0" -> "s0:abc", "s1" -> "s1:def"))))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testMapOfPrimitiveTypesCombination()
+    dfExample1.cache()
+    dfExample2.cache()
+    dfExample3.cache()
+    dfExample4.cache()
+    dfExample5.cache()
+    dfExample6.cache()
+    dfExample7.cache()
+    dfExample8.cache()
+    dfExample10.cache()
+    // Test with cached relation, the Project will be evaluated with codegen
+    testMapOfPrimitiveTypesCombination()
+  }
+
+  test("transform values function - test empty") {
+    val dfExample1 = Seq(
+      Map.empty[Int, Int]
+    ).toDF("i")
+
+    val dfExample2 = Seq(
+      Map.empty[BigInt, String]
+    ).toDF("j")
+
+    def testEmpty(): Unit = {
+      checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> NULL)"),
+        Seq(Row(Map.empty[Int, Null])))
+
+      checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> k)"),
+        Seq(Row(Map.empty[Int, Int])))
+
+      checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> v)"),
+        Seq(Row(Map.empty[Int, Int])))
+
+      checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> 0)"),
+        Seq(Row(Map.empty[Int, Int])))
+
+      checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> 'value')"),
+        Seq(Row(Map.empty[Int, String])))
+
+      checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> true)"),
+        Seq(Row(Map.empty[Int, Boolean])))
+
+      checkAnswer(dfExample2.selectExpr("transform_values(j, (k, v) -> k + cast(v as BIGINT))"),
+        Seq(Row(Map.empty[BigInt, BigInt])))
+    }
+
+    testEmpty()
+    dfExample1.cache()
+    dfExample2.cache()
+    testEmpty()
+  }
+
+  test("transform values function - test null values") {
+    val dfExample1 = Seq(
+      Map[Int, Int](1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4)
+    ).toDF("a")
+
+    val dfExample2 = Seq(
+      Map[Int, String](1 -> "a", 2 -> "b", 3 -> null)
+    ).toDF("b")
+
+    def testNullValue(): Unit = {
+      checkAnswer(dfExample1.selectExpr("transform_values(a, (k, v) -> null)"),
+        Seq(Row(Map(1 -> null, 2 -> null, 3 -> null, 4 -> null))))
+
+      checkAnswer(dfExample2.selectExpr(
+        "transform_values(b, (k, v) -> IF(v IS NULL, k + 1, k + 2))"),
+        Seq(Row(Map(1 -> 3, 2 -> 4, 3 -> 4))))
+    }
+
+    testNullValue()
+    dfExample1.cache()
+    dfExample2.cache()
+    testNullValue()
+  }
+
+  test("transform values function - test invalid functions") {
+    val dfExample1 = Seq(
+      Map[Int, Int](1 -> 1, 9 -> 9, 8 -> 8, 7 -> 7)
+    ).toDF("i")
+
+    val dfExample2 = Seq(
+      Map[String, String]("a" -> "b")
+    ).toDF("j")
+
+    def testInvalidLambdaFunctions(): Unit = {
+
+      val ex1 = intercept[AnalysisException] {
+        dfExample1.selectExpr("transform_values(i, k -> k )")
+      }
+      assert(ex1.getMessage.contains("The number of lambda function arguments '1' does not match"))
+
+      val ex2 = intercept[AnalysisException] {
+        dfExample2.selectExpr("transform_values(j, (k, v, x) -> k + 1)")
+      }
+      assert(ex2.getMessage.contains("The number of lambda function arguments '3' does not match"))
+    }
+
+    testInvalidLambdaFunctions()
+    dfExample1.cache()
+    dfExample2.cache()
+    testInvalidLambdaFunctions()
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {

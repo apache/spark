@@ -445,6 +445,7 @@ object FunctionRegistry {
     expression[MapFilter]("map_filter"),
     expression[ArrayFilter]("filter"),
     expression[ArrayAggregate]("aggregate"),
+    expression[TransformValues]("transform_values"),
     CreateStruct.registryEntry,
 
     // misc functions

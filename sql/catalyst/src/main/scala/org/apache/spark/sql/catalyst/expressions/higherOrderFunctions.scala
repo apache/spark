@@ -442,3 +442,61 @@ case class ArrayAggregate(
 
   override def prettyName: String = "aggregate"
 }
+
+/**
+ * Transform Values for every entry of the map by applying transform_values function.
+ * Returns map wth transformed values
+ */
+@ExpressionDescription(
+usage = "_FUNC_(expr, func) - Transforms values in the map using the function.",
+examples = """
+    Examples:
+       > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3), (k,v) -> k + 1);
+        map(array(1, 2, 3), array(2, 3, 4))
+       > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3), (k, v) -> k + v);
+        map(array(1, 2, 3), array(2, 4, 6))
+  """,
+since = "2.4.0")
+case class TransformValues(
+    input: Expression,
+    function: Expression)
+  extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
+
+  override def nullable: Boolean = input.nullable
+
+  override def dataType: DataType = {
+    val map = input.dataType.asInstanceOf[MapType]
+    MapType(map.keyType, function.dataType, map.valueContainsNull)
+  }
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(MapType, expectingFunctionType)
+
+  @transient val (keyType, valueType, valueContainsNull) =
+    HigherOrderFunction.mapKeyValueArgumentType(input.dataType)
+
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction):
+  TransformValues = {
+    copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
+  }
+
+  @transient lazy val (keyVar, valueVar) = {
+    val LambdaFunction(
+    _, (keyVar: NamedLambdaVariable) :: (valueVar: NamedLambdaVariable) :: Nil, _) = function
+    (keyVar, valueVar)
+  }
+
+  override def nullSafeEval(inputRow: InternalRow, value: Any): Any = {
+    val map = value.asInstanceOf[MapData]
+    val f = functionForEval
+    val resultValues = new GenericArrayData(new Array[Any](map.numElements))
+    var i = 0
+    while (i < map.numElements) {
+      keyVar.value.set(map.keyArray().get(i, keyVar.dataType))
+      valueVar.value.set(map.valueArray().get(i, valueVar.dataType))
+      resultValues.update(i, f.eval(inputRow))
+      i += 1
+    }
+    new ArrayBasedMapData(map.keyArray(), resultValues)
+  }
+  override def prettyName: String = "transform_values"
+}
