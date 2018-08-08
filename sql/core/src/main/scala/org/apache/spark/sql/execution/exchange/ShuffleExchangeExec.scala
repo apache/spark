@@ -295,12 +295,13 @@ object ShuffleExchangeExec {
             canUseRadixSort)
           sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
         }
-      } else if (part.isInstanceOf[RangePartitioner[InternalRow, Null]] &&
-        part.asInstanceOf[RangePartitioner[InternalRow, Null]].getSampledArray != null) {
-        sparkContext.
-          parallelize(part.asInstanceOf[RangePartitioner[InternalRow, Null]].getSampledArray.toSeq)
       } else {
-        rdd
+        part match {
+          case partitioner: RangePartitioner[InternalRow @unchecked, _]
+            if partitioner.getSampledArray != null =>
+            sparkContext.parallelize(partitioner.getSampledArray.toSeq)
+          case _ => rdd
+        }
       }
 
       if (needToCopyObjectsBeforeShuffle(part)) {
