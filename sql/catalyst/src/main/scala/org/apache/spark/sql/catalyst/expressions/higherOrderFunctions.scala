@@ -524,7 +524,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   }
 
   @transient private lazy val getKeysWithValueIndexes:
-      (ArrayData, ArrayData) => Seq[(Any, Array[Option[Int]])] = {
+      (ArrayData, ArrayData) => mutable.Iterable[(Any, (Option[Int], Option[Int]))] = {
     if (keyTypeSupportsEquals) {
       getKeysWithIndexesFast
     } else {
@@ -541,83 +541,76 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   }
 
   private def getKeysWithIndexesFast(keys1: ArrayData, keys2: ArrayData) = {
-    val arrayBuffer = new mutable.ArrayBuffer[(Any, Array[Option[Int]])]
-    val hashMap = new mutable.OpenHashMap[Any, Array[Option[Int]]]
-    val keys = Array(keys1, keys2)
-    var z = 0
-    while(z < 2) {
-      var i = 0
-      val array = keys(z)
-      while (i < array.numElements()) {
-        val key = array.get(i, keyType)
-        hashMap.get(key) match {
-          case Some(indexes) =>
-            if (indexes(z).isEmpty) indexes(z) = Some(i)
-          case None =>
-            assertSizeOfArrayBuffer(arrayBuffer.size)
-            val indexes = Array[Option[Int]](None, None)
-            indexes(z) = Some(i)
-            hashMap.put(key, indexes)
-            arrayBuffer += Tuple2(key, indexes)
-        }
-        i += 1
-      }
-      z += 1
+    val hashMap = new mutable.OpenHashMap[Any, (Option[Int], Option[Int])]
+    var i = 0
+    while (i < keys1.numElements) {
+      val key = keys1.get(i, keyType)
+      if(!hashMap.contains(key)) hashMap.put(key, (Some(i), None))
+      i += 1
     }
-    arrayBuffer
+    i = 0
+    while (i < keys2.numElements) {
+      val key = keys2.get(i, keyType)
+      hashMap.get(key) match {
+        case Some((index1, index2)) =>
+          if (index2.isEmpty) hashMap.update(key, (index1, Some(i)))
+        case None =>
+          hashMap.put(key, (None, Some(i)))
+      }
+      i += 1
+    }
+    hashMap
   }
 
   private def getKeysWithIndexesBruteForce(keys1: ArrayData, keys2: ArrayData) = {
-    val arrayBuffer = new mutable.ArrayBuffer[(Any, Array[Option[Int]])]
-    val keys = Array(keys1, keys2)
-    var z = 0
-    while(z < 2) {
-      var i = 0
-      val array = keys(z)
-      while (i < array.numElements()) {
-        val key = array.get(i, keyType)
-        var found = false
-        var j = 0
-        while (!found && j < arrayBuffer.size) {
-          val (bufferKey, indexes) = arrayBuffer(j)
-          if (ordering.equiv(bufferKey, key)) {
-            found = true
-            if(indexes(z).isEmpty) indexes(z) = Some(i)
-          }
-          j += 1
-        }
-        if (!found) {
-          assertSizeOfArrayBuffer(arrayBuffer.size)
-          val indexes = Array[Option[Int]](None, None)
-          indexes(z) = Some(i)
-          arrayBuffer += Tuple2(key, indexes)
-        }
-        i += 1
+    val arrayBuffer = new mutable.ArrayBuffer[(Any, (Option[Int], Option[Int]))]
+    var i = 0
+    while (i < keys1.numElements) {
+      val key = keys1.get(i, keyType)
+      var found = false
+      var j = 0
+      while (!found && j < arrayBuffer.size) {
+        if (ordering.equiv(arrayBuffer(j)._1, key)) found = true
+        j += 1
       }
-      z += 1
+      if (!found) arrayBuffer += Tuple2(key, (Some(i), None))
+      i += 1
+    }
+    i = 0
+    while (i < keys2.numElements) {
+      val key = keys2.get(i, keyType)
+      var found = false
+      var j = 0
+      while (!found && j < arrayBuffer.size) {
+        val (bufferKey, (index1, index2)) = arrayBuffer(j)
+        if (ordering.equiv(bufferKey, key)) {
+          found = true
+          if(index2.isEmpty) arrayBuffer(j) = Tuple2(key, (index1, Some(i)))
+        }
+        j += 1
+      }
+      if (!found) {
+        assertSizeOfArrayBuffer(arrayBuffer.size)
+        arrayBuffer += Tuple2(key, (None, Some(i)))
+      }
+      i += 1
     }
     arrayBuffer
-  }
-
-  private def getValue(valueData: ArrayData, eType: DataType, index: Option[Int]) = index match {
-    case Some(i) => valueData.get(i, eType)
-    case None => null
   }
 
   private def nullSafeEval(inputRow: InternalRow, value1: Any, value2: Any): Any = {
     val mapData1 = value1.asInstanceOf[MapData]
     val mapData2 = value2.asInstanceOf[MapData]
     val keysWithIndexes = getKeysWithValueIndexes(mapData1.keyArray(), mapData2.keyArray())
-    val length = keysWithIndexes.length
-    val keys = new GenericArrayData(new Array[Any](length))
-    val values = new GenericArrayData(new Array[Any](length))
+    val size = keysWithIndexes.size
+    val keys = new GenericArrayData(new Array[Any](size))
+    val values = new GenericArrayData(new Array[Any](size))
     val valueData1 = mapData1.valueArray()
     val valueData2 = mapData2.valueArray()
     var i = 0
-    while(i < length) {
-      val (key, indexes) = keysWithIndexes(i)
-      val v1 = getValue(valueData1, leftValueType, indexes(0))
-      val v2 = getValue(valueData2, rightValueType, indexes(1))
+    keysWithIndexes.foreach { case (key, (index1, index2)) =>
+      val v1 = index1.map(valueData1.get(_, leftValueType)).getOrElse(null)
+      val v2 = index2.map(valueData2.get(_, rightValueType)).getOrElse(null)
       keyVar.value.set(key)
       value1Var.value.set(v1)
       value2Var.value.set(v2)
