@@ -444,14 +444,13 @@ case class ArrayAggregate(
 }
 
 /**
- * Transform Values for every entry of the map by applying transform_values function.
- * Returns map wth transformed values
+ * Returns a map that applies the function to each value of the map.
  */
 @ExpressionDescription(
 usage = "_FUNC_(expr, func) - Transforms values in the map using the function.",
 examples = """
     Examples:
-       > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3), (k,v) -> k + 1);
+       > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3), (k, v) -> v + 1);
         map(array(1, 2, 3), array(2, 3, 4))
        > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3), (k, v) -> k + v);
         map(array(1, 2, 3), array(2, 4, 6))
@@ -466,16 +465,14 @@ case class TransformValues(
 
   override def dataType: DataType = {
     val map = input.dataType.asInstanceOf[MapType]
-    MapType(map.keyType, function.dataType, map.valueContainsNull)
+    MapType(map.keyType, function.dataType, function.nullable)
   }
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(MapType, expectingFunctionType)
 
   @transient val (keyType, valueType, valueContainsNull) =
     HigherOrderFunction.mapKeyValueArgumentType(input.dataType)
 
-  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction):
-  TransformValues = {
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction)
+  : TransformValues = {
     copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
   }
 
