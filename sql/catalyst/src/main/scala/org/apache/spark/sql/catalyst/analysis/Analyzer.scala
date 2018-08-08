@@ -2258,8 +2258,8 @@ class Analyzer(
       if (expected.size < query.output.size) {
         throw new AnalysisException(
           s"""Cannot write to '$tableName', too many data columns:
-             |Table columns: ${expected.map(_.name).mkString(", ")}
-             |Data columns: ${query.output.map(_.name).mkString(", ")}""".stripMargin)
+             |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
+             |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}""".stripMargin)
       }
 
       val errors = new mutable.ArrayBuffer[String]()
@@ -2278,8 +2278,9 @@ class Analyzer(
         if (expected.size > query.output.size) {
           throw new AnalysisException(
             s"""Cannot write to '$tableName', not enough data columns:
-               |Table columns: ${expected.map(_.name).mkString(", ")}
-               |Data columns: ${query.output.map(_.name).mkString(", ")}""".stripMargin)
+               |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
+               |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}"""
+                .stripMargin)
         }
 
         query.output.zip(expected).flatMap {
@@ -2301,12 +2302,15 @@ class Analyzer(
         queryExpr: NamedExpression,
         addError: String => Unit): Option[NamedExpression] = {
 
+      // run the type check first to ensure type errors are present
+      val canWrite = DataType.canWrite(
+        queryExpr.dataType, tableAttr.dataType, resolver, tableAttr.name, addError)
+
       if (queryExpr.nullable && !tableAttr.nullable) {
         addError(s"Cannot write nullable values to non-null column '${tableAttr.name}'")
         None
 
-      } else if (!DataType.canWrite(
-          tableAttr.dataType, queryExpr.dataType, resolver, tableAttr.name, addError)) {
+      } else if (!canWrite) {
         None
 
       } else {
