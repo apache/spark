@@ -27,6 +27,9 @@ import org.apache.spark.sql.types.StructType;
 /**
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
  * provide data writing ability for batch processing.
+ *
+ * This interface is used when end users want to use a data source implementation directly, e.g.
+ * {@code Dataset.write.format(...).option(...).save()}.
  */
 @InterfaceStability.Evolving
 public interface BatchWriteSupportProvider extends DataSourceV2 {
@@ -47,10 +50,6 @@ public interface BatchWriteSupportProvider extends DataSourceV2 {
    * @param options the options for the returned data source writer, which is an immutable
    *                case-insensitive string-to-string map.
    * @return a write support to write data to this data source.
-   *
-   * Note that, it's possible that there are many writing jobs running at the same time, and the
-   * returned {@link BatchWriteSupport} should take care of it to avoid conflicts. For example,
-   * file-based data source can put a random UUID in the file path.
    */
   Optional<BatchWriteSupport> createBatchWriteSupport(
       String queryId,

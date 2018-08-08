@@ -26,6 +26,9 @@ import org.apache.spark.sql.types.StructType;
 /**
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
  * provide data writing ability for structured streaming.
+ *
+ * This interface is used when end users want to use a data source implementation directly, e.g.
+ * {@code Dataset.writeStream.format(...).option(...).save()}.
  */
 @InterfaceStability.Evolving
 public interface StreamingWriteSupportProvider extends DataSourceV2, BaseStreamingSink {
