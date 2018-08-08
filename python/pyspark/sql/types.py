@@ -206,7 +206,7 @@ class DecimalType(FractionalType):
     and scale (the number of digits on the right of dot). For example, (5, 2) can
     support the value from [-999.99 to 999.99].
 
-    The precision can be up to 38, the scale must less or equal to precision.
+    The precision can be up to 38, the scale must be less or equal to precision.
 
     When create a DecimalType, the default precision and scale is (10, 0). When infer
     schema from decimal.Decimal objects, it will be DecimalType(38, 18).
