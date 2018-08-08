@@ -384,7 +384,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     outputMode = Append
   )
 
-  // Inner joins: Multiple stream-stream joins supported only in append or update mode
+  // Inner joins: Multiple stream-stream joins supported only in append mode
   testBinaryOperationInStreamingPlan(
     "single inner join in append mode",
     _.join(_, joinType = Inner),
@@ -399,12 +399,21 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     outputMode = Append,
     streamStreamSupported = true)
 
+  // Inner joins: Multiple stream-stream joins supported also in update mode
   testBinaryOperationInStreamingPlan(
-    "inner join in update mode",
+    "single inner join in update mode",
     _.join(_, joinType = Inner),
     outputMode = Update,
     streamStreamSupported = true,
     expectedMsg = "inner join")
+
+  testBinaryOperationInStreamingPlan(
+    "multiple inner joins in update mode",
+    (x: LogicalPlan, y: LogicalPlan) => {
+      x.join(y, joinType = Inner).join(streamRelation, joinType = Inner)
+    },
+    outputMode = Update,
+    streamStreamSupported = true)
 
   // Full outer joins: only batch-batch is allowed
   testBinaryOperationInStreamingPlan(
@@ -422,28 +431,40 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     streamStreamSupported = false,
     expectedMsg = "outer join")
 
-  // Left outer joins: stream-stream allowed with join on watermark attribute
+  // Left outer joins: stream-stream allowed in append mode with join on watermark attribute
   // Note that the attribute need not be watermarked on both sides.
   assertSupportedInStreamingPlan(
-    s"left outer join with stream-stream relations and join on attribute with left watermark",
+    s"left outer join with stream-stream relations and join on attribute with left watermark in append mode",
     streamRelation.join(streamRelation, joinType = LeftOuter,
       condition = Some(attributeWithWatermark === attribute)),
-    OutputMode.Append())
+    Append)
   assertSupportedInStreamingPlan(
-    s"left outer join with stream-stream relations and join on attribute with right watermark",
+    s"left outer join with stream-stream relations and join on attribute with right watermark in append mode",
     streamRelation.join(streamRelation, joinType = LeftOuter,
       condition = Some(attribute === attributeWithWatermark)),
-    OutputMode.Append())
+    Append)
   assertNotSupportedInStreamingPlan(
     s"left outer join with stream-stream relations and join on non-watermarked attribute",
     streamRelation.join(streamRelation, joinType = LeftOuter,
       condition = Some(attribute === attribute)),
-    OutputMode.Append(),
+    Append,
     Seq("watermark in the join keys"))
+
+  // Left outer joins: stream-stream allowed in update mode with join on watermark attribute
+  assertSupportedInStreamingPlan(
+    s"left outer join with stream-stream relations and join on attribute with left watermark in update mode",
+    streamRelation.join(streamRelation, joinType = LeftOuter,
+      condition = Some(attributeWithWatermark === attribute)),
+    Update)
+  assertSupportedInStreamingPlan(
+    s"left outer join with stream-stream relations and join on attribute with right watermark in update mode",
+    streamRelation.join(streamRelation, joinType = LeftOuter,
+      condition = Some(attribute === attributeWithWatermark)),
+    Update)
 
   // Left outer joins: stream-stream allowed with range condition yielding state value watermark
   assertSupportedInStreamingPlan(
-    s"left outer join with stream-stream relations and state value watermark", {
+    s"left outer join with stream-stream relations and state value watermark in append mode", {
       val leftRelation = streamRelation
       val rightTimeWithWatermark =
         AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
@@ -453,7 +474,21 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
         joinType = LeftOuter,
         condition = Some(attribute > rightTimeWithWatermark + 10))
     },
-    OutputMode.Append())
+    Append)
+
+  // Left outer joins: stream-stream allowed with range condition also supported in update mode
+  assertSupportedInStreamingPlan(
+    s"left outer join with stream-stream relations and state value watermark in update mode", {
+      val leftRelation = streamRelation
+      val rightTimeWithWatermark =
+        AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
+      val rightRelation = new TestStreamingRelation(rightTimeWithWatermark)
+      leftRelation.join(
+        rightRelation,
+        joinType = LeftOuter,
+        condition = Some(attribute > rightTimeWithWatermark + 10))
+    },
+    Append)
 
   // Left outer joins: stream-stream not allowed with insufficient range condition
   assertNotSupportedInStreamingPlan(
@@ -467,7 +502,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
         joinType = LeftOuter,
         condition = Some(attribute < rightTimeWithWatermark + 10))
     },
-    OutputMode.Append(),
+    Append,
     Seq("appropriate range condition"))
 
   // Left semi joins: stream-* not allowed
@@ -494,28 +529,41 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     streamStreamSupported = false,
     expectedMsg = "outer join")
 
-  // Right outer joins: stream-stream allowed with join on watermark attribute
+  // Right outer joins: stream-stream allowed in append mode with join on watermark attribute
   // Note that the attribute need not be watermarked on both sides.
   assertSupportedInStreamingPlan(
-    s"right outer join with stream-stream relations and join on attribute with left watermark",
+    s"right outer join with stream-stream relations and join on attribute with left watermark in append mode",
     streamRelation.join(streamRelation, joinType = RightOuter,
       condition = Some(attributeWithWatermark === attribute)),
-    OutputMode.Append())
+    Append)
   assertSupportedInStreamingPlan(
-    s"right outer join with stream-stream relations and join on attribute with right watermark",
+    s"right outer join with stream-stream relations and join on attribute with right watermark in append mode",
     streamRelation.join(streamRelation, joinType = RightOuter,
       condition = Some(attribute === attributeWithWatermark)),
-    OutputMode.Append())
+    Append)
   assertNotSupportedInStreamingPlan(
     s"right outer join with stream-stream relations and join on non-watermarked attribute",
     streamRelation.join(streamRelation, joinType = RightOuter,
       condition = Some(attribute === attribute)),
-    OutputMode.Append(),
+    Append,
     Seq("watermark in the join keys"))
 
-  // Right outer joins: stream-stream allowed with range condition yielding state value watermark
+
+  // Right outer joins: stream-stream allowed in update mode with join on watermark attribute
   assertSupportedInStreamingPlan(
-    s"right outer join with stream-stream relations and state value watermark", {
+    s"right outer join with stream-stream relations and join on attribute with left watermark in update mode",
+    streamRelation.join(streamRelation, joinType = RightOuter,
+      condition = Some(attributeWithWatermark === attribute)),
+    Update)
+  assertSupportedInStreamingPlan(
+    s"right outer join with stream-stream relations and join on attribute with right watermark in update mode",
+    streamRelation.join(streamRelation, joinType = RightOuter,
+      condition = Some(attribute === attributeWithWatermark)),
+    Update)
+
+  // Right outer joins: stream-stream allowed in append mode with range condition yielding state value watermark
+  assertSupportedInStreamingPlan(
+    s"right outer join with stream-stream relations and state value watermark in append mode", {
       val leftTimeWithWatermark =
         AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
       val leftRelation = new TestStreamingRelation(leftTimeWithWatermark)
@@ -525,7 +573,21 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
         joinType = RightOuter,
         condition = Some(leftTimeWithWatermark + 10 < attribute))
     },
-    OutputMode.Append())
+    Append)
+
+  // Right outer joins: stream-stream allowed in update mode with range condition yielding state value watermark
+  assertSupportedInStreamingPlan(
+    s"right outer join with stream-stream relations and state value watermark in update mode", {
+      val leftTimeWithWatermark =
+        AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
+      val leftRelation = new TestStreamingRelation(leftTimeWithWatermark)
+      val rightRelation = streamRelation
+      leftRelation.join(
+        rightRelation,
+        joinType = RightOuter,
+        condition = Some(leftTimeWithWatermark + 10 < attribute))
+    },
+    Update)
 
   // Right outer joins: stream-stream not allowed with insufficient range condition
   assertNotSupportedInStreamingPlan(
