@@ -2242,7 +2242,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     testEmpty()
   }
 
-  test("transform keys function - Invalid lambda functions") {
+  test("transform keys function - Invalid lambda functions and exceptions") {
     val dfExample1 = Seq(
       Map[Int, Int](1 -> 1, 9 -> 9, 8 -> 8, 7 -> 7)
     ).toDF("i")
@@ -2250,6 +2250,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val dfExample2 = Seq(
       Map[String, String]("a" -> "b")
     ).toDF("j")
+
+    val dfExample3 = Seq(
+      Map[String, String]("a" -> null)
+    ).toDF("x")
 
     def testInvalidLambdaFunctions(): Unit = {
       val ex1 = intercept[AnalysisException] {
@@ -2260,13 +2264,44 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       val ex2 = intercept[AnalysisException] {
         dfExample2.selectExpr("transform_keys(j, (k, v, x) -> k + 1)")
       }
-      assert(ex2.getMessage.contains("The number of lambda function arguments '3' does not match"))
+      assert(ex2.getMessage.contains(
+      "The number of lambda function arguments '3' does not match"))
     }
 
     testInvalidLambdaFunctions()
     dfExample1.cache()
     dfExample2.cache()
     testInvalidLambdaFunctions()
+  }
+
+  test("transform keys function - test null") {
+    val dfExample1 = Seq(
+      Map[Boolean, Integer](true -> 1, false -> null)
+    ).toDF("a")
+
+    def testNullValues(): Unit = {
+      checkAnswer(dfExample1.selectExpr("transform_keys(a, (k, v) -> if(k, NOT k, v IS NULL))"),
+        Seq(Row(Map(false -> 1, true -> null))))
+    }
+
+    testNullValues()
+    dfExample1.cache()
+    testNullValues()
+  }
+
+  test("transform keys function - test duplicate keys") {
+    val dfExample1 = Seq(
+      Map[Int, String](1 -> "a", 2 -> "b", 3 -> "c", 4 -> "d")
+    ).toDF("a")
+
+    def testNullValues(): Unit = {
+      checkAnswer(dfExample1.selectExpr("transform_keys(a, (k, v) -> k%3)"),
+        Seq(Row(Map(1 -> "a", 2 -> "b", 0 -> "c", 1 -> "d"))))
+    }
+
+    testNullValues()
+    dfExample1.cache()
+    testNullValues()
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {

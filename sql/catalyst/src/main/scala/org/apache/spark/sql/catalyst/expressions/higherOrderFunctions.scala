@@ -444,13 +444,14 @@ case class ArrayAggregate(
 }
 
 /**
- * Transform Keys in a map using the transform_keys function.
+ * Transform Keys for every entry of the map by applying the transform_keys function.
+ * Returns map with transformed key entries
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, func) - Transforms elements in a map using the function.",
   examples = """
     Examples:
-      > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3), (k,v) -> k + 1);
+      > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3), (k, v) -> k + 1);
        map(array(2, 3, 4), array(1, 2, 3))
       > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3), (k, v) -> k + v);
        map(array(2, 4, 6), array(1, 2, 3))
@@ -459,27 +460,22 @@ case class ArrayAggregate(
 case class TransformKeys(
     input: Expression,
     function: Expression)
-  extends ArrayBasedHigherOrderFunction with CodegenFallback {
+  extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
 
   override def nullable: Boolean = input.nullable
 
   override def dataType: DataType = {
-    val valueType = input.dataType.asInstanceOf[MapType].valueType
-    MapType(function.dataType, valueType, input.nullable)
+    val map = input.dataType.asInstanceOf[MapType]
+    MapType(function.dataType, map.valueType, map.valueContainsNull)
   }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(MapType, expectingFunctionType)
 
-  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction):
-  TransformKeys = {
-    val (keyElementType, valueElementType, containsNull) = input.dataType match {
-      case MapType(keyType, valueType, containsNullValue) =>
-        (keyType, valueType, containsNullValue)
-      case _ =>
-        val MapType(keyType, valueType, containsNullValue) = MapType.defaultConcreteType
-        (keyType, valueType, containsNullValue)
-    }
-    copy(function = f(function, (keyElementType, false) :: (valueElementType, containsNull) :: Nil))
+  @transient val (keyType, valueType, valueContainsNull) =
+    HigherOrderFunction.mapKeyValueArgumentType(input.dataType)
+
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): TransformKeys = {
+    copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
   }
 
   @transient lazy val (keyVar, valueVar) = {
@@ -488,22 +484,22 @@ case class TransformKeys(
     (keyVar, valueVar)
   }
 
-  override def eval(input: InternalRow): Any = {
-    val arr = this.input.eval(input).asInstanceOf[MapData]
-    if (arr == null) {
-      null
-    } else {
-      val f = functionForEval
-      val resultKeys = new GenericArrayData(new Array[Any](arr.numElements))
-      var i = 0
-      while (i < arr.numElements) {
-        keyVar.value.set(arr.keyArray().get(i, keyVar.dataType))
-        valueVar.value.set(arr.valueArray().get(i, valueVar.dataType))
-        resultKeys.update(i, f.eval(input))
-        i += 1
+  override def nullSafeEval(inputRow: InternalRow, value: Any): Any = {
+    val map = value.asInstanceOf[MapData]
+    val f = functionForEval
+    val resultKeys = new GenericArrayData(new Array[Any](map.numElements))
+    var i = 0
+    while (i < map.numElements) {
+      keyVar.value.set(map.keyArray().get(i, keyVar.dataType))
+      valueVar.value.set(map.valueArray().get(i, valueVar.dataType))
+      val result = f.eval(inputRow)
+      if (result ==  null) {
+        throw new RuntimeException("Cannot use null as map key!")
       }
-      new ArrayBasedMapData(resultKeys, arr.valueArray())
+      resultKeys.update(i, f.eval(inputRow))
+      i += 1
     }
+    new ArrayBasedMapData(resultKeys, map.valueArray())
   }
 
   override def prettyName: String = "transform_keys"
