@@ -957,6 +957,8 @@ class DAGScheduler(
     } catch {
       case e: Exception if e.getMessage ==
           DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER =>
+        logWarning("The job requires to run a barrier stage that requires more slots than the " +
+          "total number of slots in the cluster currently.")
         jobIdToNumTasksCheckFailures.putIfAbsent(jobId, 0)
         val numCheckFailures = jobIdToNumTasksCheckFailures.get(jobId) + 1
         if (numCheckFailures < DAGScheduler.DEFAULT_MAX_CONSECUTIVE_NUM_TASKS_CHECK_FAILURES) {
