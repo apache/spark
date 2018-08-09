@@ -224,6 +224,24 @@ class CreateTableAsSelectSuite
   }
 
   test("create table using as select - with invalid number of buckets") {
+    withTable("t") {
+      Seq(0, 100001).foreach(numBuckets => {
+        val e = intercept[AnalysisException] {
+          sql(
+            s"""
+               |CREATE TABLE t USING PARQUET
+               |OPTIONS (PATH '${path.toURI}')
+               |CLUSTERED BY (a) SORTED BY (b) INTO $numBuckets BUCKETS
+               |AS SELECT 1 AS a, 2 AS b
+             """.stripMargin
+          )
+        }.getMessage
+        assert(e.contains("Number of buckets should be greater than 0 but less than 100000"))
+      })
+    }
+  }
+
+  test("create table using as select - with overriden max number of buckets") {
     def createTableSql(numBuckets: Int): String =
       s"""
          |CREATE TABLE t USING PARQUET
@@ -232,22 +250,11 @@ class CreateTableAsSelectSuite
          |AS SELECT 1 AS a, 2 AS b
        """.stripMargin
 
-    withTable("t") {
-      Seq(0, 100001).foreach(numBuckets => {
-        val e = intercept[AnalysisException] {
-          sql(createTableSql(numBuckets))
-        }.getMessage
-        assert(e.contains("Number of buckets should be greater than 0 but less than " +
-          "spark.sql.bucketing.maxBuckets"))
-      })
-    }
-
-    // Reconfigure max
     val maxNrBuckets: Int = 200000
     val catalog = spark.sessionState.catalog
     withSQLConf("spark.sql.bucketing.maxBuckets" -> maxNrBuckets.toString) {
 
-      // Shall be allowed
+      // Within the new limit
       Seq(100001, maxNrBuckets).foreach(numBuckets => {
         withTable("t") {
           sql(createTableSql(numBuckets))
@@ -256,13 +263,11 @@ class CreateTableAsSelectSuite
         }
       })
 
-      // Test new limit not respected
+      // Over the new limit
       withTable("t") {
-        val e = intercept[AnalysisException] {
-          sql(createTableSql(maxNrBuckets + 1))
-        }.getMessage
-        assert(e.contains("Number of buckets should be greater than 0 but less than " +
-          "spark.sql.bucketing.maxBuckets"))
+        val e = intercept[AnalysisException](sql(createTableSql(maxNrBuckets + 1)))
+        assert(
+          e.getMessage.contains("Number of buckets should be greater than 0 but less than "))
       }
     }
   }

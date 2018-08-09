@@ -49,22 +49,22 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
     intercept[AnalysisException](df.write.bucketBy(2, "k").saveAsTable("tt"))
   }
 
-  test("numBuckets be greater than 0 but less than default bucketing.maxBuckets (100000)") {
+  test("numBuckets be greater than 0 but less/eq than default bucketing.maxBuckets (100000)") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
 
     Seq(-1, 0, 100001).foreach(numBuckets => {
-      val e = intercept[AnalysisException](
-        df.write.bucketBy(numBuckets, "i").saveAsTable("tt")
-      ).getMessage
-      assert(e.contains("Number of buckets should be greater than 0 but less than"))
+      val e = intercept[AnalysisException](df.write.bucketBy(numBuckets, "i").saveAsTable("tt"))
+      assert(
+        e.getMessage.contains("Number of buckets should be greater than 0 but less than"))
     })
   }
 
-  test("numBuckets be greater than 0 but less than overridden bucketing.maxBuckets (200000)") {
+  test("numBuckets be greater than 0 but less/eq than overridden bucketing.maxBuckets (200000)") {
     val maxNrBuckets: Int = 200000
     val catalog = spark.sessionState.catalog
+
     withSQLConf("spark.sql.bucketing.maxBuckets" -> maxNrBuckets.toString) {
-      // Shall be allowed
+      // within the new limit
       Seq(100001, maxNrBuckets).foreach(numBuckets => {
         withTable("t") {
           df.write.bucketBy(numBuckets, "i").saveAsTable("t")
@@ -73,12 +73,12 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
         }
       })
 
-      // Test new limit not respected
+      // over the new limit
       withTable("t") {
         val e = intercept[AnalysisException](
-          df.write.bucketBy(maxNrBuckets + 1, "i").saveAsTable("t")
-        ).getMessage
-        assert(e.contains("Number of buckets should be greater than 0 but less than"))
+          df.write.bucketBy(maxNrBuckets + 1, "i").saveAsTable("t"))
+        assert(
+          e.getMessage.contains("Number of buckets should be greater than 0 but less than"))
       }
     }
   }
