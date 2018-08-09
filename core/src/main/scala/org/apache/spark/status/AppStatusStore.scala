@@ -113,9 +113,9 @@ private[spark] class AppStatusStore(
   }
 
   def stageAttempt(stageId: Int, stageAttemptId: Int,
-    details: Boolean = false): (v1.StageData, Seq[Int]) = {
+      details: Boolean = false): (v1.StageData, Seq[Int]) = {
     val stageKey = Array(stageId, stageAttemptId)
-    val stageDataWrapper: StageDataWrapper = store.read(classOf[StageDataWrapper], stageKey)
+    val stageDataWrapper = store.read(classOf[StageDataWrapper], stageKey)
     val stage = if (details) stageWithDetails(stageDataWrapper.info) else stageDataWrapper.info
     val jobIds = stageDataWrapper.jobIds
     (stage, jobIds.toSeq)

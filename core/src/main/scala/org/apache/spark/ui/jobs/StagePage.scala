@@ -105,28 +105,29 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val stageAttemptId = parameterAttempt.toInt
 
     val stageHeader = s"Details for Stage $stageId (Attempt $stageAttemptId)"
-    var stageDataTuple: Tuple2[StageData, Seq[Int]] = null
-    try {
-      stageDataTuple = parent.store.stageAttempt(stageId, stageAttemptId, details = false)
+    var stageDataTuple: Option[Tuple2[StageData, Seq[Int]]] = try {
+      Some(parent.store.stageAttempt(stageId, stageAttemptId, details = false))
     } catch {
       case e: NoSuchElementException => e.getMessage
+      None
     }
     var stageData: StageData = null
     var stageJobIds: Seq[Int] = null
-    if (stageDataTuple == null) {
-      stageData = {
-        val content =
-          <div id="no-info">
-            <p>No information to display for Stage
-              {stageId}
-              (Attempt
-              {stageAttemptId})</p>
-          </div>
-        return UIUtils.headerSparkPage(request, stageHeader, content, parent)
-      }
-    } else {
-      stageData = stageDataTuple._1
-      stageJobIds = stageDataTuple._2
+    stageDataTuple match {
+      case Some(stageTuple) =>
+        stageData = stageTuple._1
+        stageJobIds = stageTuple._2
+      case None =>
+        stageData = {
+          val content =
+            <div id="no-info">
+              <p>No information to display for Stage
+                {stageId}
+                (Attempt
+                {stageAttemptId})</p>
+            </div>
+          return UIUtils.headerSparkPage(request, stageHeader, content, parent)
+        }
     }
 
     val localitySummary = store.localitySummary(stageData.stageId, stageData.attemptId)
