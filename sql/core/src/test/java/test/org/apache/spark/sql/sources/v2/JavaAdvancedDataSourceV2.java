@@ -20,8 +20,8 @@ package test.org.apache.spark.sql.sources.v2;
 import java.io.IOException;
 import java.util.*;
 
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.sources.GreaterThan;
 import org.apache.spark.sql.sources.v2.DataSourceOptions;
@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.StructType;
 public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
 
   public class Reader implements DataSourceReader, SupportsPushDownRequiredColumns,
-      SupportsPushDownFilters {
+    SupportsPushDownFilters {
 
     // Exposed for testing.
     public StructType requiredSchema = new StructType().add("i", "int").add("j", "int");
@@ -79,8 +79,8 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<DataReaderFactory<Row>> createDataReaderFactories() {
-      List<DataReaderFactory<Row>> res = new ArrayList<>();
+    public List<InputPartition<InternalRow>> planInputPartitions() {
+      List<InputPartition<InternalRow>> res = new ArrayList<>();
 
       Integer lowerBound = null;
       for (Filter filter : filters) {
@@ -94,33 +94,34 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
       }
 
       if (lowerBound == null) {
-        res.add(new JavaAdvancedDataReaderFactory(0, 5, requiredSchema));
-        res.add(new JavaAdvancedDataReaderFactory(5, 10, requiredSchema));
+        res.add(new JavaAdvancedInputPartition(0, 5, requiredSchema));
+        res.add(new JavaAdvancedInputPartition(5, 10, requiredSchema));
       } else if (lowerBound < 4) {
-        res.add(new JavaAdvancedDataReaderFactory(lowerBound + 1, 5, requiredSchema));
-        res.add(new JavaAdvancedDataReaderFactory(5, 10, requiredSchema));
+        res.add(new JavaAdvancedInputPartition(lowerBound + 1, 5, requiredSchema));
+        res.add(new JavaAdvancedInputPartition(5, 10, requiredSchema));
       } else if (lowerBound < 9) {
-        res.add(new JavaAdvancedDataReaderFactory(lowerBound + 1, 10, requiredSchema));
+        res.add(new JavaAdvancedInputPartition(lowerBound + 1, 10, requiredSchema));
       }
 
       return res;
     }
   }
 
-  static class JavaAdvancedDataReaderFactory implements DataReaderFactory<Row>, DataReader<Row> {
+  static class JavaAdvancedInputPartition implements InputPartition<InternalRow>,
+      InputPartitionReader<InternalRow> {
     private int start;
     private int end;
     private StructType requiredSchema;
 
-    JavaAdvancedDataReaderFactory(int start, int end, StructType requiredSchema) {
+    JavaAdvancedInputPartition(int start, int end, StructType requiredSchema) {
       this.start = start;
       this.end = end;
       this.requiredSchema = requiredSchema;
     }
 
     @Override
-    public DataReader<Row> createDataReader() {
-      return new JavaAdvancedDataReaderFactory(start - 1, end, requiredSchema);
+    public InputPartitionReader<InternalRow> createPartitionReader() {
+      return new JavaAdvancedInputPartition(start - 1, end, requiredSchema);
     }
 
     @Override
@@ -130,7 +131,7 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public Row get() {
+    public InternalRow get() {
       Object[] values = new Object[requiredSchema.size()];
       for (int i = 0; i < values.length; i++) {
         if ("i".equals(requiredSchema.apply(i).name())) {
@@ -139,7 +140,7 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
           values[i] = -start;
         }
       }
-      return new GenericRow(values);
+      return new GenericInternalRow(values);
     }
 
     @Override

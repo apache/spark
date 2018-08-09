@@ -39,7 +39,16 @@ public interface SupportsPushDownCatalystFilters extends DataSourceReader {
   Expression[] pushCatalystFilters(Expression[] filters);
 
   /**
-   * Returns the catalyst filters that are pushed in {@link #pushCatalystFilters(Expression[])}.
+   * Returns the catalyst filters that are pushed to the data source via
+   * {@link #pushCatalystFilters(Expression[])}.
+   *
+   * There are 3 kinds of filters:
+   *  1. pushable filters which don't need to be evaluated again after scanning.
+   *  2. pushable filters which still need to be evaluated after scanning, e.g. parquet
+   *     row group filter.
+   *  3. non-pushable filters.
+   * Both case 1 and 2 should be considered as pushed filters and should be returned by this method.
+   *
    * It's possible that there is no filters in the query and
    * {@link #pushCatalystFilters(Expression[])} is never called, empty array should be returned for
    * this case.

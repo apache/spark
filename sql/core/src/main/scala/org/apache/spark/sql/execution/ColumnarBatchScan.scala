@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
@@ -51,18 +52,22 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
       nullable: Boolean): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
     val value = CodeGenerator.getValueFromVector(columnVar, dataType, ordinal)
-    val isNullVar = if (nullable) { ctx.freshName("isNull") } else { "false" }
+    val isNullVar = if (nullable) {
+      JavaCode.isNullVariable(ctx.freshName("isNull"))
+    } else {
+      FalseLiteral
+    }
     val valueVar = ctx.freshName("value")
     val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
-    val code = s"${ctx.registerComment(str)}\n" + (if (nullable) {
-      s"""
+    val code = code"${ctx.registerComment(str)}" + (if (nullable) {
+      code"""
         boolean $isNullVar = $columnVar.isNullAt($ordinal);
         $javaType $valueVar = $isNullVar ? ${CodeGenerator.defaultValue(dataType)} : ($value);
       """
     } else {
-      s"$javaType $valueVar = $value;"
-    }).trim
-    ExprCode(code, isNullVar, valueVar)
+      code"$javaType $valueVar = $value;"
+    })
+    ExprCode(code, isNullVar, JavaCode.variable(valueVar, dataType))
   }
 
   /**

@@ -104,15 +104,20 @@ private[spark] class BlockStoreShuffleReader[K, C](
         context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
         context.taskMetrics().incPeakExecutionMemory(sorter.peakMemoryUsedBytes)
         // Use completion callback to stop sorter if task was finished/cancelled.
-        context.addTaskCompletionListener(_ => {
+        context.addTaskCompletionListener[Unit](_ => {
           sorter.stop()
         })
         CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](sorter.iterator, sorter.stop())
       case None =>
         aggregatedIter
     }
-    // Use another interruptible iterator here to support task cancellation as aggregator or(and)
-    // sorter may have consumed previous interruptible iterator.
-    new InterruptibleIterator[Product2[K, C]](context, resultIter)
+
+    resultIter match {
+      case _: InterruptibleIterator[Product2[K, C]] => resultIter
+      case _ =>
+        // Use another interruptible iterator here to support task cancellation as aggregator
+        // or(and) sorter may have consumed previous interruptible iterator.
+        new InterruptibleIterator[Product2[K, C]](context, resultIter)
+    }
   }
 }

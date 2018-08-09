@@ -145,6 +145,39 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsToAdd(manager) === 1)
   }
 
+  def testAllocationRatio(cores: Int, divisor: Double, expected: Int): Unit = {
+    val conf = new SparkConf()
+      .setMaster("myDummyLocalExternalClusterManager")
+      .setAppName("test-executor-allocation-manager")
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.dynamicAllocation.testing", "true")
+      .set("spark.dynamicAllocation.maxExecutors", "15")
+      .set("spark.dynamicAllocation.minExecutors", "3")
+      .set("spark.dynamicAllocation.executorAllocationRatio", divisor.toString)
+      .set("spark.executor.cores", cores.toString)
+    val sc = new SparkContext(conf)
+    contexts += sc
+    var manager = sc.executorAllocationManager.get
+    post(sc.listenerBus, SparkListenerStageSubmitted(createStageInfo(0, 20)))
+    for (i <- 0 to 5) {
+      addExecutors(manager)
+    }
+    assert(numExecutorsTarget(manager) === expected)
+    sc.stop()
+  }
+
+  test("executionAllocationRatio is correctly handled") {
+    testAllocationRatio(1, 0.5, 10)
+    testAllocationRatio(1, 1.0/3.0, 7)
+    testAllocationRatio(2, 1.0/3.0, 4)
+    testAllocationRatio(1, 0.385, 8)
+
+    // max/min executors capping
+    testAllocationRatio(1, 1.0, 15) // should be 20 but capped by max
+    testAllocationRatio(4, 1.0/3.0, 3)  // should be 2 but elevated by min
+  }
+
+
   test("add executors capped by num pending tasks") {
     sc = createSparkContext(0, 10, 0)
     val manager = sc.executorAllocationManager.get

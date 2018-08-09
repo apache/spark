@@ -50,7 +50,7 @@ private[spark] object KubernetesUtils {
     }
   }
 
-  private def resolveFileUri(uri: String): String = {
+  def resolveFileUri(uri: String): String = {
     val fileUri = Utils.resolveURI(uri)
     val fileScheme = Option(fileUri.getScheme).getOrElse("file")
     fileScheme match {
@@ -58,4 +58,6 @@ private[spark] object KubernetesUtils {
       case _ => uri
     }
   }
+
+  def parseMasterUrl(url: String): String = url.substring("k8s://".length)
 }

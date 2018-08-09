@@ -63,7 +63,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
         class_name = cls.__name__
         conf = SparkConf().set("spark.default.parallelism", 1)
         cls.sc = SparkContext(appName=class_name, conf=conf)
-        cls.sc.setCheckpointDir("/tmp")
+        cls.sc.setCheckpointDir(tempfile.mkdtemp())
 
     @classmethod
     def tearDownClass(cls):
@@ -507,6 +507,10 @@ class StreamingListenerTests(PySparkStreamingTestCase):
             self.batchInfosCompleted = []
             self.batchInfosStarted = []
             self.batchInfosSubmitted = []
+            self.streamingStartedTime = []
+
+        def onStreamingStarted(self, streamingStarted):
+            self.streamingStartedTime.append(streamingStarted.time)
 
         def onBatchSubmitted(self, batchSubmitted):
             self.batchInfosSubmitted.append(batchSubmitted.batchInfo())
@@ -530,8 +534,11 @@ class StreamingListenerTests(PySparkStreamingTestCase):
         batchInfosSubmitted = batch_collector.batchInfosSubmitted
         batchInfosStarted = batch_collector.batchInfosStarted
         batchInfosCompleted = batch_collector.batchInfosCompleted
+        streamingStartedTime = batch_collector.streamingStartedTime
 
         self.wait_for(batchInfosCompleted, 4)
+
+        self.assertEqual(len(streamingStartedTime), 1)
 
         self.assertGreaterEqual(len(batchInfosSubmitted), 4)
         for info in batchInfosSubmitted:
@@ -771,6 +778,12 @@ class StreamingContextTests(PySparkStreamingTestCase):
         dstream = self.ssc.transform([dstream1, dstream2, dstream3], func)
 
         self.assertEqual([2, 3, 1], self._take(dstream, 3))
+
+    def test_transform_pairrdd(self):
+        # This regression test case is for SPARK-17756.
+        dstream = self.ssc.queueStream(
+            [[1], [2], [3]]).transform(lambda rdd: rdd.cartesian(rdd))
+        self.assertEqual([(1, 1), (2, 2), (3, 3)], self._take(dstream, 3))
 
     def test_get_active(self):
         self.assertEqual(StreamingContext.getActive(), None)
@@ -1542,7 +1555,9 @@ if __name__ == "__main__":
         kinesis_jar_present = True
         jars = "%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, kinesis_asl_assembly_jar)
 
-    os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
+    existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
+    jars_args = "--jars %s" % jars
+    os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, existing_args])
     testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests, CheckpointTests,
                  StreamingListenerTests]
 
@@ -1583,11 +1598,11 @@ if __name__ == "__main__":
         sys.stderr.write("[Running %s]\n" % (testcase))
         tests = unittest.TestLoader().loadTestsFromTestCase(testcase)
         if xmlrunner:
-            result = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=3).run(tests)
+            result = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2).run(tests)
             if not result.wasSuccessful():
                 failed = True
         else:
-            result = unittest.TextTestRunner(verbosity=3).run(tests)
+            result = unittest.TextTestRunner(verbosity=2).run(tests)
             if not result.wasSuccessful():
                 failed = True
     sys.exit(failed)

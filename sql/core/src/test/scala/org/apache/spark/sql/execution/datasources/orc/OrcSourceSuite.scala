@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.orc
 
 import java.io.File
+import java.sql.Timestamp
 import java.util.Locale
 
 import org.apache.orc.OrcConf.COMPRESS
@@ -167,6 +168,14 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
         df.write.format("orc").save(path.getCanonicalPath)
         checkAnswer(spark.read.orc(path.getCanonicalPath), df)
       }
+    }
+  }
+
+  test("SPARK-24322 Fix incorrect workaround for bug in java.sql.Timestamp") {
+    withTempPath { path =>
+      val ts = Timestamp.valueOf("1900-05-05 12:34:56.000789")
+      Seq(ts).toDF.write.orc(path.getCanonicalPath)
+      checkAnswer(spark.read.orc(path.getCanonicalPath), Row(ts))
     }
   }
 }

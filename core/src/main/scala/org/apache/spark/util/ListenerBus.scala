@@ -61,6 +61,15 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
   }
 
   /**
+   * This can be overriden by subclasses if there is any extra cleanup to do when removing a
+   * listener.  In particular AsyncEventQueues can clean up queues in the LiveListenerBus.
+   */
+  def removeListenerOnError(listener: L): Unit = {
+    removeListener(listener)
+  }
+
+
+  /**
    * Post the event to all registered listeners. The `postToAll` caller should guarantee calling
    * `postToAll` in the same thread for all events.
    */
@@ -80,8 +89,17 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
       }
       try {
         doPostEvent(listener, event)
+        if (Thread.interrupted()) {
+          // We want to throw the InterruptedException right away so we can associate the interrupt
+          // with this listener, as opposed to waiting for a queue.take() etc. to detect it.
+          throw new InterruptedException()
+        }
       } catch {
-        case NonFatal(e) =>
+        case ie: InterruptedException =>
+          logError(s"Interrupted while posting to ${Utils.getFormattedClassName(listener)}.  " +
+            s"Removing that listener.", ie)
+          removeListenerOnError(listener)
+        case NonFatal(e) if !isIgnorableException(e) =>
           logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)
       } finally {
         if (maybeTimerContext != null) {
@@ -96,6 +114,9 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * thread for all listeners.
    */
   protected def doPostEvent(listener: L, event: E): Unit
+
+  /** Allows bus implementations to prevent error logging for certain exceptions. */
+  protected def isIgnorableException(e: Throwable): Boolean = false
 
   private[spark] def findListenersByClass[T <: L : ClassTag](): Seq[T] = {
     val c = implicitly[ClassTag[T]].runtimeClass

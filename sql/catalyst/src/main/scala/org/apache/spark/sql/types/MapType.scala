@@ -42,9 +42,9 @@ case class MapType(
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"$prefix-- key: ${keyType.typeName}\n")
+    DataType.buildFormattedString(keyType, s"$prefix    |", builder)
     builder.append(s"$prefix-- value: ${valueType.typeName} " +
       s"(valueContainsNull = $valueContainsNull)\n")
-    DataType.buildFormattedString(keyType, s"$prefix    |", builder)
     DataType.buildFormattedString(valueType, s"$prefix    |", builder)
   }
 

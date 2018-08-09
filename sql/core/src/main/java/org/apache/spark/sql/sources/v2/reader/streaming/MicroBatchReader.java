@@ -33,7 +33,7 @@ import java.util.Optional;
 @InterfaceStability.Evolving
 public interface MicroBatchReader extends DataSourceReader, BaseStreamingSource {
     /**
-     * Set the desired offset range for reader factories created from this reader. Reader factories
+     * Set the desired offset range for input partitions created from this reader. Partition readers
      * will generate only data within (`start`, `end`]; that is, from the first record after `start`
      * to the record with offset `end`.
      *
