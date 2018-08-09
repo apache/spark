@@ -44,7 +44,7 @@ object CodegenObjectFactoryMode extends Enumeration {
 
 /**
  * A codegen object generator which creates objects with codegen path first. Once any compile
- * error happens, it can fallbacks to interpreted implementation. In tests, we can use a SQL config
+ * error happens, it can fallback to interpreted implementation. In tests, we can use a SQL config
  * `SQLConf.CODEGEN_FACTORY_MODE` to control fallback behavior.
  */
 abstract class CodeGeneratorWithInterpretedFallback[IN, OUT] {
