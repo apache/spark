@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.File
 import java.util.{Locale, TimeZone}
 
+import org.apache.commons.io.FileUtils
 import org.scalatest.{Assertions, BeforeAndAfterAll}
 
 import org.apache.spark.{SparkEnv, SparkException}
@@ -38,6 +40,7 @@ import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.sql.streaming.util.{MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
+import org.apache.spark.util.Utils
 
 object FailureSingleton {
   var firstTime = true
@@ -589,6 +592,58 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       }
     )
   }
+
+
+  test("simple count, update mode - recovery from checkpoint uses state format version 1") {
+    val inputData = MemoryStream[Int]
+
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .as[(Int, Long)]
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-2.3.1-streaming-aggregate-state-format-1/").toURI
+
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+
+    inputData.addData(3)
+    inputData.addData(3, 2)
+
+    testStream(aggregated, Update)(
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath,
+        additionalConfs = Map(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key -> "2")),
+      /*
+        Note: The checkpoint was generated using the following input in Spark version 2.3.1
+        AddData(inputData, 3),
+        CheckLastBatch((3, 1)),
+        AddData(inputData, 3, 2),
+        CheckLastBatch((3, 2), (2, 1))
+       */
+
+      AddData(inputData, 3, 2, 1),
+      CheckLastBatch((3, 3), (2, 2), (1, 1)),
+
+      Execute { query =>
+        // Verify state format = 1
+        val stateVersions = query.lastExecution.executedPlan.collect {
+          case f: StateStoreSaveExec => f.stateFormatVersion
+          case f: StateStoreRestoreExec => f.stateFormatVersion
+        }
+        assert(stateVersions.size == 2)
+        assert(stateVersions.forall(_ == 1))
+      },
+
+      // By default we run in new tuple mode.
+      AddData(inputData, 4, 4, 4, 4),
+      CheckLastBatch((4, 4))
+    )
+  }
+
 
   /** Add blocks of data to the `BlockRDDBackedSource`. */
   case class AddBlockData(source: BlockRDDBackedSource, data: Seq[Int]*) extends AddData {
