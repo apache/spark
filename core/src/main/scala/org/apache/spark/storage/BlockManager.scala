@@ -413,8 +413,10 @@ private[spark] class BlockManager(
     // to the final location, but that would require a deeper refactor of this code.  So instead
     // we just write to a temp file, and call putBytes on the data in that file.
     val tmpFile = diskBlockManager.createTempLocalBlock()._2
+    val channel = new CountingWritableChannel(
+      Channels.newChannel(serializerManager.wrapForEncryption(new FileOutputStream(tmpFile))))
+    logTrace(s"Streaming block $blockId to tmp file $tmpFile")
     new StreamCallbackWithID {
-      val channel: WritableByteChannel = Channels.newChannel(new FileOutputStream(tmpFile))
 
       override def getID: String = blockId.name
 
@@ -425,6 +427,7 @@ private[spark] class BlockManager(
       }
 
       override def onComplete(streamId: String): Unit = {
+        logTrace(s"Done receiving block $blockId, now putting into local blockManager")
         // Read the contents of the downloaded file as a buffer to put into the blockManager.
         // Note this is all happening inside the netty thread as soon as it reads the end of the
         // stream.
@@ -432,8 +435,19 @@ private[spark] class BlockManager(
         // TODO SPARK-25035 Even if we're only going to write the data to disk after this, we end up
         // using a lot of memory here.  We won't get a jvm OOM, but might get killed by the
         // OS / cluster manager.  We could at least read the tmp file as a stream.
-        val buffer = ChunkedByteBuffer.map(tmpFile,
-          conf.get(config.MEMORY_MAP_LIMIT_FOR_TESTS).toInt)
+        val buffer = securityManager.getIOEncryptionKey() match {
+          case Some(key) =>
+            // we need to pass in the size of the unencrypted block
+            val blockSize = channel.getCount
+            val allocator = level.memoryMode match {
+              case MemoryMode.ON_HEAP => ByteBuffer.allocate _
+              case MemoryMode.OFF_HEAP => Platform.allocateDirectBuffer _
+            }
+            new EncryptedBlockData(tmpFile, blockSize, conf, key).toChunkedByteBuffer(allocator)
+
+          case None =>
+            ChunkedByteBuffer.map(tmpFile, conf.get(config.MEMORY_MAP_LIMIT_FOR_TESTS).toInt)
+        }
         putBytes(blockId, buffer, level)(classTag)
         tmpFile.delete()
       }

@@ -152,12 +152,12 @@ private[spark] class NettyBlockTransferService(
     val asStream = blockData.size() > conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
     val callback = new RpcResponseCallback {
       override def onSuccess(response: ByteBuffer): Unit = {
-        logTrace(s"Successfully uploaded block $blockId${if (asStream) "as stream" else ""}")
+        logTrace(s"Successfully uploaded block $blockId${if (asStream) " as stream" else ""}")
         result.success((): Unit)
       }
 
       override def onFailure(e: Throwable): Unit = {
-        logError(s"Error while uploading $blockId${if (asStream) "as stream" else ""}", e)
+        logError(s"Error while uploading $blockId${if (asStream) " as stream" else ""}", e)
         result.failure(e)
       }
     }

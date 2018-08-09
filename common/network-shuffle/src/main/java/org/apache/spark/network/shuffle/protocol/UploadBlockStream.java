@@ -28,7 +28,7 @@ import org.apache.spark.network.protocol.Encoders;
 import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
 
 /**
- * A request to Upload a block, which the destintation should receive as a stream.
+ * A request to Upload a block, which the destination should receive as a stream.
  *
  * The actual block data is not contained here.  It will be passed to the StreamCallbackWithID
  * that is returned from RpcHandler.receiveStream()
