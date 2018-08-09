@@ -196,7 +196,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     sc = createSparkContext(Some(conf))
     val rdd = sc.parallelize(1 to 10, 5)
       .barrier()
-      .mapPartitions((iter, context) => iter)
+      .mapPartitions(iter => iter)
     testSubmitJob(sc, rdd,
       message = DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
   }
@@ -211,7 +211,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     sc = createSparkContext(Some(conf))
     val rdd = sc.parallelize(1 to 10, 5)
       .barrier()
-      .mapPartitions((iter, context) => iter)
+      .mapPartitions(iter => iter)
       .repartition(2)
       .map(x => x + 1)
     testSubmitJob(sc, rdd,
@@ -229,7 +229,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     sc = createSparkContext(Some(conf))
     val rdd = sc.parallelize(1 to 10, 5)
       .barrier()
-      .mapPartitions((iter, context) => iter)
+      .mapPartitions(iter => iter)
     testSubmitJob(sc, rdd,
       message = DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
   }
@@ -245,7 +245,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     sc = createSparkContext(Some(conf))
     val rdd = sc.parallelize(1 to 10, 5)
       .barrier()
-      .mapPartitions((iter, context) => iter)
+      .mapPartitions(iter => iter)
       .repartition(2)
       .map(x => x + 1)
     testSubmitJob(sc, rdd,
