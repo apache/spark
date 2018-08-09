@@ -170,17 +170,16 @@ class RangePartitioner[K : Ordering : ClassTag, V](
       val sampleSizePerPartition = math.ceil(3.0 * sampleSize / rdd.partitions.length).toInt
       val (numItems, sketched) = RangePartitioner.sketch(rdd.map(_._1), sampleSizePerPartition)
       val numSampled = sketched.map(_._3.length).sum
-      if (numItems == 0) {
-        Array.empty
-      }
-      // already got the whole data
-      else if (sampleCacheEnabled && numItems == numSampled) {
-        // get the sampled data
-        sampledArray = sketched.foldLeft(Array.empty[K])((total, sample) => {
-          total ++ sample._3
-        })
+      if (numItems == 0L) {
         Array.empty
       } else {
+        // already got the whole data
+        if (sampleCacheEnabled && numItems == numSampled) {
+          // get the sampled data
+          sampledArray = sketched.foldLeft(Array.empty[K])((total, sample) => {
+            total ++ sample._3
+          })
+        }
         // If a partition contains much more than the average number of items, we re-sample from it
         // to ensure that enough items are collected from that partition.
         val fraction = math.min(sampleSize / math.max(numItems, 1L), 1.0)
