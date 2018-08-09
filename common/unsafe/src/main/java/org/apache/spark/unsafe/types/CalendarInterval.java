@@ -277,6 +277,12 @@ public final class CalendarInterval implements Serializable {
     return new CalendarInterval(months, microseconds);
   }
 
+  public CalendarInterval multiply(Number multiplier) {
+    int months = this.months * multiplier.intValue();
+    long microseconds = this.microseconds * multiplier.intValue();
+    return new CalendarInterval(months, microseconds);
+  }
+
   public CalendarInterval negate() {
     return new CalendarInterval(-this.months, -this.microseconds);
   }

@@ -211,14 +211,58 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
   """)
 case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
 
-  override def inputType: AbstractDataType = NumericType
+  override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
   override def symbol: String = "*"
   override def decimalMethod: String = "$times"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
+  override def dataType: DataType = right.dataType match {
+    case CalendarIntervalType => CalendarIntervalType
+    case _ => left.dataType
+  }
+
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    if (left.dataType.isInstanceOf[CalendarIntervalType]) {
+      input1.asInstanceOf[CalendarInterval].multiply(input2.asInstanceOf[Number])
+    } else if (right.dataType.isInstanceOf[CalendarIntervalType]) {
+      input2.asInstanceOf[CalendarInterval].multiply(input1.asInstanceOf[Number])
+    } else {
+      numeric.times(input1, input2)
+    }
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!left.dataType.sameType(right.dataType) && !left.dataType.sameType(CalendarIntervalType)
+      && !right.dataType.sameType(CalendarIntervalType)) {
+      TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
+        s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
+    } else if (!inputType.acceptsType(left.dataType)) {
+      TypeCheckResult.TypeCheckFailure(s"'$sql' requires ${inputType.simpleString} type," +
+        s" not ${left.dataType.simpleString}")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = right.dataType match {
+    case CalendarIntervalType => defineCodeGen(ctx, ev,
+      (eval1, eval2) => s"$eval2.multiply($eval1)")
+    case _ =>
+      left.dataType match {
+        case CalendarIntervalType => defineCodeGen(ctx, ev,
+          (eval1, eval2) => s"$eval1.multiply((${CodeGenerator.javaType(dataType)})$eval2)")
+        case dt: DecimalType =>
+          defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$$times($eval2)")
+        case ByteType | ShortType =>
+          defineCodeGen(ctx, ev,
+            (eval1, eval2) => s"${CodeGenerator.javaType(dataType)}($eval1 $symbol $eval2)")
+        case _ =>
+          defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
+      }
+  }
 }
 
 // Common base trait for Divide and Remainder, since these two classes are almost identical

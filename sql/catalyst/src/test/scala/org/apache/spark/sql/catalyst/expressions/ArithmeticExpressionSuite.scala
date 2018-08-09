@@ -21,10 +21,12 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -120,6 +122,16 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
       checkConsistencyBetweenInterpretedAndCodegen(Multiply, tpe, tpe)
     }
+    DataTypeTestUtils.integralType.foreach { tpe =>
+      checkConsistencyBetweenInterpretedAndCodegen(Multiply, CalendarIntervalType, tpe)
+      checkConsistencyBetweenInterpretedAndCodegen(Multiply, tpe, CalendarIntervalType)
+    }
+
+    // Type checking error
+    assert(
+      Multiply(Literal(new CalendarInterval(1, 0)), Literal(3)).checkInputDataTypes() ==
+        TypeCheckResult.TypeCheckSuccess)
+
   }
 
   private def testDecimalAndDoubleType(testFunc: (Int => Any) => Unit): Unit = {

@@ -230,6 +230,31 @@ public class CalendarIntervalSuite {
     assertEquals(interval.subtract(interval2), new CalendarInterval(-85, -281 * MICROS_PER_HOUR));
   }
 
+  @Test
+  public void multiplyTest() {
+    String input = "interval 3 month 1 hour";
+    String input2 = "interval 2 month 100 hour";
+    int multiplier = 5;
+
+    CalendarInterval interval = fromString(input);
+    CalendarInterval interval2 = fromString(input2);
+
+    assertEquals(interval.multiply(multiplier), new CalendarInterval(15, 5 * MICROS_PER_HOUR));
+    assertEquals(interval2.multiply(multiplier), new CalendarInterval(10, 500 * MICROS_PER_HOUR));
+
+    input = "interval -10 month -81 hour";
+    input2 = "interval 75 month 200 hour";
+
+    interval = fromString(input);
+    interval2 = fromString(input2);
+    int negMultiplier = -5;
+
+    assertEquals(interval.multiply(negMultiplier),
+            new CalendarInterval(50, 405 * MICROS_PER_HOUR));
+    assertEquals(interval2.multiply(negMultiplier),
+            new CalendarInterval(-375, -1000 * MICROS_PER_HOUR));
+   }
+    
   private static void testSingleUnit(String unit, int number, int months, long microseconds) {
     String input1 = "interval " + number + " " + unit;
     String input2 = "interval " + number + " " + unit + "s";
