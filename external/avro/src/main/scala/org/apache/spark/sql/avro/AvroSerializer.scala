@@ -89,13 +89,33 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
         (getter, ordinal) => getter.getDecimal(ordinal, d.precision, d.scale).toString
       case StringType => avroType.getType match {
         case Type.ENUM =>
-          (getter, ordinal) => new EnumSymbol(avroType, getter.getUTF8String(ordinal).toString)
+          import scala.collection.JavaConverters._
+          val enumSymbols: Set[String] = avroType.getEnumSymbols.asScala.toSet
+          (getter, ordinal) =>
+            val data = getter.getUTF8String(ordinal).toString
+            if (!enumSymbols.contains(data)) {
+              throw new IncompatibleSchemaException(
+                "Cannot write \"" + data + "\" since it's not defined in enum \"" +
+                  enumSymbols.mkString("\", \""))
+            }
+            require(enumSymbols.contains(data))
+            new EnumSymbol(avroType, data)
         case _ =>
           (getter, ordinal) => new Utf8(getter.getUTF8String(ordinal).getBytes)
       }
       case BinaryType => avroType.getType match {
         case Type.FIXED =>
-          (getter, ordinal) => new Fixed(avroType, getter.getBinary(ordinal))
+          val size = avroType.getFixedSize()
+          (getter, ordinal) =>
+            val data: Array[Byte] = getter.getBinary(ordinal)
+            if (data.length != size) {
+              val byteString1 = if (data.length > 1) "bytes" else "byte"
+              val byteString2 = if (size > 1) "bytes" else "byte"
+              throw new IncompatibleSchemaException(
+                s"Cannot write ${data.length} $byteString1 of binary data into " +
+                  s"FIXED Type with size of $size $byteString2")
+            }
+            new Fixed(avroType, data)
         case _ =>
           (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
       }
