@@ -312,7 +312,7 @@ trait ProgressReporter extends Logging {
       // DataSourceV2ScanExec records the number of rows it has read using SQLMetrics. However,
       // just collecting all DataSourceV2ScanExec nodes and getting the metric is not correct as
       // a DataSourceV2ScanExec instance may be referred to in the execution plan from two (or
-      // even multiple times) points and considering it twice will leads to double counting. We
+      // even multiple times) points and considering it twice will lead to double counting. We
       // can't dedup them using their hashcode either because two different instances of
       // DataSourceV2ScanExec can have the same hashcode but account for separate sets of
       // records read, and deduping them to consider only one of them would be undercounting the
