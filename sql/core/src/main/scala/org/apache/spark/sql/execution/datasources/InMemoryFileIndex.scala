@@ -162,7 +162,7 @@ object InMemoryFileIndex extends Logging {
    *
    * @return for each input path, the set of discovered files for the path
    */
-  private def bulkListLeafFiles(
+  private[sql] def bulkListLeafFiles(
       paths: Seq[Path],
       hadoopConf: Configuration,
       filter: PathFilter,
