@@ -3416,7 +3416,7 @@ case class ArrayDistinct(child: Expression)
   }
 
   @transient protected lazy val (hsPostFix, hsTypeName) = {
-    val ptName = CodeGenerator.primitiveTypeName (elementType)
+    val ptName = CodeGenerator.primitiveTypeName(elementType)
     elementType match {
       // we cast byte/short to int when writing to the hash set.
       case ByteType | ShortType | IntegerType => ("$mcI$sp", "Int")
@@ -3510,25 +3510,16 @@ case class ArrayDistinct(child: Expression)
     """.stripMargin
   }
 
-  private def setNotNullValue(
-      distinctArray: String,
-      pos: String,
-      getValue1: String,
-      primitiveValueTypeName: String): String = {
-    s"$distinctArray.set$primitiveValueTypeName($pos, $getValue1)"
-  }
-
-  private def setValueForFastEval(
+  private def setValue(
       hs: String,
       distinctArray: String,
       pos: String,
       getValue1: String,
       primitiveValueTypeName: String): String = {
-    val setValue = setNotNullValue(distinctArray, pos, getValue1, primitiveValueTypeName)
     s"""
        |if (!($hs.contains$hsPostFix($hsValueCast$getValue1))) {
        |  $hs.add$hsPostFix($hsValueCast$getValue1);
-       |  $setValue;
+       |  $distinctArray.set$primitiveValueTypeName($pos, $getValue1);
        |  $pos = $pos + 1;
        |}
     """.stripMargin
@@ -3547,10 +3538,8 @@ case class ArrayDistinct(child: Expression)
     val hs = ctx.freshName("hs")
     val openHashSet = classOf[OpenHashSet[_]].getName
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
-    val setNullForPrimitive = setNull(foundNullElement, distinctArray, pos)
     val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
-    val setValueForFast =
-      setValueForFastEval(hs, distinctArray, pos, getValue1, primitiveValueTypeName)
+
     s"""
        |${ctx.createUnsafeArray(distinctArray, size, elementType, s" $prettyName failed.")}
        |int $pos = 0;
@@ -3558,9 +3547,9 @@ case class ArrayDistinct(child: Expression)
        |$openHashSet $hs = new $openHashSet($classTag);
        |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
        |  if ($inputArray.isNullAt($i)) {
-       |    $setNullForPrimitive;
+       |    ${setNull(foundNullElement, distinctArray, pos)}
        |  } else {
-       |    $setValueForFast;
+       |    ${setValue(hs, distinctArray, pos, getValue1, primitiveValueTypeName)}
        |  }
        |}
        |${ev.value} = $distinctArray;
