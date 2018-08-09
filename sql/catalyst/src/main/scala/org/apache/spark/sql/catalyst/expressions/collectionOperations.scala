@@ -3472,7 +3472,7 @@ case class ArrayDistinct(child: Expression)
         val openHashSet = classOf[OpenHashSet[_]].getName
         val hs = ctx.freshName("hs")
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
-        val getValue1 = CodeGenerator.getValue(array, elementType, i)
+        val getValue = CodeGenerator.getValue(array, elementType, i)
         s"""
            |int $sizeOfDistinctArray = 0;
            |boolean $foundNullElement = false;
@@ -3481,7 +3481,7 @@ case class ArrayDistinct(child: Expression)
            |  if ($array.isNullAt($i)) {
            |    $foundNullElement = true;
            |  } else {
-           |    $hs.add$hsPostFix($hsValueCast$getValue1);
+           |    $hs.add$hsPostFix($hsValueCast$getValue);
            |  }
            |}
            |$sizeOfDistinctArray = $hs.size() + ($foundNullElement ? 1 : 0);
