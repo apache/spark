@@ -772,6 +772,15 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       checkAnswer(df, spark.read.format("avro").load(tempSaveDir))
       checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
+
+      // Writing df containing data not in the enum will throw an exception
+      intercept[SparkException] {
+        spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+          Row("SPADES"), Row("NOT-IN-ENUM"), Row("HEARTS"), Row("DIAMONDS"))),
+          StructType(Seq(StructField("Suit", StringType, true))))
+          .write.format("avro").option("avroSchema", avroSchema)
+          .save(s"$tempDir/${UUID.randomUUID()}")
+      }
     }
   }
 
@@ -809,12 +818,81 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
 
       // Writing df containing nulls without using avro union type will
-      // throw exception as avro uses union type to handle null.
+      // throw an exception as avro uses union type to handle null.
       val message = intercept[SparkException] {
         dfWithNull.write.format("avro")
           .option("avroSchema", avroSchema).save(s"$tempDir/${UUID.randomUUID()}")
       }.getCause.getMessage
       assert(message.contains("org.apache.avro.AvroRuntimeException: Not a union:"))
+
+      // Writing df containing data not in the enum will throw an exception
+      intercept[SparkException] {
+        spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+          Row("SPADES"), Row("NOT-IN-ENUM"), Row("HEARTS"), Row("DIAMONDS"))),
+          StructType(Seq(StructField("Suit", StringType, false))))
+          .write.format("avro").option("avroSchema", avroSchema)
+          .save(s"$tempDir/${UUID.randomUUID()}")
+      }
+    }
+  }
+
+  test("support user provided avro schema for writing nullable fixed type") {
+    withTempPath { tempDir =>
+      val avroSchema =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [{
+          |    "name": "fixed2",
+          |    "type": [{ "type": "fixed",
+          |               "size": 2,
+          |               "name": "fixed2"
+          |            }, "null"]
+          |  }]
+          |}
+        """.stripMargin
+
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+        Row(Array(192, 168).map(_.toByte)), Row(null))),
+        StructType(Seq(StructField("fixed2", BinaryType, true))))
+
+      val tempSaveDir = s"$tempDir/save/"
+
+      df.write.format("avro").option("avroSchema", avroSchema).save(tempSaveDir)
+
+      checkAnswer(df, spark.read.format("avro").load(tempSaveDir))
+      checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
+    }
+  }
+
+  test("support user provided avro schema for writing non-nullable fixed type") {
+    withTempPath { tempDir =>
+      val avroSchema =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [{
+          |    "name": "fixed2",
+          |    "type": { "type": "fixed",
+          |               "size": 2,
+          |               "name": "fixed2"
+          |            }
+          |  }]
+          |}
+        """.stripMargin
+
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+        Row(Array(192, 168).map(_.toByte)), Row(Array(1, 1).map(_.toByte)))),
+        StructType(Seq(StructField("fixed2", BinaryType, false))))
+
+      val tempSaveDir = s"$tempDir/save/"
+
+      df.write.format("avro").option("avroSchema", avroSchema).save(tempSaveDir)
+
+      checkAnswer(df, spark.read.format("avro").load(tempSaveDir))
+      checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
     }
   }
 
@@ -981,13 +1059,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     withTempPath { dir =>
       val writeDf = spark.createDataFrame(List(NestedTop(1, NestedMiddle(2, NestedBottom(3, "1")))))
       writeDf.write.format("avro").save(dir.toString)
-      val file = new File(dir.toString)
-        .listFiles()
-        .filter(_.isFile)
-        .filter(_.getName.endsWith("avro"))
-        .head
-      val reader = new DataFileReader(file, new GenericDatumReader[Any]())
-      val schema = reader.getSchema.toString()
+      val schema = getAvroSchemaStringFromFiles(dir.toString)
       assert(schema.contains("\"namespace\":\"topLevelRecord\""))
       assert(schema.contains("\"namespace\":\"topLevelRecord.data\""))
       assert(schema.contains("\"namespace\":\"topLevelRecord.data.data\""))
