@@ -813,8 +813,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       val tempSaveDir = s"$tempDir/save1/"
 
-      df.write.format("avro")
-        .option("avroSchema", avroSchema).save(tempSaveDir)
+      df.write.format("avro").option("avroSchema", avroSchema).save(tempSaveDir)
 
       checkAnswer(df, spark.read.format("avro").load(tempSaveDir))
       checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
