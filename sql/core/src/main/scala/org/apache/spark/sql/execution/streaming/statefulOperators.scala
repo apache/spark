@@ -166,13 +166,13 @@ trait WatermarkSupport extends UnaryExecNode {
     }
   }
 
-  protected def removeKeysOlderThanWatermark(storeManager: StreamingAggregationStateManager,
-                                             store: StateStore)
-    : Unit = {
+  protected def removeKeysOlderThanWatermark(
+      storeManager: StreamingAggregationStateManager,
+      store: StateStore): Unit = {
     if (watermarkPredicateForKeys.nonEmpty) {
       storeManager.keys(store).foreach { keyRow =>
         if (watermarkPredicateForKeys.get.eval(keyRow)) {
-          store.remove(keyRow)
+          storeManager.remove(store, keyRow)
         }
       }
     }
@@ -234,11 +234,10 @@ case class StateStoreRestoreExec(
           // the `HashAggregateExec` will output a 0 value for the partial merge. We need to
           // restore the value, so that we don't overwrite our state with a 0 value, but rather
           // merge the 0 with existing state.
-          // In this case the value should represent origin row, so no need to restore.
           store.iterator().map(_.value)
         } else {
           iter.flatMap { row =>
-            val key = stateManager.getKey(row)
+            val key = stateManager.getKey(row.asInstanceOf[UnsafeRow])
             val restoredRow = stateManager.get(store, key)
             numOutputRows += 1
             Option(restoredRow).toSeq :+ row
@@ -381,7 +380,9 @@ case class StateStoreSaveExec(
                 allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
 
                 // Remove old aggregates if watermark specified
-                allRemovalsTimeMs += timeTakenMs { removeKeysOlderThanWatermark(store) }
+                allRemovalsTimeMs += timeTakenMs {
+                  removeKeysOlderThanWatermark(stateManager, store)
+                }
                 commitTimeMs += timeTakenMs { stateManager.commit(store) }
                 setStoreMetrics(store)
               }

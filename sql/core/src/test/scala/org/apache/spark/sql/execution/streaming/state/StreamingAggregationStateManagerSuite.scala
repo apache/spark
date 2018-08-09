@@ -65,29 +65,24 @@ class StreamingAggregationStateManagerSuite extends StreamTest {
   // ============================ StateManagerImplV1 ============================
 
   test("StateManager v1 - get, put, iter") {
-    val stateManager = newStateManager(testKeyAttributes, testOutputAttributes, 1)
+    val stateManager = StreamingAggregationStateManager.createStateManager(testKeyAttributes,
+      testOutputAttributes, 1)
 
     // in V1, input row is stored as value
     testGetPutIterOnStateManager(stateManager, testOutputSchema, testRow,
-      expectedTestKeyRow, testRow)
+      expectedTestKeyRow, expectedStateValue = testRow)
   }
 
   // ============================ StateManagerImplV2 ============================
   test("StateManager v2 - get, put, iter") {
-    val stateManager = newStateManager(testKeyAttributes, testOutputAttributes, 2)
+    val stateManager = StreamingAggregationStateManager.createStateManager(testKeyAttributes,
+      testOutputAttributes, 2)
 
     // in V2, row for values itself (excluding keys from input row) is stored as value
     // so that stored value doesn't have key part, but state manager V2 will provide same output
     // as V1 when getting row for key
     testGetPutIterOnStateManager(stateManager, expectedTestValuesSchema, testRow,
       expectedTestKeyRow, expectedTestValueRowForV2)
-  }
-
-  private def newStateManager(
-      keysAttributes: Seq[Attribute],
-      inputRowAttributes: Seq[Attribute],
-      version: Int): StreamingAggregationStateManager = {
-    StreamingAggregationStateManager.createStateManager(keysAttributes, inputRowAttributes, version)
   }
 
   private def testGetPutIterOnStateManager(
@@ -128,5 +123,4 @@ class StreamingAggregationStateManagerSuite extends StreamTest {
     // state manager should return row which is same as input row regardless of format version
     assert(inputRow === stateManager.get(memoryStateStore, keyRow))
   }
-
 }
