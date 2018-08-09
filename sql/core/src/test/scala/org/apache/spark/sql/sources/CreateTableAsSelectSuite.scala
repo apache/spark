@@ -236,7 +236,7 @@ class CreateTableAsSelectSuite
              """.stripMargin
           )
         }.getMessage
-        assert(e.contains("Number of buckets should be greater than 0 but less than 100000"))
+        assert(e.contains("Number of buckets should be greater than 0 but less than"))
       })
     }
   }
