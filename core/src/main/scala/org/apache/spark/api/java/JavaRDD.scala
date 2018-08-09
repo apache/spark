@@ -21,7 +21,6 @@ import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.apache.spark._
-import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.rdd.RDD
@@ -59,14 +58,6 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
    * @param blocking Whether to block until all blocks are deleted.
    */
   def unpersist(blocking: Boolean): JavaRDD[T] = wrapRDD(rdd.unpersist(blocking))
-
-  /**
-   * :: Experimental ::
-   * Indicates that Spark must launch the tasks together for the current stage.
-   */
-  @Experimental
-  @Since("2.4.0")
-  def barrier(): JavaRDDBarrier[T] = new JavaRDDBarrier[T](this)
 
   // Transformations (return a new RDD)
 
@@ -214,12 +205,6 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
     implicit val ctag: ClassTag[S] = fakeClassTag
     wrapRDD(rdd.sortBy(fn, ascending, numPartitions))
   }
-
-  /**
-   * Whether the JavaRDD is in a barrier stage. Spark must launch all the tasks at the same time
-   * for a barrier stage.
-   */
-  private[spark] def isBarrier(): Boolean = rdd.isBarrier()
 
 }
 

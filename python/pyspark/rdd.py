@@ -2408,7 +2408,11 @@ class RDD(object):
 
     def barrier(self):
         """
+        .. note:: Experimental
+
         Indicates that Spark must launch the tasks together for the current stage.
+
+        .. versionadded:: 2.4.0
         """
         return RDDBarrier(self)
 
@@ -2416,7 +2420,7 @@ class RDD(object):
         """
         Whether this RDD is in a barrier stage.
         """
-        return self._jrdd.isBarrier()
+        return self._jrdd.rdd().isBarrier()
 
 
 def _prepare_for_python_RDD(sc, command):
@@ -2448,6 +2452,8 @@ class RDDBarrier(object):
 
     An RDDBarrier turns an RDD into a barrier RDD, which forces Spark to launch tasks of the stage
     contains this RDD together.
+
+    .. versionadded:: 2.4.0
     """
 
     def __init__(self, rdd):
@@ -2456,12 +2462,17 @@ class RDDBarrier(object):
 
     def mapPartitions(self, f, preservesPartitioning=False):
         """
+        .. note:: Experimental
+
         Return a new RDD by applying a function to each partition of this RDD.
+
+        .. versionadded:: 2.4.0
         """
         def func(s, iterator):
             return f(iterator)
-        jrdd = self._jrdd.barrier().mapPartitions(f, preservesPartitioning)
-        return RDD(jrdd, self.rdd.ctx, self.rdd._jrdd_deserializer)
+        jBarrierRdd = self._jrdd.rdd().barrier().toJavaRDD()
+        pyBarrierRdd = RDD(jBarrierRdd, self.rdd.ctx, self.rdd._jrdd_deserializer)
+        return pyBarrierRdd.mapPartitions(f, preservesPartitioning)
 
 
 class PipelinedRDD(RDD):
