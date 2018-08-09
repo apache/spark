@@ -206,7 +206,11 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "expr1 _FUNC_(expr2, expr3, ...) - Returns true if `expr` equals to any valN.",
+  usage = """
+    expr1 _FUNC_(expr2, expr3, ...) - Returns true if `expr` equals to any valN. Otherwise, if
+      spark.sql.legacy.inOperator.falseForNullField is false and any of the elements or fields of
+      the elements is null it returns null, else it returns false.
+  """,
   arguments = """
     Arguments:
       * expr1, expr2, expr3, ... - the arguments must be same type.
