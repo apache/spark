@@ -325,7 +325,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     hiveVariables.asScala.foreach(kv => SparkSQLEnv.sqlContext.conf.setConfString(kv._1, kv._2))
   }
 
-  def printMasterAndAppId = {
+  def printMasterAndAppId(): Unit = {
     val master = SparkSQLEnv.sparkContext.master
     val appId = SparkSQLEnv.sparkContext.applicationId
     console.printInfo(s"Spark master: $master, Application Id: $appId")
