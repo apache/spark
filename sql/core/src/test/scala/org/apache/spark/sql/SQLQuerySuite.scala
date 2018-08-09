@@ -632,6 +632,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("current_date with case sensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql("SELECT DATEDIFF(CURRENT_DATE, current_date)"),
+        Row(0))
+    }
+  }
+
   test("inner join where, one match per row") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       checkAnswer(
