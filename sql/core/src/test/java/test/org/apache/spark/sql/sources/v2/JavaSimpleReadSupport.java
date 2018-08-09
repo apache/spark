@@ -46,7 +46,7 @@ class JavaNoopScanConfigBuilder implements ScanConfigBuilder, ScanConfig {
 
   private StructType schema;
 
-  public JavaNoopScanConfigBuilder(StructType schema) {
+  JavaNoopScanConfigBuilder(StructType schema) {
     this.schema = schema;
   }
 

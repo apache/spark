@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.StructType;
  *
  * For APIs that take a {@link ScanConfig} as input, like
  * {@link ReadSupport#planInputPartitions(ScanConfig)} and
- * {@link ReadSupport#createReaderFactory(ScanConfig)}, implementations mostly need to cast the
+ * {@link BatchReadSupport#createReaderFactory(ScanConfig)}, implementations mostly need to cast the
  * input {@link ScanConfig} to the concrete {@link ScanConfig} class of the data source.
  */
 @InterfaceStability.Evolving
