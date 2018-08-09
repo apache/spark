@@ -2157,7 +2157,7 @@ class Analyzer(
           // trust the `nullable` information.
           // (cls, expr) => cls.isPrimitive && expr.nullable
           val needsNullCheck = (cls: Class[_], expr: Expression) =>
-            cls.isPrimitive && !expr.isInstanceOf[KnowNotNull]
+            cls.isPrimitive && !expr.isInstanceOf[KnownNotNull]
           val inputsNullCheck = parameterTypes.zip(inputs)
             .filter { case (cls, expr) => needsNullCheck(cls, expr) }
             .map { case (_, expr) => IsNull(expr) }
@@ -2167,7 +2167,7 @@ class Analyzer(
           // branch of `If` will be called if any of these checked inputs is null. Thus we can
           // prevent this rule from being applied repeatedly.
           val newInputs = parameterTypes.zip(inputs).map{ case (cls, expr) =>
-            if (needsNullCheck(cls, expr)) KnowNotNull(expr) else expr }
+            if (needsNullCheck(cls, expr)) KnownNotNull(expr) else expr }
           inputsNullCheck
             .map(If(_, Literal.create(null, udf.dataType), udf.copy(children = newInputs)))
             .getOrElse(udf)
