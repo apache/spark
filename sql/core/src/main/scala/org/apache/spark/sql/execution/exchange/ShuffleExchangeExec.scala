@@ -299,7 +299,7 @@ object ShuffleExchangeExec {
         part match {
           case partitioner: RangePartitioner[InternalRow @unchecked, _]
             if partitioner.getSampledArray != null =>
-            sparkContext.parallelize(partitioner.getSampledArray.toSeq)
+            sparkContext.parallelize(partitioner.getSampledArray.toSeq, rdd.getNumPartitions)
           case _ => rdd
         }
       }
