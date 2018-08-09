@@ -444,6 +444,7 @@ object FunctionRegistry {
     expression[ArrayTransform]("transform"),
     expression[MapFilter]("map_filter"),
     expression[ArrayFilter]("filter"),
+    expression[ArrayExists]("exists"),
     expression[ArrayAggregate]("aggregate"),
     CreateStruct.registryEntry,
 
