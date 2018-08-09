@@ -466,10 +466,10 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 
   @transient lazy val functionForEval: Expression = functionsForEval.head
 
-  @transient lazy val (leftKeyType, leftValueType, _) =
+  @transient lazy val (leftKeyType, leftValueType, leftValueContainsNull) =
     HigherOrderFunction.mapKeyValueArgumentType(left.dataType)
 
-  @transient lazy val (rightKeyType, rightValueType, _) =
+  @transient lazy val (rightKeyType, rightValueType, rightValueContainsNull) =
     HigherOrderFunction.mapKeyValueArgumentType(right.dataType)
 
   @transient lazy val keyType =
@@ -490,7 +490,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
       case (MapType(k1, _, _), MapType(k2, _, _)) if k1.sameType(k2) =>
         TypeUtils.checkForOrderingExpr(k1, s"function $prettyName")
       case _ => TypeCheckResult.TypeCheckFailure(s"The input to function $prettyName should have " +
-        s"been two ${MapType.simpleString}s with the same key type, but it's " +
+        s"been two ${MapType.simpleString}s with compatible key types, but it's " +
         s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
     }
   }

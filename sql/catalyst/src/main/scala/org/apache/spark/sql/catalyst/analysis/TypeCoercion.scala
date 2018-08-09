@@ -602,6 +602,20 @@ object TypeCoercion {
 
         CreateMap(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
 
+      case m @ MapZipWith(left, right, function) if MapType.acceptsType(left.dataType) &&
+          MapType.acceptsType(right.dataType) && !m.leftKeyType.sameType(m.rightKeyType) =>
+        findWiderTypeForTwo(m.leftKeyType, m.rightKeyType) match {
+          case Some(finalKeyType) =>
+            val newLeft = castIfNotSameType(
+              left,
+              MapType(finalKeyType, m.leftValueType, m.leftValueContainsNull))
+            val newRight = castIfNotSameType(
+              right,
+              MapType(finalKeyType, m.rightValueType, m.rightValueContainsNull))
+            MapZipWith(newLeft, newRight, function)
+          case None => m
+        }
+
       // Promote SUM, SUM DISTINCT and AVERAGE to largest types to prevent overflows.
       case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
       case Sum(e @ IntegralType()) if e.dataType != LongType => Sum(Cast(e, LongType))
