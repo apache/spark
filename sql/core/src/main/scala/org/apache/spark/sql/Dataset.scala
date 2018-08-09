@@ -280,6 +280,7 @@ class Dataset[T] private[sql](
     // We set a minimum column width at '3'
     val minimumColWidth = 3
 
+    val regex = """[^\x00-\xff¡±¡°]""".r
     if (!vertical) {
       // Initialise the width of each column to a minimum value
       val colWidths = Array.fill(numCols)(minimumColWidth)
@@ -287,7 +288,7 @@ class Dataset[T] private[sql](
       // Compute the width of each column
       for (row <- rows) {
         for ((cell, i) <- row.zipWithIndex) {
-          colWidths(i) = math.max(colWidths(i), cell.length)
+          colWidths(i) = math.max(colWidths(i), cell.length + regex.findAllIn(cell).size)
         }
       }
 
@@ -297,9 +298,9 @@ class Dataset[T] private[sql](
       // column names
       rows.head.zipWithIndex.map { case (cell, i) =>
         if (truncate > 0) {
-          StringUtils.leftPad(cell, colWidths(i))
+          StringUtils.leftPad(cell, colWidths(i) - regex.findAllIn(cell).size)
         } else {
-          StringUtils.rightPad(cell, colWidths(i))
+          StringUtils.rightPad(cell, colWidths(i) - regex.findAllIn(cell).size)
         }
       }.addString(sb, "|", "|", "|\n")
 
@@ -309,9 +310,9 @@ class Dataset[T] private[sql](
       rows.tail.foreach {
         _.zipWithIndex.map { case (cell, i) =>
           if (truncate > 0) {
-            StringUtils.leftPad(cell.toString, colWidths(i))
+            StringUtils.leftPad(cell.toString, colWidths(i) - regex.findAllIn(cell).size)
           } else {
-            StringUtils.rightPad(cell.toString, colWidths(i))
+            StringUtils.rightPad(cell.toString, colWidths(i) - regex.findAllIn(cell).size)
           }
         }.addString(sb, "|", "|", "|\n")
       }
@@ -324,12 +325,10 @@ class Dataset[T] private[sql](
 
       // Compute the width of field name and data columns
       val fieldNameColWidth = fieldNames.foldLeft(minimumColWidth) { case (curMax, fieldName) =>
-        math.max(curMax, fieldName.length)
+        math.max(curMax, fieldName.length + regex.findAllIn(fieldName).size)
       }
       val dataColWidth = dataRows.foldLeft(minimumColWidth) { case (curMax, row) =>
-        math.max(curMax, row.map(_.length).reduceLeftOption[Int] { case (cellMax, cell) =>
-          math.max(cellMax, cell)
-        }.getOrElse(0))
+        math.max(curMax, row.map(cell => cell.length + regex.findAllIn(cell).size).max)
       }
 
       dataRows.zipWithIndex.foreach { case (row, i) =>
@@ -338,8 +337,8 @@ class Dataset[T] private[sql](
           s"-RECORD $i", fieldNameColWidth + dataColWidth + 5, "-")
         sb.append(rowHeader).append("\n")
         row.zipWithIndex.map { case (cell, j) =>
-          val fieldName = StringUtils.rightPad(fieldNames(j), fieldNameColWidth)
-          val data = StringUtils.rightPad(cell, dataColWidth)
+          val fieldName = StringUtils.rightPad(fieldNames(j), fieldNameColWidth - regex.findAllIn(fieldNames(j)).size)
+          val data = StringUtils.rightPad(cell, dataColWidth - regex.findAllIn(cell).size)
           s" $fieldName | $data "
         }.addString(sb, "", "\n", "\n")
       }
