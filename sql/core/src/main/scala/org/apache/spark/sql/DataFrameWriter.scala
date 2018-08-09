@@ -548,8 +548,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <ul>
    * <li>`compression` (default is the value specified in `spark.sql.parquet.compression.codec`):
    * compression codec to use when saving to file. This can be one of the known case-insensitive
-   * shorten names(`none`, `snappy`, `gzip`, and `lzo`). This will override
-   * `spark.sql.parquet.compression.codec`.</li>
+   * shorten names(`none`, `uncompressed`, `snappy`, `gzip`, `lzo`, `brotli`, `lz4`, and `zstd`).
+   * This will override `spark.sql.parquet.compression.codec`.</li>
    * </ul>
    *
    * @since 1.4.0
