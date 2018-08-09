@@ -98,7 +98,6 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
                 "Cannot write \"" + data + "\" since it's not defined in enum \"" +
                   enumSymbols.mkString("\", \""))
             }
-            require(enumSymbols.contains(data))
             new EnumSymbol(avroType, data)
         case _ =>
           (getter, ordinal) => new Utf8(getter.getUTF8String(ordinal).getBytes)
@@ -109,11 +108,10 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
           (getter, ordinal) =>
             val data: Array[Byte] = getter.getBinary(ordinal)
             if (data.length != size) {
-              val byteString1 = if (data.length > 1) "bytes" else "byte"
-              val byteString2 = if (size > 1) "bytes" else "byte"
               throw new IncompatibleSchemaException(
-                s"Cannot write ${data.length} $byteString1 of binary data into " +
-                  s"FIXED Type with size of $size $byteString2")
+                s"Cannot write ${data.length} ${if (data.length > 1) "bytes" else "byte"} of " +
+                  s"binary data into FIXED Type with size of " +
+                  s"$size ${if (size > 1) "bytes" else "byte"}")
             }
             new Fixed(avroType, data)
         case _ =>
