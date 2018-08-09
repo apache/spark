@@ -207,6 +207,17 @@ class HeartbeatReceiverSuite
     assert(fakeClusterManager.getExecutorIdsToKill === Set(executorId1, executorId2))
   }
 
+  test("report executor webUrl") {
+    val webUrl1 = "http://hostname1:12345"
+    val webUrl2 = "http://hostname2:12345"
+    heartbeatReceiverRef.askSync[Boolean](
+      ReportExecutorWebUrl(executorId1, webUrl1))
+    heartbeatReceiverRef.askSync[Boolean](
+      ReportExecutorWebUrl(executorId2, webUrl2))
+    assert(sc.executorWebUrl(executorId1).get === webUrl1)
+    assert(sc.executorWebUrl(executorId2).get === webUrl2)
+  }
+
   /** Manually send a heartbeat and return the response. */
   private def triggerHeartbeat(
       executorId: String,

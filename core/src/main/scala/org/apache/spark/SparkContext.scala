@@ -276,6 +276,10 @@ class SparkContext(config: SparkConf) extends Logging {
 
   def uiWebUrl: Option[String] = _ui.map(_.webUrl)
 
+  private[spark] val executorToWebUrl = HashMap[String, String]()
+
+  def executorWebUrl(execId: String): Option[String] = executorToWebUrl.get(execId)
+
   /**
    * A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse.
    *

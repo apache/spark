@@ -28,6 +28,7 @@ import scala.collection.mutable.Map
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
+import org.eclipse.jetty.servlet.ServletContextHandler
 import org.mockito.ArgumentCaptor
 import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito.{inOrder, verify, when}
@@ -41,11 +42,11 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.memory.MemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.RDD
-import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{FakeTask, ResultTask, TaskDescription}
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.storage.{BlockManager, BlockManagerId}
 import org.apache.spark.util.UninterruptibleThread
 
 class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar with Eventually {
@@ -249,6 +250,33 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
         assert(ef.exception.get.getMessage() === NonDeserializableTask.errorMsg)
       case _ =>
         fail(s"unexpected failure type: $failReason")
+    }
+  }
+
+  test("test executor web ui") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("executor web ui test")
+      .set("spark.ui.enabled", "false")
+      .set("spark.executor.ui.enabled", "true")
+      .set("spark.app.id", "app1")
+    conf.getenv("SPARK_LOCAL_IP")
+    val serializer = new JavaSerializer(conf)
+    val env = createMockEnv(conf, serializer)
+    when(env.securityManager).thenReturn(new SecurityManager(conf))
+    when(env.blockManager).thenReturn(mock[BlockManager])
+    when(env.rpcEnv).thenReturn(mock[RpcEnv])
+    when(env.rpcEnv.setupEndpointRef(any(), any())).thenReturn(mock[RpcEndpointRef])
+    when(env.metricsSystem.getServletHandlers).thenReturn(Array[ServletContextHandler]())
+    var executor: Executor = null
+    try {
+      executor = new Executor("id", "localhost", env, userClassPath = Nil, isLocal = false,
+        uncaughtExceptionHandler = mock[UncaughtExceptionHandler])
+      assert(executor.webUi.webUrl.startsWith("http://"))
+    } finally {
+      if (executor != null) {
+        executor.stop()
+      }
     }
   }
 

@@ -60,6 +60,7 @@
 #    5. The MetricsServlet sink is added by default as a sink in the master,
 #    worker and driver, and you can send HTTP requests to the "/metrics/json"
 #    endpoint to get a snapshot of all the registered metrics in JSON format.
+#    For executor, it added when spark.executor.ui.enabled is set to true.
 #    For master, requests to the "/metrics/master/json" and
 #    "/metrics/applications/json" endpoints can be sent separately to get
 #    metrics snapshots of the master instance and applications. This
