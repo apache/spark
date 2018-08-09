@@ -252,7 +252,7 @@ class CreateTableAsSelectSuite
 
     val maxNrBuckets: Int = 200000
     val catalog = spark.sessionState.catalog
-    withSQLConf("spark.sql.bucketing.maxBuckets" -> maxNrBuckets.toString) {
+    withSQLConf("spark.sql.sources.bucketing.maxBuckets" -> maxNrBuckets.toString) {
 
       // Within the new limit
       Seq(100001, maxNrBuckets).foreach(numBuckets => {
