@@ -2172,7 +2172,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       "been two maps with the same key type"))
 
     val ex4 = intercept[AnalysisException] {
-      df.selectExpr("map_zip_with(mmi,mmi, (x, y, z) -> x)")
+      df.selectExpr("map_zip_with(mmi, mmi, (x, y, z) -> x)")
     }
     assert(ex4.getMessage.contains("function map_zip_with does not support ordering on type map"))
   }

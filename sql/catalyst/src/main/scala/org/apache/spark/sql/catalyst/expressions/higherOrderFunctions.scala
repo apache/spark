@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
@@ -466,11 +466,14 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 
   @transient lazy val functionForEval: Expression = functionsForEval.head
 
-  @transient lazy val (keyType, leftValueType, _) =
+  @transient lazy val (leftKeyType, leftValueType, _) =
     HigherOrderFunction.mapKeyValueArgumentType(left.dataType)
 
-  @transient lazy val (_, rightValueType, _) =
+  @transient lazy val (rightKeyType, rightValueType, _) =
     HigherOrderFunction.mapKeyValueArgumentType(right.dataType)
+
+  @transient lazy val keyType =
+    TypeCoercion.findTightestCommonType(leftKeyType, rightKeyType).getOrElse(NullType)
 
   @transient lazy val ordering = TypeUtils.getInterpretedOrdering(keyType)
 
@@ -523,8 +526,13 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     case _ => false
   }
 
+  /**
+   * The function accepts two key arrays and returns a collection of keys with indexes
+   * to value arrays. Indexes are represented as an array of two items. This is a small
+   * optimization leveraging mutability of arrays.
+   */
   @transient private lazy val getKeysWithValueIndexes:
-      (ArrayData, ArrayData) => mutable.Iterable[(Any, (Option[Int], Option[Int]))] = {
+      (ArrayData, ArrayData) => mutable.Iterable[(Any, Array[Option[Int]])] = {
     if (keyTypeSupportsEquals) {
       getKeysWithIndexesFast
     } else {
@@ -541,59 +549,53 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   }
 
   private def getKeysWithIndexesFast(keys1: ArrayData, keys2: ArrayData) = {
-    val hashMap = new mutable.OpenHashMap[Any, (Option[Int], Option[Int])]
-    var i = 0
-    while (i < keys1.numElements) {
-      val key = keys1.get(i, keyType)
-      if(!hashMap.contains(key)) hashMap.put(key, (Some(i), None))
-      i += 1
-    }
-    i = 0
-    while (i < keys2.numElements) {
-      val key = keys2.get(i, keyType)
-      hashMap.get(key) match {
-        case Some((index1, index2)) =>
-          if (index2.isEmpty) hashMap.update(key, (index1, Some(i)))
-        case None =>
-          hashMap.put(key, (None, Some(i)))
+    val hashMap = new mutable.LinkedHashMap[Any, Array[Option[Int]]]
+    for((z, array) <- Array((0, keys1), (1, keys2))) {
+      var i = 0
+      while (i < array.numElements()) {
+        val key = array.get(i, keyType)
+        hashMap.get(key) match {
+          case Some(indexes) =>
+            if (indexes(z).isEmpty) {
+              indexes(z) = Some(i)
+            }
+          case None =>
+            val indexes = Array[Option[Int]](None, None)
+            indexes(z) = Some(i)
+            hashMap.put(key, indexes)
+        }
+        i += 1
       }
-      i += 1
     }
     hashMap
   }
 
   private def getKeysWithIndexesBruteForce(keys1: ArrayData, keys2: ArrayData) = {
-    val arrayBuffer = new mutable.ArrayBuffer[(Any, (Option[Int], Option[Int]))]
-    var i = 0
-    while (i < keys1.numElements) {
-      val key = keys1.get(i, keyType)
-      var found = false
-      var j = 0
-      while (!found && j < arrayBuffer.size) {
-        if (ordering.equiv(arrayBuffer(j)._1, key)) found = true
-        j += 1
-      }
-      if (!found) arrayBuffer += Tuple2(key, (Some(i), None))
-      i += 1
-    }
-    i = 0
-    while (i < keys2.numElements) {
-      val key = keys2.get(i, keyType)
-      var found = false
-      var j = 0
-      while (!found && j < arrayBuffer.size) {
-        val (bufferKey, (index1, index2)) = arrayBuffer(j)
-        if (ordering.equiv(bufferKey, key)) {
-          found = true
-          if(index2.isEmpty) arrayBuffer(j) = Tuple2(key, (index1, Some(i)))
+    val arrayBuffer = new mutable.ArrayBuffer[(Any, Array[Option[Int]])]
+    for((z, array) <- Array((0, keys1), (1, keys2))) {
+      var i = 0
+      while (i < array.numElements()) {
+        val key = array.get(i, keyType)
+        var found = false
+        var j = 0
+        while (!found && j < arrayBuffer.size) {
+          val (bufferKey, indexes) = arrayBuffer(j)
+          if (ordering.equiv(bufferKey, key)) {
+            found = true
+            if(indexes(z).isEmpty) {
+              indexes(z) = Some(i)
+            }
+          }
+          j += 1
         }
-        j += 1
+        if (!found) {
+          assertSizeOfArrayBuffer(arrayBuffer.size)
+          val indexes = Array[Option[Int]](None, None)
+          indexes(z) = Some(i)
+          arrayBuffer += Tuple2(key, indexes)
+        }
+        i += 1
       }
-      if (!found) {
-        assertSizeOfArrayBuffer(arrayBuffer.size)
-        arrayBuffer += Tuple2(key, (None, Some(i)))
-      }
-      i += 1
     }
     arrayBuffer
   }
@@ -608,7 +610,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     val valueData1 = mapData1.valueArray()
     val valueData2 = mapData2.valueArray()
     var i = 0
-    keysWithIndexes.foreach { case (key, (index1, index2)) =>
+    for ((key, Array(index1, index2)) <- keysWithIndexes) {
       val v1 = index1.map(valueData1.get(_, leftValueType)).getOrElse(null)
       val v2 = index2.map(valueData2.get(_, rightValueType)).getOrElse(null)
       keyVar.value.set(key)
