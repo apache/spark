@@ -1287,7 +1287,7 @@ true
 -- !query 152
 SELECT cast(1 as tinyint) in (cast(1 as tinyint), cast(1 as string)) FROM t
 -- !query 152 schema
-struct<(CAST(CAST(1 AS TINYINT) AS STRING) IN (CAST(CAST(1 AS TINYINT) AS STRING), CAST(CAST(1 AS STRING) AS STRING))):boolean>
+struct<(CAST(CAST(1 AS TINYINT) AS TINYINT) IN (CAST(CAST(1 AS TINYINT) AS TINYINT), CAST(CAST(1 AS STRING) AS TINYINT))):boolean>
 -- !query 152 output
 true
 
@@ -1387,7 +1387,7 @@ true
 -- !query 164
 SELECT cast(1 as smallint) in (cast(1 as smallint), cast(1 as string)) FROM t
 -- !query 164 schema
-struct<(CAST(CAST(1 AS SMALLINT) AS STRING) IN (CAST(CAST(1 AS SMALLINT) AS STRING), CAST(CAST(1 AS STRING) AS STRING))):boolean>
+struct<(CAST(CAST(1 AS SMALLINT) AS SMALLINT) IN (CAST(CAST(1 AS SMALLINT) AS SMALLINT), CAST(CAST(1 AS STRING) AS SMALLINT))):boolean>
 -- !query 164 output
 true
 
@@ -1487,7 +1487,7 @@ true
 -- !query 176
 SELECT cast(1 as int) in (cast(1 as int), cast(1 as string)) FROM t
 -- !query 176 schema
-struct<(CAST(CAST(1 AS INT) AS STRING) IN (CAST(CAST(1 AS INT) AS STRING), CAST(CAST(1 AS STRING) AS STRING))):boolean>
+struct<(CAST(CAST(1 AS INT) AS INT) IN (CAST(CAST(1 AS INT) AS INT), CAST(CAST(1 AS STRING) AS INT))):boolean>
 -- !query 176 output
 true
 
@@ -1587,7 +1587,7 @@ true
 -- !query 188
 SELECT cast(1 as bigint) in (cast(1 as bigint), cast(1 as string)) FROM t
 -- !query 188 schema
-struct<(CAST(CAST(1 AS BIGINT) AS STRING) IN (CAST(CAST(1 AS BIGINT) AS STRING), CAST(CAST(1 AS STRING) AS STRING))):boolean>
+struct<(CAST(CAST(1 AS BIGINT) AS BIGINT) IN (CAST(CAST(1 AS BIGINT) AS BIGINT), CAST(CAST(1 AS STRING) AS BIGINT))):boolean>
 -- !query 188 output
 true
 
@@ -1687,7 +1687,7 @@ true
 -- !query 200
 SELECT cast(1 as float) in (cast(1 as float), cast(1 as string)) FROM t
 -- !query 200 schema
-struct<(CAST(CAST(1 AS FLOAT) AS STRING) IN (CAST(CAST(1 AS FLOAT) AS STRING), CAST(CAST(1 AS STRING) AS STRING))):boolean>
+struct<(CAST(CAST(1 AS FLOAT) AS FLOAT) IN (CAST(CAST(1 AS FLOAT) AS FLOAT), CAST(CAST(1 AS STRING) AS FLOAT))):boolean>
 -- !query 200 output
 true
 
@@ -1787,7 +1787,7 @@ true
 -- !query 212
 SELECT cast(1 as double) in (cast(1 as double), cast(1 as string)) FROM t
 -- !query 212 schema
-struct<(CAST(CAST(1 AS DOUBLE) AS STRING) IN (CAST(CAST(1 AS DOUBLE) AS STRING), CAST(CAST(1 AS STRING) AS STRING))):boolean>
+struct<(CAST(CAST(1 AS DOUBLE) AS DOUBLE) IN (CAST(CAST(1 AS DOUBLE) AS DOUBLE), CAST(CAST(1 AS STRING) AS DOUBLE))):boolean>
 -- !query 212 output
 true
 
@@ -1887,7 +1887,7 @@ true
 -- !query 224
 SELECT cast(1 as decimal(10, 0)) in (cast(1 as decimal(10, 0)), cast(1 as string)) FROM t
 -- !query 224 schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS STRING) IN (CAST(CAST(1 AS DECIMAL(10,0)) AS STRING), CAST(CAST(1 AS STRING) AS STRING))):boolean>
+struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE) IN (CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE), CAST(CAST(1 AS STRING) AS DOUBLE))):boolean>
 -- !query 224 output
 true
 
@@ -1931,7 +1931,7 @@ cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST(1 AS DECIMAL(10,0)), CAST('20
 -- !query 229
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as tinyint)) FROM t
 -- !query 229 schema
-struct<(CAST(CAST(1 AS STRING) AS STRING) IN (CAST(CAST(1 AS STRING) AS STRING), CAST(CAST(1 AS TINYINT) AS STRING))):boolean>
+struct<(CAST(CAST(1 AS STRING) AS TINYINT) IN (CAST(CAST(1 AS STRING) AS TINYINT), CAST(CAST(1 AS TINYINT) AS TINYINT))):boolean>
 -- !query 229 output
 true
 
@@ -1939,7 +1939,7 @@ true
 -- !query 230
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as smallint)) FROM t
 -- !query 230 schema
-struct<(CAST(CAST(1 AS STRING) AS STRING) IN (CAST(CAST(1 AS STRING) AS STRING), CAST(CAST(1 AS SMALLINT) AS STRING))):boolean>
+struct<(CAST(CAST(1 AS STRING) AS SMALLINT) IN (CAST(CAST(1 AS STRING) AS SMALLINT), CAST(CAST(1 AS SMALLINT) AS SMALLINT))):boolean>
 -- !query 230 output
 true
 
@@ -1947,7 +1947,7 @@ true
 -- !query 231
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as int)) FROM t
 -- !query 231 schema
-struct<(CAST(CAST(1 AS STRING) AS STRING) IN (CAST(CAST(1 AS STRING) AS STRING), CAST(CAST(1 AS INT) AS STRING))):boolean>
+struct<(CAST(CAST(1 AS STRING) AS INT) IN (CAST(CAST(1 AS STRING) AS INT), CAST(CAST(1 AS INT) AS INT))):boolean>
 -- !query 231 output
 true
 
@@ -1955,7 +1955,7 @@ true
 -- !query 232
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as bigint)) FROM t
 -- !query 232 schema
-struct<(CAST(CAST(1 AS STRING) AS STRING) IN (CAST(CAST(1 AS STRING) AS STRING), CAST(CAST(1 AS BIGINT) AS STRING))):boolean>
+struct<(CAST(CAST(1 AS STRING) AS BIGINT) IN (CAST(CAST(1 AS STRING) AS BIGINT), CAST(CAST(1 AS BIGINT) AS BIGINT))):boolean>
 -- !query 232 output
 true
 
@@ -1963,7 +1963,7 @@ true
 -- !query 233
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as float)) FROM t
 -- !query 233 schema
-struct<(CAST(CAST(1 AS STRING) AS STRING) IN (CAST(CAST(1 AS STRING) AS STRING), CAST(CAST(1 AS FLOAT) AS STRING))):boolean>
+struct<(CAST(CAST(1 AS STRING) AS FLOAT) IN (CAST(CAST(1 AS STRING) AS FLOAT), CAST(CAST(1 AS FLOAT) AS FLOAT))):boolean>
 -- !query 233 output
 true
 
@@ -1971,7 +1971,7 @@ true
 -- !query 234
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as double)) FROM t
 -- !query 234 schema
-struct<(CAST(CAST(1 AS STRING) AS STRING) IN (CAST(CAST(1 AS STRING) AS STRING), CAST(CAST(1 AS DOUBLE) AS STRING))):boolean>
+struct<(CAST(CAST(1 AS STRING) AS DOUBLE) IN (CAST(CAST(1 AS STRING) AS DOUBLE), CAST(CAST(1 AS DOUBLE) AS DOUBLE))):boolean>
 -- !query 234 output
 true
 
@@ -1979,7 +1979,7 @@ true
 -- !query 235
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as decimal(10, 0))) FROM t
 -- !query 235 schema
-struct<(CAST(CAST(1 AS STRING) AS STRING) IN (CAST(CAST(1 AS STRING) AS STRING), CAST(CAST(1 AS DECIMAL(10,0)) AS STRING))):boolean>
+struct<(CAST(CAST(1 AS STRING) AS DOUBLE) IN (CAST(CAST(1 AS STRING) AS DOUBLE), CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE))):boolean>
 -- !query 235 output
 true
 
@@ -1995,19 +1995,17 @@ true
 -- !query 237
 SELECT cast(1 as string) in (cast(1 as string), cast('1' as binary)) FROM t
 -- !query 237 schema
-struct<>
+struct<(CAST(CAST(1 AS STRING) AS BINARY) IN (CAST(CAST(1 AS STRING) AS BINARY), CAST(CAST(1 AS BINARY) AS BINARY))):boolean>
 -- !query 237 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS STRING) IN (CAST(1 AS STRING), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: string != binary; line 1 pos 25
+true
 
 
 -- !query 238
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as boolean)) FROM t
 -- !query 238 schema
-struct<>
+struct<(CAST(CAST(1 AS STRING) AS BOOLEAN) IN (CAST(CAST(1 AS STRING) AS BOOLEAN), CAST(CAST(1 AS BOOLEAN) AS BOOLEAN))):boolean>
 -- !query 238 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS STRING) IN (CAST(1 AS STRING), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: string != boolean; line 1 pos 25
+true
 
 
 -- !query 239
@@ -2092,10 +2090,9 @@ cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS DECIMAL(
 -- !query 248
 SELECT cast('1' as binary) in (cast('1' as binary), cast(1 as string)) FROM t
 -- !query 248 schema
-struct<>
+struct<(CAST(CAST(1 AS BINARY) AS BINARY) IN (CAST(CAST(1 AS BINARY) AS BINARY), CAST(CAST(1 AS STRING) AS BINARY))):boolean>
 -- !query 248 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS STRING)))' due to data type mismatch: Arguments must be same type but were: binary != string; line 1 pos 27
+true
 
 
 -- !query 249
@@ -2199,10 +2196,9 @@ cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS DECIMA
 -- !query 260
 SELECT cast('1' as boolean) in (cast('1' as boolean), cast(1 as string)) FROM t
 -- !query 260 schema
-struct<>
+struct<(CAST(CAST(1 AS BOOLEAN) AS BOOLEAN) IN (CAST(CAST(1 AS BOOLEAN) AS BOOLEAN), CAST(CAST(1 AS STRING) AS BOOLEAN))):boolean>
 -- !query 260 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS STRING)))' due to data type mismatch: Arguments must be same type but were: boolean != string; line 1 pos 28
+true
 
 
 -- !query 261
