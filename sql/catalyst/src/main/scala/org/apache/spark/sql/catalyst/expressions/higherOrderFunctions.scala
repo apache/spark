@@ -357,6 +357,53 @@ case class ArrayFilter(
 }
 
 /**
+ * Tests whether a predicate holds for one or more elements in the array.
+ */
+@ExpressionDescription(usage =
+  "_FUNC_(expr, pred) - Tests whether a predicate holds for one or more elements in the array.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 0);
+       true
+  """,
+  since = "2.4.0")
+case class ArrayExists(
+    input: Expression,
+    function: Expression)
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+
+  override def nullable: Boolean = input.nullable
+
+  override def dataType: DataType = BooleanType
+
+  override def expectingFunctionType: AbstractDataType = BooleanType
+
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayExists = {
+    val elem = HigherOrderFunction.arrayArgumentType(input.dataType)
+    copy(function = f(function, elem :: Nil))
+  }
+
+  @transient lazy val LambdaFunction(_, Seq(elementVar: NamedLambdaVariable), _) = function
+
+  override def nullSafeEval(inputRow: InternalRow, value: Any): Any = {
+    val arr = value.asInstanceOf[ArrayData]
+    val f = functionForEval
+    var exists = false
+    var i = 0
+    while (i < arr.numElements && !exists) {
+      elementVar.value.set(arr.get(i, elementVar.dataType))
+      if (f.eval(inputRow).asInstanceOf[Boolean]) {
+        exists = true
+      }
+      i += 1
+    }
+    exists
+  }
+
+  override def prettyName: String = "exists"
+}
+
+/**
  * Applies a binary operator to a start value and all elements in the array.
  */
 @ExpressionDescription(
