@@ -222,9 +222,12 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     // Struct types:
+    val atomicAndComplexTypes = atomicTypes ++ atomicTypes.map { t =>
+      StructType(StructField("f1", t) :: StructField("f2", t) :: Nil)
+    }
     for (
-        colOneType <- atomicTypes;
-        colTwoType <- atomicTypes;
+        colOneType <- atomicAndComplexTypes;
+        colTwoType <- atomicAndComplexTypes;
         nullable <- Seq(true, false)) {
       val structType = StructType(
         StructField("a", colOneType) :: StructField("b", colTwoType) :: Nil)
