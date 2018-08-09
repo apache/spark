@@ -388,15 +388,16 @@ case class ArrayExists(
   override def nullSafeEval(inputRow: InternalRow, value: Any): Any = {
     val arr = value.asInstanceOf[ArrayData]
     val f = functionForEval
+    var exists = false
     var i = 0
-    while (i < arr.numElements) {
+    while (i < arr.numElements && !exists) {
       elementVar.value.set(arr.get(i, elementVar.dataType))
       if (f.eval(inputRow).asInstanceOf[Boolean]) {
-        return true
+        exists = true
       }
       i += 1
     }
-    false
+    exists
   }
 
   override def prettyName: String = "exists"
