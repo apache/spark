@@ -64,6 +64,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val structRowWriter = ctx.addMutableState(rowWriterClass, "rowWriter",
       v => s"$v = new $rowWriterClass($rowWriter, ${fieldEvals.length});")
     val previousCursor = ctx.freshName("previousCursor")
+    val structExpressions = writeExpressionsToBuffer(
+      ctx, tmpInput, fieldEvals, fieldTypeAndNullables.map(_._1), structRowWriter)
     s"""
        |final InternalRow $tmpInput = $input;
        |if ($tmpInput instanceof UnsafeRow) {
@@ -72,8 +74,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
        |  // Remember the current cursor so that we can calculate how many bytes are
        |  // written later.
        |  final int $previousCursor = $rowWriter.cursor();
-       |  ${writeExpressionsToBuffer(
-                ctx, tmpInput, fieldEvals, fieldTypeAndNullables.map(_._1), structRowWriter)}
+       |  $structExpressions
        |  $rowWriter.setOffsetAndSizeFromPreviousCursor($index, $previousCursor);
        |}
      """.stripMargin
@@ -181,7 +182,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val elementAssignment = if (elementNullable) {
       s"""
          |if ($tmpInput.isNullAt($index)) {
-         |  $arrayWriter.setNull$primitiveTypeName($index);
+         |  $arrayWriter.setNull${elementOrOffsetSize}Bytes($index);
          |} else {
          |  ${writeElement(ctx, element, index, et, arrayWriter)}
          |}
@@ -219,6 +220,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val previousCursor = ctx.freshName("previousCursor")
 
     // Writes out unsafe map according to the format described in `UnsafeMapData`.
+    val keyArray = writeArrayToBuffer(
+      ctx, s"$tmpInput.keyArray()", keyType, false, rowWriter)
+    val valueArray = writeArrayToBuffer(
+      ctx, s"$tmpInput.valueArray()", valueType, valueNullable, rowWriter)
+
     s"""
        |final MapData $tmpInput = $input;
        |if ($tmpInput instanceof UnsafeMapData) {
@@ -235,8 +241,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
        |  // Remember the current cursor so that we can write numBytes of key array later.
        |  final int $tmpCursor = $rowWriter.cursor();
        |
-       |  ${writeArrayToBuffer(
-               ctx, s"$tmpInput.keyArray()", keyType, false, rowWriter)}
+       |  $keyArray
        |
        |  // Write the numBytes of key array into the first 8 bytes.
        |  Platform.putLong(
@@ -244,8 +249,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
        |    $tmpCursor - 8,
        |    $rowWriter.cursor() - $tmpCursor);
        |
-       |  ${writeArrayToBuffer(
-               ctx, s"$tmpInput.valueArray()", valueType, valueNullable, rowWriter)}
+       |  $valueArray
        |  $rowWriter.setOffsetAndSizeFromPreviousCursor($index, $previousCursor);
        |}
      """.stripMargin
