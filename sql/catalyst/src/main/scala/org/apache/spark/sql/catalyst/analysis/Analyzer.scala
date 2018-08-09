@@ -115,6 +115,8 @@ class Analyzer(
     }
   }
 
+  override def verifyOnceStrategyIdempotence: Boolean = true
+
   override def execute(plan: LogicalPlan): LogicalPlan = {
     AnalysisContext.reset()
     try {

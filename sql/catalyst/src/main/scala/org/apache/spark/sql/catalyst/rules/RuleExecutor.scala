@@ -65,6 +65,9 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
    */
   protected def isPlanIntegral(plan: TreeType): Boolean = true
 
+  /** Whether to verify batches with once strategy stabilize after one run. */
+  protected def verifyOnceStrategyIdempotence: Boolean = false
+
   /**
    * Executes the batches of rules defined by the subclass. The batches are executed serially
    * using the defined execution strategy. Within each batch, rules are also executed serially.
@@ -78,6 +81,12 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
       var iteration = 1
       var lastPlan = curPlan
       var continue = true
+      // Verify that once-strategy batches stabilize after one run when testing.
+      val maxIterations = if (batch.strategy.maxIterations == 1 && verifyOnceStrategyIdempotence) {
+        2
+      } else {
+        batch.strategy.maxIterations
+      }
 
       // Run until fix point (or the max number of iterations as specified in the strategy.
       while (continue) {
@@ -108,11 +117,19 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
             result
         }
-        iteration += 1
-        if (iteration > batch.strategy.maxIterations) {
-          // Only log if this is a rule that is supposed to run more than once.
-          if (iteration != 2) {
-            val message = s"Max iterations (${iteration - 1}) reached for batch ${batch.name}"
+
+        // Stop applying this batch if:
+        // 1) the plan hasn't changed over the last iteration; or
+        // 2) max number of iterations has been reached.
+        if (curPlan.fastEquals(lastPlan)) {
+          logTrace(
+            s"Fixed point reached for batch ${batch.name} after ${iteration} iterations.")
+          continue = false
+        } else if (iteration >= maxIterations) {
+          // Only log if the batch has run more than once.
+          if (iteration > 1) {
+            val message = s"Plan did not stabilize after max iterations " +
+              s"(${batch.strategy.maxIterations}) reached for batch ${batch.name}."
             if (Utils.isTesting) {
               throw new TreeNodeException(curPlan, message, null)
             } else {
@@ -122,11 +139,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
           continue = false
         }
 
-        if (curPlan.fastEquals(lastPlan)) {
-          logTrace(
-            s"Fixed point reached for batch ${batch.name} after ${iteration - 1} iterations.")
-          continue = false
-        }
+        iteration += 1
         lastPlan = curPlan
       }
 

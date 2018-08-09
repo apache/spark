@@ -54,7 +54,9 @@ class RuleExecutorSuite extends SparkFunSuite {
     val message = intercept[TreeNodeException[LogicalPlan]] {
       ToFixedPoint.execute(Literal(100))
     }.getMessage
-    assert(message.contains("Max iterations (10) reached for batch fixedPoint"))
+    assert(
+      message.contains(
+        "Plan did not stabilize after max iterations (10) reached for batch fixedPoint"))
   }
 
   test("structural integrity checker") {
@@ -72,5 +74,18 @@ class RuleExecutorSuite extends SparkFunSuite {
       WithSIChecker.execute(Literal(10.1))
     }.getMessage
     assert(message.contains("the structural integrity of the plan is broken"))
+  }
+
+  test("only once but did not stabilize") {
+    object ApplyOnce extends RuleExecutor[Expression] {
+      override def verifyOnceStrategyIdempotence: Boolean = true
+      val batches = Batch("once", Once, DecrementLiterals) :: Nil
+    }
+
+    val message = intercept[TreeNodeException[LogicalPlan]] {
+      ApplyOnce.execute(Literal(10))
+    }.getMessage
+    assert(
+      message.contains("Plan did not stabilize after max iterations (1) reached for batch once"))
   }
 }
