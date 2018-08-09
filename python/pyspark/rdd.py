@@ -2418,7 +2418,11 @@ class RDD(object):
 
     def isBarrier(self):
         """
+        .. note:: Experimental
+
         Whether this RDD is in a barrier stage.
+        
+        .. versionadded:: 2.4.0
         """
         return self._jrdd.rdd().isBarrier()
 
