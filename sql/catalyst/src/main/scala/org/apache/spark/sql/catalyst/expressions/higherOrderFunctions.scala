@@ -451,9 +451,9 @@ case class ArrayAggregate(
   usage = "_FUNC_(expr, func) - Transforms elements in a map using the function.",
   examples = """
     Examples:
-      > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3), (k, v) -> k + 1);
+      > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + 1);
        map(array(2, 3, 4), array(1, 2, 3))
-      > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3), (k, v) -> k + v);
+      > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + v);
        map(array(2, 4, 6), array(1, 2, 3))
   """,
   since = "2.4.0")

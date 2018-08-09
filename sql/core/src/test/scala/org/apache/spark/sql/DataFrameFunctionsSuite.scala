@@ -2123,71 +2123,42 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     ).toDF("i")
 
     val dfExample2 = Seq(
-      Map[Int, String](1 -> "a", 2 -> "b", 3 -> "c")
-    ).toDF("x")
+      Map[Int, Double](1 -> 1.0E0, 2 -> 1.4E0, 3 -> 1.7E0)
+    ).toDF("j")
 
     val dfExample3 = Seq(
-      Map[String, Int]("a" -> 1, "b" -> 2, "c" -> 3)
-    ).toDF("y")
+      Map[Int, Boolean](25 -> true, 26 -> false)
+    ).toDF("x")
 
     val dfExample4 = Seq(
-      Map[Int, Double](1 -> 1.0E0, 2 -> 1.4E0, 3 -> 1.7E0)
-    ).toDF("z")
-
-    val dfExample5 = Seq(
-      Map[Int, Boolean](25 -> true, 26 -> false)
-    ).toDF("a")
-
-    val dfExample6 = Seq(
-      Map[Int, String](25 -> "ab", 26 -> "cd")
-    ).toDF("b")
-
-    val dfExample7 = Seq(
       Map[Array[Int], Boolean](Array(1, 2) -> false)
-    ).toDF("c")
+    ).toDF("y")
 
 
     def testMapOfPrimitiveTypesCombination(): Unit = {
       checkAnswer(dfExample1.selectExpr("transform_keys(i, (k, v) -> k + v)"),
         Seq(Row(Map(2 -> 1, 18 -> 9, 16 -> 8, 14 -> 7))))
 
-      checkAnswer(dfExample2.selectExpr("transform_keys(x, (k, v) -> k + 1)"),
-        Seq(Row(Map(2 -> "a", 3 -> "b", 4 -> "c"))))
-
-      checkAnswer(dfExample3.selectExpr("transform_keys(y, (k, v) -> v * v)"),
-        Seq(Row(Map(1 -> 1, 4 -> 2, 9 -> 3))))
-
-      checkAnswer(dfExample3.selectExpr("transform_keys(y, (k, v) -> length(k) + v)"),
-        Seq(Row(Map(2 -> 1, 3 -> 2, 4 -> 3))))
-
-      checkAnswer(
-        dfExample3.selectExpr("transform_keys(y, (k, v) -> concat(k, cast(v as String)))"),
-        Seq(Row(Map("a1" -> 1, "b2" -> 2, "c3" -> 3))))
-
-      checkAnswer(dfExample4.selectExpr("transform_keys(z, " +
+      checkAnswer(dfExample2.selectExpr("transform_keys(j, " +
         "(k, v) -> map_from_arrays(ARRAY(1, 2, 3), ARRAY('one', 'two', 'three'))[k])"),
         Seq(Row(Map("one" -> 1.0, "two" -> 1.4, "three" -> 1.7))))
 
-      checkAnswer(dfExample4.selectExpr("transform_keys(z, (k, v) -> CAST(v * 2 AS BIGINT) + k)"),
+      checkAnswer(dfExample2.selectExpr("transform_keys(j, (k, v) -> CAST(v * 2 AS BIGINT) + k)"),
         Seq(Row(Map(3 -> 1.0, 4 -> 1.4, 6 -> 1.7))))
 
-      checkAnswer(dfExample4.selectExpr("transform_keys(z, (k, v) -> k + v)"),
+      checkAnswer(dfExample2.selectExpr("transform_keys(j, (k, v) -> k + v)"),
         Seq(Row(Map(2.0 -> 1.0, 3.4 -> 1.4, 4.7 -> 1.7))))
 
-      checkAnswer(dfExample5.selectExpr("transform_keys(a, (k, v) ->  k % 2 = 0 OR v)"),
+      checkAnswer(dfExample3.selectExpr("transform_keys(x, (k, v) ->  k % 2 = 0 OR v)"),
         Seq(Row(Map(true -> true, true -> false))))
 
-      checkAnswer(dfExample5.selectExpr("transform_keys(a, (k, v) -> if(v, 2 * k, 3 * k))"),
+      checkAnswer(dfExample3.selectExpr("transform_keys(x, (k, v) -> if(v, 2 * k, 3 * k))"),
         Seq(Row(Map(50 -> true, 78 -> false))))
 
-      checkAnswer(dfExample5.selectExpr("transform_keys(a, (k, v) -> if(v, 2 * k, 3 * k))"),
+      checkAnswer(dfExample3.selectExpr("transform_keys(x, (k, v) -> if(v, 2 * k, 3 * k))"),
         Seq(Row(Map(50 -> true, 78 -> false))))
 
-      checkAnswer(dfExample6.selectExpr(
-        "transform_keys(b, (k, v) ->  concat(conv(k, 10, 16) , substr(v, 1, 1)))"),
-        Seq(Row(Map("19a" -> "ab", "1Ac" -> "cd"))))
-
-      checkAnswer(dfExample7.selectExpr("transform_keys(c, (k, v) -> array_contains(k, 3) AND v)"),
+      checkAnswer(dfExample4.selectExpr("transform_keys(y, (k, v) -> array_contains(k, 3) AND v)"),
         Seq(Row(Map(false -> false))))
     }
     // Test with local relation, the Project will be evaluated without codegen
@@ -2196,50 +2167,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     dfExample2.cache()
     dfExample3.cache()
     dfExample4.cache()
-    dfExample5.cache()
-    dfExample6.cache()
     // Test with cached relation, the Project will be evaluated with codegen
     testMapOfPrimitiveTypesCombination()
-  }
-
-  test("transform keys function - test empty") {
-    val dfExample1 = Seq(
-      Map.empty[Int, Int]
-    ).toDF("i")
-
-    val dfExample2 = Seq(
-      Map.empty[BigInt, String]
-    ).toDF("j")
-
-    def testEmpty(): Unit = {
-      checkAnswer(dfExample1.selectExpr("transform_keys(i, (k, v) -> NULL)"),
-        Seq(Row(Map.empty[Null, Null])))
-
-      checkAnswer(dfExample1.selectExpr("transform_keys(i, (k, v) -> k)"),
-        Seq(Row(Map.empty[Null, Null])))
-
-      checkAnswer(dfExample1.selectExpr("transform_keys(i, (k, v) -> v)"),
-        Seq(Row(Map.empty[Null, Null])))
-
-      checkAnswer(dfExample1.selectExpr("transform_keys(i, (k, v) -> 0)"),
-        Seq(Row(Map.empty[Int, Null])))
-
-      checkAnswer(dfExample1.selectExpr("transform_keys(i, (k, v) -> 'key')"),
-        Seq(Row(Map.empty[String, Null])))
-
-      checkAnswer(dfExample1.selectExpr("transform_keys(i, (k, v) -> true)"),
-        Seq(Row(Map.empty[Boolean, Null])))
-
-      checkAnswer(dfExample2.selectExpr("transform_keys(j, (k, v) -> k + cast(v as BIGINT))"),
-        Seq(Row(Map.empty[BigInt, Null])))
-
-      checkAnswer(dfExample2.selectExpr("transform_keys(j, (k, v) -> v)"),
-        Seq(Row(Map())))
-    }
-    testEmpty()
-    dfExample1.cache()
-    dfExample2.cache()
-    testEmpty()
   }
 
   test("transform keys function - Invalid lambda functions and exceptions") {
@@ -2277,36 +2206,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     dfExample1.cache()
     dfExample2.cache()
     testInvalidLambdaFunctions()
-  }
-
-  test("transform keys function - test null") {
-    val dfExample1 = Seq(
-      Map[Boolean, Integer](true -> 1, false -> null)
-    ).toDF("a")
-
-    def testNullValues(): Unit = {
-      checkAnswer(dfExample1.selectExpr("transform_keys(a, (k, v) -> if(k, NOT k, v IS NULL))"),
-        Seq(Row(Map(false -> 1, true -> null))))
-    }
-
-    testNullValues()
-    dfExample1.cache()
-    testNullValues()
-  }
-
-  test("transform keys function - test duplicate keys") {
-    val dfExample1 = Seq(
-      Map[Int, String](1 -> "a", 2 -> "b", 3 -> "c", 4 -> "d")
-    ).toDF("a")
-
-    def testNullValues(): Unit = {
-      checkAnswer(dfExample1.selectExpr("transform_keys(a, (k, v) -> k%3)"),
-        Seq(Row(Map(1 -> "a", 2 -> "b", 0 -> "c", 1 -> "d"))))
-    }
-
-    testNullValues()
-    dfExample1.cache()
-    testNullValues()
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
