@@ -453,7 +453,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       super.applicationId
     }
 
-  override def getNumSlots(): Int = {
+  override def maxNumConcurrentTasks(): Int = {
     // TODO support this method for MesosFineGrainedSchedulerBackend
     0
   }

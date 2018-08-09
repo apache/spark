@@ -385,7 +385,7 @@ private[spark] abstract class MockBackend(
     }.toIndexedSeq
   }
 
-  override def getNumSlots(): Int = 0
+  override def maxNumConcurrentTasks(): Int = 0
 
   /**
    * This is called by the scheduler whenever it has tasks it would like to schedule, when a tasks

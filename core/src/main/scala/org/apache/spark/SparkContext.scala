@@ -1603,13 +1603,13 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Get the number of currently active slots (total number of tasks can be launched currently).
+   * Get the max number of tasks that can be concurrent launched currently.
    * Note that please don't cache the value returned by this method, because the number can change
    * due to add/remove executors.
    *
-   * @return The number of tasks can be launched currently.
+   * @return The max number of tasks that can be concurrent launched currently.
    */
-  private[spark] def getNumSlots(): Int = schedulerBackend.getNumSlots()
+  private[spark] def maxNumConcurrentTasks(): Int = schedulerBackend.maxNumConcurrentTasks()
 
   /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included

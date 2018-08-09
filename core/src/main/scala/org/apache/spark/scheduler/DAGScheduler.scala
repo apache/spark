@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
 import java.util.Properties
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.annotation.tailrec
@@ -39,7 +39,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.rdd.{PartitionPruningRDD, RDD, RDDCheckpointData}
+import org.apache.spark.rdd.{RDD, RDDCheckpointData}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -202,6 +202,17 @@ class DAGScheduler(
   private[scheduler] val maxConsecutiveStageAttempts =
     sc.getConf.getInt("spark.stage.maxConsecutiveAttempts",
       DAGScheduler.DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS)
+
+  /**
+   * Number of max concurrent tasks check failures for each job.
+   */
+  private[scheduler] val jobIdToNumTasksCheckFailures = new ConcurrentHashMap[Int, Int]
+
+  /**
+   * Time in seconds to wait between a max concurrent tasks check failure and the next check.
+   */
+  private val timeIntervalNumTasksCheck = sc.getConf
+    .get(config.BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL)
 
   private val messageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
@@ -405,11 +416,12 @@ class DAGScheduler(
 
   /**
    * Check whether the barrier stage requires more slots (to be able to launch all tasks in the
-   * barrier stage together) than the total number of active slots currently. Fail fast if trying
-   * to submit a barrier stage that requires more slots than current total number.
+   * barrier stage together) than the total number of active slots currently. Fail current check
+   * if trying to submit a barrier stage that requires more slots than current total number. If
+   * the check fails consecutively for three times for a job, then fail current job submission.
    */
   private def checkBarrierStageWithNumSlots(rdd: RDD[_]): Unit = {
-    if (rdd.isBarrier() && rdd.getNumPartitions > sc.getNumSlots) {
+    if (rdd.isBarrier() && rdd.getNumPartitions > sc.maxNumConcurrentTasks) {
       throw new SparkException(
         DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
     }
@@ -943,6 +955,26 @@ class DAGScheduler(
       // HadoopRDD whose underlying HDFS files have been deleted.
       finalStage = createResultStage(finalRDD, func, partitions, jobId, callSite)
     } catch {
+      case e: Exception if e.getMessage ==
+          DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER =>
+        jobIdToNumTasksCheckFailures.putIfAbsent(jobId, 0)
+        val numCheckFailures = jobIdToNumTasksCheckFailures.get(jobId) + 1
+        if (numCheckFailures < DAGScheduler.DEFAULT_MAX_CONSECUTIVE_NUM_TASKS_CHECK_FAILURES) {
+          jobIdToNumTasksCheckFailures.put(jobId, numCheckFailures)
+          messageScheduler.schedule(
+            new Runnable {
+              override def run(): Unit = eventProcessLoop.post(JobSubmitted(jobId, finalRDD, func,
+                partitions, callSite, listener, properties))
+            },
+            timeIntervalNumTasksCheck * 1000,
+            TimeUnit.MILLISECONDS
+          )
+          return
+        } else {
+          listener.jobFailed(e)
+          return
+        }
+
       case e: Exception =>
         logWarning("Creating new stage failed due to exception - job: " + jobId, e)
         listener.jobFailed(e)
@@ -2025,6 +2057,10 @@ private[spark] object DAGScheduler {
 
   // Number of consecutive stage attempts allowed before a stage is aborted
   val DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS = 4
+
+  // Number of consecutive max concurrent tasks check failures allowed before fail a job
+  // submission.
+  val DEFAULT_MAX_CONSECUTIVE_NUM_TASKS_CHECK_FAILURES = 3
 
   // Error message when running a barrier stage that have unsupported RDD chain pattern.
   val ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN =

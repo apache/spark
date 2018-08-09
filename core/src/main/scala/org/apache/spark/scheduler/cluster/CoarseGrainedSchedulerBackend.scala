@@ -496,10 +496,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     executorDataMap.keySet.toSeq
   }
 
-  override def getNumSlots(): Int = {
-    executorDataMap.values.foldLeft(0) { (num, executor) =>
-      num + executor.totalCores / scheduler.CPUS_PER_TASK
-    }
+  override def maxNumConcurrentTasks(): Int = {
+    executorDataMap.values.map { executor =>
+      executor.totalCores / scheduler.CPUS_PER_TASK
+    }.sum
   }
 
   /**

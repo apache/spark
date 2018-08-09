@@ -156,7 +156,7 @@ private[spark] class LocalSchedulerBackend(
 
   override def applicationId(): String = appId
 
-  override def getNumSlots(): Int = totalCores / scheduler.CPUS_PER_TASK
+  override def maxNumConcurrentTasks(): Int = totalCores / scheduler.CPUS_PER_TASK
 
   private def stop(finalState: SparkAppHandle.State): Unit = {
     localEndpoint.ask(StopExecutor)
