@@ -177,6 +177,10 @@ object AggUtils {
       case agg @ AggregateExpression(aggregateFunction, mode, true, _) =>
         aggregateFunction.transformDown(distinctColumnAttributeLookup)
           .asInstanceOf[AggregateFunction]
+      case agg =>
+        throw new IllegalArgumentException(
+          "Non-distinct aggregate is found in functionsWithDistinct " +
+          s"at planAggregateWithOneDistinct: $agg")
     }
 
     val partialDistinctAggregate: SparkPlan = {
