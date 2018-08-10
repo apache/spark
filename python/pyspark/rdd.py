@@ -2462,7 +2462,6 @@ class RDDBarrier(object):
 
     def __init__(self, rdd):
         self.rdd = rdd
-        self._jrdd = rdd._jrdd
 
     def mapPartitions(self, f, preservesPartitioning=False):
         """
@@ -2474,9 +2473,7 @@ class RDDBarrier(object):
         """
         def func(s, iterator):
             return f(iterator)
-        jBarrierRdd = self._jrdd.rdd().barrier().toJavaRDD()
-        pyBarrierRdd = RDD(jBarrierRdd, self.rdd.ctx, self.rdd._jrdd_deserializer)
-        return pyBarrierRdd.mapPartitions(f, preservesPartitioning)
+        return PipelinedRDD(self.rdd, func, preservesPartitioning, isFromBarrier=True)
 
 
 class PipelinedRDD(RDD):
@@ -2498,7 +2495,7 @@ class PipelinedRDD(RDD):
     20
     """
 
-    def __init__(self, prev, func, preservesPartitioning=False):
+    def __init__(self, prev, func, preservesPartitioning=False, isFromBarrier=False):
         if not isinstance(prev, PipelinedRDD) or not prev._is_pipelinable():
             # This transformation is the first in its stage:
             self.func = func
@@ -2524,6 +2521,7 @@ class PipelinedRDD(RDD):
         self._jrdd_deserializer = self.ctx.serializer
         self._bypass_serializer = False
         self.partitioner = prev.partitioner if self.preservesPartitioning else None
+        self.is_barrier = prev.isBarrier() or isFromBarrier
 
     def getNumPartitions(self):
         return self._prev_jrdd.partitions().size()
@@ -2543,7 +2541,7 @@ class PipelinedRDD(RDD):
         wrapped_func = _wrap_function(self.ctx, self.func, self._prev_jrdd_deserializer,
                                       self._jrdd_deserializer, profiler)
         python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(), wrapped_func,
-                                             self.preservesPartitioning)
+                                             self.preservesPartitioning, self.is_barrier)
         self._jrdd_val = python_rdd.asJavaRDD()
 
         if profiler:
@@ -2558,6 +2556,9 @@ class PipelinedRDD(RDD):
 
     def _is_pipelinable(self):
         return not (self.is_cached or self.is_checkpointed)
+
+    def isBarrier(self):
+        return self.is_barrier
 
 
 def _test():

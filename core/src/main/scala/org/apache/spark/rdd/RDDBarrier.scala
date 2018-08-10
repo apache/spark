@@ -21,7 +21,6 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.api.java.JavaRDD
 
 /** Represents an RDD barrier, which forces Spark to launch tasks of this stage together. */
 class RDDBarrier[T: ClassTag](rdd: RDD[T]) {
@@ -45,19 +44,6 @@ class RDDBarrier[T: ClassTag](rdd: RDD[T]) {
       preservesPartitioning,
       isFromBarrier = true
     )
-  }
-
-  /**
-   * Expose a JavaRDD that wraps a barrier RDD generated from the prev RDD, to support launch
-   * barrier stage from python side.
-   */
-  private[spark] def toJavaRDD(): JavaRDD[T] = {
-    val barrierRDD = new MapPartitionsRDD[T, T](
-      rdd,
-      (context, pid, iter) => iter,
-      preservesPartitioning = false,
-      isFromBarrier = true)
-    JavaRDD.fromRDD(barrierRDD)
   }
 
   /** TODO extra conf(e.g. timeout) */
