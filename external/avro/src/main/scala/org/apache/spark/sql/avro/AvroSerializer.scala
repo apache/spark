@@ -96,7 +96,7 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
             if (!enumSymbols.contains(data)) {
               throw new IncompatibleSchemaException(
                 "Cannot write \"" + data + "\" since it's not defined in enum \"" +
-                  enumSymbols.mkString("\", \""))
+                  enumSymbols.mkString("\", \"") + "\"")
             }
             new EnumSymbol(avroType, data)
         case _ =>
@@ -110,7 +110,7 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
             if (data.length != size) {
               throw new IncompatibleSchemaException(
                 s"Cannot write ${data.length} ${if (data.length > 1) "bytes" else "byte"} of " +
-                  s"binary data into FIXED Type with size of " +
+                  "binary data into FIXED Type with size of " +
                   s"$size ${if (size > 1) "bytes" else "byte"}")
             }
             new Fixed(avroType, data)
