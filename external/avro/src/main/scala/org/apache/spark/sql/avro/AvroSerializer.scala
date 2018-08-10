@@ -23,8 +23,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.avro.LogicalTypes.{TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema
-import org.apache.avro.Schema.Type.NULL
-import org.apache.avro.generic.GenericData.Record
+import org.apache.avro.Schema.Type
+import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed, Record}
 import org.apache.avro.util.Utf8
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -87,10 +87,36 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
         (getter, ordinal) => getter.getDouble(ordinal)
       case d: DecimalType =>
         (getter, ordinal) => getter.getDecimal(ordinal, d.precision, d.scale).toString
-      case StringType =>
-        (getter, ordinal) => new Utf8(getter.getUTF8String(ordinal).getBytes)
-      case BinaryType =>
-        (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
+      case StringType => avroType.getType match {
+        case Type.ENUM =>
+          import scala.collection.JavaConverters._
+          val enumSymbols: Set[String] = avroType.getEnumSymbols.asScala.toSet
+          (getter, ordinal) =>
+            val data = getter.getUTF8String(ordinal).toString
+            if (!enumSymbols.contains(data)) {
+              throw new IncompatibleSchemaException(
+                "Cannot write \"" + data + "\" since it's not defined in enum \"" +
+                  enumSymbols.mkString("\", \"") + "\"")
+            }
+            new EnumSymbol(avroType, data)
+        case _ =>
+          (getter, ordinal) => new Utf8(getter.getUTF8String(ordinal).getBytes)
+      }
+      case BinaryType => avroType.getType match {
+        case Type.FIXED =>
+          val size = avroType.getFixedSize()
+          (getter, ordinal) =>
+            val data: Array[Byte] = getter.getBinary(ordinal)
+            if (data.length != size) {
+              throw new IncompatibleSchemaException(
+                s"Cannot write ${data.length} ${if (data.length > 1) "bytes" else "byte"} of " +
+                  "binary data into FIXED Type with size of " +
+                  s"$size ${if (size > 1) "bytes" else "byte"}")
+            }
+            new Fixed(avroType, data)
+        case _ =>
+          (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
+      }
       case DateType =>
         (getter, ordinal) => getter.getInt(ordinal)
       case TimestampType => avroType.getLogicalType match {
@@ -182,7 +208,7 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       // avro uses union to represent nullable type.
       val fields = avroType.getTypes.asScala
       assert(fields.length == 2)
-      val actualType = fields.filter(_.getType != NULL)
+      val actualType = fields.filter(_.getType != Type.NULL)
       assert(actualType.length == 1)
       actualType.head
     } else {
