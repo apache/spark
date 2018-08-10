@@ -21,6 +21,8 @@ import java.lang.management.ManagementFactory
 import java.nio.ByteBuffer
 import java.util.Properties
 
+import com.google.common.cache.{CacheBuilder, CacheLoader}
+import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
 import scala.language.existentials
 
 import org.apache.spark._
@@ -55,7 +57,7 @@ import org.apache.spark.shuffle.ShuffleWriter
 private[spark] class ShuffleMapTask(
     stageId: Int,
     stageAttemptId: Int,
-    taskBinary: Broadcast[Array[Byte]],
+    taskBinary: Broadcast[Array[Array[Byte]]],
     partition: Partition,
     @transient private var locs: Seq[TaskLocation],
     localProperties: Properties,
@@ -85,8 +87,9 @@ private[spark] class ShuffleMapTask(
       threadMXBean.getCurrentThreadCpuTime
     } else 0L
     val ser = SparkEnv.get.closureSerializer.newInstance()
-    val (rdd, dep) = ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
-      ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
+    val rdd = ser.deserialize[(RDD[_])](
+      ByteBuffer.wrap(taskBinary.value(0)), Thread.currentThread.getContextClassLoader)
+    val dep = ShuffleMapTask.getDep(taskBinary.value(1))
     _executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime
     _executorDeserializeCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
       threadMXBean.getCurrentThreadCpuTime - deserializeStartCpuTime
@@ -115,4 +118,25 @@ private[spark] class ShuffleMapTask(
   override def preferredLocations: Seq[TaskLocation] = preferredLocs
 
   override def toString: String = "ShuffleMapTask(%d, %d)".format(stageId, partitionId)
+}
+
+object ShuffleMapTask extends Logging {
+  private val cache = CacheBuilder.newBuilder()
+    .maximumSize(50)
+    .build(
+      new CacheLoader[Array[Byte], (ShuffleDependency[_, _, _])]() {
+        override def load(depBinary: Array[Byte]): (ShuffleDependency[_, _, _]) = {
+          val ser = SparkEnv.get.closureSerializer.newInstance()
+          val dep = ser.deserialize[(ShuffleDependency[_, _, _])](
+            ByteBuffer.wrap(depBinary), Thread.currentThread.getContextClassLoader)
+          dep
+        }
+      })
+
+  def getDep(depBinary: Array[Byte]): (ShuffleDependency[_, _, _]) = try {
+    cache.get(depBinary)
+  } catch {
+    case e @ (_: UncheckedExecutionException | _: ExecutionError) =>
+      throw e.getCause
+  }
 }

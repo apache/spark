@@ -1078,28 +1078,33 @@ class DAGScheduler(
     // task gets a different copy of the RDD. This provides stronger isolation between tasks that
     // might modify state of objects referenced in their closures. This is necessary in Hadoop
     // where the JobConf/Configuration object is not thread-safe.
-    var taskBinary: Broadcast[Array[Byte]] = null
+    var mapTaskBinary: Broadcast[Array[Array[Byte]]] = null
+    var resultTaskBinary: Broadcast[Array[Byte]] = null
     var partitions: Array[Partition] = null
     try {
       // For ShuffleMapTask, serialize and broadcast (rdd, shuffleDep).
       // For ResultTask, serialize and broadcast (rdd, func).
-      var taskBinaryBytes: Array[Byte] = null
+      var mapTaskBinaryBytes: Array[Array[Byte]] = new Array[Array[Byte]](2)
+      var resultTaskBinaryBytes: Array[Byte] = null
       // taskBinaryBytes and partitions are both effected by the checkpoint status. We need
       // this synchronization in case another concurrent job is checkpointing this RDD, so we get a
       // consistent view of both variables.
       RDDCheckpointData.synchronized {
-        taskBinaryBytes = stage match {
+        stage match {
           case stage: ShuffleMapStage =>
-            JavaUtils.bufferToArray(
-              closureSerializer.serialize((stage.rdd, stage.shuffleDep): AnyRef))
+            mapTaskBinaryBytes(0) = JavaUtils.bufferToArray(
+              closureSerializer.serialize((stage.rdd): AnyRef))
+            mapTaskBinaryBytes(1) = JavaUtils.bufferToArray(
+              closureSerializer.serialize((stage.shuffleDep): AnyRef))
+            mapTaskBinary = sc.broadcast(mapTaskBinaryBytes)
           case stage: ResultStage =>
-            JavaUtils.bufferToArray(closureSerializer.serialize((stage.rdd, stage.func): AnyRef))
+            resultTaskBinaryBytes = JavaUtils.bufferToArray(
+              closureSerializer.serialize((stage.rdd, stage.func): AnyRef))
+            resultTaskBinary = sc.broadcast(resultTaskBinaryBytes)
         }
-
         partitions = stage.rdd.partitions
       }
 
-      taskBinary = sc.broadcast(taskBinaryBytes)
     } catch {
       // In the case of a failure during serialization, abort the stage.
       case e: NotSerializableException =>
@@ -1124,7 +1129,7 @@ class DAGScheduler(
             val part = partitions(id)
             stage.pendingPartitions += id
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptNumber,
-              taskBinary, part, locs, properties, serializedTaskMetrics, Option(jobId),
+              mapTaskBinary, part, locs, properties, serializedTaskMetrics, Option(jobId),
               Option(sc.applicationId), sc.applicationAttemptId, stage.rdd.isBarrier())
           }
 
@@ -1134,7 +1139,7 @@ class DAGScheduler(
             val part = partitions(p)
             val locs = taskIdToLocations(id)
             new ResultTask(stage.id, stage.latestInfo.attemptNumber,
-              taskBinary, part, locs, id, properties, serializedTaskMetrics,
+              resultTaskBinary, part, locs, id, properties, serializedTaskMetrics,
               Option(jobId), Option(sc.applicationId), sc.applicationAttemptId,
               stage.rdd.isBarrier())
           }
