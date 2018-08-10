@@ -301,13 +301,13 @@ abstract class HashExpression[E] extends Expression {
   }
 
   protected def nullSafeElementHash(
-      input: String,
+      input: ExprValue,
       index: String,
       nullable: Boolean,
       elementType: DataType,
       result: String,
       ctx: CodegenContext): String = {
-    val element = ctx.freshName("element")
+    val element = JavaCode.variable(ctx.freshName("element"), elementType)
 
     val jt = CodeGenerator.javaType(elementType)
     ctx.nullSafeExec(nullable, s"$input.isNullAt($index)") {
@@ -373,8 +373,8 @@ abstract class HashExpression[E] extends Expression {
       valueType: DataType,
       valueContainsNull: Boolean): String = {
     val index = ctx.freshName("index")
-    val keys = ctx.freshName("keys")
-    val values = ctx.freshName("values")
+    val keys = JavaCode.variable(ctx.freshName("keys"), classOf[ArrayData])
+    val values = JavaCode.variable(ctx.freshName("values"), classOf[ArrayData])
     s"""
         final ArrayData $keys = $input.keyArray();
         final ArrayData $values = $input.valueArray();
@@ -387,7 +387,7 @@ abstract class HashExpression[E] extends Expression {
 
   protected def genHashForArray(
       ctx: CodegenContext,
-      input: String,
+      input: ExprValue,
       result: String,
       elementType: DataType,
       containsNull: Boolean): String = {
@@ -404,7 +404,7 @@ abstract class HashExpression[E] extends Expression {
       input: String,
       result: String,
       fields: Array[StructField]): String = {
-    val tmpInput = ctx.freshName("input")
+    val tmpInput = JavaCode.variable(ctx.freshName("input"), classOf[InternalRow])
     val fieldsHash = fields.zipWithIndex.map { case (field, index) =>
       nullSafeElementHash(tmpInput, index.toString, field.nullable, field.dataType, result, ctx)
     }
@@ -428,7 +428,7 @@ abstract class HashExpression[E] extends Expression {
 
   @tailrec
   private def computeHashWithTailRec(
-      input: String,
+      input: ExprValue,
       dataType: DataType,
       result: String,
       ctx: CodegenContext): String = dataType match {
@@ -451,7 +451,7 @@ abstract class HashExpression[E] extends Expression {
   }
 
   protected def computeHash(
-      input: String,
+      input: ExprValue,
       dataType: DataType,
       result: String,
       ctx: CodegenContext): String = computeHashWithTailRec(input, dataType, result, ctx)
@@ -735,7 +735,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
 
   override protected def genHashForArray(
       ctx: CodegenContext,
-      input: String,
+      input: ExprValue,
       result: String,
       elementType: DataType,
       containsNull: Boolean): String = {
@@ -759,8 +759,8 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
       valueType: DataType,
       valueContainsNull: Boolean): String = {
     val index = ctx.freshName("index")
-    val keys = ctx.freshName("keys")
-    val values = ctx.freshName("values")
+    val keys = JavaCode.variable(ctx.freshName("keys"), classOf[ArrayData])
+    val values = JavaCode.variable(ctx.freshName("values"), classOf[ArrayData])
     val keyResult = ctx.freshName("keyResult")
     val valueResult = ctx.freshName("valueResult")
     s"""
@@ -783,7 +783,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
       input: String,
       result: String,
       fields: Array[StructField]): String = {
-    val tmpInput = ctx.freshName("input")
+    val tmpInput = JavaCode.variable(ctx.freshName("input"), classOf[InternalRow])
     val childResult = ctx.freshName("childResult")
     val fieldsHash = fields.zipWithIndex.map { case (field, index) =>
       val computeFieldHash = nullSafeElementHash(

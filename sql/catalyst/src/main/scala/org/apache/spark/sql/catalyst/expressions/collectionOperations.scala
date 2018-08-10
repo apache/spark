@@ -194,7 +194,7 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
 
   def nonEmptyInputGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val genericInternalRow = classOf[GenericInternalRow].getName
-    val arrVals = ctx.freshName("arrVals")
+    val arrVals = JavaCode.variable(ctx.freshName("arrVals"), classOf[Array[ArrayData]])
     val biggestCardinality = ctx.freshName("biggestCardinality")
 
     val currentRow = ctx.freshName("currentRow")
@@ -228,11 +228,12 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
         """.stripMargin,
       foldFunctions = _.map(funcCall => s"$biggestCardinality = $funcCall;").mkString("\n"),
       extraArguments =
-        ("ArrayData[]", arrVals) ::
+        ("ArrayData[]", arrVals.code) ::
         ("int", biggestCardinality) :: Nil)
 
     val getValueForType = arrayElementTypes.zipWithIndex.map { case (eleType, idx) =>
-      val g = CodeGenerator.getValue(s"$arrVals[$idx]", eleType, i)
+      val g = CodeGenerator.getValue(
+        JavaCode.expression(code"$arrVals[$idx]", classOf[ArrayData]), eleType, i)
       s"""
         |if ($i < $arrVals[$idx].numElements() && !$arrVals[$idx].isNullAt($i)) {
         |  $currentRow[$idx] = $g;
@@ -248,7 +249,7 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
       arguments =
         ("int", i) ::
         ("Object[]", currentRow) ::
-        ("ArrayData[]", arrVals) :: Nil)
+        ("ArrayData[]", arrVals.code) :: Nil)
 
     val initVariables = s"""
       |ArrayData[] $arrVals = new ArrayData[${children.length}];
@@ -386,8 +387,8 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
       val numElements = ctx.freshName("numElements")
-      val keys = ctx.freshName("keys")
-      val values = ctx.freshName("values")
+      val keys = JavaCode.variable(ctx.freshName("keys"), classOf[ArrayData])
+      val values = JavaCode.variable(ctx.freshName("values"), classOf[ArrayData])
       val isKeyPrimitive = CodeGenerator.isPrimitiveType(childDataType.keyType)
       val isValuePrimitive = CodeGenerator.isPrimitiveType(childDataType.valueType)
       val code = if (isKeyPrimitive && isValuePrimitive) {
@@ -404,16 +405,18 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
     })
   }
 
-  private def getKey(varName: String) = CodeGenerator.getValue(varName, childDataType.keyType, "z")
+  private def getKey(varName: ExprValue) = {
+    CodeGenerator.getValue(varName, childDataType.keyType, "z")
+  }
 
-  private def getValue(varName: String) = {
+  private def getValue(varName: ExprValue) = {
     CodeGenerator.getValue(varName, childDataType.valueType, "z")
   }
 
   private def genCodeForPrimitiveElements(
       ctx: CodegenContext,
-      keys: String,
-      values: String,
+      keys: ExprValue,
+      values: ExprValue,
       arrayData: String,
       numElements: String): String = {
     val unsafeRow = ctx.freshName("unsafeRow")
@@ -465,8 +468,8 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
 
   private def genCodeForAnyElements(
       ctx: CodegenContext,
-      keys: String,
-      values: String,
+      keys: ExprValue,
+      values: ExprValue,
       arrayData: String,
       numElements: String): String = {
     val genericArrayClass = classOf[GenericArrayData].getName
@@ -668,15 +671,15 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
       checkForNull: Boolean): String = {
     val counter = ctx.freshName("counter")
     val arrayData = ctx.freshName("arrayData")
-    val argsName = ctx.freshName("args")
+    val argsName = JavaCode.variable(ctx.freshName("args"), classOf[Array[ArrayData]])
     val numElemName = ctx.freshName("numElements")
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
-
+    val argsGetExpr = JavaCode.expression(code"$argsName[y]", classOf[ArrayData])
     val setterCode1 =
       s"""
          |$arrayData.set$primitiveValueTypeName(
          |  $counter,
-         |  ${CodeGenerator.getValue(s"$argsName[y]", elementType, "z")}
+         |  ${CodeGenerator.getValue(argsGetExpr, elementType, "z")}
          |);""".stripMargin
 
     val setterCode = if (checkForNull) {
@@ -713,8 +716,9 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     val genericArrayClass = classOf[GenericArrayData].getName
     val arrayData = ctx.freshName("arrayObjects")
     val counter = ctx.freshName("counter")
-    val argsName = ctx.freshName("args")
+    val argsName = JavaCode.variable(ctx.freshName("args"), classOf[Array[ArrayData]])
     val numElemName = ctx.freshName("numElements")
+    val argsGetExpr = JavaCode.expression(code"$argsName[y]", classOf[ArrayData])
 
     val concat = ctx.freshName("concat")
     val concatDef =
@@ -724,7 +728,7 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
          |  int $counter = 0;
          |  for (int y = 0; y < ${children.length}; y++) {
          |    for (int z = 0; z < $argsName[y].numElements(); z++) {
-         |      $arrayData[$counter] = ${CodeGenerator.getValue(s"$argsName[y]", elementType, "z")};
+         |      $arrayData[$counter] = ${CodeGenerator.getValue(argsGetExpr, elementType, "z")};
          |      $counter++;
          |    }
          |  }
@@ -825,8 +829,8 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
       mapData: String,
       numEntries: String,
       keyAssignment: (String, String) => String,
-      valueAssignment: (String, String) => String): String = {
-    val entry = ctx.freshName("entry")
+      valueAssignment: (ExprValue, String) => String): String = {
+    val entry = JavaCode.variable(ctx.freshName("entry"), classOf[InternalRow])
     val i = ctx.freshName("idx")
 
     val nullKeyCheck = if (dataTypeDetails.get._2) {
@@ -871,7 +875,7 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
     val valueTypeName = CodeGenerator.primitiveTypeName(dataType.valueType)
 
     val keyAssignment = (key: String, idx: String) => s"$keyArrayData.set$keyTypeName($idx, $key);"
-    val valueAssignment = (entry: String, idx: String) => {
+    val valueAssignment = (entry: ExprValue, idx: String) => {
       val value = CodeGenerator.getValue(entry, dataType.valueType, "1")
       val valueNullUnsafeAssignment = s"$valueArrayData.set$valueTypeName($idx, $value);"
       if (dataType.valueContainsNull) {
@@ -926,7 +930,7 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
     val mapDataClass = classOf[ArrayBasedMapData].getName()
 
     val isValuePrimitive = CodeGenerator.isPrimitiveType(dataType.valueType)
-    val valueAssignment = (entry: String, idx: String) => {
+    val valueAssignment = (entry: ExprValue, idx: String) => {
       val value = CodeGenerator.getValue(entry, dataType.valueType, "1")
       if (dataType.valueContainsNull && isValuePrimitive) {
         s"$values[$idx] = $entry.isNullAt(1) ? null : (Object)$value;"
@@ -1255,7 +1259,10 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
     nullSafeCodeGen(ctx, ev, c => shuffleArrayCodeGen(ctx, ev, c))
   }
 
-  private def shuffleArrayCodeGen(ctx: CodegenContext, ev: ExprCode, childName: String): String = {
+  private def shuffleArrayCodeGen(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      childName: ExprValue): String = {
     val randomClass = classOf[RandomIndicesGenerator].getName
 
     val rand = ctx.addMutableState(randomClass, "rand", forceInline = true)
@@ -1351,7 +1358,7 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
     s"${ev.value} = ($childName).reverse();"
   }
 
-  private def arrayCodeGen(ctx: CodegenContext, ev: ExprCode, childName: String): String = {
+  private def arrayCodeGen(ctx: CodegenContext, ev: ExprCode, childName: ExprValue): String = {
 
     val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
 
@@ -1591,8 +1598,8 @@ case class ArraysOverlap(left: Expression, right: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (a1, a2) => {
-      val smaller = ctx.freshName("smallerArray")
-      val bigger = ctx.freshName("biggerArray")
+      val smaller = JavaCode.variable(ctx.freshName("smallerArray"), classOf[ArrayData])
+      val bigger = JavaCode.variable(ctx.freshName("biggerArray"), classOf[ArrayData])
       val comparisonCode = if (elementTypeSupportEquals) {
         fastCodegen(ctx, ev, smaller, bigger)
       } else {
@@ -1620,7 +1627,11 @@ case class ArraysOverlap(left: Expression, right: Expression)
    * in a set and then performs a lookup on it for each element of the bigger one.
    * It works only for data types which implements properly the equals method.
    */
-  private def fastCodegen(ctx: CodegenContext, ev: ExprCode, smaller: String, bigger: String): String = {
+  private def fastCodegen(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      smaller: ExprValue,
+      bigger: ExprValue): String = {
     val i = ctx.freshName("i")
     val getFromSmaller = CodeGenerator.getValue(smaller, elementType, i)
     val getFromBigger = CodeGenerator.getValue(bigger, elementType, i)
@@ -1654,7 +1665,11 @@ case class ArraysOverlap(left: Expression, right: Expression)
   /**
    * Code generation for a slower evaluation which performs a nested loop and supports all the data types.
    */
-  private def bruteForceCodegen(ctx: CodegenContext, ev: ExprCode, smaller: String, bigger: String): String = {
+  private def bruteForceCodegen(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      smaller: ExprValue,
+      bigger: ExprValue): String = {
     val i = ctx.freshName("i")
     val j = ctx.freshName("j")
     val getFromSmaller = CodeGenerator.getValue(smaller, elementType, j)
@@ -1789,7 +1804,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
   def genCodeForResult(
       ctx: CodegenContext,
       ev: ExprCode,
-      inputArray: String,
+      inputArray: ExprValue,
       startIdx: String,
       resLength: String): String = {
     val values = ctx.freshName("values")
@@ -2031,8 +2046,8 @@ case class ArrayMin(child: Expression) extends UnaryExpression with ImplicitCast
     val javaType = CodeGenerator.javaType(dataType)
     val i = ctx.freshName("i")
     val item = ExprCode(EmptyBlock,
-      isNull = JavaCode.isNullExpression(s"${childGen.value}.isNullAt($i)"),
-      value = JavaCode.expression(CodeGenerator.getValue(childGen.value, dataType, i), dataType))
+      isNull = JavaCode.isNullExpression(code"${childGen.value}.isNullAt($i)"),
+      value = CodeGenerator.getValue(childGen.value, dataType, i))
     ev.copy(code =
       code"""
          |${childGen.code}
@@ -2095,9 +2110,10 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
     val childGen = child.genCode(ctx)
     val javaType = CodeGenerator.javaType(dataType)
     val i = ctx.freshName("i")
+
     val item = ExprCode(EmptyBlock,
-      isNull = JavaCode.isNullExpression(s"${childGen.value}.isNullAt($i)"),
-      value = JavaCode.expression(CodeGenerator.getValue(childGen.value, dataType, i), dataType))
+      isNull = JavaCode.isNullExpression(code"${childGen.value}.isNullAt($i)"),
+      value = CodeGenerator.getValue(childGen.value, dataType, i))
     ev.copy(code =
       code"""
          |${childGen.code}
@@ -2491,12 +2507,13 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx)
 
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
+    val argGetExpr = JavaCode.expression(code"args[y]", classOf[ArrayData])
 
     val setterCode =
       s"""
          |$arrayData.set$primitiveValueTypeName(
          |  $counter,
-         |  ${CodeGenerator.getValue(s"args[y]", elementType, "z")}
+         |  ${CodeGenerator.getValue(argGetExpr, elementType, "z")}
          |);
        """.stripMargin
 
@@ -2536,6 +2553,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     val genericArrayClass = classOf[GenericArrayData].getName
     val arrayData = ctx.freshName("arrayObjects")
     val counter = ctx.freshName("counter")
+    val argGetExpr = JavaCode.expression(code"args[y]", classOf[ArrayData])
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx)
 
@@ -2548,7 +2566,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
          |  int $counter = 0;
          |  for (int y = 0; y < ${children.length}; y++) {
          |    for (int z = 0; z < args[y].numElements(); z++) {
-         |      $arrayData[$counter] = ${CodeGenerator.getValue(s"args[y]", elementType, "z")};
+         |      $arrayData[$counter] = ${CodeGenerator.getValue(argGetExpr, elementType, "z")};
          |      $counter++;
          |    }
          |  }
@@ -2658,6 +2676,7 @@ case class Flatten(child: Expression) extends UnaryExpression {
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, childVariableName)
 
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
+    val arrVar = JavaCode.variable("arr", classOf[ArrayData])
 
     s"""
     |$numElemCode
@@ -2671,7 +2690,7 @@ case class Flatten(child: Expression) extends UnaryExpression {
     |   } else {
     |     $tempArrayDataName.set$primitiveValueTypeName(
     |       $counter,
-    |       ${CodeGenerator.getValue("arr", elementType, "l")}
+    |       ${CodeGenerator.getValue(arrVar, elementType, "l")}
     |     );
     |   }
     |   $counter++;
@@ -2690,6 +2709,7 @@ case class Flatten(child: Expression) extends UnaryExpression {
     val counter = ctx.freshName("counter")
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, childVariableName)
 
+    val arrVar = JavaCode.variable("arr", classOf[ArrayData])
     s"""
     |$numElemCode
     |Object[] $arrayName = new Object[(int)$numElemName];
@@ -2697,7 +2717,7 @@ case class Flatten(child: Expression) extends UnaryExpression {
     |for (int k = 0; k < $childVariableName.numElements(); k++) {
     |  ArrayData arr = $childVariableName.getArray(k);
     |  for (int l = 0; l < arr.numElements(); l++) {
-    |    $arrayName[$counter] = ${CodeGenerator.getValue("arr", elementType, "l")};
+    |    $arrayName[$counter] = ${CodeGenerator.getValue(arrVar, elementType, "l")};
     |    $counter++;
     |  }
     |}
@@ -2885,7 +2905,7 @@ object Sequence {
     def genCode(ctx: CodegenContext, startGen: ExprCode, stopGen: ExprCode): ExprCode = {
       val Seq(oneVal, negativeOneVal) = Seq(one, negativeOne).map(Literal(_).genCode(ctx).value)
       ExprCode.forNonNullValue(JavaCode.expression(
-        s"${startGen.value} <= ${stopGen.value} ? $oneVal : $negativeOneVal",
+        code"${startGen.value} <= ${stopGen.value} ? $oneVal : $negativeOneVal",
         stepType))
     }
   }
@@ -3322,7 +3342,7 @@ case class ArrayRemove(left: Expression, right: Expression)
   def genCodeForResult(
       ctx: CodegenContext,
       ev: ExprCode,
-      inputArray: String,
+      inputArray: ExprValue,
       value: String,
       newArraySize: String): String = {
     val values = ctx.freshName("values")
@@ -3528,7 +3548,7 @@ case class ArrayDistinct(child: Expression)
   def genCodeForResult(
       ctx: CodegenContext,
       ev: ExprCode,
-      inputArray: String,
+      inputArray: ExprValue,
       size: String): String = {
     val distinctArray = ctx.freshName("distinctArray")
     val i = ctx.freshName("i")
@@ -3587,7 +3607,7 @@ abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
     case _ => false
   }
 
-  protected def genGetValue(array: String, i: String): String =
+  protected def genGetValue(array: ExprValue, i: String): String =
     CodeGenerator.getValue(array, elementType, i)
 
   @transient protected lazy val (hsPostFix, hsTypeName) = {
@@ -3759,7 +3779,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
         val foundNullElement = ctx.freshName("foundNullElement")
         val nullElementIndex = ctx.freshName("nullElementIndex")
         val builder = ctx.freshName("builder")
-        val array = ctx.freshName("array")
+        val array = JavaCode.variable(ctx.freshName("array"), classOf[ArrayData])
         val arrays = ctx.freshName("arrays")
         val arrayDataIdx = ctx.freshName("arrayDataIdx")
         val openHashSet = classOf[OpenHashSet[_]].getName

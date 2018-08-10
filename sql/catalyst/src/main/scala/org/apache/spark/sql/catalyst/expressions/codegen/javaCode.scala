@@ -97,21 +97,21 @@ object JavaCode {
   /**
    * Create an expression fragment.
    */
-  def expression(code: String, dataType: DataType): SimpleExprValue = {
+  def expression(code: Block, dataType: DataType): SimpleExprValue = {
     expression(code, CodeGenerator.javaClass(dataType))
   }
 
   /**
    * Create an expression fragment.
    */
-  def expression(code: String, javaClass: Class[_]): SimpleExprValue = {
+  def expression(code: Block, javaClass: Class[_]): SimpleExprValue = {
     SimpleExprValue(code, javaClass)
   }
 
   /**
    * Create a isNull expression fragment.
    */
-  def isNullExpression(code: String): SimpleExprValue = {
+  def isNullExpression(code: Block): SimpleExprValue = {
     expression(code, BooleanType)
   }
 
@@ -317,7 +317,7 @@ object ExprValue {
 /**
  * A java expression fragment.
  */
-case class SimpleExprValue(expr: String, javaType: Class[_]) extends ExprValue {
+case class SimpleExprValue(expr: Block, javaType: Class[_]) extends ExprValue {
   override def code: String = s"($expr)"
 }
 

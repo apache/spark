@@ -348,7 +348,7 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
     val value = eval.isNull match {
       case TrueLiteral => FalseLiteral
       case FalseLiteral => TrueLiteral
-      case v => JavaCode.isNullExpression(s"!$v")
+      case v => JavaCode.isNullExpression(code"!$v")
     }
     ExprCode(code = eval.code, isNull = FalseLiteral, value = value)
   }

@@ -637,6 +637,8 @@ class CodegenContext {
       val isNullB = freshName("isNullB")
       val compareFunc = freshName("compareArray")
       val minLength = freshName("minLength")
+      val a = JavaCode.variable("a", classOf[ArrayData])
+      val b = JavaCode.variable("b", classOf[ArrayData])
       val jt = javaType(elementType)
       val funcCode: String =
         s"""
@@ -659,8 +661,8 @@ class CodegenContext {
               } else if ($isNullB) {
                 return 1;
               } else {
-                $jt $elementA = ${getValue("a", elementType, "i")};
-                $jt $elementB = ${getValue("b", elementType, "i")};
+                $jt $elementA = ${getValue(a, elementType, "i")};
+                $jt $elementB = ${getValue(b, elementType, "i")};
                 int comp = ${genComp(elementType, elementA, elementB)};
                 if (comp != 0) {
                   return comp;
@@ -1473,20 +1475,24 @@ object CodeGenerator extends Logging {
   /**
    * Returns the specialized code to access a value from `inputRow` at `ordinal`.
    */
-  def getValue(input: String, dataType: DataType, ordinal: String): String = {
+  def getValue(input: ExprValue, dataType: DataType, ordinal: String): ExprValue = {
     val jt = javaType(dataType)
     dataType match {
-      case _ if isPrimitiveType(jt) => s"$input.get${primitiveTypeName(jt)}($ordinal)"
-      case t: DecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
-      case StringType => s"$input.getUTF8String($ordinal)"
-      case BinaryType => s"$input.getBinary($ordinal)"
-      case CalendarIntervalType => s"$input.getInterval($ordinal)"
-      case t: StructType => s"$input.getStruct($ordinal, ${t.size})"
-      case _: ArrayType => s"$input.getArray($ordinal)"
-      case _: MapType => s"$input.getMap($ordinal)"
-      case NullType => "null"
+      case _ if isPrimitiveType(jt) =>
+        JavaCode.expression(code"$input.get${primitiveTypeName(jt)}($ordinal)", dataType)
+      case t: DecimalType => JavaCode.expression(
+        code"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})", dataType)
+      case StringType => JavaCode.expression(code"$input.getUTF8String($ordinal)", dataType)
+      case BinaryType => JavaCode.expression(code"$input.getBinary($ordinal)", dataType)
+      case CalendarIntervalType =>
+        JavaCode.expression(code"$input.getInterval($ordinal)", dataType)
+      case t: StructType =>
+        JavaCode.expression(code"$input.getStruct($ordinal, ${t.size})", dataType)
+      case _: ArrayType => JavaCode.expression(code"$input.getArray($ordinal)", dataType)
+      case _: MapType => JavaCode.expression(code"$input.getMap($ordinal)", dataType)
+      case NullType => JavaCode.literal("null", NullType)
       case udt: UserDefinedType[_] => getValue(input, udt.sqlType, ordinal)
-      case _ => s"($jt)$input.get($ordinal, null)"
+      case _ => JavaCode.expression(code"($jt)$input.get($ordinal, null)", dataType)
     }
   }
 
@@ -1584,7 +1590,7 @@ object CodeGenerator extends Logging {
   /**
    * Returns the specialized code to access a value from a column vector for a given `DataType`.
    */
-  def getValueFromVector(vector: String, dataType: DataType, rowId: String): String = {
+  def getValueFromVector(vector: ExprValue, dataType: DataType, rowId: String): String = {
     if (dataType.isInstanceOf[StructType]) {
       // `ColumnVector.getStruct` is different from `InternalRow.getStruct`, it only takes an
       // `ordinal` parameter.

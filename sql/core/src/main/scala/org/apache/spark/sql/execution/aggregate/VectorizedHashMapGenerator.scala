@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, JavaCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.execution.vectorized.{MutableColumnarRow, OnHeapColumnVector}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -127,7 +128,8 @@ class VectorizedHashMapGenerator(
 
     def genEqualsForKeys(groupingKeys: Seq[Buffer]): String = {
       groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        val value = CodeGenerator.getValueFromVector(s"vectors[$ordinal]", key.dataType,
+        val expr = JavaCode.expression(code"vectors[$ordinal]", classOf[OnHeapColumnVector])
+        val value = CodeGenerator.getValueFromVector(expr, key.dataType,
           "buckets[idx]")
         s"(${ctx.genEqual(key.dataType, value, key.name)})"
       }.mkString(" && ")

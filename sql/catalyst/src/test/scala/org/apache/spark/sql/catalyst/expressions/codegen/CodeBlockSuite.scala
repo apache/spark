@@ -112,7 +112,7 @@ class CodeBlockSuite extends SparkFunSuite {
   }
 
   test("transform expr in code block") {
-    val expr = JavaCode.expression("1 + 1", IntegerType)
+    val expr = JavaCode.expression(code"1 + 1", IntegerType)
     val isNull = JavaCode.isNullVariable("expr1_isNull")
     val exprInFunc = JavaCode.variable("expr1", IntegerType)
 
@@ -127,7 +127,8 @@ class CodeBlockSuite extends SparkFunSuite {
 
     // We want to replace all occurrences of `expr` with the variable `aliasedParam`.
     val aliasedCode = code.transformExprValues {
-      case SimpleExprValue("1 + 1", java.lang.Integer.TYPE) => aliasedParam
+      case SimpleExprValue(codeBlock, java.lang.Integer.TYPE) if codeBlock.code == "1 + 1" =>
+        aliasedParam
     }
     val expected =
       code"""
@@ -138,8 +139,8 @@ class CodeBlockSuite extends SparkFunSuite {
     assert(aliasedCode.toString == expected.toString)
   }
 
-  test ("transform expr in nested blocks") {
-    val expr = JavaCode.expression("1 + 1", IntegerType)
+  test("transform expr in nested blocks") {
+    val expr = JavaCode.expression(code"1 + 1", IntegerType)
     val isNull = JavaCode.isNullVariable("expr1_isNull")
     val exprInFunc = JavaCode.variable("expr1", IntegerType)
 
@@ -157,7 +158,8 @@ class CodeBlockSuite extends SparkFunSuite {
     val block = code"${subBlocks(0)}\n${subBlocks(1)}\n${subBlocks(2)}"
     val transformedBlock = block.transform {
       case b: Block => b.transformExprValues {
-        case SimpleExprValue("1 + 1", java.lang.Integer.TYPE) => aliasedParam
+        case SimpleExprValue(codeBlock, java.lang.Integer.TYPE) if codeBlock.code == "1 + 1" =>
+          aliasedParam
       }
     }.asInstanceOf[CodeBlock]
 
@@ -193,5 +195,32 @@ class CodeBlockSuite extends SparkFunSuite {
     assert(transformedBlock.children(2).toString == expected3.toString)
     assert(transformedBlock.toString == (expected1 + expected2 + expected3).toString)
     assert(exprValues === Set(isNull, exprInFunc, aliasedParam))
+  }
+
+  test("transform block with input expressions") {
+    val var1 = JavaCode.variable("var1", IntegerType)
+    val var2 = JavaCode.variable("var2", IntegerType)
+    val expr = JavaCode.expression(code"$var1 + 2", IntegerType)
+    val block =
+      code"""
+        |int $var1 = 0;
+        |int a = $expr;
+        |return a;""".stripMargin
+    val transformed = block.transform {
+      case b: Block => b.transformExprValues {
+        case VariableValue("var1", _) => var2
+        case e @ SimpleExprValue(block, _) =>
+          val newBlock = block.transformExprValues {
+            case VariableValue("var1", _) => var2
+          }
+          e.copy(expr = newBlock)
+      }
+    }
+    val expected =
+      code"""
+        |int $var2 = 0;
+        |int a = ($var2 + 2);
+        |return a;""".stripMargin
+    assert(transformed.code == expected.code)
   }
 }

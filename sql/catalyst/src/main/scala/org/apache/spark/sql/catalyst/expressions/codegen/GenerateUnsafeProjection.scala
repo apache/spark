@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
 
 /**
@@ -51,11 +53,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       fieldTypes: Seq[DataType],
       rowWriter: String): String = {
     // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
-    val tmpInput = ctx.freshName("tmpInput")
+    val tmpInput = JavaCode.variable(ctx.freshName("tmpInput"), classOf[InternalRow])
     val fieldEvals = fieldTypes.zipWithIndex.map { case (dt, i) =>
       ExprCode(
-        JavaCode.isNullExpression(s"$tmpInput.isNullAt($i)"),
-        JavaCode.expression(CodeGenerator.getValue(tmpInput, dt, i.toString), dt))
+        JavaCode.isNullExpression(code"$tmpInput.isNullAt($i)"),
+        CodeGenerator.getValue(tmpInput, dt, i.toString))
     }
 
     val rowWriterClass = classOf[UnsafeRowWriter].getName
@@ -150,7 +152,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       elementType: DataType,
       rowWriter: String): String = {
     // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
-    val tmpInput = ctx.freshName("tmpInput")
+    val tmpInput = JavaCode.variable(ctx.freshName("tmpInput"), classOf[ArrayData])
     val numElements = ctx.freshName("numElements")
     val index = ctx.freshName("index")
 
@@ -276,10 +278,10 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case _ => true
     }
 
-    val rowWriterClass = classOf[UnsafeRowWriter].getName
-    val rowWriter = ctx.addMutableState(rowWriterClass, "rowWriter",
+    val rowWriterClass = classOf[UnsafeRowWriter]
+    val rowWriter = ctx.addMutableState(rowWriterClass.toString, "rowWriter",
       v => s"$v = new $rowWriterClass(${expressions.length}, ${numVarLenFields * 32});")
-
+    val rowWriterExpr = JavaCode.global(rowWriter, rowWriterClass)
     // Evaluate all the subexpression.
     val evalSubexpr = ctx.subexprFunctions.mkString("\n")
 
@@ -288,12 +290,13 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val code =
       code"""
-         |$rowWriter.reset();
+         |$rowWriterExpr.reset();
          |$evalSubexpr
          |$writeExpressions
        """.stripMargin
     // `rowWriter` is declared as a class field, so we can access it directly in methods.
-    ExprCode(code, FalseLiteral, JavaCode.expression(s"$rowWriter.getRow()", classOf[UnsafeRow]))
+    ExprCode(
+      code, FalseLiteral, JavaCode.expression(code"$rowWriterExpr.getRow()", classOf[UnsafeRow]))
   }
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
