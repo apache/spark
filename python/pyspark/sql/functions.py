@@ -265,8 +265,6 @@ for _name, _doc in _functions_1_6.items():
     globals()[_name] = since(1.6)(_create_function(_name, _doc))
 for _name, _doc in _functions_2_1.items():
     globals()[_name] = since(2.1)(_create_function(_name, _doc))
-for _name, _doc in _functions_2_2.items():
-    globals()[_name] = since(2.1)(_create_function(_name, _doc))
 for _name, _message in _functions_deprecated.items():
     globals()[_name] = _wrap_deprecated_function(globals()[_name], _message)
 for _name, _doc in _functions_2_4.items():
