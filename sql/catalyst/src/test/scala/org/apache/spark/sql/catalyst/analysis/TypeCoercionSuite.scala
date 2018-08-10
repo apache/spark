@@ -1378,8 +1378,8 @@ class TypeCoercionSuite extends AnalysisTest {
     )
     ruleTest(inConversion,
       In(Literal("a"), Seq(Literal(1), Literal("b"))),
-      In(Cast(Literal("a"), StringType),
-        Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
+      In(Cast(Literal("a"), IntegerType),
+        Seq(Cast(Literal(1), IntegerType), Cast(Literal("b"), IntegerType)))
     )
   }
 
