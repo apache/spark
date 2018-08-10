@@ -292,7 +292,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
   test(s"test dequeue with spill") {
     withExternalArray(inMemoryThreshold = 2, spillThreshold = 3, true) { array =>
       // insert 2 rows, iterate until the first row
-      populateRows(array, 10)
+      populateRows(array, 5)
       assertSpill()
 
       var iterator = array.generateIterator()
@@ -308,14 +308,16 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       val third2 = array.dequeue().get
       assert(third.equals(third2))
 
-      assert(array.length == 7)
+      assert(array.length == 2)
+
+      array.dequeue()
 
       populateRows(array, 10)
 
       array.dequeue()
       array.dequeue()
 
-      assert(array.length == 15)
+      assert(array.length == 9)
     }
   }
 
