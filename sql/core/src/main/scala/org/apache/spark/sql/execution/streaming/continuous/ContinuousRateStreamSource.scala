@@ -123,8 +123,7 @@ case class RateStreamContinuousInputPartition(
   extends InputPartition
 
 object RateStreamContinuousReaderFactory extends ContinuousPartitionReaderFactory {
-  override def createContinuousReader(
-      partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
+  override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[RateStreamContinuousInputPartition]
     new RateStreamContinuousPartitionReader(
       p.startValue, p.startTimeMs, p.partitionIndex, p.increment, p.rowsPerSecond)

@@ -33,10 +33,11 @@ import org.apache.spark.sql.types.StructType;
 public interface MicroBatchReadSupportProvider extends DataSourceV2 {
 
   /**
-   * Creates a {@link MicroBatchReadSupport} to scan the data from this streaming data source.
+   * Creates a {@link MicroBatchReadSupport} to scan the data from this streaming data source with
+   * a user specified schema.
    *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
-   * submitted.
+   * By default this method throws {@link UnsupportedOperationException}, implementations should
+   * override this method to handle user specified schema.
    *
    * @param schema the user provided schema.
    * @param checkpointLocation a path to Hadoop FS scratch space that can be used for failure
@@ -44,9 +45,6 @@ public interface MicroBatchReadSupportProvider extends DataSourceV2 {
    *                           will be given the same checkpointLocation.
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.
-   *
-   * By default this method throws {@link UnsupportedOperationException}, implementations should
-   * override this method to handle user specified schema.
    */
   default MicroBatchReadSupport createMicroBatchReadSupport(
       StructType schema,
@@ -57,9 +55,6 @@ public interface MicroBatchReadSupportProvider extends DataSourceV2 {
 
   /**
    * Creates a {@link MicroBatchReadSupport} to scan the data from this streaming data source.
-   *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
-   * submitted.
    *
    * @param checkpointLocation a path to Hadoop FS scratch space that can be used for failure
    *                           recovery. Readers for the same logical source in the same query

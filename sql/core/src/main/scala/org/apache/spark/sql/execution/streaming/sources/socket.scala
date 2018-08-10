@@ -117,7 +117,7 @@ class TextSocketMicroBatchReadSupport(options: DataSourceOptions)
 
   override def initialOffset(): Offset = LongOffset(-1L)
 
-  override def latestOffset(start: Offset): Offset = currentOffset
+  override def latestOffset(): Offset = currentOffset
 
   override def deserializeOffset(json: String): Offset = {
     LongOffset(json.toLong)

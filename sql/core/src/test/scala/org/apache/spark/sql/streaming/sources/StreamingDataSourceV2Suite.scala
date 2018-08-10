@@ -39,7 +39,7 @@ case class FakeReadSupport() extends MicroBatchReadSupport with ContinuousReadSu
   override def fullSchema(): StructType = StructType(Seq())
   override def newScanConfigBuilder(start: Offset, end: Offset): ScanConfigBuilder = null
   override def initialOffset(): Offset = RateStreamOffset(Map())
-  override def latestOffset(start: Offset): Offset = RateStreamOffset(Map())
+  override def latestOffset(): Offset = RateStreamOffset(Map())
   override def newScanConfigBuilder(start: Offset): ScanConfigBuilder = null
   override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
     throw new IllegalStateException("fake source - cannot actually read")

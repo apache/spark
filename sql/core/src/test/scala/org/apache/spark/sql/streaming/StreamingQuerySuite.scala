@@ -215,9 +215,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       private def dataAdded: Boolean = currentOffset.offset != -1
 
       // latestOffset should take 50 ms the first time it is called after data is added
-      override def latestOffset(start: OffsetV2): OffsetV2 = synchronized {
+      override def latestOffset(): OffsetV2 = synchronized {
         if (dataAdded) clock.waitTillTime(1050)
-        super.latestOffset(start)
+        super.latestOffset()
       }
 
       // getBatch should take 100 ms the first time it is called

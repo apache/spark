@@ -22,11 +22,14 @@ import java.io.Serializable;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * An input partition returned by {@link ReadSupport#planInputPartitions(ScanConfig)}, which
- * represents a data split that should be processed by one Spark task.
  *
- * Note that {@link InputPartition}s will be serialized and sent to executors, then
- * {@link PartitionReader}s will be created by {@link PartitionReaderFactory} on executors to do
+ * A serializable representation of an input partition returned by
+ * {@link ReadSupport#planInputPartitions(ScanConfig)}.
+ *
+ * Note that {@link InputPartition} will be serialized and sent to executors, then
+ * {@link PartitionReader} will be created by
+ * {@link PartitionReaderFactory#createReader(InputPartition)} or
+ * {@link PartitionReaderFactory#createColumnarReader(InputPartition)} on executors to do
  * the actual reading. So {@link InputPartition} must be serializable while {@link PartitionReader}
  * doesn't need to be.
  */

@@ -15,20 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2;
+package org.apache.spark.sql.execution.streaming.sources
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset}
 
-/**
- * The base interface for data source v2. Implementations must have a public, 0-arg constructor.
- *
- * Note that this is an empty interface. Data source implementations must mix in interfaces such as
- * {@link BatchReadSupportProvider} or {@link BatchWriteSupportProvider}, which can provide
- * batch or streaming read/write support instances. Otherwise it's just a dummy data source which
- * is un-readable/writable.
- *
- * If Spark fails to execute any methods in the implementations of this interface (by throwing an
- * exception), the read action will fail and no Spark job will be submitted.
- */
-@InterfaceStability.Evolving
-public interface DataSourceV2 {}
+// A special `MicroBatchReadSupport` that can get latestOffset with a start offset.
+trait RateControlMicroBatchReadSupport extends MicroBatchReadSupport {
+
+  override def latestOffset(): Offset = {
+    throw new IllegalAccessException(
+      "latestOffset should not be called for RateControlMicroBatchReadSupport")
+  }
+
+  def latestOffset(start: Offset): Offset
+}

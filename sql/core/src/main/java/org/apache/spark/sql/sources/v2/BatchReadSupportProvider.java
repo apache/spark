@@ -33,17 +33,15 @@ import org.apache.spark.sql.types.StructType;
 public interface BatchReadSupportProvider extends DataSourceV2 {
 
   /**
-   * Creates a {@link BatchReadSupport} to scan the data from this data source.
+   * Creates a {@link BatchReadSupport} to scan the data from this data source with a user
+   * specified schema.
    *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
-   * submitted.
+   * By default this method throws {@link UnsupportedOperationException}, implementations should
+   * override this method to handle user specified schema.
    *
    * @param schema the user specified schema.
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.
-   *
-   * By default this method throws {@link UnsupportedOperationException}, implementations should
-   * override this method to handle user specified schema.
    */
   default BatchReadSupport createBatchReadSupport(StructType schema, DataSourceOptions options) {
     return DataSourceV2Utils.failForUserSpecifiedSchema(this);
@@ -51,9 +49,6 @@ public interface BatchReadSupportProvider extends DataSourceV2 {
 
   /**
    * Creates a {@link BatchReadSupport} to scan the data from this data source.
-   *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
-   * submitted.
    *
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.

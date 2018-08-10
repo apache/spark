@@ -79,7 +79,7 @@ class ContinuousDataSourceRDD(
     val readerForPartition = {
       val partition = castPartition(split)
       if (partition.queueReader == null) {
-        val partitionReader = partitionReaderFactory.createContinuousReader(
+        val partitionReader = partitionReaderFactory.createReader(
           partition.inputPartition)
         partition.queueReader = new ContinuousQueuedDataReader(
           partition.index, partitionReader, schema, context, dataQueueSize, epochPollIntervalMs)

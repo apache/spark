@@ -25,6 +25,10 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 
 /**
  * A factory used to create {@link PartitionReader} instances.
+ *
+ * If Spark fails to execute any methods in the implementations of this interface or in the returned
+ * {@link PartitionReader} (by throwing an exception), corresponding Spark task would fail and
+ * get retried until hitting the maximum retry times.
  */
 @InterfaceStability.Evolving
 public interface PartitionReaderFactory extends Serializable {
@@ -34,9 +38,6 @@ public interface PartitionReaderFactory extends Serializable {
    *
    * Implementations probably need to cast the input partition to the concrete
    * {@link InputPartition} class defined for the data source.
-   *
-   * If this method fails (by throwing an exception), the corresponding Spark task would fail and
-   * get retried until hitting the maximum retry times.
    */
   PartitionReader<InternalRow> createReader(InputPartition partition);
 
@@ -45,9 +46,6 @@ public interface PartitionReaderFactory extends Serializable {
    *
    * Implementations probably need to cast the input partition to the concrete
    * {@link InputPartition} class defined for the data source.
-   *
-   * If this method fails (by throwing an exception), the corresponding Spark task would fail and
-   * get retried until hitting the maximum retry times.
    */
   default PartitionReader<ColumnarBatch> createColumnarReader(InputPartition partition) {
     throw new UnsupportedOperationException("Cannot create columnar reader.");
@@ -59,7 +57,7 @@ public interface PartitionReaderFactory extends Serializable {
    * for the input partitions that this method returns true.
    *
    * As of Spark 2.4, Spark can only read all input partition in a columnar way, or none of them.
-   * Data source can't mix columnar and row-based partitions. This will be relaxed in future
+   * Data source can't mix columnar and row-based partitions. This may be relaxed in future
    * versions.
    */
   default boolean supportColumnarReads(InputPartition partition) {

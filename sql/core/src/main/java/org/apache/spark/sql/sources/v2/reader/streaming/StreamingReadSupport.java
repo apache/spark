@@ -28,9 +28,9 @@ interface StreamingReadSupport extends ReadSupport {
 
   /**
    * Returns the initial offset for a streaming query to start reading from. Note that the
-   * streaming data source should not assume that it will start reading from its
-   * {@link #initialOffset()} value: if Spark is restarting an existing query, it will restart from
-   * the check-pointed offset rather than the initial one.
+   * streaming data source should not assume that it will start reading from its initial offset:
+   * if Spark is restarting an existing query, it will restart from the check-pointed offset rather
+   * than the initial one.
    */
   Offset initialOffset();
 

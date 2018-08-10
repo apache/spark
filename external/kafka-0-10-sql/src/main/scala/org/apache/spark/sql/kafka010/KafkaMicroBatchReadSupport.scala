@@ -30,6 +30,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset, SimpleStreamingScanConfig, SimpleStreamingScanConfigBuilder}
+import org.apache.spark.sql.execution.streaming.sources.RateControlMicroBatchReadSupport
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader._
@@ -60,7 +61,7 @@ private[kafka010] class KafkaMicroBatchReadSupport(
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
-  extends MicroBatchReadSupport with Logging {
+  extends RateControlMicroBatchReadSupport with Logging {
 
   private val pollTimeoutMs = options.getLong(
     "kafkaConsumer.pollTimeoutMs",

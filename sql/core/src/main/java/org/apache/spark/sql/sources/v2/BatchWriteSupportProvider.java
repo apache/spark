@@ -38,9 +38,6 @@ public interface BatchWriteSupportProvider extends DataSourceV2 {
    * Creates an optional {@link BatchWriteSupport} to save the data to this data source. Data
    * sources can return None if there is no writing needed to be done according to the save mode.
    *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
-   * submitted.
-   *
    * @param queryId A unique string for the writing query. It's possible that there are many
    *                writing queries running at the same time, and the returned
    *                {@link BatchWriteSupport} can use this id to distinguish itself from others.

@@ -21,14 +21,15 @@ import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.types.StructType;
 
 /**
- * An interface that carries query specific information for the data scan. Currently it's used to
- * hold operator pushdown result and streaming offsets. This is defined as an empty interface, and
- * data sources should define their own {@link ScanConfig} classes.
+ * An interface that carries query specific information for the data scan, like operator pushdown
+ * information and streaming query offsets. This is defined as an empty interface, and data sources
+ * should define their own {@link ScanConfig} classes.
  *
  * For APIs that take a {@link ScanConfig} as input, like
- * {@link ReadSupport#planInputPartitions(ScanConfig)} and
- * {@link BatchReadSupport#createReaderFactory(ScanConfig)}, implementations mostly need to cast the
- * input {@link ScanConfig} to the concrete {@link ScanConfig} class of the data source.
+ * {@link ReadSupport#planInputPartitions(ScanConfig)},
+ * {@link BatchReadSupport#createReaderFactory(ScanConfig)} and
+ * {@link SupportsReportStatistics#estimateStatistics(ScanConfig)}, implementations mostly need to
+ * cast the input {@link ScanConfig} to the concrete {@link ScanConfig} class of the data source.
  */
 @InterfaceStability.Evolving
 public interface ScanConfig {

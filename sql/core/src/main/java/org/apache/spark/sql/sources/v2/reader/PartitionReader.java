@@ -38,18 +38,12 @@ public interface PartitionReader<T> extends Closeable {
   /**
    * Proceed to next record, returns false if there is no more records.
    *
-   * If this method fails (by throwing an exception), the corresponding Spark task would fail and
-   * get retried until hitting the maximum retry times.
-   *
    * @throws IOException if failure happens during disk/network IO like reading files.
    */
   boolean next() throws IOException;
 
   /**
    * Return the current record. This method should return same value until `next` is called.
-   *
-   * If this method fails (by throwing an exception), the corresponding Spark task would fail and
-   * get retried until hitting the maximum retry times.
    */
   T get();
 }

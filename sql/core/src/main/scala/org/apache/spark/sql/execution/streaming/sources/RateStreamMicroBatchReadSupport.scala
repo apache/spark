@@ -105,7 +105,7 @@ class RateStreamMicroBatchReadSupport(options: DataSourceOptions, checkpointLoca
 
   override def initialOffset(): Offset = LongOffset(0L)
 
-  override def latestOffset(start: Offset): Offset = {
+  override def latestOffset(): Offset = {
     val now = clock.getTimeMillis()
     if (lastTimeMs < now) {
       lastTimeMs = now

@@ -45,17 +45,12 @@ public interface ContinuousReadSupport extends StreamingReadSupport, BaseStreami
    *
    * This is the first step of the data scan. All other methods in {@link ContinuousReadSupport}
    * needs to take {@link ScanConfig} as an input.
-   *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
-   * submitted.
    */
   ScanConfigBuilder newScanConfigBuilder(Offset start);
 
   /**
-   * Returns a factory to produce {@link ContinuousPartitionReader}s for {@link InputPartition}s.
-   *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
-   * submitted.
+   * Returns a factory, which produces one {@link ContinuousPartitionReader} for one
+   * {@link InputPartition}.
    */
   ContinuousPartitionReaderFactory createContinuousReaderFactory(ScanConfig config);
 

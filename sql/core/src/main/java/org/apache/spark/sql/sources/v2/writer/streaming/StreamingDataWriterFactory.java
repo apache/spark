@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources.v2.writer.streaming;
 
 import java.io.Serializable;
 
+import org.apache.spark.TaskContext;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.sources.v2.writer.DataWriter;
@@ -31,6 +32,10 @@ import org.apache.spark.sql.sources.v2.writer.DataWriter;
  * Note that, the writer factory will be serialized and sent to executors, then the data writer
  * will be created on executors and do the actual writing. So this interface must be
  * serializable and {@link DataWriter} doesn't need to be.
+ *
+ * If Spark fails to execute any methods in the implementations of this interface or in the returned
+ * {@link DataWriter} (by throwing an exception), corresponding Spark task would fail and
+ * get retried until hitting the maximum retry times.
  */
 @InterfaceStability.Evolving
 public interface StreamingDataWriterFactory extends Serializable {
@@ -41,16 +46,13 @@ public interface StreamingDataWriterFactory extends Serializable {
    * are responsible for defensive copies if necessary, e.g. copy the data before buffer it in a
    * list.
    *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
-   * submitted.
-   *
    * @param partitionId A unique id of the RDD partition that the returned writer will process.
    *                    Usually Spark processes many RDD partitions at the same time,
    *                    implementations should use the partition id to distinguish writers for
    *                    different partitions.
-   * @param taskId A unique identifier for a task that is performing the write of the partition
-   *               data. Spark may run multiple tasks for the same partition (due to speculation
-   *               or task failures, for example).
+   * @param taskId The task id returned by {@link TaskContext#taskAttemptId()}. Spark may run
+   *               multiple tasks for the same partition (due to speculation or task failures,
+   *               for example).
    * @param epochId A monotonically increasing id for streaming queries that are split in to
    *                discrete periods of execution.
    */

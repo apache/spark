@@ -23,6 +23,9 @@ import org.apache.spark.sql.types.StructType;
 /**
  * The base interface for all the batch and streaming read supports. Data sources should implement
  * concrete read support interfaces like {@link BatchReadSupport}.
+ *
+ * If Spark fails to execute any methods in the implementations of this interface (by throwing an
+ * exception), the read action will fail and no Spark job will be submitted.
  */
 @InterfaceStability.Evolving
 public interface ReadSupport {
@@ -31,9 +34,6 @@ public interface ReadSupport {
    * Returns the full schema of this data source, which is usually the physical schema of the
    * underlying storage. This full schema should not be affected by column pruning or other
    * optimizations.
-   *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
-   * submitted.
    */
   StructType fullSchema();
 
@@ -45,9 +45,6 @@ public interface ReadSupport {
    * Note that, this may not be a full scan if the data source supports optimization like filter
    * push-down. Implementations should check the input {@link ScanConfig} and adjust the resulting
    * {@link InputPartition input partitions}.
-   *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
-   * submitted.
    */
   InputPartition[] planInputPartitions(ScanConfig config);
 }

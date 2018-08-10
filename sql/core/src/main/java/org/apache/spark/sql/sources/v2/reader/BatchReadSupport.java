@@ -21,6 +21,12 @@ import org.apache.spark.annotation.InterfaceStability;
 
 /**
  * An interface that defines how to scan the data from data source for batch processing.
+ *
+ * The execution engine will create an instance of this interface at the start of a batch query,
+ * then call {@link #newScanConfigBuilder()} and create an instance of {@link ScanConfig}. The
+ * {@link ScanConfigBuilder} can apply operator pushdown and keep the pushdown result in
+ * {@link ScanConfig}. The {@link ScanConfig} will be used to create input partitions and reader
+ * factory to process data from the data source.
  */
 @InterfaceStability.Evolving
 public interface BatchReadSupport extends ReadSupport {
@@ -31,17 +37,11 @@ public interface BatchReadSupport extends ReadSupport {
    *
    * This is the first step of the data scan. All other methods in {@link BatchReadSupport} needs
    * to take {@link ScanConfig} as an input.
-   *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
-   * submitted.
    */
   ScanConfigBuilder newScanConfigBuilder();
 
   /**
    * Returns a factory, which produces one {@link PartitionReader} for one {@link InputPartition}.
-   *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
-   * submitted.
    */
   PartitionReaderFactory createReaderFactory(ScanConfig config);
 }

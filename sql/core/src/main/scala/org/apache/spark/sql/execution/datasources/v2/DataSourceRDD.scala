@@ -72,7 +72,7 @@ class DataSourceRDD(
         reader.get()
       }
     }
-    // TODO: get rid of this type hack.
+    // TODO: SPARK-25083 remove the type erasure hack in data source scan
     new InterruptibleIterator(context, iter.asInstanceOf[Iterator[InternalRow]])
   }
 

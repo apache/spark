@@ -160,8 +160,7 @@ case class ContinuousMemoryStreamInputPartition(
     startOffset: Int) extends InputPartition
 
 object ContinuousMemoryStreamReaderFactory extends ContinuousPartitionReaderFactory {
-  override def createContinuousReader(
-      partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
+  override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[ContinuousMemoryStreamInputPartition]
     new ContinuousMemoryStreamPartitionReader(p.driverEndpointName, p.partition, p.startOffset)
   }

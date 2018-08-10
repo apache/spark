@@ -123,7 +123,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   override def initialOffset: OffsetV2 = LongOffset(-1)
 
-  override def latestOffset(start: OffsetV2): OffsetV2 = {
+  override def latestOffset(): OffsetV2 = {
     if (currentOffset.offset == -1) null else currentOffset
   }
 

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentBatchTimestamp, 
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, WriteToDataSourceV2}
-import org.apache.spark.sql.execution.streaming.sources.MicroBatchWritSupport
+import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWritSupport, RateControlMicroBatchReadSupport}
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
@@ -338,6 +338,11 @@ class MicroBatchExecution(
           (s, s.getOffset)
         }
       case s: MicroBatchReadSupport =>
+        updateStatusMessage(s"Getting offsets from $s")
+        reportTimeTaken("latestOffset") {
+          (s, Option(s.latestOffset()))
+        }
+      case s: RateControlMicroBatchReadSupport =>
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("latestOffset") {
           val startOffset = availableOffsets
