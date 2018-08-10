@@ -290,9 +290,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       expressions: Seq[Expression],
       useSubexprElimination: Boolean = false): ExprCode = {
     val exprEvals = ctx.generateExpressions(expressions, useSubexprElimination)
-    val exprType = expressions.map(_.dataType)
+    val exprTypes = expressions.map(_.dataType)
 
-    val numVarLenFields = exprType.count {
+    val numVarLenFields = exprTypes.count {
       case dt => !UnsafeRow.isFixedLength(dt)
       // TODO: consider large decimal and interval type
     }
@@ -305,7 +305,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val evalSubexpr = ctx.subexprFunctions.mkString("\n")
 
     val writeExpressions = writeExpressionsToBuffer(
-      ctx, ctx.INPUT_ROW, exprEvals, exprType, rowWriter, isTopLevel = true)
+      ctx, ctx.INPUT_ROW, exprEvals, exprTypes, rowWriter, isTopLevel = true)
 
     val code =
       code"""
