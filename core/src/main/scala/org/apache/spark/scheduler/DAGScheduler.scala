@@ -21,6 +21,7 @@ import java.io.NotSerializableException
 import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.function.BiFunction
 
 import scala.annotation.tailrec
 import scala.collection.Map
@@ -213,6 +214,13 @@ class DAGScheduler(
    */
   private val timeIntervalNumTasksCheck = sc.getConf
     .get(config.BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL)
+
+  /**
+   * Max number of max concurrent tasks check failures allowed for a job before fail the job
+   * submission.
+   */
+  private val maxFailureNumTasksCheck = sc.getConf
+    .get(config.BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES)
 
   private val messageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
@@ -955,14 +963,20 @@ class DAGScheduler(
       // HadoopRDD whose underlying HDFS files have been deleted.
       finalStage = createResultStage(finalRDD, func, partitions, jobId, callSite)
     } catch {
-      case e: Exception if e.getMessage ==
-          DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER =>
-        logWarning("The job requires to run a barrier stage that requires more slots than the " +
-          "total number of slots in the cluster currently.")
-        jobIdToNumTasksCheckFailures.putIfAbsent(jobId, 0)
-        val numCheckFailures = jobIdToNumTasksCheckFailures.get(jobId) + 1
-        if (numCheckFailures < DAGScheduler.DEFAULT_MAX_CONSECUTIVE_NUM_TASKS_CHECK_FAILURES) {
-          jobIdToNumTasksCheckFailures.put(jobId, numCheckFailures)
+      case e: Exception if e.getMessage.contains(
+          DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER) =>
+        logWarning(s"The job $jobId requires to run a barrier stage that requires more slots " +
+          "than the total number of slots in the cluster currently.")
+        jobIdToNumTasksCheckFailures.compute(jobId, new BiFunction[Int, Int, Int] {
+          override def apply(key: Int, value: Int): Int =
+            if (value == null) {
+              1
+            } else {
+              value + 1
+            }
+        })
+        val numCheckFailures = jobIdToNumTasksCheckFailures.get(jobId)
+        if (numCheckFailures <= maxFailureNumTasksCheck) {
           messageScheduler.schedule(
             new Runnable {
               override def run(): Unit = eventProcessLoop.post(JobSubmitted(jobId, finalRDD, func,
@@ -973,6 +987,8 @@ class DAGScheduler(
           )
           return
         } else {
+          // Job failed, clear internal data.
+          jobIdToNumTasksCheckFailures.remove(jobId)
           listener.jobFailed(e)
           return
         }
@@ -982,6 +998,8 @@ class DAGScheduler(
         listener.jobFailed(e)
         return
     }
+    // Job submitted, clear internal data.
+    jobIdToNumTasksCheckFailures.remove(jobId)
 
     val job = new ActiveJob(jobId, finalStage, callSite, listener, properties)
     clearCacheLocs()
@@ -2059,10 +2077,6 @@ private[spark] object DAGScheduler {
 
   // Number of consecutive stage attempts allowed before a stage is aborted
   val DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS = 4
-
-  // Number of consecutive max concurrent tasks check failures allowed before fail a job
-  // submission.
-  val DEFAULT_MAX_CONSECUTIVE_NUM_TASKS_CHECK_FAILURES = 3
 
   // Error message when running a barrier stage that have unsupported RDD chain pattern.
   val ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN =

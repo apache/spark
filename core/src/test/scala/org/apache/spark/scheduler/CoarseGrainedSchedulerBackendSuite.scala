@@ -79,7 +79,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       .setAppName("test")
     sc = new SparkContext(conf)
     val rdd = sc.parallelize(1 to 10, 4).mapPartitions { iter =>
-      Thread.sleep(1000)
+      Thread.sleep(5000)
       iter
     }
     var taskStarted = new AtomicBoolean(false)
@@ -104,7 +104,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       // Submit a job to trigger some tasks on active executors.
       testSubmitJob(sc, rdd)
 
-      eventually(timeout(5.seconds)) {
+      eventually(timeout(10.seconds)) {
         // Ensure some tasks have started and no task finished, so some executors must be busy.
         assert(taskStarted.get() == true)
         assert(taskEnded.get() == false)

@@ -191,6 +191,8 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     val conf = new SparkConf()
       // Shorten the time interval between two failed checks to make the test fail faster.
       .set("spark.scheduler.barrier.maxConcurrentTasksCheck.interval", "1s")
+      // Reduce max check failures allowed to make the test fail faster.
+      .set("spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures", "3")
       .setMaster("local[4]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))
@@ -206,6 +208,8 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     val conf = new SparkConf()
       // Shorten the time interval between two failed checks to make the test fail faster.
       .set("spark.scheduler.barrier.maxConcurrentTasksCheck.interval", "1s")
+      // Reduce max check failures allowed to make the test fail faster.
+      .set("spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures", "3")
       .setMaster("local[4]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))
@@ -224,6 +228,8 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .set("spark.task.cpus", "2")
       // Shorten the time interval between two failed checks to make the test fail faster.
       .set("spark.scheduler.barrier.maxConcurrentTasksCheck.interval", "1s")
+      // Reduce max check failures allowed to make the test fail faster.
+      .set("spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures", "3")
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))
@@ -240,6 +246,8 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .set("spark.task.cpus", "2")
       // Shorten the time interval between two failed checks to make the test fail faster.
       .set("spark.scheduler.barrier.maxConcurrentTasksCheck.interval", "1s")
+      // Reduce max check failures allowed to make the test fail faster.
+      .set("spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures", "3")
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))
