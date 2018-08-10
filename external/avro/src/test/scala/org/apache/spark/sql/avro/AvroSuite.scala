@@ -90,6 +90,33 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   // writer.close()
   val dateAvro = testFile("date.avro")
 
+  // The test file decimal.avro is generated via following Python code:
+  // import decimal
+  // from fastavro import writer, parse_schema
+  // from fastavro._write import prepare_bytes_decimal, prepare_fixed_decimal
+  //
+  // bytesSchema = {"type": "bytes", "logicalType": "decimal", "precision": 4, "scale": 2}
+  // fixedSchema = {"type": "fixed", "size": 5, "logicalType": "decimal",
+  //   "name": "foo", "scale": 2, "precision": 4}
+  // avro_schema = {
+  //   "namespace": "logical",
+  //   "type": "record",
+  //   "name": "test",
+  //   "fields": [
+  //   {"name": "bytes", "type": bytesSchema},
+  //   {"name": "fixed", "type": fixedSchema}
+  //   ]
+  // }
+  // parsed_schema = parse_schema(avro_schema)
+  // fixed_decimal = lambda x: prepare_fixed_decimal(decimal.Decimal(x), fixedSchema)
+  // bytes_decimal = lambda x: prepare_bytes_decimal(decimal.Decimal(x), bytesSchema)
+  // create_row = lambda x: {u'bytes': bytes_decimal(x), u'fixed': fixed_decimal(x)}
+  // records = map(create_row, ['1.23', '4.56', '78.90', '-1', '-2.31'])
+  // # Writing
+  // with open('decimal.avro', 'wb') as out:
+  //   writer(out, parsed_schema, records)
+  val decimalAvro = testFile("decimal.avro")
+
   override protected def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set("spark.sql.files.maxPartitionBytes", 1024)
@@ -494,6 +521,39 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     checkAnswer(df, expected)
   }
 
+  test("Logical type: Decimal") {
+    val expected = Seq("1.23", "4.56", "78.90", "-1", "-2.31")
+      .map { x => Row(new java.math.BigDecimal(x), new java.math.BigDecimal(x)) }
+    val df = spark.read.format("avro").load(decimalAvro)
+
+    checkAnswer(df, expected)
+
+    val avroSchema = s"""
+      {
+        "namespace": "logical",
+        "type": "record",
+        "name": "test",
+        "fields": [
+          {"name": "bytes", "type":
+             {"type": "bytes", "logicalType": "decimal", "precision": 4, "scale": 2}
+          },
+          {"name": "fixed", "type":
+            {"type": "fixed", "size": 5, "logicalType": "decimal",
+              "precision": 4, "scale": 2, "name": "foo"}
+          }
+        ]
+      }
+    """
+
+    checkAnswer(spark.read.format("avro").option("avroSchema", avroSchema).load(decimalAvro),
+      expected)
+
+    withTempPath { dir =>
+      df.write.format("avro").save(dir.toString)
+      checkAnswer(spark.read.format("avro").load(dir.toString), expected)
+    }
+  }
+
   test("Array data types") {
     withTempPath { dir =>
       val testSchema = StructType(Seq(
@@ -689,7 +749,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       // DecimalType should be converted to string
       val decimals = spark.read.format("avro").load(avroDir).select("Decimal").collect()
-      assert(decimals.map(_(0)).contains("3.14"))
+      assert(decimals.map(_(0)).contains(new java.math.BigDecimal("3.14")))
 
       // There should be a null entry
       val length = spark.read.format("avro").load(avroDir).select("Length").collect()

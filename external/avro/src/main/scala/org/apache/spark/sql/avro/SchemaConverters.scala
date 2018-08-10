@@ -18,19 +18,26 @@
 package org.apache.spark.sql.avro
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
+import com.fasterxml.jackson.annotation.ObjectIdGenerators.UUIDGenerator
 import org.apache.avro.{LogicalType, LogicalTypes, Schema, SchemaBuilder}
-import org.apache.avro.LogicalTypes.{Date, TimestampMicros, TimestampMillis}
+import org.apache.avro.LogicalTypes.{Date, Decimal, TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.internal.SQLConf.AvroOutputTimestampType
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.Decimal.{maxPrecisionForBytes, minBytesForPrecision}
 
 /**
  * This object contains method that are used to convert sparkSQL schemas to avro schemas and vice
  * versa.
  */
 object SchemaConverters {
+  private lazy val uuidGenerator = RandomUUIDGenerator(new Random().nextLong())
+
   case class SchemaType(dataType: DataType, nullable: Boolean)
 
   /**
@@ -44,14 +51,20 @@ object SchemaConverters {
       }
       case STRING => SchemaType(StringType, nullable = false)
       case BOOLEAN => SchemaType(BooleanType, nullable = false)
-      case BYTES => SchemaType(BinaryType, nullable = false)
+      case BYTES | FIXED => avroSchema.getLogicalType match {
+        // For FIXED type, if the precision requires more bytes than fixed size, the logical
+        // type will be null, which is handled by Avro library.
+        case d: Decimal => SchemaType(DecimalType(d.getPrecision, d.getScale), nullable = false)
+        case _ => SchemaType(BinaryType, nullable = false)
+      }
+
       case DOUBLE => SchemaType(DoubleType, nullable = false)
       case FLOAT => SchemaType(FloatType, nullable = false)
       case LONG => avroSchema.getLogicalType match {
         case _: TimestampMillis | _: TimestampMicros => SchemaType(TimestampType, nullable = false)
         case _ => SchemaType(LongType, nullable = false)
       }
-      case FIXED => SchemaType(BinaryType, nullable = false)
+
       case ENUM => SchemaType(StringType, nullable = false)
 
       case RECORD =>
@@ -139,7 +152,22 @@ object SchemaConverters {
 
       case FloatType => builder.floatType()
       case DoubleType => builder.doubleType()
-      case _: DecimalType | StringType => builder.stringType()
+      case StringType => builder.stringType()
+      case d: DecimalType =>
+        val avroType = LogicalTypes.decimal(d.precision, d.scale)
+        val fixedSize = minBytesForPrecision(d.precision)
+        // Use random name to avoid conflict in naming of fixed field.
+        // Field names must start with [A-Za-z_], while the charset of Random.alphanumeric contains
+        // [0-9]. So add a single character "f" to ensure the name is valid.
+        val name = "f" + Random.alphanumeric.take(32).mkString("")
+        if (nullable) {
+          val schema = avroType.addToSchema(
+            SchemaBuilder.builder().fixed(name).size(fixedSize))
+          builder.`type`(schema)
+        } else {
+          avroType.addToSchema(builder.fixed(name).size(fixedSize))
+        }
+
       case BinaryType => builder.bytesType()
       case ArrayType(et, containsNull) =>
         builder.array()
