@@ -411,7 +411,7 @@ abstract class HashExpression[E] extends Expression {
     ctx.splitExpressions(
       expressions = fieldsHash,
       funcName = "computeHashForStruct",
-      arguments = Seq("InternalRow" -> input, hashResultType -> result),
+      arguments = Seq(hashResultType -> result),
       returnType = hashResultType,
       makeSplitFunction = body =>
         s"""
