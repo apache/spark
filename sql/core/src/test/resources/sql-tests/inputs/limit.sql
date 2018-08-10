@@ -1,3 +1,5 @@
+-- Disable global limit parallel
+set spark.sql.limit.flatGlobalLimit=false;
 
 -- limit on various data types
 SELECT * FROM testdata LIMIT 2;
