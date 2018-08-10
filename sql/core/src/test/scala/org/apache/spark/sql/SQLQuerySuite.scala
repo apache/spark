@@ -2840,8 +2840,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       val distributeExprs = (0 until 100).map(c => s"id$c").mkString(",")
       df.selectExpr(columns : _*).createTempView("spark_25084")
       assert(
-        spark.sql(s"select * from spark_25084 distribute by ($distributeExprs)").count()
-          === count)
+        spark.sql(s"select * from spark_25084 distribute by ($distributeExprs)").count === count)
     }
   }
 }
