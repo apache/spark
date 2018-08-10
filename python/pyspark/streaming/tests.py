@@ -215,12 +215,12 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
         def func(dstream):
             return dstream.slice()
-        expected = [dt.datetime(2019, 12, 31, 23, 55),
-                    dt.datetime(2019, 12, 31, 23, 56),
-                    dt.datetime(2019, 12, 31, 23, 57),
-                    dt.datetime(2019, 12, 31, 23, 58),
-                    dt.datetime(2019, 12, 31, 23, 59),
-                    dt.datetime(2020, 1, 1)]
+        expected = [[dt.datetime(2019, 12, 31, 23, 55)],
+                    [dt.datetime(2019, 12, 31, 23, 56)],
+                    [dt.datetime(2019, 12, 31, 23, 57)],
+                    [dt.datetime(2019, 12, 31, 23, 58)],
+                    [dt.datetime(2019, 12, 31, 23, 59)],
+                    [dt.datetime(2020, 1, 1)]]
         self._test_func(input, func, expected)
 
     def test_reduce(self):
