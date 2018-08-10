@@ -19,17 +19,18 @@ package org.apache.spark.deploy.yarn.security
 
 import java.util.concurrent.{Executors, TimeUnit}
 
-import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-
-import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.{SparkConf, SparkContext, SparkEnv}
+
+import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 private[spark] class CredentialUpdater(
     sparkConf: SparkConf,
@@ -39,6 +40,7 @@ private[spark] class CredentialUpdater(
   @volatile private var lastCredentialsFileSuffix = 0
 
   private val credentialsFile = sparkConf.get(CREDENTIALS_FILE_PATH)
+  private val skipUpdate = sparkConf.get(CREDENTIAL_DRIVER_SKIP_UPDATE)
   private val freshHadoopConf =
     SparkHadoopUtil.get.getConfBypassingFSCache(
       hadoopConf, new Path(credentialsFile).toUri.getScheme)
@@ -66,6 +68,10 @@ private[spark] class CredentialUpdater(
   }
 
   private def updateCredentialsIfRequired(): Unit = {
+    if (skipUpdate && (SparkEnv.get.executorId == SparkContext.DRIVER_IDENTIFIER)) {
+      logInfo("Skip update token with driver.")
+      return
+    }
     val timeToNextUpdate = try {
       val credentialsFilePath = new Path(credentialsFile)
       val remoteFs = FileSystem.get(freshHadoopConf)
@@ -78,7 +84,18 @@ private[spark] class CredentialUpdater(
             logInfo("Reading new credentials from " + credentialsStatus.getPath)
             val newCredentials = getCredentialsFromHDFSFile(remoteFs, credentialsStatus.getPath)
             lastCredentialsFileSuffix = suffix
+            newCredentials.getAllTokens.asScala
+              .map(_.decodeIdentifier())
+              .filter(_.isInstanceOf[DelegationTokenIdentifier])
+              .map(_.toString)
+              .foreach(logInfo(_))
             UserGroupInformation.getCurrentUser.addCredentials(newCredentials)
+            val tokens = UserGroupInformation.getCurrentUser.getCredentials.getAllTokens
+            tokens.asScala
+              .map(_.decodeIdentifier())
+              .filter(_.isInstanceOf[DelegationTokenIdentifier])
+              .map(_.toString)
+              .foreach(logInfo(_))
             logInfo("Credentials updated from credentials file.")
 
             val remainingTime = (getTimeOfNextUpdateFromFileName(credentialsStatus.getPath)

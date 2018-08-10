@@ -225,6 +225,21 @@ package object config {
       .createOptional
 
   /* Security configuration. */
+  private[spark] val CREDENTIAL_DRIVER_SKIP_UPDATE =
+    ConfigBuilder("spark.yarn.credentials.driver.skipUpdate")
+      .booleanConf
+      .createWithDefault(true)
+
+
+  private[spark] val CREDENTIAL_UPDATE_COEFFICIENT =
+    ConfigBuilder("spark.yarn.credentials.update.coefficient")
+      .doubleConf
+      .createWithDefault(0.6)
+
+  private[spark] val CREDENTIAL_RENEW_TIME_COEFFICIENT =
+    ConfigBuilder("spark.yarn.credentials.renewTime.coefficient")
+      .doubleConf
+      .createWithDefault(0.5)
 
   private[spark] val CREDENTIAL_FILE_MAX_COUNT =
     ConfigBuilder("spark.yarn.credentials.file.retention.count")

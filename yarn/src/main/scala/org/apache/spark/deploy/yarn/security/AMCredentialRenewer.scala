@@ -67,6 +67,8 @@ private[yarn] class AMCredentialRenewer(
   private val credentialsFile = sparkConf.get(CREDENTIALS_FILE_PATH)
   private val daysToKeepFiles = sparkConf.get(CREDENTIALS_FILE_MAX_RETENTION)
   private val numFilesToKeep = sparkConf.get(CREDENTIAL_FILE_MAX_COUNT)
+  private val credentialUpdateCoefficient = sparkConf.get(CREDENTIAL_UPDATE_COEFFICIENT)
+  private val credentialRenewTimeCoefficient = sparkConf.get(CREDENTIAL_RENEW_TIME_COEFFICIENT)
   private val freshHadoopConf =
     hadoopUtil.getConfBypassingFSCache(hadoopConf, new Path(credentialsFile).toUri.getScheme)
 
@@ -193,8 +195,9 @@ private[yarn] class AMCredentialRenewer(
     } else {
       // Next valid renewal time is about 75% of credential renewal time, and update time is
       // slightly later than valid renewal time (80% of renewal time).
-      timeOfNextRenewal = ((nearestNextRenewalTime - currTime) * 0.75 + currTime).toLong
-      ((nearestNextRenewalTime - currTime) * 0.8 + currTime).toLong
+      timeOfNextRenewal = ((nearestNextRenewalTime - currTime) *
+        credentialRenewTimeCoefficient + currTime).toLong
+      ((nearestNextRenewalTime - currTime) * credentialUpdateCoefficient + currTime).toLong
     }
 
     // Add the temp credentials back to the original ones.
