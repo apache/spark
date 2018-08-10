@@ -1996,6 +1996,102 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(ex3.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
   }
 
+  test("exists function - array for primitive type not containing null") {
+    val df = Seq(
+      Seq(1, 9, 8, 7),
+      Seq(5, 9, 7),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
+      checkAnswer(df.selectExpr("exists(i, x -> x % 2 == 0)"),
+        Seq(
+          Row(true),
+          Row(false),
+          Row(false),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeNotContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testArrayOfPrimitiveTypeNotContainsNull()
+  }
+
+  test("exists function - array for primitive type containing null") {
+    val df = Seq[Seq[Integer]](
+      Seq(1, 9, 8, null, 7),
+      Seq(5, null, null, 9, 7, null),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeContainsNull(): Unit = {
+      checkAnswer(df.selectExpr("exists(i, x -> x % 2 == 0)"),
+        Seq(
+          Row(true),
+          Row(false),
+          Row(false),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testArrayOfPrimitiveTypeContainsNull()
+  }
+
+  test("exists function - array for non-primitive type") {
+    val df = Seq(
+      Seq("c", "a", "b"),
+      Seq("b", null, "c", null),
+      Seq.empty,
+      null
+    ).toDF("s")
+
+    def testNonPrimitiveType(): Unit = {
+      checkAnswer(df.selectExpr("exists(s, x -> x is null)"),
+        Seq(
+          Row(false),
+          Row(true),
+          Row(false),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testNonPrimitiveType()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testNonPrimitiveType()
+  }
+
+  test("exists function - invalid") {
+    val df = Seq(
+      (Seq("c", "a", "b"), 1),
+      (Seq("b", null, "c", null), 2),
+      (Seq.empty, 3),
+      (null, 4)
+    ).toDF("s", "i")
+
+    val ex1 = intercept[AnalysisException] {
+      df.selectExpr("exists(s, (x, y) -> x + y)")
+    }
+    assert(ex1.getMessage.contains("The number of lambda function arguments '2' does not match"))
+
+    val ex2 = intercept[AnalysisException] {
+      df.selectExpr("exists(i, x -> x)")
+    }
+    assert(ex2.getMessage.contains("data type mismatch: argument 1 requires array type"))
+
+    val ex3 = intercept[AnalysisException] {
+      df.selectExpr("exists(s, x -> x)")
+    }
+    assert(ex3.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
+  }
+
   test("aggregate function - array for primitive type not containing null") {
     val df = Seq(
       Seq(1, 9, 8, 7),

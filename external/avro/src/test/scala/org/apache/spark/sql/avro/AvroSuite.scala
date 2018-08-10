@@ -32,6 +32,7 @@ import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWri
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -98,6 +99,25 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     val originalEntries = spark.read.format("avro").load(testAvro).collect()
     val newEntries = spark.read.format("avro").load(newFile)
     checkAnswer(newEntries, originalEntries)
+  }
+
+  def checkAvroSchemaEquals(avroSchema: String, expectedAvroSchema: String): Unit = {
+    assert(new Schema.Parser().parse(avroSchema) ==
+      new Schema.Parser().parse(expectedAvroSchema))
+  }
+
+  def getAvroSchemaStringFromFiles(filePath: String): String = {
+    new DataFileReader({
+      val file = new File(filePath)
+      if (file.isFile) {
+        file
+      } else {
+        file.listFiles()
+          .filter(_.isFile)
+          .filter(_.getName.endsWith("avro"))
+          .head
+      }
+    }, new GenericDatumReader[Any]()).getSchema.toString(false)
   }
 
   test("resolve avro data source") {
@@ -471,7 +491,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       }
     """
     val df = spark.read.format("avro").option("avroSchema", avroSchema).load(timestampAvro)
-
     checkAnswer(df, expected)
   }
 
@@ -773,6 +792,205 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(result === Row("foo"))
   }
 
+  test("support user provided avro schema for writing nullable enum type") {
+    withTempPath { tempDir =>
+      val avroSchema =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [{
+          |    "name": "enum",
+          |    "type": [{ "type": "enum",
+          |              "name": "Suit",
+          |              "symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
+          |            }, "null"]
+          |  }]
+          |}
+        """.stripMargin
+
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+        Row("SPADES"), Row(null), Row("HEARTS"), Row("DIAMONDS"),
+        Row(null), Row("CLUBS"), Row("HEARTS"), Row("SPADES"))),
+        StructType(Seq(StructField("Suit", StringType, true))))
+
+      val tempSaveDir = s"$tempDir/save/"
+
+      df.write.format("avro").option("avroSchema", avroSchema).save(tempSaveDir)
+
+      checkAnswer(df, spark.read.format("avro").load(tempSaveDir))
+      checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
+
+      // Writing df containing data not in the enum will throw an exception
+      val message = intercept[SparkException] {
+        spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+          Row("SPADES"), Row("NOT-IN-ENUM"), Row("HEARTS"), Row("DIAMONDS"))),
+          StructType(Seq(StructField("Suit", StringType, true))))
+          .write.format("avro").option("avroSchema", avroSchema)
+          .save(s"$tempDir/${UUID.randomUUID()}")
+      }.getCause.getMessage
+      assert(message.contains("org.apache.spark.sql.avro.IncompatibleSchemaException: " +
+        "Cannot write \"NOT-IN-ENUM\" since it's not defined in enum"))
+    }
+  }
+
+  test("support user provided avro schema for writing non-nullable enum type") {
+    withTempPath { tempDir =>
+      val avroSchema =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [{
+          |    "name": "enum",
+          |    "type": { "type": "enum",
+          |              "name": "Suit",
+          |              "symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
+          |            }
+          |  }]
+          |}
+        """.stripMargin
+
+      val dfWithNull = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+        Row("SPADES"), Row(null), Row("HEARTS"), Row("DIAMONDS"),
+        Row(null), Row("CLUBS"), Row("HEARTS"), Row("SPADES"))),
+        StructType(Seq(StructField("Suit", StringType, true))))
+
+      val df = spark.createDataFrame(dfWithNull.na.drop().rdd,
+        StructType(Seq(StructField("Suit", StringType, false))))
+
+      val tempSaveDir = s"$tempDir/save/"
+
+      df.write.format("avro").option("avroSchema", avroSchema).save(tempSaveDir)
+
+      checkAnswer(df, spark.read.format("avro").load(tempSaveDir))
+      checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
+
+      // Writing df containing nulls without using avro union type will
+      // throw an exception as avro uses union type to handle null.
+      val message1 = intercept[SparkException] {
+        dfWithNull.write.format("avro")
+          .option("avroSchema", avroSchema).save(s"$tempDir/${UUID.randomUUID()}")
+      }.getCause.getMessage
+      assert(message1.contains("org.apache.avro.AvroRuntimeException: Not a union:"))
+
+      // Writing df containing data not in the enum will throw an exception
+      val message2 = intercept[SparkException] {
+        spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+          Row("SPADES"), Row("NOT-IN-ENUM"), Row("HEARTS"), Row("DIAMONDS"))),
+          StructType(Seq(StructField("Suit", StringType, false))))
+          .write.format("avro").option("avroSchema", avroSchema)
+          .save(s"$tempDir/${UUID.randomUUID()}")
+      }.getCause.getMessage
+      assert(message2.contains("org.apache.spark.sql.avro.IncompatibleSchemaException: " +
+        "Cannot write \"NOT-IN-ENUM\" since it's not defined in enum"))
+    }
+  }
+
+  test("support user provided avro schema for writing nullable fixed type") {
+    withTempPath { tempDir =>
+      val avroSchema =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [{
+          |    "name": "fixed2",
+          |    "type": [{ "type": "fixed",
+          |               "size": 2,
+          |               "name": "fixed2"
+          |            }, "null"]
+          |  }]
+          |}
+        """.stripMargin
+
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+        Row(Array(192, 168).map(_.toByte)), Row(null))),
+        StructType(Seq(StructField("fixed2", BinaryType, true))))
+
+      val tempSaveDir = s"$tempDir/save/"
+
+      df.write.format("avro").option("avroSchema", avroSchema).save(tempSaveDir)
+
+      checkAnswer(df, spark.read.format("avro").load(tempSaveDir))
+      checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
+
+      // Writing df containing binary data that doesn't fit FIXED size will throw an exception
+      val message1 = intercept[SparkException] {
+        spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+          Row(Array(192, 168, 1).map(_.toByte)))),
+          StructType(Seq(StructField("fixed2", BinaryType, true))))
+          .write.format("avro").option("avroSchema", avroSchema)
+          .save(s"$tempDir/${UUID.randomUUID()}")
+      }.getCause.getMessage
+      assert(message1.contains("org.apache.spark.sql.avro.IncompatibleSchemaException: " +
+        "Cannot write 3 bytes of binary data into FIXED Type with size of 2 bytes"))
+
+      // Writing df containing binary data that doesn't fit FIXED size will throw an exception
+      val message2 = intercept[SparkException] {
+        spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+          Row(Array(192).map(_.toByte)))),
+          StructType(Seq(StructField("fixed2", BinaryType, true))))
+          .write.format("avro").option("avroSchema", avroSchema)
+          .save(s"$tempDir/${UUID.randomUUID()}")
+      }.getCause.getMessage
+      assert(message2.contains("org.apache.spark.sql.avro.IncompatibleSchemaException: " +
+        "Cannot write 1 byte of binary data into FIXED Type with size of 2 bytes"))
+    }
+  }
+
+  test("support user provided avro schema for writing non-nullable fixed type") {
+    withTempPath { tempDir =>
+      val avroSchema =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [{
+          |    "name": "fixed2",
+          |    "type": { "type": "fixed",
+          |               "size": 2,
+          |               "name": "fixed2"
+          |            }
+          |  }]
+          |}
+        """.stripMargin
+
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+        Row(Array(192, 168).map(_.toByte)), Row(Array(1, 1).map(_.toByte)))),
+        StructType(Seq(StructField("fixed2", BinaryType, false))))
+
+      val tempSaveDir = s"$tempDir/save/"
+
+      df.write.format("avro").option("avroSchema", avroSchema).save(tempSaveDir)
+
+      checkAnswer(df, spark.read.format("avro").load(tempSaveDir))
+      checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
+
+      // Writing df containing binary data that doesn't fit FIXED size will throw an exception
+      val message1 = intercept[SparkException] {
+        spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+          Row(Array(192, 168, 1).map(_.toByte)))),
+          StructType(Seq(StructField("fixed2", BinaryType, false))))
+          .write.format("avro").option("avroSchema", avroSchema)
+          .save(s"$tempDir/${UUID.randomUUID()}")
+      }.getCause.getMessage
+      assert(message1.contains("org.apache.spark.sql.avro.IncompatibleSchemaException: " +
+        "Cannot write 3 bytes of binary data into FIXED Type with size of 2 bytes"))
+
+      // Writing df containing binary data that doesn't fit FIXED size will throw an exception
+      val message2 = intercept[SparkException] {
+        spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+          Row(Array(192).map(_.toByte)))),
+          StructType(Seq(StructField("fixed2", BinaryType, false))))
+          .write.format("avro").option("avroSchema", avroSchema)
+          .save(s"$tempDir/${UUID.randomUUID()}")
+      }.getCause.getMessage
+      assert(message2.contains("org.apache.spark.sql.avro.IncompatibleSchemaException: " +
+        "Cannot write 1 byte of binary data into FIXED Type with size of 2 bytes"))
+    }
+  }
+
   test("reading from invalid path throws exception") {
 
     // Directory given has no avro files
@@ -936,13 +1154,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     withTempPath { dir =>
       val writeDf = spark.createDataFrame(List(NestedTop(1, NestedMiddle(2, NestedBottom(3, "1")))))
       writeDf.write.format("avro").save(dir.toString)
-      val file = new File(dir.toString)
-        .listFiles()
-        .filter(_.isFile)
-        .filter(_.getName.endsWith("avro"))
-        .head
-      val reader = new DataFileReader(file, new GenericDatumReader[Any]())
-      val schema = reader.getSchema.toString()
+      val schema = getAvroSchemaStringFromFiles(dir.toString)
       assert(schema.contains("\"namespace\":\"topLevelRecord\""))
       assert(schema.contains("\"namespace\":\"topLevelRecord.data\""))
       assert(schema.contains("\"namespace\":\"topLevelRecord.data.data\""))

@@ -363,13 +363,14 @@ case class AppendData(
   override def output: Seq[Attribute] = Seq.empty
 
   override lazy val resolved: Boolean = {
-    query.output.size == table.output.size && query.output.zip(table.output).forall {
-      case (inAttr, outAttr) =>
-          // names and types must match, nullability must be compatible
-          inAttr.name == outAttr.name &&
-          DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
-          (outAttr.nullable || !inAttr.nullable)
-    }
+    table.resolved && query.resolved && query.output.size == table.output.size &&
+        query.output.zip(table.output).forall {
+          case (inAttr, outAttr) =>
+            // names and types must match, nullability must be compatible
+            inAttr.name == outAttr.name &&
+                DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
+                (outAttr.nullable || !inAttr.nullable)
+        }
   }
 }
 

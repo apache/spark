@@ -15,21 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql.internal
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.{LocalSparkSession, SparkSession}
 
-case class KnownNotNull(child: Expression) extends UnaryExpression {
-  override def nullable: Boolean = false
-  override def dataType: DataType = child.dataType
+class SQLConfGetterSuite extends SparkFunSuite with LocalSparkSession {
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    child.genCode(ctx).copy(isNull = FalseLiteral)
-  }
-
-  override def eval(input: InternalRow): Any = {
-    child.eval(input)
+  test("SPARK-25076: SQLConf should not be retrieved from a stopped SparkSession") {
+    spark = SparkSession.builder().master("local").getOrCreate()
+    assert(SQLConf.get eq spark.sessionState.conf,
+      "SQLConf.get should get the conf from the active spark session.")
+    spark.stop()
+    assert(SQLConf.get eq SQLConf.getFallbackConf,
+      "SQLConf.get should not get conf from a stopped spark session.")
   }
 }

@@ -32,14 +32,15 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming.{LongOffset, SimpleStreamingScanConfig, SimpleStreamingScanConfigBuilder}
+import org.apache.spark.sql.execution.streaming.continuous.TextSocketContinuousReadSupport
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, MicroBatchReadSupportProvider}
+import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceOptions, DataSourceV2, MicroBatchReadSupportProvider}
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, MicroBatchReadSupport, Offset}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
-object TextSocketMicroBatchReadSupport {
+object TextSocketReader {
   val SCHEMA_REGULAR = StructType(StructField("value", StringType) :: Nil)
   val SCHEMA_TIMESTAMP = StructType(StructField("value", StringType) ::
     StructField("timestamp", TimestampType) :: Nil)
@@ -47,9 +48,9 @@ object TextSocketMicroBatchReadSupport {
 }
 
 /**
- * A MicroBatchReader that reads text lines through a TCP socket, designed only for tutorials and
- * debugging. This MicroBatchReader will *not* work in production applications due to multiple
- * reasons, including no support for fault recovery.
+ * A MicroBatchReadSupport that reads text lines through a TCP socket, designed only for tutorials
+ * and debugging. This MicroBatchReadSupport will *not* work in production applications due to
+ * multiple reasons, including no support for fault recovery.
  */
 class TextSocketMicroBatchReadSupport(options: DataSourceOptions)
   extends MicroBatchReadSupport with Logging {
@@ -125,9 +126,9 @@ class TextSocketMicroBatchReadSupport(options: DataSourceOptions)
 
   override def fullSchema(): StructType = {
     if (options.getBoolean("includeTimestamp", false)) {
-      TextSocketMicroBatchReadSupport.SCHEMA_TIMESTAMP
+      TextSocketReader.SCHEMA_TIMESTAMP
     } else {
-      TextSocketMicroBatchReadSupport.SCHEMA_REGULAR
+      TextSocketReader.SCHEMA_REGULAR
     }
   }
 
@@ -221,7 +222,8 @@ class TextSocketMicroBatchReadSupport(options: DataSourceOptions)
 case class TextSocketInputPartition(slice: ListBuffer[(UTF8String, Long)]) extends InputPartition
 
 class TextSocketSourceProvider extends DataSourceV2
-  with MicroBatchReadSupportProvider with DataSourceRegister with Logging {
+  with MicroBatchReadSupportProvider with ContinuousReadSupportProvider
+  with DataSourceRegister with Logging {
 
   private def checkParameters(params: DataSourceOptions): Unit = {
     logWarning("The socket source should not be used for production applications! " +
@@ -246,6 +248,13 @@ class TextSocketSourceProvider extends DataSourceV2
       options: DataSourceOptions): MicroBatchReadSupport = {
     checkParameters(options)
     new TextSocketMicroBatchReadSupport(options)
+  }
+
+  override def createContinuousReadSupport(
+      checkpointLocation: String,
+      options: DataSourceOptions): ContinuousReadSupport = {
+    checkParameters(options)
+    new TextSocketContinuousReadSupport(options)
   }
 
   /** String that represents the format that this data source provider uses. */
