@@ -404,14 +404,16 @@ abstract class HashExpression[E] extends Expression {
       input: String,
       result: String,
       fields: Array[StructField]): String = {
+    val tmpInput = ctx.freshName("arg")
     val fieldsHash = fields.zipWithIndex.map { case (field, index) =>
-      nullSafeElementHash(input, index.toString, field.nullable, field.dataType, result, ctx)
+      nullSafeElementHash(tmpInput, index.toString, field.nullable, field.dataType, result, ctx)
     }
     val hashResultType = CodeGenerator.javaType(dataType)
+    s"final InternalRow $tmpInput = $tmpInput;\n" +
     ctx.splitExpressions(
       expressions = fieldsHash,
       funcName = "computeHashForStruct",
-      arguments = Seq("InternalRow" -> input, hashResultType -> result),
+      arguments = Seq("InternalRow" -> tmpInput, hashResultType -> result),
       returnType = hashResultType,
       makeSplitFunction = body =>
         s"""
@@ -778,10 +780,11 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
       input: String,
       result: String,
       fields: Array[StructField]): String = {
+    val tmpInput = ctx.freshName("arg")
     val childResult = ctx.freshName("childResult")
     val fieldsHash = fields.zipWithIndex.map { case (field, index) =>
       val computeFieldHash = nullSafeElementHash(
-        input, index.toString, field.nullable, field.dataType, childResult, ctx)
+        tmpInput, index.toString, field.nullable, field.dataType, childResult, ctx)
       s"""
          |$childResult = 0;
          |$computeFieldHash
@@ -789,10 +792,11 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
        """.stripMargin
     }
 
-    s"${CodeGenerator.JAVA_INT} $childResult = 0;\n" + ctx.splitExpressions(
+    s"${CodeGenerator.JAVA_INT} $childResult = 0;\n" +
+       s"final InternalRow $tmpInput = $input;\n" + ctx.splitExpressions(
       expressions = fieldsHash,
       funcName = "computeHashForStruct",
-      arguments = Seq("InternalRow" -> input, CodeGenerator.JAVA_INT -> result),
+      arguments = Seq("InternalRow" -> tmpInput, CodeGenerator.JAVA_INT -> result),
       returnType = CodeGenerator.JAVA_INT,
       makeSplitFunction = body =>
         s"""
