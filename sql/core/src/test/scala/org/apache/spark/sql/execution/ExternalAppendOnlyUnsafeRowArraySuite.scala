@@ -31,7 +31,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
 
   override def afterAll(): Unit = TaskContext.unset()
 
-  private def withExternalArray(inMemoryThreshold: Int, spillThreshold: Int)
+  private def withExternalArray(inMemoryThreshold: Int, spillThreshold: Int, asQueue: Boolean)
                                (f: ExternalAppendOnlyUnsafeRowArray => Unit): Unit = {
     sc = new SparkContext("local", "test", new SparkConf(false))
 
@@ -43,6 +43,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       SparkEnv.get.blockManager,
       SparkEnv.get.serializerManager,
       taskContext,
+      asQueue,
       1024,
       SparkEnv.get.memoryManager.pageSizeBytes,
       inMemoryThreshold,
@@ -110,265 +111,311 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
     assert(getNumBytesSpilled > 0)
   }
 
-  test("insert rows less than the inMemoryThreshold") {
-    val (inMemoryThreshold, spillThreshold) = (100, 50)
-    withExternalArray(inMemoryThreshold, spillThreshold) { array =>
-      assert(array.isEmpty)
+  val asQueueVals = Array(false, true)
 
-      val expectedValues = populateRows(array, 1)
-      assert(!array.isEmpty)
-      assert(array.length == 1)
+  asQueueVals.foreach(q => {
+    test(s"insert rows less than the inMemoryThreshold $q") {
+      val (inMemoryThreshold, spillThreshold) = (100, 50)
+      withExternalArray(inMemoryThreshold, spillThreshold, q) { array =>
+        assert(array.isEmpty)
 
-      val iterator1 = validateData(array, expectedValues)
+        val expectedValues = populateRows(array, 1)
+        assert(!array.isEmpty)
+        assert(array.length == 1)
 
-      // Add more rows (but not too many to trigger switch to [[UnsafeExternalSorter]])
-      // Verify that NO spill has happened
-      populateRows(array, inMemoryThreshold - 1, expectedValues)
-      assert(array.length == inMemoryThreshold)
-      assertNoSpill()
+        val iterator1 = validateData(array, expectedValues)
 
-      val iterator2 = validateData(array, expectedValues)
+        // Add more rows (but not too many to trigger switch to [[UnsafeExternalSorter]])
+        // Verify that NO spill has happened
+        populateRows(array, inMemoryThreshold - 1, expectedValues)
+        assert(array.length == inMemoryThreshold)
+        assertNoSpill()
 
-      assert(!iterator1.hasNext)
-      assert(!iterator2.hasNext)
-    }
-  }
+        val iterator2 = validateData(array, expectedValues)
 
-  test("insert rows more than the inMemoryThreshold but less than spillThreshold") {
-    val (inMemoryThreshold, spillThreshold) = (10, 50)
-    withExternalArray(inMemoryThreshold, spillThreshold) { array =>
-      assert(array.isEmpty)
-      val expectedValues = populateRows(array, inMemoryThreshold - 1)
-      assert(array.length == (inMemoryThreshold - 1))
-      val iterator1 = validateData(array, expectedValues)
-      assertNoSpill()
-
-      // Add more rows to trigger switch to [[UnsafeExternalSorter]] but not too many to cause a
-      // spill to happen. Verify that NO spill has happened
-      populateRows(array, spillThreshold - expectedValues.length - 1, expectedValues)
-      assert(array.length == spillThreshold - 1)
-      assertNoSpill()
-
-      val iterator2 = validateData(array, expectedValues)
-      assert(!iterator2.hasNext)
-
-      assert(!iterator1.hasNext)
-      intercept[ConcurrentModificationException](iterator1.next())
-    }
-  }
-
-  test("insert rows enough to force spill") {
-    val (inMemoryThreshold, spillThreshold) = (20, 10)
-    withExternalArray(inMemoryThreshold, spillThreshold) { array =>
-      assert(array.isEmpty)
-      val expectedValues = populateRows(array, inMemoryThreshold - 1)
-      assert(array.length == (inMemoryThreshold - 1))
-      val iterator1 = validateData(array, expectedValues)
-      assertNoSpill()
-
-      // Add more rows to trigger switch to [[UnsafeExternalSorter]] and cause a spill to happen.
-      // Verify that spill has happened
-      populateRows(array, 2, expectedValues)
-      assert(array.length == inMemoryThreshold + 1)
-      assertSpill()
-
-      val iterator2 = validateData(array, expectedValues)
-      assert(!iterator2.hasNext)
-
-      assert(!iterator1.hasNext)
-      intercept[ConcurrentModificationException](iterator1.next())
-    }
-  }
-
-  test("iterator on an empty array should be empty") {
-    withExternalArray(inMemoryThreshold = 4, spillThreshold = 10) { array =>
-      val iterator = array.generateIterator()
-      assert(array.isEmpty)
-      assert(array.length == 0)
-      assert(!iterator.hasNext)
-    }
-  }
-
-  test("generate iterator with negative start index") {
-    withExternalArray(inMemoryThreshold = 100, spillThreshold = 56) { array =>
-      val exception =
-        intercept[ArrayIndexOutOfBoundsException](array.generateIterator(startIndex = -10))
-
-      assert(exception.getMessage.contains(
-        "Invalid `startIndex` provided for generating iterator over the array")
-      )
-    }
-  }
-
-  test("generate iterator with start index exceeding array's size (without spill)") {
-    val (inMemoryThreshold, spillThreshold) = (20, 100)
-    withExternalArray(inMemoryThreshold, spillThreshold) { array =>
-      populateRows(array, spillThreshold / 2)
-
-      val exception =
-        intercept[ArrayIndexOutOfBoundsException](
-          array.generateIterator(startIndex = spillThreshold * 10))
-      assert(exception.getMessage.contains(
-        "Invalid `startIndex` provided for generating iterator over the array"))
-    }
-  }
-
-  test("generate iterator with start index exceeding array's size (with spill)") {
-    val (inMemoryThreshold, spillThreshold) = (20, 100)
-    withExternalArray(inMemoryThreshold, spillThreshold) { array =>
-      populateRows(array, spillThreshold * 2)
-
-      val exception =
-        intercept[ArrayIndexOutOfBoundsException](
-          array.generateIterator(startIndex = spillThreshold * 10))
-
-      assert(exception.getMessage.contains(
-        "Invalid `startIndex` provided for generating iterator over the array"))
-    }
-  }
-
-  test("generate iterator with custom start index (without spill)") {
-    val (inMemoryThreshold, spillThreshold) = (20, 100)
-    withExternalArray(inMemoryThreshold, spillThreshold) { array =>
-      val expectedValues = populateRows(array, inMemoryThreshold)
-      val startIndex = inMemoryThreshold / 2
-      val iterator = array.generateIterator(startIndex = startIndex)
-      for (i <- startIndex until expectedValues.length) {
-        checkIfValueExists(iterator, expectedValues(i))
+        assert(!iterator1.hasNext)
+        assert(!iterator2.hasNext)
       }
-    }
-  }
+    }})
 
-  test("generate iterator with custom start index (with spill)") {
-    val (inMemoryThreshold, spillThreshold) = (20, 100)
-    withExternalArray(inMemoryThreshold, spillThreshold) { array =>
-      val expectedValues = populateRows(array, spillThreshold * 10)
-      val startIndex = spillThreshold * 2
-      val iterator = array.generateIterator(startIndex = startIndex)
-      for (i <- startIndex until expectedValues.length) {
-        checkIfValueExists(iterator, expectedValues(i))
+  asQueueVals.foreach(q => {
+    test(s"insert rows more than the inMemoryThreshold but less than spillThreshold $q") {
+      val (inMemoryThreshold, spillThreshold) = (10, 50)
+      withExternalArray(inMemoryThreshold, spillThreshold, q) { array =>
+        assert(array.isEmpty)
+        val expectedValues = populateRows(array, inMemoryThreshold - 1)
+        assert(array.length == (inMemoryThreshold - 1))
+        val iterator1 = validateData(array, expectedValues)
+        assertNoSpill()
+
+        // Add more rows to trigger switch to [[UnsafeExternalSorter]] but not too many to cause a
+        // spill to happen. Verify that NO spill has happened
+        populateRows(array, spillThreshold - expectedValues.length - 1, expectedValues)
+        assert(array.length == spillThreshold - 1)
+        assertNoSpill()
+
+        val iterator2 = validateData(array, expectedValues)
+        assert(!iterator2.hasNext)
+
+        assert(!iterator1.hasNext)
+        intercept[ConcurrentModificationException](iterator1.next())
       }
-    }
-  }
+    }})
 
-  test("test iterator invalidation (without spill)") {
-    withExternalArray(inMemoryThreshold = 10, spillThreshold = 100) { array =>
+  asQueueVals.foreach(q => {
+    test(s"insert rows enough to force spill $q") {
+      val (inMemoryThreshold, spillThreshold) = (20, 10)
+      withExternalArray(inMemoryThreshold, spillThreshold, q) { array =>
+        assert(array.isEmpty)
+        val expectedValues = populateRows(array, inMemoryThreshold - 1)
+        assert(array.length == (inMemoryThreshold - 1))
+        val iterator1 = validateData(array, expectedValues)
+        assertNoSpill()
+
+        // Add more rows to trigger switch to [[UnsafeExternalSorter]] and cause a spill to happen.
+        // Verify that spill has happened
+        populateRows(array, 2, expectedValues)
+        assert(array.length == inMemoryThreshold + 1)
+        assertSpill()
+
+        val iterator2 = validateData(array, expectedValues)
+        assert(!iterator2.hasNext)
+
+        assert(!iterator1.hasNext)
+        intercept[ConcurrentModificationException](iterator1.next())
+      }
+    }})
+
+  asQueueVals.foreach(q => {
+    test(s"iterator on an empty array should be empty $q") {
+      withExternalArray(inMemoryThreshold = 4, spillThreshold = 10, q) { array =>
+        val iterator = array.generateIterator()
+        assert(array.isEmpty)
+        assert(array.length == 0)
+        assert(!iterator.hasNext)
+      }
+    }})
+
+  asQueueVals.foreach(q => {
+    test(s"generate iterator with negative start index $q") {
+      withExternalArray(inMemoryThreshold = 100, spillThreshold = 56, q) { array =>
+        val exception =
+          intercept[ArrayIndexOutOfBoundsException](array.generateIterator(startIndex = -10))
+
+        assert(exception.getMessage.contains(
+          "Invalid `startIndex` provided for generating iterator over the array")
+        )
+      }
+    }})
+
+  asQueueVals.foreach(q => {
+    test(s"generate iterator with start index exceeding array's size (without spill) $q") {
+      val (inMemoryThreshold, spillThreshold) = (20, 100)
+      withExternalArray(inMemoryThreshold, spillThreshold, q) { array =>
+        populateRows(array, spillThreshold / 2)
+
+        val exception =
+          intercept[ArrayIndexOutOfBoundsException](
+            array.generateIterator(startIndex = spillThreshold * 10))
+        assert(exception.getMessage.contains(
+          "Invalid `startIndex` provided for generating iterator over the array"))
+      }
+    }})
+
+  asQueueVals.foreach(q => {
+    test(s"generate iterator with start index exceeding array's size (with spill) $q") {
+      val (inMemoryThreshold, spillThreshold) = (20, 100)
+      withExternalArray(inMemoryThreshold, spillThreshold, q) { array =>
+        populateRows(array, spillThreshold * 2)
+
+        val exception =
+          intercept[ArrayIndexOutOfBoundsException](
+            array.generateIterator(startIndex = spillThreshold * 10))
+
+        assert(exception.getMessage.contains(
+          "Invalid `startIndex` provided for generating iterator over the array"))
+      }
+    }})
+
+  asQueueVals.foreach(q => {
+    test(s"generate iterator with custom start index (without spill) $q") {
+      val (inMemoryThreshold, spillThreshold) = (20, 100)
+      withExternalArray(inMemoryThreshold, spillThreshold, q) { array =>
+        val expectedValues = populateRows(array, inMemoryThreshold)
+        val startIndex = inMemoryThreshold / 2
+        val iterator = array.generateIterator(startIndex = startIndex)
+        for (i <- startIndex until expectedValues.length) {
+          checkIfValueExists(iterator, expectedValues(i))
+        }
+      }
+    }})
+
+  asQueueVals.foreach(q => {
+    test(s"generate iterator with custom start index (with spill) $q") {
+      val (inMemoryThreshold, spillThreshold) = (20, 100)
+      withExternalArray(inMemoryThreshold, spillThreshold, q) { array =>
+        val expectedValues = populateRows(array, spillThreshold * 10)
+        val startIndex = spillThreshold * 2
+        val iterator = array.generateIterator(startIndex = startIndex)
+        for (i <- startIndex until expectedValues.length) {
+          checkIfValueExists(iterator, expectedValues(i))
+        }
+      }
+    }})
+
+  asQueueVals.foreach(q => {
+    test(s"test iterator invalidation (without spill) $q") {
+      withExternalArray(inMemoryThreshold = 10, spillThreshold = 100, q) { array =>
+        // insert 2 rows, iterate until the first row
+        populateRows(array, 2)
+
+        var iterator = array.generateIterator()
+        assert(iterator.hasNext)
+        iterator.next()
+
+        // Adding more row(s) should invalidate any old iterators
+        populateRows(array, 1)
+        assert(!iterator.hasNext)
+        intercept[ConcurrentModificationException](iterator.next())
+
+        // Clearing the array should also invalidate any old iterators
+        iterator = array.generateIterator()
+        assert(iterator.hasNext)
+        iterator.next()
+
+        array.clear()
+        assert(!iterator.hasNext)
+        intercept[ConcurrentModificationException](iterator.next())
+      }
+    }})
+
+  test(s"test dequeue with spill") {
+    withExternalArray(inMemoryThreshold = 2, spillThreshold = 3, true) { array =>
       // insert 2 rows, iterate until the first row
-      populateRows(array, 2)
-
-      var iterator = array.generateIterator()
-      assert(iterator.hasNext)
-      iterator.next()
-
-      // Adding more row(s) should invalidate any old iterators
-      populateRows(array, 1)
-      assert(!iterator.hasNext)
-      intercept[ConcurrentModificationException](iterator.next())
-
-      // Clearing the array should also invalidate any old iterators
-      iterator = array.generateIterator()
-      assert(iterator.hasNext)
-      iterator.next()
-
-      array.clear()
-      assert(!iterator.hasNext)
-      intercept[ConcurrentModificationException](iterator.next())
-    }
-  }
-
-  test("test iterator invalidation (with spill)") {
-    val (inMemoryThreshold, spillThreshold) = (2, 10)
-    withExternalArray(inMemoryThreshold, spillThreshold) { array =>
-      // Populate enough rows so that spill happens
-      populateRows(array, spillThreshold * 2)
+      populateRows(array, 10)
       assertSpill()
 
       var iterator = array.generateIterator()
       assert(iterator.hasNext)
-      iterator.next()
+      val first = iterator.next()
 
-      // Adding more row(s) should invalidate any old iterators
-      populateRows(array, 1)
-      assert(!iterator.hasNext)
-      intercept[ConcurrentModificationException](iterator.next())
+      val first2 = array.dequeue().get
+      assert(first.equals(first2))
+      val second = array.dequeue().get
+      assert(!second.equals(first2))
 
-      // Clearing the array should also invalidate any old iterators
-      iterator = array.generateIterator()
-      assert(iterator.hasNext)
-      iterator.next()
+      val third = array.peek().get
+      val third2 = array.dequeue().get
+      assert(third.equals(third2))
 
-      array.clear()
-      assert(!iterator.hasNext)
-      intercept[ConcurrentModificationException](iterator.next())
+      assert(array.length == 7)
+
+      populateRows(array, 10)
+
+      array.dequeue()
+      array.dequeue()
+
+      assert(array.length == 15)
     }
   }
 
-  test("clear on an empty the array") {
-    withExternalArray(inMemoryThreshold = 2, spillThreshold = 3) { array =>
-      val iterator = array.generateIterator()
-      assert(!iterator.hasNext)
+  asQueueVals.foreach(q => {
+    test(s"test iterator invalidation (with spill) $q") {
+      val (inMemoryThreshold, spillThreshold) = (2, 10)
+      withExternalArray(inMemoryThreshold, spillThreshold, q) { array =>
+        // Populate enough rows so that spill happens
+        populateRows(array, spillThreshold * 2)
+        assertSpill()
 
-      // multiple clear'ing should not have an side-effect
-      array.clear()
-      array.clear()
-      array.clear()
-      assert(array.isEmpty)
-      assert(array.length == 0)
+        var iterator = array.generateIterator()
+        assert(iterator.hasNext)
+        iterator.next()
 
-      // Clearing an empty array should also invalidate any old iterators
-      assert(!iterator.hasNext)
-      intercept[ConcurrentModificationException](iterator.next())
-    }
-  }
+        // Adding more row(s) should invalidate any old iterators
+        populateRows(array, 1)
+        assert(!iterator.hasNext)
+        intercept[ConcurrentModificationException](iterator.next())
 
-  test("clear array (without spill)") {
-    val (inMemoryThreshold, spillThreshold) = (10, 100)
-    withExternalArray(inMemoryThreshold, spillThreshold) { array =>
-      // Populate rows ... but not enough to trigger spill
-      populateRows(array, inMemoryThreshold / 2)
-      assertNoSpill()
+        // Clearing the array should also invalidate any old iterators
+        iterator = array.generateIterator()
+        assert(iterator.hasNext)
+        iterator.next()
 
-      // Clear the array
-      array.clear()
-      assert(array.isEmpty)
+        array.clear()
+        assert(!iterator.hasNext)
+        intercept[ConcurrentModificationException](iterator.next())
+      }
+    }})
 
-      // Re-populate few rows so that there is no spill
-      // Verify the data. Verify that there was no spill
-      val expectedValues = populateRows(array, inMemoryThreshold / 2)
-      validateData(array, expectedValues)
-      assertNoSpill()
+  asQueueVals.foreach(q => {
+    test(s"clear on an empty the array $q") {
+      withExternalArray(inMemoryThreshold = 2, spillThreshold = 3, q) { array =>
+        val iterator = array.generateIterator()
+        assert(!iterator.hasNext)
 
-      // Populate more rows .. enough to not trigger a spill.
-      // Verify the data. Verify that there was no spill
-      populateRows(array, inMemoryThreshold / 2, expectedValues)
-      validateData(array, expectedValues)
-      assertNoSpill()
-    }
-  }
+        // multiple clear'ing should not have an side-effect
+        array.clear()
+        array.clear()
+        array.clear()
+        assert(array.isEmpty)
+        assert(array.length == 0)
 
-  test("clear array (with spill)") {
-    val (inMemoryThreshold, spillThreshold) = (10, 20)
-    withExternalArray(inMemoryThreshold, spillThreshold) { array =>
-      // Populate enough rows to trigger spill
-      populateRows(array, spillThreshold * 2)
-      val bytesSpilled = getNumBytesSpilled
-      assert(bytesSpilled > 0)
+        // Clearing an empty array should also invalidate any old iterators
+        assert(!iterator.hasNext)
+        intercept[ConcurrentModificationException](iterator.next())
+      }
+    }})
 
-      // Clear the array
-      array.clear()
-      assert(array.isEmpty)
+  asQueueVals.foreach(q => {
+    test(s"clear array (without spill) $q") {
+      val (inMemoryThreshold, spillThreshold) = (10, 100)
+      withExternalArray(inMemoryThreshold, spillThreshold, q) { array =>
+        // Populate rows ... but not enough to trigger spill
+        populateRows(array, inMemoryThreshold / 2)
+        assertNoSpill()
 
-      // Re-populate the array ... but NOT upto the point that there is spill.
-      // Verify data. Verify that there was NO "extra" spill
-      val expectedValues = populateRows(array, spillThreshold / 2)
-      validateData(array, expectedValues)
-      assert(getNumBytesSpilled == bytesSpilled)
+        // Clear the array
+        array.clear()
+        assert(array.isEmpty)
 
-      // Populate more rows to trigger spill
-      // Verify the data. Verify that there was "extra" spill
-      populateRows(array, spillThreshold * 2, expectedValues)
-      validateData(array, expectedValues)
-      assert(getNumBytesSpilled > bytesSpilled)
-    }
-  }
+        // Re-populate few rows so that there is no spill
+        // Verify the data. Verify that there was no spill
+        val expectedValues = populateRows(array, inMemoryThreshold / 2)
+        validateData(array, expectedValues)
+        assertNoSpill()
+
+        // Populate more rows .. enough to not trigger a spill.
+        // Verify the data. Verify that there was no spill
+        populateRows(array, inMemoryThreshold / 2, expectedValues)
+        validateData(array, expectedValues)
+        assertNoSpill()
+      }
+    }})
+
+  asQueueVals.foreach(q => {
+    test(s"clear array (with spill) $q") {
+      val (inMemoryThreshold, spillThreshold) = (10, 20)
+      withExternalArray(inMemoryThreshold, spillThreshold, q) { array =>
+        // Populate enough rows to trigger spill
+        populateRows(array, spillThreshold * 2)
+        val bytesSpilled = getNumBytesSpilled
+        assert(bytesSpilled > 0)
+
+        // Clear the array
+        array.clear()
+        assert(array.isEmpty)
+
+        // Re-populate the array ... but NOT upto the point that there is spill.
+        // Verify data. Verify that there was NO "extra" spill
+        val expectedValues = populateRows(array, spillThreshold / 2)
+        validateData(array, expectedValues)
+        assert(getNumBytesSpilled == bytesSpilled)
+
+        // Populate more rows to trigger spill
+        // Verify the data. Verify that there was "extra" spill
+        populateRows(array, spillThreshold * 2, expectedValues)
+        validateData(array, expectedValues)
+        assert(getNumBytesSpilled > bytesSpilled)
+      }
+    }})
 }

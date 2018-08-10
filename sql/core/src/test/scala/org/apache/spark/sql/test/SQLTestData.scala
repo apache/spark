@@ -72,6 +72,30 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
+  protected lazy val testData4: DataFrame = {
+    val df = spark.sparkContext.parallelize(
+      TestData2(1, 3) :: TestData2(1, 4) :: TestData2(1, 7) :: TestData2(1, 8) ::
+        TestData2(1, 10) :: TestData2(2, 1) :: TestData2(2, 2) :: TestData2(2, 3) ::
+        TestData2(2, 8) :: TestData2(3, 1) :: TestData2(3, 2) :: TestData2(3, 3) ::
+        TestData2(3, 5) :: TestData2(4, 1) :: TestData2(4, 2) :: TestData2(4, 3) ::
+        Nil).toDF()
+    df.orderBy("a").sortWithinPartitions("b").
+      createOrReplaceTempView("testData4")
+    df
+  }
+
+  protected lazy val testData5: DataFrame = {
+    val df = spark.sparkContext.parallelize(
+      TestData2(1, 1) :: TestData2(1, 2) :: TestData2(1, 2) :: TestData2(1, 3) ::
+        TestData2(1, 5) :: TestData2(1, 7) :: TestData2(1, 20) ::
+        TestData2(2, 1) :: TestData2(2, 2) :: TestData2(2, 3) :: TestData2(2, 5) ::
+        TestData2(2, 6) :: TestData2(3, 3) :: TestData2(3, 6) ::
+        Nil).toDF("c", "d")
+    df.orderBy("c").sortWithinPartitions("d").
+      createOrReplaceTempView("testData5")
+    df
+  }
+
   protected lazy val negativeData: DataFrame = {
     val df = spark.sparkContext.parallelize(
       (1 to 100).map(i => TestData(-i, (-i).toString))).toDF()
