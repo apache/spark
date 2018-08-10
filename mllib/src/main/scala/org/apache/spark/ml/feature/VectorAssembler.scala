@@ -140,7 +140,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       case VectorAssembler.ERROR_INVALID => (dataset, false)
     }
     // Data transformation.
-    val assembleFunc = udf { r: Row =>
+    val assembleFunc = udfInternal { r: Row =>
       VectorAssembler.assemble(lengths, keepInvalid)(r.toSeq: _*)
     }.asNondeterministic()
     val args = $(inputCols).map { c =>

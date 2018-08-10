@@ -73,7 +73,7 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
     val featureEncoders = getFeatureEncoders(inputFeatures)
     val featureAttrs = getFeatureAttrs(inputFeatures)
 
-    def interactFunc = udf { row: Row =>
+    def interactFunc = udfInternal { row: Row =>
       var indices = ArrayBuilder.make[Int]
       var values = ArrayBuilder.make[Double]
       var size = 1

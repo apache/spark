@@ -25,7 +25,7 @@ import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.functions.{col, udfInternal}
 import org.apache.spark.sql.types.{ArrayType, StructType}
 
 /**
@@ -95,7 +95,7 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val outputSchema = transformSchema(dataset.schema)
     val hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
     // TODO: Make the hashingTF.transform natively in ml framework to avoid extra conversion.
-    val t = udf { terms: Seq[_] => hashingTF.transform(terms).asML }
+    val t = udfInternal { terms: Seq[_] => hashingTF.transform(terms).asML }
     val metadata = outputSchema($(outputCol)).metadata
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
   }
