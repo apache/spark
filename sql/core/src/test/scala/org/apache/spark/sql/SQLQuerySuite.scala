@@ -2831,4 +2831,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-25084: distribute by on multiple columns may lead to codegen issue") {
+    withView("SPARK_25084") {
+      val count = 1000
+      val df = spark.range(count)
+      val columns = (0 until 100).map{ i => s"id as id$i" }
+      val distributeExprs = (0 until 100).map(c => s"id$c").mkString(",")
+      df.selectExpr(columns : _*).createTempView("SPARK_25084")
+      assert(spark.sql(s"select * from SPARK_25084" +
+        s" distribute by ($distributeExprs, rand())").count() === count)
+    }
+  }
 }
