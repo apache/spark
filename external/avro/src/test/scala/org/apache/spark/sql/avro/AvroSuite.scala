@@ -25,7 +25,8 @@ import java.util.{TimeZone, UUID}
 
 import scala.collection.JavaConverters._
 
-import org.apache.avro.Schema
+import org.apache.avro.{LogicalTypes, Schema}
+import org.apache.avro.Conversions.DecimalConversion
 import org.apache.avro.Schema.{Field, Type}
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
@@ -551,6 +552,35 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     withTempPath { dir =>
       df.write.format("avro").save(dir.toString)
       checkAnswer(spark.read.format("avro").load(dir.toString), expected)
+    }
+  }
+
+  test("Logical type: Decimal with too large precision") {
+    withTempDir { dir =>
+      val schema = new Schema.Parser().parse("""{
+        "namespace": "logical",
+        "type": "record",
+        "name": "test",
+        "fields": [{
+          "name": "decimal",
+          "type": {"type": "bytes", "logicalType": "decimal", "precision": 4, "scale": 2}
+        }]
+      }""")
+      val datumWriter = new GenericDatumWriter[GenericRecord](schema)
+      val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
+      dataFileWriter.create(schema, new File(s"$dir.avro"))
+      val avroRec = new GenericData.Record(schema)
+      val decimal = new java.math.BigDecimal("0.12345678901234567890123456789012345678")
+      val bytes = (new DecimalConversion).toBytes(decimal, schema, LogicalTypes.decimal(39, 38))
+      avroRec.put("decimal", bytes)
+      dataFileWriter.append(avroRec)
+      dataFileWriter.flush()
+      dataFileWriter.close()
+
+      val msg = intercept[SparkException] {
+        spark.read.format("avro").load(s"$dir.avro").collect()
+      }.getCause.getMessage
+      assert(msg.contains("Unscaled value too large for precision"))
     }
   }
 
