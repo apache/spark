@@ -202,12 +202,6 @@ _functions_2_1 = {
                """,
 }
 
-_functions_2_2 = {
-    'to_date': 'Converts a string date into a DateType using the (optionally) specified format.',
-    'to_timestamp': 'Converts a string timestamp into a timestamp type using the ' +
-                    '(optionally) specified format.',
-}
-
 # math functions that take two arguments as input
 _binary_mathfunctions = {
     'atan2': """

@@ -88,8 +88,7 @@ class RelationalGroupedDataset protected[sql](
   }
 
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction)
-  : DataFrame = {
-
+    : DataFrame = {
     val columnExprs = if (colNames.isEmpty) {
       // No columns specified. Use all numeric columns.
       df.numericColumns
@@ -109,8 +108,7 @@ class RelationalGroupedDataset protected[sql](
   }
 
   private[this] def aggregateBooleanColumns(colNames: String*)(f: Expression => AggregateFunction)
-  : DataFrame = {
-
+    : DataFrame = {
     val columnExprs = if (colNames.isEmpty) {
       // No columns specified. Use all numeric columns.
       df.booleanColumns
@@ -322,7 +320,7 @@ class RelationalGroupedDataset protected[sql](
    * The resulting `DataFrame` will also contain the grouping columns.
    * When specified columns are given, only compute the sum for them.
    *
-   * @since 2.2.0
+   * @since 2.4.0
    */
   @scala.annotation.varargs
   def every(colNames: String*): DataFrame = {
@@ -334,7 +332,7 @@ class RelationalGroupedDataset protected[sql](
    * The resulting `DataFrame` will also contain the grouping columns.
    * When specified columns are given, only compute the sum for them.
    *
-   * @since 2.2.0
+   * @since 2.4.0
    */
   @scala.annotation.varargs
   def any(colNames: String*): DataFrame = {
@@ -346,7 +344,7 @@ class RelationalGroupedDataset protected[sql](
    * The resulting `DataFrame` will also contain the grouping columns.
    * When specified columns are given, only compute the sum for them.
    *
-   * @since 2.2.0
+   * @since 2.4.0
    */
   @scala.annotation.varargs
   def some(colNames: String*): DataFrame = {
