@@ -396,10 +396,10 @@ abstract class RDD[T: ClassTag](
    * Return a new RDD containing the distinct elements in this RDD.
    */
   def distinct(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] = withScope {
-    // If the data is already approriately partioned with a known partioner we can work locally.
+    // If the data is already approriately partitioned with a known partitioner we can work locally.
     def removeDuplicatesInPartition(itr: Iterator[T]): Iterator[T] = {
-      val set = new mutable.HashSet[T]() ++= itr
-      set.toIterator
+      val set = new mutable.HashSet[T]()
+      itr.filter(set.add(_))
     }
     partitioner match {
       case Some(p) if numPartitions == partitions.length =>
