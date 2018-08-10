@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
-import java.io.{BufferedReader, IOException, InputStreamReader}
+import java.io.{BufferedReader, InputStreamReader, IOException}
 import java.net.Socket
 import java.sql.Timestamp
 import java.util.Calendar
-
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ListBuffer
@@ -75,7 +74,8 @@ class TextSocketContinuousReadSupport(options: DataSourceOptions)
   @GuardedBy("this")
   private var currentOffset: Int = -1
 
-  private var startOffset: TextSocketOffset = _
+  // Exposed for tests.
+  private[spark] var startOffset: TextSocketOffset = _
 
   private val recordEndpoint = new ContinuousRecordEndpoint(buckets, this)
   @volatile private var endpointRef: RpcEndpointRef = _

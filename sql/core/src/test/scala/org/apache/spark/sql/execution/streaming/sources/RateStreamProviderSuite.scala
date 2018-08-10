@@ -119,7 +119,7 @@ class RateSourceSuite extends StreamTest {
         case r: LongOffset => assert(r.offset === 0L)
         case _ => throw new IllegalStateException("unexpected offset type")
       }
-      readSupport.latestOffset(startOffset) match {
+      readSupport.latestOffset() match {
         case r: LongOffset => assert(r.offset >= 100)
         case _ => throw new IllegalStateException("unexpected offset type")
       }
@@ -313,7 +313,7 @@ class RateSourceSuite extends StreamTest {
           .asInstanceOf[RateStreamOffset]
           .partitionToValueAndRunTimeMs(t.partitionIndex)
           .runTimeMs
-        val r = readerFactory.createContinuousReader(t)
+        val r = readerFactory.createReader(t)
           .asInstanceOf[RateStreamContinuousPartitionReader]
         for (rowIndex <- 0 to 9) {
           r.next()

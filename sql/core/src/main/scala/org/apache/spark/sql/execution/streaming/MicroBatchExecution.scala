@@ -337,11 +337,6 @@ class MicroBatchExecution(
         reportTimeTaken("getOffset") {
           (s, s.getOffset)
         }
-      case s: MicroBatchReadSupport =>
-        updateStatusMessage(s"Getting offsets from $s")
-        reportTimeTaken("latestOffset") {
-          (s, Option(s.latestOffset()))
-        }
       case s: RateControlMicroBatchReadSupport =>
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("latestOffset") {
@@ -349,6 +344,11 @@ class MicroBatchExecution(
             .get(s).map(off => s.deserializeOffset(off.json))
             .getOrElse(s.initialOffset())
           (s, Option(s.latestOffset(startOffset)))
+        }
+      case s: MicroBatchReadSupport =>
+        updateStatusMessage(s"Getting offsets from $s")
+        reportTimeTaken("latestOffset") {
+          (s, Option(s.latestOffset()))
         }
     }.toMap
     availableOffsets ++= latestOffsets.filter { case (_, o) => o.nonEmpty }.mapValues(_.get)

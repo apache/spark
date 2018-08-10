@@ -71,19 +71,16 @@ case class DataSourceV2ScanExec(
     case r: BatchReadSupport => r.createReaderFactory(scanConfig)
     case r: MicroBatchReadSupport => r.createReaderFactory(scanConfig)
     case r: ContinuousReadSupport => r.createContinuousReaderFactory(scanConfig)
+    case _ => throw new IllegalStateException("unknown read support: " + readSupport)
   }
 
   // TODO: clean this up when we have dedicated scan plan for continuous streaming.
   override val supportsBatch: Boolean = {
-    val isColumnar: InputPartition => Boolean = readerFactory match {
-      case factory: PartitionReaderFactory => factory.supportColumnarReads
-      case factory: ContinuousPartitionReaderFactory => factory.supportColumnarReads
-    }
-
-    require(partitions.forall(isColumnar) || !partitions.exists(isColumnar),
+    require(partitions.forall(readerFactory.supportColumnarReads) ||
+      !partitions.exists(readerFactory.supportColumnarReads),
       "Cannot mix row-based and columnar input partitions.")
 
-    partitions.exists(isColumnar)
+    partitions.exists(readerFactory.supportColumnarReads)
   }
 
   private lazy val inputRDD: RDD[InternalRow] = readSupport match {
