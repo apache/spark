@@ -232,6 +232,15 @@ object TypeCoercion {
   }
 
   /**
+   * Similar to [[findTightestCommonType]] but with string promotion.
+   */
+  def findWiderTypeForTwoExceptDecimals(t1: DataType, t2: DataType): Option[DataType] = {
+    findTightestCommonType(t1, t2)
+      .orElse(stringPromotion(t1, t2))
+      .orElse(findTypeForComplex(t1, t2, findWiderTypeForTwoExceptDecimals))
+  }
+
+  /**
    * Similar to [[findWiderTypeForTwo]] that can handle decimal types, but can't promote to
    * string. If the wider decimal type exceeds system limitation, this rule will truncate
    * the decimal type before return it.
@@ -604,7 +613,7 @@ object TypeCoercion {
 
       case m @ MapZipWith(left, right, function) if MapType.acceptsType(left.dataType) &&
           MapType.acceptsType(right.dataType) && !m.leftKeyType.sameType(m.rightKeyType) =>
-        findWiderTypeForTwo(m.leftKeyType, m.rightKeyType) match {
+        findWiderTypeForTwoExceptDecimals(m.leftKeyType, m.rightKeyType) match {
           case Some(finalKeyType) =>
             val newLeft = castIfNotSameType(
               left,

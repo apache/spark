@@ -2133,19 +2133,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(null)))
   }
 
-  test("map_zip_with function - key type coercion to long") {
-    // TODO: Add proper SQL coercion tests
-    val df = Seq(
-      (Map(8 -> 6, 3 -> 5, 6 -> 2), Map[Long, Integer]((6L, 4), (8L, 2), (3L, 2))),
-      (Map(10 -> 6, 8 -> 3), Map[Long, Integer]((8L, 4), (4L, null)))
-    ).toDF("m1", "m2")
-
-    checkAnswer(df.selectExpr("map_zip_with(m1, m2, (k, v1, v2) -> k == v1 + v2)"),
-      Seq(
-        Row(Map(8L -> true, 3L -> false, 6L -> true)),
-        Row(Map(10L -> null, 8L -> false, 4L -> null))))
-  }
-
   test("map_zip_with function - map of complex types") {
     val df = Seq(
       (Map("z" -> "a", "y" -> "b", "x" -> "c"), Map("x" -> "a", "z" -> "c")),

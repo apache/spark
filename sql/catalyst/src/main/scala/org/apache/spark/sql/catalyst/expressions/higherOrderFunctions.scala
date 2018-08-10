@@ -473,7 +473,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     HigherOrderFunction.mapKeyValueArgumentType(right.dataType)
 
   @transient lazy val keyType =
-    TypeCoercion.findTightestCommonType(leftKeyType, rightKeyType).getOrElse(NullType)
+    TypeCoercion.findWiderTypeForTwoExceptDecimals(leftKeyType, rightKeyType).getOrElse(NullType)
 
   @transient lazy val ordering = TypeUtils.getInterpretedOrdering(keyType)
 
