@@ -2416,13 +2416,9 @@ class RDD(object):
         """
         return RDDBarrier(self)
 
-    def isBarrier(self):
+    def _is_barrier(self):
         """
-        .. note:: Experimental
-
         Whether this RDD is in a barrier stage.
-
-        .. versionadded:: 2.4.0
         """
         return self._jrdd.rdd().isBarrier()
 
@@ -2521,7 +2517,7 @@ class PipelinedRDD(RDD):
         self._jrdd_deserializer = self.ctx.serializer
         self._bypass_serializer = False
         self.partitioner = prev.partitioner if self.preservesPartitioning else None
-        self.is_barrier = prev.isBarrier() or isFromBarrier
+        self.is_barrier = prev._is_barrier() or isFromBarrier
 
     def getNumPartitions(self):
         return self._prev_jrdd.partitions().size()
@@ -2557,7 +2553,7 @@ class PipelinedRDD(RDD):
     def _is_pipelinable(self):
         return not (self.is_cached or self.is_checkpointed)
 
-    def isBarrier(self):
+    def _is_barrier(self):
         return self.is_barrier
 
 
