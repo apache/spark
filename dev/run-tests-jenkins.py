@@ -182,7 +182,7 @@ def main():
 
     # format: http://linux.die.net/man/1/timeout
     # must be less than the timeout configured on Jenkins (currently 400m)
-    tests_timeout = "330m"
+    tests_timeout = "340m"
 
     # Array to capture all test names to run on the pull request. These tests are represented
     # by their file equivalents in the dev/tests/ directory.
