@@ -409,7 +409,7 @@ abstract class HashExpression[E] extends Expression {
       nullSafeElementHash(tmpInput, index.toString, field.nullable, field.dataType, result, ctx)
     }
     val hashResultType = CodeGenerator.javaType(dataType)
-    s"final InternalRow $tmpInput = $tmpInput;\n" +
+    s"final InternalRow $tmpInput = $input;\n" +
     ctx.splitExpressions(
       expressions = fieldsHash,
       funcName = "computeHashForStruct",
