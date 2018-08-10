@@ -212,18 +212,6 @@ def run_python_style_checks():
     run_cmd([os.path.join(SPARK_HOME, "dev", "lint-python")])
 
 
-def run_sparkr_style_checks():
-    set_title_and_block("Running R style checks", "BLOCK_R_STYLE")
-
-    if which("R"):
-        # R style check should be executed after `install-dev.sh`.
-        # Since warnings about `no visible global function definition` appear
-        # without the installation. SEE ALSO: SPARK-9121.
-        run_cmd([os.path.join(SPARK_HOME, "dev", "lint-r")])
-    else:
-        print("Ignoring SparkR style check as R was not found in PATH")
-
-
 def build_spark_documentation():
     set_title_and_block("Building Spark Documentation", "BLOCK_DOCUMENTATION")
     os.environ["PRODUCTION"] = "1 jekyll build"
@@ -555,8 +543,6 @@ def main():
         pass
     if not changed_files or any(f.endswith(".py") for f in changed_files):
         run_python_style_checks()
-    if not changed_files or any(f.endswith(".R") for f in changed_files):
-        run_sparkr_style_checks()
 
     # determine if docs were changed and if we're inside the amplab environment
     # note - the below commented out until *all* Jenkins workers can get `jekyll` installed
