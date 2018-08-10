@@ -407,7 +407,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       metadata.isMulticlassWithCategoricalFeatures)
     logDebug("using nodeIdCache = " + nodeIdCache.nonEmpty.toString)
 
-    /**
+    /*
      * Performs a sequential aggregation over a partition for a particular tree and node.
      *
      * For each feature, the aggregate sufficient statistics are updated for the relevant
@@ -438,7 +438,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       }
     }
 
-    /**
+    /*
      * Performs a sequential aggregation over a partition.
      *
      * Each data point contributes to one node. For each feature,
