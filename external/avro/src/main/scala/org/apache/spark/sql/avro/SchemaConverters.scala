@@ -38,6 +38,8 @@ import org.apache.spark.sql.types.Decimal.{maxPrecisionForBytes, minBytesForPrec
 object SchemaConverters {
   private lazy val uuidGenerator = RandomUUIDGenerator(new Random().nextLong())
 
+  private lazy val nullSchema = Schema.create(Schema.Type.NULL)
+
   case class SchemaType(dataType: DataType, nullable: Boolean)
 
   /**
@@ -127,20 +129,14 @@ object SchemaConverters {
       prevNameSpace: String = "",
       outputTimestampType: AvroOutputTimestampType.Value = AvroOutputTimestampType.TIMESTAMP_MICROS)
     : Schema = {
-    val builder = if (nullable) {
-      SchemaBuilder.builder().nullable()
-    } else {
-      SchemaBuilder.builder()
-    }
+    val builder = SchemaBuilder.builder()
 
-    catalystType match {
+    val schema = catalystType match {
       case BooleanType => builder.booleanType()
       case ByteType | ShortType | IntegerType => builder.intType()
       case LongType => builder.longType()
-      case DateType => builder
-        .intBuilder()
-        .prop(LogicalType.LOGICAL_TYPE_PROP, LogicalTypes.date().getName)
-        .endInt()
+      case DateType =>
+        LogicalTypes.date().addToSchema(builder.intType())
       case TimestampType =>
         val timestampType = outputTimestampType match {
           case AvroOutputTimestampType.TIMESTAMP_MILLIS => LogicalTypes.timestampMillis()
@@ -148,7 +144,7 @@ object SchemaConverters {
           case other =>
             throw new IncompatibleSchemaException(s"Unexpected output timestamp type $other.")
         }
-        builder.longBuilder().prop(LogicalType.LOGICAL_TYPE_PROP, timestampType.getName).endLong()
+        timestampType.addToSchema(builder.longType())
 
       case FloatType => builder.floatType()
       case DoubleType => builder.doubleType()
@@ -160,13 +156,7 @@ object SchemaConverters {
         // Field names must start with [A-Za-z_], while the charset of Random.alphanumeric contains
         // [0-9]. So add a single character "f" to ensure the name is valid.
         val name = "f" + Random.alphanumeric.take(32).mkString("")
-        if (nullable) {
-          val schema = avroType.addToSchema(
-            SchemaBuilder.builder().fixed(name).size(fixedSize))
-          builder.`type`(schema)
-        } else {
-          avroType.addToSchema(builder.fixed(name).size(fixedSize))
-        }
+        avroType.addToSchema(SchemaBuilder.fixed(name).size(fixedSize))
 
       case BinaryType => builder.bytesType()
       case ArrayType(et, containsNull) =>
@@ -191,6 +181,11 @@ object SchemaConverters {
 
       // This should never happen.
       case other => throw new IncompatibleSchemaException(s"Unexpected type $other.")
+    }
+    if (nullable) {
+      Schema.createUnion(schema, nullSchema)
+    } else {
+      schema
     }
   }
 }
