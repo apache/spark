@@ -294,7 +294,7 @@ class Dataset[T] private[sql](
     // We set a minimum column width at '3'
     val minimumColWidth = 3
 
-    val regex = """[^\x00-\xff“”]""".r
+    val regex = """[^\x00-\u2e39]""".r
     if (!vertical) {
       // Initialise the width of each column to a minimum value
       val colWidths = Array.fill(numCols)(minimumColWidth)
