@@ -825,10 +825,10 @@ class DataFrameWriter(OptionUtils):
                 exists.
         :param partitionBy: names of partitioning columns
         :param compression: compression codec to use when saving to file. This can be one of the
-                            known case-insensitive shorten names (none, snappy, gzip, and lzo).
-                            This will override ``spark.sql.parquet.compression.codec``. If None
-                            is set, it uses the value specified in
-                            ``spark.sql.parquet.compression.codec``.
+                            known case-insensitive shorten names (none, uncompressed, snappy, gzip,
+                            lzo, brotli, lz4, and zstd). This will override
+                            ``spark.sql.parquet.compression.codec``. If None is set, it uses the
+                            value specified in ``spark.sql.parquet.compression.codec``.
 
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
