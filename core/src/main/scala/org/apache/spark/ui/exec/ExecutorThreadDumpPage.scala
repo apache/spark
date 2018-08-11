@@ -28,7 +28,9 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
   private val sc = parent.sc
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val executorId = Option(request.getParameter("executorId")).map { executorId =>
+    // stripXSS is called first to remove suspicious characters used in XSS attacks
+    val executorId =
+      Option(UIUtils.stripXSS(request.getParameter("executorId"))).map { executorId =>
       UIUtils.decodeURLParameter(executorId)
     }.getOrElse {
       throw new IllegalArgumentException(s"Missing executorId parameter")
