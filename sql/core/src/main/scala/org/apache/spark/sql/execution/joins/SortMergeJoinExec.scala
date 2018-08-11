@@ -868,7 +868,7 @@ case class SortMergeJoinExec(
  *
  * @param streamedKeyGenerator a projection that produces join keys from the streamed input.
  * @param bufferedKeyGenerator a projection that produces join keys from the buffered input.
- * @param keyOrdering an ordering which can be used to compare join keys.
+ * @param keyOrdering an ordering which can be used to compare join keys
  * @param streamedIter an input whose rows will be streamed.
  * @param bufferedIter an input whose rows will be buffered to construct sequences of rows that
  *                     have the same join key.
