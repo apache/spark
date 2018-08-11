@@ -377,7 +377,7 @@ object SQLConf {
       "`parquet.compression` is specified in the table-specific options/properties, the " +
       "precedence would be `compression`, `parquet.compression`, " +
       "`spark.sql.parquet.compression.codec`. Acceptable values include: none, uncompressed, " +
-      "snappy, gzip, lzo.")
+      "snappy, gzip, lzo, brotli, lz4, zstd.")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("none", "uncompressed", "snappy", "gzip", "lzo", "lz4", "brotli", "zstd"))
