@@ -152,10 +152,11 @@ object SchemaConverters {
       case d: DecimalType =>
         val avroType = LogicalTypes.decimal(d.precision, d.scale)
         val fixedSize = minBytesForPrecision(d.precision)
-        // Use random name to avoid conflict in naming of fixed field.
-        // Field names must start with [A-Za-z_], while the charset of Random.alphanumeric contains
-        // [0-9]. So add a single character "f" to ensure the name is valid.
-        val name = "f" + Random.alphanumeric.take(32).mkString("")
+        // Need to avoid naming conflict for the fixed fields
+        val name = prevNameSpace match {
+          case "" => s"$recordName.fixed"
+          case _ => s"$prevNameSpace.$recordName.fixed"
+        }
         avroType.addToSchema(SchemaBuilder.fixed(name).size(fixedSize))
 
       case BinaryType => builder.bytesType()

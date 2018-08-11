@@ -91,33 +91,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   // writer.close()
   val dateAvro = testFile("date.avro")
 
-  // The test file decimal.avro is generated via following Python code:
-  // import decimal
-  // from fastavro import writer, parse_schema
-  // from fastavro._write import prepare_bytes_decimal, prepare_fixed_decimal
-  //
-  // bytesSchema = {"type": "bytes", "logicalType": "decimal", "precision": 4, "scale": 2}
-  // fixedSchema = {"type": "fixed", "size": 5, "logicalType": "decimal",
-  //   "name": "foo", "scale": 2, "precision": 4}
-  // avro_schema = {
-  //   "namespace": "logical",
-  //   "type": "record",
-  //   "name": "test",
-  //   "fields": [
-  //   {"name": "bytes", "type": bytesSchema},
-  //   {"name": "fixed", "type": fixedSchema}
-  //   ]
-  // }
-  // parsed_schema = parse_schema(avro_schema)
-  // fixed_decimal = lambda x: prepare_fixed_decimal(decimal.Decimal(x), fixedSchema)
-  // bytes_decimal = lambda x: prepare_bytes_decimal(decimal.Decimal(x), bytesSchema)
-  // create_row = lambda x: {u'bytes': bytes_decimal(x), u'fixed': fixed_decimal(x)}
-  // records = map(create_row, ['1.23', '4.56', '78.90', '-1', '-2.31'])
-  // # Writing
-  // with open('decimal.avro', 'wb') as out:
-  //   writer(out, parsed_schema, records)
-  val decimalAvro = testFile("decimal.avro")
-
   override protected def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set("spark.sql.files.maxPartitionBytes", 1024)
@@ -523,35 +496,71 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("Logical type: Decimal") {
-    val expected = Seq("1.23", "4.56", "78.90", "-1", "-2.31")
-      .map { x => Row(new java.math.BigDecimal(x), new java.math.BigDecimal(x)) }
-    val df = spark.read.format("avro").load(decimalAvro)
+    val precision = 4
+    val scale = 2
+    val bytesFieldName = "bytes"
+    val bytesSchema = s"""{
+         "type":"bytes",
+         "logicalType":"decimal",
+         "precision":$precision,
+         "scale":$scale
+      }
+    """
 
-    checkAnswer(df, expected)
-
+    val fixedFieldName = "fixed"
+    val fixedSchema = s"""{
+         "type":"fixed",
+         "size":5,
+         "logicalType":"decimal",
+         "precision":$precision,
+         "scale":$scale,
+         "name":"foo"
+      }
+    """
     val avroSchema = s"""
       {
         "namespace": "logical",
         "type": "record",
         "name": "test",
         "fields": [
-          {"name": "bytes", "type":
-             {"type": "bytes", "logicalType": "decimal", "precision": 4, "scale": 2}
-          },
-          {"name": "fixed", "type":
-            {"type": "fixed", "size": 5, "logicalType": "decimal",
-              "precision": 4, "scale": 2, "name": "foo"}
-          }
+          {"name": "$bytesFieldName", "type": $bytesSchema},
+          {"name": "$fixedFieldName", "type": $fixedSchema}
         ]
       }
     """
+    val schema = new Schema.Parser().parse(avroSchema)
+    val datumWriter = new GenericDatumWriter[GenericRecord](schema)
+    val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
+    val decimalConversion = new DecimalConversion
+    withTempDir { dir =>
+      val avroFile = s"$dir.avro"
+      dataFileWriter.create(schema, new File(avroFile))
+      val logicalType = LogicalTypes.decimal(precision, scale)
+      val data = Seq("1.23", "4.56", "78.90", "-1", "-2.31")
+      data.map { x =>
+        val avroRec = new GenericData.Record(schema)
+        val decimal = new java.math.BigDecimal(x).setScale(scale)
+        val bytes =
+          decimalConversion.toBytes(decimal, schema.getField(bytesFieldName).schema, logicalType)
+        avroRec.put("bytes", bytes)
+        val fixed =
+          decimalConversion.toFixed(decimal, schema.getField(fixedFieldName).schema, logicalType)
+        avroRec.put("fixed", fixed)
+        dataFileWriter.append(avroRec)
+      }
+      dataFileWriter.flush()
+      dataFileWriter.close()
 
-    checkAnswer(spark.read.format("avro").option("avroSchema", avroSchema).load(decimalAvro),
-      expected)
+      val expected = data.map { x => Row(new java.math.BigDecimal(x), new java.math.BigDecimal(x)) }
+      val df = spark.read.format("avro").load(avroFile)
+      checkAnswer(df, expected)
+      checkAnswer(spark.read.format("avro").option("avroSchema", avroSchema).load(avroFile),
+        expected)
 
-    withTempPath { dir =>
-      df.write.format("avro").save(dir.toString)
-      checkAnswer(spark.read.format("avro").load(dir.toString), expected)
+      withTempPath { path =>
+        df.write.format("avro").save(path.toString)
+        checkAnswer(spark.read.format("avro").load(path.toString), expected)
+      }
     }
   }
 
