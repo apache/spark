@@ -23,8 +23,6 @@ from datetime import datetime
 
 if sys.version < "3":
     from itertools import imap as map, ifilter as filter
-else:
-    long = int
 
 from py4j.protocol import Py4JJavaError
 
