@@ -404,14 +404,15 @@ abstract class HashExpression[E] extends Expression {
       input: String,
       result: String,
       fields: Array[StructField]): String = {
+    val tmpInput = ctx.freshName("input")
     val fieldsHash = fields.zipWithIndex.map { case (field, index) =>
-      nullSafeElementHash(input, index.toString, field.nullable, field.dataType, result, ctx)
+      nullSafeElementHash(tmpInput, index.toString, field.nullable, field.dataType, result, ctx)
     }
     val hashResultType = ctx.javaType(dataType)
-    ctx.splitExpressions(
+    val code = ctx.splitExpressions(
       expressions = fieldsHash,
       funcName = "computeHashForStruct",
-      arguments = Seq("InternalRow" -> input, hashResultType -> result),
+      arguments = Seq("InternalRow" -> tmpInput, hashResultType -> result),
       returnType = hashResultType,
       makeSplitFunction = body =>
         s"""
@@ -419,6 +420,10 @@ abstract class HashExpression[E] extends Expression {
            |return $result;
          """.stripMargin,
       foldFunctions = _.map(funcCall => s"$result = $funcCall;").mkString("\n"))
+    s"""
+       |final InternalRow $tmpInput = $input;
+       |$code
+     """.stripMargin
   }
 
   @tailrec
@@ -769,10 +774,11 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
       input: String,
       result: String,
       fields: Array[StructField]): String = {
+    val tmpInput = ctx.freshName("input")
     val childResult = ctx.freshName("childResult")
     val fieldsHash = fields.zipWithIndex.map { case (field, index) =>
       val computeFieldHash = nullSafeElementHash(
-        input, index.toString, field.nullable, field.dataType, childResult, ctx)
+        tmpInput, index.toString, field.nullable, field.dataType, childResult, ctx)
       s"""
          |$childResult = 0;
          |$computeFieldHash
@@ -780,10 +786,10 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
        """.stripMargin
     }
 
-    s"${ctx.JAVA_INT} $childResult = 0;\n" + ctx.splitExpressions(
+    val code = ctx.splitExpressions(
       expressions = fieldsHash,
       funcName = "computeHashForStruct",
-      arguments = Seq("InternalRow" -> input, ctx.JAVA_INT -> result),
+      arguments = Seq("InternalRow" -> tmpInput, ctx.JAVA_INT -> result),
       returnType = ctx.JAVA_INT,
       makeSplitFunction = body =>
         s"""
@@ -792,6 +798,11 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
            |return $result;
            """.stripMargin,
       foldFunctions = _.map(funcCall => s"$result = $funcCall;").mkString("\n"))
+    s"""
+       |final InternalRow $tmpInput = $input;
+       |${ctx.JAVA_INT} $childResult = 0;
+       |$code
+     """.stripMargin
   }
 }
 
