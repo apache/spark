@@ -424,7 +424,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     sc.stop()
   }
 
-  test("spill during iteration") {
+  test("SPARK-22713 spill during iteration leaks internal map") {
     val size = 1000
     val conf = createSparkConf(loadDefaults = true)
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
@@ -434,7 +434,10 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     assert(map.numSpills == 0, "map was not supposed to spill")
 
     val it = map.iterator
-    assert( it.isInstanceOf[CompletionIterator[_, _]])
+    assert(it.isInstanceOf[CompletionIterator[_, _]])
+    assert(underlyingIt != null)
+    // org.apache.spark.util.collection.AppendOnlyMap.destructiveSortedIterator returns
+    // an instance of an annonymous Iterator class.
 
     val underlyingMapRef = WeakReference(map.currentMap)
 
@@ -450,7 +453,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
       assert(sortedVs.seq == (0 until 10).map(10 * k + _))
       k
     }
-    assert( map.numSpills == 0 )
+    assert(map.numSpills == 0)
     map.spill(Long.MaxValue, null)
     // these asserts try to show that we're no longer holding references to the underlying map.
     // it'd be nice to use something like
@@ -509,7 +512,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     assert(it.isEmpty)
     assert(keys == (0 until 100))
 
-    assert( map.numSpills == 0 )
+    assert(map.numSpills == 0)
     // these asserts try to show that we're no longer holding references to the underlying map.
     // it'd be nice to use something like
     // https://github.com/scala/scala/blob/2.13.x/test/junit/scala/tools/testing/AssertUtil.scala
@@ -527,7 +530,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     assert(it.toList.isEmpty)
   }
 
-  test("external aggregation updates peak execution memory") {
+  test("SPARK-22713 external aggregation updates peak execution memory") {
     val spillThreshold = 1000
     val conf = createSparkConf(loadDefaults = false)
       .set("spark.shuffle.spill.numElementsForceSpillThreshold", spillThreshold.toString)

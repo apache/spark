@@ -273,7 +273,7 @@ class ExternalAppendOnlyMap[K, V, C](
    */
   def destructiveIterator(inMemoryIterator: Iterator[(K, C)]): Iterator[(K, C)] = {
     readingIterator = new SpillableIterator(inMemoryIterator)
-    readingIterator
+    readingIterator.toCompletionIterator
   }
 
   /**
@@ -286,8 +286,7 @@ class ExternalAppendOnlyMap[K, V, C](
         "ExternalAppendOnlyMap.iterator is destructive and should only be called once.")
     }
     if (spilledMaps.isEmpty) {
-      CompletionIterator[(K, C), Iterator[(K, C)]](
-        destructiveIterator(currentMap.iterator), freeCurrentMap())
+      destructiveIterator(currentMap.iterator)
     } else {
       new ExternalIterator()
     }
@@ -311,8 +310,8 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // Input streams are derived both from the in-memory map and spilled maps on disk
     // The in-memory map is sorted in place, while the spilled maps are already in sorted order
-    private val sortedMap = CompletionIterator[(K, C), Iterator[(K, C)]](destructiveIterator(
-      currentMap.destructiveSortedIterator(keyComparator)), freeCurrentMap())
+    private val sortedMap = destructiveIterator(
+      currentMap.destructiveSortedIterator(keyComparator))
     private val inputStreams = (Seq(sortedMap) ++ spilledMaps).map(it => it.buffered)
 
     inputStreams.foreach { it =>
@@ -598,6 +597,15 @@ class ExternalAppendOnlyMap[K, V, C](
         upstream = nextUpstream
         true
       }
+    }
+
+    private def destroy() : Unit = {
+      freeCurrentMap()
+      upstream = Iterator.empty
+    }
+
+    def toCompletionIterator: CompletionIterator[(K, C), SpillableIterator] = {
+      CompletionIterator[(K, C), SpillableIterator](this, this.destroy )
     }
 
     def readNext(): (K, C) = SPILL_LOCK.synchronized {
