@@ -104,6 +104,13 @@ trait HigherOrderFunction extends Expression {
   lazy val argumentsResolved: Boolean = arguments.forall(_.resolved)
 
   /**
+   * Checks the argument data types, returns `TypeCheckResult.success` if it's valid,
+   * or returns a `TypeCheckResult` with an error message if invalid.
+   * Note: it's not valid to call this method until `argumentsResolved == true`.
+   */
+  def checkArgumentDataTypes(): TypeCheckResult
+
+  /**
    * Functions applied by the higher order function.
    */
   def functions: Seq[Expression]
@@ -133,25 +140,6 @@ trait HigherOrderFunction extends Expression {
   }
 }
 
-object HigherOrderFunction {
-
-  def arrayArgumentType(dt: DataType): (DataType, Boolean) = {
-    dt match {
-      case ArrayType(elementType, containsNull) => (elementType, containsNull)
-      case _ =>
-        val ArrayType(elementType, containsNull) = ArrayType.defaultConcreteType
-        (elementType, containsNull)
-    }
-  }
-
-  def mapKeyValueArgumentType(dt: DataType): (DataType, DataType, Boolean) = dt match {
-    case MapType(kType, vType, vContainsNull) => (kType, vType, vContainsNull)
-    case _ =>
-      val MapType(kType, vType, vContainsNull) = MapType.defaultConcreteType
-      (kType, vType, vContainsNull)
-  }
-}
-
 /**
  * Trait for functions having as input one argument and one function.
  */
@@ -161,11 +149,19 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction with ExpectsInputTyp
 
   override def arguments: Seq[Expression] = argument :: Nil
 
+  def argumentType: AbstractDataType
+
+  override def checkArgumentDataTypes(): TypeCheckResult = {
+    ExpectsInputTypes.checkInputDataTypes(arguments, argumentType :: Nil)
+  }
+
   def function: Expression
 
   override def functions: Seq[Expression] = function :: Nil
 
   def expectingFunctionType: AbstractDataType = AnyDataType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(argumentType, expectingFunctionType)
 
   @transient lazy val functionForEval: Expression = functionsForEval.head
 
@@ -187,11 +183,11 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction with ExpectsInputTyp
 }
 
 trait ArrayBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, expectingFunctionType)
+  override def argumentType: AbstractDataType = ArrayType
 }
 
 trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
-  override def inputTypes: Seq[AbstractDataType] = Seq(MapType, expectingFunctionType)
+  override def argumentType: AbstractDataType = MapType
 }
 
 /**
@@ -218,12 +214,12 @@ case class ArrayTransform(
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayTransform = {
-    val elem = HigherOrderFunction.arrayArgumentType(argument.dataType)
+    val ArrayType(elementType, containsNull) = argument.dataType
     function match {
       case LambdaFunction(_, arguments, _) if arguments.size == 2 =>
-        copy(function = f(function, elem :: (IntegerType, false) :: Nil))
+        copy(function = f(function, (elementType, containsNull) :: (IntegerType, false) :: Nil))
       case _ =>
-        copy(function = f(function, elem :: Nil))
+        copy(function = f(function, (elementType, containsNull) :: Nil))
     }
   }
 
@@ -277,8 +273,7 @@ case class MapFilter(
     (args.head.asInstanceOf[NamedLambdaVariable], args.tail.head.asInstanceOf[NamedLambdaVariable])
   }
 
-  @transient val (keyType, valueType, valueContainsNull) =
-    HigherOrderFunction.mapKeyValueArgumentType(argument.dataType)
+  @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): MapFilter = {
     copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
@@ -332,8 +327,8 @@ case class ArrayFilter(
   override def expectingFunctionType: AbstractDataType = BooleanType
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayFilter = {
-    val elem = HigherOrderFunction.arrayArgumentType(argument.dataType)
-    copy(function = f(function, elem :: Nil))
+    val ArrayType(elementType, containsNull) = argument.dataType
+    copy(function = f(function, (elementType, containsNull) :: Nil))
   }
 
   @transient lazy val LambdaFunction(_, Seq(elementVar: NamedLambdaVariable), _) = function
@@ -379,8 +374,8 @@ case class ArrayExists(
   override def expectingFunctionType: AbstractDataType = BooleanType
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayExists = {
-    val elem = HigherOrderFunction.arrayArgumentType(argument.dataType)
-    copy(function = f(function, elem :: Nil))
+    val ArrayType(elementType, containsNull) = argument.dataType
+    copy(function = f(function, (elementType, containsNull) :: Nil))
   }
 
   @transient lazy val LambdaFunction(_, Seq(elementVar: NamedLambdaVariable), _) = function
@@ -440,27 +435,31 @@ case class ArrayAggregate(
 
   override def dataType: DataType = finish.dataType
 
+  override def checkArgumentDataTypes(): TypeCheckResult = {
+    ExpectsInputTypes.checkInputDataTypes(arguments, Seq(ArrayType, AnyDataType))
+  }
+
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (!ArrayType.acceptsType(argument.dataType)) {
-      TypeCheckResult.TypeCheckFailure(
-        s"argument 1 requires ${ArrayType.simpleString} type, " +
-          s"however, '${argument.sql}' is of ${argument.dataType.catalogString} type.")
-    } else if (!DataType.equalsStructurally(
-        zero.dataType, merge.dataType, ignoreNullability = true)) {
-      TypeCheckResult.TypeCheckFailure(
-        s"argument 3 requires ${zero.dataType.simpleString} type, " +
-          s"however, '${merge.sql}' is of ${merge.dataType.catalogString} type.")
-    } else {
-      TypeCheckResult.TypeCheckSuccess
+    checkArgumentDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        if (!DataType.equalsStructurally(
+            zero.dataType, merge.dataType, ignoreNullability = true)) {
+          TypeCheckResult.TypeCheckFailure(
+            s"argument 3 requires ${zero.dataType.simpleString} type, " +
+              s"however, '${merge.sql}' is of ${merge.dataType.catalogString} type.")
+        } else {
+          TypeCheckResult.TypeCheckSuccess
+        }
+      case failure => failure
     }
   }
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayAggregate = {
     // Be very conservative with nullable. We cannot be sure that the accumulator does not
     // evaluate to null. So we always set nullable to true here.
-    val elem = HigherOrderFunction.arrayArgumentType(argument.dataType)
+    val ArrayType(elementType, containsNull) = argument.dataType
     val acc = zero.dataType -> true
-    val newMerge = f(merge, acc :: elem :: Nil)
+    val newMerge = f(merge, acc :: (elementType, containsNull) :: Nil)
     val newFinish = f(finish, acc :: Nil)
     copy(merge = newMerge, finish = newFinish)
   }
