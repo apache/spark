@@ -461,7 +461,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
       System.gc()
       // direct asserts introduced some macro generated code that held a reference to the map
       val tmpIsNull = null == underlyingMapRef.get.orNull
-      tmpIsNull
+      assert(tmpIsNull)
     }
 
 
@@ -517,10 +517,11 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     assert(map.currentMap == null)
 
     eventually{
+      Thread.sleep(500)
       System.gc()
       // direct asserts introduced some macro generated code that held a reference to the map
       val tmpIsNull = null == underlyingMapRef.get.orNull
-      tmpIsNull
+      assert(tmpIsNull)
     }
 
     assert(it.toList.isEmpty)
