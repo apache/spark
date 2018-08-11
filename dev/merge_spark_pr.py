@@ -374,8 +374,8 @@ def standardize_jira_ref(text):
     >>> standardize_jira_ref("[SPARK-979] a LRU scheduler for load balancing in TaskSchedulerImpl")
     '[SPARK-979] a LRU scheduler for load balancing in TaskSchedulerImpl'
     >>> standardize_jira_ref(
-    ...     "SPARK-1094 Support MiMa for reporting binary compatibility accross versions.")
-    '[SPARK-1094] Support MiMa for reporting binary compatibility accross versions.'
+    ...     "SPARK-1094 Support MiMa for reporting binary compatibility across versions.")
+    '[SPARK-1094] Support MiMa for reporting binary compatibility across versions.'
     >>> standardize_jira_ref("[WIP]  [SPARK-1146] Vagrant support for Spark")
     '[SPARK-1146][WIP] Vagrant support for Spark'
     >>> standardize_jira_ref(

@@ -279,7 +279,7 @@ private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: 
   override def transferred(): Long = _transferred
 
   override def transferTo(target: WritableByteChannel, pos: Long): Long = {
-    assert(pos == transfered(), "Invalid position.")
+    assert(pos == transferred(), "Invalid position.")
 
     var written = 0L
     var lastWrite = -1L

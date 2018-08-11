@@ -74,7 +74,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
  * their output.
  *
  * @param generator the generator expression
- * @param unrequiredChildIndex this paramter starts as Nil and gets filled by the Optimizer.
+ * @param unrequiredChildIndex this parameter starts as Nil and gets filled by the Optimizer.
  *                             It's used as an optimization for omitting data generation that will
  *                             be discarded next by a projection.
  *                             A common use case is when we explode(array(..)) and are interested
