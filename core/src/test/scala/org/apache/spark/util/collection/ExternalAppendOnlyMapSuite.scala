@@ -435,7 +435,6 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
 
     val it = map.iterator
     assert(it.isInstanceOf[CompletionIterator[_, _]])
-    assert(underlyingIt != null)
     // org.apache.spark.util.collection.AppendOnlyMap.destructiveSortedIterator returns
     // an instance of an annonymous Iterator class.
 
