@@ -3260,7 +3260,7 @@ case class ArrayDistinct(child: Expression)
            |  }
            |}
            |$sizeOfDistinctArray = $hs.size() + ($foundNullElement ? 1 : 0);
-           |${genCodeForResult(ctx, ev, array, sizeOfDistinctArray, classTag)}
+           |${genCodeForResult(ctx, ev, array, sizeOfDistinctArray)}
          """.stripMargin
       })
     } else {
@@ -3288,12 +3288,12 @@ case class ArrayDistinct(child: Expression)
   private def setValue(
       hs: String,
       pos: String,
-      getValue1: String,
-      primitiveValueTypeName: String): String = {
+      getValue: String,
+      setNonNullValue: String): String = {
     s"""
-       |if (!($hs.contains$hsPostFix($hsValueCast$getValue1))) {
-       |  $hs.add$hsPostFix($hsValueCast$getValue1);
-       |  $distinctArray.set$primitiveValueTypeName($pos, $getValue1);
+       |if (!($hs.contains$hsPostFix($hsValueCast$getValue))) {
+       |  $hs.add$hsPostFix($hsValueCast$getValue);
+       |  $setNonNullValue;
        |  $pos = $pos + 1;
        |}
      """.stripMargin
@@ -3303,29 +3303,41 @@ case class ArrayDistinct(child: Expression)
       ctx: CodegenContext,
       ev: ExprCode,
       inputArray: String,
-      size: String,
-      classTag: String): String = {
+      size: String): String = {
     val distinctArray = ctx.freshName("distinctArray")
     val i = ctx.freshName("i")
     val pos = ctx.freshName("pos")
-    val getValue1 = CodeGenerator.getValue(inputArray, elementType, i)
+    val getValue = CodeGenerator.getValue(inputArray, elementType, i)
     val foundNullElement = ctx.freshName("foundNullElement")
     val hs = ctx.freshName("hs")
     val openHashSet = classOf[OpenHashSet[_]].getName
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
     val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
 
+    val (allocation, assignment) =
+      ctx.createArrayData(distinctArray, dataType, elementType, size,
+        inputArray, s" $prettyName failed.", checkForNull = Some(false))
+
+    val valueAssignment = setValue(hs, pos, getValue, assignment(pos, i))
+    val valueAssignmentChecked = if (dataType.asInstanceOf[ArrayType].containsNull) {
+      s"""
+         |if ($inputArray.isNullAt($i)) {
+         |  ${setNull(foundNullElement, distinctArray, pos)}
+         |} else {
+         |  $valueAssignment
+         |}
+       """.stripMargin
+    } else {
+      valueAssignment
+    }
+
     s"""
-       |${ctx.createUnsafeArray(distinctArray, size, elementType, s" $prettyName failed.")}
+       |$allocation
        |int $pos = 0;
        |boolean $foundNullElement = false;
        |$openHashSet $hs = new $openHashSet($classTag);
        |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
-       |  if ($inputArray.isNullAt($i)) {
-       |    ${setNull(foundNullElement, distinctArray, pos)}
-       |  } else {
-       |    ${setValue(hs, distinctArray, pos, getValue1, primitiveValueTypeName)}
-       |  }
+       |  $valueAssignmentChecked
        |}
        |${ev.value} = $distinctArray;
     """.stripMargin
