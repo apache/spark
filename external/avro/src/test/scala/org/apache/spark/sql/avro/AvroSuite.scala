@@ -542,10 +542,10 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         val decimal = new java.math.BigDecimal(x).setScale(scale)
         val bytes =
           decimalConversion.toBytes(decimal, schema.getField(bytesFieldName).schema, logicalType)
-        avroRec.put("bytes", bytes)
+        avroRec.put(bytesFieldName, bytes)
         val fixed =
           decimalConversion.toFixed(decimal, schema.getField(fixedFieldName).schema, logicalType)
-        avroRec.put("fixed", fixed)
+        avroRec.put(fixedFieldName, fixed)
         dataFileWriter.append(avroRec)
       }
       dataFileWriter.flush()
