@@ -35,8 +35,8 @@ case class NamedLambdaVariable(
     name: String,
     dataType: DataType,
     nullable: Boolean,
-    value: AtomicReference[Any] = new AtomicReference(),
-    exprId: ExprId = NamedExpression.newExprId)
+    exprId: ExprId = NamedExpression.newExprId,
+    value: AtomicReference[Any] = new AtomicReference())
   extends LeafExpression
   with NamedExpression
   with CodegenFallback {
@@ -44,7 +44,7 @@ case class NamedLambdaVariable(
   override def qualifier: Seq[String] = Seq.empty
 
   override def newInstance(): NamedExpression =
-    copy(value = new AtomicReference(), exprId = NamedExpression.newExprId)
+    copy(exprId = NamedExpression.newExprId, value = new AtomicReference())
 
   override def toAttribute: Attribute = {
     AttributeReference(name, dataType, nullable, Metadata.empty)(exprId, Seq.empty)
@@ -130,6 +130,8 @@ trait HigherOrderFunction extends Expression {
    */
   def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): HigherOrderFunction
 
+  // Make sure the lambda variables refer the same instances as of arguments for case that the
+  // variables in instantiated separately during serialization or for some reason.
   @transient lazy val functionsForEval: Seq[Expression] = functions.map {
     case LambdaFunction(function, arguments, hidden) =>
       val argumentMap = arguments.map { arg => arg.exprId -> arg }.toMap
@@ -163,7 +165,7 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction with ExpectsInputTyp
 
   override def inputTypes: Seq[AbstractDataType] = Seq(argumentType, expectingFunctionType)
 
-  @transient lazy val functionForEval: Expression = functionsForEval.head
+  def functionForEval: Expression = functionsForEval.head
 
   /**
    * Called by [[eval]]. If a subclass keeps the default nullability, it can override this method
