@@ -176,9 +176,12 @@ class RangePartitioner[K : Ordering : ClassTag, V](
         // already got the whole data
         if (sampleCacheEnabled && numItems == numSampled) {
           // get the sampled data
-          sampledArray = sketched.foldLeft(Array.empty[K])((total, sample) => {
-            total ++ sample._3
-          })
+          sampledArray = new Array[K](numSampled)
+          var curPos = 0
+          sketched.foreach(_._3.foreach(sampleRow => {
+            sampledArray(curPos) = sampleRow
+            curPos += 1
+          }))
         }
         // If a partition contains much more than the average number of items, we re-sample from it
         // to ensure that enough items are collected from that partition.
