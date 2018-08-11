@@ -135,7 +135,7 @@ case class ResolveLambdaVariables(conf: SQLConf) extends Rule[LogicalPlan] {
   private def resolve(e: Expression, parentLambdaMap: LambdaVariableMap): Expression = e match {
     case _ if e.resolved => e
 
-    case h: HigherOrderFunction if h.inputResolved =>
+    case h: HigherOrderFunction if h.argumentsResolved =>
       h.bind(createLambda).mapChildren(resolve(_, parentLambdaMap))
 
     case l: LambdaFunction if !l.bound =>
