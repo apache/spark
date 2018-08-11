@@ -471,7 +471,7 @@ public class HiveSessionImpl implements HiveSession {
       opHandleSet.add(opHandle);
       return opHandle;
     } catch (HiveSQLException e) {
-      // Refering to SQLOperation.java,there is no chance that a HiveSQLException throws and the asyn
+      // Referring to SQLOperation.java, there is no chance that a HiveSQLException throws and the asyn
       // background operation submits to thread pool successfully at the same time. So, Cleanup
       // opHandle directly when got HiveSQLException
       operationManager.closeOperation(opHandle);
