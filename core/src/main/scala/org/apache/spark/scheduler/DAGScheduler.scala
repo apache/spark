@@ -968,12 +968,7 @@ class DAGScheduler(
         logWarning(s"The job $jobId requires to run a barrier stage that requires more slots " +
           "than the total number of slots in the cluster currently.")
         jobIdToNumTasksCheckFailures.compute(jobId, new BiFunction[Int, Int, Int] {
-          override def apply(key: Int, value: Int): Int =
-            if (value == null) {
-              1
-            } else {
-              value + 1
-            }
+          override def apply(key: Int, value: Int): Int = value + 1
         })
         val numCheckFailures = jobIdToNumTasksCheckFailures.get(jobId)
         if (numCheckFailures <= maxFailureNumTasksCheck) {
