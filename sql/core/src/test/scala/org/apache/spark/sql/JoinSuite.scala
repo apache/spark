@@ -882,4 +882,15 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       checkAnswer(df, Row(3, 8, 7, 2) :: Row(3, 8, 4, 2) :: Nil)
     }
   }
+
+  test("SPARK-24495: Join may return wrong result when having duplicated equal-join keys") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+      SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(0, 100, 1, 2)
+      val df2 = spark.range(100).select($"id".as("b1"), (- $"id").as("b2"))
+      val res = df1.join(df2, $"id" === $"b1" && $"id" === $"b2").select($"b1", $"b2", $"id")
+      checkAnswer(res, Row(0, 0, 0))
+    }
+  }
 }

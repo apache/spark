@@ -95,6 +95,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     True
     >>> model.numFeatures
     1
+    >>> model.write().format("pmml").save(model_path + "_2")
 
     .. versionadded:: 1.4.0
     """
@@ -161,7 +162,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         return self.getOrDefault(self.epsilon)
 
 
-class LinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable, JavaMLReadable):
+class LinearRegressionModel(JavaModel, JavaPredictionModel, GeneralJavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`LinearRegression`.
 
@@ -602,6 +603,19 @@ class TreeEnsembleParams(DecisionTreeParams):
                             "used for learning each decision tree, in range (0, 1].",
                             typeConverter=TypeConverters.toFloat)
 
+    supportedFeatureSubsetStrategies = ["auto", "all", "onethird", "sqrt", "log2"]
+
+    featureSubsetStrategy = \
+        Param(Params._dummy(), "featureSubsetStrategy",
+              "The number of features to consider for splits at each tree node. Supported " +
+              "options: 'auto' (choose automatically for task: If numTrees == 1, set to " +
+              "'all'. If numTrees > 1 (forest), set to 'sqrt' for classification and to " +
+              "'onethird' for regression), 'all' (use all features), 'onethird' (use " +
+              "1/3 of the features), 'sqrt' (use sqrt(number of features)), 'log2' (use " +
+              "log2(number of features)), 'n' (when n is in the range (0, 1.0], use " +
+              "n * number of features. When n is in the range (1, number of features), use" +
+              " n features). default = 'auto'", typeConverter=TypeConverters.toString)
+
     def __init__(self):
         super(TreeEnsembleParams, self).__init__()
 
@@ -618,6 +632,22 @@ class TreeEnsembleParams(DecisionTreeParams):
         Gets the value of subsamplingRate or its default value.
         """
         return self.getOrDefault(self.subsamplingRate)
+
+    @since("1.4.0")
+    def setFeatureSubsetStrategy(self, value):
+        """
+        Sets the value of :py:attr:`featureSubsetStrategy`.
+
+        .. note:: Deprecated in 2.4.0 and will be removed in 3.0.0.
+        """
+        return self._set(featureSubsetStrategy=value)
+
+    @since("1.4.0")
+    def getFeatureSubsetStrategy(self):
+        """
+        Gets the value of featureSubsetStrategy or its default value.
+        """
+        return self.getOrDefault(self.featureSubsetStrategy)
 
 
 class TreeRegressorParams(Params):
@@ -654,14 +684,8 @@ class RandomForestParams(TreeEnsembleParams):
     Private class to track supported random forest parameters.
     """
 
-    supportedFeatureSubsetStrategies = ["auto", "all", "onethird", "sqrt", "log2"]
     numTrees = Param(Params._dummy(), "numTrees", "Number of trees to train (>= 1).",
                      typeConverter=TypeConverters.toInt)
-    featureSubsetStrategy = \
-        Param(Params._dummy(), "featureSubsetStrategy",
-              "The number of features to consider for splits at each tree node. Supported " +
-              "options: " + ", ".join(supportedFeatureSubsetStrategies) + ", (0.0-1.0], [1-n].",
-              typeConverter=TypeConverters.toString)
 
     def __init__(self):
         super(RandomForestParams, self).__init__()
@@ -679,20 +703,6 @@ class RandomForestParams(TreeEnsembleParams):
         Gets the value of numTrees or its default value.
         """
         return self.getOrDefault(self.numTrees)
-
-    @since("1.4.0")
-    def setFeatureSubsetStrategy(self, value):
-        """
-        Sets the value of :py:attr:`featureSubsetStrategy`.
-        """
-        return self._set(featureSubsetStrategy=value)
-
-    @since("1.4.0")
-    def getFeatureSubsetStrategy(self):
-        """
-        Gets the value of featureSubsetStrategy or its default value.
-        """
-        return self.getOrDefault(self.featureSubsetStrategy)
 
 
 class GBTParams(TreeEnsembleParams):
@@ -981,6 +991,13 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     def _create_model(self, java_model):
         return RandomForestRegressionModel(java_model)
 
+    @since("2.4.0")
+    def setFeatureSubsetStrategy(self, value):
+        """
+        Sets the value of :py:attr:`featureSubsetStrategy`.
+        """
+        return self._set(featureSubsetStrategy=value)
+
 
 class RandomForestRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable,
                                   JavaMLReadable):
@@ -1029,6 +1046,8 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> gbt = GBTRegressor(maxIter=5, maxDepth=2, seed=42)
     >>> print(gbt.getImpurity())
     variance
+    >>> print(gbt.getFeatureSubsetStrategy())
+    all
     >>> model = gbt.fit(df)
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
@@ -1079,20 +1098,20 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
-                 impurity="variance"):
+                 impurity="variance", featureSubsetStrategy="all"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
-                 impurity="variance")
+                 impurity="variance", featureSubsetStrategy="all")
         """
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                          checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1,
-                         impurity="variance")
+                         impurity="variance", featureSubsetStrategy="all")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1102,13 +1121,13 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                   checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
-                  impuriy="variance"):
+                  impuriy="variance", featureSubsetStrategy="all"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
                   checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
-                  impurity="variance")
+                  impurity="variance", featureSubsetStrategy="all")
         Sets params for Gradient Boosted Tree Regression.
         """
         kwargs = self._input_kwargs
@@ -1130,6 +1149,13 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         Gets the value of lossType or its default value.
         """
         return self.getOrDefault(self.lossType)
+
+    @since("2.4.0")
+    def setFeatureSubsetStrategy(self, value):
+        """
+        Sets the value of :py:attr:`featureSubsetStrategy`.
+        """
+        return self._set(featureSubsetStrategy=value)
 
 
 class GBTRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable, JavaMLReadable):

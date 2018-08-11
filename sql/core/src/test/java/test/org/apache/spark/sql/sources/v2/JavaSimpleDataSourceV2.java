@@ -20,8 +20,8 @@ package test.org.apache.spark.sql.sources.v2;
 import java.io.IOException;
 import java.util.List;
 
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
 import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.ReadSupport;
@@ -41,14 +41,16 @@ public class JavaSimpleDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<InputPartition<Row>> planInputPartitions() {
+    public List<InputPartition<InternalRow>> planInputPartitions() {
       return java.util.Arrays.asList(
         new JavaSimpleInputPartition(0, 5),
         new JavaSimpleInputPartition(5, 10));
     }
   }
 
-  static class JavaSimpleInputPartition implements InputPartition<Row>, InputPartitionReader<Row> {
+  static class JavaSimpleInputPartition implements InputPartition<InternalRow>,
+    InputPartitionReader<InternalRow> {
+
     private int start;
     private int end;
 
@@ -58,7 +60,7 @@ public class JavaSimpleDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public InputPartitionReader<Row> createPartitionReader() {
+    public InputPartitionReader<InternalRow> createPartitionReader() {
       return new JavaSimpleInputPartition(start - 1, end);
     }
 
@@ -69,8 +71,8 @@ public class JavaSimpleDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public Row get() {
-      return new GenericRow(new Object[] {start, -start});
+    public InternalRow get() {
+      return new GenericInternalRow(new Object[] {start, -start});
     }
 
     @Override

@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader}
 import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset
 import org.apache.spark.util.ThreadUtils
@@ -37,11 +37,11 @@ import org.apache.spark.util.ThreadUtils
  * offsets across epochs. Each compute() should call the next() method here until null is returned.
  */
 class ContinuousQueuedDataReader(
-    partition: InputPartition[UnsafeRow],
+    partition: ContinuousDataSourceRDDPartition,
     context: TaskContext,
     dataQueueSize: Int,
     epochPollIntervalMs: Long) extends Closeable {
-  private val reader = partition.createPartitionReader()
+  private val reader = partition.inputPartition.createPartitionReader()
 
   // Important sequencing - we must get our starting point before the provider threads start running
   private var currentOffset: PartitionOffset =
@@ -52,7 +52,7 @@ class ContinuousQueuedDataReader(
    */
   sealed trait ContinuousRecord
   case object EpochMarker extends ContinuousRecord
-  case class ContinuousRow(row: UnsafeRow, offset: PartitionOffset) extends ContinuousRecord
+  case class ContinuousRow(row: InternalRow, offset: PartitionOffset) extends ContinuousRecord
 
   private val queue = new ArrayBlockingQueue[ContinuousRecord](dataQueueSize)
 
@@ -70,7 +70,7 @@ class ContinuousQueuedDataReader(
   dataReaderThread.setDaemon(true)
   dataReaderThread.start()
 
-  context.addTaskCompletionListener(_ => {
+  context.addTaskCompletionListener[Unit](_ => {
     this.close()
   })
 
@@ -79,12 +79,12 @@ class ContinuousQueuedDataReader(
   }
 
   /**
-   * Return the next UnsafeRow to be read in the current epoch, or null if the epoch is done.
+   * Return the next row to be read in the current epoch, or null if the epoch is done.
    *
    * After returning null, the [[ContinuousDataSourceRDD]] compute() for the following epoch
    * will call next() again to start getting rows.
    */
-  def next(): UnsafeRow = {
+  def next(): InternalRow = {
     val POLL_TIMEOUT_MS = 1000
     var currentEntry: ContinuousRecord = null
 
@@ -113,7 +113,7 @@ class ContinuousQueuedDataReader(
     currentEntry match {
       case EpochMarker =>
         epochCoordEndpoint.send(ReportPartitionOffset(
-          context.partitionId(), EpochTracker.getCurrentEpoch.get, currentOffset))
+          partition.index, EpochTracker.getCurrentEpoch.get, currentOffset))
         null
       case ContinuousRow(row, offset) =>
         currentOffset = offset

@@ -22,6 +22,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
@@ -71,7 +72,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       arguments = Seq("InternalRow" -> tmpInput, "Object[]" -> values)
     )
     val code =
-      s"""
+      code"""
          |final InternalRow $tmpInput = $input;
          |final Object[] $values = new Object[${schema.length}];
          |$allFields
@@ -97,7 +98,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       ctx,
       JavaCode.expression(CodeGenerator.getValue(tmpInput, elementType, index), elementType),
       elementType)
-    val code = s"""
+    val code = code"""
       final ArrayData $tmpInput = $input;
       final int $numElements = $tmpInput.numElements();
       final Object[] $values = new Object[$numElements];
@@ -124,7 +125,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
 
     val keyConverter = createCodeForArray(ctx, s"$tmpInput.keyArray()", keyType)
     val valueConverter = createCodeForArray(ctx, s"$tmpInput.valueArray()", valueType)
-    val code = s"""
+    val code = code"""
       final MapData $tmpInput = $input;
       ${keyConverter.code}
       ${valueConverter.code}

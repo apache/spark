@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.vectorized._
 import org.apache.spark.sql.types._
@@ -97,7 +97,7 @@ case class InMemoryTableScanExec(
         columnarBatch.column(i).asInstanceOf[WritableColumnVector],
         columnarBatchSchema.fields(i).dataType, rowCount)
     }
-    taskContext.foreach(_.addTaskCompletionListener(_ => columnarBatch.close()))
+    taskContext.foreach(_.addTaskCompletionListener[Unit](_ => columnarBatch.close()))
     columnarBatch
   }
 
@@ -169,8 +169,8 @@ case class InMemoryTableScanExec(
   // But the cached version could alias output, so we need to replace output.
   override def outputPartitioning: Partitioning = {
     relation.cachedPlan.outputPartitioning match {
-      case h: HashPartitioning => updateAttribute(h).asInstanceOf[HashPartitioning]
-      case _ => relation.cachedPlan.outputPartitioning
+      case e: Expression => updateAttribute(e).asInstanceOf[Partitioning]
+      case other => other
     }
   }
 
@@ -183,6 +183,18 @@ case class InMemoryTableScanExec(
   private val stats = relation.partitionStatistics
   private def statsFor(a: Attribute) = stats.forAttribute(a)
 
+  // Currently, only use statistics from atomic types except binary type only.
+  private object ExtractableLiteral {
+    def unapply(expr: Expression): Option[Literal] = expr match {
+      case lit: Literal => lit.dataType match {
+        case BinaryType => None
+        case _: AtomicType => Some(lit)
+        case _ => None
+      }
+      case _ => None
+    }
+  }
+
   // Returned filter predicate should return false iff it is impossible for the input expression
   // to evaluate to `true' based on statistics collected about this partition batch.
   @transient lazy val buildFilter: PartialFunction[Expression, Expression] = {
@@ -194,33 +206,37 @@ case class InMemoryTableScanExec(
       if buildFilter.isDefinedAt(lhs) && buildFilter.isDefinedAt(rhs) =>
       buildFilter(lhs) || buildFilter(rhs)
 
-    case EqualTo(a: AttributeReference, l: Literal) =>
+    case EqualTo(a: AttributeReference, ExtractableLiteral(l)) =>
       statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
-    case EqualTo(l: Literal, a: AttributeReference) =>
-      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
-
-    case EqualNullSafe(a: AttributeReference, l: Literal) =>
-      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
-    case EqualNullSafe(l: Literal, a: AttributeReference) =>
+    case EqualTo(ExtractableLiteral(l), a: AttributeReference) =>
       statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
 
-    case LessThan(a: AttributeReference, l: Literal) => statsFor(a).lowerBound < l
-    case LessThan(l: Literal, a: AttributeReference) => l < statsFor(a).upperBound
+    case EqualNullSafe(a: AttributeReference, ExtractableLiteral(l)) =>
+      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
+    case EqualNullSafe(ExtractableLiteral(l), a: AttributeReference) =>
+      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
 
-    case LessThanOrEqual(a: AttributeReference, l: Literal) => statsFor(a).lowerBound <= l
-    case LessThanOrEqual(l: Literal, a: AttributeReference) => l <= statsFor(a).upperBound
+    case LessThan(a: AttributeReference, ExtractableLiteral(l)) => statsFor(a).lowerBound < l
+    case LessThan(ExtractableLiteral(l), a: AttributeReference) => l < statsFor(a).upperBound
 
-    case GreaterThan(a: AttributeReference, l: Literal) => l < statsFor(a).upperBound
-    case GreaterThan(l: Literal, a: AttributeReference) => statsFor(a).lowerBound < l
+    case LessThanOrEqual(a: AttributeReference, ExtractableLiteral(l)) =>
+      statsFor(a).lowerBound <= l
+    case LessThanOrEqual(ExtractableLiteral(l), a: AttributeReference) =>
+      l <= statsFor(a).upperBound
 
-    case GreaterThanOrEqual(a: AttributeReference, l: Literal) => l <= statsFor(a).upperBound
-    case GreaterThanOrEqual(l: Literal, a: AttributeReference) => statsFor(a).lowerBound <= l
+    case GreaterThan(a: AttributeReference, ExtractableLiteral(l)) => l < statsFor(a).upperBound
+    case GreaterThan(ExtractableLiteral(l), a: AttributeReference) => statsFor(a).lowerBound < l
+
+    case GreaterThanOrEqual(a: AttributeReference, ExtractableLiteral(l)) =>
+      l <= statsFor(a).upperBound
+    case GreaterThanOrEqual(ExtractableLiteral(l), a: AttributeReference) =>
+      statsFor(a).lowerBound <= l
 
     case IsNull(a: Attribute) => statsFor(a).nullCount > 0
     case IsNotNull(a: Attribute) => statsFor(a).count - statsFor(a).nullCount > 0
 
     case In(a: AttributeReference, list: Seq[Expression])
-      if list.forall(_.isInstanceOf[Literal]) && list.nonEmpty =>
+      if list.forall(ExtractableLiteral.unapply(_).isDefined) && list.nonEmpty =>
       list.map(l => statsFor(a).lowerBound <= l.asInstanceOf[Literal] &&
         l.asInstanceOf[Literal] <= statsFor(a).upperBound).reduce(_ || _)
   }

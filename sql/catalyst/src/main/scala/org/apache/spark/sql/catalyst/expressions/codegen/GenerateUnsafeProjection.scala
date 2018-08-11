@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 
 /**
@@ -86,7 +87,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       // For top level row writer, it always writes to the beginning of the global buffer holder,
       // which means its fixed-size region always in the same position, so we don't need to call
       // `reset` to set up its fixed-size region every time.
-      if (inputs.map(_.isNull).forall(_ == "false")) {
+      if (inputs.map(_.isNull).forall(_ == FalseLiteral)) {
         // If all fields are not nullable, which means the null bits never changes, then we don't
         // need to clear it out every time.
         ""
@@ -286,7 +287,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       ctx, ctx.INPUT_ROW, exprEvals, exprTypes, rowWriter, isTopLevel = true)
 
     val code =
-      s"""
+      code"""
          |$rowWriter.reset();
          |$evalSubexpr
          |$writeExpressions
@@ -343,7 +344,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
          |  }
          |
          |  public UnsafeRow apply(InternalRow ${ctx.INPUT_ROW}) {
-         |    ${eval.code.trim}
+         |    ${eval.code}
          |    return ${eval.value};
          |  }
          |

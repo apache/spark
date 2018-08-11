@@ -39,7 +39,21 @@ import org.apache.spark.util.Utils
 
 
 /**
- * Functions available for DataFrame operations.
+ * Commonly used functions available for DataFrame operations. Using functions defined here provides
+ * a little bit more compile-time safety to make sure the function exists.
+ *
+ * Spark also includes more built-in functions that are less common and are not defined here.
+ * You can still access them (and all the functions defined here) using the `functions.expr()` API
+ * and calling them through a SQL expression string. You can find the entire list of functions
+ * at SQL API documentation.
+ *
+ * As an example, `isnan` is a function that is defined here. You can use `isnan(col("myCol"))`
+ * to invoke the `isnan` function. This way the programming language's compiler ensures `isnan`
+ * exists and is of the proper form. You can also use `expr("isnan(myCol)")` function to invoke the
+ * same function. In this case, Spark itself will ensure `isnan` exists when it analyzes the query.
+ *
+ * `regr_count` is an example of a function that is built-in but not defined here, because it is
+ * less commonly used. To invoke it, use `expr("regr_count(yCol, xCol)")`.
  *
  * @groupname udf_funcs UDF functions
  * @groupname agg_funcs Aggregate functions
@@ -1032,14 +1046,6 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Computes the absolute value.
-   *
-   * @group normal_funcs
-   * @since 1.3.0
-   */
-  def abs(e: Column): Column = withExpr { Abs(e.expr) }
-
-  /**
    * Creates a new array column. The input columns must all have the same data type.
    *
    * @group normal_funcs
@@ -1069,6 +1075,17 @@ object functions {
    */
   @scala.annotation.varargs
   def map(cols: Column*): Column = withExpr { CreateMap(cols.map(_.expr)) }
+
+  /**
+   * Creates a new map column. The array in the first column is used for keys. The array in the
+   * second column is used for values. All elements in the array for key should not be null.
+   *
+   * @group normal_funcs
+   * @since 2.4
+   */
+  def map_from_arrays(keys: Column, values: Column): Column = withExpr {
+    MapFromArrays(keys.expr, values.expr)
+  }
 
   /**
    * Marks a DataFrame as small enough for use in broadcast joins.
@@ -1325,7 +1342,7 @@ object functions {
   }
 
   /**
-   * Computes bitwise NOT.
+   * Computes bitwise NOT (~) of a number.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1352,6 +1369,14 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Math Functions
   //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Computes the absolute value of a numeric value.
+   *
+   * @group math_funcs
+   * @since 1.3.0
+   */
+  def abs(e: Column): Column = withExpr { Abs(e.expr) }
 
   /**
    * @return inverse cosine of `e` in radians, as if computed by `java.lang.Math.acos`
@@ -2924,6 +2949,17 @@ object functions {
   }
 
   /**
+   * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
+   * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
+   * '2017-07-14 03:40:00.0'.
+   * @group datetime_funcs
+   * @since 2.4.0
+   */
+  def from_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
+    FromUTCTimestamp(ts.expr, tz.expr)
+  }
+
+  /**
    * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time
    * zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
    * '2017-07-14 01:40:00.0'.
@@ -2932,6 +2968,17 @@ object functions {
    */
   def to_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     ToUTCTimestamp(ts.expr, Literal(tz))
+  }
+
+  /**
+   * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time
+   * zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
+   * '2017-07-14 01:40:00.0'.
+   * @group datetime_funcs
+   * @since 2.4.0
+   */
+  def to_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
+    ToUTCTimestamp(ts.expr, tz.expr)
   }
 
   /**
@@ -3082,7 +3129,7 @@ object functions {
    * @since 1.5.0
    */
   def array_contains(column: Column, value: Any): Column = withExpr {
-    ArrayContains(column.expr, Literal(value))
+    ArrayContains(column.expr, lit(value).expr)
   }
 
   /**
@@ -3146,7 +3193,7 @@ object functions {
    * @since 2.4.0
    */
   def array_position(column: Column, value: Any): Column = withExpr {
-    ArrayPosition(column.expr, Literal(value))
+    ArrayPosition(column.expr, lit(value).expr)
   }
 
   /**
@@ -3157,7 +3204,7 @@ object functions {
    * @since 2.4.0
    */
   def element_at(column: Column, value: Any): Column = withExpr {
-    ElementAt(column.expr, Literal(value))
+    ElementAt(column.expr, lit(value).expr)
   }
 
   /**
@@ -3168,6 +3215,55 @@ object functions {
    * @since 2.4.0
    */
   def array_sort(e: Column): Column = withExpr { ArraySort(e.expr) }
+
+  /**
+   * Remove all elements that equal to element from the given array.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_remove(column: Column, element: Any): Column = withExpr {
+    ArrayRemove(column.expr, lit(element).expr)
+  }
+
+  /**
+   * Removes duplicate values from the array.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_distinct(e: Column): Column = withExpr { ArrayDistinct(e.expr) }
+
+  /**
+   * Returns an array of the elements in the intersection of the given two arrays,
+   * without duplicates.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_intersect(col1: Column, col2: Column): Column = withExpr {
+    ArrayIntersect(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns an array of the elements in the union of the given two arrays, without duplicates.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_union(col1: Column, col2: Column): Column = withExpr {
+    ArrayUnion(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns an array of the elements in the first array but not in the second array,
+   * without duplicates. The order of elements in the result is not determined
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_except(col1: Column, col2: Column): Column = withExpr {
+    ArrayExcept(col1.expr, col2.expr)
+  }
 
   /**
    * Creates a new row for each element in the given array or map column.
@@ -3255,7 +3351,7 @@ object functions {
    * @since 2.2.0
    */
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = withExpr {
-    new JsonToStructs(schema, options, e.expr)
+    JsonToStructs(schema, options, e.expr)
   }
 
   /**
@@ -3349,10 +3445,52 @@ object functions {
     val dataType = try {
       DataType.fromJson(schema)
     } catch {
-      case NonFatal(_) => StructType.fromDDL(schema)
+      case NonFatal(_) => DataType.fromDDL(schema)
     }
     from_json(e, dataType, options)
   }
+
+  /**
+   * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def from_json(e: Column, schema: Column): Column = {
+    from_json(e, schema, Map.empty[String, String].asJava)
+  }
+
+  /**
+   * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def from_json(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
+    withExpr(new JsonToStructs(e.expr, schema.expr, options.asScala.toMap))
+  }
+
+  /**
+   * Parses a column containing a JSON string and infers its schema.
+   *
+   * @param e a string column containing JSON data.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def schema_of_json(e: Column): Column = withExpr(new SchemaOfJson(e.expr))
 
   /**
    * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` of `StructType`s,
@@ -3444,6 +3582,16 @@ object functions {
   def array_max(e: Column): Column = withExpr { ArrayMax(e.expr) }
 
   /**
+   * Returns a random permutation of the given array.
+   *
+   * @note The function is non-deterministic.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def shuffle(e: Column): Column = withExpr { Shuffle(e.expr) }
+
+  /**
    * Returns a reversed string or an array with reverse order of elements.
    * @group collection_funcs
    * @since 1.5.0
@@ -3457,6 +3605,27 @@ object functions {
    * @since 2.4.0
    */
   def flatten(e: Column): Column = withExpr { Flatten(e.expr) }
+
+  /**
+   * Generate a sequence of integers from start to stop, incrementing by step.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def sequence(start: Column, stop: Column, step: Column): Column = withExpr {
+    new Sequence(start.expr, stop.expr, step.expr)
+  }
+
+  /**
+   * Generate a sequence of integers from start to stop,
+   * incrementing by 1 if start is less than or equal to stop, otherwise -1.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def sequence(start: Column, stop: Column): Column = withExpr {
+    new Sequence(start.expr, stop.expr)
+  }
 
   /**
    * Creates an array containing the left argument repeated the number of times given by the
@@ -3491,6 +3660,37 @@ object functions {
    * @since 2.3.0
    */
   def map_values(e: Column): Column = withExpr { MapValues(e.expr) }
+
+  /**
+   * Returns an unordered array of all entries in the given map.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def map_entries(e: Column): Column = withExpr { MapEntries(e.expr) }
+
+  /**
+   * Returns a map created from the given array of entries.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def map_from_entries(e: Column): Column = withExpr { MapFromEntries(e.expr) }
+
+  /**
+   * Returns a merged array of structs in which the N-th struct contains all N-th values of input
+   * arrays.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  @scala.annotation.varargs
+  def arrays_zip(e: Column*): Column = withExpr { ArraysZip(e.map(_.expr)) }
+
+  /**
+   * Returns the union of all the given maps.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  @scala.annotation.varargs
+  def map_concat(cols: Column*): Column = withExpr { MapConcat(cols.map(_.expr)) }
 
   // scalastyle:off line.size.limit
   // scalastyle:off parameter.number

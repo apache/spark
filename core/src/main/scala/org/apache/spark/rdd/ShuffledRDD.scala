@@ -110,4 +110,6 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     super.clearDependencies()
     prev = null
   }
+
+  private[spark] override def isBarrier(): Boolean = false
 }

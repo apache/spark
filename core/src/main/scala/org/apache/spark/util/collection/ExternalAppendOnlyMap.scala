@@ -570,7 +570,7 @@ class ExternalAppendOnlyMap[K, V, C](
       }
     }
 
-    context.addTaskCompletionListener(context => cleanup())
+    context.addTaskCompletionListener[Unit](context => cleanup())
   }
 
   /**
