@@ -220,9 +220,17 @@ case class InsertIntoHadoopFsRelationCommand(
     }
     // first clear the path determined by the static partition keys (e.g. /table/foo=1)
     val staticPrefixPath = qualifiedOutputPath.suffix(staticPartitionPrefix)
-    if (fs.exists(staticPrefixPath) && !committer.deleteWithJob(fs, staticPrefixPath, true)) {
-      throw new IOException(s"Unable to clear output " +
-        s"directory $staticPrefixPath prior to writing to it")
+    val errorMsg = s"Unable to clear output directory $staticPrefixPath prior to writing to it"
+    if (staticPartitionPrefix.isEmpty) {
+      // Avoid drop table location folder because it may contain information like ACL entries.
+      if (fs.exists(staticPrefixPath) &&
+        !committer.truncateDirectoryWithJob(fs, staticPrefixPath, true)) {
+        throw new IOException(errorMsg)
+      }
+    } else {
+      if (fs.exists(staticPrefixPath) && !committer.deleteWithJob(fs, staticPrefixPath, true)) {
+        throw new IOException(errorMsg)
+      }
     }
     // now clear all custom partition locations (e.g. /custom/dir/where/foo=2/bar=4)
     for ((spec, customLoc) <- customPartitionLocations) {

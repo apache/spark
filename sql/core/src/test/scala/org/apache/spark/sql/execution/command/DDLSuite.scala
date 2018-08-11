@@ -21,7 +21,9 @@ import java.io.File
 import java.net.URI
 import java.util.Locale
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.permission.{FsAction, FsPermission}
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
@@ -2306,6 +2308,55 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           assert(spark.sql(s"SHOW PARTITIONS $tableName").count() == 0)
           assert(!new File(dir, "c=c/b=b").exists())
           checkAnswer(spark.table(tableName), Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-25085: Insert overwrite a non-partitioned table don't delete table folder") {
+    withTable("t1", "t2") {
+      withTempPath { dir =>
+        // datasource table
+        spark.sql(s"CREATE TABLE t1(a int) USING parquet LOCATION '${dir.toURI}/t1'")
+        validateTableFilePermission("t1")
+
+        // hive table
+        if (isUsingHiveMetastore) {
+          spark.sql(s"CREATE TABLE t2(a int) LOCATION '${dir.toURI}/t2'")
+          validateTableFilePermission("t2")
+        }
+
+        def validateTableFilePermission(tableName: String): Unit = {
+          spark.sql(s"INSERT OVERWRITE table $tableName SELECT 1 WHERE true")
+          val conf = new Configuration()
+          val fs = FileSystem.get(conf)
+          val path = new Path(dir.getAbsolutePath + "/" + tableName)
+
+          // Use permission to test because ChecksumFileSystem doesn't support getAclStatus.
+          val defaultOtherAction = fs.getFileStatus(path).getPermission.getOtherAction
+          assert(spark.table(tableName).count() === 1)
+          assert(
+            fs.getFileStatus(path).getPermission.getOtherAction === defaultOtherAction)
+
+          val newPermission = if (defaultOtherAction.implies(FsAction.ALL)) {
+            new FsPermission(FsAction.ALL, FsAction.ALL, FsAction.READ_WRITE)
+          } else {
+            new FsPermission(FsAction.ALL, FsAction.ALL, FsAction.ALL)
+          }
+          // Change the table location folder permission.
+          fs.setPermission(path, newPermission)
+
+          spark.sql(s"INSERT OVERWRITE table $tableName SELECT 2 WHERE true")
+          assert(spark.table(tableName).count() === 1)
+          assert(
+            fs.getFileStatus(path).getPermission.getOtherAction === newPermission.getOtherAction)
+          assert(fs.getFileStatus(path).getPermission.getOtherAction !== defaultOtherAction)
+
+          spark.sql(s"INSERT OVERWRITE table $tableName SELECT 3 WHERE false")
+          assert(spark.table(tableName).count() === 0)
+          assert(
+            fs.getFileStatus(path).getPermission.getOtherAction === newPermission.getOtherAction)
+          assert(fs.getFileStatus(path).getPermission.getOtherAction !== defaultOtherAction)
         }
       }
     }
