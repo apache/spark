@@ -21,19 +21,20 @@ import java.util.Objects
 
 import scala.collection.mutable.ArrayBuffer
 import scala.ref.WeakReference
+
+import org.scalatest.Matchers
+import org.scalatest.concurrent.Eventually
+
 import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.util.CompletionIterator
-import org.scalatest.Matchers
-import org.scalatest.concurrent.Eventually
-import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
-import scala.concurrent.duration.{Duration, FiniteDuration}
-
-
-class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext with Eventually with Matchers{
+class ExternalAppendOnlyMapSuite extends SparkFunSuite
+  with LocalSparkContext
+  with Eventually
+  with Matchers{
   import TestUtils.{assertNotSpilled, assertSpilled}
 
   private val allCompressionCodecs = CompressionCodec.ALL_COMPRESSION_CODECS
@@ -436,7 +437,12 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext wi
     assert( it.isInstanceOf[CompletionIterator[_, _]])
 
     val underlyingMapRef = WeakReference(map.currentMap)
-    assert(underlyingMapRef.get.nonEmpty)
+
+    {
+      // direct asserts introduced some macro generated code that held a reference to the map
+      val tmpIsNull = null == underlyingMapRef.get.orNull
+      assert(!tmpIsNull)
+    }
 
     val first50Keys = for ( _ <- 0 until 50) yield {
       val (k, vs) = it.next
@@ -450,14 +456,12 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext wi
     // it'd be nice to use something like
     // https://github.com/scala/scala/blob/2.13.x/test/junit/scala/tools/testing/AssertUtil.scala
     // (lines 69-89)
-    //assert(map.currentMap == null)
-//    eventually (Timeout(FiniteDuration(500, scala.concurrent.duration.SECONDS))){
-//      System.gc()
-//      underlyingMapRef.get should be (empty)
-//    }
-    while(underlyingMapRef.get.nonEmpty){
+    // assert(map.currentMap == null)
+    eventually{
       System.gc()
-      Thread.sleep(5000)
+      // direct asserts introduced some macro generated code that held a reference to the map
+      val tmpIsNull = null == underlyingMapRef.get.orNull
+      tmpIsNull
     }
 
 
@@ -482,7 +486,12 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext wi
     assert(map.numSpills == 0, "map was not supposed to spill")
 
     val underlyingMapRef = WeakReference(map.currentMap)
-    assert(underlyingMapRef.get.nonEmpty)
+
+    {
+      // direct asserts introduced some macro generated code that held a reference to the map
+      val tmpIsNull = null == underlyingMapRef.get.orNull
+      assert(!tmpIsNull)
+    }
 
     val it = map.iterator
     assert( it.isInstanceOf[CompletionIterator[_, _]])
@@ -507,14 +516,11 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext wi
     // (lines 69-89)
     assert(map.currentMap == null)
 
-//    eventually(Timeout(FiniteDuration(5, scala.concurrent.duration.SECONDS))){
-//      System.gc()
-//      underlyingMapRef.get should be (empty)
-//    }
-
-    while(underlyingMapRef.get.nonEmpty){
+    eventually{
       System.gc()
-      Thread.sleep(5000)
+      // direct asserts introduced some macro generated code that held a reference to the map
+      val tmpIsNull = null == underlyingMapRef.get.orNull
+      tmpIsNull
     }
 
     assert(it.toList.isEmpty)
