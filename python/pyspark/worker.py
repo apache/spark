@@ -25,13 +25,15 @@ import time
 import socket
 import traceback
 
+from py4j.java_gateway import JavaGateway, GatewayParameters
+
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.java_gateway import do_server_auth
 from pyspark.taskcontext import TaskContext
 from pyspark.files import SparkFiles
 from pyspark.rdd import PythonEvalType
-from pyspark.serializers import write_with_length, write_int, read_long, \
+from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
     BatchedSerializer, ArrowStreamPandasSerializer
 from pyspark.sql.types import to_arrow_type
@@ -261,6 +263,9 @@ def main(infile, outfile):
 
         # initialize global state
         taskContext = TaskContext._getOrCreate()
+        isBarrier = read_bool(infile)
+        boundPort = read_int(infile)
+        secret = UTF8Deserializer().loads(infile)
         taskContext._stageId = read_int(infile)
         taskContext._partitionId = read_int(infile)
         taskContext._attemptNumber = read_int(infile)
@@ -274,6 +279,10 @@ def main(infile, outfile):
         shuffle.MemoryBytesSpilled = 0
         shuffle.DiskBytesSpilled = 0
         _accumulatorRegistry.clear()
+
+        if isBarrier:
+            paras = GatewayParameters(port=boundPort, auth_token=secret, auto_convert=True)
+            taskContext._javaContext = JavaGateway(gateway_parameters=paras).entry_point
 
         # fetch name of workdir
         spark_files_dir = utf8_deserializer.loads(infile)

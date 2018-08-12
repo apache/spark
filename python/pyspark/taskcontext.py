@@ -29,6 +29,7 @@ class TaskContext(object):
     """
 
     _taskContext = None
+    _javaContext = None
 
     _attemptNumber = None
     _partitionId = None
@@ -95,3 +96,33 @@ class TaskContext(object):
         Get a local property set upstream in the driver, or None if it is missing.
         """
         return self._localProperties.get(key, None)
+
+    def barrier(self):
+        """
+        .. note:: Experimental
+
+        Sets a global barrier and waits until all tasks in this stage hit this barrier.
+        Note this method is only allowed for a BarrierTaskContext.
+
+        .. versionadded:: 2.4.0
+        """
+        if self._javaContext is None:
+            raise Exception("Not supported to call barrier() inside a non-barrier task.")
+        else:
+            self._javaContext.barrier()
+
+    def getTaskInfos(self):
+        """
+        .. note:: Experimental
+
+        Returns the all task infos in this barrier stage, the task infos are ordered by
+        partitionId.
+        Note this method is only allowed for a BarrierTaskContext.
+
+        .. versionadded:: 2.4.0
+        """
+        if self._javaContext is None:
+            raise Exception("Not supported to call getTaskInfos() inside a non-barrier task.")
+        else:
+            java_list = self._javaContext.getTaskInfos()
+            return [h for h in java_list]

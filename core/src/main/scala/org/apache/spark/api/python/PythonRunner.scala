@@ -20,9 +20,12 @@ package org.apache.spark.api.python
 import java.io._
 import java.net._
 import java.nio.charset.StandardCharsets
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
+
+import py4j.GatewayServer
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -180,7 +183,42 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         dataOut.writeInt(partitionIndex)
         // Python version of driver
         PythonRDD.writeUTF(pythonVer, dataOut)
+        // Init a GatewayServer to port current BarrierTaskContext to Python side.
+        val isBarrier = context.isInstanceOf[BarrierTaskContext]
+        val secret = if (isBarrier) {
+          Utils.createSecret(env.conf)
+        } else {
+          ""
+        }
+        val gatewayServer: Option[GatewayServer] = if (isBarrier) {
+          Some(new GatewayServer.GatewayServerBuilder()
+            .entryPoint(context.asInstanceOf[BarrierTaskContext])
+            .authToken(secret)
+            .javaPort(0)
+            .callbackClient(GatewayServer.DEFAULT_PYTHON_PORT, GatewayServer.defaultAddress(),
+              secret)
+            .build())
+        } else {
+          None
+        }
+        gatewayServer.map(_.start())
+        gatewayServer.foreach { server =>
+          context.addTaskCompletionListener(_ => server.shutdown())
+        }
+        val boundPort: Int = gatewayServer.map(_.getListeningPort).getOrElse(0)
+        if (boundPort == -1) {
+          val message = "GatewayServer to port BarrierTaskContext failed to bind to Java side."
+          logError(message)
+          throw new SparkException(message)
+        } else {
+          logDebug(s"Started GatewayServer to port BarrierTaskContext on port $boundPort.")
+        }
         // Write out the TaskContextInfo
+        dataOut.writeBoolean(isBarrier)
+        dataOut.writeInt(boundPort)
+        val secretBytes = secret.getBytes(UTF_8)
+        dataOut.writeInt(secretBytes.length)
+        dataOut.write(secretBytes, 0, secretBytes.length)
         dataOut.writeInt(context.stageId())
         dataOut.writeInt(context.partitionId())
         dataOut.writeInt(context.attemptNumber())
