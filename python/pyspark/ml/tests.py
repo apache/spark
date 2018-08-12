@@ -955,7 +955,7 @@ class CrossValidatorTests(SparkSessionTestCase):
         paramGrid = ParamGridBuilder().addGrid(lr.regParam, [0.5, 1]).build()
         for param in paramGrid:
             for v in param.values():
-                assert(type(v) is float)
+                assert(type(v) == float)
 
     def test_save_load_trained_model(self):
         # This tests saving and loading the trained model only.
