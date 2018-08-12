@@ -111,6 +111,20 @@ class JacksonParser(
         // the specified schema is an array of structures. In that case, the input JSON is
         // considered as an array of only one element of struct type.
         // This behavior was introduced by changes for SPARK-19595.
+        //
+        // For example, if the specified schema is ArrayType(new StructType().add("i", IntegerType))
+        // and JSON input as below:
+        //
+        // [{"i": 1}, {"i": 2}]
+        // [{"i": 3}]
+        // {"i": 4}
+        //
+        // The last row is considered as an array with one element, and result of conversion:
+        //
+        // Seq(Row(1), Row(2))
+        // Seq(Row(3))
+        // Seq(Row(4))
+        //
         val st = at.elementType.asInstanceOf[StructType]
         val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
         Seq(InternalRow(new GenericArrayData(Seq(convertObject(parser, st, fieldConverters)))))
