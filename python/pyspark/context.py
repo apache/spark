@@ -126,7 +126,7 @@ class SparkContext(object):
         self.environment = environment or {}
         # java gateway must have been launched at this point.
         if conf is not None and conf._jconf is not None:
-            # conf has been initialized in JVM properly, so use conf directly. This represent the
+            # conf has been initialized in JVM properly, so use conf directly. This represents the
             # scenario that JVM has been launched before SparkConf is created (e.g. SparkContext is
             # created and then stopped, and we create a new SparkConf and new SparkContext again)
             self._conf = conf
