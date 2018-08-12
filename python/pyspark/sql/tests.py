@@ -765,7 +765,7 @@ class SQLTests(ReusedSQLTestCase):
         row2 = df2.select(sameText(df2['file'])).first()
         self.assertTrue(row2[0].find("people.json") != -1)
 
-    def test_udf_defers_judf_initalization(self):
+    def test_udf_defers_judf_initialization(self):
         # This is separate of  UDFInitializationTests
         # to avoid context initialization
         # when udf is called
@@ -3613,7 +3613,7 @@ class UDFInitializationTests(unittest.TestCase):
         if SparkContext._active_spark_context is not None:
             SparkContext._active_spark_context.stop()
 
-    def test_udf_init_shouldnt_initalize_context(self):
+    def test_udf_init_shouldnt_initialize_context(self):
         from pyspark.sql.functions import UserDefinedFunction
 
         UserDefinedFunction(lambda x: x, StringType())

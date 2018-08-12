@@ -1345,7 +1345,7 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
   }
 
   def this(left: Expression) = {
-    // backwards compatability
+    // backwards compatibility
     this(left, None, Cast(left, DateType))
   }
 

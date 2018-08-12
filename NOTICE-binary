@@ -476,7 +476,7 @@ which has the following notices:
     PureJavaCrc32C from apache-hadoop-common http://hadoop.apache.org/
     (Apache 2.0 license)
 
-   This library containd statically linked libstdc++. This inclusion is allowed by
+   This library contains statically linked libstdc++. This inclusion is allowed by
    "GCC RUntime Library Exception"
    http://gcc.gnu.org/onlinedocs/libstdc++/manual/license.html
 

@@ -235,7 +235,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     checkAnalysis(plan, expected)
   }
 
-  test("Analysis may leave unnecassary aliases") {
+  test("Analysis may leave unnecessary aliases") {
     val att1 = testRelation.output.head
     var plan = testRelation.select(
       CreateStruct(Seq(att1, ((att1.as("aa")) + 1).as("a_plus_1"))).as("col"),
