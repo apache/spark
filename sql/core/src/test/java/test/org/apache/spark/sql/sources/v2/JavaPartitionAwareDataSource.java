@@ -21,8 +21,8 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
 import org.apache.spark.sql.sources.v2.ReadSupport;
@@ -43,10 +43,10 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<DataReaderFactory<Row>> createDataReaderFactories() {
+    public List<InputPartition<InternalRow>> planInputPartitions() {
       return java.util.Arrays.asList(
-        new SpecificDataReaderFactory(new int[]{1, 1, 3}, new int[]{4, 4, 6}),
-        new SpecificDataReaderFactory(new int[]{2, 4, 4}, new int[]{6, 2, 2}));
+        new SpecificInputPartition(new int[]{1, 1, 3}, new int[]{4, 4, 6}),
+        new SpecificInputPartition(new int[]{2, 4, 4}, new int[]{6, 2, 2}));
     }
 
     @Override
@@ -73,12 +73,14 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, ReadSupport {
     }
   }
 
-  static class SpecificDataReaderFactory implements DataReaderFactory<Row>, DataReader<Row> {
+  static class SpecificInputPartition implements InputPartition<InternalRow>,
+    InputPartitionReader<InternalRow> {
+
     private int[] i;
     private int[] j;
     private int current = -1;
 
-    SpecificDataReaderFactory(int[] i, int[] j) {
+    SpecificInputPartition(int[] i, int[] j) {
       assert i.length == j.length;
       this.i = i;
       this.j = j;
@@ -91,8 +93,8 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public Row get() {
-      return new GenericRow(new Object[] {i[current], j[current]});
+    public InternalRow get() {
+      return new GenericInternalRow(new Object[] {i[current], j[current]});
     }
 
     @Override
@@ -101,7 +103,7 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public DataReader<Row> createDataReader() {
+    public InputPartitionReader<InternalRow> createPartitionReader() {
       return this;
     }
   }

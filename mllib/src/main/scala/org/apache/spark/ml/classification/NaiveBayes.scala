@@ -25,6 +25,7 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.{col, lit}
@@ -125,9 +126,12 @@ class NaiveBayes @Since("1.5.0") (
    */
   private[spark] def trainWithLabelCheck(
       dataset: Dataset[_],
-      positiveLabel: Boolean): NaiveBayesModel = {
+      positiveLabel: Boolean): NaiveBayesModel = instrumented { instr =>
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
     if (positiveLabel && isDefined(thresholds)) {
       val numClasses = getNumClasses(dataset)
+      instr.logNumClasses(numClasses)
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
         ".train() called with non-matching numClasses and thresholds.length." +
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
@@ -146,8 +150,7 @@ class NaiveBayes @Since("1.5.0") (
       }
     }
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(labelCol, featuresCol, weightCol, predictionCol, rawPredictionCol,
+    instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, rawPredictionCol,
       probabilityCol, modelType, smoothing, thresholds)
 
     val numFeatures = dataset.select(col($(featuresCol))).head().getAs[Vector](0).size
@@ -203,9 +206,7 @@ class NaiveBayes @Since("1.5.0") (
 
     val pi = Vectors.dense(piArray)
     val theta = new DenseMatrix(numLabels, numFeatures, thetaArray, true)
-    val model = new NaiveBayesModel(uid, pi, theta).setOldLabels(labelArray)
-    instr.logSuccess(model)
-    model
+    new NaiveBayesModel(uid, pi, theta).setOldLabels(labelArray)
   }
 
   @Since("1.5.0")
@@ -407,7 +408,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
         .head()
       val model = new NaiveBayesModel(metadata.uid, pi, theta)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

@@ -72,6 +72,9 @@ package object config {
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite").booleanConf.createWithDefault(false)
 
+  private[spark] val EVENT_LOG_CALLSITE_FORM =
+    ConfigBuilder("spark.eventLog.callsite").stringConf.createWithDefault("short")
+
   private[spark] val EXECUTOR_CLASS_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH).stringConf.createOptional
 
@@ -125,6 +128,10 @@ package object config {
 
   private[spark] val DYN_ALLOCATION_MAX_EXECUTORS =
     ConfigBuilder("spark.dynamicAllocation.maxExecutors").intConf.createWithDefault(Int.MaxValue)
+
+  private[spark] val DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO =
+    ConfigBuilder("spark.dynamicAllocation.executorAllocationRatio")
+      .doubleConf.createWithDefault(1.0)
 
   private[spark] val LOCALITY_WAIT = ConfigBuilder("spark.locality.wait")
     .timeConf(TimeUnit.MILLISECONDS)
@@ -301,6 +308,12 @@ package object config {
     .booleanConf
     .createWithDefault(false)
 
+  private[spark] val IGNORE_MISSING_FILES = ConfigBuilder("spark.files.ignoreMissingFiles")
+    .doc("Whether to ignore missing files. If true, the Spark jobs will continue to run when " +
+        "encountering missing files and the contents that have been read will still be returned.")
+    .booleanConf
+    .createWithDefault(false)
+
   private[spark] val APP_CALLER_CONTEXT = ConfigBuilder("spark.log.callerContext")
     .stringConf
     .createOptional
@@ -332,7 +345,7 @@ package object config {
         "a property key or value, the value is redacted from the environment UI and various logs " +
         "like YARN and event logs.")
       .regexConf
-      .createWithDefault("(?i)secret|password|url|user|username".r)
+      .createWithDefault("(?i)secret|password".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
@@ -341,6 +354,11 @@ package object config {
         "dummy value. This is currently used to redact the output of SQL explain commands.")
       .regexConf
       .createOptional
+
+  private[spark] val AUTH_SECRET_BIT_LENGTH =
+    ConfigBuilder("spark.authenticate.secretBitLength")
+      .intConf
+      .createWithDefault(256)
 
   private[spark] val NETWORK_AUTH_ENABLED =
     ConfigBuilder("spark.authenticate")
@@ -414,7 +432,11 @@ package object config {
         "external shuffle service, this feature can only be worked when external shuffle" +
         "service is newer than Spark 2.2.")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(Long.MaxValue)
+      // fetch-to-mem is guaranteed to fail if the message is bigger than 2 GB, so we might
+      // as well use fetch-to-disk in that case.  The message includes some metadata in addition
+      // to the block data itself (in particular UploadBlock has a lot of metadata), so we leave
+      // extra room.
+      .createWithDefault(Int.MaxValue - 512)
 
   private[spark] val TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES =
     ConfigBuilder("spark.taskMetrics.trackUpdatedBlockStatuses")
@@ -468,10 +490,11 @@ package object config {
 
   private[spark] val FORCE_DOWNLOAD_SCHEMES =
     ConfigBuilder("spark.yarn.dist.forceDownloadSchemes")
-      .doc("Comma-separated list of schemes for which files will be downloaded to the " +
+      .doc("Comma-separated list of schemes for which resources will be downloaded to the " +
         "local disk prior to being added to YARN's distributed cache. For use in cases " +
         "where the YARN service does not support schemes that are supported by Spark, like http, " +
-        "https and ftp.")
+        "https and ftp, or jars required to be in the local YARN client's classpath. Wildcard " +
+        "'*' is denoted to download resources for all the schemes.")
       .stringConf
       .toSequence
       .createWithDefault(Nil)
@@ -525,4 +548,33 @@ package object config {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("1g")
 
+  private[spark] val CREDENTIALS_RENEWAL_INTERVAL_RATIO =
+    ConfigBuilder("spark.security.credentials.renewalRatio")
+      .doc("Ratio of the credential's expiration time when Spark should fetch new credentials.")
+      .doubleConf
+      .createWithDefault(0.75d)
+
+  private[spark] val CREDENTIALS_RENEWAL_RETRY_WAIT =
+    ConfigBuilder("spark.security.credentials.retryWait")
+      .doc("How long to wait before retrying to fetch new credentials after a failure.")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefaultString("1h")
+
+  private[spark] val SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS =
+    ConfigBuilder("spark.shuffle.minNumPartitionsToHighlyCompress")
+      .internal()
+      .doc("Number of partitions to determine if MapStatus should use HighlyCompressedMapStatus")
+      .intConf
+      .checkValue(v => v > 0, "The value should be a positive integer.")
+      .createWithDefault(2000)
+
+  private[spark] val BARRIER_SYNC_TIMEOUT =
+    ConfigBuilder("spark.barrier.sync.timeout")
+      .doc("The timeout in seconds for each barrier() call from a barrier task. If the " +
+        "coordinator didn't receive all the sync messages from barrier tasks within the " +
+        "configed time, throw a SparkException to fail all the tasks. The default value is set " +
+        "to 31536000(3600 * 24 * 365) so the barrier() call shall wait for one year.")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(v => v > 0, "The value should be a positive time value.")
+      .createWithDefaultString("365d")
 }

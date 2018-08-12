@@ -91,9 +91,14 @@ class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils
       summary: Boolean,
       check: Boolean): Option[FileStatus] = {
     var result: Option[FileStatus] = None
+    val summaryLevel = if (summary) {
+      "ALL"
+    } else {
+      "NONE"
+    }
     withSQLConf(
       SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key -> committer,
-      ParquetOutputFormat.ENABLE_JOB_SUMMARY -> summary.toString) {
+      ParquetOutputFormat.JOB_SUMMARY_LEVEL -> summaryLevel) {
         withTempPath { dest =>
           val df = spark.createDataFrame(Seq((1, "4"), (2, "2")))
           val destPath = new Path(dest.toURI)

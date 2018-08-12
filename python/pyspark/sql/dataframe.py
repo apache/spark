@@ -78,6 +78,9 @@ class DataFrame(object):
         self.is_cached = False
         self._schema = None  # initialized lazily
         self._lazy_rdd = None
+        # Check whether _repr_html is supported or not, we use it to avoid calling _jdf twice
+        # by __repr__ and _repr_html_ while eager evaluation opened.
+        self._support_repr_html = False
 
     @property
     @since(1.3)
@@ -290,6 +293,31 @@ class DataFrame(object):
         else:
             print(self._jdf.queryExecution().simpleString())
 
+    @since(2.4)
+    def exceptAll(self, other):
+        """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame` but
+        not in another :class:`DataFrame` while preserving duplicates.
+
+        This is equivalent to `EXCEPT ALL` in SQL.
+
+        >>> df1 = spark.createDataFrame(
+        ...         [("a", 1), ("a", 1), ("a", 1), ("a", 2), ("b",  3), ("c", 4)], ["C1", "C2"])
+        >>> df2 = spark.createDataFrame([("a", 1), ("b", 3)], ["C1", "C2"])
+
+        >>> df1.exceptAll(df2).show()
+        +---+---+
+        | C1| C2|
+        +---+---+
+        |  a|  1|
+        |  a|  1|
+        |  a|  2|
+        |  c|  4|
+        +---+---+
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
+        """
+        return DataFrame(self._jdf.exceptAll(other._jdf), self.sql_ctx)
+
     @since(1.3)
     def isLocal(self):
         """Returns ``True`` if the :func:`collect` and :func:`take` methods can be run locally
@@ -352,7 +380,46 @@ class DataFrame(object):
             print(self._jdf.showString(n, int(truncate), vertical))
 
     def __repr__(self):
-        return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+        if not self._support_repr_html and self.sql_ctx._conf.isReplEagerEvalEnabled():
+            vertical = False
+            return self._jdf.showString(
+                self.sql_ctx._conf.replEagerEvalMaxNumRows(),
+                self.sql_ctx._conf.replEagerEvalTruncate(), vertical)
+        else:
+            return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+
+    def _repr_html_(self):
+        """Returns a dataframe with html code when you enabled eager evaluation
+        by 'spark.sql.repl.eagerEval.enabled', this only called by REPL you are
+        using support eager evaluation with HTML.
+        """
+        import cgi
+        if not self._support_repr_html:
+            self._support_repr_html = True
+        if self.sql_ctx._conf.isReplEagerEvalEnabled():
+            max_num_rows = max(self.sql_ctx._conf.replEagerEvalMaxNumRows(), 0)
+            sock_info = self._jdf.getRowsToPython(
+                max_num_rows, self.sql_ctx._conf.replEagerEvalTruncate())
+            rows = list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
+            head = rows[0]
+            row_data = rows[1:]
+            has_more_data = len(row_data) > max_num_rows
+            row_data = row_data[:max_num_rows]
+
+            html = "<table border='1'>\n"
+            # generate table head
+            html += "<tr><th>%s</th></tr>\n" % "</th><th>".join(map(lambda x: cgi.escape(x), head))
+            # generate table rows
+            for row in row_data:
+                html += "<tr><td>%s</td></tr>\n" % "</td><td>".join(
+                    map(lambda x: cgi.escape(x), row))
+            html += "</table>\n"
+            if has_more_data:
+                html += "only showing top %d %s\n" % (
+                    max_num_rows, "row" if max_num_rows == 1 else "rows")
+            return html
+        else:
+            return None
 
     @since(2.1)
     def checkpoint(self, eager=True):
@@ -463,8 +530,8 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.collectToPython()
-        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
+            sock_info = self._jdf.collectToPython()
+        return list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
 
     @ignore_unicode_prefix
     @since(2.0)
@@ -477,8 +544,8 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.toPythonIterator()
-        return _load_from_socket(port, BatchedSerializer(PickleSerializer()))
+            sock_info = self._jdf.toPythonIterator()
+        return _load_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -1433,6 +1500,28 @@ class DataFrame(object):
         """
         return DataFrame(self._jdf.intersect(other._jdf), self.sql_ctx)
 
+    @since(2.4)
+    def intersectAll(self, other):
+        """ Return a new :class:`DataFrame` containing rows in both this dataframe and other
+        dataframe while preserving duplicates.
+
+        This is equivalent to `INTERSECT ALL` in SQL.
+        >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
+        >>> df2 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3)], ["C1", "C2"])
+
+        >>> df1.intersectAll(df2).sort("C1", "C2").show()
+        +---+---+
+        | C1| C2|
+        +---+---+
+        |  a|  1|
+        |  a|  1|
+        |  b|  3|
+        +---+---+
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
+        """
+        return DataFrame(self._jdf.intersectAll(other._jdf), self.sql_ctx)
+
     @since(1.3)
     def subtract(self, other):
         """ Return a new :class:`DataFrame` containing rows in this frame
@@ -1975,6 +2064,8 @@ class DataFrame(object):
         .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
             to be small, as all the data is loaded into the driver's memory.
 
+        .. note:: Usage with spark.sql.execution.arrow.enabled=True is experimental.
+
         >>> df.toPandas()  # doctest: +SKIP
            age   name
         0    2  Alice
@@ -1985,13 +2076,12 @@ class DataFrame(object):
 
         import pandas as pd
 
-        if self.sql_ctx.getConf("spark.sql.execution.pandas.respectSessionTimeZone").lower() \
-           == "true":
-            timezone = self.sql_ctx.getConf("spark.sql.session.timeZone")
+        if self.sql_ctx._conf.pandasRespectSessionTimeZone():
+            timezone = self.sql_ctx._conf.sessionLocalTimeZone()
         else:
             timezone = None
 
-        if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
+        if self.sql_ctx._conf.arrowEnabled():
             use_arrow = True
             try:
                 from pyspark.sql.types import to_arrow_schema
@@ -2001,13 +2091,12 @@ class DataFrame(object):
                 to_arrow_schema(self.schema)
             except Exception as e:
 
-                if self.sql_ctx.getConf("spark.sql.execution.arrow.fallback.enabled", "true") \
-                        .lower() == "true":
+                if self.sql_ctx._conf.arrowFallbackEnabled():
                     msg = (
                         "toPandas attempted Arrow optimization because "
                         "'spark.sql.execution.arrow.enabled' is set to true; however, "
                         "failed by the reason below:\n  %s\n"
-                        "Attempts non-optimization as "
+                        "Attempting non-optimization as "
                         "'spark.sql.execution.arrow.fallback.enabled' is set to "
                         "true." % _exception_message(e))
                     warnings.warn(msg)
@@ -2015,11 +2104,12 @@ class DataFrame(object):
                 else:
                     msg = (
                         "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.enabled' is set to true; however, "
-                        "failed by the reason below:\n  %s\n"
-                        "For fallback to non-optimization automatically, please set true to "
-                        "'spark.sql.execution.arrow.fallback.enabled'." % _exception_message(e))
-                    raise RuntimeError(msg)
+                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
+                        "the error below and will not continue because automatic fallback "
+                        "with 'spark.sql.execution.arrow.fallback.enabled' has been set to "
+                        "false.\n  %s" % _exception_message(e))
+                    warnings.warn(msg)
+                    raise
 
             # Try to use Arrow optimization when the schema is supported and the required version
             # of PyArrow is found, if 'spark.sql.execution.arrow.enabled' is enabled.
@@ -2042,12 +2132,12 @@ class DataFrame(object):
                     # be executed. So, simply fail in this case for now.
                     msg = (
                         "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.enabled' is set to true; however, "
-                        "failed unexpectedly:\n  %s\n"
-                        "Note that 'spark.sql.execution.arrow.fallback.enabled' does "
-                        "not have an effect in such failure in the middle of "
-                        "computation." % _exception_message(e))
-                    raise RuntimeError(msg)
+                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
+                        "the error below and can not continue. Note that "
+                        "'spark.sql.execution.arrow.fallback.enabled' does not have an effect "
+                        "on failures in the middle of computation.\n  %s" % _exception_message(e))
+                    warnings.warn(msg)
+                    raise
 
         # Below is toPandas without Arrow optimization.
         pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
@@ -2086,8 +2176,8 @@ class DataFrame(object):
         .. note:: Experimental.
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.collectAsArrowToPython()
-        return list(_load_from_socket(port, ArrowSerializer()))
+            sock_info = self._jdf.collectAsArrowToPython()
+        return list(_load_from_socket(sock_info, ArrowSerializer()))
 
     ##########################################################################################
     # Pandas compatibility

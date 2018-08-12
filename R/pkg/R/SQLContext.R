@@ -351,7 +351,7 @@ setMethod("toDF", signature(x = "RDD"),
 read.json.default <- function(path, ...) {
   sparkSession <- getSparkSession()
   options <- varargsToStrEnv(...)
-  # Allow the user to have a more flexible definiton of the text file path
+  # Allow the user to have a more flexible definition of the text file path
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sparkSession, "read")
   read <- callJMethod(read, "options", options)
@@ -421,7 +421,7 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
 read.orc <- function(path, ...) {
   sparkSession <- getSparkSession()
   options <- varargsToStrEnv(...)
-  # Allow the user to have a more flexible definiton of the ORC file path
+  # Allow the user to have a more flexible definition of the ORC file path
   path <- suppressWarnings(normalizePath(path))
   read <- callJMethod(sparkSession, "read")
   read <- callJMethod(read, "options", options)
@@ -442,7 +442,7 @@ read.orc <- function(path, ...) {
 read.parquet.default <- function(path, ...) {
   sparkSession <- getSparkSession()
   options <- varargsToStrEnv(...)
-  # Allow the user to have a more flexible definiton of the Parquet file path
+  # Allow the user to have a more flexible definition of the Parquet file path
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sparkSession, "read")
   read <- callJMethod(read, "options", options)
@@ -492,7 +492,7 @@ parquetFile <- function(x, ...) {
 read.text.default <- function(path, ...) {
   sparkSession <- getSparkSession()
   options <- varargsToStrEnv(...)
-  # Allow the user to have a more flexible definiton of the text file path
+  # Allow the user to have a more flexible definition of the text file path
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sparkSession, "read")
   read <- callJMethod(read, "options", options)
@@ -712,7 +712,7 @@ read.jdbc <- function(url, tableName,
 #' @param schema The data schema defined in structType or a DDL-formatted string, this is
 #'               required for file-based streaming data source
 #' @param ... additional external data source specific named options, for instance \code{path} for
-#'        file-based streaming data source. \code{timeZone} to indicate a timezone to be used to 
+#'        file-based streaming data source. \code{timeZone} to indicate a timezone to be used to
 #'        parse timestamps in the JSON/CSV data sources or partition values; If it isn't set, it
 #'        uses the default value, session local timezone.
 #' @return SparkDataFrame

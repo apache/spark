@@ -17,30 +17,30 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.sources.v2.reader.DataReaderFactory
+import org.apache.spark.sql.sources.v2.reader.InputPartition
 
-class DataSourceRDDPartition[T : ClassTag](val index: Int, val readerFactory: DataReaderFactory[T])
+class DataSourceRDDPartition[T : ClassTag](val index: Int, val inputPartition: InputPartition[T])
   extends Partition with Serializable
 
 class DataSourceRDD[T: ClassTag](
     sc: SparkContext,
-    @transient private val readerFactories: java.util.List[DataReaderFactory[T]])
+    @transient private val inputPartitions: Seq[InputPartition[T]])
   extends RDD[T](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
-    readerFactories.asScala.zipWithIndex.map {
-      case (readerFactory, index) => new DataSourceRDDPartition(index, readerFactory)
+    inputPartitions.zipWithIndex.map {
+      case (inputPartition, index) => new DataSourceRDDPartition(index, inputPartition)
     }.toArray
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
-    val reader = split.asInstanceOf[DataSourceRDDPartition[T]].readerFactory.createDataReader()
-    context.addTaskCompletionListener(_ => reader.close())
+    val reader = split.asInstanceOf[DataSourceRDDPartition[T]].inputPartition
+        .createPartitionReader()
+    context.addTaskCompletionListener[Unit](_ => reader.close())
     val iter = new Iterator[T] {
       private[this] var valuePrepared = false
 
@@ -63,6 +63,6 @@ class DataSourceRDD[T: ClassTag](
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    split.asInstanceOf[DataSourceRDDPartition[T]].readerFactory.preferredLocations()
+    split.asInstanceOf[DataSourceRDDPartition[T]].inputPartition.preferredLocations()
   }
 }

@@ -499,6 +499,15 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       Vector, LogisticRegressionModel](this, model, smallBinaryDataset)
   }
 
+  test("prediction on single instance") {
+    val blor = new LogisticRegression().setFamily("binomial")
+    val blorModel = blor.fit(smallBinaryDataset)
+    testPredictionModelSinglePrediction(blorModel, smallBinaryDataset)
+    val mlor = new LogisticRegression().setFamily("multinomial")
+    val mlorModel = mlor.fit(smallMultinomialDataset)
+    testPredictionModelSinglePrediction(mlorModel, smallMultinomialDataset)
+  }
+
   test("coefficients and intercept methods") {
     val mlr = new LogisticRegression().setMaxIter(1).setFamily("multinomial")
     val mlrModel = mlr.fit(smallMultinomialDataset)
@@ -2741,6 +2750,12 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       val model = lr.fit(data)
       assert(model.getFamily === family)
     }
+  }
+
+  test("toString") {
+    val model = new LogisticRegressionModel("logReg", Vectors.dense(0.1, 0.2, 0.3), 0.0)
+    val expected = "LogisticRegressionModel: uid = logReg, numClasses = 2, numFeatures = 3"
+    assert(model.toString === expected)
   }
 }
 

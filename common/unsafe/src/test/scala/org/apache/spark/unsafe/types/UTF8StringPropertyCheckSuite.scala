@@ -164,7 +164,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
     def padding(origin: String, pad: String, length: Int, isLPad: Boolean): String = {
       if (length <= 0) return ""
       if (length <= origin.length) {
-        if (length <= 0) "" else origin.substring(0, length)
+        origin.substring(0, length)
       } else {
         if (pad.length == 0) return origin
         val toPad = length - origin.length
@@ -192,8 +192,8 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
   val nullalbeSeq = Gen.listOf(Gen.oneOf[String](null: String, randomString))
 
   test("concat") {
-    def concat(orgin: Seq[String]): String =
-      if (orgin.contains(null)) null else orgin.mkString
+    def concat(origin: Seq[String]): String =
+      if (origin.contains(null)) null else origin.mkString
 
     forAll { (inputs: Seq[String]) =>
       assert(UTF8String.concat(inputs.map(toUTF8): _*) === toUTF8(inputs.mkString))
