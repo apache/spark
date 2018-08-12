@@ -1375,7 +1375,7 @@ class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     @since("1.6.0")
     def scale(self):
         """
-        Model scale paramter.
+        Model scale parameter.
         """
         return self._call_java("scale")
 
