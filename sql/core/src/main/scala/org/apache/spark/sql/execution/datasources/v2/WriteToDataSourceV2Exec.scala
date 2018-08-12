@@ -35,8 +35,10 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 /**
- * The logical plan for writing data into data source v2.
+ * Deprecated logical plan for writing data into data source v2. This is being replaced by more
+ * specific logical plans, like [[org.apache.spark.sql.catalyst.plans.logical.AppendData]].
  */
+@deprecated("Use specific logical plans like AppendData instead", "2.4.0")
 case class WriteToDataSourceV2(writer: DataSourceWriter, query: LogicalPlan) extends LogicalPlan {
   override def children: Seq[LogicalPlan] = Seq(query)
   override def output: Seq[Attribute] = Nil
@@ -50,11 +52,7 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
   override def output: Seq[Attribute] = Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val writeTask = writer match {
-      case w: SupportsWriteInternalRow => w.createInternalRowWriterFactory()
-      case _ => new InternalRowDataWriterFactory(writer.createWriterFactory(), query.schema)
-    }
-
+    val writeTask = writer.createWriterFactory()
     val useCommitCoordinator = writer.useCommitCoordinator
     val rdd = query.execute()
     val messages = new Array[WriterCommitMessage](rdd.partitions.length)
@@ -154,28 +152,4 @@ object DataWritingSparkTask extends Logging {
             s"stage $stageId.$stageAttempt)")
     })
   }
-}
-
-class InternalRowDataWriterFactory(
-    rowWriterFactory: DataWriterFactory[Row],
-    schema: StructType) extends DataWriterFactory[InternalRow] {
-
-  override def createDataWriter(
-      partitionId: Int,
-      taskId: Long,
-      epochId: Long): DataWriter[InternalRow] = {
-    new InternalRowDataWriter(
-      rowWriterFactory.createDataWriter(partitionId, taskId, epochId),
-      RowEncoder.apply(schema).resolveAndBind())
-  }
-}
-
-class InternalRowDataWriter(rowWriter: DataWriter[Row], encoder: ExpressionEncoder[Row])
-  extends DataWriter[InternalRow] {
-
-  override def write(record: InternalRow): Unit = rowWriter.write(encoder.fromRow(record))
-
-  override def commit(): WriterCommitMessage = rowWriter.commit()
-
-  override def abort(): Unit = rowWriter.abort()
 }

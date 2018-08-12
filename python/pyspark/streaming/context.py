@@ -222,7 +222,7 @@ class StreamingContext(object):
         Set each DStreams in this context to remember RDDs it generated
         in the last given duration. DStreams remember RDDs only for a
         limited duration of time and releases them for garbage collection.
-        This method allows the developer to specify how to long to remember
+        This method allows the developer to specify how long to remember
         the RDDs (if the developer wishes to query old data outside the
         DStream computation).
 
@@ -287,7 +287,7 @@ class StreamingContext(object):
 
     def queueStream(self, rdds, oneAtATime=True, default=None):
         """
-        Create an input stream from an queue of RDDs or list. In each batch,
+        Create an input stream from a queue of RDDs or list. In each batch,
         it will process either one or all of the RDDs returned by the queue.
 
         .. note:: Changes to the queue after the stream is created will not be recognized.

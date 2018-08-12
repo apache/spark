@@ -130,7 +130,9 @@ trait Block extends TreeNode[Block] with JavaCode {
 
   def length: Int = toString.length
 
-  def nonEmpty: Boolean = toString.nonEmpty
+  def isEmpty: Boolean = toString.isEmpty
+
+  def nonEmpty: Boolean = !isEmpty
 
   // The leading prefix that should be stripped from each line.
   // By default we strip blanks or control characters followed by '|' from the line.

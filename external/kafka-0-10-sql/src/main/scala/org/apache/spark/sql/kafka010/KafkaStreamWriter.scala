@@ -42,11 +42,11 @@ case object KafkaWriterCommitMessage extends WriterCommitMessage
  */
 class KafkaStreamWriter(
     topic: Option[String], producerParams: Map[String, String], schema: StructType)
-  extends StreamWriter with SupportsWriteInternalRow {
+  extends StreamWriter {
 
   validateQuery(schema.toAttributes, producerParams.toMap[String, Object].asJava, topic)
 
-  override def createInternalRowWriterFactory(): KafkaStreamWriterFactory =
+  override def createWriterFactory(): KafkaStreamWriterFactory =
     KafkaStreamWriterFactory(topic, producerParams, schema)
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}

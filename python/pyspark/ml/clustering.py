@@ -88,6 +88,14 @@ class ClusteringSummary(JavaWrapper):
         """
         return self._call_java("clusterSizes")
 
+    @property
+    @since("2.4.0")
+    def numIter(self):
+        """
+        Number of iterations.
+        """
+        return self._call_java("numIter")
+
 
 class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
@@ -1027,7 +1035,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     def setOptimizer(self, value):
         """
         Sets the value of :py:attr:`optimizer`.
-        Currenlty only support 'em' and 'online'.
+        Currently only support 'em' and 'online'.
 
         >>> algo = LDA().setOptimizer("em")
         >>> algo.getOptimizer()
