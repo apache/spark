@@ -3152,6 +3152,95 @@ case class ArrayRemove(left: Expression, right: Expression)
 }
 
 /**
+ * Will become common base class for [[ArrayDistinct]], [[ArrayUnion]], [[ArrayIntersect]],
+ * and [[ArrayExcept]].
+ */
+trait ArraySetLike {
+  val dt: DataType
+  val et: DataType
+
+  @transient protected lazy val canUseSpecializedHashSet = et match {
+    case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType => true
+    case _ => false
+  }
+
+  @transient protected lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(et)
+
+  @transient protected lazy val elementTypeSupportEquals = et match {
+    case BinaryType => false
+    case _: AtomicType => true
+    case _ => false
+  }
+
+  protected def genGetValue(array: String, i: String): String =
+    CodeGenerator.getValue(array, et, i)
+
+  @transient protected lazy val (hsPostFix, hsTypeName) = {
+    val ptName = CodeGenerator.primitiveTypeName(et)
+    et match {
+      // we cast byte/short to int when writing to the hash set.
+      case ByteType | ShortType | IntegerType => ("$mcI$sp", "Int")
+      case LongType => ("$mcJ$sp", ptName)
+      case FloatType => ("$mcF$sp", ptName)
+      case DoubleType => ("$mcD$sp", ptName)
+    }
+  }
+
+  // we cast byte/short to int when writing to the hash set.
+  @transient protected lazy val hsValueCast = et match {
+    case ByteType | ShortType => "(int) "
+    case _ => ""
+  }
+
+  // When hitting a null value, put a null holder in the ArrayBuilder. Finally we will
+  // convert ArrayBuilder to ArrayData and setNull on the slot with null holder.
+  @transient protected lazy val nullValueHolder = et match {
+    case ByteType => "(byte) 0"
+    case ShortType => "(short) 0"
+    case _ => "0"
+  }
+
+  protected def withResultArrayNullCheck(
+      body: String,
+      value: String,
+      nullElementIndex: String): String = {
+    if (dt.asInstanceOf[ArrayType].containsNull) {
+      s"""
+         |$body
+         |if ($nullElementIndex >= 0) {
+         |  // result has null element
+         |  $value.setNullAt($nullElementIndex);
+         |}
+       """.stripMargin
+    } else {
+      body
+    }
+  }
+
+  def buildResultArray(
+      builder: String,
+      value : String,
+      size : String,
+      nullElementIndex : String): String = withResultArrayNullCheck(
+    s"""
+       |if ($size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+       |  throw new RuntimeException("Cannot create array with " + $size +
+       |  " elements of data due to exceeding the limit " +
+       |  "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for ArrayData.");
+       |}
+       |
+       |if (!UnsafeArrayData.shouldUseGenericArrayData(${et.defaultSize}, $size)) {
+       |  $value = UnsafeArrayData.fromPrimitiveArray($builder.result());
+       |} else {
+       |  $value = new ${classOf[GenericArrayData].getName}($builder.result());
+       |}
+     """.stripMargin, value, nullElementIndex)
+
+}
+
+
+/**
  * Removes duplicate values from the array.
  */
 @ExpressionDescription(
@@ -3162,7 +3251,7 @@ case class ArrayRemove(left: Expression, right: Expression)
        [1,2,3,null]
   """, since = "2.4.0")
 case class ArrayDistinct(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes {
+  extends UnaryExpression with ArraySetLike with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
@@ -3170,8 +3259,8 @@ case class ArrayDistinct(child: Expression)
 
   @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
-  @transient private lazy val ordering: Ordering[Any] =
-    TypeUtils.getInterpretedOrdering(elementType)
+  override val dt = dataType
+  override val et = elementType
 
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
@@ -3179,28 +3268,6 @@ case class ArrayDistinct(child: Expression)
       case TypeCheckResult.TypeCheckSuccess =>
         TypeUtils.checkForOrderingExpr(elementType, s"function $prettyName")
     }
-  }
-
-  @transient protected lazy val canUseSpecializedHashSet = elementType match {
-    case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType => true
-    case _ => false
-  }
-
-  @transient protected lazy val (hsPostFix, hsTypeName) = {
-    val ptName = CodeGenerator.primitiveTypeName(elementType)
-    elementType match {
-      // we cast byte/short to int when writing to the hash set.
-      case ByteType | ShortType | IntegerType => ("$mcI$sp", "Int")
-      case LongType => ("$mcJ$sp", ptName)
-      case FloatType => ("$mcF$sp", ptName)
-      case DoubleType => ("$mcD$sp", ptName)
-    }
-  }
-
-  // we cast byte/short to int when writing to the hash set.
-  @transient protected lazy val hsValueCast = elementType match {
-    case ByteType | ShortType => "(int) "
-    case _ => ""
   }
 
   override def nullSafeEval(array: Any): Any = {
@@ -3239,28 +3306,73 @@ case class ArrayDistinct(child: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val i = ctx.freshName("i")
+    val value = ctx.freshName("value")
+    val size = ctx.freshName("size")
+
     if (canUseSpecializedHashSet) {
+      val jt = CodeGenerator.javaType(elementType)
+      val ptName = CodeGenerator.primitiveTypeName(jt)
+
       nullSafeCodeGen(ctx, ev, (array) => {
-        val i = ctx.freshName("i")
-        val sizeOfDistinctArray = ctx.freshName("sizeOfDistinctArray")
         val foundNullElement = ctx.freshName("foundNullElement")
+        val nullElementIndex = ctx.freshName("nullElementIndex")
+        val builder = ctx.freshName("builder")
         val openHashSet = classOf[OpenHashSet[_]].getName
-        val hs = ctx.freshName("hs")
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
-        val getValue = CodeGenerator.getValue(array, elementType, i)
+        val hashSet = ctx.freshName("hashSet")
+        val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
+        val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
+
+        // Only need to track null element index when array's element is nullable.
+        val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
+          s"""
+             |boolean $foundNullElement = false;
+             |int $nullElementIndex = -1;
+           """.stripMargin
+        } else {
+          ""
+        }
+
+        def withArrayNullAssignment(body: String) =
+          if (dataType.asInstanceOf[ArrayType].containsNull) {
+            s"""
+               |if ($array.isNullAt($i)) {
+               |  if (!$foundNullElement) {
+               |    $nullElementIndex = $size;
+               |    $foundNullElement = true;
+               |    $size++;
+               |    $builder.$$plus$$eq($nullValueHolder);
+               |  }
+               |} else {
+               |  $body
+               |}
+             """.stripMargin
+          } else {
+            body
+          }
+
+        val processArray = withArrayNullAssignment(
+          s"""
+             |$jt $value = ${genGetValue(array, i)};
+             |if (!$hashSet.contains($hsValueCast$value)) {
+             |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+             |    break;
+             |  }
+             |  $hashSet.add$hsPostFix($hsValueCast$value);
+             |  $builder.$$plus$$eq($value);
+             |}
+           """.stripMargin)
+
         s"""
-           |int $sizeOfDistinctArray = 0;
-           |boolean $foundNullElement = false;
-           |$openHashSet $hs = new $openHashSet($classTag);
-           |for (int $i = 0; $i < $array.numElements(); $i ++) {
-           |  if ($array.isNullAt($i)) {
-           |    $foundNullElement = true;
-           |  } else {
-           |    $hs.add$hsPostFix($hsValueCast$getValue);
-           |  }
+           |$openHashSet $hashSet = new $openHashSet$hsPostFix($classTag);
+           |$declareNullTrackVariables
+           |$arrayBuilderClass $builder = new $arrayBuilderClass();
+           |int $size = 0;
+           |for (int $i = 0; $i < $array.numElements(); $i++) {
+           |  $processArray
            |}
-           |$sizeOfDistinctArray = $hs.size() + ($foundNullElement ? 1 : 0);
-           |${genCodeForResult(ctx, ev, array, sizeOfDistinctArray)}
+           |${buildResultArray(builder, ev.value, size, nullElementIndex)}
          """.stripMargin
       })
     } else {
@@ -3271,85 +3383,16 @@ case class ArrayDistinct(child: Expression)
     }
   }
 
-  private def setNull(
-      foundNullElement: String,
-      distinctArray: String,
-      pos: String): String = {
-    val setNullValue = s"$distinctArray.setNullAt($pos)"
-    s"""
-       |if (!($foundNullElement)) {
-       |  $distinctArray.setNullAt($pos);
-       |  $pos = $pos + 1;
-       |  $foundNullElement = true;
-       |}
-    """.stripMargin
-  }
-
-  private def setValue(
-      hs: String,
-      pos: String,
-      getValue: String,
-      setNonNullValue: String): String = {
-    s"""
-       |if (!($hs.contains$hsPostFix($hsValueCast$getValue))) {
-       |  $hs.add$hsPostFix($hsValueCast$getValue);
-       |  $setNonNullValue;
-       |  $pos = $pos + 1;
-       |}
-     """.stripMargin
-  }
-
-  def genCodeForResult(
-      ctx: CodegenContext,
-      ev: ExprCode,
-      inputArray: String,
-      size: String): String = {
-    val distinctArray = ctx.freshName("distinctArray")
-    val i = ctx.freshName("i")
-    val pos = ctx.freshName("pos")
-    val getValue = CodeGenerator.getValue(inputArray, elementType, i)
-    val foundNullElement = ctx.freshName("foundNullElement")
-    val hs = ctx.freshName("hs")
-    val openHashSet = classOf[OpenHashSet[_]].getName
-    val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
-    val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
-
-    val (allocation, assignment) =
-      ctx.createArrayData(distinctArray, dataType, elementType, size,
-        inputArray, s" $prettyName failed.", checkForNull = Some(false))
-
-    val valueAssignment = setValue(hs, pos, getValue, assignment(pos, i))
-    val valueAssignmentChecked = if (dataType.asInstanceOf[ArrayType].containsNull) {
-      s"""
-         |if ($inputArray.isNullAt($i)) {
-         |  ${setNull(foundNullElement, distinctArray, pos)}
-         |} else {
-         |  $valueAssignment
-         |}
-       """.stripMargin
-    } else {
-      valueAssignment
-    }
-
-    s"""
-       |$allocation
-       |int $pos = 0;
-       |boolean $foundNullElement = false;
-       |$openHashSet $hs = new $openHashSet($classTag);
-       |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
-       |  $valueAssignmentChecked
-       |}
-       |${ev.value} = $distinctArray;
-    """.stripMargin
-  }
-
   override def prettyName: String = "array_distinct"
 }
 
 /**
  * Will become common base class for [[ArrayUnion]], [[ArrayIntersect]], and [[ArrayExcept]].
  */
-abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
+trait ArrayBinaryLike extends BinaryArrayExpressionWithImplicitCast with ArraySetLike {
+  override val dt = dataType
+  override val et = elementType
+
   override def checkInputDataTypes(): TypeCheckResult = {
     val typeCheckResult = super.checkInputDataTypes()
     if (typeCheckResult.isSuccess) {
@@ -3359,81 +3402,9 @@ abstract class ArraySetLike extends BinaryArrayExpressionWithImplicitCast {
       typeCheckResult
     }
   }
-
-  @transient protected lazy val ordering: Ordering[Any] =
-    TypeUtils.getInterpretedOrdering(elementType)
-
-  @transient protected lazy val canUseSpecializedHashSet = elementType match {
-    case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType => true
-    case _ => false
-  }
-
-  protected def genGetValue(array: String, i: String): String =
-    CodeGenerator.getValue(array, elementType, i)
-
-  @transient protected lazy val (hsPostFix, hsTypeName) = {
-    val ptName = CodeGenerator.primitiveTypeName (elementType)
-    elementType match {
-      // we cast byte/short to int when writing to the hash set.
-      case ByteType | ShortType | IntegerType => ("$mcI$sp", "Int")
-      case LongType => ("$mcJ$sp", ptName)
-      case FloatType => ("$mcF$sp", ptName)
-      case DoubleType => ("$mcD$sp", ptName)
-    }
-  }
-
-  // we cast byte/short to int when writing to the hash set.
-  @transient protected lazy val hsValueCast = elementType match {
-    case ByteType | ShortType => "(int) "
-    case _ => ""
-  }
-
-  // When hitting a null value, put a null holder in the ArrayBuilder. Finally we will
-  // convert ArrayBuilder to ArrayData and setNull on the slot with null holder.
-  @transient protected lazy val nullValueHolder = elementType match {
-    case ByteType => "(byte) 0"
-    case ShortType => "(short) 0"
-    case _ => "0"
-  }
-
-  protected def withResultArrayNullCheck(
-      body: String,
-      value: String,
-      nullElementIndex: String): String = {
-    if (dataType.asInstanceOf[ArrayType].containsNull) {
-      s"""
-         |$body
-         |if ($nullElementIndex >= 0) {
-         |  // result has null element
-         |  $value.setNullAt($nullElementIndex);
-         |}
-       """.stripMargin
-    } else {
-      body
-    }
-  }
-
-  def buildResultArray(
-      builder: String,
-      value : String,
-      size : String,
-      nullElementIndex : String): String = withResultArrayNullCheck(
-    s"""
-       |if ($size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-       |  throw new RuntimeException("Cannot create array with " + $size +
-       |  " elements of data due to exceeding the limit " +
-       |  "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for ArrayData.");
-       |}
-       |
-       |if (!UnsafeArrayData.shouldUseGenericArrayData(${elementType.defaultSize}, $size)) {
-       |  $value = UnsafeArrayData.fromPrimitiveArray($builder.result());
-       |} else {
-       |  $value = new ${classOf[GenericArrayData].getName}($builder.result());
-       |}
-     """.stripMargin, value, nullElementIndex)
 }
 
-object ArraySetLike {
+object ArrayBinaryLike {
   def throwUnionLengthOverflowException(length: Int): Unit = {
     throw new RuntimeException(s"Unsuccessful try to union arrays with $length " +
       s"elements due to exceeding the array size limit " +
@@ -3456,7 +3427,7 @@ object ArraySetLike {
        array(1, 2, 3, 5)
   """,
   since = "2.4.0")
-case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
+case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
 
   @transient lazy val evalUnion: (ArrayData, ArrayData) => ArrayData = {
@@ -3477,7 +3448,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
               val elem = array.get(i, elementType)
               if (!hs.contains(elem)) {
                 if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-                  ArraySetLike.throwUnionLengthOverflowException(arrayBuffer.size)
+                  ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
                 }
                 arrayBuffer += elem
                 hs.add(elem)
@@ -3512,7 +3483,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
           }
           if (!found) {
             if (arrayBuffer.length > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-              ArraySetLike.throwUnionLengthOverflowException(arrayBuffer.length)
+              ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.length)
             }
             arrayBuffer += elem
           }
@@ -3644,7 +3615,7 @@ object ArrayUnion {
       }
       if (!found) {
         if (arrayBuffer.length > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-          ArraySetLike.throwUnionLengthOverflowException(arrayBuffer.length)
+          ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.length)
         }
         arrayBuffer += elem
       }
@@ -3667,7 +3638,7 @@ object ArrayUnion {
        array(1, 3)
   """,
   since = "2.4.0")
-case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetLike
+case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
   override def dataType: DataType = {
     dataTypeCheck
@@ -3908,7 +3879,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
        array(2)
   """,
   since = "2.4.0")
-case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
+case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
 
   override def dataType: DataType = {
