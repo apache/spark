@@ -208,7 +208,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val pairs2: RDD[MutablePair[Int, String]] = sc.parallelize(data2, 2)
     val results = new SubtractedRDD(pairs1, pairs2, new HashPartitioner(2)).collect()
     results should have length (1)
-    // substracted rdd return results as Tuple2
+    // subtracted rdd return results as Tuple2
     results(0) should be ((3, 33))
   }
 
