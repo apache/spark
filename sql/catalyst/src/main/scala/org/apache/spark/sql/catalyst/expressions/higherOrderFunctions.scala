@@ -88,7 +88,7 @@ object LambdaFunction {
  * A higher order function takes one or more (lambda) functions and applies these to some objects.
  * The function produces a number of variables which can be consumed by some lambda function.
  */
-trait HigherOrderFunction extends Expression {
+trait HigherOrderFunction extends Expression with ExpectsInputTypes {
 
   override def children: Seq[Expression] = arguments ++ functions
 
@@ -96,6 +96,8 @@ trait HigherOrderFunction extends Expression {
    * Arguments of the higher ordered function.
    */
   def arguments: Seq[Expression]
+
+  def argumentTypes: Seq[AbstractDataType]
 
   /**
    * All arguments have been resolved. This means that the types and nullabilty of (most of) the
@@ -108,12 +110,18 @@ trait HigherOrderFunction extends Expression {
    * or returns a `TypeCheckResult` with an error message if invalid.
    * Note: it's not valid to call this method until `argumentsResolved == true`.
    */
-  def checkArgumentDataTypes(): TypeCheckResult
+  def checkArgumentDataTypes(): TypeCheckResult = {
+    ExpectsInputTypes.checkInputDataTypes(arguments, argumentTypes)
+  }
 
   /**
    * Functions applied by the higher order function.
    */
   def functions: Seq[Expression]
+
+  def functionTypes: Seq[AbstractDataType]
+
+  override def inputTypes: Seq[AbstractDataType] = argumentTypes ++ functionTypes
 
   /**
    * All inputs must be resolved and all functions must be resolved lambda functions.
@@ -145,7 +153,7 @@ trait HigherOrderFunction extends Expression {
 /**
  * Trait for functions having as input one argument and one function.
  */
-trait SimpleHigherOrderFunction extends HigherOrderFunction with ExpectsInputTypes {
+trait SimpleHigherOrderFunction extends HigherOrderFunction  {
 
   def argument: Expression
 
@@ -153,17 +161,15 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction with ExpectsInputTyp
 
   def argumentType: AbstractDataType
 
-  override def checkArgumentDataTypes(): TypeCheckResult = {
-    ExpectsInputTypes.checkInputDataTypes(arguments, argumentType :: Nil)
-  }
+  override def argumentTypes(): Seq[AbstractDataType] = argumentType :: Nil
 
   def function: Expression
 
   override def functions: Seq[Expression] = function :: Nil
 
-  def expectingFunctionType: AbstractDataType = AnyDataType
+  def functionType: AbstractDataType = AnyDataType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(argumentType, expectingFunctionType)
+  override def functionTypes: Seq[AbstractDataType] = functionType :: Nil
 
   def functionForEval: Expression = functionsForEval.head
 
@@ -301,7 +307,7 @@ case class MapFilter(
 
   override def dataType: DataType = argument.dataType
 
-  override def expectingFunctionType: AbstractDataType = BooleanType
+  override def functionType: AbstractDataType = BooleanType
 
   override def prettyName: String = "map_filter"
 }
@@ -326,7 +332,7 @@ case class ArrayFilter(
 
   override def dataType: DataType = argument.dataType
 
-  override def expectingFunctionType: AbstractDataType = BooleanType
+  override def functionType: AbstractDataType = BooleanType
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayFilter = {
     val ArrayType(elementType, containsNull) = argument.dataType
@@ -373,7 +379,7 @@ case class ArrayExists(
 
   override def dataType: DataType = BooleanType
 
-  override def expectingFunctionType: AbstractDataType = BooleanType
+  override def functionType: AbstractDataType = BooleanType
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayExists = {
     val ArrayType(elementType, containsNull) = argument.dataType
@@ -431,15 +437,15 @@ case class ArrayAggregate(
 
   override def arguments: Seq[Expression] = argument :: zero :: Nil
 
+  override def argumentTypes: Seq[AbstractDataType] = ArrayType :: AnyDataType :: Nil
+
   override def functions: Seq[Expression] = merge :: finish :: Nil
+
+  override def functionTypes: Seq[AbstractDataType] = zero.dataType :: AnyDataType :: Nil
 
   override def nullable: Boolean = argument.nullable || finish.nullable
 
   override def dataType: DataType = finish.dataType
-
-  override def checkArgumentDataTypes(): TypeCheckResult = {
-    ExpectsInputTypes.checkInputDataTypes(arguments, Seq(ArrayType, AnyDataType))
-  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     checkArgumentDataTypes() match {
