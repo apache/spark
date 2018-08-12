@@ -231,14 +231,13 @@ object TypeCoercion {
       })
   }
 
-  private def findInCommonType(types: Seq[DataType], conf: SQLConf): Option[DataType] = {
-    val (stringTypes, nonStringTypes) = types.partition(hasStringType(_))
-    (stringTypes.distinct ++ nonStringTypes).foldLeft[Option[DataType]](Some(NullType))((r, c) =>
-      r match {
-        case Some(d) => findCommonTypeForBinaryComparison(d, c, conf)
-          .orElse(findWiderTypeWithoutStringPromotionForTwo(d, c))
-        case _ => None
-      })
+  private def findInCommonType(
+      valueType: DataType, listTypes: Seq[DataType], conf: SQLConf): Option[DataType] = {
+    findWiderCommonType(listTypes) match {
+      case Some(d) => findCommonTypeForBinaryComparison(valueType, d, conf)
+        .orElse(findWiderTypeWithoutStringPromotionForTwo(valueType, d))
+      case _ => None
+    }
   }
 
   /**
@@ -495,8 +494,8 @@ object TypeCoercion {
           i
         }
 
-      case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
-        findInCommonType(i.children.map(_.dataType), conf) match {
+      case i @ In(value, list) if list.exists(_.dataType != value.dataType) =>
+        findInCommonType(value.dataType, list.map(_.dataType), conf) match {
           case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
           case None => i
         }

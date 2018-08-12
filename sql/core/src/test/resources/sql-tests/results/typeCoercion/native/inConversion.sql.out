@@ -1931,7 +1931,7 @@ cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST(1 AS DECIMAL(10,0)), CAST('20
 -- !query 229
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as tinyint)) FROM t
 -- !query 229 schema
-struct<(CAST(CAST(1 AS STRING) AS TINYINT) IN (CAST(CAST(1 AS STRING) AS TINYINT), CAST(CAST(1 AS TINYINT) AS TINYINT))):boolean>
+struct<(CAST(CAST(1 AS STRING) AS STRING) IN (CAST(CAST(1 AS STRING) AS STRING), CAST(CAST(1 AS TINYINT) AS STRING))):boolean>
 -- !query 229 output
 true
 
@@ -1939,7 +1939,7 @@ true
 -- !query 230
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as smallint)) FROM t
 -- !query 230 schema
-struct<(CAST(CAST(1 AS STRING) AS SMALLINT) IN (CAST(CAST(1 AS STRING) AS SMALLINT), CAST(CAST(1 AS SMALLINT) AS SMALLINT))):boolean>
+struct<(CAST(CAST(1 AS STRING) AS STRING) IN (CAST(CAST(1 AS STRING) AS STRING), CAST(CAST(1 AS SMALLINT) AS STRING))):boolean>
 -- !query 230 output
 true
 
@@ -1947,7 +1947,7 @@ true
 -- !query 231
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as int)) FROM t
 -- !query 231 schema
-struct<(CAST(CAST(1 AS STRING) AS INT) IN (CAST(CAST(1 AS STRING) AS INT), CAST(CAST(1 AS INT) AS INT))):boolean>
+struct<(CAST(CAST(1 AS STRING) AS STRING) IN (CAST(CAST(1 AS STRING) AS STRING), CAST(CAST(1 AS INT) AS STRING))):boolean>
 -- !query 231 output
 true
 
@@ -1955,7 +1955,7 @@ true
 -- !query 232
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as bigint)) FROM t
 -- !query 232 schema
-struct<(CAST(CAST(1 AS STRING) AS BIGINT) IN (CAST(CAST(1 AS STRING) AS BIGINT), CAST(CAST(1 AS BIGINT) AS BIGINT))):boolean>
+struct<(CAST(CAST(1 AS STRING) AS STRING) IN (CAST(CAST(1 AS STRING) AS STRING), CAST(CAST(1 AS BIGINT) AS STRING))):boolean>
 -- !query 232 output
 true
 
@@ -1963,7 +1963,7 @@ true
 -- !query 233
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as float)) FROM t
 -- !query 233 schema
-struct<(CAST(CAST(1 AS STRING) AS FLOAT) IN (CAST(CAST(1 AS STRING) AS FLOAT), CAST(CAST(1 AS FLOAT) AS FLOAT))):boolean>
+struct<(CAST(CAST(1 AS STRING) AS STRING) IN (CAST(CAST(1 AS STRING) AS STRING), CAST(CAST(1 AS FLOAT) AS STRING))):boolean>
 -- !query 233 output
 true
 
@@ -1971,7 +1971,7 @@ true
 -- !query 234
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as double)) FROM t
 -- !query 234 schema
-struct<(CAST(CAST(1 AS STRING) AS DOUBLE) IN (CAST(CAST(1 AS STRING) AS DOUBLE), CAST(CAST(1 AS DOUBLE) AS DOUBLE))):boolean>
+struct<(CAST(CAST(1 AS STRING) AS STRING) IN (CAST(CAST(1 AS STRING) AS STRING), CAST(CAST(1 AS DOUBLE) AS STRING))):boolean>
 -- !query 234 output
 true
 
@@ -1979,7 +1979,7 @@ true
 -- !query 235
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as decimal(10, 0))) FROM t
 -- !query 235 schema
-struct<(CAST(CAST(1 AS STRING) AS DOUBLE) IN (CAST(CAST(1 AS STRING) AS DOUBLE), CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE))):boolean>
+struct<(CAST(CAST(1 AS STRING) AS STRING) IN (CAST(CAST(1 AS STRING) AS STRING), CAST(CAST(1 AS DECIMAL(10,0)) AS STRING))):boolean>
 -- !query 235 output
 true
 
@@ -1995,17 +1995,19 @@ true
 -- !query 237
 SELECT cast(1 as string) in (cast(1 as string), cast('1' as binary)) FROM t
 -- !query 237 schema
-struct<(CAST(CAST(1 AS STRING) AS BINARY) IN (CAST(CAST(1 AS STRING) AS BINARY), CAST(CAST(1 AS BINARY) AS BINARY))):boolean>
+struct<>
 -- !query 237 output
-true
+org.apache.spark.sql.AnalysisException
+cannot resolve '(CAST(1 AS STRING) IN (CAST(1 AS STRING), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: string != binary; line 1 pos 25
 
 
 -- !query 238
 SELECT cast(1 as string) in (cast(1 as string), cast(1 as boolean)) FROM t
 -- !query 238 schema
-struct<(CAST(CAST(1 AS STRING) AS BOOLEAN) IN (CAST(CAST(1 AS STRING) AS BOOLEAN), CAST(CAST(1 AS BOOLEAN) AS BOOLEAN))):boolean>
+struct<>
 -- !query 238 output
-true
+org.apache.spark.sql.AnalysisException
+cannot resolve '(CAST(1 AS STRING) IN (CAST(1 AS STRING), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: string != boolean; line 1 pos 25
 
 
 -- !query 239
@@ -2090,9 +2092,10 @@ cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS DECIMAL(
 -- !query 248
 SELECT cast('1' as binary) in (cast('1' as binary), cast(1 as string)) FROM t
 -- !query 248 schema
-struct<(CAST(CAST(1 AS BINARY) AS BINARY) IN (CAST(CAST(1 AS BINARY) AS BINARY), CAST(CAST(1 AS STRING) AS BINARY))):boolean>
+struct<>
 -- !query 248 output
-true
+org.apache.spark.sql.AnalysisException
+cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS STRING)))' due to data type mismatch: Arguments must be same type but were: binary != string; line 1 pos 27
 
 
 -- !query 249
@@ -2196,9 +2199,10 @@ cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS DECIMA
 -- !query 260
 SELECT cast('1' as boolean) in (cast('1' as boolean), cast(1 as string)) FROM t
 -- !query 260 schema
-struct<(CAST(CAST(1 AS BOOLEAN) AS BOOLEAN) IN (CAST(CAST(1 AS BOOLEAN) AS BOOLEAN), CAST(CAST(1 AS STRING) AS BOOLEAN))):boolean>
+struct<>
 -- !query 260 output
-true
+org.apache.spark.sql.AnalysisException
+cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS STRING)))' due to data type mismatch: Arguments must be same type but were: boolean != string; line 1 pos 28
 
 
 -- !query 261
