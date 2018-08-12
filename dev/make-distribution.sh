@@ -149,6 +149,7 @@ if [ "$NAME" == "none" ]; then
   NAME=$SPARK_HADOOP_VERSION
 fi
 
+echo "Scala verison is $SCALA_VERSION"
 echo "Spark version is $VERSION"
 
 if [ "$MAKE_TGZ" == "true" ]; then
@@ -176,6 +177,7 @@ echo -e "\$ ${BUILD_COMMAND[@]}\n"
 # Make directories
 rm -rf "$DISTDIR"
 mkdir -p "$DISTDIR/jars"
+mkdir -p "$DISTDIR/external/jars"
 echo "Spark $VERSION$GITREVSTRING built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE"
 echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 
@@ -186,6 +188,23 @@ cp "$SPARK_HOME"/assembly/target/scala*/jars/* "$DISTDIR/jars/"
 if [ -f "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar ]; then
   mkdir "$DISTDIR/yarn"
   cp "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/yarn"
+fi
+
+# Only copy external jars if built
+if [ -f "$SPARK_HOME"/external/avro/target/spark-avro_${SCALA_VERSION}-${VERSION}.jar ]; then
+  cp "$SPARK_HOME"/external/avro/target/spark-avro_${SCALA_VERSION}-${VERSION}.jar "$DISTDIR/external/jars/"
+fi
+if [ -f "$SPARK_HOME"/external/kafka-0-10/target/spark-streaming-kafka-0-10_${SCALA_VERSION}-${VERSION}.jar ]; then
+  cp "$SPARK_HOME"/external/kafka-0-10/target/spark-streaming-kafka-0-10_${SCALA_VERSION}-${VERSION}.jar "$DISTDIR/external/jars/"
+fi
+if [ -f "$SPARK_HOME"/external/kafka-0-10-sql/target/spark-sql-kafka-0-10_${SCALA_VERSION}-${VERSION}.jar ]; then
+  cp "$SPARK_HOME"/external/kafka-0-10-sql/target/spark-sql-kafka-0-10_${SCALA_VERSION}-${VERSION}.jar "$DISTDIR/external/jars/"
+fi
+if [ -f "$SPARK_HOME"/external/flume/target/spark-streaming-flume_${SCALA_VERSION}-${VERSION}.jar ]; then
+  cp "$SPARK_HOME"/external/flume/target/spark-streaming-flume_${SCALA_VERSION}-${VERSION}.jar "$DISTDIR/external/jars/"
+fi
+if [ -f "$SPARK_HOME"/external/flume-sink/target/spark-streaming-flume-sink_${SCALA_VERSION}-${VERSION}.jar ]; then
+  cp "$SPARK_HOME"/external/flume-sink/target/spark-streaming-flume-sink_${SCALA_VERSION}-${VERSION}.jar "$DISTDIR/external/jars/"
 fi
 
 # Only create and copy the dockerfiles directory if the kubernetes artifacts were built.
