@@ -3156,8 +3156,8 @@ case class ArrayRemove(left: Expression, right: Expression)
  * and [[ArrayExcept]].
  */
 trait ArraySetLike {
-  val dt: DataType
-  val et: DataType
+  @transient protected lazy val dt: DataType = NullType
+  @transient protected lazy val et: DataType = NullType
 
   @transient protected lazy val canUseSpecializedHashSet = et match {
     case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType => true
@@ -3259,8 +3259,8 @@ case class ArrayDistinct(child: Expression)
 
   @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
-  override val dt = dataType
-  override val et = elementType
+  @transient lazy override val dt = dataType
+  @transient lazy override val et = elementType
 
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
@@ -3390,8 +3390,8 @@ case class ArrayDistinct(child: Expression)
  * Will become common base class for [[ArrayUnion]], [[ArrayIntersect]], and [[ArrayExcept]].
  */
 trait ArrayBinaryLike extends BinaryArrayExpressionWithImplicitCast with ArraySetLike {
-  override val dt = dataType
-  override val et = elementType
+  @transient lazy override val dt = dataType
+  @transient lazy override val et = elementType
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val typeCheckResult = super.checkInputDataTypes()
