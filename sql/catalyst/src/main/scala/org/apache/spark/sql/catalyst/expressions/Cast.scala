@@ -1042,7 +1042,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   }
 
   private[this] def decimalToTimestampCode(d: ExprValue): Block = {
-    val block = code"new java.math.BigDecimal(1000000L)"
+    val block = inline"new java.math.BigDecimal(1000000L)"
     code"($d.toBigDecimal().bigDecimal().multiply($block)).longValue()"
   }
   private[this] def longToTimeStampCode(l: ExprValue): Block = code"$l * 1000000L"
