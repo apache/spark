@@ -133,14 +133,7 @@ abstract class FileCommitProtocol {
   def truncateDirectoryWithJob(fs: FileSystem, directory: Path, recursive: Boolean): Boolean = {
     assert(fs.isDirectory(directory))
     val listStatus = fs.listStatus(directory)
-    if (listStatus.isEmpty) {
-      true
-    } else {
-      val result = listStatus.map { f =>
-        fs.delete(f.getPath, recursive)
-      }.distinct
-      result.length == 1 && result.head
-    }
+    listStatus.isEmpty || listStatus.forall(file => fs.delete(file.getPath, recursive))
   }
 
   /**
