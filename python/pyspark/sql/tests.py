@@ -4587,7 +4587,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         from pyspark.sql.functions import pandas_udf
         tokenize = pandas_udf(lambda s: s.apply(lambda str: [str.split(' ')]),
                               ArrayType(ArrayType(StringType())))
-        self.assertEqual(tokenize.returnType, ArrayType(StringType()))
+        self.assertEqual(tokenize.returnType, ArrayType(ArrayType(StringType())))
         df = self.spark.createDataFrame([("hi boo",), ("bye boo",)], ["vals"])
         result = df.select(tokenize("vals").alias("hi"))
         self.assertEqual([Row(hi=[[u'hi', u'boo']]), Row(hi=[[u'bye', u'boo']])], result.collect())
