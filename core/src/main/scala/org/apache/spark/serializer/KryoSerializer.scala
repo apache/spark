@@ -38,6 +38,7 @@ import org.roaringbitmap.RoaringBitmap
 import org.apache.spark._
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.io.FileCommitProtocol._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
@@ -177,6 +178,7 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(Nil.getClass)
     kryo.register(Utils.classForName("scala.collection.immutable.$colon$colon"))
     kryo.register(Utils.classForName("scala.collection.immutable.Map$EmptyMap$"))
+    kryo.register(Utils.classForName("scala.collection.immutable.Set$EmptySet$"))
     kryo.register(classOf[ArrayBuffer[Any]])
 
     // We can't load those class directly in order to avoid unnecessary jar dependencies.
@@ -430,7 +432,8 @@ private[serializer] object KryoSerializer {
     classOf[Array[String]],
     classOf[Array[Array[String]]],
     classOf[BoundedPriorityQueue[_]],
-    classOf[SparkConf]
+    classOf[SparkConf],
+    classOf[TaskCommitMessage]
   )
 
   private val toRegisterSerializer = Map[Class[_], KryoClassSerializer[_]](
