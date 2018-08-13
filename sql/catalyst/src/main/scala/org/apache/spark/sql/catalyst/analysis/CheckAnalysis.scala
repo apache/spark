@@ -90,9 +90,10 @@ trait CheckAnalysis extends PredicateHelper {
         u.failAnalysis(s"Table or view not found: ${u.tableIdentifier}")
 
       case operator: LogicalPlan =>
-        // Check argument data types of higher-order functions downwards first because function
-        // arguments of the higher-order functions might be unresolved due to the unresolved
-        // argument data types, otherwise always claims the function arguments are unresolved.
+        // Check argument data types of higher-order functions downwards first.
+        // If the arguments of the higher-order functions are resolved but the type check fails,
+        // the argument functions will not get resolved, but we should report the argument type
+        // check failure instead of claiming the function arguments are unresolved.
         operator transformExpressionsDown {
           case hof: HigherOrderFunction
               if hof.argumentsResolved && hof.checkArgumentDataTypes().isFailure =>
