@@ -34,6 +34,7 @@ import kafka.utils.ZkUtils
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.serialization.StringSerializer
+import org.apache.kafka.common.utils.Exit
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 
 import org.apache.spark.SparkConf
@@ -125,40 +126,55 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
   /** Teardown the whole servers, including Kafka broker and Zookeeper */
   def teardown(): Unit = {
-    brokerReady = false
-    zkReady = false
-
-    if (producer != null) {
-      producer.close()
-      producer = null
-    }
-
-    if (server != null) {
-      server.shutdown()
-      server.awaitShutdown()
-      server = null
-    }
-
-    // On Windows, `logDirs` is left open even after Kafka server above is completely shut down
-    // in some cases. It leads to test failures on Windows if the directory deletion failure
-    // throws an exception.
-    brokerConf.logDirs.foreach { f =>
-      try {
-        Utils.deleteRecursively(new File(f))
-      } catch {
-        case e: IOException if Utils.isWindows =>
-          logWarning(e.getMessage)
+    // There is a race condition that may kill JVM when terminating the Kafka cluster. We set
+    // a custom Procedure here during the termination in order to keep JVM running and not fail the
+    // tests.
+    val logExitEvent = new Exit.Procedure {
+      override def execute(statusCode: Int, message: String): Unit = {
+        logError(s"Prevent Kafka from killing JVM (statusCode: $statusCode message: $message)")
       }
     }
+    Exit.setExitProcedure(logExitEvent)
+    Exit.setHaltProcedure(logExitEvent)
+    try {
+      brokerReady = false
+      zkReady = false
 
-    if (zkUtils != null) {
-      zkUtils.close()
-      zkUtils = null
-    }
+      if (producer != null) {
+        producer.close()
+        producer = null
+      }
 
-    if (zookeeper != null) {
-      zookeeper.shutdown()
-      zookeeper = null
+      if (server != null) {
+        server.shutdown()
+        server.awaitShutdown()
+        server = null
+      }
+
+      // On Windows, `logDirs` is left open even after Kafka server above is completely shut down
+      // in some cases. It leads to test failures on Windows if the directory deletion failure
+      // throws an exception.
+      brokerConf.logDirs.foreach { f =>
+        try {
+          Utils.deleteRecursively(new File(f))
+        } catch {
+          case e: IOException if Utils.isWindows =>
+            logWarning(e.getMessage)
+        }
+      }
+
+      if (zkUtils != null) {
+        zkUtils.close()
+        zkUtils = null
+      }
+
+      if (zookeeper != null) {
+        zookeeper.shutdown()
+        zookeeper = null
+      }
+    } finally {
+      Exit.resetExitProcedure()
+      Exit.resetHaltProcedure()
     }
   }
 
