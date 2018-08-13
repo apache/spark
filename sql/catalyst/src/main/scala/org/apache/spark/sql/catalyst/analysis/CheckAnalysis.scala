@@ -93,7 +93,7 @@ trait CheckAnalysis extends PredicateHelper {
         // Check argument data types of higher-order functions downwards first.
         // If the arguments of the higher-order functions are resolved but the type check fails,
         // the argument functions will not get resolved, but we should report the argument type
-        // check failure instead of claiming the function arguments are unresolved.
+        // check failure instead of claiming the argument functions are unresolved.
         operator transformExpressionsDown {
           case hof: HigherOrderFunction
               if hof.argumentsResolved && hof.checkArgumentDataTypes().isFailure =>
