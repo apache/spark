@@ -447,7 +447,6 @@ org.slf4j:jul-to-slf4j
 org.slf4j:slf4j-api
 org.slf4j:slf4j-log4j12
 com.github.scopt:scopt_2.11
-org.bouncycastle:bcprov-jdk15on
 
 core/src/main/resources/org/apache/spark/ui/static/dagre-d3.min.js
 core/src/main/resources/org/apache/spark/ui/static/*dataTables*
