@@ -21,15 +21,17 @@ import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
 
+import org.apache.avro.{LogicalTypes, Schema}
+import org.apache.avro.Conversions.DecimalConversion
 import org.apache.avro.LogicalTypes.{TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema
 import org.apache.avro.Schema.Type
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed, Record}
+import org.apache.avro.generic.GenericData.Record
 import org.apache.avro.util.Utf8
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -67,6 +69,8 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
 
   private type Converter = (SpecializedGetters, Int) => Any
 
+  private lazy val decimalConversions = new DecimalConversion()
+
   private def newConverter(catalystType: DataType, avroType: Schema): Converter = {
     catalystType match {
       case NullType =>
@@ -86,7 +90,11 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       case DoubleType =>
         (getter, ordinal) => getter.getDouble(ordinal)
       case d: DecimalType =>
-        (getter, ordinal) => getter.getDecimal(ordinal, d.precision, d.scale).toString
+        (getter, ordinal) =>
+          val decimal = getter.getDecimal(ordinal, d.precision, d.scale)
+          decimalConversions.toFixed(decimal.toJavaBigDecimal, avroType,
+            LogicalTypes.decimal(d.precision, d.scale))
+
       case StringType => avroType.getType match {
         case Type.ENUM =>
           import scala.collection.JavaConverters._

@@ -25,7 +25,8 @@ import java.util.{TimeZone, UUID}
 
 import scala.collection.JavaConverters._
 
-import org.apache.avro.Schema
+import org.apache.avro.{LogicalTypes, Schema}
+import org.apache.avro.Conversions.DecimalConversion
 import org.apache.avro.Schema.{Field, Type}
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
@@ -494,6 +495,104 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     checkAnswer(df, expected)
   }
 
+  test("Logical type: Decimal") {
+    val precision = 4
+    val scale = 2
+    val bytesFieldName = "bytes"
+    val bytesSchema = s"""{
+         "type":"bytes",
+         "logicalType":"decimal",
+         "precision":$precision,
+         "scale":$scale
+      }
+    """
+
+    val fixedFieldName = "fixed"
+    val fixedSchema = s"""{
+         "type":"fixed",
+         "size":5,
+         "logicalType":"decimal",
+         "precision":$precision,
+         "scale":$scale,
+         "name":"foo"
+      }
+    """
+    val avroSchema = s"""
+      {
+        "namespace": "logical",
+        "type": "record",
+        "name": "test",
+        "fields": [
+          {"name": "$bytesFieldName", "type": $bytesSchema},
+          {"name": "$fixedFieldName", "type": $fixedSchema}
+        ]
+      }
+    """
+    val schema = new Schema.Parser().parse(avroSchema)
+    val datumWriter = new GenericDatumWriter[GenericRecord](schema)
+    val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
+    val decimalConversion = new DecimalConversion
+    withTempDir { dir =>
+      val avroFile = s"$dir.avro"
+      dataFileWriter.create(schema, new File(avroFile))
+      val logicalType = LogicalTypes.decimal(precision, scale)
+      val data = Seq("1.23", "4.56", "78.90", "-1", "-2.31")
+      data.map { x =>
+        val avroRec = new GenericData.Record(schema)
+        val decimal = new java.math.BigDecimal(x).setScale(scale)
+        val bytes =
+          decimalConversion.toBytes(decimal, schema.getField(bytesFieldName).schema, logicalType)
+        avroRec.put(bytesFieldName, bytes)
+        val fixed =
+          decimalConversion.toFixed(decimal, schema.getField(fixedFieldName).schema, logicalType)
+        avroRec.put(fixedFieldName, fixed)
+        dataFileWriter.append(avroRec)
+      }
+      dataFileWriter.flush()
+      dataFileWriter.close()
+
+      val expected = data.map { x => Row(new java.math.BigDecimal(x), new java.math.BigDecimal(x)) }
+      val df = spark.read.format("avro").load(avroFile)
+      checkAnswer(df, expected)
+      checkAnswer(spark.read.format("avro").option("avroSchema", avroSchema).load(avroFile),
+        expected)
+
+      withTempPath { path =>
+        df.write.format("avro").save(path.toString)
+        checkAnswer(spark.read.format("avro").load(path.toString), expected)
+      }
+    }
+  }
+
+  test("Logical type: Decimal with too large precision") {
+    withTempDir { dir =>
+      val schema = new Schema.Parser().parse("""{
+        "namespace": "logical",
+        "type": "record",
+        "name": "test",
+        "fields": [{
+          "name": "decimal",
+          "type": {"type": "bytes", "logicalType": "decimal", "precision": 4, "scale": 2}
+        }]
+      }""")
+      val datumWriter = new GenericDatumWriter[GenericRecord](schema)
+      val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
+      dataFileWriter.create(schema, new File(s"$dir.avro"))
+      val avroRec = new GenericData.Record(schema)
+      val decimal = new java.math.BigDecimal("0.12345678901234567890123456789012345678")
+      val bytes = (new DecimalConversion).toBytes(decimal, schema, LogicalTypes.decimal(39, 38))
+      avroRec.put("decimal", bytes)
+      dataFileWriter.append(avroRec)
+      dataFileWriter.flush()
+      dataFileWriter.close()
+
+      val msg = intercept[SparkException] {
+        spark.read.format("avro").load(s"$dir.avro").collect()
+      }.getCause.getMessage
+      assert(msg.contains("Unscaled value too large for precision"))
+    }
+  }
+
   test("Array data types") {
     withTempPath { dir =>
       val testSchema = StructType(Seq(
@@ -689,7 +788,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       // DecimalType should be converted to string
       val decimals = spark.read.format("avro").load(avroDir).select("Decimal").collect()
-      assert(decimals.map(_(0)).contains("3.14"))
+      assert(decimals.map(_(0)).contains(new java.math.BigDecimal("3.14")))
 
       // There should be a null entry
       val length = spark.read.format("avro").load(avroDir).select("Length").collect()

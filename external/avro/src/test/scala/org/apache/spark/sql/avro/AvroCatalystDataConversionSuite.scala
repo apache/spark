@@ -64,8 +64,6 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite with ExpressionEvalH
     BinaryType)
 
   protected def prepareExpectedResult(expected: Any): Any = expected match {
-    // Spark decimal is converted to avro string=
-    case d: Decimal => UTF8String.fromString(d.toString)
     // Spark byte and short both map to avro int
     case b: Byte => b.toInt
     case s: Short => s.toInt
