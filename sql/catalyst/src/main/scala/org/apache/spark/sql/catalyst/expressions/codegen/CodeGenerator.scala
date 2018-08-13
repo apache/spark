@@ -783,10 +783,9 @@ class CodegenContext {
     } else {
       elementType.defaultSize
     }
-    val arrayData = classOf[ArrayData].getName
     val allocation =
       s"""
-         |ArrayData $arrayName = $arrayData$$.MODULE$$.allocateArrayData(
+         |ArrayData $arrayName = ArrayData.allocateArrayData(
          |  $elemSize, $numElements, $isPrimitiveType, "$additionalErrorMessage");
        """.stripMargin
 
@@ -801,8 +800,7 @@ class CodegenContext {
    * @param elementType data type of the elements in source array
    * @param srcArray code representing the number of elements the array should contain
    * @param setFunc string to include in the error message
-   * @param rhsValue an optionally specified expression for the right-hand side of the returning
-   *                 assignment
+   * @param rhsValue optional expression for the right-hand side of the returning assignment
    * @param checkForNull optional value which shows whether a nullcheck is required for
    *                     the returning assignment
    *
@@ -815,10 +813,10 @@ class CodegenContext {
       elementType: DataType,
       srcArray: String,
       setFunc: String,
-      rhsValue: String = null,
+      rhsValue: Option[String] = None,
       checkForNull: Option[Boolean] = None): (String, String) => String = {
-    val getValue = (srcLoopIndex: String) => if (rhsValue != null) {
-      rhsValue
+    val getValue = (srcLoopIndex: String) => if (rhsValue.isDefined) {
+      rhsValue.get
     } else {
       CodeGenerator.getValue(srcArray, elementType, srcLoopIndex)
     }

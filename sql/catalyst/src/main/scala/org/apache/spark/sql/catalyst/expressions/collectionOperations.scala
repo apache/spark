@@ -1317,7 +1317,7 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
     val (initialization, setFunc) =
       ctx.createArrayData(arrayData, elementType, numElements, s" $prettyName failed.")
     val assignment =
-      ctx.createArrayAssignment(arrayData, dataType, elementType,  childName, setFunc)
+      ctx.createArrayAssignment(arrayData, dataType, elementType, childName, setFunc)
 
     s"""
        |final int $numElements = $childName.numElements();
@@ -3031,7 +3031,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
     val (allocation, setFunc) =
       ctx.createArrayData(tempArrayDataName, elementType, numElemName, s" $prettyName failed.")
     val assignment = ctx.createArrayAssignment(tempArrayDataName, dataType, elementType, "",
-      setFunc, rhsValue = element, checkForNull = Some(false))
+      setFunc, rhsValue = Some(element), checkForNull = Some(false))
 
     s"""
        |$numElemCode
