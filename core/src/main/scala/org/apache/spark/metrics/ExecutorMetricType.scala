@@ -36,7 +36,7 @@ private[spark] abstract class MemoryManagerExecutorMetricType(
   }
 }
 
-private[spark]abstract class MBeanExecutorMetricType(mBeanName: String)
+private[spark] abstract class MBeanExecutorMetricType(mBeanName: String)
   extends ExecutorMetricType {
   private val bean = ManagementFactory.newPlatformMXBeanProxy(
     ManagementFactory.getPlatformMBeanServer,
