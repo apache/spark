@@ -269,17 +269,18 @@ def main(infile, outfile):
         memory_limit_mb = int(os.environ.get('PYSPARK_EXECUTOR_MEMORY_MB', "-1"))
         total_memory = resource.RLIMIT_AS
         try:
-            (total_memory_limit, max_total_memory) = resource.getrlimit(total_memory)
-            msg = "Current mem: {0} of max {1}\n".format(total_memory_limit, max_total_memory)
-            print(msg, file=sys.stderr)
-
-            if memory_limit_mb > 0 and total_memory_limit == resource.RLIM_INFINITY:
-                # convert to bytes
-                total_memory_limit = memory_limit_mb * 1024 * 1024
-
-                msg = "Setting mem to {0} of max {1}\n".format(total_memory_limit, max_total_memory)
+            if memory_limit_mb > 0:
+                (soft_limit, hard_limit) = resource.getrlimit(total_memory)
+                msg = "Current mem limits: {0} of max {1}\n".format(soft_limit, hard_limit)
                 print(msg, file=sys.stderr)
-                resource.setrlimit(total_memory, (total_memory_limit, total_memory_limit))
+
+                # convert to bytes
+                new_limit = memory_limit_mb * 1024 * 1024
+
+                if soft_limit == resource.RLIM_INFINITY or new_limit < soft_limit:
+                    msg = "Setting mem limits to {0} of max {1}\n".format(new_limit, new_limit)
+                    print(msg, file=sys.stderr)
+                    resource.setrlimit(total_memory, (new_limit, new_limit))
 
         except (resource.error, OSError, ValueError) as e:
             # not all systems support resource limits, so warn instead of failing
