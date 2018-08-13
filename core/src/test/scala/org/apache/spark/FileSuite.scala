@@ -444,7 +444,6 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val conf = new SparkConf(false).setMaster("local").
         set("spark.kryo.registrationRequired", "true").setAppName("test")
     conf.set("spark.serializer", classOf[KryoSerializer].getName)
-    conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     
     val jobConf = new JobConf()
     jobConf.setOutputKeyClass(classOf[IntWritable])
