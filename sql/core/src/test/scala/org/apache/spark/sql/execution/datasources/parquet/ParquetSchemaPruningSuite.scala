@@ -38,8 +38,8 @@ class ParquetSchemaPruningSuite
     name: FullName,
     address: String,
     pets: Int,
-    friends: Array[FullName] = Array(),
-    relatives: Map[String, FullName] = Map())
+    friends: Array[FullName] = Array.empty,
+    relatives: Map[String, FullName] = Map.empty)
 
   val janeDoe = FullName("Jane", "X.", "Doe")
   val johnDoe = FullName("John", "Y.", "Doe")
@@ -74,19 +74,6 @@ class ParquetSchemaPruningSuite
   private val briefContactsWithDataPartitionColumn =
     briefContacts.map { case BriefContact(id, name, address) =>
       BriefContactWithDataPartitionColumn(id, name, address, 2) }
-
-  override def beforeEach(): Unit = {
-    super.beforeAll()
-    conf.setConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED, true)
-  }
-
-  override def afterEach(): Unit = {
-    try {
-      conf.unsetConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED)
-    } finally {
-      super.afterEach()
-    }
-  }
 
   testSchemaPruning("select a single complex field") {
     val query = sql("select name.middle from contacts")
@@ -215,7 +202,7 @@ class ParquetSchemaPruningSuite
   private val schemaEquality = new Equality[StructType] {
     override def areEqual(a: StructType, b: Any): Boolean =
       b match {
-        case otherType: StructType => a sameType otherType
+        case otherType: StructType => a.sameType(otherType)
         case _ => false
       }
   }
