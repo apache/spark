@@ -52,6 +52,7 @@ private[mesos] class MesosClusterDispatcher(
   extends Logging {
 
   {
+    // This doesn't support authentication because the RestSubmissionServer doesn't support it.
     val authKey = SecurityManager.SPARK_AUTH_SECRET_CONF
     require(conf.getOption(authKey).isEmpty,
       s"The MesosClusterDispatcher does not support authentication via ${authKey}.  It is not " +
