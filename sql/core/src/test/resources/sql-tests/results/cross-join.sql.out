@@ -128,6 +128,7 @@ two	2	two	2	one	1	two	2
 two	2	two	2	three	3	two	2
 two	2	two	2	two	2	two	2
 
+
 -- !query 12
 SELECT * FROM nt1 CROSS JOIN nt2 ON (nt1.k > nt2.k)
 -- !query 12 schema

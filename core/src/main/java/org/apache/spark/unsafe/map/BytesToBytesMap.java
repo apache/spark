@@ -283,13 +283,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         } else {
           currentPage = null;
           if (reader != null) {
-            // remove the spill file from disk
-            File file = spillWriters.removeFirst().getFile();
-            if (file != null && file.exists()) {
-              if (!file.delete()) {
-                logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
-              }
-            }
+            handleFailedDelete();
           }
           try {
             Closeables.close(reader, /* swallowIOException = */ false);
@@ -307,13 +301,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     public boolean hasNext() {
       if (numRecords == 0) {
         if (reader != null) {
-          // remove the spill file from disk
-          File file = spillWriters.removeFirst().getFile();
-          if (file != null && file.exists()) {
-            if (!file.delete()) {
-              logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
-            }
-          }
+          handleFailedDelete();
         }
       }
       return numRecords > 0;
@@ -359,6 +347,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
           return 0L;
         }
 
+        updatePeakMemoryUsed();
+
         // TODO: use existing ShuffleWriteMetrics
         ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
 
@@ -403,6 +393,14 @@ public final class BytesToBytesMap extends MemoryConsumer {
     public void remove() {
       throw new UnsupportedOperationException();
     }
+
+    private void handleFailedDelete() {
+      // remove the spill file from disk
+      File file = spillWriters.removeFirst().getFile();
+      if (file != null && file.exists() && !file.delete()) {
+        logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
+      }
+    }
   }
 
   /**
@@ -428,6 +426,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * `lookup()`, the behavior of the returned iterator is undefined.
    */
   public MapIterator destructiveIterator() {
+    updatePeakMemoryUsed();
     return new MapIterator(numValues, loc, true);
   }
 
@@ -663,7 +662,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
      * It is only valid to call this method immediately after calling `lookup()` using the same key.
      * </p>
      * <p>
-     * The key and value must be word-aligned (that is, their sizes must multiples of 8).
+     * The key and value must be word-aligned (that is, their sizes must be a multiple of 8).
      * </p>
      * <p>
      * After calling this method, calls to `get[Key|Value]Address()` and `get[Key|Value]Length`
@@ -704,7 +703,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       // must be stored in the same memory page.
       // (8 byte key length) (key) (value) (8 byte pointer to next value)
       int uaoSize = UnsafeAlignedOffset.getUaoSize();
-      final long recordLength = (2 * uaoSize) + klen + vlen + 8;
+      final long recordLength = (2L * uaoSize) + klen + vlen + 8;
       if (currentPage == null || currentPage.size() - pageCursor < recordLength) {
         if (!acquireNewPage(recordLength + uaoSize)) {
           return false;
@@ -883,6 +882,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * Reset this map to initialized state.
    */
   public void reset() {
+    updatePeakMemoryUsed();
     numKeys = 0;
     numValues = 0;
     freeArray(longArray);

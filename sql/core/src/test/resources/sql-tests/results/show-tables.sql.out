@@ -164,7 +164,7 @@ struct<>
 -- !query 13 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-mismatched input '<EOF>' expecting 'LIKE'(line 1, pos 19)
+mismatched input '<EOF>' expecting {'FROM', 'IN', 'LIKE'}(line 1, pos 19)
 
 == SQL ==
 SHOW TABLE EXTENDED
@@ -178,6 +178,8 @@ struct<database:string,tableName:string,isTemporary:boolean,information:string>
 -- !query 14 output
 showdb	show_t1	false	Partition Values: [c=Us, d=1]
 Location [not included in comparison]sql/core/spark-warehouse/showdb.db/show_t1/c=Us/d=1
+Created Time [not included in comparison]
+Last Access [not included in comparison]
 
 
 -- !query 15
@@ -187,7 +189,7 @@ struct<>
 -- !query 15 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-mismatched input 'PARTITION' expecting 'LIKE'(line 1, pos 20)
+mismatched input 'PARTITION' expecting {'FROM', 'IN', 'LIKE'}(line 1, pos 20)
 
 == SQL ==
 SHOW TABLE EXTENDED PARTITION(c='Us', d=1)

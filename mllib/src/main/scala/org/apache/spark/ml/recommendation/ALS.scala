@@ -39,6 +39,7 @@ import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
@@ -289,9 +290,13 @@ class ALSModel private[ml] (
 
   private val predict = udf { (featuresA: Seq[Float], featuresB: Seq[Float]) =>
     if (featuresA != null && featuresB != null) {
-      // TODO(SPARK-19759): try dot-producting on Seqs or another non-converted type for
-      // potential optimization.
-      blas.sdot(rank, featuresA.toArray, 1, featuresB.toArray, 1)
+      var dotProduct = 0.0f
+      var i = 0
+      while (i < rank) {
+        dotProduct += featuresA(i) * featuresB(i)
+        i += 1
+      }
+      dotProduct
     } else {
       Float.NaN
     }
@@ -345,6 +350,21 @@ class ALSModel private[ml] (
   }
 
   /**
+   * Returns top `numItems` items recommended for each user id in the input data set. Note that if
+   * there are duplicate ids in the input dataset, only one set of recommendations per unique id
+   * will be returned.
+   * @param dataset a Dataset containing a column of user ids. The column name must match `userCol`.
+   * @param numItems max number of recommendations for each user.
+   * @return a DataFrame of (userCol: Int, recommendations), where recommendations are
+   *         stored as an array of (itemCol: Int, rating: Float) Rows.
+   */
+  @Since("2.3.0")
+  def recommendForUserSubset(dataset: Dataset[_], numItems: Int): DataFrame = {
+    val srcFactorSubset = getSourceFactorSubset(dataset, userFactors, $(userCol))
+    recommendForAll(srcFactorSubset, itemFactors, $(userCol), $(itemCol), numItems)
+  }
+
+  /**
    * Returns top `numUsers` users recommended for each item, for all items.
    * @param numUsers max number of recommendations for each item
    * @return a DataFrame of (itemCol: Int, recommendations), where recommendations are
@@ -353,6 +373,39 @@ class ALSModel private[ml] (
   @Since("2.2.0")
   def recommendForAllItems(numUsers: Int): DataFrame = {
     recommendForAll(itemFactors, userFactors, $(itemCol), $(userCol), numUsers)
+  }
+
+  /**
+   * Returns top `numUsers` users recommended for each item id in the input data set. Note that if
+   * there are duplicate ids in the input dataset, only one set of recommendations per unique id
+   * will be returned.
+   * @param dataset a Dataset containing a column of item ids. The column name must match `itemCol`.
+   * @param numUsers max number of recommendations for each item.
+   * @return a DataFrame of (itemCol: Int, recommendations), where recommendations are
+   *         stored as an array of (userCol: Int, rating: Float) Rows.
+   */
+  @Since("2.3.0")
+  def recommendForItemSubset(dataset: Dataset[_], numUsers: Int): DataFrame = {
+    val srcFactorSubset = getSourceFactorSubset(dataset, itemFactors, $(itemCol))
+    recommendForAll(srcFactorSubset, userFactors, $(itemCol), $(userCol), numUsers)
+  }
+
+  /**
+   * Returns a subset of a factor DataFrame limited to only those unique ids contained
+   * in the input dataset.
+   * @param dataset input Dataset containing id column to user to filter factors.
+   * @param factors factor DataFrame to filter.
+   * @param column column name containing the ids in the input dataset.
+   * @return DataFrame containing factors only for those ids present in both the input dataset and
+   *         the factor DataFrame.
+   */
+  private def getSourceFactorSubset(
+      dataset: Dataset[_],
+      factors: DataFrame,
+      column: String): DataFrame = {
+    factors
+      .join(dataset.select(column), factors("id") === dataset(column), joinType = "left_semi")
+      .select(factors("id"), factors("features"))
   }
 
   /**
@@ -477,7 +530,7 @@ object ALSModel extends MLReadable[ALSModel] {
 
       val model = new ALSModel(metadata.uid, rank, userFactors, itemFactors)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
@@ -602,7 +655,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
   }
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): ALSModel = {
+  override def fit(dataset: Dataset[_]): ALSModel = instrumented { instr =>
     transformSchema(dataset.schema)
     import dataset.sparkSession.implicits._
 
@@ -614,8 +667,9 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
 
-    val instr = Instrumentation.create(this, ratings)
-    instr.logParams(rank, numUserBlocks, numItemBlocks, implicitPrefs, alpha, userCol,
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, rank, numUserBlocks, numItemBlocks, implicitPrefs, alpha, userCol,
       itemCol, ratingCol, predictionCol, maxIter, regParam, nonnegative, checkpointInterval,
       seed, intermediateStorageLevel, finalStorageLevel)
 
@@ -629,7 +683,6 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
     val userDF = userFactors.toDF("id", "features")
     val itemDF = itemFactors.toDF("id", "features")
     val model = new ALSModel(uid, $(rank), userDF, itemDF).setParent(this)
-    instr.logSuccess(model)
     copyValues(model)
   }
 

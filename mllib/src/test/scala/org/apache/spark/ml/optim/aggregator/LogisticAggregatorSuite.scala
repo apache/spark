@@ -28,6 +28,7 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   @transient var instances: Array[Instance] = _
   @transient var instancesConstantFeature: Array[Instance] = _
+  @transient var instancesConstantFeatureFiltered: Array[Instance] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -40,6 +41,11 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       Instance(0.0, 0.1, Vectors.dense(1.0, 2.0)),
       Instance(1.0, 0.5, Vectors.dense(1.0, 1.0)),
       Instance(2.0, 0.3, Vectors.dense(1.0, 0.5))
+    )
+    instancesConstantFeatureFiltered = Array(
+      Instance(0.0, 0.1, Vectors.dense(2.0)),
+      Instance(1.0, 0.5, Vectors.dense(1.0)),
+      Instance(2.0, 0.3, Vectors.dense(0.5))
     )
   }
 
@@ -211,8 +217,6 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     }.sum
     val loss = lossSum / weightSum
 
-
-
     // compute the gradients
     val gradientCoef = new Array[Double](numFeatures)
     var gradientIntercept = 0.0
@@ -233,21 +237,44 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val binaryInstances = instancesConstantFeature.map { instance =>
       if (instance.label <= 1.0) instance else Instance(0.0, instance.weight, instance.features)
     }
+    val binaryInstancesFiltered = instancesConstantFeatureFiltered.map { instance =>
+      if (instance.label <= 1.0) instance else Instance(0.0, instance.weight, instance.features)
+    }
     val coefArray = Array(1.0, 2.0, -2.0, 3.0, 0.0, -1.0)
+    val coefArrayFiltered = Array(3.0, 0.0, -1.0)
     val interceptArray = Array(4.0, 2.0, -3.0)
     val aggConstantFeature = getNewAggregator(instancesConstantFeature,
       Vectors.dense(coefArray ++ interceptArray), fitIntercept = true, isMultinomial = true)
-    instances.foreach(aggConstantFeature.add)
+    val aggConstantFeatureFiltered = getNewAggregator(instancesConstantFeatureFiltered,
+      Vectors.dense(coefArrayFiltered ++ interceptArray), fitIntercept = true, isMultinomial = true)
+
+    instancesConstantFeature.foreach(aggConstantFeature.add)
+    instancesConstantFeatureFiltered.foreach(aggConstantFeatureFiltered.add)
+
     // constant features should not affect gradient
-    assert(aggConstantFeature.gradient(0) === 0.0)
+    def validateGradient(grad: Vector, gradFiltered: Vector, numCoefficientSets: Int): Unit = {
+      for (i <- 0 until numCoefficientSets) {
+        assert(grad(i) === 0.0)
+        assert(grad(numCoefficientSets + i) == gradFiltered(i))
+      }
+    }
+
+    validateGradient(aggConstantFeature.gradient, aggConstantFeatureFiltered.gradient, 3)
 
     val binaryCoefArray = Array(1.0, 2.0)
+    val binaryCoefArrayFiltered = Array(2.0)
     val intercept = 1.0
     val aggConstantFeatureBinary = getNewAggregator(binaryInstances,
       Vectors.dense(binaryCoefArray ++ Array(intercept)), fitIntercept = true,
       isMultinomial = false)
-    instances.foreach(aggConstantFeatureBinary.add)
+    val aggConstantFeatureBinaryFiltered = getNewAggregator(binaryInstancesFiltered,
+      Vectors.dense(binaryCoefArrayFiltered ++ Array(intercept)), fitIntercept = true,
+      isMultinomial = false)
+    binaryInstances.foreach(aggConstantFeatureBinary.add)
+    binaryInstancesFiltered.foreach(aggConstantFeatureBinaryFiltered.add)
+
     // constant features should not affect gradient
-    assert(aggConstantFeatureBinary.gradient(0) === 0.0)
+    validateGradient(aggConstantFeatureBinary.gradient,
+      aggConstantFeatureBinaryFiltered.gradient, 1)
   }
 }

@@ -24,7 +24,7 @@ import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateOrdering, LazilyGeneratedOrdering}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateOrdering, LazilyGeneratedOrdering}
 import org.apache.spark.sql.types._
 
 class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -155,5 +155,14 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(rowOrdering.compare(rowB1, rowB2) < 0)
       assert(genOrdering.compare(rowB1, rowB2) < 0)
     }
+  }
+
+  test("SPARK-22591: GenerateOrdering shouldn't change ctx.INPUT_ROW") {
+    val ctx = new CodegenContext()
+    ctx.INPUT_ROW = null
+
+    val schema = new StructType().add("field", FloatType, nullable = true)
+    GenerateOrdering.genComparisons(ctx, schema)
+    assert(ctx.INPUT_ROW == null)
   }
 }

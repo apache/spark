@@ -17,58 +17,30 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
-import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, StreamSinkProvider}
+import org.apache.spark.sql._
+import org.apache.spark.sql.execution.streaming.sources.ConsoleWriter
+import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, StreamWriteSupport}
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
-
-class ConsoleSink(options: Map[String, String]) extends Sink with Logging {
-  // Number of rows to display, by default 20 rows
-  private val numRowsToShow = options.get("numRows").map(_.toInt).getOrElse(20)
-
-  // Truncate the displayed data if it is too long, by default it is true
-  private val isTruncated = options.get("truncate").map(_.toBoolean).getOrElse(true)
-
-  // Track the batch id
-  private var lastBatchId = -1L
-
-  override def addBatch(batchId: Long, data: DataFrame): Unit = synchronized {
-    val batchIdStr = if (batchId <= lastBatchId) {
-      s"Rerun batch: $batchId"
-    } else {
-      lastBatchId = batchId
-      s"Batch: $batchId"
-    }
-
-    // scalastyle:off println
-    println("-------------------------------------------")
-    println(batchIdStr)
-    println("-------------------------------------------")
-    // scalastyle:off println
-    data.sparkSession.createDataFrame(
-      data.sparkSession.sparkContext.parallelize(data.collect()), data.schema)
-      .show(numRowsToShow, isTruncated)
-  }
-
-  override def toString(): String = s"ConsoleSink[numRows=$numRowsToShow, truncate=$isTruncated]"
-}
 
 case class ConsoleRelation(override val sqlContext: SQLContext, data: DataFrame)
   extends BaseRelation {
   override def schema: StructType = data.schema
 }
 
-class ConsoleSinkProvider extends StreamSinkProvider
+class ConsoleSinkProvider extends DataSourceV2
+  with StreamWriteSupport
   with DataSourceRegister
   with CreatableRelationProvider {
-  def createSink(
-      sqlContext: SQLContext,
-      parameters: Map[String, String],
-      partitionColumns: Seq[String],
-      outputMode: OutputMode): Sink = {
-    new ConsoleSink(parameters)
+
+  override def createStreamWriter(
+      queryId: String,
+      schema: StructType,
+      mode: OutputMode,
+      options: DataSourceOptions): StreamWriter = {
+    new ConsoleWriter(schema, options)
   }
 
   def createRelation(

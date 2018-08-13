@@ -177,7 +177,7 @@ object Metadata {
   private def toJsonValue(obj: Any): JValue = {
     obj match {
       case map: Map[_, _] =>
-        val fields = map.toList.map { case (k: String, v) => (k, toJsonValue(v)) }
+        val fields = map.toList.map { case (k, v) => (k.toString, toJsonValue(v)) }
         JObject(fields)
       case arr: Array[_] =>
         val values = arr.toList.map(toJsonValue)
@@ -215,6 +215,8 @@ object Metadata {
         x.##
       case x: Metadata =>
         hash(x.map)
+      case null =>
+        0
       case other =>
         throw new RuntimeException(s"Do not support type ${other.getClass}.")
     }

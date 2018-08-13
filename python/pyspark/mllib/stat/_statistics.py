@@ -259,7 +259,7 @@ class Statistics(object):
 
         The KS statistic gives us the maximum distance between the
         ECDF and the CDF. Intuitively if this statistic is large, the
-        probabilty that the null hypothesis is true becomes small.
+        probability that the null hypothesis is true becomes small.
         For specific details of the implementation, please have a look
         at the Scala documentation.
 
@@ -303,7 +303,13 @@ class Statistics(object):
 
 def _test():
     import doctest
+    import numpy
     from pyspark.sql import SparkSession
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = globals().copy()
     spark = SparkSession.builder\
         .master("local[4]")\
@@ -313,7 +319,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

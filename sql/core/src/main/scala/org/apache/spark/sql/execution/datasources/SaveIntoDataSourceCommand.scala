@@ -21,6 +21,7 @@ import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.CreatableRelationProvider
 
 /**
@@ -38,12 +39,17 @@ case class SaveIntoDataSourceCommand(
     options: Map[String, String],
     mode: SaveMode) extends RunnableCommand {
 
-  override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     dataSource.createRelation(
       sparkSession.sqlContext, mode, options, Dataset.ofRows(sparkSession, query))
 
     Seq.empty[Row]
+  }
+
+  override def simpleString: String = {
+    val redacted = SQLConf.get.redactOptions(options)
+    s"SaveIntoDataSourceCommand ${dataSource}, ${redacted}, ${mode}"
   }
 }

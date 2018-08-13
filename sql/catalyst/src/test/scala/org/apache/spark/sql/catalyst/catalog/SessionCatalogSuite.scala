@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -279,7 +279,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
-  test("create temp table") {
+  test("create temp view") {
     withBasicCatalog { catalog =>
       val tempTable1 = Range(1, 10, 1, 10)
       val tempTable2 = Range(1, 20, 2, 10)
@@ -288,11 +288,11 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       assert(catalog.getTempView("tbl1") == Option(tempTable1))
       assert(catalog.getTempView("tbl2") == Option(tempTable2))
       assert(catalog.getTempView("tbl3").isEmpty)
-      // Temporary table already exists
+      // Temporary view already exists
       intercept[TempTableAlreadyExistsException] {
         catalog.createTempView("tbl1", tempTable1, overrideIfExists = false)
       }
-      // Temporary table already exists but we override it
+      // Temporary view already exists but we override it
       catalog.createTempView("tbl1", tempTable2, overrideIfExists = true)
       assert(catalog.getTempView("tbl1") == Option(tempTable2))
     }
@@ -463,9 +463,9 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     withBasicCatalog { sessionCatalog =>
       sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
       val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
-      sessionCatalog.alterTableSchema(
+      sessionCatalog.alterTableDataSchema(
         TableIdentifier("t1", Some("default")),
-        StructType(oldTab.dataSchema.add("c3", IntegerType) ++ oldTab.partitionSchema))
+        StructType(oldTab.dataSchema.add("c3", IntegerType)))
 
       val newTab = sessionCatalog.externalCatalog.getTable("default", "t1")
       // construct the expected table schema
@@ -480,8 +480,8 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
       val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
       val e = intercept[AnalysisException] {
-        sessionCatalog.alterTableSchema(
-          TableIdentifier("t1", Some("default")), StructType(oldTab.schema.drop(1)))
+        sessionCatalog.alterTableDataSchema(
+          TableIdentifier("t1", Some("default")), StructType(oldTab.dataSchema.drop(1)))
       }.getMessage
       assert(e.contains("We don't support dropping columns yet."))
     }
@@ -537,11 +537,11 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       val view = View(desc = metadata, output = metadata.schema.toAttributes,
         child = CatalystSqlParser.parsePlan(metadata.viewText.get))
       comparePlans(catalog.lookupRelation(TableIdentifier("view1", Some("db3"))),
-        SubqueryAlias("view1", view))
+        SubqueryAlias("view1", "db3", view))
       // Look up a view using current database of the session catalog.
       catalog.setCurrentDatabase("db3")
       comparePlans(catalog.lookupRelation(TableIdentifier("view1")),
-        SubqueryAlias("view1", view))
+        SubqueryAlias("view1", "db3", view))
     }
   }
 
@@ -1114,11 +1114,13 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     // And for hive serde table, hive metastore will set some values(e.g.transient_lastDdlTime)
     // in table's parameters and storage's properties, here we also ignore them.
     val actualPartsNormalize = actualParts.map(p =>
-      p.copy(parameters = Map.empty, storage = p.storage.copy(
+      p.copy(parameters = Map.empty, createTime = -1, lastAccessTime = -1,
+        storage = p.storage.copy(
         properties = Map.empty, locationUri = None, serde = None))).toSet
 
     val expectedPartsNormalize = expectedParts.map(p =>
-        p.copy(parameters = Map.empty, storage = p.storage.copy(
+        p.copy(parameters = Map.empty, createTime = -1, lastAccessTime = -1,
+          storage = p.storage.copy(
           properties = Map.empty, locationUri = None, serde = None))).toSet
 
     actualPartsNormalize == expectedPartsNormalize
@@ -1212,6 +1214,42 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       assert(FunctionRegistry.builtin.functionExists(FunctionIdentifier("sum")))
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("sum")))
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("histogram_numeric")))
+    }
+  }
+
+  test("isRegisteredFunction") {
+    withBasicCatalog { catalog =>
+      // Returns false when the function does not register
+      assert(!catalog.isRegisteredFunction(FunctionIdentifier("temp1")))
+
+      // Returns true when the function does register
+      val tempFunc1 = (e: Seq[Expression]) => e.head
+      catalog.registerFunction(newFunc("iff", None), overrideIfExists = false,
+        functionBuilder = Some(tempFunc1) )
+      assert(catalog.isRegisteredFunction(FunctionIdentifier("iff")))
+
+      // Returns false when using the createFunction
+      catalog.createFunction(newFunc("sum", Some("db2")), ignoreIfExists = false)
+      assert(!catalog.isRegisteredFunction(FunctionIdentifier("sum")))
+      assert(!catalog.isRegisteredFunction(FunctionIdentifier("sum", Some("db2"))))
+    }
+  }
+
+  test("isPersistentFunction") {
+    withBasicCatalog { catalog =>
+      // Returns false when the function does not register
+      assert(!catalog.isPersistentFunction(FunctionIdentifier("temp2")))
+
+      // Returns false when the function does register
+      val tempFunc2 = (e: Seq[Expression]) => e.head
+      catalog.registerFunction(newFunc("iff", None), overrideIfExists = false,
+        functionBuilder = Some(tempFunc2))
+      assert(!catalog.isPersistentFunction(FunctionIdentifier("iff")))
+
+      // Return true when using the createFunction
+      catalog.createFunction(newFunc("sum", Some("db2")), ignoreIfExists = false)
+      assert(catalog.isPersistentFunction(FunctionIdentifier("sum", Some("db2"))))
+      assert(!catalog.isPersistentFunction(FunctionIdentifier("db2.sum")))
     }
   }
 

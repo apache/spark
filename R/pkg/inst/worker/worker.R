@@ -62,13 +62,13 @@ compute <- function(mode, partition, serializer, deserializer, key,
       # Transform the result data.frame back to a list of rows
       output <- split(output, seq(nrow(output)))
     } else {
-      # Serialize the ouput to a byte array
+      # Serialize the output to a byte array
       stopifnot(serializer == "byte")
     }
   } else {
     output <- computeFunc(partition, inputData)
   }
-  return (output)
+  return(output)
 }
 
 outputResult <- function(serializer, output, outputCon) {
@@ -100,9 +100,12 @@ suppressPackageStartupMessages(library(SparkR))
 
 port <- as.integer(Sys.getenv("SPARKR_WORKER_PORT"))
 inputCon <- socketConnection(
-    port = port, blocking = TRUE, open = "rb", timeout = connectionTimeout)
+    port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
+SparkR:::doServerAuth(inputCon, Sys.getenv("SPARKR_WORKER_SECRET"))
+
 outputCon <- socketConnection(
     port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
+SparkR:::doServerAuth(outputCon, Sys.getenv("SPARKR_WORKER_SECRET"))
 
 # read the index of the current partition inside the RDD
 partition <- SparkR:::readInt(inputCon)

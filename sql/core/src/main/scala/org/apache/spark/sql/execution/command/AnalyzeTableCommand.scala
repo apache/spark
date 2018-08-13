@@ -39,7 +39,7 @@ case class AnalyzeTableCommand(
     }
 
     // Compute stats for the whole table
-    val newTotalSize = CommandUtils.calculateTotalSize(sessionState, tableMeta)
+    val newTotalSize = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
     val newRowCount =
       if (noscan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
 
@@ -48,8 +48,6 @@ case class AnalyzeTableCommand(
     val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
     if (newStats.isDefined) {
       sessionState.catalog.alterTableStats(tableIdentWithDB, newStats)
-      // Refresh the cached data source table in the catalog.
-      sessionState.catalog.refreshTable(tableIdentWithDB)
     }
 
     Seq.empty[Row]

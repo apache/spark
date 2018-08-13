@@ -19,18 +19,23 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.TimeZone
 
-import org.scalatest.ShouldMatchers
+import scala.reflect.ClassTag
 
+import org.scalatest.Matchers
+
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
+  RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.types._
 
 
-class AnalysisSuite extends AnalysisTest with ShouldMatchers {
+class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
   test("union project *") {
@@ -230,7 +235,7 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     checkAnalysis(plan, expected)
   }
 
-  test("Analysis may leave unnecassary aliases") {
+  test("Analysis may leave unnecessary aliases") {
     val att1 = testRelation.output.head
     var plan = testRelation.select(
       CreateStruct(Seq(att1, ((att1.as("aa")) + 1).as("a_plus_1"))).as("col"),
@@ -268,7 +273,7 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
   }
 
   test("self intersect should resolve duplicate expression IDs") {
-    val plan = testRelation.intersect(testRelation)
+    val plan = testRelation.intersect(testRelation, isAll = false)
     assertAnalysisSuccess(plan)
   }
 
@@ -313,7 +318,8 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
 
     // only primitive parameter needs special null handling
     val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil)
-    val expected2 = If(IsNull(double), nullResult, udf2)
+    val expected2 =
+      If(IsNull(double), nullResult, udf2.copy(children = string :: KnownNotNull(double) :: Nil))
     checkUDF(udf2, expected2)
 
     // special null handling should apply to all primitive parameters
@@ -321,7 +327,7 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     val expected3 = If(
       IsNull(short) || IsNull(double),
       nullResult,
-      udf3)
+      udf3.copy(children = KnownNotNull(short) :: KnownNotNull(double) :: Nil))
     checkUDF(udf3, expected3)
 
     // we can skip special null handling for primitive parameters that are not nullable
@@ -333,8 +339,17 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     val expected4 = If(
       IsNull(short),
       nullResult,
-      udf4)
+      udf4.copy(children = KnownNotNull(short) :: double.withNullability(false) :: Nil))
     // checkUDF(udf4, expected4)
+  }
+
+  test("SPARK-24891 Fix HandleNullInputsForUDF rule") {
+    val a = testRelation.output(0)
+    val func = (x: Int, y: Int) => x + y
+    val udf1 = ScalaUDF(func, IntegerType, a :: a :: Nil)
+    val udf2 = ScalaUDF(func, IntegerType, a :: udf1 :: Nil)
+    val plan = Project(Alias(udf2, "")() :: Nil, testRelation)
+    comparePlans(plan.analyze, plan.analyze.analyze)
   }
 
   test("SPARK-11863 mixture of aliases and real columns in order by clause - tpcds 19,55,71") {
@@ -406,8 +421,8 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     assertExpressionType(sum(Divide(1.0, 2.0)), DoubleType)
     assertExpressionType(sum(Divide(1, 2.0f)), DoubleType)
     assertExpressionType(sum(Divide(1.0f, 2)), DoubleType)
-    assertExpressionType(sum(Divide(1, Decimal(2))), DecimalType(31, 11))
-    assertExpressionType(sum(Divide(Decimal(1), 2)), DecimalType(31, 11))
+    assertExpressionType(sum(Divide(1, Decimal(2))), DecimalType(22, 11))
+    assertExpressionType(sum(Divide(Decimal(1), 2)), DecimalType(26, 6))
     assertExpressionType(sum(Divide(Decimal(1), 2.0)), DoubleType)
     assertExpressionType(sum(Divide(1.0, Decimal(2.0))), DoubleType)
   }
@@ -424,8 +439,8 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     val unionPlan = Union(firstTable, secondTable)
     assertAnalysisSuccess(unionPlan)
 
-    val r1 = Except(firstTable, secondTable)
-    val r2 = Intersect(firstTable, secondTable)
+    val r1 = Except(firstTable, secondTable, isAll = false)
+    val r2 = Intersect(firstTable, secondTable, isAll = false)
 
     assertAnalysisSuccess(r1)
     assertAnalysisSuccess(r2)
@@ -513,5 +528,59 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
       joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
       Seq("Number of column aliases does not match number of columns. " +
         "Number of column aliases: 5; number of columns: 4."))
+  }
+
+  test("SPARK-22614 RepartitionByExpression partitioning") {
+    def checkPartitioning[T <: Partitioning: ClassTag](
+        numPartitions: Int, exprs: Expression*): Unit = {
+      val partitioning = RepartitionByExpression(exprs, testRelation2, numPartitions).partitioning
+      val clazz = implicitly[ClassTag[T]].runtimeClass
+      assert(clazz.isInstance(partitioning))
+    }
+
+    checkPartitioning[HashPartitioning](numPartitions = 10, exprs = Literal(20))
+    checkPartitioning[HashPartitioning](numPartitions = 10, exprs = 'a.attr, 'b.attr)
+
+    checkPartitioning[RangePartitioning](numPartitions = 10,
+      exprs = SortOrder(Literal(10), Ascending))
+    checkPartitioning[RangePartitioning](numPartitions = 10,
+      exprs = SortOrder('a.attr, Ascending), SortOrder('b.attr, Descending))
+
+    checkPartitioning[RoundRobinPartitioning](numPartitions = 10, exprs = Seq.empty: _*)
+
+    intercept[IllegalArgumentException] {
+      checkPartitioning(numPartitions = 0, exprs = Literal(20))
+    }
+    intercept[IllegalArgumentException] {
+      checkPartitioning(numPartitions = -1, exprs = Literal(20))
+    }
+    intercept[IllegalArgumentException] {
+      checkPartitioning(numPartitions = 10, exprs = SortOrder('a.attr, Ascending), 'b.attr)
+    }
+  }
+
+  test("SPARK-24208: analysis fails on self-join with FlatMapGroupsInPandas") {
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("a", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+      true)
+    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
+    val flatMapGroupsInPandas = FlatMapGroupsInPandas(
+      Seq(UnresolvedAttribute("a")), pythonUdf, output, project)
+    val left = SubqueryAlias("temp0", flatMapGroupsInPandas)
+    val right = SubqueryAlias("temp1", flatMapGroupsInPandas)
+    val join = Join(left, right, Inner, None)
+    assertAnalysisSuccess(
+      Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
+  }
+
+  test("SPARK-24488 Generator with multiple aliases") {
+    assertAnalysisSuccess(
+      listRelation.select(Explode('list).as("first_alias").as("second_alias")))
+    assertAnalysisSuccess(
+      listRelation.select(MultiAlias(MultiAlias(
+        PosExplode('list), Seq("first_pos", "first_val")), Seq("second_pos", "second_val"))))
   }
 }

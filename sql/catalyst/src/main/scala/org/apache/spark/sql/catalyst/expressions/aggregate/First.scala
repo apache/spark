@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -44,7 +45,7 @@ case class First(child: Expression, ignoreNullsExpr: Expression)
   override def nullable: Boolean = true
 
   // First is not a deterministic function.
-  override def deterministic: Boolean = false
+  override lazy val deterministic: Boolean = false
 
   // Return data type.
   override def dataType: DataType = child.dataType
@@ -80,8 +81,8 @@ case class First(child: Expression, ignoreNullsExpr: Expression)
   override lazy val updateExpressions: Seq[Expression] = {
     if (ignoreNulls) {
       Seq(
-        /* first = */ If(Or(valueSet, IsNull(child)), first, child),
-        /* valueSet = */ Or(valueSet, IsNotNull(child))
+        /* first = */ If(valueSet || child.isNull, first, child),
+        /* valueSet = */ valueSet || child.isNotNull
       )
     } else {
       Seq(
@@ -97,7 +98,7 @@ case class First(child: Expression, ignoreNullsExpr: Expression)
     // false, we are safe to do so because first.right will be null in this case).
     Seq(
       /* first = */ If(valueSet.left, first.left, first.right),
-      /* valueSet = */ Or(valueSet.left, valueSet.right)
+      /* valueSet = */ valueSet.left || valueSet.right
     )
   }
 

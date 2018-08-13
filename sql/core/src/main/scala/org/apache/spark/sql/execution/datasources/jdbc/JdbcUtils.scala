@@ -29,6 +29,7 @@ import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -66,7 +67,7 @@ object JdbcUtils extends Logging {
   /**
    * Returns true if the table already exists in the JDBC database.
    */
-  def tableExists(conn: Connection, options: JDBCOptions): Boolean = {
+  def tableExists(conn: Connection, options: JdbcOptionsInWrite): Boolean = {
     val dialect = JdbcDialects.get(options.url)
 
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
@@ -75,6 +76,7 @@ object JdbcUtils extends Logging {
     Try {
       val statement = conn.prepareStatement(dialect.getTableExistsQuery(options.table))
       try {
+        statement.setQueryTimeout(options.queryTimeout)
         statement.executeQuery()
       } finally {
         statement.close()
@@ -85,9 +87,10 @@ object JdbcUtils extends Logging {
   /**
    * Drops a table from the JDBC database.
    */
-  def dropTable(conn: Connection, table: String): Unit = {
+  def dropTable(conn: Connection, table: String, options: JDBCOptions): Unit = {
     val statement = conn.createStatement
     try {
+      statement.setQueryTimeout(options.queryTimeout)
       statement.executeUpdate(s"DROP TABLE $table")
     } finally {
       statement.close()
@@ -95,12 +98,19 @@ object JdbcUtils extends Logging {
   }
 
   /**
-   * Truncates a table from the JDBC database.
+   * Truncates a table from the JDBC database without side effects.
    */
-  def truncateTable(conn: Connection, table: String): Unit = {
+  def truncateTable(conn: Connection, options: JdbcOptionsInWrite): Unit = {
+    val dialect = JdbcDialects.get(options.url)
     val statement = conn.createStatement
     try {
-      statement.executeUpdate(s"TRUNCATE TABLE $table")
+      statement.setQueryTimeout(options.queryTimeout)
+      val truncateQuery = if (options.isCascadeTruncate.isDefined) {
+        dialect.getTruncateQuery(options.table, options.isCascadeTruncate)
+      } else {
+        dialect.getTruncateQuery(options.table)
+      }
+      statement.executeUpdate(truncateQuery)
     } finally {
       statement.close()
     }
@@ -170,7 +180,7 @@ object JdbcUtils extends Logging {
 
   private def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
     dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
-      throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.simpleString}"))
+      throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.catalogString}"))
   }
 
   /**
@@ -225,11 +235,10 @@ object JdbcUtils extends Logging {
       case java.sql.Types.STRUCT        => StringType
       case java.sql.Types.TIME          => TimestampType
       case java.sql.Types.TIME_WITH_TIMEZONE
-                                        => TimestampType
+                                        => null
       case java.sql.Types.TIMESTAMP     => TimestampType
       case java.sql.Types.TIMESTAMP_WITH_TIMEZONE
-                                        => TimestampType
-      case -101                         => TimestampType // Value for Timestamp with Time Zone in Oracle
+                                        => null
       case java.sql.Types.TINYINT       => IntegerType
       case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR       => StringType
@@ -251,8 +260,9 @@ object JdbcUtils extends Logging {
     val dialect = JdbcDialects.get(options.url)
 
     try {
-      val statement = conn.prepareStatement(dialect.getSchemaQuery(options.table))
+      val statement = conn.prepareStatement(dialect.getSchemaQuery(options.tableOrQuery))
       try {
+        statement.setQueryTimeout(options.queryTimeout)
         Some(getSchema(statement.executeQuery(), dialect))
       } catch {
         case _: SQLException => None
@@ -300,13 +310,11 @@ object JdbcUtils extends Logging {
       } else {
         rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
       }
-      val metadata = new MetadataBuilder()
-        .putString("name", columnName)
-        .putLong("scale", fieldScale)
+      val metadata = new MetadataBuilder().putLong("scale", fieldScale)
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
           getCatalystType(dataType, fieldSize, fieldScale, isSigned))
-      fields(i) = StructField(columnName, columnType, nullable, metadata.build())
+      fields(i) = StructField(columnName, columnType, nullable)
       i = i + 1
     }
     new StructType(fields)
@@ -458,8 +466,9 @@ object JdbcUtils extends Logging {
 
         case StringType =>
           (array: Object) =>
-            array.asInstanceOf[Array[java.lang.String]]
-              .map(UTF8String.fromString)
+            // some underling types are not String such as uuid, inet, cidr, etc.
+            array.asInstanceOf[Array[java.lang.Object]]
+              .map(obj => if (obj == null) null else UTF8String.fromString(obj.toString))
 
         case DateType =>
           (array: Object) =>
@@ -476,7 +485,7 @@ object JdbcUtils extends Logging {
 
         case LongType if metadata.contains("binarylong") =>
           throw new IllegalArgumentException(s"Unsupported array element " +
-            s"type ${dt.simpleString} based on binary")
+            s"type ${dt.catalogString} based on binary")
 
         case ArrayType(_, _) =>
           throw new IllegalArgumentException("Nested arrays unsupported")
@@ -490,7 +499,7 @@ object JdbcUtils extends Logging {
           array => new GenericArrayData(elementConversion.apply(array.getArray)))
         row.update(pos, array)
 
-    case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.simpleString}")
+    case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.catalogString}")
   }
 
   private def nullSafeConvert[T](input: T, f: T => Any): Any = {
@@ -596,7 +605,8 @@ object JdbcUtils extends Logging {
       insertStmt: String,
       batchSize: Int,
       dialect: JdbcDialect,
-      isolationLevel: Int): Iterator[Byte] = {
+      isolationLevel: Int,
+      options: JDBCOptions): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
 
@@ -637,6 +647,9 @@ object JdbcUtils extends Logging {
 
       try {
         var rowCount = 0
+
+        stmt.setQueryTimeout(options.queryTimeout)
+
         while (iterator.hasNext) {
           val row = iterator.next()
           var i = 0
@@ -768,13 +781,40 @@ object JdbcUtils extends Logging {
   }
 
   /**
+   * Parses the user specified customSchema option value to DataFrame schema, and
+   * returns a schema that is replaced by the custom schema's dataType if column name is matched.
+   */
+  def getCustomSchema(
+      tableSchema: StructType,
+      customSchema: String,
+      nameEquality: Resolver): StructType = {
+    if (null != customSchema && customSchema.nonEmpty) {
+      val userSchema = CatalystSqlParser.parseTableSchema(customSchema)
+
+      SchemaUtils.checkColumnNameDuplication(
+        userSchema.map(_.name), "in the customSchema option value", nameEquality)
+
+      // This is resolved by names, use the custom filed dataType to replace the default dataType.
+      val newSchema = tableSchema.map { col =>
+        userSchema.find(f => nameEquality(f.name, col.name)) match {
+          case Some(c) => col.copy(dataType = c.dataType)
+          case None => col
+        }
+      }
+      StructType(newSchema)
+    } else {
+      tableSchema
+    }
+  }
+
+  /**
    * Saves the RDD to the database in a single transaction.
    */
   def saveTable(
       df: DataFrame,
       tableSchema: Option[StructType],
       isCaseSensitive: Boolean,
-      options: JDBCOptions): Unit = {
+      options: JdbcOptionsInWrite): Unit = {
     val url = options.url
     val table = options.table
     val dialect = JdbcDialects.get(url)
@@ -792,7 +832,8 @@ object JdbcUtils extends Logging {
       case _ => df
     }
     repartitionedDF.rdd.foreachPartition(iterator => savePartition(
-      getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel)
+      getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel,
+      options)
     )
   }
 
@@ -802,7 +843,7 @@ object JdbcUtils extends Logging {
   def createTable(
       conn: Connection,
       df: DataFrame,
-      options: JDBCOptions): Unit = {
+      options: JdbcOptionsInWrite): Unit = {
     val strSchema = schemaString(
       df, options.url, options.createTableColumnTypes)
     val table = options.table
@@ -814,6 +855,7 @@ object JdbcUtils extends Logging {
     val sql = s"CREATE TABLE $table ($strSchema) $createTableOptions"
     val statement = conn.createStatement
     try {
+      statement.setQueryTimeout(options.queryTimeout)
       statement.executeUpdate(sql)
     } finally {
       statement.close()

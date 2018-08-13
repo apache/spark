@@ -34,6 +34,7 @@ import com.google.common.base.Objects;
 import org.junit.*;
 import org.junit.rules.ExpectedException;
 
+import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.sql.*;
@@ -334,6 +335,23 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<Tuple5<Integer, String, Long, String, Boolean>> ds5 =
       spark.createDataset(data5, encoder5);
     Assert.assertEquals(data5, ds5.collectAsList());
+  }
+
+  @Test
+  public void testTupleEncoderSchema() {
+    Encoder<Tuple2<String, Tuple2<String,String>>> encoder =
+      Encoders.tuple(Encoders.STRING(), Encoders.tuple(Encoders.STRING(), Encoders.STRING()));
+    List<Tuple2<String, Tuple2<String, String>>> data = Arrays.asList(tuple2("1", tuple2("a", "b")),
+      tuple2("2", tuple2("c", "d")));
+    Dataset<Row> ds1 = spark.createDataset(data, encoder).toDF("value1", "value2");
+
+    JavaPairRDD<String, Tuple2<String, String>> pairRDD = jsc.parallelizePairs(data);
+    Dataset<Row> ds2 = spark.createDataset(JavaPairRDD.toRDD(pairRDD), encoder)
+      .toDF("value1", "value2");
+
+    Assert.assertEquals(ds1.schema(), ds2.schema());
+    Assert.assertEquals(ds1.select(expr("value2._1")).collectAsList(),
+      ds2.select(expr("value2._1")).collectAsList());
   }
 
   @Test
@@ -1281,6 +1299,80 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<NestedComplicatedJavaBean> ds =
       spark.createDataset(data, Encoders.bean(NestedComplicatedJavaBean.class));
     ds.collectAsList();
+  }
+
+  public enum MyEnum {
+    A("www.elgoog.com"),
+    B("www.google.com");
+
+    private String url;
+
+    MyEnum(String url) {
+      this.url = url;
+    }
+
+    public String getUrl() {
+      return url;
+    }
+
+    public void setUrl(String url) {
+      this.url = url;
+    }
+  }
+
+  public static class BeanWithEnum {
+    MyEnum enumField;
+    String regularField;
+
+    public String getRegularField() {
+      return regularField;
+    }
+
+    public void setRegularField(String regularField) {
+      this.regularField = regularField;
+    }
+
+    public MyEnum getEnumField() {
+      return enumField;
+    }
+
+    public void setEnumField(MyEnum field) {
+      this.enumField = field;
+    }
+
+    public BeanWithEnum(MyEnum enumField, String regularField) {
+      this.enumField = enumField;
+      this.regularField = regularField;
+    }
+
+    public BeanWithEnum() {
+    }
+
+    public String toString() {
+      return "BeanWithEnum(" + enumField  + ", " + regularField + ")";
+    }
+
+    public int hashCode() {
+      return Objects.hashCode(enumField, regularField);
+    }
+
+    public boolean equals(Object other) {
+      if (other instanceof BeanWithEnum) {
+        BeanWithEnum beanWithEnum = (BeanWithEnum) other;
+        return beanWithEnum.regularField.equals(regularField)
+          && beanWithEnum.enumField.equals(enumField);
+      }
+      return false;
+    }
+  }
+
+  @Test
+  public void testBeanWithEnum() {
+    List<BeanWithEnum> data = Arrays.asList(new BeanWithEnum(MyEnum.A, "mira avenue"),
+            new BeanWithEnum(MyEnum.B, "flower boulevard"));
+    Encoder<BeanWithEnum> encoder = Encoders.bean(BeanWithEnum.class);
+    Dataset<BeanWithEnum> ds = spark.createDataset(data, encoder);
+    Assert.assertEquals(ds.collectAsList(), data);
   }
 
   public static class EmptyBean implements Serializable {}

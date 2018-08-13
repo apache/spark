@@ -30,6 +30,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -93,7 +94,7 @@ trait StateStore {
   def abort(): Unit
 
   /**
-   * Return an iterator containing all the key-value pairs in the SateStore. Implementations must
+   * Return an iterator containing all the key-value pairs in the StateStore. Implementations must
    * ensure that updates (puts, removes) can be made while iterating over this iterator.
    */
   def iterator(): Iterator[UnsafeRowPair]
@@ -119,6 +120,15 @@ case class StateStoreMetrics(
     numKeys: Long,
     memoryUsedBytes: Long,
     customMetrics: Map[StateStoreCustomMetric, Long])
+
+object StateStoreMetrics {
+  def combine(allMetrics: Seq[StateStoreMetrics]): StateStoreMetrics = {
+    StateStoreMetrics(
+      allMetrics.map(_.numKeys).sum,
+      allMetrics.map(_.memoryUsedBytes).sum,
+      allMetrics.flatMap(_.customMetrics).toMap)
+  }
+}
 
 /**
  * Name and description of custom implementation-specific metrics that a
@@ -226,6 +236,17 @@ object StateStoreProvider {
  * instance is not reused across query restarts.
  */
 case class StateStoreProviderId(storeId: StateStoreId, queryRunId: UUID)
+
+object StateStoreProviderId {
+  private[sql] def apply(
+      stateInfo: StatefulOperatorStateInfo,
+      partitionIndex: Int,
+      storeName: String): StateStoreProviderId = {
+    val storeId = StateStoreId(
+      stateInfo.checkpointLocation, stateInfo.operatorId, partitionIndex, storeName)
+    StateStoreProviderId(storeId, stateInfo.queryRunId)
+  }
+}
 
 /**
  * Unique identifier for a bunch of keyed state data.
@@ -438,7 +459,6 @@ object StateStore extends Logging {
   private def coordinatorRef: Option[StateStoreCoordinatorRef] = loadedProviders.synchronized {
     val env = SparkEnv.get
     if (env != null) {
-      logInfo("Env is not null")
       val isDriver =
         env.executorId == SparkContext.DRIVER_IDENTIFIER ||
           env.executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
@@ -446,13 +466,12 @@ object StateStore extends Logging {
       // as SparkContext + SparkEnv may have been restarted. Hence, when running in driver,
       // always recreate the reference.
       if (isDriver || _coordRef == null) {
-        logInfo("Getting StateStoreCoordinatorRef")
+        logDebug("Getting StateStoreCoordinatorRef")
         _coordRef = StateStoreCoordinatorRef.forExecutor(env)
       }
       logInfo(s"Retrieved reference to StateStoreCoordinator: ${_coordRef}")
       Some(_coordRef)
     } else {
-      logInfo("Env is null")
       _coordRef = null
       None
     }

@@ -75,7 +75,17 @@ private[kafka010] class KafkaOffsetReader(
    * A KafkaConsumer used in the driver to query the latest Kafka offsets. This only queries the
    * offsets and never commits them.
    */
-  protected var consumer = createConsumer()
+  @volatile protected var _consumer: Consumer[Array[Byte], Array[Byte]] = null
+
+  protected def consumer: Consumer[Array[Byte], Array[Byte]] = synchronized {
+    assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
+    if (_consumer == null) {
+      val newKafkaParams = new ju.HashMap[String, Object](driverKafkaParams)
+      newKafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, nextGroupId())
+      _consumer = consumerStrategy.createConsumer(newKafkaParams)
+    }
+    _consumer
+  }
 
   private val maxOffsetFetchAttempts =
     readerOptions.getOrElse("fetchOffset.numRetries", "3").toInt
@@ -95,9 +105,7 @@ private[kafka010] class KafkaOffsetReader(
    * Closes the connection to Kafka, and cleans up state.
    */
   def close(): Unit = {
-    runUninterruptibly {
-      consumer.close()
-    }
+    if (_consumer != null) runUninterruptibly { stopConsumer() }
     kafkaReaderThread.shutdown()
   }
 
@@ -117,10 +125,14 @@ private[kafka010] class KafkaOffsetReader(
    * Resolves the specific offsets based on Kafka seek positions.
    * This method resolves offset value -1 to the latest and -2 to the
    * earliest Kafka seek position.
+   *
+   * @param partitionOffsets the specific offsets to resolve
+   * @param reportDataLoss callback to either report or log data loss depending on setting
    */
   def fetchSpecificOffsets(
-      partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] =
-    runUninterruptibly {
+      partitionOffsets: Map[TopicPartition, Long],
+      reportDataLoss: String => Unit): KafkaSourceOffset = {
+    val fetched = runUninterruptibly {
       withRetriesWithoutInterrupt {
         // Poll to get the latest assigned partitions
         consumer.poll(0)
@@ -144,6 +156,19 @@ private[kafka010] class KafkaOffsetReader(
         }
       }
     }
+
+    partitionOffsets.foreach {
+      case (tp, off) if off != KafkaOffsetRangeLimit.LATEST &&
+        off != KafkaOffsetRangeLimit.EARLIEST =>
+        if (fetched(tp) != off) {
+          reportDataLoss(
+            s"startingOffsets for $tp was $off but consumer reset to ${fetched(tp)}")
+        }
+      case _ =>
+        // no real way to check that beginning or end is reasonable
+    }
+    KafkaSourceOffset(fetched)
+  }
 
   /**
    * Fetch the earliest offsets for the topic partitions that are indicated
@@ -287,19 +312,14 @@ private[kafka010] class KafkaOffsetReader(
     }
   }
 
-  /**
-   * Create a consumer using the new generated group id. We always use a new consumer to avoid
-   * just using a broken consumer to retry on Kafka errors, which likely will fail again.
-   */
-  private def createConsumer(): Consumer[Array[Byte], Array[Byte]] = synchronized {
-    val newKafkaParams = new ju.HashMap[String, Object](driverKafkaParams)
-    newKafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, nextGroupId())
-    consumerStrategy.createConsumer(newKafkaParams)
+  private def stopConsumer(): Unit = synchronized {
+    assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
+    if (_consumer != null) _consumer.close()
   }
 
   private def resetConsumer(): Unit = synchronized {
-    consumer.close()
-    consumer = createConsumer()
+    stopConsumer()
+    _consumer = null  // will automatically get reinitialized again
   }
 }
 

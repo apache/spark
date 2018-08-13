@@ -26,8 +26,9 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 
 /**
@@ -56,7 +57,7 @@ trait FileFormat {
       dataSchema: StructType): OutputWriterFactory
 
   /**
-   * Returns whether this format support returning columnar batch or not.
+   * Returns whether this format supports returning columnar batch or not.
    *
    * TODO: we should just have different traits for the different formats.
    */
@@ -65,7 +66,18 @@ trait FileFormat {
   }
 
   /**
-   * Returns whether a file with `path` could be splitted or not.
+   * Returns concrete column vector class names for each column to be used in a columnar batch
+   * if this format supports returning columnar batch.
+   */
+  def vectorTypes(
+      requiredSchema: StructType,
+      partitionSchema: StructType,
+      sqlConf: SQLConf): Option[Seq[String]] = {
+    None
+  }
+
+  /**
+   * Returns whether a file with `path` could be split or not.
    */
   def isSplitable(
       sparkSession: SparkSession,
@@ -140,6 +152,11 @@ trait FileFormat {
     }
   }
 
+  /**
+   * Returns whether this format supports the given [[DataType]] in read/write path.
+   * By default all data types are supported.
+   */
+  def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = true
 }
 
 /**

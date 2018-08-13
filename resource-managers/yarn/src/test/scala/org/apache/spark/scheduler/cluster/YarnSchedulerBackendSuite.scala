@@ -19,7 +19,7 @@ package org.apache.spark.scheduler.cluster
 import scala.language.reflectiveCalls
 
 import org.mockito.Mockito.when
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.{LocalSparkContext, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.TaskSchedulerImpl

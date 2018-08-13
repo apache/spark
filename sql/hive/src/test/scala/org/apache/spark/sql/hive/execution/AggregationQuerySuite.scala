@@ -1005,6 +1005,19 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       )
     )
   }
+
+  test("SPARK-24957: average with decimal followed by aggregation returning wrong result") {
+    val df = Seq(("a", BigDecimal("12.0")),
+      ("a", BigDecimal("12.0")),
+      ("a", BigDecimal("11.9999999988")),
+      ("a", BigDecimal("12.0")),
+      ("a", BigDecimal("12.0")),
+      ("a", BigDecimal("11.9999999988")),
+      ("a", BigDecimal("11.9999999988"))).toDF("text", "number")
+    val agg1 = df.groupBy($"text").agg(avg($"number").as("avg_res"))
+    val agg2 = agg1.groupBy($"text").agg(sum($"avg_res"))
+    checkAnswer(agg2, Row("a", BigDecimal("11.9999999994857142860000")))
+  }
 }
 
 
@@ -1015,7 +1028,7 @@ class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySu
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     Seq("true", "false").foreach { enableTwoLevelMaps =>
-      withSQLConf("spark.sql.codegen.aggregate.map.twolevel.enable" ->
+      withSQLConf("spark.sql.codegen.aggregate.map.twolevel.enabled" ->
         enableTwoLevelMaps) {
         (1 to 3).foreach { fallbackStartsAt =>
           withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" ->

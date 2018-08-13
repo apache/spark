@@ -118,7 +118,7 @@ class DiskStoreSuite extends SparkFunSuite {
     val chunks = chunkedByteBuffer.chunks
     assert(chunks.size === 2)
     for (chunk <- chunks) {
-      assert(chunk.limit === 10 * 1024)
+      assert(chunk.limit() === 10 * 1024)
     }
 
     val e = intercept[IllegalArgumentException]{
@@ -194,8 +194,8 @@ class DiskStoreSuite extends SparkFunSuite {
     val region = data.toNetty().asInstanceOf[FileRegion]
     val byteChannel = new ByteArrayWritableChannel(data.size.toInt)
 
-    while (region.transfered() < region.count()) {
-      region.transferTo(byteChannel, region.transfered())
+    while (region.transferred() < region.count()) {
+      region.transferTo(byteChannel, region.transferred())
     }
 
     byteChannel.close()

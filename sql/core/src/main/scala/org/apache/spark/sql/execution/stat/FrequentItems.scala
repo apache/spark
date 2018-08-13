@@ -95,7 +95,7 @@ object FrequentItems extends Logging {
       (name, originalSchema.fields(index).dataType)
     }.toArray
 
-    val freqItems = df.select(cols.map(Column(_)) : _*).rdd.aggregate(countMaps)(
+    val freqItems = df.select(cols.map(Column(_)) : _*).rdd.treeAggregate(countMaps)(
       seqOp = (counts, row) => {
         var i = 0
         while (i < numCols) {

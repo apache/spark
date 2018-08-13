@@ -35,7 +35,7 @@ public class InMemoryStoreSuite {
 
     try {
       store.read(CustomType1.class, t.key);
-      fail("Expected exception for non-existant object.");
+      fail("Expected exception for non-existent object.");
     } catch (NoSuchElementException nsee) {
       // Expected.
     }

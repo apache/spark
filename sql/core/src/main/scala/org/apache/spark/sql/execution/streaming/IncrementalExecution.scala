@@ -21,12 +21,16 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.expressions.CurrentBatchTimestamp
+import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
+import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.util.Utils
 
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
@@ -39,7 +43,7 @@ class IncrementalExecution(
     val checkpointLocation: String,
     val runId: UUID,
     val currentBatchId: Long,
-    offsetSeqMetadata: OffsetSeqMetadata)
+    val offsetSeqMetadata: OffsetSeqMetadata)
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // Modified planner with stateful operations.
@@ -52,11 +56,17 @@ class IncrementalExecution(
       sparkSession.sessionState.planner.strategies
 
     override def extraPlanningStrategies: Seq[Strategy] =
+      StreamingJoinStrategy ::
       StatefulAggregationStrategy ::
       FlatMapGroupsWithStateStrategy ::
       StreamingRelationStrategy ::
-      StreamingDeduplicationStrategy :: Nil
+      StreamingDeduplicationStrategy ::
+      StreamingGlobalLimitStrategy(outputMode) :: Nil
   }
+
+  private[sql] val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
+    .map(SQLConf.SHUFFLE_PARTITIONS.valueConverter)
+    .getOrElse(sparkSession.sessionState.conf.numShufflePartitions)
 
   /**
    * See [SPARK-18339]
@@ -68,6 +78,7 @@ class IncrementalExecution(
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
         logInfo(s"Current batch timestamp = $timestamp")
         ts.toLiteral
+      case e: ExpressionWithRandomSeed => e.withNewSeed(Utils.random.nextLong())
     }
   }
 
@@ -80,7 +91,11 @@ class IncrementalExecution(
   /** Get the state info of the next stateful operator */
   private def nextStatefulOperationStateInfo(): StatefulOperatorStateInfo = {
     StatefulOperatorStateInfo(
-      checkpointLocation, runId, statefulOperatorId.getAndIncrement(), currentBatchId)
+      checkpointLocation,
+      runId,
+      statefulOperatorId.getAndIncrement(),
+      currentBatchId,
+      numStateStores)
   }
 
   /** Locates save/restore pairs surrounding aggregation. */
@@ -89,7 +104,7 @@ class IncrementalExecution(
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
       case StateStoreSaveExec(keys, None, None, None,
              UnaryExecNode(agg,
-               StateStoreRestoreExec(keys2, None, child))) =>
+               StateStoreRestoreExec(_, None, child))) =>
         val aggStateInfo = nextStatefulOperationStateInfo
         StateStoreSaveExec(
           keys,
@@ -114,6 +129,20 @@ class IncrementalExecution(
           stateInfo = Some(nextStatefulOperationStateInfo),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
           eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs))
+
+      case j: StreamingSymmetricHashJoinExec =>
+        j.copy(
+          stateInfo = Some(nextStatefulOperationStateInfo),
+          eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs),
+          stateWatermarkPredicates =
+            StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+              j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
+              Some(offsetSeqMetadata.batchWatermarkMs)))
+
+      case l: StreamingGlobalLimitExec =>
+        l.copy(
+          stateInfo = Some(nextStatefulOperationStateInfo),
+          outputMode = Some(outputMode))
     }
   }
 
@@ -121,4 +150,14 @@ class IncrementalExecution(
 
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }
+
+  /**
+   * Should the MicroBatchExecution run another batch based on this execution and the current
+   * updated metadata.
+   */
+  def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+    executedPlan.collect {
+      case p: StateStoreWriter => p.shouldRunAnotherBatch(newMetadata)
+    }.exists(_ == true)
+  }
 }

@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.execution
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.metric.SQLMetricInfo
-import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
  * Stores information about a SQL SparkPlan.
  */
 @DeveloperApi
+@JsonIgnoreProperties(Array("metadata")) // The metadata field was removed in Spark 2.3.
 class SparkPlanInfo(
     val nodeName: String,
     val simpleString: String,

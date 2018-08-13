@@ -17,6 +17,7 @@
 
 package org.apache.spark.util.kvstore;
 
+import java.io.Closeable;
 import java.util.Iterator;
 import java.util.List;
 
@@ -31,7 +32,7 @@ import org.apache.spark.annotation.Private;
  * </p>
  */
 @Private
-public interface KVStoreIterator<T> extends Iterator<T>, AutoCloseable {
+public interface KVStoreIterator<T> extends Iterator<T>, Closeable {
 
   /**
    * Retrieve multiple elements from the store.

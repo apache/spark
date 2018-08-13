@@ -625,6 +625,8 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
           backend.taskFailed(taskDescription, fetchFailed)
         case (1, _, partition) =>
           backend.taskSuccess(taskDescription, 42 + partition)
+        case unmatched =>
+          fail(s"Unexpected shuffle output $unmatched")
       }
     }
     withBackend(runBackend _) {

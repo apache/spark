@@ -33,7 +33,7 @@ import org.apache.mesos.Protos.Value.Scalar
 import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Matchers._
 import org.mockito.Mockito._
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.executor.MesosExecutorBackend
@@ -253,6 +253,7 @@ class MesosFineGrainedSchedulerBackendSuite
       executorId = "s1",
       name = "n1",
       index = 0,
+      partitionId = 0,
       addedFiles = mutable.Map.empty[String, Long],
       addedJars = mutable.Map.empty[String, Long],
       properties = new Properties(),
@@ -361,6 +362,7 @@ class MesosFineGrainedSchedulerBackendSuite
       executorId = "s1",
       name = "n1",
       index = 0,
+      partitionId = 0,
       addedFiles = mutable.Map.empty[String, Long],
       addedJars = mutable.Map.empty[String, Long],
       properties = new Properties(),

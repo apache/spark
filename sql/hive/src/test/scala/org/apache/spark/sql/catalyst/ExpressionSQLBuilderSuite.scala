@@ -19,12 +19,29 @@ package org.apache.spark.sql.catalyst
 
 import java.sql.Timestamp
 
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{If, Literal, SpecifiedWindowFrame, TimeAdd,
-  TimeSub, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class ExpressionSQLBuilderSuite extends SQLBuilderTest {
+class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
+  protected def checkSQL(e: Expression, expectedSQL: String): Unit = {
+    val actualSQL = e.sql
+    try {
+      assert(actualSQL == expectedSQL)
+    } catch {
+      case cause: Throwable =>
+        fail(
+          s"""Wrong SQL generated for the following expression:
+             |
+             |${e.prettyName}
+             |
+             |$cause
+           """.stripMargin)
+    }
+  }
+
   test("literal") {
     checkSQL(Literal("foo"), "'foo'")
     checkSQL(Literal("\"foo\""), "'\"foo\"'")
@@ -91,10 +108,7 @@ class ExpressionSQLBuilderSuite extends SQLBuilderTest {
   }
 
   test("window specification") {
-    val frame = SpecifiedWindowFrame.defaultWindowFrame(
-      hasOrderSpecification = true,
-      acceptWindowFrame = true
-    )
+    val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
 
     checkSQL(
       WindowSpecDefinition('a.int :: Nil, Nil, frame),

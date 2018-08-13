@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+import com.codahale.metrics.MetricSet;
 import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -90,7 +91,7 @@ public class ExternalShuffleClient extends ShuffleClient {
       String execId,
       String[] blockIds,
       BlockFetchingListener listener,
-      TempShuffleFileManager tempShuffleFileManager) {
+      TempFileManager tempFileManager) {
     checkInit();
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
@@ -98,7 +99,7 @@ public class ExternalShuffleClient extends ShuffleClient {
           (blockIds1, listener1) -> {
             TransportClient client = clientFactory.createClient(host, port);
             new OneForOneBlockFetcher(client, appId, execId,
-              blockIds1, listener1, conf, tempShuffleFileManager).start();
+              blockIds1, listener1, conf, tempFileManager).start();
           };
 
       int maxRetries = conf.maxIORetries();
@@ -115,6 +116,12 @@ public class ExternalShuffleClient extends ShuffleClient {
         listener.onBlockFetchFailure(blockId, e);
       }
     }
+  }
+
+  @Override
+  public MetricSet shuffleMetrics() {
+    checkInit();
+    return clientFactory.getAllMetrics();
   }
 
   /**
@@ -140,6 +147,10 @@ public class ExternalShuffleClient extends ShuffleClient {
 
   @Override
   public void close() {
-    clientFactory.close();
+    checkInit();
+    if (clientFactory != null) {
+      clientFactory.close();
+      clientFactory = null;
+    }
   }
 }

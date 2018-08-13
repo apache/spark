@@ -22,6 +22,7 @@ import java.sql.{Connection, Date, Timestamp}
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, InterfaceStability, Since}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.types._
 
 /**
@@ -114,6 +115,33 @@ abstract class JdbcDialect extends Serializable {
   @Since("2.1.0")
   def getSchemaQuery(table: String): String = {
     s"SELECT * FROM $table WHERE 1=0"
+  }
+
+  /**
+   * The SQL query that should be used to truncate a table. Dialects can override this method to
+   * return a query that is suitable for a particular database. For PostgreSQL, for instance,
+   * a different query is used to prevent "TRUNCATE" affecting other tables.
+   * @param table The table to truncate
+   * @return The SQL query to use for truncating a table
+   */
+  @Since("2.3.0")
+  def getTruncateQuery(table: String): String = {
+    getTruncateQuery(table, isCascadingTruncateTable)
+  }
+
+  /**
+   * The SQL query that should be used to truncate a table. Dialects can override this method to
+   * return a query that is suitable for a particular database. For PostgreSQL, for instance,
+   * a different query is used to prevent "TRUNCATE" affecting other tables.
+   * @param table The table to truncate
+   * @param cascade Whether or not to cascade the truncation
+   * @return The SQL query to use for truncating a table
+   */
+  @Since("2.4.0")
+  def getTruncateQuery(
+    table: String,
+    cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+      s"TRUNCATE TABLE $table"
   }
 
   /**

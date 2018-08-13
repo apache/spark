@@ -126,7 +126,7 @@ class SparkContext(object):
         self.environment = environment or {}
         # java gateway must have been launched at this point.
         if conf is not None and conf._jconf is not None:
-            # conf has been initialized in JVM properly, so use conf directly. This represent the
+            # conf has been initialized in JVM properly, so use conf directly. This represents the
             # scenario that JVM has been launched before SparkConf is created (e.g. SparkContext is
             # created and then stopped, and we create a new SparkConf and new SparkContext again)
             self._conf = conf
@@ -183,9 +183,10 @@ class SparkContext(object):
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server
-        self._accumulatorServer = accumulators._start_update_server()
+        auth_token = self._gateway.gateway_parameters.auth_token
+        self._accumulatorServer = accumulators._start_update_server(auth_token)
         (host, port) = self._accumulatorServer.server_address
-        self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port)
+        self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port, auth_token)
         self._jsc.sc().register(self._javaAccumulator)
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
@@ -211,9 +212,21 @@ class SparkContext(object):
         for path in self._conf.get("spark.submit.pyFiles", "").split(","):
             if path != "":
                 (dirname, filename) = os.path.split(path)
-                if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
-                    self._python_includes.append(filename)
-                    sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
+                try:
+                    filepath = os.path.join(SparkFiles.getRootDirectory(), filename)
+                    if not os.path.exists(filepath):
+                        # In case of YARN with shell mode, 'spark.submit.pyFiles' files are
+                        # not added via SparkContext.addFile. Here we check if the file exists,
+                        # try to copy and then add it to the path. See SPARK-21945.
+                        shutil.copyfile(path, filepath)
+                    if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
+                        self._python_includes.append(filename)
+                        sys.path.insert(1, filepath)
+                except Exception:
+                    warnings.warn(
+                        "Failed to add file [%s] speficied in 'spark.submit.pyFiles' to "
+                        "Python path:\n  %s" % (path, "\n  ".join(sys.path)),
+                        RuntimeWarning)
 
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
@@ -475,24 +488,30 @@ class SparkContext(object):
                 return xrange(getStart(split), getStart(split + 1), step)
 
             return self.parallelize([], numSlices).mapPartitionsWithIndex(f)
-        # Calling the Java parallelize() method with an ArrayList is too slow,
-        # because it sends O(n) Py4J commands.  As an alternative, serialized
-        # objects are written to a file and loaded through textFile().
+
+        # Make sure we distribute data evenly if it's smaller than self.batchSize
+        if "__len__" not in dir(c):
+            c = list(c)    # Make it a list so we can compute its length
+        batchSize = max(1, min(len(c) // numSlices, self._batchSize or 1024))
+        serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
+        jrdd = self._serialize_to_jvm(c, numSlices, serializer)
+        return RDD(jrdd, self, serializer)
+
+    def _serialize_to_jvm(self, data, parallelism, serializer):
+        """
+        Calling the Java parallelize() method with an ArrayList is too slow,
+        because it sends O(n) Py4J commands.  As an alternative, serialized
+        objects are written to a file and loaded through textFile().
+        """
         tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
         try:
-            # Make sure we distribute data evenly if it's smaller than self.batchSize
-            if "__len__" not in dir(c):
-                c = list(c)    # Make it a list so we can compute its length
-            batchSize = max(1, min(len(c) // numSlices, self._batchSize or 1024))
-            serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
-            serializer.dump_stream(c, tempFile)
+            serializer.dump_stream(data, tempFile)
             tempFile.close()
             readRDDFromFile = self._jvm.PythonRDD.readRDDFromFile
-            jrdd = readRDDFromFile(self._jsc, tempFile.name, numSlices)
+            return readRDDFromFile(self._jsc, tempFile.name, parallelism)
         finally:
             # readRDDFromFile eagerily reads the file so we can delete right after.
             os.unlink(tempFile.name)
-        return RDD(jrdd, self, serializer)
 
     def pickleFile(self, name, minPartitions=None):
         """
@@ -829,6 +848,8 @@ class SparkContext(object):
         A directory can be given if the recursive option is set to True.
         Currently directories are only supported for Hadoop-supported filesystems.
 
+        .. note:: A path can be added only once. Subsequent additions of the same path are ignored.
+
         >>> from pyspark import SparkFiles
         >>> path = os.path.join(tempdir, "test.txt")
         >>> with open(path, "w") as testFile:
@@ -849,6 +870,8 @@ class SparkContext(object):
         SparkContext in the future.  The C{path} passed can be either a local
         file, a file in HDFS (or other Hadoop-supported filesystems), or an
         HTTP, HTTPS or FTP URI.
+
+        .. note:: A path can be added only once. Subsequent additions of the same path are ignored.
         """
         self.addFile(path)
         (dirname, filename) = os.path.split(path)  # dirname may be directory or HDFS/S3 prefix
@@ -911,10 +934,10 @@ class SparkContext(object):
         >>> def stop_job():
         ...     sleep(5)
         ...     sc.cancelJobGroup("job_to_cancel")
-        >>> supress = lock.acquire()
-        >>> supress = threading.Thread(target=start_job, args=(10,)).start()
-        >>> supress = threading.Thread(target=stop_job).start()
-        >>> supress = lock.acquire()
+        >>> suppress = lock.acquire()
+        >>> suppress = threading.Thread(target=start_job, args=(10,)).start()
+        >>> suppress = threading.Thread(target=stop_job).start()
+        >>> suppress = lock.acquire()
         >>> print(result)
         Cancelled
 
@@ -992,17 +1015,25 @@ class SparkContext(object):
         # by runJob() in order to avoid having to pass a Python lambda into
         # SparkContext#runJob.
         mappedRDD = rdd.mapPartitions(partitionFunc)
-        port = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions)
-        return list(_load_from_socket(port, mappedRDD._jrdd_deserializer))
+        sock_info = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions)
+        return list(_load_from_socket(sock_info, mappedRDD._jrdd_deserializer))
 
     def show_profiles(self):
         """ Print the profile stats to stdout """
-        self.profiler_collector.show_profiles()
+        if self.profiler_collector is not None:
+            self.profiler_collector.show_profiles()
+        else:
+            raise RuntimeError("'spark.python.profile' configuration must be set "
+                               "to 'true' to enable Python profile.")
 
     def dump_profiles(self, path):
         """ Dump the profile stats into directory `path`
         """
-        self.profiler_collector.dump_profiles(path)
+        if self.profiler_collector is not None:
+            self.profiler_collector.dump_profiles(path)
+        else:
+            raise RuntimeError("'spark.python.profile' configuration must be set "
+                               "to 'true' to enable Python profile.")
 
     def getConf(self):
         conf = SparkConf()
@@ -1021,7 +1052,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":
