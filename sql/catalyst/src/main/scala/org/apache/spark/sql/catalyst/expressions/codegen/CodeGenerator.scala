@@ -747,72 +747,35 @@ class CodegenContext {
   }
 
   /**
-   * Generates code and assignment creating a [[UnsafeArrayData]] or [[GenericArrayData]] based on
+   * Generates code creating a [[UnsafeArrayData]] or [[GenericArrayData]] based on
    * given parameters.
    *
    * @param arrayName name of the array to create
-   * @param dataType data type of the result array
    * @param elementType data type of the elements in source array
    * @param numElements code representing the number of elements the array should contain
-   * @param srcArray code representing the number of elements the array should contain
    * @param additionalErrorMessage string to include in the error message
-   * @param rhsValue an optionally specified expression for the right-hand side of the returning
-   *                 assignment
-   * @param checkForNull optional value which shows whether a nullcheck is required for
-   *                     the returning assignment
    * @param elementSize optional value which shows the size of an element of the allocated
    *                    [[UnsafeArrayData]] or [[GenericArrayData]]
    *
-   * @return code representing the allocation of ArrayData
-   *         code representing an assignment to each element of the allocated [[UnsafeArrayData]]
-   *         or [[GenericArrayData]], which requires a pair of destination and source loop index
-   *         variables
+   * @return code representing the allocation of [[ArrayData]]
+   *         code representing a setter of an assignment for the generated array
    */
   def createArrayData(
       arrayName: String,
-      dataType: DataType,
       elementType: DataType,
       numElements: String,
-      srcArray: String,
       additionalErrorMessage: String,
-      rhsValue: String = null,
-      checkForNull: Option[Boolean] = None,
-      elementSize: Option[Int] = None): (String, (String, String) => String) = {
+      elementSize: Option[Int] = None): (String, String) = {
     val isPrimitiveType = if (elementSize.isDefined) {
       false
     } else {
       CodeGenerator.isPrimitiveType(elementType)
     }
 
-    val setValue = (srcLoopIndex: String) => if (rhsValue != null) {
-      rhsValue
-    } else {
-      CodeGenerator.getValue(srcArray, elementType, srcLoopIndex)
-    }
-
     val setFunc = if (isPrimitiveType) {
       s"set${CodeGenerator.primitiveTypeName(elementType)}"
     } else {
       "update"
-    }
-
-    val assignmentWithoutNull = if (checkForNull.isDefined) {
-      checkForNull.get
-    } else {
-      dataType.asInstanceOf[ArrayType].containsNull
-    }
-
-    val assignment = (dstLoopIndex: String, srcLoopIndex: String) =>
-      if (isPrimitiveType && assignmentWithoutNull) {
-        s"""
-           |if ($srcArray.isNullAt($srcLoopIndex)) {
-           |  $arrayName.setNullAt($dstLoopIndex);
-           |} else {
-           |  $arrayName.$setFunc($dstLoopIndex, ${setValue(srcLoopIndex)});
-           |}
-         """.stripMargin
-    } else {
-      s"$arrayName.$setFunc($dstLoopIndex, ${setValue(srcLoopIndex)});"
     }
 
     val elemSize = if (elementSize.isDefined) {
@@ -827,7 +790,57 @@ class CodegenContext {
          |  $elemSize, $numElements, $isPrimitiveType, "$additionalErrorMessage");
        """.stripMargin
 
-    (allocation, assignment)
+    (allocation, setFunc)
+  }
+
+  /**
+   * Generates assignment code for a [[ArrayData]]
+   *
+   * @param arrayName name of the array to create
+   * @param dataType data type of the result array
+   * @param elementType data type of the elements in source array
+   * @param srcArray code representing the number of elements the array should contain
+   * @param setFunc string to include in the error message
+   * @param rhsValue an optionally specified expression for the right-hand side of the returning
+   *                 assignment
+   * @param checkForNull optional value which shows whether a nullcheck is required for
+   *                     the returning assignment
+   *
+   * @return code representing an assignment to each element of the [[ArrayData]], which requires
+   *         a pair of destination and source loop index variables
+   */
+  def createArrayAssignment(
+      arrayName: String,
+      dataType: DataType,
+      elementType: DataType,
+      srcArray: String,
+      setFunc: String,
+      rhsValue: String = null,
+      checkForNull: Option[Boolean] = None): (String, String) => String = {
+    val getValue = (srcLoopIndex: String) => if (rhsValue != null) {
+      rhsValue
+    } else {
+      CodeGenerator.getValue(srcArray, elementType, srcLoopIndex)
+    }
+
+    val assignmentWithoutNull = if (checkForNull.isDefined) {
+      checkForNull.get
+    } else {
+      dataType.asInstanceOf[ArrayType].containsNull
+    }
+
+    (dstLoopIndex: String, srcLoopIndex: String) =>
+      if (assignmentWithoutNull) {
+        s"""
+           |if ($srcArray.isNullAt($srcLoopIndex)) {
+           |  $arrayName.setNullAt($dstLoopIndex);
+           |} else {
+           |  $arrayName.$setFunc($dstLoopIndex, ${getValue(srcLoopIndex)});
+           |}
+         """.stripMargin
+      } else {
+        s"$arrayName.$setFunc($dstLoopIndex, ${getValue(srcLoopIndex)});"
+      }
   }
 
   /**
