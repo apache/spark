@@ -209,7 +209,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     withTempDir { dir =>
       withTable(table) {
         sql(s"""
-             |CREATE TABLE $table (name string, value string)
+             |CREATE TABLE $table (value string, name string)
              |USING PARQUET
              |PARTITIONED BY (name)
              |LOCATION '${dir.toURI}'""".stripMargin)
