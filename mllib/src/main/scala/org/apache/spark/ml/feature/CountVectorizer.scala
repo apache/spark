@@ -363,7 +363,7 @@ object CountVectorizerModel extends MLReadable[CountVectorizerModel] {
         .head()
       val vocabulary = data.getAs[Seq[String]](0).toArray
       val model = new CountVectorizerModel(metadata.uid, vocabulary)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

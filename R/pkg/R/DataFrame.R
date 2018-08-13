@@ -588,7 +588,7 @@ setMethod("cache",
 #' \url{http://spark.apache.org/docs/latest/rdd-programming-guide.html#rdd-persistence}.
 #'
 #' @param x the SparkDataFrame to persist.
-#' @param newLevel storage level chosen for the persistance. See available options in
+#' @param newLevel storage level chosen for the persistence. See available options in
 #'        the description.
 #'
 #' @family SparkDataFrame functions
@@ -2296,6 +2296,8 @@ setMethod("rename",
           })
 
 setClassUnion("characterOrColumn", c("character", "Column"))
+
+setClassUnion("numericOrColumn", c("numeric", "Column"))
 
 #' Arrange Rows by Variables
 #'

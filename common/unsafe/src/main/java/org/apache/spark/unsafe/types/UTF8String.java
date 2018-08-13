@@ -29,8 +29,8 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-
 import com.google.common.primitives.Ints;
+
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
@@ -877,17 +877,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public static UTF8String concat(UTF8String... inputs) {
     // Compute the total length of the result.
-    int totalLength = 0;
+    long totalLength = 0;
     for (int i = 0; i < inputs.length; i++) {
       if (inputs[i] != null) {
-        totalLength += inputs[i].numBytes;
+        totalLength += (long)inputs[i].numBytes;
       } else {
         return null;
       }
     }
 
     // Allocate a new byte array, and copy the inputs one by one into it.
-    final byte[] result = new byte[totalLength];
+    final byte[] result = new byte[Ints.checkedCast(totalLength)];
     int offset = 0;
     for (int i = 0; i < inputs.length; i++) {
       int len = inputs[i].numBytes;

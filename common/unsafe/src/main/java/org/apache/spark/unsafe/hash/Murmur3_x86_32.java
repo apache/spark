@@ -20,6 +20,7 @@ package org.apache.spark.unsafe.hash;
 import com.google.common.primitives.Ints;
 
 import org.apache.spark.unsafe.memory.MemoryBlock;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * 32-bit Murmur3 hasher.  This is based on Guava's Murmur3_32HashFunction.
@@ -82,6 +83,10 @@ public final class Murmur3_x86_32 {
     return fmix(h1, lengthInBytes);
   }
 
+  public static int hashUTF8String(UTF8String str, int seed) {
+    return hashUnsafeBytesBlock(str.getMemoryBlock(), seed);
+  }
+
   public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes, int seed) {
     return hashUnsafeBytesBlock(MemoryBlock.allocateFromObject(base, offset, lengthInBytes), seed);
   }
@@ -91,7 +96,7 @@ public final class Murmur3_x86_32 {
   }
 
   public static int hashUnsafeBytes2Block(MemoryBlock base, int seed) {
-    // This is compatible with original and another implementations.
+    // This is compatible with original and other implementations.
     // Use this method for new components after Spark 2.3.
     int lengthInBytes = Ints.checkedCast(base.size());
     assert (lengthInBytes >= 0) : "lengthInBytes cannot be negative";

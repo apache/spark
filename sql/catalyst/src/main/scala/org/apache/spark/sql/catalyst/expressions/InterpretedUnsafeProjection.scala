@@ -87,12 +87,11 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
 /**
  * Helper functions for creating an [[InterpretedUnsafeProjection]].
  */
-object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
-
+object InterpretedUnsafeProjection {
   /**
    * Returns an [[UnsafeProjection]] for given sequence of bound Expressions.
    */
-  override protected def createProjection(exprs: Seq[Expression]): UnsafeProjection = {
+  def createProjection(exprs: Seq[Expression]): UnsafeProjection = {
     // We need to make sure that we do not reuse stateful expressions.
     val cleanedExpressions = exprs.map(_.transform {
       case s: Stateful => s.freshCopy()
@@ -173,21 +172,17 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
         val rowWriter = new UnsafeRowWriter(writer, numFields)
         val structWriter = generateStructWriter(rowWriter, fields)
         (v, i) => {
-          val previousCursor = writer.cursor()
           v.getStruct(i, fields.length) match {
             case row: UnsafeRow =>
-              writeUnsafeData(
-                rowWriter,
-                row.getBaseObject,
-                row.getBaseOffset,
-                row.getSizeInBytes)
+              writer.write(i, row)
             case row =>
+              val previousCursor = writer.cursor()
               // Nested struct. We don't know where this will start because a row can be
               // variable length, so we need to update the offsets and zero out the bit mask.
               rowWriter.resetRowWriter()
               structWriter.apply(row)
+              writer.setOffsetAndSizeFromPreviousCursor(i, previousCursor)
           }
-          writer.setOffsetAndSizeFromPreviousCursor(i, previousCursor)
         }
 
       case ArrayType(elementType, containsNull) =>
@@ -214,15 +209,12 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
           valueType,
           valueContainsNull)
         (v, i) => {
-          val previousCursor = writer.cursor()
           v.getMap(i) match {
             case map: UnsafeMapData =>
-              writeUnsafeData(
-                valueArrayWriter,
-                map.getBaseObject,
-                map.getBaseOffset,
-                map.getSizeInBytes)
+              writer.write(i, map)
             case map =>
+              val previousCursor = writer.cursor()
+
               // preserve 8 bytes to write the key array numBytes later.
               valueArrayWriter.grow(8)
               valueArrayWriter.increaseCursor(8)
@@ -237,8 +229,8 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
 
               // Write the values.
               writeArray(valueArrayWriter, valueWriter, map.valueArray())
+              writer.setOffsetAndSizeFromPreviousCursor(i, previousCursor)
           }
-          writer.setOffsetAndSizeFromPreviousCursor(i, previousCursor)
         }
 
       case udt: UserDefinedType[_] =>
@@ -318,11 +310,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
       elementWriter: (SpecializedGetters, Int) => Unit,
       array: ArrayData): Unit = array match {
     case unsafe: UnsafeArrayData =>
-      writeUnsafeData(
-        arrayWriter,
-        unsafe.getBaseObject,
-        unsafe.getBaseOffset,
-        unsafe.getSizeInBytes)
+      arrayWriter.write(unsafe)
     case _ =>
       val numElements = array.numElements()
       arrayWriter.initialize(numElements)
@@ -331,24 +319,5 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
         elementWriter.apply(array, i)
         i += 1
       }
-  }
-
-  /**
-   * Write an opaque block of data to the buffer. This is used to copy
-   * [[UnsafeRow]], [[UnsafeArrayData]] and [[UnsafeMapData]] objects.
-   */
-  private def writeUnsafeData(
-      writer: UnsafeWriter,
-      baseObject: AnyRef,
-      baseOffset: Long,
-      sizeInBytes: Int) : Unit = {
-    writer.grow(sizeInBytes)
-    Platform.copyMemory(
-      baseObject,
-      baseOffset,
-      writer.getBuffer,
-      writer.cursor,
-      sizeInBytes)
-    writer.increaseCursor(sizeInBytes)
   }
 }

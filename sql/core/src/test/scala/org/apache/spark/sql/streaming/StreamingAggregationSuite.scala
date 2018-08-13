@@ -536,6 +536,31 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     )
   }
 
+  test("SPARK-23004: Ensure that TypedImperativeAggregate functions do not throw errors") {
+    // See the JIRA SPARK-23004 for more details. In short, this test reproduces the error
+    // by ensuring the following.
+    // - A streaming query with a streaming aggregation.
+    // - Aggregation function 'collect_list' that is a subclass of TypedImperativeAggregate.
+    // - Post shuffle partition has exactly 128 records (i.e. the threshold at which
+    //   ObjectHashAggregateExec falls back to sort-based aggregation). This is done by having a
+    //   micro-batch with 128 records that shuffle to a single partition.
+    // This test throws the exact error reported in SPARK-23004 without the corresponding fix.
+    withSQLConf("spark.sql.shuffle.partitions" -> "1") {
+      val input = MemoryStream[Int]
+      val df = input.toDF().toDF("value")
+        .selectExpr("value as group", "value")
+        .groupBy("group")
+        .agg(collect_list("value"))
+      testStream(df, outputMode = OutputMode.Update)(
+        AddData(input, (1 to spark.sqlContext.conf.objectAggSortBasedFallbackThreshold): _*),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          true
+        }
+      )
+    }
+  }
+
   /** Add blocks of data to the `BlockRDDBackedSource`. */
   case class AddBlockData(source: BlockRDDBackedSource, data: Seq[Int]*) extends AddData {
     override def addData(query: Option[StreamExecution]): (Source, Offset) = {

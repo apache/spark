@@ -50,7 +50,7 @@ class FileStreamSource(
   @transient private val fs = new Path(path).getFileSystem(hadoopConf)
 
   private val qualifiedBasePath: Path = {
-    fs.makeQualified(new Path(path))  // can contains glob patterns
+    fs.makeQualified(new Path(path))  // can contain glob patterns
   }
 
   private val optionsWithPartitionBasePath = sourceOptions.optionMapWithoutPath ++ {

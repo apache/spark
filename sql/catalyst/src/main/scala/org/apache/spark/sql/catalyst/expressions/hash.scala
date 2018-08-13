@@ -28,6 +28,7 @@ import org.apache.commons.codec.digest.DigestUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -270,7 +271,7 @@ abstract class HashExpression[E] extends Expression {
   protected def computeHash(value: Any, dataType: DataType, seed: E): E
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ev.isNull = "false"
+    ev.isNull = FalseLiteral
 
     val childrenHash = children.map { child =>
       val childGen = child.genCode(ctx)
@@ -293,7 +294,7 @@ abstract class HashExpression[E] extends Expression {
       foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
 
     ev.copy(code =
-      s"""
+      code"""
          |$hashResultType ${ev.value} = $seed;
          |$codes
        """.stripMargin)
@@ -361,8 +362,7 @@ abstract class HashExpression[E] extends Expression {
   }
 
   protected def genHashString(input: String, result: String): String = {
-    val mb = s"$input.getMemoryBlock()"
-    s"$result = $hasherClassName.hashUnsafeBytesBlock($mb, $result);"
+    s"$result = $hasherClassName.hashUTF8String($input, $result);"
   }
 
   protected def genHashForMap(
@@ -404,14 +404,15 @@ abstract class HashExpression[E] extends Expression {
       input: String,
       result: String,
       fields: Array[StructField]): String = {
+    val tmpInput = ctx.freshName("input")
     val fieldsHash = fields.zipWithIndex.map { case (field, index) =>
-      nullSafeElementHash(input, index.toString, field.nullable, field.dataType, result, ctx)
+      nullSafeElementHash(tmpInput, index.toString, field.nullable, field.dataType, result, ctx)
     }
     val hashResultType = CodeGenerator.javaType(dataType)
-    ctx.splitExpressions(
+    val code = ctx.splitExpressions(
       expressions = fieldsHash,
       funcName = "computeHashForStruct",
-      arguments = Seq("InternalRow" -> input, hashResultType -> result),
+      arguments = Seq("InternalRow" -> tmpInput, hashResultType -> result),
       returnType = hashResultType,
       makeSplitFunction = body =>
         s"""
@@ -419,6 +420,10 @@ abstract class HashExpression[E] extends Expression {
            |return $result;
          """.stripMargin,
       foldFunctions = _.map(funcCall => s"$result = $funcCall;").mkString("\n"))
+    s"""
+       |final InternalRow $tmpInput = $input;
+       |$code
+     """.stripMargin
   }
 
   @tailrec
@@ -644,7 +649,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ev.isNull = "false"
+    ev.isNull = FalseLiteral
 
     val childHash = ctx.freshName("childHash")
     val childrenHash = children.map { child =>
@@ -675,7 +680,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
 
 
     ev.copy(code =
-      s"""
+      code"""
          |${CodeGenerator.JAVA_INT} ${ev.value} = $seed;
          |${CodeGenerator.JAVA_INT} $childHash = 0;
          |$codes
@@ -725,8 +730,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
      """
 
   override protected def genHashString(input: String, result: String): String = {
-    val mb = s"$input.getMemoryBlock()"
-    s"$result = $hasherClassName.hashUnsafeBytesBlock($mb);"
+    s"$result = $hasherClassName.hashUTF8String($input);"
   }
 
   override protected def genHashForArray(
@@ -779,10 +783,11 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
       input: String,
       result: String,
       fields: Array[StructField]): String = {
+    val tmpInput = ctx.freshName("input")
     val childResult = ctx.freshName("childResult")
     val fieldsHash = fields.zipWithIndex.map { case (field, index) =>
       val computeFieldHash = nullSafeElementHash(
-        input, index.toString, field.nullable, field.dataType, childResult, ctx)
+        tmpInput, index.toString, field.nullable, field.dataType, childResult, ctx)
       s"""
          |$childResult = 0;
          |$computeFieldHash
@@ -790,10 +795,10 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
        """.stripMargin
     }
 
-    s"${CodeGenerator.JAVA_INT} $childResult = 0;\n" + ctx.splitExpressions(
+    val code = ctx.splitExpressions(
       expressions = fieldsHash,
       funcName = "computeHashForStruct",
-      arguments = Seq("InternalRow" -> input, CodeGenerator.JAVA_INT -> result),
+      arguments = Seq("InternalRow" -> tmpInput, CodeGenerator.JAVA_INT -> result),
       returnType = CodeGenerator.JAVA_INT,
       makeSplitFunction = body =>
         s"""
@@ -802,6 +807,11 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
            |return $result;
            """.stripMargin,
       foldFunctions = _.map(funcCall => s"$result = $funcCall;").mkString("\n"))
+    s"""
+       |final InternalRow $tmpInput = $input;
+       |${CodeGenerator.JAVA_INT} $childResult = 0;
+       |$code
+     """.stripMargin
   }
 }
 
