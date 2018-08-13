@@ -29,7 +29,6 @@ class TaskContext(object):
     """
 
     _taskContext = None
-    _javaContext = None
 
     _attemptNumber = None
     _partitionId = None
@@ -97,6 +96,50 @@ class TaskContext(object):
         """
         return self._localProperties.get(key, None)
 
+
+class BarrierTaskContext(TaskContext):
+
+    """
+    .. note:: Experimental
+
+    A TaskContext with extra info and tooling for a barrier stage. To access the BarrierTaskContext
+    for a running task, use:
+    L{BarrierTaskContext.get()}.
+
+    .. versionadded:: 2.4.0
+    """
+
+    _barrierContext = None
+
+    def __init__(self):
+        """Construct a BarrierTaskContext, use get instead"""
+        pass
+
+    @classmethod
+    def _getOrCreate(cls):
+        """Internal function to get or create global BarrierTaskContext."""
+        if cls._taskContext is None:
+            cls._taskContext = BarrierTaskContext()
+        return cls._taskContext
+
+    @classmethod
+    def get(cls):
+        """
+        Return the currently active BarrierTaskContext. This can be called inside of user functions
+        to access contextual information about running tasks.
+
+        .. note:: Must be called on the worker, not the driver. Returns None if not initialized.
+        """
+        return cls._taskContext
+
+    @classmethod
+    def _initialize(cls, ctx):
+        """
+        Initialize BarrierTaskContext, other methods within BarrierTaskContext can only be called
+        after BarrierTaskContext is initialized.
+        """
+        cls._barrierContext = ctx
+
     def barrier(self):
         """
         .. note:: Experimental
@@ -106,10 +149,11 @@ class TaskContext(object):
 
         .. versionadded:: 2.4.0
         """
-        if self._javaContext is None:
-            raise Exception("Not supported to call barrier() inside a non-barrier task.")
+        if self._barrierContext is None:
+            raise Exception("Not supported to call barrier() before initialize " +
+                            "BarrierTaskContext.")
         else:
-            self._javaContext.barrier()
+            self._barrierContext.barrier()
 
     def getTaskInfos(self):
         """
@@ -121,8 +165,22 @@ class TaskContext(object):
 
         .. versionadded:: 2.4.0
         """
-        if self._javaContext is None:
-            raise Exception("Not supported to call getTaskInfos() inside a non-barrier task.")
+        if self._barrierContext is None:
+            raise Exception("Not supported to call getTaskInfos() before initialize " +
+                            "BarrierTaskContext.")
         else:
-            java_list = self._javaContext.getTaskInfos()
-            return [h for h in java_list]
+            java_list = self._barrierContext.getTaskInfos()
+            return [BarrierTaskInfo(h) for h in java_list]
+
+
+class BarrierTaskInfo(object):
+    """
+    .. note:: Experimental
+
+    Carries all task infos of a barrier task.
+
+    .. versionadded:: 2.4.0
+    """
+
+    def __init__(self, info):
+        self.address = info.address

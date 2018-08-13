@@ -195,6 +195,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             .entryPoint(context.asInstanceOf[BarrierTaskContext])
             .authToken(secret)
             .javaPort(0)
+            // TODO We do not have requests from Java to Python, find a better approach other than
+            // filling in DEFAULT_PYTHON_PORT here.
             .callbackClient(GatewayServer.DEFAULT_PYTHON_PORT, GatewayServer.defaultAddress(),
               secret)
             .build())
@@ -210,7 +212,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           val message = "GatewayServer to port BarrierTaskContext failed to bind to Java side."
           logError(message)
           throw new SparkException(message)
-        } else {
+        } else if (isBarrier) {
           logDebug(s"Started GatewayServer to port BarrierTaskContext on port $boundPort.")
         }
         // Write out the TaskContextInfo
