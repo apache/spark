@@ -19,7 +19,12 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.IOException
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import com.google.common.base.{Joiner, Predicate}
+import com.google.common.collect.Iterables
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, FsShell, Path}
+import org.apache.hadoop.fs.permission._
+import org.apache.hadoop.hdfs.DFSConfigKeys.{DFS_NAMENODE_ACLS_ENABLED_DEFAULT, DFS_NAMENODE_ACLS_ENABLED_KEY}
 
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
@@ -30,6 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -70,6 +76,8 @@ case class InsertIntoHadoopFsRelationCommand(
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+
+    val (group, permission, aclStatus) = getFullFileStatus(conf, hadoopConf, fs, outputPath)
 
     val partitionsTrackedByCatalog = sparkSession.sessionState.conf.manageFilesourcePartitions &&
       catalogTable.isDefined &&
@@ -186,6 +194,10 @@ case class InsertIntoHadoopFsRelationCommand(
       // refresh data cache if table is cached
       sparkSession.catalog.refreshByPath(outputPath.toString)
 
+      if (conf.isDataSouceTableInheritPerms && group != null) {
+        setFullFileStatus(hadoopConf, group, permission, aclStatus, fs, outputPath)
+      }
+
       if (catalogTable.nonEmpty) {
         CommandUtils.updateTableStats(sparkSession, catalogTable.get)
       }
@@ -220,17 +232,9 @@ case class InsertIntoHadoopFsRelationCommand(
     }
     // first clear the path determined by the static partition keys (e.g. /table/foo=1)
     val staticPrefixPath = qualifiedOutputPath.suffix(staticPartitionPrefix)
-    val errorMsg = s"Unable to clear output directory $staticPrefixPath prior to writing to it"
-    if (fs.isDirectory(staticPrefixPath) && staticPartitionPrefix.isEmpty) {
-      // Avoid drop table location folder because it may contain information like ACL entries.
-      if (fs.exists(staticPrefixPath)
-        && !committer.truncateDirectoryWithJob(fs, staticPrefixPath, true)) {
-        throw new IOException(errorMsg)
-      }
-    } else {
-      if (fs.exists(staticPrefixPath) && !committer.deleteWithJob(fs, staticPrefixPath, true)) {
-        throw new IOException(errorMsg)
-      }
+    if (fs.exists(staticPrefixPath) && !committer.deleteWithJob(fs, staticPrefixPath, true)) {
+      throw new IOException(s"Unable to clear output " +
+        s"directory $staticPrefixPath prior to writing to it")
     }
     // now clear all custom partition locations (e.g. /custom/dir/where/foo=2/bar=4)
     for ((spec, customLoc) <- customPartitionLocations) {
@@ -268,5 +272,68 @@ case class InsertIntoHadoopFsRelationCommand(
         None
       }
     }.toMap
+  }
+
+  private def isExtendedAclEnabled(hadoopConf: Configuration): Boolean =
+    hadoopConf.getBoolean(DFS_NAMENODE_ACLS_ENABLED_KEY, DFS_NAMENODE_ACLS_ENABLED_DEFAULT)
+
+  private def getFullFileStatus(
+      conf: SQLConf,
+      hadoopConf: Configuration,
+      fs: FileSystem,
+      file: Path): (String, FsPermission, AclStatus) = {
+    if (conf.isDataSouceTableInheritPerms && fs.exists(file)) {
+      val fileStatus = fs.getFileStatus(file)
+      val aclStatus = if (isExtendedAclEnabled(hadoopConf)) fs.getAclStatus(file) else null
+      (fileStatus.getGroup, fileStatus.getPermission, aclStatus)
+    } else {
+      (null, null, null)
+    }
+  }
+
+  private def setFullFileStatus(
+      hadoopConf: Configuration,
+      group: String,
+      permission: FsPermission,
+      aclStatus: AclStatus,
+      fs: FileSystem,
+      target: Path): Unit = {
+    try {
+      // use FsShell to change group, permissions, and extended ACL's recursively
+      val fsShell = new FsShell
+      fsShell.setConf(hadoopConf)
+      fsShell.run(Array[String]("-chgrp", "-R", group, target.toString))
+      if (isExtendedAclEnabled(hadoopConf) && aclStatus != null) {
+        // Attempt extended Acl operations only if its enabled,
+        // but don't fail the operation regardless.
+        try {
+          val aclEntries = aclStatus.getEntries
+          Iterables.removeIf(aclEntries, new Predicate[AclEntry]() {
+            override def apply(input: AclEntry): Boolean = input.getName == null
+          })
+          // the ACL api's also expect the tradition
+          // user/group/other permission in the form of ACL
+          aclEntries.add((new AclEntry.Builder).setScope(AclEntryScope.ACCESS)
+            .setType(AclEntryType.USER).setPermission(permission.getUserAction).build)
+          aclEntries.add((new AclEntry.Builder).setScope(AclEntryScope.ACCESS)
+            .setType(AclEntryType.GROUP).setPermission(permission.getGroupAction).build)
+          aclEntries.add((new AclEntry.Builder).setScope(AclEntryScope.ACCESS)
+            .setType(AclEntryType.OTHER).setPermission(permission.getOtherAction).build)
+          // construct the -setfacl command
+          val aclEntry = Joiner.on(",").join(aclStatus.getEntries)
+          fsShell.run(Array[String]("-setfacl", "-R", "--set", aclEntry, target.toString))
+        } catch {
+          case e: Exception =>
+            logWarning(s"Skipping ACL inheritance: File system for path $target " +
+              s"does not support ACLs but $DFS_NAMENODE_ACLS_ENABLED_KEY is set to true: $e", e)
+        }
+      } else {
+        val perm = Integer.toString(permission.toShort, 8)
+        fsShell.run(Array[String]("-chmod", "-R", perm, target.toString))
+      }
+    } catch {
+      case e: Exception =>
+        throw new IOException(s"Unable to set permissions of $target", e)
+    }
   }
 }

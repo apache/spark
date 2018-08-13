@@ -626,6 +626,14 @@ object SQLConf {
     .stringConf
     .createWithDefault("parquet")
 
+  val DATA_SOURCE_TABLE_INHERIT_PERMS = buildConf("spark.sql.datasource.table.inherit.perms")
+    .internal()
+    .doc("Set this to true if the table directories should be inheriting the permission " +
+      "of the warehouse or database directory " +
+      "instead of created with the permissions derived from dfs umask.")
+    .booleanConf
+    .createWithDefault(false)
+
   val CONVERT_CTAS = buildConf("spark.sql.hive.convertCTAS")
     .internal()
     .doc("When true, a table created by a Hive CTAS statement (no USING clause) " +
@@ -1741,6 +1749,8 @@ class SQLConf extends Serializable with Logging {
   def broadcastTimeout: Long = getConf(BROADCAST_TIMEOUT)
 
   def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
+
+  def isDataSouceTableInheritPerms: Boolean = getConf(DATA_SOURCE_TABLE_INHERIT_PERMS)
 
   def convertCTAS: Boolean = getConf(CONVERT_CTAS)
 

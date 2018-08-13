@@ -125,18 +125,6 @@ abstract class FileCommitProtocol {
   }
 
   /**
-   * Specifies that a directory should be truncated with the commit of this job. The default
-   * implementation deletes the file immediately.
-   *
-   * Return true if this directory is empty or deleted all files in this directory, otherwise false.
-   */
-  def truncateDirectoryWithJob(fs: FileSystem, directory: Path, recursive: Boolean): Boolean = {
-    assert(fs.isDirectory(directory))
-    val listStatus = fs.listStatus(directory)
-    listStatus.isEmpty || listStatus.forall(file => fs.delete(file.getPath, recursive))
-  }
-
-  /**
    * Called on the driver after a task commits. This can be used to access task commit messages
    * before the job has finished. These same task commit messages will be passed to commitJob()
    * if the entire job succeeds.
