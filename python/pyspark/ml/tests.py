@@ -950,6 +950,13 @@ class CrossValidatorTests(SparkSessionTestCase):
                          "Best model should have zero induced error")
         self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
 
+    def test_param_grid_type_coercion(self):
+        lr = LogisticRegression(maxIter=10)
+        paramGrid = ParamGridBuilder().addGrid(lr.regParam, [0.5, 1]).build()
+        for param in paramGrid:
+            for v in param.values():
+                assert(type(v) == float)
+
     def test_save_load_trained_model(self):
         # This tests saving and loading the trained model only.
         # Save/load for CrossValidator will be added later: SPARK-13786
