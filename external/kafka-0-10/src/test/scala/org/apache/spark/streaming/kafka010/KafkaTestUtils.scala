@@ -50,7 +50,7 @@ import org.apache.spark.util.Utils
 private[kafka010] class KafkaTestUtils extends Logging {
 
   // Zookeeper related configurations
-  private val zkHost = "localhost"
+  private val zkHost = "127.0.0.1"
   private var zkPort: Int = 0
   private val zkConnectionTimeout = 60000
   private val zkSessionTimeout = 6000
@@ -60,7 +60,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
   private var zkUtils: ZkUtils = _
 
   // Kafka broker related configurations
-  private val brokerHost = "localhost"
+  private val brokerHost = "127.0.0.1"
   private var brokerPort = 0
   private var brokerConf: KafkaConfig = _
 
@@ -217,7 +217,8 @@ private[kafka010] class KafkaTestUtils extends Logging {
   private def brokerConfiguration: Properties = {
     val props = new Properties()
     props.put("broker.id", "0")
-    props.put("host.name", "localhost")
+    props.put("host.name", "127.0.0.1")
+    props.put("advertised.host.name", "127.0.0.1")
     props.put("port", brokerPort.toString)
     props.put("log.dir", brokerLogDir)
     props.put("zookeeper.connect", zkAddress)
