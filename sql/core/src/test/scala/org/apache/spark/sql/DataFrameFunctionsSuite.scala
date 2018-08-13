@@ -2287,15 +2287,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       "been two maps with compatible key types"))
 
     val ex3 = intercept[AnalysisException] {
-      df.selectExpr("map_zip_with(mis, i, (x, y, z) -> concat(x, y, z))")
+      df.selectExpr("map_zip_with(i, mis, (x, y, z) -> concat(x, y, z))")
     }
-    assert(ex3.getMessage.contains("The input to function map_zip_with should have " +
-      "been two maps with compatible key types"))
+    assert(ex3.getMessage.contains("type mismatch: argument 1 requires map type"))
 
     val ex4 = intercept[AnalysisException] {
+      df.selectExpr("map_zip_with(mis, i, (x, y, z) -> concat(x, y, z))")
+    }
+    assert(ex4.getMessage.contains("type mismatch: argument 2 requires map type"))
+
+    val ex5 = intercept[AnalysisException] {
       df.selectExpr("map_zip_with(mmi, mmi, (x, y, z) -> x)")
     }
-    assert(ex4.getMessage.contains("function map_zip_with does not support ordering on type map"))
+    assert(ex5.getMessage.contains("function map_zip_with does not support ordering on type map"))
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {

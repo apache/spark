@@ -54,6 +54,7 @@ object TypeCoercion {
       BooleanEquality ::
       FunctionArgumentConversion ::
       ConcatCoercion(conf) ::
+      MapZipWithCoercion ::
       EltCoercion(conf) ::
       CaseWhenCoercion ::
       IfCoercion ::
@@ -236,15 +237,6 @@ object TypeCoercion {
         case Some(d) => findWiderTypeForTwo(d, c)
         case _ => None
       })
-  }
-
-  /**
-   * Similar to [[findTightestCommonType]] but with string promotion.
-   */
-  def findWiderTypeForTwoExceptDecimals(t1: DataType, t2: DataType): Option[DataType] = {
-    findTightestCommonType(t1, t2)
-      .orElse(stringPromotion(t1, t2))
-      .orElse(findTypeForComplex(t1, t2, findWiderTypeForTwoExceptDecimals))
   }
 
   /**
@@ -618,20 +610,6 @@ object TypeCoercion {
 
         CreateMap(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
 
-      case m @ MapZipWith(left, right, function) if MapType.acceptsType(left.dataType) &&
-          MapType.acceptsType(right.dataType) && !m.leftKeyType.sameType(m.rightKeyType) =>
-        findWiderTypeForTwoExceptDecimals(m.leftKeyType, m.rightKeyType) match {
-          case Some(finalKeyType) =>
-            val newLeft = castIfNotSameType(
-              left,
-              MapType(finalKeyType, m.leftValueType, m.leftValueContainsNull))
-            val newRight = castIfNotSameType(
-              right,
-              MapType(finalKeyType, m.rightValueType, m.rightValueContainsNull))
-            MapZipWith(newLeft, newRight, function)
-          case None => m
-        }
-
       // Promote SUM, SUM DISTINCT and AVERAGE to largest types to prevent overflows.
       case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
       case Sum(e @ IntegralType()) if e.dataType != LongType => Sum(Cast(e, LongType))
@@ -782,6 +760,30 @@ object TypeCoercion {
             c.copy(children = newChildren)
         }
       }
+    }
+  }
+
+  /**
+   * Coerces key types of two different [[MapType]] arguments of the [[MapZipWith]] expression
+   * to a common type.
+   */
+  object MapZipWithCoercion extends TypeCoercionRule {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      // Lambda function isn't resolved when the rule is executed.
+      case m @ MapZipWith(left, right, function) if m.arguments.forall(a => a.resolved &&
+          MapType.acceptsType(a.dataType)) && !m.leftKeyType.sameType(m.rightKeyType) =>
+        findWiderTypeForTwo(m.leftKeyType, m.rightKeyType) match {
+          case Some(finalKeyType) if !Cast.forceNullable(m.leftKeyType, finalKeyType) &&
+              !Cast.forceNullable(m.rightKeyType, finalKeyType) =>
+            val newLeft = castIfNotSameType(
+              left,
+              MapType(finalKeyType, m.leftValueType, m.leftValueContainsNull))
+            val newRight = castIfNotSameType(
+              right,
+              MapType(finalKeyType, m.rightValueType, m.rightValueContainsNull))
+            MapZipWith(newLeft, newRight, function)
+          case _ => m
+        }
     }
   }
 

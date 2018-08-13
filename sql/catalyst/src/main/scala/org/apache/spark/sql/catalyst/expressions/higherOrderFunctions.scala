@@ -520,39 +520,48 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 
   @transient lazy val functionForEval: Expression = functionsForEval.head
 
-  @transient lazy val (leftKeyType, leftValueType, leftValueContainsNull) =
-    HigherOrderFunction.mapKeyValueArgumentType(left.dataType)
+  @transient lazy val MapType(leftKeyType, leftValueType, leftValueContainsNull) = left.dataType
 
-  @transient lazy val (rightKeyType, rightValueType, rightValueContainsNull) =
-    HigherOrderFunction.mapKeyValueArgumentType(right.dataType)
+  @transient lazy val MapType(rightKeyType, rightValueType, rightValueContainsNull) = right.dataType
 
   @transient lazy val keyType =
-    TypeCoercion.findWiderTypeForTwoExceptDecimals(leftKeyType, rightKeyType).getOrElse(NullType)
+    TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(leftKeyType, rightKeyType).get
 
   @transient lazy val ordering = TypeUtils.getInterpretedOrdering(keyType)
 
-  override def inputs: Seq[Expression] = left :: right :: Nil
+  override def arguments: Seq[Expression] = left :: right :: Nil
+
+  override def argumentTypes: Seq[AbstractDataType] = MapType :: MapType :: Nil
 
   override def functions: Seq[Expression] = function :: Nil
+
+  override def functionTypes: Seq[AbstractDataType] = AnyDataType :: Nil
 
   override def nullable: Boolean = left.nullable || right.nullable
 
   override def dataType: DataType = MapType(keyType, function.dataType, function.nullable)
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    (left.dataType, right.dataType) match {
-      case (MapType(k1, _, _), MapType(k2, _, _)) if k1.sameType(k2) =>
-        TypeUtils.checkForOrderingExpr(k1, s"function $prettyName")
-      case _ => TypeCheckResult.TypeCheckFailure(s"The input to function $prettyName should have " +
-        s"been two ${MapType.simpleString}s with compatible key types, but it's " +
-        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
-    }
-  }
-
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): MapZipWith = {
     val arguments = Seq((keyType, false), (leftValueType, true), (rightValueType, true))
     copy(function = f(function, arguments))
   }
+
+  override def checkArgumentDataTypes(): TypeCheckResult = {
+    super.checkArgumentDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        if (leftKeyType.sameType(rightKeyType)) {
+          TypeUtils.checkForOrderingExpr(leftKeyType, s"function $prettyName")
+        } else {
+          TypeCheckResult.TypeCheckFailure(s"The input to function $prettyName should have " +
+            s"been two ${MapType.simpleString}s with compatible key types, but the key types are " +
+            s"[${leftKeyType.catalogString}, ${rightKeyType.catalogString}].")
+        }
+      case failure => failure
+    }
+  }
+
+  // Nothing to check since the data type of the lambda function can be anything.
+  override def checkInputDataTypes(): TypeCheckResult = TypeCheckResult.TypeCheckSuccess
 
   override def eval(input: InternalRow): Any = {
     val value1 = left.eval(input)
