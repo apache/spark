@@ -200,6 +200,9 @@ fi
 if [ -f "$SPARK_HOME"/external/kafka-0-10-sql/target/spark-sql-kafka-0-10_${SCALA_VERSION}-${VERSION}.jar ]; then
   cp "$SPARK_HOME"/external/kafka-0-10-sql/target/spark-sql-kafka-0-10_${SCALA_VERSION}-${VERSION}.jar "$DISTDIR/external/jars/"
 fi
+if [ -f "$SPARK_HOME"/external/kafka-0-8/target/spark-streaming-kafka-0-8_${SCALA_VERSION}-${VERSION}.jar ]; then
+  cp "$SPARK_HOME"/external/kafka-0-8/target/spark-streaming-kafka-0-8_${SCALA_VERSION}-${VERSION}.jar "$DISTDIR/external/jars/"
+fi
 if [ -f "$SPARK_HOME"/external/flume/target/spark-streaming-flume_${SCALA_VERSION}-${VERSION}.jar ]; then
   cp "$SPARK_HOME"/external/flume/target/spark-streaming-flume_${SCALA_VERSION}-${VERSION}.jar "$DISTDIR/external/jars/"
 fi
