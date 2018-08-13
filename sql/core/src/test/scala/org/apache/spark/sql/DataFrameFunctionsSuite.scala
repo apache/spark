@@ -1852,6 +1852,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("transform(i, x -> x)")
     }
     assert(ex2.getMessage.contains("data type mismatch: argument 1 requires array type"))
+
+    val ex3 = intercept[AnalysisException] {
+      df.selectExpr("transform(a, x -> x)")
+    }
+    assert(ex3.getMessage.contains("cannot resolve '`a`'"))
   }
 
   test("map_filter") {
@@ -1898,6 +1903,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("map_filter(i, (k, v) -> k > v)")
     }
     assert(ex3.getMessage.contains("data type mismatch: argument 1 requires map type"))
+
+    val ex4 = intercept[AnalysisException] {
+      df.selectExpr("map_filter(a, (k, v) -> k > v)")
+    }
+    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
   }
 
   test("filter function - array for primitive type not containing null") {
@@ -1994,6 +2004,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("filter(s, x -> x)")
     }
     assert(ex3.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
+
+    val ex4 = intercept[AnalysisException] {
+      df.selectExpr("filter(a, x -> x)")
+    }
+    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
   }
 
   test("exists function - array for primitive type not containing null") {
@@ -2090,6 +2105,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("exists(s, x -> x)")
     }
     assert(ex3.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
+
+    val ex4 = intercept[AnalysisException] {
+      df.selectExpr("exists(a, x -> x)")
+    }
+    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
   }
 
   test("aggregate function - array for primitive type not containing null") {
@@ -2211,6 +2231,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("aggregate(s, 0, (acc, x) -> x)")
     }
     assert(ex4.getMessage.contains("data type mismatch: argument 3 requires int type"))
+
+    val ex5 = intercept[AnalysisException] {
+      df.selectExpr("aggregate(a, 0, (acc, x) -> x)")
+    }
+    assert(ex5.getMessage.contains("cannot resolve '`a`'"))
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
