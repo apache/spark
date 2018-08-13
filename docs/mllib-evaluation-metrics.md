@@ -461,11 +461,11 @@ $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{
     <tr>
       <td>Normalized Discounted Cumulative Gain</td>
       <td>
-        $NDCG(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{IDCG(D_i, k)}\sum_{j=0}^{n-1}
+        $NDCG(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{IDCG(D_i, k)}\sum_{j=1}^{n}
           \frac{rel_{D_i}(R_i(j))}{\text{ln}(j+1)}} \\
         \text{Where} \\
         \hspace{5 mm} n = \text{min}\left(\text{max}\left(|R_i|,|D_i|\right),k\right) \\
-        \hspace{5 mm} IDCG(D, k) = \sum_{j=0}^{\text{min}(\left|D\right|, k) - 1} \frac{1}{\text{ln}(j+1)}$
+        \hspace{5 mm} IDCG(D, k) = \sum_{j=1}^{\text{min}(\left|D\right|, k)} \frac{1}{\text{ln}(j+1)}$
       </td>
       <td>
         <a href="https://en.wikipedia.org/wiki/Information_retrieval#Discounted_cumulative_gain">NDCG at k</a> is a
