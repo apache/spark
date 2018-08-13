@@ -240,7 +240,7 @@ public class TransportCipher {
 
     @Override
     public long transferTo(WritableByteChannel target, long position) throws IOException {
-      Preconditions.checkArgument(position == transfered(), "Invalid position.");
+      Preconditions.checkArgument(position == transferred(), "Invalid position.");
 
       do {
         if (currentEncrypted == null) {

@@ -145,3 +145,21 @@ select aggregate(cast(null as array<int>), 0, (a, y) -> a + y + 1, a -> a + 2) a
 struct<v:int>
 -- !query 14 output
 NULL
+
+
+-- !query 15
+select exists(ys, y -> y > 30) as v from nested
+-- !query 15 schema
+struct<v:boolean>
+-- !query 15 output
+false
+true
+true
+
+
+-- !query 16
+select exists(cast(null as array<int>), y -> y > 30) as v
+-- !query 16 schema
+struct<v:boolean>
+-- !query 16 output
+NULL
