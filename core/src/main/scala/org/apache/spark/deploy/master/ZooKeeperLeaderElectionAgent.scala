@@ -19,7 +19,6 @@ package org.apache.spark.deploy.master
 
 import org.apache.curator.framework.CuratorFramework
 import org.apache.curator.framework.recipes.leader.{LeaderLatch, LeaderLatchListener}
-
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkCuratorUtil
 import org.apache.spark.internal.Logging
@@ -38,7 +37,7 @@ private[master] class ZooKeeperLeaderElectionAgent(val masterInstance: LeaderEle
   private def start() {
     logInfo("Starting ZooKeeper LeaderElection agent")
     zk = SparkCuratorUtil.newClient(conf)
-    leaderLatch = new LeaderLatch(zk, WORKING_DIR)
+    leaderLatch = new LeaderLatch(zk, WORKING_DIR, conf.get("spark.master.leader.id", ""))
     leaderLatch.addListener(this)
     leaderLatch.start()
   }
