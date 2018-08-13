@@ -80,7 +80,10 @@ class ExternalAppendOnlyMap[K, V, C](
     this(createCombiner, mergeValue, mergeCombiners, serializer, blockManager, TaskContext.get())
   }
 
-  @volatile private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
+  /**
+   * Exposed for testing
+   */
+  @volatile private[collection] var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
   private val sparkConf = SparkEnv.get.conf
   private val diskBlockManager = blockManager.diskBlockManager
@@ -267,7 +270,7 @@ class ExternalAppendOnlyMap[K, V, C](
    */
   def destructiveIterator(inMemoryIterator: Iterator[(K, C)]): Iterator[(K, C)] = {
     readingIterator = new SpillableIterator(inMemoryIterator)
-    readingIterator
+    readingIterator.toCompletionIterator
   }
 
   /**
@@ -280,8 +283,7 @@ class ExternalAppendOnlyMap[K, V, C](
         "ExternalAppendOnlyMap.iterator is destructive and should only be called once.")
     }
     if (spilledMaps.isEmpty) {
-      CompletionIterator[(K, C), Iterator[(K, C)]](
-        destructiveIterator(currentMap.iterator), freeCurrentMap())
+      destructiveIterator(currentMap.iterator)
     } else {
       new ExternalIterator()
     }
@@ -305,8 +307,8 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // Input streams are derived both from the in-memory map and spilled maps on disk
     // The in-memory map is sorted in place, while the spilled maps are already in sorted order
-    private val sortedMap = CompletionIterator[(K, C), Iterator[(K, C)]](destructiveIterator(
-      currentMap.destructiveSortedIterator(keyComparator)), freeCurrentMap())
+    private val sortedMap = destructiveIterator(
+      currentMap.destructiveSortedIterator(keyComparator))
     private val inputStreams = (Seq(sortedMap) ++ spilledMaps).map(it => it.buffered)
 
     inputStreams.foreach { it =>
@@ -568,12 +570,10 @@ class ExternalAppendOnlyMap[K, V, C](
     context.addTaskCompletionListener[Unit](context => cleanup())
   }
 
-  private[this] class SpillableIterator(var upstream: Iterator[(K, C)])
+  private class SpillableIterator(var upstream: Iterator[(K, C)])
     extends Iterator[(K, C)] {
 
     private val SPILL_LOCK = new Object()
-
-    private var nextUpstream: Iterator[(K, C)] = null
 
     private var cur: (K, C) = readNext()
 
@@ -585,17 +585,24 @@ class ExternalAppendOnlyMap[K, V, C](
       } else {
         logInfo(s"Task ${context.taskAttemptId} force spilling in-memory map to disk and " +
           s"it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
-        nextUpstream = spillMemoryIteratorToDisk(upstream)
+        val nextUpstream = spillMemoryIteratorToDisk(upstream)
+        assert(!upstream.hasNext)
         hasSpilled = true
+        upstream = nextUpstream
         true
       }
     }
 
+    private def destroy(): Unit = {
+      freeCurrentMap()
+      upstream = Iterator.empty
+    }
+
+    def toCompletionIterator: CompletionIterator[(K, C), SpillableIterator] = {
+      CompletionIterator[(K, C), SpillableIterator](this, this.destroy)
+    }
+
     def readNext(): (K, C) = SPILL_LOCK.synchronized {
-      if (nextUpstream != null) {
-        upstream = nextUpstream
-        nextUpstream = null
-      }
       if (upstream.hasNext) {
         upstream.next()
       } else {
