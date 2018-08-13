@@ -20,7 +20,7 @@ package org.apache.spark.storage
 import java.io._
 import java.lang.ref.{ReferenceQueue => JReferenceQueue, WeakReference}
 import java.nio.ByteBuffer
-import java.nio.channels.{Channels, WritableByteChannel}
+import java.nio.channels.Channels
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
