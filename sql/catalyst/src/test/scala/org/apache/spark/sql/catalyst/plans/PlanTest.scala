@@ -81,7 +81,7 @@ trait PlanTestBase extends PredicateHelper { self: Suite =>
       case ae: AggregateExpression =>
         ae.copy(resultId = ExprId(0))
       case lv: NamedLambdaVariable =>
-        lv.copy(value = null, exprId = ExprId(0))
+        lv.copy(exprId = ExprId(0), value = null)
     }
   }
 
