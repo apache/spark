@@ -459,7 +459,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     // https://github.com/scala/scala/blob/2.13.x/test/junit/scala/tools/testing/AssertUtil.scala
     // (lines 69-89)
     // assert(map.currentMap == null)
-    eventually{
+    eventually {
       System.gc()
       // direct asserts introduced some macro generated code that held a reference to the map
       val tmpIsNull = null == underlyingMapRef.get.orNull
@@ -518,7 +518,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     // (lines 69-89)
     assert(map.currentMap == null)
 
-    eventually{
+    eventually {
       Thread.sleep(500)
       System.gc()
       // direct asserts introduced some macro generated code that held a reference to the map

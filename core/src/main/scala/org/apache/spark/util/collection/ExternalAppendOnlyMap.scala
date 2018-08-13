@@ -117,10 +117,7 @@ class ExternalAppendOnlyMap[K, V, C](
   private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
 
-  /**
-   * Exposed for testing
-   */
-  @volatile private[collection] var readingIterator: SpillableIterator = null
+  @volatile private var readingIterator: SpillableIterator = null
 
   /**
    * Number of files this map has spilled so far.
@@ -573,10 +570,7 @@ class ExternalAppendOnlyMap[K, V, C](
     context.addTaskCompletionListener[Unit](context => cleanup())
   }
 
-  /**
-   * Exposed for testing
-   */
-  private[collection] class SpillableIterator(var upstream: Iterator[(K, C)])
+  private class SpillableIterator(var upstream: Iterator[(K, C)])
     extends Iterator[(K, C)] {
 
     private val SPILL_LOCK = new Object()
@@ -599,13 +593,13 @@ class ExternalAppendOnlyMap[K, V, C](
       }
     }
 
-    private def destroy() : Unit = {
+    private def destroy(): Unit = {
       freeCurrentMap()
       upstream = Iterator.empty
     }
 
     def toCompletionIterator: CompletionIterator[(K, C), SpillableIterator] = {
-      CompletionIterator[(K, C), SpillableIterator](this, this.destroy )
+      CompletionIterator[(K, C), SpillableIterator](this, this.destroy)
     }
 
     def readNext(): (K, C) = SPILL_LOCK.synchronized {
