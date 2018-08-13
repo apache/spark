@@ -205,9 +205,9 @@ class DAGScheduler(
       DAGScheduler.DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS)
 
   /**
-   * Number of max concurrent tasks check failures for each job.
+   * Number of max concurrent tasks check failures for each barrier job.
    */
-  private[scheduler] val jobIdToNumTasksCheckFailures = new ConcurrentHashMap[Int, Int]
+  private[scheduler] val barrierJobIdToNumTasksCheckFailures = new ConcurrentHashMap[Int, Int]
 
   /**
    * Time in seconds to wait between a max concurrent tasks check failure and the next check.
@@ -967,23 +967,24 @@ class DAGScheduler(
           DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER) =>
         logWarning(s"The job $jobId requires to run a barrier stage that requires more slots " +
           "than the total number of slots in the cluster currently.")
-        jobIdToNumTasksCheckFailures.compute(jobId, new BiFunction[Int, Int, Int] {
-          override def apply(key: Int, value: Int): Int = value + 1
-        })
-        val numCheckFailures = jobIdToNumTasksCheckFailures.get(jobId)
+        // If jobId doesn't exist in the map, Scala coverts its value null to 0: Int automatically.
+        val numCheckFailures = barrierJobIdToNumTasksCheckFailures.compute(jobId,
+          new BiFunction[Int, Int, Int] {
+            override def apply(key: Int, value: Int): Int = value + 1
+          })
         if (numCheckFailures <= maxFailureNumTasksCheck) {
           messageScheduler.schedule(
             new Runnable {
               override def run(): Unit = eventProcessLoop.post(JobSubmitted(jobId, finalRDD, func,
                 partitions, callSite, listener, properties))
             },
-            timeIntervalNumTasksCheck * 1000,
-            TimeUnit.MILLISECONDS
+            timeIntervalNumTasksCheck,
+            TimeUnit.SECONDS
           )
           return
         } else {
           // Job failed, clear internal data.
-          jobIdToNumTasksCheckFailures.remove(jobId)
+          barrierJobIdToNumTasksCheckFailures.remove(jobId)
           listener.jobFailed(e)
           return
         }
@@ -994,7 +995,7 @@ class DAGScheduler(
         return
     }
     // Job submitted, clear internal data.
-    jobIdToNumTasksCheckFailures.remove(jobId)
+    barrierJobIdToNumTasksCheckFailures.remove(jobId)
 
     val job = new ActiveJob(jobId, finalStage, callSite, listener, properties)
     clearCacheLocs()
