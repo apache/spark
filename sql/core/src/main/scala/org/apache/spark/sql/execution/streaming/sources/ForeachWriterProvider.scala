@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import org.apache.spark.sql.{Encoder, ForeachWriter, SparkSession}
+import org.apache.spark.sql.{ForeachWriter, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.python.PythonForeachWriter
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, StreamWriteSupport}
-import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory, SupportsWriteInternalRow, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory, WriterCommitMessage}
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
@@ -46,11 +46,11 @@ case class ForeachWriterProvider[T](
       schema: StructType,
       mode: OutputMode,
       options: DataSourceOptions): StreamWriter = {
-    new StreamWriter with SupportsWriteInternalRow {
+    new StreamWriter {
       override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
       override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
 
-      override def createInternalRowWriterFactory(): DataWriterFactory[InternalRow] = {
+      override def createWriterFactory(): DataWriterFactory[InternalRow] = {
         val rowConverter: InternalRow => T = converter match {
           case Left(enc) =>
             val boundEnc = enc.resolveAndBind(

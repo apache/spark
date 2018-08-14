@@ -1484,7 +1484,7 @@ sealed trait LogisticRegressionSummary extends Serializable {
 
   /**
    * Convenient method for casting to binary logistic regression summary.
-   * This method will throws an Exception if the summary is not a binary summary.
+   * This method will throw an Exception if the summary is not a binary summary.
    */
   @Since("2.3.0")
   def asBinary: BinaryLogisticRegressionSummary = this match {

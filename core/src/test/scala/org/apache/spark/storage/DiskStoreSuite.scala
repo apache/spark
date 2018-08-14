@@ -195,8 +195,8 @@ class DiskStoreSuite extends SparkFunSuite {
     val region = data.toNetty().asInstanceOf[FileRegion]
     val byteChannel = new ByteArrayWritableChannel(data.size.toInt)
 
-    while (region.transfered() < region.count()) {
-      region.transferTo(byteChannel, region.transfered())
+    while (region.transferred() < region.count()) {
+      region.transferTo(byteChannel, region.transferred())
     }
 
     byteChannel.close()

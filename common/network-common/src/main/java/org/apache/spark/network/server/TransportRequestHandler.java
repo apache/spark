@@ -252,8 +252,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         }
       };
       if (req.bodyByteCount > 0) {
-        StreamInterceptor interceptor = new StreamInterceptor(this, wrappedCallback.getID(),
-          req.bodyByteCount, wrappedCallback);
+        StreamInterceptor<RequestMessage> interceptor = new StreamInterceptor<>(
+          this, wrappedCallback.getID(), req.bodyByteCount, wrappedCallback);
         frameDecoder.setInterceptor(interceptor);
       } else {
         wrappedCallback.onComplete(wrappedCallback.getID());

@@ -32,12 +32,13 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupport}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types._
 
 class TextSocketStreamSuite extends StreamTest with SharedSQLContext with BeforeAndAfterEach {
 
@@ -297,6 +298,101 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       } catch {
         case e: StreamingQueryException if e.cause.isInstanceOf[SocketException] => // pass
       }
+    }
+  }
+
+  test("continuous data") {
+    serverThread = new ServerThread()
+    serverThread.start()
+
+    val reader = new TextSocketContinuousReader(
+      new DataSourceOptions(Map("numPartitions" -> "2", "host" -> "localhost",
+        "port" -> serverThread.port.toString).asJava))
+    reader.setStartOffset(Optional.empty())
+    val tasks = reader.planInputPartitions()
+    assert(tasks.size == 2)
+
+    val numRecords = 10
+    val data = scala.collection.mutable.ListBuffer[Int]()
+    val offsets = scala.collection.mutable.ListBuffer[Int]()
+    import org.scalatest.time.SpanSugar._
+    failAfter(5 seconds) {
+      // inject rows, read and check the data and offsets
+      for (i <- 0 until numRecords) {
+        serverThread.enqueue(i.toString)
+      }
+      tasks.asScala.foreach {
+        case t: TextSocketContinuousInputPartition =>
+          val r = t.createPartitionReader().asInstanceOf[TextSocketContinuousInputPartitionReader]
+          for (i <- 0 until numRecords / 2) {
+            r.next()
+            offsets.append(r.getOffset().asInstanceOf[ContinuousRecordPartitionOffset].offset)
+            data.append(r.get().get(0, DataTypes.StringType).asInstanceOf[String].toInt)
+            // commit the offsets in the middle and validate if processing continues
+            if (i == 2) {
+              commitOffset(t.partitionId, i + 1)
+            }
+          }
+          assert(offsets.toSeq == Range.inclusive(1, 5))
+          assert(data.toSeq == Range(t.partitionId, 10, 2))
+          offsets.clear()
+          data.clear()
+        case _ => throw new IllegalStateException("Unexpected task type")
+      }
+      assert(reader.getStartOffset.asInstanceOf[TextSocketOffset].offsets == List(3, 3))
+      reader.commit(TextSocketOffset(List(5, 5)))
+      assert(reader.getStartOffset.asInstanceOf[TextSocketOffset].offsets == List(5, 5))
+    }
+
+    def commitOffset(partition: Int, offset: Int): Unit = {
+      val offsetsToCommit = reader.getStartOffset.asInstanceOf[TextSocketOffset]
+        .offsets.updated(partition, offset)
+      reader.commit(TextSocketOffset(offsetsToCommit))
+      assert(reader.getStartOffset.asInstanceOf[TextSocketOffset].offsets == offsetsToCommit)
+    }
+  }
+
+  test("continuous data - invalid commit") {
+    serverThread = new ServerThread()
+    serverThread.start()
+
+    val reader = new TextSocketContinuousReader(
+      new DataSourceOptions(Map("numPartitions" -> "2", "host" -> "localhost",
+        "port" -> serverThread.port.toString).asJava))
+    reader.setStartOffset(Optional.of(TextSocketOffset(List(5, 5))))
+    // ok to commit same offset
+    reader.setStartOffset(Optional.of(TextSocketOffset(List(5, 5))))
+    assertThrows[IllegalStateException] {
+      reader.commit(TextSocketOffset(List(6, 6)))
+    }
+  }
+
+  test("continuous data with timestamp") {
+    serverThread = new ServerThread()
+    serverThread.start()
+
+    val reader = new TextSocketContinuousReader(
+      new DataSourceOptions(Map("numPartitions" -> "2", "host" -> "localhost",
+        "includeTimestamp" -> "true",
+        "port" -> serverThread.port.toString).asJava))
+    reader.setStartOffset(Optional.empty())
+    val tasks = reader.planInputPartitions()
+    assert(tasks.size == 2)
+
+    val numRecords = 4
+    // inject rows, read and check the data and offsets
+    for (i <- 0 until numRecords) {
+      serverThread.enqueue(i.toString)
+    }
+    tasks.asScala.foreach {
+      case t: TextSocketContinuousInputPartition =>
+        val r = t.createPartitionReader().asInstanceOf[TextSocketContinuousInputPartitionReader]
+        for (i <- 0 until numRecords / 2) {
+          r.next()
+          assert(r.get().get(0, TextSocketReader.SCHEMA_TIMESTAMP)
+            .isInstanceOf[(String, Timestamp)])
+        }
+      case _ => throw new IllegalStateException("Unexpected task type")
     }
   }
 

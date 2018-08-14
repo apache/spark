@@ -77,15 +77,15 @@ public class Murmur3_x86_32Suite {
     for (int i = 0; i < 16; i++) {
       bytes[i] = 0;
     }
-    Assert.assertEquals(-300363099, hasher.hashUnsafeWords(bytes, offset, 16, 42));
+    Assert.assertEquals(-300363099, Murmur3_x86_32.hashUnsafeWords(bytes, offset, 16, 42));
     for (int i = 0; i < 16; i++) {
       bytes[i] = -1;
     }
-    Assert.assertEquals(-1210324667, hasher.hashUnsafeWords(bytes, offset, 16, 42));
+    Assert.assertEquals(-1210324667, Murmur3_x86_32.hashUnsafeWords(bytes, offset, 16, 42));
     for (int i = 0; i < 16; i++) {
       bytes[i] = (byte)i;
     }
-    Assert.assertEquals(-634919701, hasher.hashUnsafeWords(bytes, offset, 16, 42));
+    Assert.assertEquals(-634919701, Murmur3_x86_32.hashUnsafeWords(bytes, offset, 16, 42));
   }
 
   @Test

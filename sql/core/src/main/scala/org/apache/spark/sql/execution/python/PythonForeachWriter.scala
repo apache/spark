@@ -56,7 +56,7 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
 
   override def open(partitionId: Long, version: Long): Boolean = {
     outputIterator  // initialize everything
-    TaskContext.get.addTaskCompletionListener { _ => buffer.close() }
+    TaskContext.get.addTaskCompletionListener[Unit] { _ => buffer.close() }
     true
   }
 
