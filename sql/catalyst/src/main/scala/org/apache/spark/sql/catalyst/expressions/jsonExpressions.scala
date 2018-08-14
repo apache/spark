@@ -628,7 +628,7 @@ case class JsonToStructs(
        {"a":1,"b":2}
       > SELECT _FUNC_(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'));
        {"time":"26/08/2015"}
-      > SELECT _FUNC_(array(named_struct('a', 1, 'b', 2));
+      > SELECT _FUNC_(array(named_struct('a', 1, 'b', 2)));
        [{"a":1,"b":2}]
       > SELECT _FUNC_(map('a', named_struct('b', 1)));
        {"a":{"b":1}}
