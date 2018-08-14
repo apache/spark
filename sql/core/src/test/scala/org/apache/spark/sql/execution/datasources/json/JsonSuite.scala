@@ -2490,4 +2490,10 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       assert(exception.getMessage.contains("encoding must not be included in the blacklist"))
     }
   }
+
+  test("SPARK-25040: empty strings should be treated as null for double and float") {
+    val df = spark.read.schema("a DOUBLE, b FLOAT")
+      .option("mode", "FAILFAST").json(Seq("""{"a":"","b": ""}""", """{"a": 1.1,"b": 1.1}""").toDS)
+    checkAnswer(df, Row(null, null) :: Row(1.1D, 1.1F) :: Nil)
+  }
 }

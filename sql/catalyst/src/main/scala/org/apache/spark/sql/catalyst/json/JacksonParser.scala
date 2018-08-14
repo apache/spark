@@ -167,7 +167,7 @@ class JacksonParser(
         case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
           parser.getFloatValue
 
-        case VALUE_STRING =>
+        case VALUE_STRING if parser.getTextLength >= 1 =>
           // Special case handling for NaN and Infinity.
           parser.getText match {
             case "NaN" => Float.NaN
@@ -183,7 +183,7 @@ class JacksonParser(
         case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
           parser.getDoubleValue
 
-        case VALUE_STRING =>
+        case VALUE_STRING if parser.getTextLength >= 1 =>
           // Special case handling for NaN and Infinity.
           parser.getText match {
             case "NaN" => Double.NaN
