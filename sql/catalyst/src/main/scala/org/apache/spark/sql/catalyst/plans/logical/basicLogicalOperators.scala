@@ -74,7 +74,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
  * their output.
  *
  * @param generator the generator expression
- * @param unrequiredChildIndex this paramter starts as Nil and gets filled by the Optimizer.
+ * @param unrequiredChildIndex this parameter starts as Nil and gets filled by the Optimizer.
  *                             It's used as an optimization for omitting data generation that will
  *                             be discarded next by a projection.
  *                             A common use case is when we explode(array(..)) and are interested
@@ -363,13 +363,14 @@ case class AppendData(
   override def output: Seq[Attribute] = Seq.empty
 
   override lazy val resolved: Boolean = {
-    query.output.size == table.output.size && query.output.zip(table.output).forall {
-      case (inAttr, outAttr) =>
-          // names and types must match, nullability must be compatible
-          inAttr.name == outAttr.name &&
-          DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
-          (outAttr.nullable || !inAttr.nullable)
-    }
+    table.resolved && query.resolved && query.output.size == table.output.size &&
+        query.output.zip(table.output).forall {
+          case (inAttr, outAttr) =>
+            // names and types must match, nullability must be compatible
+            inAttr.name == outAttr.name &&
+                DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
+                (outAttr.nullable || !inAttr.nullable)
+        }
   }
 }
 

@@ -960,6 +960,9 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       case EXTERNAL => " EXTERNAL TABLE"
       case VIEW => " VIEW"
       case MANAGED => " TABLE"
+      case t =>
+        throw new IllegalArgumentException(
+          s"Unknown table type is found at showCreateHiveTable: $t")
     }
 
     builder ++= s"CREATE$tableTypeString ${table.quotedString}"

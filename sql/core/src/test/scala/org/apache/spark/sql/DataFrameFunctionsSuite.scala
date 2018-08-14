@@ -1852,6 +1852,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("transform(i, x -> x)")
     }
     assert(ex2.getMessage.contains("data type mismatch: argument 1 requires array type"))
+
+    val ex3 = intercept[AnalysisException] {
+      df.selectExpr("transform(a, x -> x)")
+    }
+    assert(ex3.getMessage.contains("cannot resolve '`a`'"))
   }
 
   test("map_filter") {
@@ -1898,6 +1903,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("map_filter(i, (k, v) -> k > v)")
     }
     assert(ex3.getMessage.contains("data type mismatch: argument 1 requires map type"))
+
+    val ex4 = intercept[AnalysisException] {
+      df.selectExpr("map_filter(a, (k, v) -> k > v)")
+    }
+    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
   }
 
   test("filter function - array for primitive type not containing null") {
@@ -1994,6 +2004,112 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("filter(s, x -> x)")
     }
     assert(ex3.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
+
+    val ex4 = intercept[AnalysisException] {
+      df.selectExpr("filter(a, x -> x)")
+    }
+    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
+  }
+
+  test("exists function - array for primitive type not containing null") {
+    val df = Seq(
+      Seq(1, 9, 8, 7),
+      Seq(5, 9, 7),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
+      checkAnswer(df.selectExpr("exists(i, x -> x % 2 == 0)"),
+        Seq(
+          Row(true),
+          Row(false),
+          Row(false),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeNotContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testArrayOfPrimitiveTypeNotContainsNull()
+  }
+
+  test("exists function - array for primitive type containing null") {
+    val df = Seq[Seq[Integer]](
+      Seq(1, 9, 8, null, 7),
+      Seq(5, null, null, 9, 7, null),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeContainsNull(): Unit = {
+      checkAnswer(df.selectExpr("exists(i, x -> x % 2 == 0)"),
+        Seq(
+          Row(true),
+          Row(false),
+          Row(false),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testArrayOfPrimitiveTypeContainsNull()
+  }
+
+  test("exists function - array for non-primitive type") {
+    val df = Seq(
+      Seq("c", "a", "b"),
+      Seq("b", null, "c", null),
+      Seq.empty,
+      null
+    ).toDF("s")
+
+    def testNonPrimitiveType(): Unit = {
+      checkAnswer(df.selectExpr("exists(s, x -> x is null)"),
+        Seq(
+          Row(false),
+          Row(true),
+          Row(false),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testNonPrimitiveType()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testNonPrimitiveType()
+  }
+
+  test("exists function - invalid") {
+    val df = Seq(
+      (Seq("c", "a", "b"), 1),
+      (Seq("b", null, "c", null), 2),
+      (Seq.empty, 3),
+      (null, 4)
+    ).toDF("s", "i")
+
+    val ex1 = intercept[AnalysisException] {
+      df.selectExpr("exists(s, (x, y) -> x + y)")
+    }
+    assert(ex1.getMessage.contains("The number of lambda function arguments '2' does not match"))
+
+    val ex2 = intercept[AnalysisException] {
+      df.selectExpr("exists(i, x -> x)")
+    }
+    assert(ex2.getMessage.contains("data type mismatch: argument 1 requires array type"))
+
+    val ex3 = intercept[AnalysisException] {
+      df.selectExpr("exists(s, x -> x)")
+    }
+    assert(ex3.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
+
+    val ex4 = intercept[AnalysisException] {
+      df.selectExpr("exists(a, x -> x)")
+    }
+    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
   }
 
   test("aggregate function - array for primitive type not containing null") {
@@ -2115,6 +2231,75 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("aggregate(s, 0, (acc, x) -> x)")
     }
     assert(ex4.getMessage.contains("data type mismatch: argument 3 requires int type"))
+
+    val ex5 = intercept[AnalysisException] {
+      df.selectExpr("aggregate(a, 0, (acc, x) -> x)")
+    }
+    assert(ex5.getMessage.contains("cannot resolve '`a`'"))
+  }
+
+  test("map_zip_with function - map of primitive types") {
+    val df = Seq(
+      (Map(8 -> 6L, 3 -> 5L, 6 -> 2L), Map[Integer, Integer]((6, 4), (8, 2), (3, 2))),
+      (Map(10 -> 6L, 8 -> 3L), Map[Integer, Integer]((8, 4), (4, null))),
+      (Map.empty[Int, Long], Map[Integer, Integer]((5, 1))),
+      (Map(5 -> 1L), null)
+    ).toDF("m1", "m2")
+
+    checkAnswer(df.selectExpr("map_zip_with(m1, m2, (k, v1, v2) -> k == v1 + v2)"),
+      Seq(
+        Row(Map(8 -> true, 3 -> false, 6 -> true)),
+        Row(Map(10 -> null, 8 -> false, 4 -> null)),
+        Row(Map(5 -> null)),
+        Row(null)))
+  }
+
+  test("map_zip_with function - map of non-primitive types") {
+    val df = Seq(
+      (Map("z" -> "a", "y" -> "b", "x" -> "c"), Map("x" -> "a", "z" -> "c")),
+      (Map("b" -> "a", "c" -> "d"), Map("c" -> "a", "b" -> null, "d" -> "k")),
+      (Map("a" -> "d"), Map.empty[String, String]),
+      (Map("a" -> "d"), null)
+    ).toDF("m1", "m2")
+
+    checkAnswer(df.selectExpr("map_zip_with(m1, m2, (k, v1, v2) -> (v1, v2))"),
+      Seq(
+        Row(Map("z" -> Row("a", "c"), "y" -> Row("b", null), "x" -> Row("c", "a"))),
+        Row(Map("b" -> Row("a", null), "c" -> Row("d", "a"), "d" -> Row(null, "k"))),
+        Row(Map("a" -> Row("d", null))),
+        Row(null)))
+  }
+
+  test("map_zip_with function - invalid") {
+    val df = Seq(
+      (Map(1 -> 2), Map(1 -> "a"), Map("a" -> "b"), Map(Map(1 -> 2) -> 2), 1)
+    ).toDF("mii", "mis", "mss", "mmi", "i")
+
+    val ex1 = intercept[AnalysisException] {
+      df.selectExpr("map_zip_with(mii, mis, (x, y) -> x + y)")
+    }
+    assert(ex1.getMessage.contains("The number of lambda function arguments '2' does not match"))
+
+    val ex2 = intercept[AnalysisException] {
+      df.selectExpr("map_zip_with(mis, mmi, (x, y, z) -> concat(x, y, z))")
+    }
+    assert(ex2.getMessage.contains("The input to function map_zip_with should have " +
+      "been two maps with compatible key types"))
+
+    val ex3 = intercept[AnalysisException] {
+      df.selectExpr("map_zip_with(i, mis, (x, y, z) -> concat(x, y, z))")
+    }
+    assert(ex3.getMessage.contains("type mismatch: argument 1 requires map type"))
+
+    val ex4 = intercept[AnalysisException] {
+      df.selectExpr("map_zip_with(mis, i, (x, y, z) -> concat(x, y, z))")
+    }
+    assert(ex4.getMessage.contains("type mismatch: argument 2 requires map type"))
+
+    val ex5 = intercept[AnalysisException] {
+      df.selectExpr("map_zip_with(mmi, mmi, (x, y, z) -> x)")
+    }
+    assert(ex5.getMessage.contains("function map_zip_with does not support ordering on type map"))
   }
 
   test("transform values function - test various primitive data types combinations") {

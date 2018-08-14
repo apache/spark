@@ -134,7 +134,7 @@
     <orc.version>1.5.2</orc.version>
     <orc.classifier>nohive</orc.classifier>
     <hive.parquet.version>1.6.0</hive.parquet.version>
-    <jetty.version>9.3.20.v20170531</jetty.version>
+    <jetty.version>9.3.24.v20180605</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
     <chill.version>0.8.4</chill.version>
     <ivy.version>2.4.0</ivy.version>
@@ -149,8 +149,8 @@
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.10.2</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
-    <commons.httpclient.version>4.5.4</commons.httpclient.version>
-    <commons.httpcore.version>4.4.8</commons.httpcore.version>
+    <commons.httpclient.version>4.5.6</commons.httpclient.version>
+    <commons.httpcore.version>4.4.10</commons.httpcore.version>
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>

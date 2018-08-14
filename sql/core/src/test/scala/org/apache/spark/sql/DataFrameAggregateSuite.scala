@@ -557,11 +557,13 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-18004 limit + aggregates") {
-    val df = Seq(("a", 1), ("b", 2), ("c", 1), ("d", 5)).toDF("id", "value")
-    val limit2Df = df.limit(2)
-    checkAnswer(
-      limit2Df.groupBy("id").count().select($"id"),
-      limit2Df.select($"id"))
+    withSQLConf(SQLConf.LIMIT_FLAT_GLOBAL_LIMIT.key -> "true") {
+      val df = Seq(("a", 1), ("b", 2), ("c", 1), ("d", 5)).toDF("id", "value")
+      val limit2Df = df.limit(2)
+      checkAnswer(
+        limit2Df.groupBy("id").count().select($"id"),
+        limit2Df.select($"id"))
+    }
   }
 
   test("SPARK-17237 remove backticks in a pivot result schema") {
