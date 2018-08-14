@@ -2494,10 +2494,10 @@ test_that("intersectAll() and exceptAll()", {
   df2 <- createDataFrame(
     list(list("a", 1), list("a", 1), list("b", 3)),
     schema = c("a", "b"))
-  intersect_all_expected = data.frame("a" = c("a", "a", "b"), "b" = c(1, 1, 3),
-                                      stringsAsFactors = FALSE)
-  except_all_expected = data.frame("a" = c("a", "a", "c"), "b" = c(1, 1, 4),
-                                   stringsAsFactors = FALSE)
+  intersect_all_expected <- data.frame("a" = c("a", "a", "b"), "b" = c(1, 1, 3),
+                                       stringsAsFactors = FALSE)
+  except_all_expected <- data.frame("a" = c("a", "a", "c"), "b" = c(1, 1, 4),
+                                    stringsAsFactors = FALSE)
   intersect_all_df <- arrange(intersectAll(df1, df2), df1$a)
   expect_is(intersect_all_df, "SparkDataFrame")
   except_all_df <- arrange(exceptAll(df1, df2), df1$a)
