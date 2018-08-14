@@ -998,6 +998,8 @@ case class ScalaUDF(
     }.toArray :+ CatalystTypeConverters.createToCatalystConverter(dataType)
     val convertersTerm = ctx.addReferenceObj("converters", converters, s"$converterClassName[]")
     val errorMsgTerm = ctx.addReferenceObj("errMsg", udfErrorMessage)
+    val errorMsgNonNullableTerm = ctx.addReferenceObj("errNonNullableMsg",
+      udfNonNullableErrorMessage)
     val resultTerm = ctx.freshName("result")
 
     // codegen for children expressions
@@ -1038,16 +1040,26 @@ case class ScalaUDF(
          |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
          |if (!${ev.isNull}) {
          |  ${ev.value} = $resultTerm;
+         |} else if (!$nullable) {
+         |  throw new RuntimeException($errorMsgNonNullableTerm);
          |}
        """.stripMargin)
   }
 
   private[this] val resultConverter = CatalystTypeConverters.createToCatalystConverter(dataType)
 
-  lazy val udfErrorMessage = {
+  lazy val functionSignature = {
     val funcCls = function.getClass.getSimpleName
     val inputTypes = children.map(_.dataType.simpleString).mkString(", ")
-    s"Failed to execute user defined function($funcCls: ($inputTypes) => ${dataType.simpleString})"
+    s"user defined function ($funcCls: ($inputTypes) => ${dataType.simpleString})"
+  }
+
+  lazy val udfErrorMessage = {
+    s"Failed to execute $functionSignature"
+  }
+
+  lazy val udfNonNullableErrorMessage = {
+    s"Cannot return null value from $functionSignature"
   }
 
   override def eval(input: InternalRow): Any = {
@@ -1056,6 +1068,10 @@ case class ScalaUDF(
     } catch {
       case e: Exception =>
         throw new SparkException(udfErrorMessage, e)
+    }
+
+    if (result == null && !nullable) {
+      throw new RuntimeException(udfNonNullableErrorMessage)
     }
 
     resultConverter(result)

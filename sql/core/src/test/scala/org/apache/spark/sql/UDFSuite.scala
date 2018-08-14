@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.command.ExplainCommand
@@ -303,5 +304,36 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     assert(explainStr(sql("SELECT myUdf1(myUdf2(1))")).contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
     assert(explainStr(spark.range(1).select(udf1(udf2(functions.lit(1)))))
       .contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
+  }
+
+  test("Non-nullable UDF") {
+    val foo = udf(() => Math.random())
+    spark.udf.register("random0", foo.asNonNullable())
+    val df = sql("SELECT random0()")
+    assert(df.logicalPlan.asInstanceOf[Project].projectList.forall(!_.nullable))
+    assert(df.head().getDouble(0) >= 0.0)
+    val foo1 = foo.asNonNullable()
+    val df1 = testData.select(foo1())
+    assert(df1.logicalPlan.asInstanceOf[Project].projectList.forall(!_.nullable))
+    assert(df1.head().getDouble(0) >= 0.0)
+    val bar = udf(() => Math.random(), DataTypes.DoubleType).asNonNullable()
+    val df2 = testData.select(bar())
+    assert(df2.logicalPlan.asInstanceOf[Project].projectList.forall(!_.nullable))
+    assert(df2.head().getDouble(0) >= 0.0)
+    val javaUdf = udf(new UDF0[Double] {
+      override def call(): Double = Math.random()
+    }, DoubleType).asNonNullable()
+    val df3 = testData.select(javaUdf())
+    assert(df3.logicalPlan.asInstanceOf[Project].projectList.forall(!_.nullable))
+    assert(df3.head().getDouble(0) >= 0.0)
+  }
+
+  test("Non-nullable UDF returning null") {
+    val foo = udf(() => null).asNonNullable()
+    val df1 = testData.select(foo())
+    val e = intercept[SparkException] {
+      df1.head()
+    }
+    assert(e.getMessage.contains("Cannot return null value from user defined function"))
   }
 }

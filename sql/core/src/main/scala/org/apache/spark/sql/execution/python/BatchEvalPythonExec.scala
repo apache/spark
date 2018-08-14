@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -86,13 +86,28 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
       val unpickledBatch = unpickle.loads(pickedResult)
       unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
     }.map { result =>
+      var row: InternalRow = null
       if (udfs.length == 1) {
         // fast path for single UDF
         mutableRow(0) = fromJava(result)
-        mutableRow
+        row = mutableRow
       } else {
-        fromJava(result).asInstanceOf[InternalRow]
+        row = fromJava(result).asInstanceOf[InternalRow]
+      }
+      verifyResults(row)
+      row
+    }
+  }
+
+  private def verifyResults(row: InternalRow) {
+    for ((udf, i) <- udfs.view.zipWithIndex) {
+      if (row.isNullAt(i) && !udf.nullable) {
+        val inputTypes = udf.children.map(_.dataType.simpleString).mkString(", ")
+        val signature = s"${udf.name}: ($inputTypes) => ${udf.dataType.simpleString}"
+        throw new SparkException(
+          s"Cannot return null value from user defined function $signature.")
       }
     }
   }
+
 }
