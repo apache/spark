@@ -822,7 +822,7 @@ class StreamingContextTests(PySparkStreamingTestCase):
         self.ssc = StreamingContext.getActiveOrCreate(None, setupFunc)
         self.assertTrue(self.setupCalled)
 
-        # Verify that getActiveOrCreate() retuns active context and does not call the setupFunc
+        # Verify that getActiveOrCreate() returns active context and does not call the setupFunc
         self.ssc.start()
         self.setupCalled = False
         self.assertEqual(StreamingContext.getActiveOrCreate(None, setupFunc), self.ssc)

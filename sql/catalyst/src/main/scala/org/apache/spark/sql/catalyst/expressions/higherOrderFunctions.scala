@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
 /**
@@ -35,19 +35,19 @@ case class NamedLambdaVariable(
     name: String,
     dataType: DataType,
     nullable: Boolean,
-    value: AtomicReference[Any] = new AtomicReference(),
-    exprId: ExprId = NamedExpression.newExprId)
+    exprId: ExprId = NamedExpression.newExprId,
+    value: AtomicReference[Any] = new AtomicReference())
   extends LeafExpression
   with NamedExpression
   with CodegenFallback {
 
-  override def qualifier: Option[String] = None
+  override def qualifier: Seq[String] = Seq.empty
 
   override def newInstance(): NamedExpression =
-    copy(value = new AtomicReference(), exprId = NamedExpression.newExprId)
+    copy(exprId = NamedExpression.newExprId, value = new AtomicReference())
 
   override def toAttribute: Attribute = {
-    AttributeReference(name, dataType, nullable, Metadata.empty)(exprId, None)
+    AttributeReference(name, dataType, nullable, Metadata.empty)(exprId, Seq.empty)
   }
 
   override def eval(input: InternalRow): Any = value.get
@@ -88,30 +88,45 @@ object LambdaFunction {
  * A higher order function takes one or more (lambda) functions and applies these to some objects.
  * The function produces a number of variables which can be consumed by some lambda function.
  */
-trait HigherOrderFunction extends Expression {
+trait HigherOrderFunction extends Expression with ExpectsInputTypes {
 
-  override def children: Seq[Expression] = inputs ++ functions
+  override def children: Seq[Expression] = arguments ++ functions
 
   /**
-   * Inputs to the higher ordered function.
+   * Arguments of the higher ordered function.
    */
-  def inputs: Seq[Expression]
+  def arguments: Seq[Expression]
+
+  def argumentTypes: Seq[AbstractDataType]
 
   /**
-   * All inputs have been resolved. This means that the types and nullabilty of (most of) the
+   * All arguments have been resolved. This means that the types and nullabilty of (most of) the
    * lambda function arguments is known, and that we can start binding the lambda functions.
    */
-  lazy val inputResolved: Boolean = inputs.forall(_.resolved)
+  lazy val argumentsResolved: Boolean = arguments.forall(_.resolved)
+
+  /**
+   * Checks the argument data types, returns `TypeCheckResult.success` if it's valid,
+   * or returns a `TypeCheckResult` with an error message if invalid.
+   * Note: it's not valid to call this method until `argumentsResolved == true`.
+   */
+  def checkArgumentDataTypes(): TypeCheckResult = {
+    ExpectsInputTypes.checkInputDataTypes(arguments, argumentTypes)
+  }
 
   /**
    * Functions applied by the higher order function.
    */
   def functions: Seq[Expression]
 
+  def functionTypes: Seq[AbstractDataType]
+
+  override def inputTypes: Seq[AbstractDataType] = argumentTypes ++ functionTypes
+
   /**
    * All inputs must be resolved and all functions must be resolved lambda functions.
    */
-  override lazy val resolved: Boolean = inputResolved && functions.forall {
+  override lazy val resolved: Boolean = argumentsResolved && functions.forall {
     case l: LambdaFunction => l.resolved
     case _ => false
   }
@@ -123,6 +138,8 @@ trait HigherOrderFunction extends Expression {
    */
   def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): HigherOrderFunction
 
+  // Make sure the lambda variables refer the same instances as of arguments for case that the
+  // variables in instantiated separately during serialization or for some reason.
   @transient lazy val functionsForEval: Seq[Expression] = functions.map {
     case LambdaFunction(function, arguments, hidden) =>
       val argumentMap = arguments.map { arg => arg.exprId -> arg }.toMap
@@ -133,33 +150,52 @@ trait HigherOrderFunction extends Expression {
   }
 }
 
-trait ArrayBasedHigherOrderFunction extends HigherOrderFunction with ExpectsInputTypes {
+/**
+ * Trait for functions having as input one argument and one function.
+ */
+trait SimpleHigherOrderFunction extends HigherOrderFunction  {
 
-  def input: Expression
+  def argument: Expression
 
-  override def inputs: Seq[Expression] = input :: Nil
+  override def arguments: Seq[Expression] = argument :: Nil
+
+  def argumentType: AbstractDataType
+
+  override def argumentTypes(): Seq[AbstractDataType] = argumentType :: Nil
 
   def function: Expression
 
   override def functions: Seq[Expression] = function :: Nil
 
-  def expectingFunctionType: AbstractDataType = AnyDataType
+  def functionType: AbstractDataType = AnyDataType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, expectingFunctionType)
+  override def functionTypes: Seq[AbstractDataType] = functionType :: Nil
 
-  @transient lazy val functionForEval: Expression = functionsForEval.head
-}
+  def functionForEval: Expression = functionsForEval.head
 
-object ArrayBasedHigherOrderFunction {
+  /**
+   * Called by [[eval]]. If a subclass keeps the default nullability, it can override this method
+   * in order to save null-check code.
+   */
+  protected def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any =
+    sys.error(s"UnaryHigherOrderFunction must override either eval or nullSafeEval")
 
-  def elementArgumentType(dt: DataType): (DataType, Boolean) = {
-    dt match {
-      case ArrayType(elementType, containsNull) => (elementType, containsNull)
-      case _ =>
-        val ArrayType(elementType, containsNull) = ArrayType.defaultConcreteType
-        (elementType, containsNull)
+  override def eval(inputRow: InternalRow): Any = {
+    val value = argument.eval(inputRow)
+    if (value == null) {
+      null
+    } else {
+      nullSafeEval(inputRow, value)
     }
   }
+}
+
+trait ArrayBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
+  override def argumentType: AbstractDataType = ArrayType
+}
+
+trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
+  override def argumentType: AbstractDataType = MapType
 }
 
 /**
@@ -177,21 +213,21 @@ object ArrayBasedHigherOrderFunction {
   """,
   since = "2.4.0")
 case class ArrayTransform(
-    input: Expression,
+    argument: Expression,
     function: Expression)
-  extends ArrayBasedHigherOrderFunction with CodegenFallback {
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  override def nullable: Boolean = input.nullable
+  override def nullable: Boolean = argument.nullable
 
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayTransform = {
-    val elem = ArrayBasedHigherOrderFunction.elementArgumentType(input.dataType)
+    val ArrayType(elementType, containsNull) = argument.dataType
     function match {
       case LambdaFunction(_, arguments, _) if arguments.size == 2 =>
-        copy(function = f(function, elem :: (IntegerType, false) :: Nil))
+        copy(function = f(function, (elementType, containsNull) :: (IntegerType, false) :: Nil))
       case _ =>
-        copy(function = f(function, elem :: Nil))
+        copy(function = f(function, (elementType, containsNull) :: Nil))
     }
   }
 
@@ -205,27 +241,75 @@ case class ArrayTransform(
     (elementVar, indexVar)
   }
 
-  override def eval(input: InternalRow): Any = {
-    val arr = this.input.eval(input).asInstanceOf[ArrayData]
-    if (arr == null) {
-      null
-    } else {
-      val f = functionForEval
-      val result = new GenericArrayData(new Array[Any](arr.numElements))
-      var i = 0
-      while (i < arr.numElements) {
-        elementVar.value.set(arr.get(i, elementVar.dataType))
-        if (indexVar.isDefined) {
-          indexVar.get.value.set(i)
-        }
-        result.update(i, f.eval(input))
-        i += 1
+  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
+    val arr = argumentValue.asInstanceOf[ArrayData]
+    val f = functionForEval
+    val result = new GenericArrayData(new Array[Any](arr.numElements))
+    var i = 0
+    while (i < arr.numElements) {
+      elementVar.value.set(arr.get(i, elementVar.dataType))
+      if (indexVar.isDefined) {
+        indexVar.get.value.set(i)
       }
-      result
+      result.update(i, f.eval(inputRow))
+      i += 1
     }
+    result
   }
 
   override def prettyName: String = "transform"
+}
+
+/**
+ * Filters entries in a map using the provided function.
+ */
+@ExpressionDescription(
+usage = "_FUNC_(expr, func) - Filters entries in a map using the function.",
+examples = """
+    Examples:
+      > SELECT _FUNC_(map(1, 0, 2, 2, 3, -1), (k, v) -> k > v);
+       [1 -> 0, 3 -> -1]
+  """,
+since = "2.4.0")
+case class MapFilter(
+    argument: Expression,
+    function: Expression)
+  extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
+
+  @transient lazy val (keyVar, valueVar) = {
+    val args = function.asInstanceOf[LambdaFunction].arguments
+    (args.head.asInstanceOf[NamedLambdaVariable], args.tail.head.asInstanceOf[NamedLambdaVariable])
+  }
+
+  @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
+
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): MapFilter = {
+    copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
+  }
+
+  override def nullable: Boolean = argument.nullable
+
+  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
+    val m = argumentValue.asInstanceOf[MapData]
+    val f = functionForEval
+    val retKeys = new mutable.ListBuffer[Any]
+    val retValues = new mutable.ListBuffer[Any]
+    m.foreach(keyType, valueType, (k, v) => {
+      keyVar.value.set(k)
+      valueVar.value.set(v)
+      if (f.eval(inputRow).asInstanceOf[Boolean]) {
+        retKeys += k
+        retValues += v
+      }
+    })
+    ArrayBasedMapData(retKeys.toArray, retValues.toArray)
+  }
+
+  override def dataType: DataType = argument.dataType
+
+  override def functionType: AbstractDataType = BooleanType
+
+  override def prettyName: String = "map_filter"
 }
 
 /**
@@ -240,43 +324,86 @@ case class ArrayTransform(
   """,
   since = "2.4.0")
 case class ArrayFilter(
-    input: Expression,
+    argument: Expression,
     function: Expression)
-  extends ArrayBasedHigherOrderFunction with CodegenFallback {
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  override def nullable: Boolean = input.nullable
+  override def nullable: Boolean = argument.nullable
 
-  override def dataType: DataType = input.dataType
+  override def dataType: DataType = argument.dataType
 
-  override def expectingFunctionType: AbstractDataType = BooleanType
+  override def functionType: AbstractDataType = BooleanType
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayFilter = {
-    val elem = ArrayBasedHigherOrderFunction.elementArgumentType(input.dataType)
-    copy(function = f(function, elem :: Nil))
+    val ArrayType(elementType, containsNull) = argument.dataType
+    copy(function = f(function, (elementType, containsNull) :: Nil))
   }
 
   @transient lazy val LambdaFunction(_, Seq(elementVar: NamedLambdaVariable), _) = function
 
-  override def eval(input: InternalRow): Any = {
-    val arr = this.input.eval(input).asInstanceOf[ArrayData]
-    if (arr == null) {
-      null
-    } else {
-      val f = functionForEval
-      val buffer = new mutable.ArrayBuffer[Any](arr.numElements)
-      var i = 0
-      while (i < arr.numElements) {
-        elementVar.value.set(arr.get(i, elementVar.dataType))
-        if (f.eval(input).asInstanceOf[Boolean]) {
-          buffer += elementVar.value.get
-        }
-        i += 1
+  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
+    val arr = argumentValue.asInstanceOf[ArrayData]
+    val f = functionForEval
+    val buffer = new mutable.ArrayBuffer[Any](arr.numElements)
+    var i = 0
+    while (i < arr.numElements) {
+      elementVar.value.set(arr.get(i, elementVar.dataType))
+      if (f.eval(inputRow).asInstanceOf[Boolean]) {
+        buffer += elementVar.value.get
       }
-      new GenericArrayData(buffer)
+      i += 1
     }
+    new GenericArrayData(buffer)
   }
 
   override def prettyName: String = "filter"
+}
+
+/**
+ * Tests whether a predicate holds for one or more elements in the array.
+ */
+@ExpressionDescription(usage =
+  "_FUNC_(expr, pred) - Tests whether a predicate holds for one or more elements in the array.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 0);
+       true
+  """,
+  since = "2.4.0")
+case class ArrayExists(
+    argument: Expression,
+    function: Expression)
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+
+  override def nullable: Boolean = argument.nullable
+
+  override def dataType: DataType = BooleanType
+
+  override def functionType: AbstractDataType = BooleanType
+
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayExists = {
+    val ArrayType(elementType, containsNull) = argument.dataType
+    copy(function = f(function, (elementType, containsNull) :: Nil))
+  }
+
+  @transient lazy val LambdaFunction(_, Seq(elementVar: NamedLambdaVariable), _) = function
+
+  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
+    val arr = argumentValue.asInstanceOf[ArrayData]
+    val f = functionForEval
+    var exists = false
+    var i = 0
+    while (i < arr.numElements && !exists) {
+      elementVar.value.set(arr.get(i, elementVar.dataType))
+      if (f.eval(inputRow).asInstanceOf[Boolean]) {
+        exists = true
+      }
+      i += 1
+    }
+    exists
+  }
+
+  override def prettyName: String = "exists"
 }
 
 /**
@@ -291,52 +418,56 @@ case class ArrayFilter(
     """,
   examples = """
     Examples:
-      > SELECT _FUNC_(array(1, 2, 3), (acc, x) -> acc + x);
+      > SELECT _FUNC_(array(1, 2, 3), 0, (acc, x) -> acc + x);
        6
-      > SELECT _FUNC_(array(1, 2, 3), (acc, x) -> acc + x, acc -> acc * 10);
+      > SELECT _FUNC_(array(1, 2, 3), 0, (acc, x) -> acc + x, acc -> acc * 10);
        60
   """,
   since = "2.4.0")
 case class ArrayAggregate(
-    input: Expression,
+    argument: Expression,
     zero: Expression,
     merge: Expression,
     finish: Expression)
   extends HigherOrderFunction with CodegenFallback {
 
-  def this(input: Expression, zero: Expression, merge: Expression) = {
-    this(input, zero, merge, LambdaFunction.identity)
+  def this(argument: Expression, zero: Expression, merge: Expression) = {
+    this(argument, zero, merge, LambdaFunction.identity)
   }
 
-  override def inputs: Seq[Expression] = input :: zero :: Nil
+  override def arguments: Seq[Expression] = argument :: zero :: Nil
+
+  override def argumentTypes: Seq[AbstractDataType] = ArrayType :: AnyDataType :: Nil
 
   override def functions: Seq[Expression] = merge :: finish :: Nil
 
-  override def nullable: Boolean = input.nullable || finish.nullable
+  override def functionTypes: Seq[AbstractDataType] = zero.dataType :: AnyDataType :: Nil
+
+  override def nullable: Boolean = argument.nullable || finish.nullable
 
   override def dataType: DataType = finish.dataType
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (!ArrayType.acceptsType(input.dataType)) {
-      TypeCheckResult.TypeCheckFailure(
-        s"argument 1 requires ${ArrayType.simpleString} type, " +
-          s"however, '${input.sql}' is of ${input.dataType.catalogString} type.")
-    } else if (!DataType.equalsStructurally(
-        zero.dataType, merge.dataType, ignoreNullability = true)) {
-      TypeCheckResult.TypeCheckFailure(
-        s"argument 3 requires ${zero.dataType.simpleString} type, " +
-          s"however, '${merge.sql}' is of ${merge.dataType.catalogString} type.")
-    } else {
-      TypeCheckResult.TypeCheckSuccess
+    checkArgumentDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        if (!DataType.equalsStructurally(
+            zero.dataType, merge.dataType, ignoreNullability = true)) {
+          TypeCheckResult.TypeCheckFailure(
+            s"argument 3 requires ${zero.dataType.simpleString} type, " +
+              s"however, '${merge.sql}' is of ${merge.dataType.catalogString} type.")
+        } else {
+          TypeCheckResult.TypeCheckSuccess
+        }
+      case failure => failure
     }
   }
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayAggregate = {
     // Be very conservative with nullable. We cannot be sure that the accumulator does not
     // evaluate to null. So we always set nullable to true here.
-    val elem = ArrayBasedHigherOrderFunction.elementArgumentType(input.dataType)
+    val ArrayType(elementType, containsNull) = argument.dataType
     val acc = zero.dataType -> true
-    val newMerge = f(merge, acc :: elem :: Nil)
+    val newMerge = f(merge, acc :: (elementType, containsNull) :: Nil)
     val newFinish = f(finish, acc :: Nil)
     copy(merge = newMerge, finish = newFinish)
   }
@@ -346,7 +477,7 @@ case class ArrayAggregate(
   @transient lazy val LambdaFunction(_, Seq(accForFinishVar: NamedLambdaVariable), _) = finish
 
   override def eval(input: InternalRow): Any = {
-    val arr = this.input.eval(input).asInstanceOf[ArrayData]
+    val arr = argument.eval(input).asInstanceOf[ArrayData]
     if (arr == null) {
       null
     } else {

@@ -29,7 +29,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 
 class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSQLContext {
   test("Test `spark.sql.parquet.compression.codec` config") {
-    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "GZIP", "LZO").foreach { c =>
+    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "GZIP", "LZO", "LZ4", "BROTLI", "ZSTD").foreach { c =>
       withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> c) {
         val expected = if (c == "NONE") "UNCOMPRESSED" else c
         val option = new ParquetOptions(Map.empty[String, String], spark.sessionState.conf)

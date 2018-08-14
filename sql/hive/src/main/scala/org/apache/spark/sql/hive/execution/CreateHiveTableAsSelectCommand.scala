@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.command.DataWritingCommand
 /**
  * Create table and insert the query result into it.
  *
- * @param tableDesc the Table Describe, which may contains serde, storage handler etc.
+ * @param tableDesc the Table Describe, which may contain serde, storage handler etc.
  * @param query the query whose result will be insert into the new relation
  * @param mode SaveMode
  */

@@ -133,4 +133,37 @@ class ThreadUtilsSuite extends SparkFunSuite {
       "stack trace contains unexpected references to ThreadUtils"
     )
   }
+
+  test("parmap should be interruptible") {
+    val t = new Thread() {
+      setDaemon(true)
+
+      override def run() {
+        try {
+          // "par" is uninterruptible. The following will keep running even if the thread is
+          // interrupted. We should prefer to use "ThreadUtils.parmap".
+          //
+          // (1 to 10).par.flatMap { i =>
+          //   Thread.sleep(100000)
+          //   1 to i
+          // }
+          //
+          ThreadUtils.parmap(1 to 10, "test", 2) { i =>
+            Thread.sleep(100000)
+            1 to i
+          }.flatten
+        } catch {
+          case _: InterruptedException => // excepted
+        }
+      }
+    }
+    t.start()
+    eventually(timeout(10.seconds)) {
+      assert(t.isAlive)
+    }
+    t.interrupt()
+    eventually(timeout(10.seconds)) {
+      assert(!t.isAlive)
+    }
+  }
 }

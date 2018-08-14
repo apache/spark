@@ -214,6 +214,13 @@ object SQLConf {
     .intConf
     .createWithDefault(4)
 
+  val LIMIT_FLAT_GLOBAL_LIMIT = buildConf("spark.sql.limit.flatGlobalLimit")
+    .internal()
+    .doc("During global limit, try to evenly distribute limited rows across data " +
+      "partitions. If disabled, scanning data partitions sequentially until reaching limit number.")
+    .booleanConf
+    .createWithDefault(true)
+
   val ADVANCED_PARTITION_PREDICATE_PUSHDOWN =
     buildConf("spark.sql.hive.advancedPartitionPredicatePushdown.enabled")
       .internal()
@@ -370,7 +377,7 @@ object SQLConf {
       "`parquet.compression` is specified in the table-specific options/properties, the " +
       "precedence would be `compression`, `parquet.compression`, " +
       "`spark.sql.parquet.compression.codec`. Acceptable values include: none, uncompressed, " +
-      "snappy, gzip, lzo.")
+      "snappy, gzip, lzo, brotli, lz4, zstd.")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("none", "uncompressed", "snappy", "gzip", "lzo", "lz4", "brotli", "zstd"))
@@ -1364,7 +1371,7 @@ object SQLConf {
         "mode to keep the same behavior of Spark prior to 2.3. Note that this config doesn't " +
         "affect Hive serde tables, as they are always overwritten with dynamic mode. This can " +
         "also be set as an output option for a data source using key partitionOverwriteMode " +
-        "(which takes precendence over this setting), e.g. " +
+        "(which takes precedence over this setting), e.g. " +
         "dataframe.write.option(\"partitionOverwriteMode\", \"dynamic\").save(path)."
       )
       .stringConf
@@ -1476,6 +1483,15 @@ object SQLConf {
         "are performed before any UNION, EXCEPT and MINUS operations.")
       .booleanConf
       .createWithDefault(false)
+
+  val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
+    buildConf("spark.sql.parallelFileListingInStatsComputation.enabled")
+      .internal()
+      .doc("When true, SQL commands use parallel file listing, " +
+        "as opposed to single thread listing." +
+        "This usually speeds up commands that need to list many directories.")
+      .booleanConf
+      .createWithDefault(true)
 
   val BYPASS_PARSER_FOR_EMPTY_SCHEMA =
     buildConf("spark.sql.legacy.bypassParserForEmptySchema")
@@ -1682,6 +1698,8 @@ class SQLConf extends Serializable with Logging {
 
   def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
 
+  def limitFlatGlobalLimit: Boolean = getConf(LIMIT_FLAT_GLOBAL_LIMIT)
+
   def advancedPartitionPredicatePushdownEnabled: Boolean =
     getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
 
@@ -1881,6 +1899,9 @@ class SQLConf extends Serializable with Logging {
   def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
 
   def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
+
+  def parallelFileListingInStatsComputation: Boolean =
+    getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)
 
   def bypassParserForEmptySchema: Boolean = getConf(SQLConf.BYPASS_PARSER_FOR_EMPTY_SCHEMA)
 

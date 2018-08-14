@@ -3234,6 +3234,17 @@ object functions {
   def array_distinct(e: Column): Column = withExpr { ArrayDistinct(e.expr) }
 
   /**
+   * Returns an array of the elements in the intersection of the given two arrays,
+   * without duplicates.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_intersect(col1: Column, col2: Column): Column = withExpr {
+    ArrayIntersect(col1.expr, col2.expr)
+  }
+
+  /**
    * Returns an array of the elements in the union of the given two arrays, without duplicates.
    *
    * @group collection_funcs
@@ -3328,7 +3339,7 @@ object functions {
 
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
-   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * as keys type, `StructType` or `ArrayType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -3360,7 +3371,7 @@ object functions {
 
   /**
    * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
-   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * as keys type, `StructType` or `ArrayType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -3389,7 +3400,7 @@ object functions {
 
   /**
    * Parses a column containing a JSON string into a `MapType` with `StringType` as keys type,
-   * `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * `StructType` or `ArrayType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -3403,7 +3414,7 @@ object functions {
 
   /**
    * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
-   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * as keys type, `StructType` or `ArrayType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -3420,7 +3431,7 @@ object functions {
 
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
-   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * as keys type, `StructType` or `ArrayType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
