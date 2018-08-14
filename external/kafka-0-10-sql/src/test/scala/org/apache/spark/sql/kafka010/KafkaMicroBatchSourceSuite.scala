@@ -49,7 +49,7 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
 import org.apache.spark.sql.types.StructType
 
-abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
+abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with KafkaTest {
 
   protected var testUtils: KafkaTestUtils = _
 

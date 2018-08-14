@@ -35,7 +35,7 @@ import org.apache.spark.util.Utils
  * Once we have one, this will be changed to a specialization of KafkaSinkSuite and we won't have
  * to duplicate all the code.
  */
-class KafkaContinuousSinkSuite extends KafkaContinuousTest with KafkaTest {
+class KafkaContinuousSinkSuite extends KafkaContinuousTest {
   import testImplicits._
 
   override val streamingTimeout = 30.seconds
