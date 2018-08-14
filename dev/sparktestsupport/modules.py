@@ -377,6 +377,8 @@ pyspark_core = Module(
         "pyspark.profiler",
         "pyspark.shuffle",
         "pyspark.tests",
+        "pyspark.test_broadcast",
+        "pyspark.test_serializers",
         "pyspark.util",
     ]
 )
