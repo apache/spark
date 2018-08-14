@@ -145,7 +145,6 @@ object FileSourceStrategy extends Strategy with Logging {
       //  - bucket keys only - optionally used to prune files to read
       //  - keys stored in the data only - optionally used to skip groups of data in files
       //  - filters that need to be evaluated again after the scan
-
       val filterSet = ExpressionSet(filters)
 
       // SPARK-24721: Filter out Python UDFs, otherwise ExtractPythonUDF rule will throw exception
