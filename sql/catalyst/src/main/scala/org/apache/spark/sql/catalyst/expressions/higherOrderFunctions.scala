@@ -512,21 +512,18 @@ case class ArrayAggregate(
   """,
   since = "2.4.0")
 case class TransformKeys(
-    input: Expression,
+    argument: Expression,
     function: Expression)
   extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  override def nullable: Boolean = input.nullable
+  override def nullable: Boolean = argument.nullable
 
   override def dataType: DataType = {
-    val map = input.dataType.asInstanceOf[MapType]
+    val map = argument.dataType.asInstanceOf[MapType]
     MapType(function.dataType, map.valueType, map.valueContainsNull)
   }
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(MapType, expectingFunctionType)
-
-  @transient val (keyType, valueType, valueContainsNull) =
-    HigherOrderFunction.mapKeyValueArgumentType(input.dataType)
+  @transient val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): TransformKeys = {
     copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
@@ -538,8 +535,8 @@ case class TransformKeys(
     (keyVar, valueVar)
   }
 
-  override def nullSafeEval(inputRow: InternalRow, value: Any): Any = {
-    val map = value.asInstanceOf[MapData]
+  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
+    val map = argumentValue.asInstanceOf[MapData]
     val f = functionForEval
     val resultKeys = new GenericArrayData(new Array[Any](map.numElements))
     var i = 0
