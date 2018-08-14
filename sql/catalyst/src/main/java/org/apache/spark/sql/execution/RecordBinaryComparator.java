@@ -27,7 +27,7 @@ public final class RecordBinaryComparator extends RecordComparator {
   public int compare(
       Object leftObj, long leftOff, int leftLen, Object rightObj, long rightOff, int rightLen) {
     int i = 0;
-    int res = 0;
+    long res = 0;
 
     // If the arrays have different length, the longer one is larger.
     if (leftLen != rightLen) {
@@ -42,16 +42,16 @@ public final class RecordBinaryComparator extends RecordComparator {
       while ((leftOff + i) % 8 != 0 && i < leftLen) {
         res = (Platform.getByte(leftObj, leftOff + i) & 0xff) -
                 (Platform.getByte(rightObj, rightOff + i) & 0xff);
-        if (res != 0) return res;
+        if (res != 0) return (int) res;
         i += 1;
       }
     }
     // for architectures that support unaligned accesses, chew it up 8 bytes at a time
     if (Platform.unaligned() || (((leftOff + i) % 8 == 0) && ((rightOff + i) % 8 == 0))) {
       while (i <= leftLen - 8) {
-        res = (int) ((Platform.getLong(leftObj, leftOff + i) -
-                Platform.getLong(rightObj, rightOff + i)) % Integer.MAX_VALUE);
-        if (res != 0) return res;
+        res = Platform.getLong(leftObj, leftOff + i) -
+                Platform.getLong(rightObj, rightOff + i);
+        if (res != 0) return res > 0 ? 1 : -1;
         i += 8;
       }
     }
@@ -60,7 +60,7 @@ public final class RecordBinaryComparator extends RecordComparator {
     while (i < leftLen) {
       res = (Platform.getByte(leftObj, leftOff + i) & 0xff) -
               (Platform.getByte(rightObj, rightOff + i) & 0xff);
-      if (res != 0) return res;
+      if (res != 0) return (int) res;
       i += 1;
     }
 
