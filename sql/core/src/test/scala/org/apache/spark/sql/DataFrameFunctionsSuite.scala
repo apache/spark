@@ -2238,6 +2238,70 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(ex5.getMessage.contains("cannot resolve '`a`'"))
   }
 
+  test("map_zip_with function - map of primitive types") {
+    val df = Seq(
+      (Map(8 -> 6L, 3 -> 5L, 6 -> 2L), Map[Integer, Integer]((6, 4), (8, 2), (3, 2))),
+      (Map(10 -> 6L, 8 -> 3L), Map[Integer, Integer]((8, 4), (4, null))),
+      (Map.empty[Int, Long], Map[Integer, Integer]((5, 1))),
+      (Map(5 -> 1L), null)
+    ).toDF("m1", "m2")
+
+    checkAnswer(df.selectExpr("map_zip_with(m1, m2, (k, v1, v2) -> k == v1 + v2)"),
+      Seq(
+        Row(Map(8 -> true, 3 -> false, 6 -> true)),
+        Row(Map(10 -> null, 8 -> false, 4 -> null)),
+        Row(Map(5 -> null)),
+        Row(null)))
+  }
+
+  test("map_zip_with function - map of non-primitive types") {
+    val df = Seq(
+      (Map("z" -> "a", "y" -> "b", "x" -> "c"), Map("x" -> "a", "z" -> "c")),
+      (Map("b" -> "a", "c" -> "d"), Map("c" -> "a", "b" -> null, "d" -> "k")),
+      (Map("a" -> "d"), Map.empty[String, String]),
+      (Map("a" -> "d"), null)
+    ).toDF("m1", "m2")
+
+    checkAnswer(df.selectExpr("map_zip_with(m1, m2, (k, v1, v2) -> (v1, v2))"),
+      Seq(
+        Row(Map("z" -> Row("a", "c"), "y" -> Row("b", null), "x" -> Row("c", "a"))),
+        Row(Map("b" -> Row("a", null), "c" -> Row("d", "a"), "d" -> Row(null, "k"))),
+        Row(Map("a" -> Row("d", null))),
+        Row(null)))
+  }
+
+  test("map_zip_with function - invalid") {
+    val df = Seq(
+      (Map(1 -> 2), Map(1 -> "a"), Map("a" -> "b"), Map(Map(1 -> 2) -> 2), 1)
+    ).toDF("mii", "mis", "mss", "mmi", "i")
+
+    val ex1 = intercept[AnalysisException] {
+      df.selectExpr("map_zip_with(mii, mis, (x, y) -> x + y)")
+    }
+    assert(ex1.getMessage.contains("The number of lambda function arguments '2' does not match"))
+
+    val ex2 = intercept[AnalysisException] {
+      df.selectExpr("map_zip_with(mis, mmi, (x, y, z) -> concat(x, y, z))")
+    }
+    assert(ex2.getMessage.contains("The input to function map_zip_with should have " +
+      "been two maps with compatible key types"))
+
+    val ex3 = intercept[AnalysisException] {
+      df.selectExpr("map_zip_with(i, mis, (x, y, z) -> concat(x, y, z))")
+    }
+    assert(ex3.getMessage.contains("type mismatch: argument 1 requires map type"))
+
+    val ex4 = intercept[AnalysisException] {
+      df.selectExpr("map_zip_with(mis, i, (x, y, z) -> concat(x, y, z))")
+    }
+    assert(ex4.getMessage.contains("type mismatch: argument 2 requires map type"))
+
+    val ex5 = intercept[AnalysisException] {
+      df.selectExpr("map_zip_with(mmi, mmi, (x, y, z) -> x)")
+    }
+    assert(ex5.getMessage.contains("function map_zip_with does not support ordering on type map"))
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {
