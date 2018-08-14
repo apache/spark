@@ -80,12 +80,14 @@ class OptimizerRuleExclusionSuite extends PlanTest {
         "DummyRuleName"))
   }
 
-  test("Try to exclude a non-excludable rule") {
+  test("Try to exclude some non-excludable rules") {
     verifyExcludedRules(
       new SimpleTestOptimizer(),
       Seq(
         ReplaceIntersectWithSemiJoin.ruleName,
-        PullupCorrelatedPredicates.ruleName))
+        PullupCorrelatedPredicates.ruleName,
+        RewriteExceptAll.ruleName,
+        RewriteIntersectAll.ruleName))
   }
 
   test("Custom optimizer") {
