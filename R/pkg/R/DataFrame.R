@@ -2850,7 +2850,7 @@ setMethod("intersect",
 
 #' intersectAll
 #'
-#' Return a new SparkDataFrame containing rows only in both this SparkDataFrame
+#' Return a new SparkDataFrame containing rows in both this SparkDataFrame
 #' and another SparkDataFrame while preserving the duplicates.
 #' This is equivalent to \code{INTERSECT ALL} in SQL. Also as standard in
 #' SQL, this function resolves columns by position (not by name).
