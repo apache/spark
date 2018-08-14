@@ -856,13 +856,15 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       (NullType, NULL),
       (BooleanType, BOOLEAN),
       (ByteType, INT),
+      (ShortType, INT),
       (IntegerType, INT),
       (LongType, LONG),
       (FloatType, FLOAT),
       (DoubleType, DOUBLE),
       (BinaryType, BYTES),
       (DateType, INT),
-      (TimestampType, LONG)
+      (TimestampType, LONG),
+      (DecimalType(4, 2), BYTES)
     )
     def assertException(f: () => AvroSerializer) {
       val message = intercept[org.apache.spark.sql.avro.IncompatibleSchemaException] {
@@ -884,25 +886,23 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       nullable <- Seq(true, false)
     } if (i._2 != j._2) {
       val avroType = resolveNullable(Schema.create(j._2), nullable)
+      val avroArrayType = resolveNullable(Schema.createArray(avroType), nullable)
+      val avroMapType = resolveNullable(Schema.createMap(avroType), nullable)
+      val name = "foo"
+      val avroField = new Field(name, avroType, "", null)
+      val recordSchema = Schema.createRecord("name", "doc", "space", true, Seq(avroField).asJava)
+      val avroRecordType = resolveNullable(recordSchema, nullable)
 
-      assertException(() => new AvroSerializer(i._1, avroType, nullable))
-      assertException{() =>
-        val catalystType = ArrayType(i._1, nullable)
-        val avroSchemaType = resolveNullable(Schema.createArray(avroType), nullable)
-        new AvroSerializer(catalystType, avroSchemaType, nullable)
-      }
-      assertException{() =>
-        val catalystType = MapType(StringType, i._1, nullable)
-        val avroSchemaType = resolveNullable(Schema.createMap(avroType), nullable)
-        new AvroSerializer(catalystType, avroSchemaType, nullable)
-      }
-      assertException{() =>
-        val name = "foo"
-        val catalystType = StructType(Seq(StructField(name, i._1, nullable)))
-        val avroField = new Field(name, avroType, "", null)
-        val recordSchema = Schema.createRecord("name", "", "", true, Seq(avroField).asJava)
-        val avroSchemaType = resolveNullable(recordSchema, nullable)
-        new AvroSerializer(catalystType, avroSchemaType, nullable)
+      val catalystType = i._1
+      val catalystArrayType = ArrayType(catalystType, nullable)
+      val catalystMapType = MapType(StringType, catalystType, nullable)
+      val catalystStructType = StructType(Seq(StructField(name, catalystType, nullable)))
+
+      for {
+        avro <- Seq(avroType, avroArrayType, avroMapType, avroRecordType)
+        catalyst <- Seq(catalystType, catalystArrayType, catalystMapType, catalystStructType)
+      } {
+        assertException(() => new AvroSerializer(catalyst, avro, nullable))
       }
     }
   }

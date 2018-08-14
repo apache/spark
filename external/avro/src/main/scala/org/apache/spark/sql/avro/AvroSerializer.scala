@@ -201,6 +201,10 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
 
   private def newStructConverter(
       catalystStruct: StructType, avroStruct: Schema): InternalRow => Record = {
+    if (avroStruct.getType != RECORD) {
+      throw new IncompatibleSchemaException(s"Cannot convert Catalyst type $catalystStruct to " +
+        s"Avro type $avroStruct.")
+    }
     val avroFields = avroStruct.getFields
     assert(avroFields.size() == catalystStruct.length)
     val fieldConverters = catalystStruct.zip(avroFields.asScala).map {
