@@ -1704,6 +1704,7 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case p if !p.resolved => p // Skip unresolved nodes.
+      case ab: AnalysisBarrier => apply(ab.child)
       case p: LogicalPlan if p.resolved =>
         val childrenOutput = p.children.flatMap(c => c.output).groupBy(_.exprId).flatMap {
           case (exprId, attributes) =>
