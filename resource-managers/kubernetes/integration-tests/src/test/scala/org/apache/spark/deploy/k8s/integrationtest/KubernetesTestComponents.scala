@@ -32,7 +32,7 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
   val namespaceOption = Option(System.getProperty("spark.kubernetes.test.namespace"))
   val hasUserSpecifiedNamespace = namespaceOption.isDefined
   val namespace = namespaceOption.getOrElse(UUID.randomUUID().toString.replaceAll("-", ""))
-  private val serviceAccountName =
+  val serviceAccountName =
     Option(System.getProperty("spark.kubernetes.test.serviceAccountName"))
       .getOrElse("default")
   val kubernetesClient = defaultClient.inNamespace(namespace)

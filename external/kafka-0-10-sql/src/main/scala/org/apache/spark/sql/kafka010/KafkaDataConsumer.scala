@@ -155,7 +155,7 @@ private[kafka010] case class InternalKafkaConsumer(
     var toFetchOffset = offset
     var consumerRecord: ConsumerRecord[Array[Byte], Array[Byte]] = null
     // We want to break out of the while loop on a successful fetch to avoid using "return"
-    // which may causes a NonLocalReturnControl exception when this method is used as a function.
+    // which may cause a NonLocalReturnControl exception when this method is used as a function.
     var isFetchComplete = false
 
     while (toFetchOffset != UNKNOWN_OFFSET && !isFetchComplete) {

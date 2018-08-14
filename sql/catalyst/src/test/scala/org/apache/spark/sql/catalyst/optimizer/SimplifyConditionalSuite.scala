@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
@@ -46,7 +45,9 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
   private val unreachableBranch = (FalseLiteral, Literal(20))
   private val nullBranch = (Literal.create(null, NullType), Literal(30))
 
-  private val testRelation = LocalRelation('a.int)
+  val isNotNullCond = IsNotNull(UnresolvedAttribute(Seq("a")))
+  val isNullCond = IsNull(UnresolvedAttribute("b"))
+  val notCond = Not(UnresolvedAttribute("c"))
 
   test("simplify if") {
     assertEquivalent(
@@ -121,5 +122,48 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
         Nil,
         None),
       CaseWhen(normalBranch :: trueBranch :: Nil, None))
+  }
+
+  test("simplify CaseWhen if all the outputs are semantic equivalence") {
+    // When the conditions in `CaseWhen` are all deterministic, `CaseWhen` can be removed.
+    assertEquivalent(
+      CaseWhen((isNotNullCond, Subtract(Literal(3), Literal(2))) ::
+        (isNullCond, Literal(1)) ::
+        (notCond, Add(Literal(6), Literal(-5))) ::
+        Nil,
+        Add(Literal(2), Literal(-1))),
+      Literal(1)
+    )
+
+    // For non-deterministic conditions, we don't remove the `CaseWhen` statement.
+    assertEquivalent(
+      CaseWhen((GreaterThan(Rand(0), Literal(0.5)), Subtract(Literal(3), Literal(2))) ::
+        (LessThan(Rand(1), Literal(0.5)), Literal(1)) ::
+        (EqualTo(Rand(2), Literal(0.5)), Add(Literal(6), Literal(-5))) ::
+        Nil,
+        Add(Literal(2), Literal(-1))),
+      CaseWhen((GreaterThan(Rand(0), Literal(0.5)), Literal(1)) ::
+        (LessThan(Rand(1), Literal(0.5)), Literal(1)) ::
+        (EqualTo(Rand(2), Literal(0.5)), Literal(1)) ::
+        Nil,
+        Literal(1))
+    )
+
+    // When we have mixture of deterministic and non-deterministic conditions, we remove
+    // the deterministic conditions from the tail until a non-deterministic one is seen.
+    assertEquivalent(
+      CaseWhen((GreaterThan(Rand(0), Literal(0.5)), Subtract(Literal(3), Literal(2))) ::
+        (NonFoldableLiteral(true), Add(Literal(2), Literal(-1))) ::
+        (LessThan(Rand(1), Literal(0.5)), Literal(1)) ::
+        (NonFoldableLiteral(true), Add(Literal(6), Literal(-5))) ::
+        (NonFoldableLiteral(false), Literal(1)) ::
+        Nil,
+        Add(Literal(2), Literal(-1))),
+      CaseWhen((GreaterThan(Rand(0), Literal(0.5)), Literal(1)) ::
+        (NonFoldableLiteral(true), Literal(1)) ::
+        (LessThan(Rand(1), Literal(0.5)), Literal(1)) ::
+        Nil,
+        Literal(1))
+    )
   }
 }

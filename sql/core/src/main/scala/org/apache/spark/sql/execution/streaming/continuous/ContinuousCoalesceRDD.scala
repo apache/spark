@@ -40,7 +40,7 @@ case class ContinuousCoalesceRDDPartition(
       queueSize, numShuffleWriters, epochIntervalMs, env)
     val endpoint = env.setupEndpoint(endpointName, receiver)
 
-    TaskContext.get().addTaskCompletionListener { ctx =>
+    TaskContext.get().addTaskCompletionListener[Unit] { ctx =>
       env.stop(endpoint)
     }
     (receiver, endpoint)
@@ -118,9 +118,8 @@ class ContinuousCoalesceRDD(
         }
       }
 
-      context.addTaskCompletionListener { ctx =>
+      context.addTaskCompletionListener[Unit] { ctx =>
         threadPool.shutdownNow()
-        ()
       }
 
       part.writersInitialized = true

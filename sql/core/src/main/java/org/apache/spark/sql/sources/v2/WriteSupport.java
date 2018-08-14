@@ -38,15 +38,16 @@ public interface WriteSupport extends DataSourceV2 {
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    *
-   * @param jobId A unique string for the writing job. It's possible that there are many writing
-   *              jobs running at the same time, and the returned {@link DataSourceWriter} can
-   *              use this job id to distinguish itself from other jobs.
+   * @param writeUUID A unique string for the writing job. It's possible that there are many writing
+   *                  jobs running at the same time, and the returned {@link DataSourceWriter} can
+   *                  use this job id to distinguish itself from other jobs.
    * @param schema the schema of the data to be written.
    * @param mode the save mode which determines what to do when the data are already in this data
    *             source, please refer to {@link SaveMode} for more details.
    * @param options the options for the returned data source writer, which is an immutable
    *                case-insensitive string-to-string map.
+   * @return a writer to append data to this data source
    */
   Optional<DataSourceWriter> createWriter(
-      String jobId, StructType schema, SaveMode mode, DataSourceOptions options);
+      String writeUUID, StructType schema, SaveMode mode, DataSourceOptions options);
 }
