@@ -4360,7 +4360,7 @@ class ArrowTests(ReusedSQLTestCase):
 class PandasUDFTests(ReusedSQLTestCase):
     def test_pandas_udf_basic(self):
         from pyspark.rdd import PythonEvalType
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
+        from pyspark.sql.functions import *
 
         udf = pandas_udf(lambda x: x, DoubleType())
         self.assertEqual(udf.returnType, DoubleType())

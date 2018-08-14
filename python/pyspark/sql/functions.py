@@ -2927,7 +2927,7 @@ blacklist = ['map', 'since', 'ignore_unicode_prefix']
 __all__ = [k for k, v in globals().items()
            if not k.startswith('_') and k[0].islower() and callable(v) and k not in blacklist]
 __all__.sort()
-
+__all__ += ["PandasUDFType"]
 
 def _test():
     import doctest
