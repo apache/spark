@@ -1258,7 +1258,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
 object CodeGenerator extends Logging {
 
-  // This is the value of HugeMethodLimit in the OpenJDK JVM settings
+  // This is the default value of HugeMethodLimit in the OpenJDK HotSpot JVM,
+  // beyond which methods will be rejected from JIT compilation
   final val DEFAULT_JVM_HUGE_METHOD_LIMIT = 8000
 
   // The max valid length of method parameters in JVM.
@@ -1385,9 +1386,15 @@ object CodeGenerator extends Logging {
       try {
         val cf = new ClassFile(new ByteArrayInputStream(classBytes))
         val stats = cf.methodInfos.asScala.flatMap { method =>
-          method.getAttributes().filter(_.getClass.getName == codeAttr.getName).map { a =>
+          method.getAttributes().filter(_.getClass eq codeAttr).map { a =>
             val byteCodeSize = codeAttrField.get(a).asInstanceOf[Array[Byte]].length
             CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
+
+            if (byteCodeSize > DEFAULT_JVM_HUGE_METHOD_LIMIT) {
+              logInfo("Generated method too long to be JIT compiled: " +
+                s"${cf.getThisClassName}.${method.getName} is $byteCodeSize bytes")
+            }
+
             byteCodeSize
           }
         }
