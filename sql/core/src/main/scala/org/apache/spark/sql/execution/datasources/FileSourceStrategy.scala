@@ -148,7 +148,7 @@ object FileSourceStrategy extends Strategy with Logging {
       val filterSet = ExpressionSet(filters)
 
       // SPARK-24721: Filter out Python UDFs, otherwise ExtractPythonUDF rule will throw exception
-      val validFilters = filters.filter(_.collectFirst{case e: PythonUDF => e}.isEmpty)
+      val validFilters = filters.filter(_.collectFirst{ case e: PythonUDF => e }.isEmpty)
 
       // The attribute name of predicate could be different than the one in schema in case of
       // case insensitive, we should change them to match the one in schema, so we do not need to
