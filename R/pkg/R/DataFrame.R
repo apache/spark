@@ -2848,6 +2848,35 @@ setMethod("intersect",
             dataFrame(intersected)
           })
 
+#' intersectAll
+#'
+#' Return a new SparkDataFrame containing rows only in both this SparkDataFrame
+#' and another SparkDataFrame while preserving the duplicates.
+#' This is equivalent to \code{INTERSECT ALL} in SQL. Also as standard in
+#' SQL, this function resolves columns by position (not by name).
+#'
+#' @param x a SparkDataFrame.
+#' @param y a SparkDataFrame.
+#' @return A SparkDataFrame containing the result of the intersect all operation.
+#' @family SparkDataFrame functions
+#' @aliases intersectAll,SparkDataFrame,SparkDataFrame-method
+#' @rdname intersectAll
+#' @name intersectAll
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df1 <- read.json(path)
+#' df2 <- read.json(path2)
+#' intersectAllDF <- intersectAll(df1, df2)
+#' }
+#' @rdname intersectAll
+#' @note intersectAll since 2.4
+setMethod("intersectAll",
+          signature(x = "SparkDataFrame", y = "SparkDataFrame"),
+          function(x, y) {
+            intersected <- callJMethod(x@sdf, "intersectAll", y@sdf)
+            dataFrame(intersected)
+          })
 #' except
 #'
 #' Return a new SparkDataFrame containing rows in this SparkDataFrame
@@ -2875,6 +2904,37 @@ setMethod("except",
             excepted <- callJMethod(x@sdf, "except", y@sdf)
             dataFrame(excepted)
           })
+
+#' exceptAll
+#'
+#' Return a new SparkDataFrame containing rows in this SparkDataFrame
+#' but not in another SparkDataFrame while preserving the duplicates.
+#' This is equivalent to \code{EXCEPT ALL} in SQL. Also as standard in
+#' SQL, this function resolves columns by position (not by name).
+#'
+#' @param x a SparkDataFrame.
+#' @param y a SparkDataFrame.
+#' @return A SparkDataFrame containing the result of the except all operation.
+#' @family SparkDataFrame functions
+#' @aliases exceptAll,SparkDataFrame,SparkDataFrame-method
+#' @rdname exceptAll
+#' @name exceptAll
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df1 <- read.json(path)
+#' df2 <- read.json(path2)
+#' exceptAllDF <- exceptAll(df1, df2)
+#' }
+#' @rdname exceptAll
+#' @note exceptAll since 2.4
+setMethod("exceptAll",
+          signature(x = "SparkDataFrame", y = "SparkDataFrame"),
+          function(x, y) {
+            excepted <- callJMethod(x@sdf, "exceptAll", y@sdf)
+            dataFrame(excepted)
+          })
+
 
 #' Save the contents of SparkDataFrame to a data source.
 #'
