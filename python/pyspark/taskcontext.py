@@ -182,5 +182,5 @@ class BarrierTaskInfo(object):
     .. versionadded:: 2.4.0
     """
 
-    def __init__(self, info):
-        self.address = info.address
+    def __init__(self, jobj):
+        self.address = jobj.address()
