@@ -35,17 +35,12 @@ import org.apache.spark.util.Utils
  * Once we have one, this will be changed to a specialization of KafkaSinkSuite and we won't have
  * to duplicate all the code.
  */
-class KafkaContinuousSinkSuite extends KafkaContinuousTest {
+class KafkaContinuousSinkSuite extends KafkaContinuousTest with KafkaTest {
   import testImplicits._
 
   override val streamingTimeout = 30.seconds
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    testUtils = new KafkaTestUtils(
-      withBrokerProps = Map("auto.create.topics.enable" -> "false"))
-    testUtils.setup()
-  }
+  override val brokerProps = Map("auto.create.topics.enable" -> "false")
 
   override def afterAll(): Unit = {
     if (testUtils != null) {

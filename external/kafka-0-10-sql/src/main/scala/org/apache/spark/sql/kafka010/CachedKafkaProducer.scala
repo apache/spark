@@ -102,7 +102,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
     }
   }
 
-  private def clear(): Unit = {
+  private[kafka010] def clear(): Unit = {
     logInfo("Cleaning up guava cache.")
     guavaCache.invalidateAll()
   }
