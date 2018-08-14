@@ -27,6 +27,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.avro.Schema
 import org.apache.avro.Schema.{Field, Type}
+import org.apache.avro.Schema.Type._
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
@@ -847,6 +848,62 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       }.getCause.getMessage
       assert(message2.contains("org.apache.spark.sql.avro.IncompatibleSchemaException: " +
         "Cannot write 1 byte of binary data into FIXED Type with size of 2 bytes"))
+    }
+  }
+
+  test("throw exception if unable to write with user provided Avro schema") {
+    val input: Seq[(DataType, Schema.Type)] = Seq(
+      (NullType, NULL),
+      (BooleanType, BOOLEAN),
+      (ByteType, INT),
+      (ShortType, INT),
+      (IntegerType, INT),
+      (LongType, LONG),
+      (FloatType, FLOAT),
+      (DoubleType, DOUBLE),
+      (BinaryType, BYTES),
+      (DateType, INT),
+      (TimestampType, LONG),
+      (DecimalType(4, 2), BYTES)
+    )
+    def assertException(f: () => AvroSerializer) {
+      val message = intercept[org.apache.spark.sql.avro.IncompatibleSchemaException] {
+        f()
+      }.getMessage
+      assert(message.contains("Cannot convert Catalyst type"))
+    }
+
+    def resolveNullable(schema: Schema, nullable: Boolean): Schema = {
+      if (nullable && schema.getType != NULL) {
+        Schema.createUnion(schema, Schema.create(NULL))
+      } else {
+        schema
+      }
+    }
+    for {
+      i <- input
+      j <- input
+      nullable <- Seq(true, false)
+    } if (i._2 != j._2) {
+      val avroType = resolveNullable(Schema.create(j._2), nullable)
+      val avroArrayType = resolveNullable(Schema.createArray(avroType), nullable)
+      val avroMapType = resolveNullable(Schema.createMap(avroType), nullable)
+      val name = "foo"
+      val avroField = new Field(name, avroType, "", null)
+      val recordSchema = Schema.createRecord("name", "doc", "space", true, Seq(avroField).asJava)
+      val avroRecordType = resolveNullable(recordSchema, nullable)
+
+      val catalystType = i._1
+      val catalystArrayType = ArrayType(catalystType, nullable)
+      val catalystMapType = MapType(StringType, catalystType, nullable)
+      val catalystStructType = StructType(Seq(StructField(name, catalystType, nullable)))
+
+      for {
+        avro <- Seq(avroType, avroArrayType, avroMapType, avroRecordType)
+        catalyst <- Seq(catalystType, catalystArrayType, catalystMapType, catalystStructType)
+      } {
+        assertException(() => new AvroSerializer(catalyst, avro, nullable))
+      }
     }
   }
 
