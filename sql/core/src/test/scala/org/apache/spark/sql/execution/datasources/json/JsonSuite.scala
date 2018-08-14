@@ -2489,4 +2489,33 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       assert(exception.getMessage.contains("encoding must not be included in the blacklist"))
     }
   }
+
+  test("count() for malformed input") {
+    def countForMalformedJSON(expected: Long, input: Seq[String]): Unit = {
+      val schema = new StructType().add("a", StringType)
+      val strings = spark.createDataset(input)
+      val df = spark.read.schema(schema).json(strings)
+
+      assert(df.count() == expected)
+    }
+    def checkCount(expected: Long): Unit = {
+      val validRec = """{"a":"b"}"""
+      val inputs = Seq(
+        Seq("{-}", validRec),
+        Seq(validRec, "?"),
+        Seq("}", validRec),
+        Seq(validRec, """{"a": [1, 2, 3]}"""),
+        Seq("""{"a": {"a": "b"}}""", validRec)
+      )
+      inputs.foreach { input =>
+        countForMalformedJSON(expected, input)
+      }
+    }
+    Seq("true", "false").foreach { bypassParser =>
+      withSQLConf(SQLConf.BYPASS_PARSER_FOR_EMPTY_SCHEMA.key -> bypassParser) {
+        checkCount(2)
+        countForMalformedJSON(0, Seq(""))
+      }
+    }
+  }
 }
