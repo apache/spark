@@ -511,19 +511,18 @@ examples = """
   """,
 since = "2.4.0")
 case class TransformValues(
-    input: Expression,
+    argument: Expression,
     function: Expression)
   extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  override def nullable: Boolean = input.nullable
+  override def nullable: Boolean = argument.nullable
 
   override def dataType: DataType = {
-    val map = input.dataType.asInstanceOf[MapType]
+    val map = argument.dataType.asInstanceOf[MapType]
     MapType(map.keyType, function.dataType, function.nullable)
   }
 
-  @transient val (keyType, valueType, valueContainsNull) =
-    HigherOrderFunction.mapKeyValueArgumentType(input.dataType)
+  @transient val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction)
   : TransformValues = {
@@ -536,8 +535,8 @@ case class TransformValues(
     (keyVar, valueVar)
   }
 
-  override def nullSafeEval(inputRow: InternalRow, value: Any): Any = {
-    val map = value.asInstanceOf[MapData]
+  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
+    val map = argumentValue.asInstanceOf[MapData]
     val f = functionForEval
     val resultValues = new GenericArrayData(new Array[Any](map.numElements))
     var i = 0
