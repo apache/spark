@@ -1962,13 +1962,6 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       _heartbeater = null
     }
-    if (_dagScheduler != null) {
-      Utils.tryLogNonFatalError {
-        _dagScheduler.stop()
-      }
-      _dagScheduler = null
-    }
-
     if (env != null && _heartbeatReceiver != null) {
       Utils.tryLogNonFatalError {
         env.rpcEnv.stop(_heartbeatReceiver)
