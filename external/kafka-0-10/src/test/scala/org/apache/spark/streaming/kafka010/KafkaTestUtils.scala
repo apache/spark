@@ -21,7 +21,6 @@ import java.io.{File, IOException}
 import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
 import java.util.{Map => JMap, Properties}
-
 import java.util.concurrent.TimeoutException
 
 import scala.annotation.tailrec
@@ -40,7 +39,7 @@ import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.Time
-import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
