@@ -2223,23 +2223,20 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
   }
 
-
   test("SPARK-23723: specified encoding is not matched to actual encoding") {
-    withSQLConf(SQLConf.BYPASS_PARSER_FOR_EMPTY_SCHEMA.key -> "false") {
-      val fileName = "test-data/utf16LE.json"
-      val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
-      val exception = intercept[SparkException] {
-        spark.read.schema(schema)
-          .option("mode", "FAILFAST")
-          .option("multiline", "true")
-          .options(Map("encoding" -> "UTF-16BE"))
-          .json(testFile(fileName))
-          .count()
-      }
-      val errMsg = exception.getMessage
-
-      assert(errMsg.contains("Malformed records are detected in record parsing"))
+    val fileName = "test-data/utf16LE.json"
+    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+    val exception = intercept[SparkException] {
+      spark.read.schema(schema)
+        .option("mode", "FAILFAST")
+        .option("multiline", "true")
+        .options(Map("encoding" -> "UTF-16BE"))
+        .json(testFile(fileName))
+        .count()
     }
+    val errMsg = exception.getMessage
+
+    assert(errMsg.contains("Malformed records are detected in record parsing"))
   }
 
   def checkEncoding(expectedEncoding: String, pathToJsonFiles: String,
