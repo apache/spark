@@ -357,7 +357,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
 
     checkEvaluation(transformKeys(ax0, plusOne), Map(2 -> "x", 3 -> "y", 4 -> "z"))
   }
-  
+
   test("MapZipWith") {
     def map_zip_with(
         left: Expression,
