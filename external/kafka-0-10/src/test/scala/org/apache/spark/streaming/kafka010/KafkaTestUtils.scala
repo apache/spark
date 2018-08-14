@@ -53,7 +53,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
   private val zkHost = "127.0.0.1"
   private var zkPort: Int = 0
   private val zkConnectionTimeout = 60000
-  private val zkSessionTimeout = 6000
+  private val zkSessionTimeout = 10000
 
   private var zookeeper: EmbeddedZookeeper = _
 
