@@ -91,7 +91,7 @@ case class ConcatWs(children: Seq[Expression])
       val args = ctx.freshName("args")
 
       val inputs = strings.zipWithIndex.map { case (eval, index) =>
-        if (eval.isNull != "true") {
+        if (eval.isNull != TrueLiteral) {
           s"""
              ${eval.code}
              if (!${eval.isNull}) {
@@ -123,14 +123,14 @@ case class ConcatWs(children: Seq[Expression])
         child.dataType match {
           case StringType =>
             ("", // we count all the StringType arguments num at once below.
-             if (eval.isNull == "true") {
+             if (eval.isNull == TrueLiteral) {
                ""
              } else {
                s"$array[$idxVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.value};"
              })
           case _: ArrayType =>
             val size = ctx.freshName("n")
-            if (eval.isNull == "true") {
+            if (eval.isNull == TrueLiteral) {
               ("", "")
             } else {
               (s"""
@@ -222,12 +222,13 @@ case class Elt(children: Seq[Expression]) extends Expression {
       val (indexType, inputTypes) = (indexExpr.dataType, inputExprs.map(_.dataType))
       if (indexType != IntegerType) {
         return TypeCheckResult.TypeCheckFailure(s"first input to function $prettyName should " +
-          s"have IntegerType, but it's $indexType")
+          s"have ${IntegerType.catalogString}, but it's ${indexType.catalogString}")
       }
       if (inputTypes.exists(tpe => !Seq(StringType, BinaryType).contains(tpe))) {
         return TypeCheckResult.TypeCheckFailure(
-          s"input to function $prettyName should have StringType or BinaryType, but it's " +
-            inputTypes.map(_.simpleString).mkString("[", ", ", "]"))
+          s"input to function $prettyName should have ${StringType.catalogString} or " +
+            s"${BinaryType.catalogString}, but it's " +
+            inputTypes.map(_.catalogString).mkString("[", ", ", "]"))
       }
       TypeUtils.checkForSameTypeInputExpr(inputTypes, s"function $prettyName")
     }

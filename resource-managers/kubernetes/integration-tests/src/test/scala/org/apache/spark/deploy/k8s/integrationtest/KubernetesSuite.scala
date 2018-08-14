@@ -21,31 +21,32 @@ import java.nio.file.{Path, Paths}
 import java.util.UUID
 import java.util.regex.Pattern
 
-import scala.collection.JavaConverters._
-
 import com.google.common.io.PatternFilenameFilter
-import io.fabric8.kubernetes.api.model.{Container, Pod}
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
+import io.fabric8.kubernetes.api.model.Pod
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Tag}
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Minutes, Seconds, Span}
+import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.deploy.k8s.integrationtest.TestConfig._
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
-import org.apache.spark.deploy.k8s.integrationtest.config._
 
 private[spark] class KubernetesSuite extends SparkFunSuite
-  with BeforeAndAfterAll with BeforeAndAfter {
+  with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
+  with PythonTestsSuite with ClientModeTestsSuite {
 
   import KubernetesSuite._
 
-  private var testBackend: IntegrationTestBackend = _
-  private var sparkHomeDir: Path = _
-  private var kubernetesTestComponents: KubernetesTestComponents = _
-  private var sparkAppConf: SparkAppConf = _
-  private var image: String = _
-  private var containerLocalSparkDistroExamplesJar: String = _
-  private var appLocator: String = _
-  private var driverPodName: String = _
+  protected var testBackend: IntegrationTestBackend = _
+  protected var sparkHomeDir: Path = _
+  protected var image: String = _
+  protected var pyImage: String = _
+  protected var driverPodName: String = _
+  protected var kubernetesTestComponents: KubernetesTestComponents = _
+  protected var sparkAppConf: SparkAppConf = _
+  protected var containerLocalSparkDistroExamplesJar: String = _
+  protected var appLocator: String = _
 
   override def beforeAll(): Unit = {
     // The scalatest-maven-plugin gives system properties that are referenced but not set null
@@ -65,6 +66,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     val imageTag = getTestImageTag
     val imageRepo = getTestImageRepo
     image = s"$imageRepo/spark:$imageTag"
+    pyImage = s"$imageRepo/spark-py:$imageTag"
 
     val sparkDistroExamplesJarFile: File = sparkHomeDir.resolve(Paths.get("examples", "jars"))
       .toFile
@@ -100,72 +102,13 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     deleteDriverPod()
   }
 
-  test("Run SparkPi with no resources") {
-    runSparkPiAndVerifyCompletion()
-  }
-
-  test("Run SparkPi with a very long application name.") {
-    sparkAppConf.set("spark.app.name", "long" * 40)
-    runSparkPiAndVerifyCompletion()
-  }
-
-  test("Run SparkPi with a master URL without a scheme.") {
-    val url = kubernetesTestComponents.kubernetesClient.getMasterUrl
-    val k8sMasterUrl = if (url.getPort < 0) {
-      s"k8s://${url.getHost}"
-    } else {
-      s"k8s://${url.getHost}:${url.getPort}"
-    }
-    sparkAppConf.set("spark.master", k8sMasterUrl)
-    runSparkPiAndVerifyCompletion()
-  }
-
-  test("Run SparkPi with an argument.") {
-    runSparkPiAndVerifyCompletion(appArgs = Array("5"))
-  }
-
-  test("Run SparkPi with custom labels, annotations, and environment variables.") {
-    sparkAppConf
-      .set("spark.kubernetes.driver.label.label1", "label1-value")
-      .set("spark.kubernetes.driver.label.label2", "label2-value")
-      .set("spark.kubernetes.driver.annotation.annotation1", "annotation1-value")
-      .set("spark.kubernetes.driver.annotation.annotation2", "annotation2-value")
-      .set("spark.kubernetes.driverEnv.ENV1", "VALUE1")
-      .set("spark.kubernetes.driverEnv.ENV2", "VALUE2")
-      .set("spark.kubernetes.executor.label.label1", "label1-value")
-      .set("spark.kubernetes.executor.label.label2", "label2-value")
-      .set("spark.kubernetes.executor.annotation.annotation1", "annotation1-value")
-      .set("spark.kubernetes.executor.annotation.annotation2", "annotation2-value")
-      .set("spark.executorEnv.ENV1", "VALUE1")
-      .set("spark.executorEnv.ENV2", "VALUE2")
-
-    runSparkPiAndVerifyCompletion(
-      driverPodChecker = (driverPod: Pod) => {
-        doBasicDriverPodCheck(driverPod)
-        checkCustomSettings(driverPod)
-      },
-      executorPodChecker = (executorPod: Pod) => {
-        doBasicExecutorPodCheck(executorPod)
-        checkCustomSettings(executorPod)
-      })
-  }
-
-  // TODO(ssuchter): Enable the below after debugging
-  // test("Run PageRank using remote data file") {
-  //   sparkAppConf
-  //     .set("spark.kubernetes.mountDependencies.filesDownloadDir",
-  //       CONTAINER_LOCAL_FILE_DOWNLOAD_PATH)
-  //     .set("spark.files", REMOTE_PAGE_RANK_DATA_FILE)
-  //   runSparkPageRankAndVerifyCompletion(
-  //     appArgs = Array(CONTAINER_LOCAL_DOWNLOADED_PAGE_RANK_DATA_FILE))
-  // }
-
-  private def runSparkPiAndVerifyCompletion(
+  protected def runSparkPiAndVerifyCompletion(
       appResource: String = containerLocalSparkDistroExamplesJar,
       driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
       executorPodChecker: Pod => Unit = doBasicExecutorPodCheck,
       appArgs: Array[String] = Array.empty[String],
-      appLocator: String = appLocator): Unit = {
+      appLocator: String = appLocator,
+      isJVM: Boolean = true ): Unit = {
     runSparkApplicationAndVerifyCompletion(
       appResource,
       SPARK_PI_MAIN_CLASS,
@@ -173,10 +116,11 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       appArgs,
       driverPodChecker,
       executorPodChecker,
-      appLocator)
+      appLocator,
+      isJVM)
   }
 
-  private def runSparkPageRankAndVerifyCompletion(
+  protected def runSparkRemoteCheckAndVerifyCompletion(
       appResource: String = containerLocalSparkDistroExamplesJar,
       driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
       executorPodChecker: Pod => Unit = doBasicExecutorPodCheck,
@@ -184,27 +128,73 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       appLocator: String = appLocator): Unit = {
     runSparkApplicationAndVerifyCompletion(
       appResource,
-      SPARK_PAGE_RANK_MAIN_CLASS,
-      Seq("1 has rank", "2 has rank", "3 has rank", "4 has rank"),
+      SPARK_REMOTE_MAIN_CLASS,
+      Seq(s"Mounting of ${appArgs.head} was true"),
       appArgs,
       driverPodChecker,
       executorPodChecker,
-      appLocator)
+      appLocator,
+      true)
   }
 
-  private def runSparkApplicationAndVerifyCompletion(
+  protected def runSparkJVMCheckAndVerifyCompletion(
+      appResource: String = containerLocalSparkDistroExamplesJar,
+      mainClass: String = SPARK_DRIVER_MAIN_CLASS,
+      driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
+      appArgs: Array[String] = Array("5"),
+      expectedJVMValue: Seq[String]): Unit = {
+    val appArguments = SparkAppArguments(
+      mainAppResource = appResource,
+      mainClass = mainClass,
+      appArgs = appArgs)
+    SparkAppLauncher.launch(
+      appArguments,
+      sparkAppConf,
+      TIMEOUT.value.toSeconds.toInt,
+      sparkHomeDir,
+      true)
+
+    val driverPod = kubernetesTestComponents.kubernetesClient
+      .pods()
+      .withLabel("spark-app-locator", appLocator)
+      .withLabel("spark-role", "driver")
+      .list()
+      .getItems
+      .get(0)
+    doBasicDriverPodCheck(driverPod)
+
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      expectedJVMValue.foreach { e =>
+        assert(kubernetesTestComponents.kubernetesClient
+          .pods()
+          .withName(driverPod.getMetadata.getName)
+          .getLog
+          .contains(e), "The application did not complete.")
+      }
+    }
+  }
+
+  protected def runSparkApplicationAndVerifyCompletion(
       appResource: String,
       mainClass: String,
       expectedLogOnCompletion: Seq[String],
       appArgs: Array[String],
       driverPodChecker: Pod => Unit,
       executorPodChecker: Pod => Unit,
-      appLocator: String): Unit = {
+      appLocator: String,
+      isJVM: Boolean,
+      pyFiles: Option[String] = None): Unit = {
     val appArguments = SparkAppArguments(
       mainAppResource = appResource,
       mainClass = mainClass,
       appArgs = appArgs)
-    SparkAppLauncher.launch(appArguments, sparkAppConf, TIMEOUT.value.toSeconds.toInt, sparkHomeDir)
+    SparkAppLauncher.launch(
+      appArguments,
+      sparkAppConf,
+      TIMEOUT.value.toSeconds.toInt,
+      sparkHomeDir,
+      isJVM,
+      pyFiles)
 
     val driverPod = kubernetesTestComponents.kubernetesClient
       .pods()
@@ -236,18 +226,30 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     }
   }
 
-  private def doBasicDriverPodCheck(driverPod: Pod): Unit = {
+  protected def doBasicDriverPodCheck(driverPod: Pod): Unit = {
     assert(driverPod.getMetadata.getName === driverPodName)
     assert(driverPod.getSpec.getContainers.get(0).getImage === image)
     assert(driverPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-driver")
   }
 
-  private def doBasicExecutorPodCheck(executorPod: Pod): Unit = {
+
+  protected def doBasicDriverPyPodCheck(driverPod: Pod): Unit = {
+    assert(driverPod.getMetadata.getName === driverPodName)
+    assert(driverPod.getSpec.getContainers.get(0).getImage === pyImage)
+    assert(driverPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-driver")
+  }
+
+  protected def doBasicExecutorPodCheck(executorPod: Pod): Unit = {
     assert(executorPod.getSpec.getContainers.get(0).getImage === image)
     assert(executorPod.getSpec.getContainers.get(0).getName === "executor")
   }
 
-  private def checkCustomSettings(pod: Pod): Unit = {
+  protected def doBasicExecutorPyPodCheck(executorPod: Pod): Unit = {
+    assert(executorPod.getSpec.getContainers.get(0).getImage === pyImage)
+    assert(executorPod.getSpec.getContainers.get(0).getName === "executor")
+  }
+
+  protected def checkCustomSettings(pod: Pod): Unit = {
     assert(pod.getMetadata.getLabels.get("label1") === "label1-value")
     assert(pod.getMetadata.getLabels.get("label2") === "label2-value")
     assert(pod.getMetadata.getAnnotations.get("annotation1") === "annotation1-value")
@@ -277,18 +279,10 @@ private[spark] class KubernetesSuite extends SparkFunSuite
 }
 
 private[spark] object KubernetesSuite {
-
+  val k8sTestTag = Tag("k8s")
+  val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"
+  val SPARK_REMOTE_MAIN_CLASS: String = "org.apache.spark.examples.SparkRemoteFileTest"
+  val SPARK_DRIVER_MAIN_CLASS: String = "org.apache.spark.examples.DriverSubmissionTest"
   val TIMEOUT = PatienceConfiguration.Timeout(Span(2, Minutes))
   val INTERVAL = PatienceConfiguration.Interval(Span(2, Seconds))
-  val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"
-  val SPARK_PAGE_RANK_MAIN_CLASS: String = "org.apache.spark.examples.SparkPageRank"
-
-  // val CONTAINER_LOCAL_FILE_DOWNLOAD_PATH = "/var/spark-data/spark-files"
-
-  // val REMOTE_PAGE_RANK_DATA_FILE =
-  //   "https://storage.googleapis.com/spark-k8s-integration-tests/files/pagerank_data.txt"
-  // val CONTAINER_LOCAL_DOWNLOADED_PAGE_RANK_DATA_FILE =
-  //   s"$CONTAINER_LOCAL_FILE_DOWNLOAD_PATH/pagerank_data.txt"
-
-  // case object ShuffleNotReadyException extends Exception
 }

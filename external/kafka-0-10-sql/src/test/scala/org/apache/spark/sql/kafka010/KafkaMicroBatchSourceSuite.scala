@@ -290,6 +290,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribePattern", s"$topicPrefix-.*")
       .option("failOnDataLoss", "false")
 
@@ -467,6 +468,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribe", topic)
       // If a topic is deleted and we try to poll data starting from offset 0,
       // the Kafka consumer will just block until timeout and return an empty result.
@@ -678,7 +680,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           Optional.of[OffsetV2](KafkaSourceOffset(Map(tp -> 0L))),
           Optional.of[OffsetV2](KafkaSourceOffset(Map(tp -> 100L)))
         )
-        val factories = reader.planUnsafeInputPartitions().asScala
+        val factories = reader.planInputPartitions().asScala
           .map(_.asInstanceOf[KafkaMicroBatchInputPartition])
         withClue(s"minPartitions = $minPartitions generated factories $factories\n\t") {
           assert(factories.size == numPartitionsGenerated)
@@ -1103,6 +1105,7 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
         .option("kafka.metadata.max.age.ms", "1")
         .option("subscribePattern", "stress.*")
         .option("failOnDataLoss", "false")
+        .option("kafka.default.api.timeout.ms", "3000")
         .load()
         .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
         .as[(String, String)]
@@ -1173,7 +1176,8 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
         // 30 seconds delay (kafka.log.LogManager.InitialTaskDelayMs) so this test should run at
         // least 30 seconds.
         props.put("log.cleaner.backoff.ms", "100")
-        props.put("log.segment.bytes", "40")
+        // The size of RecordBatch V2 increases to support transactional write.
+        props.put("log.segment.bytes", "70")
         props.put("log.retention.bytes", "40")
         props.put("log.retention.check.interval.ms", "100")
         props.put("delete.retention.ms", "10")
@@ -1215,6 +1219,7 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribePattern", "failOnDataLoss.*")
       .option("startingOffsets", "earliest")
       .option("failOnDataLoss", "false")

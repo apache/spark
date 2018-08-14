@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JSON
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
 class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
@@ -144,6 +144,23 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
   override def hashCode(): Int = getClass.hashCode()
 
   override def equals(other: Any): Boolean = other.isInstanceOf[JsonFileFormat]
+
+  override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = dataType match {
+    case _: AtomicType => true
+
+    case st: StructType => st.forall { f => supportDataType(f.dataType, isReadPath) }
+
+    case ArrayType(elementType, _) => supportDataType(elementType, isReadPath)
+
+    case MapType(keyType, valueType, _) =>
+      supportDataType(keyType, isReadPath) && supportDataType(valueType, isReadPath)
+
+    case udt: UserDefinedType[_] => supportDataType(udt.sqlType, isReadPath)
+
+    case _: NullType => true
+
+    case _ => false
+  }
 }
 
 private[json] class JsonOutputWriter(

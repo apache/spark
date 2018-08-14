@@ -1360,7 +1360,7 @@ class RDD(object):
                 if len(items) == 0:
                     numPartsToTry = partsScanned * 4
                 else:
-                    # the first paramter of max is >=1 whenever partsScanned >= 2
+                    # the first parameter of max is >=1 whenever partsScanned >= 2
                     numPartsToTry = int(1.5 * num * partsScanned / len(items)) - partsScanned
                     numPartsToTry = min(max(numPartsToTry, 1), partsScanned * 4)
 
@@ -1370,7 +1370,10 @@ class RDD(object):
                 iterator = iter(iterator)
                 taken = 0
                 while taken < left:
-                    yield next(iterator)
+                    try:
+                        yield next(iterator)
+                    except StopIteration:
+                        return
                     taken += 1
 
             p = range(partsScanned, min(partsScanned + numPartsToTry, totalParts))
@@ -2403,6 +2406,22 @@ class RDD(object):
             sock_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
         return _load_from_socket(sock_info, self._jrdd_deserializer)
 
+    def barrier(self):
+        """
+        .. note:: Experimental
+
+        Indicates that Spark must launch the tasks together for the current stage.
+
+        .. versionadded:: 2.4.0
+        """
+        return RDDBarrier(self)
+
+    def _is_barrier(self):
+        """
+        Whether this RDD is in a barrier stage.
+        """
+        return self._jrdd.rdd().isBarrier()
+
 
 def _prepare_for_python_RDD(sc, command):
     # the serialized command will be compressed by broadcast
@@ -2426,6 +2445,33 @@ def _wrap_function(sc, func, deserializer, serializer, profiler=None):
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)
 
 
+class RDDBarrier(object):
+
+    """
+    .. note:: Experimental
+
+    An RDDBarrier turns an RDD into a barrier RDD, which forces Spark to launch tasks of the stage
+    contains this RDD together.
+
+    .. versionadded:: 2.4.0
+    """
+
+    def __init__(self, rdd):
+        self.rdd = rdd
+
+    def mapPartitions(self, f, preservesPartitioning=False):
+        """
+        .. note:: Experimental
+
+        Return a new RDD by applying a function to each partition of this RDD.
+
+        .. versionadded:: 2.4.0
+        """
+        def func(s, iterator):
+            return f(iterator)
+        return PipelinedRDD(self.rdd, func, preservesPartitioning, isFromBarrier=True)
+
+
 class PipelinedRDD(RDD):
 
     """
@@ -2445,7 +2491,7 @@ class PipelinedRDD(RDD):
     20
     """
 
-    def __init__(self, prev, func, preservesPartitioning=False):
+    def __init__(self, prev, func, preservesPartitioning=False, isFromBarrier=False):
         if not isinstance(prev, PipelinedRDD) or not prev._is_pipelinable():
             # This transformation is the first in its stage:
             self.func = func
@@ -2471,6 +2517,7 @@ class PipelinedRDD(RDD):
         self._jrdd_deserializer = self.ctx.serializer
         self._bypass_serializer = False
         self.partitioner = prev.partitioner if self.preservesPartitioning else None
+        self.is_barrier = prev._is_barrier() or isFromBarrier
 
     def getNumPartitions(self):
         return self._prev_jrdd.partitions().size()
@@ -2490,7 +2537,7 @@ class PipelinedRDD(RDD):
         wrapped_func = _wrap_function(self.ctx, self.func, self._prev_jrdd_deserializer,
                                       self._jrdd_deserializer, profiler)
         python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(), wrapped_func,
-                                             self.preservesPartitioning)
+                                             self.preservesPartitioning, self.is_barrier)
         self._jrdd_val = python_rdd.asJavaRDD()
 
         if profiler:
@@ -2505,6 +2552,9 @@ class PipelinedRDD(RDD):
 
     def _is_pipelinable(self):
         return not (self.is_cached or self.is_checkpointed)
+
+    def _is_barrier(self):
+        return self.is_barrier
 
 
 def _test():

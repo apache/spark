@@ -45,7 +45,6 @@ import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution,
 import org.apache.spark.sql.execution.streaming.sources.MemorySinkV2
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.{Clock, SystemClock, Utils}
@@ -292,8 +291,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
 
   /** Execute arbitrary code */
   object Execute {
-    def apply(func: StreamExecution => Any): AssertOnQuery =
-      AssertOnQuery(query => { func(query); true }, "Execute")
+    def apply(name: String)(func: StreamExecution => Any): AssertOnQuery =
+      AssertOnQuery(query => { func(query); true }, "name")
+
+    def apply(func: StreamExecution => Any): AssertOnQuery = apply("Execute")(func)
   }
 
   object AwaitEpoch {
@@ -338,8 +339,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     var currentStream: StreamExecution = null
     var lastStream: StreamExecution = null
     val awaiting = new mutable.HashMap[Int, Offset]() // source index -> offset to wait for
-    val sink = if (useV2Sink) new MemorySinkV2
-      else new MemorySink(stream.schema, outputMode, DataSourceOptions.empty())
+    val sink = if (useV2Sink) new MemorySinkV2 else new MemorySink(stream.schema, outputMode)
     val resetConfValues = mutable.Map[String, Option[String]]()
     val defaultCheckpointLocation =
       Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -514,7 +514,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       logInfo(s"Processing test stream action: $action")
       action match {
         case StartStream(trigger, triggerClock, additionalConfs, checkpointLocation) =>
-          verify(currentStream == null, "stream already running")
+          verify(currentStream == null || !currentStream.isActive, "stream already running")
           verify(triggerClock.isInstanceOf[SystemClock]
             || triggerClock.isInstanceOf[StreamManualClock],
             "Use either SystemClock or StreamManualClock to start the stream")

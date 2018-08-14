@@ -320,7 +320,7 @@ case class BroadcastHashJoinExec(
          |if (!$conditionPassed) {
          |  $matched = null;
          |  // reset the variables those are already evaluated.
-         |  ${buildVars.filter(_.code == "").map(v => s"${v.isNull} = true;").mkString("\n")}
+         |  ${buildVars.filter(_.code.isEmpty).map(v => s"${v.isNull} = true;").mkString("\n")}
          |}
          |$numOutput.add(1);
          |${consume(ctx, resultVars)}

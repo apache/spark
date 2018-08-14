@@ -33,7 +33,7 @@ import org.apache.spark.input.{PortableDataStream, StreamInputFormat}
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JsonInferSchema, JSONOptions}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
@@ -130,7 +130,7 @@ object TextInputJsonDataSource extends JsonDataSource {
       parser: JacksonParser,
       schema: StructType): Iterator[InternalRow] = {
     val linesReader = new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
-    Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
+    Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
     val textParser = parser.options.encoding
       .map(enc => CreateJacksonParser.text(enc, _: JsonFactory, _: Text))
       .getOrElse(CreateJacksonParser.text(_: JsonFactory, _: Text))

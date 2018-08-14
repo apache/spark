@@ -51,7 +51,7 @@ object JDBCRDD extends Logging {
    */
   def resolveTable(options: JDBCOptions): StructType = {
     val url = options.url
-    val table = options.table
+    val table = options.tableOrQuery
     val dialect = JdbcDialects.get(url)
     val conn: Connection = JdbcUtils.createConnectionFactory(options)()
     try {
@@ -265,7 +265,7 @@ private[jdbc] class JDBCRDD(
       closed = true
     }
 
-    context.addTaskCompletionListener{ context => close() }
+    context.addTaskCompletionListener[Unit]{ context => close() }
 
     val inputMetrics = context.taskMetrics().inputMetrics
     val part = thePart.asInstanceOf[JDBCPartition]
@@ -296,7 +296,7 @@ private[jdbc] class JDBCRDD(
 
     val myWhereClause = getWhereClause(part)
 
-    val sqlText = s"SELECT $columnList FROM ${options.table} $myWhereClause"
+    val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myWhereClause"
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)

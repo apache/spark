@@ -61,6 +61,7 @@ class JacksonParser(
     dt match {
       case st: StructType => makeStructRootConverter(st)
       case mt: MapType => makeMapRootConverter(mt)
+      case at: ArrayType => makeArrayRootConverter(at)
     }
   }
 
@@ -98,6 +99,35 @@ class JacksonParser(
     val fieldConverter = makeConverter(mt.valueType)
     (parser: JsonParser) => parseJsonToken[Seq[InternalRow]](parser, mt) {
       case START_OBJECT => Seq(InternalRow(convertMap(parser, fieldConverter)))
+    }
+  }
+
+  private def makeArrayRootConverter(at: ArrayType): JsonParser => Seq[InternalRow] = {
+    val elemConverter = makeConverter(at.elementType)
+    (parser: JsonParser) => parseJsonToken[Seq[InternalRow]](parser, at) {
+      case START_ARRAY => Seq(InternalRow(convertArray(parser, elemConverter)))
+      case START_OBJECT if at.elementType.isInstanceOf[StructType] =>
+        // This handles the case when an input JSON object is a structure but
+        // the specified schema is an array of structures. In that case, the input JSON is
+        // considered as an array of only one element of struct type.
+        // This behavior was introduced by changes for SPARK-19595.
+        //
+        // For example, if the specified schema is ArrayType(new StructType().add("i", IntegerType))
+        // and JSON input as below:
+        //
+        // [{"i": 1}, {"i": 2}]
+        // [{"i": 3}]
+        // {"i": 4}
+        //
+        // The last row is considered as an array with one element, and result of conversion:
+        //
+        // Seq(Row(1), Row(2))
+        // Seq(Row(3))
+        // Seq(Row(4))
+        //
+        val st = at.elementType.asInstanceOf[StructType]
+        val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
+        Seq(InternalRow(new GenericArrayData(Seq(convertObject(parser, st, fieldConverters)))))
     }
   }
 
@@ -143,7 +173,8 @@ class JacksonParser(
             case "NaN" => Float.NaN
             case "Infinity" => Float.PositiveInfinity
             case "-Infinity" => Float.NegativeInfinity
-            case other => throw new RuntimeException(s"Cannot parse $other as FloatType.")
+            case other => throw new RuntimeException(
+              s"Cannot parse $other as ${FloatType.catalogString}.")
           }
       }
 
@@ -158,7 +189,8 @@ class JacksonParser(
             case "NaN" => Double.NaN
             case "Infinity" => Double.PositiveInfinity
             case "-Infinity" => Double.NegativeInfinity
-            case other => throw new RuntimeException(s"Cannot parse $other as DoubleType.")
+            case other =>
+              throw new RuntimeException(s"Cannot parse $other as ${DoubleType.catalogString}.")
           }
       }
 

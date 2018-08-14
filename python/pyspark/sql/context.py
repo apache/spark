@@ -93,6 +93,11 @@ class SQLContext(object):
         """
         return self._jsqlContext
 
+    @property
+    def _conf(self):
+        """Accessor for the JVM SQL-specific configurations"""
+        return self.sparkSession._jsparkSession.sessionState().conf()
+
     @classmethod
     @since(1.6)
     def getOrCreate(cls, sc):

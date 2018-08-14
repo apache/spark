@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.text.SimpleDateFormat
-import java.util.{Date, Locale, Properties, UUID}
+import java.util.{Locale, Properties, UUID}
 
 import scala.collection.JavaConverters._
 
@@ -26,12 +25,11 @@ import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.{AnalysisBarrier, InsertIntoTable, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, WriteToDataSourceV2}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.StructType
@@ -240,21 +238,27 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      val ds = cls.newInstance()
-      ds match {
+      val source = cls.newInstance().asInstanceOf[DataSourceV2]
+      source match {
         case ws: WriteSupport =>
-          val options = new DataSourceOptions((extraOptions ++
-            DataSourceV2Utils.extractSessionConfigs(
-              ds = ds.asInstanceOf[DataSourceV2],
-              conf = df.sparkSession.sessionState.conf)).asJava)
-          // Using a timestamp and a random UUID to distinguish different writing jobs. This is good
-          // enough as there won't be tons of writing jobs created at the same second.
-          val jobId = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
-            .format(new Date()) + "-" + UUID.randomUUID()
-          val writer = ws.createWriter(jobId, df.logicalPlan.schema, mode, options)
-          if (writer.isPresent) {
+          val options = extraOptions ++
+              DataSourceV2Utils.extractSessionConfigs(source, df.sparkSession.sessionState.conf)
+
+          val relation = DataSourceV2Relation.create(source, options.toMap)
+          if (mode == SaveMode.Append) {
             runCommand(df.sparkSession, "save") {
-              WriteToDataSourceV2(writer.get(), df.logicalPlan)
+              AppendData.byName(relation, df.logicalPlan)
+            }
+
+          } else {
+            val writer = ws.createWriter(
+              UUID.randomUUID.toString, df.logicalPlan.output.toStructType, mode,
+              new DataSourceOptions(options.asJava))
+
+            if (writer.isPresent) {
+              runCommand(df.sparkSession, "save") {
+                WriteToDataSourceV2(writer.get, df.logicalPlan)
+              }
             }
           }
 
@@ -275,7 +279,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         sparkSession = df.sparkSession,
         className = source,
         partitionColumns = partitioningColumns.getOrElse(Nil),
-        options = extraOptions.toMap).planForWriting(mode, AnalysisBarrier(df.logicalPlan))
+        options = extraOptions.toMap).planForWriting(mode, df.logicalPlan)
     }
   }
 
@@ -351,7 +355,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def assertNotPartitioned(operation: String): Unit = {
     if (partitioningColumns.isDefined) {
-      throw new AnalysisException( s"'$operation' does not support partitioning")
+      throw new AnalysisException(s"'$operation' does not support partitioning")
     }
   }
 
@@ -544,8 +548,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <ul>
    * <li>`compression` (default is the value specified in `spark.sql.parquet.compression.codec`):
    * compression codec to use when saving to file. This can be one of the known case-insensitive
-   * shorten names(`none`, `snappy`, `gzip`, and `lzo`). This will override
-   * `spark.sql.parquet.compression.codec`.</li>
+   * shorten names(`none`, `uncompressed`, `snappy`, `gzip`, `lzo`, `brotli`, `lz4`, and `zstd`).
+   * This will override `spark.sql.parquet.compression.codec`.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -629,6 +633,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * enclosed in quotes. Default is to only escape values containing a quote character.</li>
    * <li>`header` (default `false`): writes the names of columns as the first line.</li>
    * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
+   * <li>`encoding` (by default it is not set): specifies encoding (charset) of saved csv
+   * files. If it is not set, the UTF-8 charset will be used.</li>
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>

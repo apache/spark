@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
+import java.util.Date
 
 import scala.language.existentials
 
@@ -33,6 +34,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
@@ -781,7 +783,7 @@ class HiveDDLSuite
     val part1 = Map("a" -> "1", "b" -> "5")
     val part2 = Map("a" -> "2", "b" -> "6")
     val root = new Path(catalog.getTableMetadata(tableIdent).location)
-    val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
+    val fs = root.getFileSystem(spark.sessionState.newHadoopConf())
     // valid
     fs.mkdirs(new Path(new Path(root, "a=1"), "b=5"))
     fs.createNewFile(new Path(new Path(root, "a=1/b=5"), "a.csv"))  // file
@@ -2246,6 +2248,36 @@ class HiveDDLSuite
       spark.range(1).select('id, 'id as 'col1, 'id as 'col2).write.saveAsTable("t3")
       spark.sql("select COL1, COL2 from t3").write.format("hive").saveAsTable("t4")
       checkAnswer(spark.table("t4"), Row(0, 0))
+    }
+  }
+
+  test("SPARK-24812: desc formatted table for last access verification") {
+    withTable("t1") {
+      sql(
+        "CREATE TABLE IF NOT EXISTS t1 (c1_int INT, c2_string STRING, c3_float FLOAT)")
+      val desc = sql("DESC FORMATTED t1").filter($"col_name".startsWith("Last Access"))
+        .select("data_type")
+      // check if the last access time doesnt have the default date of year
+      // 1970 as its a wrong access time
+      assert(!(desc.first.toString.contains("1970")))
+    }
+  }
+
+  test("SPARK-24681 checks if nested column names do not include ',', ':', and ';'") {
+    val expectedMsg = "Cannot create a table having a nested column whose name contains invalid " +
+      "characters (',', ':', ';') in Hive metastore."
+
+    Seq("nested,column", "nested:column", "nested;column").foreach { nestedColumnName =>
+      withTable("t") {
+        val e = intercept[AnalysisException] {
+          spark.range(1)
+            .select(struct(lit(0).as(nestedColumnName)).as("toplevel"))
+            .write
+            .format("hive")
+            .saveAsTable("t")
+        }.getMessage
+        assert(e.contains(expectedMsg))
+      }
     }
   }
 }
