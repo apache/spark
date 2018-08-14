@@ -3367,6 +3367,24 @@ class SQLTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(path)
 
+    def test_datasource_with_udf_filter_lit_input(self):
+        # SPARK-24721
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+        try:
+            from pyspark.sql.functions import udf, lit, col
+
+            self.spark.range(1).write.mode("overwrite").format('csv').save(path)
+            df = self.spark.read.csv(path)
+            # Test that filter with lit inputs works with data source
+            result1 = df.filter(udf(lambda x: False, 'boolean')(lit(1)))
+            result2 = df.filter(udf(lambda : False, 'boolean')())
+
+            self.assertEquals(0, result1.count())
+            self.assertEquals(0, result2.count())
+        finally:
+            shutil.rmtree(path)
+
     def test_repr_behaviors(self):
         import re
         pattern = re.compile(r'^ *\|', re.MULTILINE)

@@ -145,12 +145,16 @@ object FileSourceStrategy extends Strategy with Logging {
       //  - bucket keys only - optionally used to prune files to read
       //  - keys stored in the data only - optionally used to skip groups of data in files
       //  - filters that need to be evaluated again after the scan
+
       val filterSet = ExpressionSet(filters)
+
+      // SPARK-24721: Filter out Python UDFs, otherwise ExtractPythonUDF rule will throw exception
+      val validFilters = filters.filter(_.collectFirst{case e: PythonUDF => e}.isEmpty)
 
       // The attribute name of predicate could be different than the one in schema in case of
       // case insensitive, we should change them to match the one in schema, so we do not need to
       // worry about case sensitivity anymore.
-      val normalizedFilters = filters.map { e =>
+      val normalizedFilters = validFilters.map { e =>
         e transform {
           case a: AttributeReference =>
             a.withName(l.output.find(_.semanticEquals(a)).get.name)
