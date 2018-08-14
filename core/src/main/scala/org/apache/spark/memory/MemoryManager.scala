@@ -183,22 +183,30 @@ private[spark] abstract class MemoryManager(
   /**
    *  On heap execution memory currently in use, in bytes.
    */
-  final def onHeapExecutionMemoryUsed: Long = onHeapExecutionMemoryPool.memoryUsed
+  final def onHeapExecutionMemoryUsed: Long = synchronized {
+    onHeapExecutionMemoryPool.memoryUsed
+  }
 
   /**
    *  Off heap execution memory currently in use, in bytes.
    */
-  final def offHeapExecutionMemoryUsed: Long = offHeapExecutionMemoryPool.memoryUsed
+  final def offHeapExecutionMemoryUsed: Long = synchronized {
+    offHeapExecutionMemoryPool.memoryUsed
+  }
 
   /**
    *  On heap storage memory currently in use, in bytes.
    */
-  final def onHeapStorageMemoryUsed: Long = onHeapStorageMemoryPool.memoryUsed
+  final def onHeapStorageMemoryUsed: Long = synchronized {
+    onHeapStorageMemoryPool.memoryUsed
+  }
 
   /**
    *  Off heap storage memory currently in use, in bytes.
    */
-  final def offHeapStorageMemoryUsed: Long = offHeapStorageMemoryPool.memoryUsed
+  final def offHeapStorageMemoryUsed: Long = synchronized {
+    offHeapStorageMemoryPool.memoryUsed
+  }
 
   /**
    * Returns the execution memory consumption, in bytes, for the given task.

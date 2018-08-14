@@ -68,10 +68,10 @@ class ExecutorMetrics private[spark] extends Serializable {
    * @return if there is a new peak value for any metric
    */
   private[spark] def compareAndUpdatePeakValues(executorMetrics: ExecutorMetrics): Boolean = {
-    var updated: Boolean = false
+    var updated = false
 
     (0 until ExecutorMetricType.values.length).foreach { idx =>
-       if ( executorMetrics.metrics(idx) > metrics(idx)) {
+       if (executorMetrics.metrics(idx) > metrics(idx)) {
         updated = true
         metrics(idx) = executorMetrics.metrics(idx)
       }
