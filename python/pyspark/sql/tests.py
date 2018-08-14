@@ -26,6 +26,7 @@ import subprocess
 import pydoc
 import shutil
 import tempfile
+import threading
 import pickle
 import functools
 import time
@@ -228,12 +229,12 @@ class SQLTestUtils(object):
 class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils):
     @classmethod
     def setUpClass(cls):
-        ReusedPySparkTestCase.setUpClass()
+        super(ReusedSQLTestCase, cls).setUpClass()
         cls.spark = SparkSession(cls.sc)
 
     @classmethod
     def tearDownClass(cls):
-        ReusedPySparkTestCase.tearDownClass()
+        super(ReusedSQLTestCase, cls).tearDownClass()
         cls.spark.stop()
 
     def assertPandasEqual(self, expected, result):
@@ -4105,7 +4106,8 @@ class ArrowTests(ReusedSQLTestCase):
         from decimal import Decimal
         from distutils.version import LooseVersion
         import pyarrow as pa
-        ReusedSQLTestCase.setUpClass()
+        super(ArrowTests, cls).setUpClass()
+        cls.warnings_lock = threading.Lock()
 
         # Synchronize default timezone between Python and Java
         cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
@@ -4146,7 +4148,7 @@ class ArrowTests(ReusedSQLTestCase):
         if cls.tz_prev is not None:
             os.environ["TZ"] = cls.tz_prev
         time.tzset()
-        ReusedSQLTestCase.tearDownClass()
+        super(ArrowTests, cls).tearDownClass()
 
     def create_pandas_data_frame(self):
         import pandas as pd
@@ -4166,15 +4168,18 @@ class ArrowTests(ReusedSQLTestCase):
             schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
             df = self.spark.createDataFrame([({u'a': 1},)], schema=schema)
             with QuietTest(self.sc):
-                with warnings.catch_warnings(record=True) as warns:
-                    pdf = df.toPandas()
-                    # Catch and check the last UserWarning.
-                    user_warns = [
-                        warn.message for warn in warns if isinstance(warn.message, UserWarning)]
-                    self.assertTrue(len(user_warns) > 0)
-                    self.assertTrue(
-                        "Attempting non-optimization" in _exception_message(user_warns[-1]))
-                    self.assertPandasEqual(pdf, pd.DataFrame({u'map': [{u'a': 1}]}))
+                with self.warnings_lock:
+                    with warnings.catch_warnings(record=True) as warns:
+                        # we want the warnings to appear even if this test is run from a subclass
+                        warnings.simplefilter("always")
+                        pdf = df.toPandas()
+                        # Catch and check the last UserWarning.
+                        user_warns = [
+                            warn.message for warn in warns if isinstance(warn.message, UserWarning)]
+                        self.assertTrue(len(user_warns) > 0)
+                        self.assertTrue(
+                            "Attempting non-optimization" in _exception_message(user_warns[-1]))
+                        self.assertPandasEqual(pdf, pd.DataFrame({u'map': [{u'a': 1}]}))
 
     def test_toPandas_fallback_disabled(self):
         from distutils.version import LooseVersion
@@ -4183,8 +4188,9 @@ class ArrowTests(ReusedSQLTestCase):
         schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'Unsupported type'):
-                df.toPandas()
+            with self.warnings_lock:
+                with self.assertRaisesRegexp(Exception, 'Unsupported type'):
+                    df.toPandas()
 
         # TODO: remove BinaryType check once minimum pyarrow version is 0.10.0
         if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
@@ -4396,6 +4402,8 @@ class ArrowTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.sql_conf({"spark.sql.execution.arrow.fallback.enabled": True}):
                 with warnings.catch_warnings(record=True) as warns:
+                    # we want the warnings to appear even if this test is run from a subclass
+                    warnings.simplefilter("always")
                     df = self.spark.createDataFrame(
                         pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
                     # Catch and check the last UserWarning.
@@ -4437,6 +4445,13 @@ class ArrowTests(ReusedSQLTestCase):
 
         self.assertPandasEqual(pdf, df_from_python.toPandas())
         self.assertPandasEqual(pdf, df_from_pandas.toPandas())
+
+
+class EncryptionArrowTests(ArrowTests):
+
+    @classmethod
+    def conf(cls):
+        return super(EncryptionArrowTests, cls).conf().set("spark.io.encryption.enabled", "true")
 
 
 @unittest.skipIf(
