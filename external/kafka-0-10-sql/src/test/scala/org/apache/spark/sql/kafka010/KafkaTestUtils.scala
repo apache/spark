@@ -157,6 +157,10 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
       producer = null
     }
 
+    if (adminClient != null) {
+      adminClient.close()
+    }
+
     if (server != null) {
       server.shutdown()
       server.awaitShutdown()
