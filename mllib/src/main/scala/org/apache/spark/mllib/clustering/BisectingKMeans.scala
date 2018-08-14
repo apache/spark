@@ -153,8 +153,9 @@ class BisectingKMeans private (
   }
 
 
-  private[spark] def run(input: RDD[Vector],
-                         instr: Option[Instrumentation]): BisectingKMeansModel = {
+  private[spark] def run(
+      input: RDD[Vector],
+      instr: Option[Instrumentation]): BisectingKMeansModel = {
     if (input.getStorageLevel == StorageLevel.NONE) {
       logWarning(s"The input RDD ${input.id} is not directly cached, which may hurt performance if"
         + " its parent RDDs are also not cached.")
@@ -251,7 +252,9 @@ class BisectingKMeans private (
    * @return model for the bisecting kmeans
    */
   @Since("1.6.0")
-  private[spark] def run(input: RDD[Vector]): BisectingKMeansModel = run(input, None)
+  def run(input: RDD[Vector]): BisectingKMeansModel = {
+    run(input, None)
+  }
 
   /**
    * Java-friendly version of `run()`.
