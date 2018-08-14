@@ -268,6 +268,13 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     assert(trueLikelihood ~== doubleLikelihood absTol 1e-6)
     assert(trueLikelihood ~== floatLikelihood absTol 1e-6)
   }
+
+  test("prediction on single instance") {
+    val gmm = new GaussianMixture()
+    val model = gmm.fit(dataset)
+    testClusteringModelSinglePrediction(model, model.predict, dataset,
+      model.getFeaturesCol, model.getPredictionCol)
+  }
 }
 
 object GaussianMixtureSuite extends SparkFunSuite {
