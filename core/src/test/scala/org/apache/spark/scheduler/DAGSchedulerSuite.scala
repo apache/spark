@@ -96,7 +96,9 @@ class MyRDD(
   override def toString: String = "DAGSchedulerSuiteRDD " + id
 }
 
-class DAGSchedulerSuiteDummyException extends Exception
+class DAGSchedulerSuiteDummyException extends Exception {
+  override def getMessage: String = "Dummy exception."
+}
 
 class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLimits {
 
@@ -215,7 +217,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   private def init(testConf: SparkConf): Unit = {
-    sc = new SparkContext("local", "DAGSchedulerSuite", testConf)
+    sc = new SparkContext("local[2]", "DAGSchedulerSuite", testConf)
     sparkListener.submittedStageInfos.clear()
     sparkListener.successfulStages.clear()
     sparkListener.failedStages.clear()
