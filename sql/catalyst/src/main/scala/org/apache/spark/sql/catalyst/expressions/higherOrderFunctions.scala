@@ -518,7 +518,7 @@ case class ArrayAggregate(
 case class MapZipWith(left: Expression, right: Expression, function: Expression)
   extends HigherOrderFunction with CodegenFallback {
 
-  @transient lazy val functionForEval: Expression = functionsForEval.head
+  def functionForEval: Expression = functionsForEval.head
 
   @transient lazy val MapType(leftKeyType, leftValueType, leftValueContainsNull) = left.dataType
 
@@ -560,8 +560,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     }
   }
 
-  // Nothing to check since the data type of the lambda function can be anything.
-  override def checkInputDataTypes(): TypeCheckResult = TypeCheckResult.TypeCheckSuccess
+  override def checkInputDataTypes(): TypeCheckResult = checkArgumentDataTypes()
 
   override def eval(input: InternalRow): Any = {
     val value1 = left.eval(input)

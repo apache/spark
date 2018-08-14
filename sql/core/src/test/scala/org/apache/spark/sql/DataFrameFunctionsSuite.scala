@@ -2254,7 +2254,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(null)))
   }
 
-  test("map_zip_with function - map of complex types") {
+  test("map_zip_with function - map of non-primitive types") {
     val df = Seq(
       (Map("z" -> "a", "y" -> "b", "x" -> "c"), Map("x" -> "a", "z" -> "c")),
       (Map("b" -> "a", "c" -> "d"), Map("c" -> "a", "b" -> null, "d" -> "k")),
