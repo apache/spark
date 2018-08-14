@@ -3378,7 +3378,7 @@ class SQLTests(ReusedSQLTestCase):
             df = self.spark.read.csv(path)
             # Test that filter with lit inputs works with data source
             result1 = df.filter(udf(lambda x: False, 'boolean')(lit(1)))
-            result2 = df.filter(udf(lambda : False, 'boolean')())
+            result2 = df.filter(udf(lambda: False, 'boolean')())
 
             self.assertEquals(0, result1.count())
             self.assertEquals(0, result2.count())
