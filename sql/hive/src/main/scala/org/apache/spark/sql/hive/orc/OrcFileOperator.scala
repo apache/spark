@@ -70,7 +70,7 @@ private[hive] object OrcFileOperator extends Logging {
       hdfsPath.getFileSystem(conf)
     }
 
-    listOrcFiles(basePath, conf).iterator.map { path =>
+    listOrcFiles(basePath, conf).view.map { path =>
       val reader = try {
         Some(OrcFile.createReader(fs, path))
       } catch {
