@@ -3369,9 +3369,7 @@ class SQLTests(ReusedSQLTestCase):
 
     # SPARK-24721
     def test_datasource_with_udf_filter_lit_input(self):
-        import pandas as pd
-        import numpy as np
-        from pyspark.sql.functions import udf, pandas_udf, lit, col
+        from pyspark.sql.functions import udf, lit, col
 
         path = tempfile.mkdtemp()
         shutil.rmtree(path)
@@ -3387,12 +3385,10 @@ class SQLTests(ReusedSQLTestCase):
 
             filter1 = udf(lambda: False, 'boolean')()
             filter2 = udf(lambda x: False, 'boolean')(lit(1))
-            filter3 = pandas_udf(lambda x: pd.Series(np.repeat(False, len(x))), 'boolean')(lit(1))
 
             for df in [filesource_df, datasource_df, datasource_v2_df]:
-                for f in [filter1, filter2, filter3]:
+                for f in [filter1, filter2]:
                     result = df.filter(f)
-                    result.explain(True)
                     self.assertEquals(0, result.count())
 
         finally:
@@ -5300,6 +5296,33 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         self.assertEquals(expected.collect(), df1.collect())
 
+    def test_datasource_with_udf_filter_lit_input(self):
+        # Same as SQLTests.test_datasource_with_udf_filter_lit_input, but with Pandas UDF
+        # This needs to a separate test because Arrow dependency is optional
+        import pandas as pd
+        import numpy as np
+        from pyspark.sql.functions import pandas_udf, lit, col
+
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+        try:
+            self.spark.range(1).write.mode("overwrite").format('csv').save(path)
+            filesource_df = self.spark.read.csv(path)
+            datasource_df = self.spark.read \
+                .format("org.apache.spark.sql.sources.SimpleScanSource") \
+                .option('from', 0).option('to', 1).load()
+            datasource_v2_df = self.spark.read \
+                .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+                .load()
+
+            f = pandas_udf(lambda x: pd.Series(np.repeat(False, len(x))), 'boolean')(lit(1))
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                result = df.filter(f)
+                self.assertEquals(0, result.count())
+
+        finally:
+            shutil.rmtree(path)
 
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,
