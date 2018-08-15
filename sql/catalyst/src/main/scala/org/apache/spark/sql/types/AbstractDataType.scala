@@ -115,8 +115,6 @@ protected[sql] abstract class AtomicType extends DataType {
   private[sql] type InternalType
   private[sql] val tag: TypeTag[InternalType]
   private[sql] val ordering: Ordering[InternalType]
-
-  private[spark] override def supportsEquals: Boolean = true
 }
 
 object AtomicType {

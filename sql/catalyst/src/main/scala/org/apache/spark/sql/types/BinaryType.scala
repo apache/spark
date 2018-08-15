@@ -49,8 +49,6 @@ class BinaryType private() extends AtomicType {
    */
   override def defaultSize: Int = 100
 
-  private[spark] override def supportsEquals: Boolean = false
-
   private[spark] override def asNullable: BinaryType = this
 }
 
