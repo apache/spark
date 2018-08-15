@@ -520,9 +520,7 @@ case class TransformKeys(
 
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
-  override def dataType: DataType = {
-    MapType(function.dataType, valueType, valueContainsNull)
-  }
+  override def dataType: DataType = MapType(function.dataType, valueType, valueContainsNull)
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): TransformKeys = {
     copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
@@ -534,13 +532,12 @@ case class TransformKeys(
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val map = argumentValue.asInstanceOf[MapData]
-    val f = functionForEval
     val resultKeys = new GenericArrayData(new Array[Any](map.numElements))
     var i = 0
     while (i < map.numElements) {
       keyVar.value.set(map.keyArray().get(i, keyVar.dataType))
       valueVar.value.set(map.valueArray().get(i, valueVar.dataType))
-      val result = f.eval(inputRow)
+      val result = functionForEval.eval(inputRow)
       if (result == null) {
         throw new RuntimeException("Cannot use null as map key!")
       }
