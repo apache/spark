@@ -654,6 +654,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       .setMaster("local-cluster[3, 1, 1024]")
       .setAppName("test-cluster")
     sc = new SparkContext(conf)
+
     val rdd = sc.makeRDD(Seq(1, 2, 3, 4), 2)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()

@@ -577,4 +577,31 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .checkValue(v => v > 0, "The value should be a positive time value.")
       .createWithDefaultString("365d")
+
+  private[spark] val BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL =
+    ConfigBuilder("spark.scheduler.barrier.maxConcurrentTasksCheck.interval")
+      .doc("Time in seconds to wait between a max concurrent tasks check failure and the next " +
+        "check. A max concurrent tasks check ensures the cluster can launch more concurrent " +
+        "tasks than required by a barrier stage on job submitted. The check can fail in case " +
+        "a cluster has just started and not enough executors have registered, so we wait for a " +
+        "little while and try to perform the check again. If the check fails more than a " +
+        "configured max failure times for a job then fail current job submission. Note this " +
+        "config only applies to jobs that contain one or more barrier stages, we won't perform " +
+        "the check on non-barrier jobs.")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefaultString("15s")
+
+  private[spark] val BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES =
+    ConfigBuilder("spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures")
+      .doc("Number of max concurrent tasks check failures allowed before fail a job submission. " +
+        "A max concurrent tasks check ensures the cluster can launch more concurrent tasks than " +
+        "required by a barrier stage on job submitted. The check can fail in case a cluster " +
+        "has just started and not enough executors have registered, so we wait for a little " +
+        "while and try to perform the check again. If the check fails more than a configured " +
+        "max failure times for a job then fail current job submission. Note this config only " +
+        "applies to jobs that contain one or more barrier stages, we won't perform the check on " +
+        "non-barrier jobs.")
+      .intConf
+      .checkValue(v => v > 0, "The max failures should be a positive value.")
+      .createWithDefault(40)
 }
