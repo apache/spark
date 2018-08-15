@@ -21,6 +21,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.apache.spark.rdd.{PartitionPruningRDD, RDD}
+import org.apache.spark.scheduler.BarrierJobAllocationFailed._
 import org.apache.spark.scheduler.DAGScheduler
 import org.apache.spark.util.ThreadUtils
 
@@ -63,7 +64,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .barrier()
       .mapPartitions(iter => iter)
     testSubmitJob(sc, rdd,
-      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
+      message = ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
   }
 
   test("submit a barrier ShuffleMapStage that contains PartitionPruningRDD") {
@@ -75,7 +76,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .repartition(2)
       .map(x => x + 1)
     testSubmitJob(sc, rdd,
-      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
+      message = ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
   }
 
   test("submit a barrier stage that doesn't contain PartitionPruningRDD") {
@@ -96,7 +97,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .barrier()
       .mapPartitions(iter => iter)
     testSubmitJob(sc, rdd, Some(Seq(1, 3)),
-      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
+      message = ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
   }
 
   test("submit a barrier stage with union()") {
@@ -110,7 +111,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .map(x => x * 2)
     // Fail the job on submit because the barrier RDD (rdd1) may be not assigned Task 0.
     testSubmitJob(sc, rdd3,
-      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
+      message = ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
   }
 
   test("submit a barrier stage with coalesce()") {
@@ -122,7 +123,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     // Fail the job on submit because the barrier RDD requires to run on 4 tasks, but the stage
     // only launches 1 task.
     testSubmitJob(sc, rdd,
-      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
+      message = ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
   }
 
   test("submit a barrier stage that contains an RDD that depends on multiple barrier RDDs") {
@@ -137,7 +138,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .zip(rdd2)
       .map(x => x._1 + x._2)
     testSubmitJob(sc, rdd3,
-      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
+      message = ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
   }
 
   test("submit a barrier stage with zip()") {
@@ -166,7 +167,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .barrier()
       .mapPartitions(iter => iter)
     testSubmitJob(sc, rdd,
-      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
+      message = ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
   }
 
   test("submit a barrier ShuffleMapStage with dynamic resource allocation enabled") {
@@ -183,7 +184,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .repartition(2)
       .map(x => x + 1)
     testSubmitJob(sc, rdd,
-      message = DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
+      message = ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
   }
 
   test("submit a barrier ResultStage that requires more slots than current total under local " +
@@ -200,7 +201,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .barrier()
       .mapPartitions(iter => iter)
     testSubmitJob(sc, rdd,
-      message = DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+      message = ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
   }
 
   test("submit a barrier ShuffleMapStage that requires more slots than current total under " +
@@ -219,7 +220,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .repartition(2)
       .map(x => x + 1)
     testSubmitJob(sc, rdd,
-      message = DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+      message = ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
   }
 
   test("submit a barrier ResultStage that requires more slots than current total under " +
@@ -237,7 +238,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .barrier()
       .mapPartitions(iter => iter)
     testSubmitJob(sc, rdd,
-      message = DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+      message = ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
   }
 
   test("submit a barrier ShuffleMapStage that requires more slots than current total under " +
@@ -257,6 +258,6 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .repartition(2)
       .map(x => x + 1)
     testSubmitJob(sc, rdd,
-      message = DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+      message = ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
   }
 }

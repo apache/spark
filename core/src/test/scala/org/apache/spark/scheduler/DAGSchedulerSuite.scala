@@ -96,9 +96,7 @@ class MyRDD(
   override def toString: String = "DAGSchedulerSuiteRDD " + id
 }
 
-class DAGSchedulerSuiteDummyException extends Exception {
-  override def getMessage: String = "Dummy exception."
-}
+class DAGSchedulerSuiteDummyException extends Exception
 
 class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLimits {
 

@@ -112,8 +112,7 @@ import org.apache.spark.util._
  *  - When adding a new data structure, update `DAGSchedulerSuite.assertDataStructuresEmpty` to
  *    include the new structure. This will help to catch memory leaks.
  */
-private[spark]
-class DAGScheduler(
+private[spark] class DAGScheduler(
     private[scheduler] val sc: SparkContext,
     private[scheduler] val taskScheduler: TaskScheduler,
     listenerBus: LiveListenerBus,
@@ -370,8 +369,7 @@ class DAGScheduler(
     val predicate: RDD[_] => Boolean = (r =>
       r.getNumPartitions == numTasksInStage && r.dependencies.filter(_.rdd.isBarrier()).size <= 1)
     if (rdd.isBarrier() && !traverseParentRDDsWithinStage(rdd, predicate)) {
-      throw new SparkException(
-        DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN)
+      throw new BarrierJobUnsupportedRDDChainException
     }
   }
 
@@ -418,7 +416,7 @@ class DAGScheduler(
    */
   private def checkBarrierStageWithDynamicAllocation(rdd: RDD[_]): Unit = {
     if (rdd.isBarrier() && Utils.isDynamicAllocationEnabled(sc.getConf)) {
-      throw new SparkException(DAGScheduler.ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION)
+      throw new BarrierJobRunWithDynamicAllocationException
     }
   }
 
@@ -426,12 +424,12 @@ class DAGScheduler(
    * Check whether the barrier stage requires more slots (to be able to launch all tasks in the
    * barrier stage together) than the total number of active slots currently. Fail current check
    * if trying to submit a barrier stage that requires more slots than current total number. If
-   * the check fails consecutively for three times for a job, then fail current job submission.
+   * the check fails consecutively beyond a configured number for a job, then fail current job
+   * submission.
    */
   private def checkBarrierStageWithNumSlots(rdd: RDD[_]): Unit = {
     if (rdd.isBarrier() && rdd.getNumPartitions > sc.maxNumConcurrentTasks) {
-      throw new SparkException(
-        DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+      throw new BarrierJobSlotsNumberCheckFailed
     }
   }
 
@@ -963,8 +961,7 @@ class DAGScheduler(
       // HadoopRDD whose underlying HDFS files have been deleted.
       finalStage = createResultStage(finalRDD, func, partitions, jobId, callSite)
     } catch {
-      case e: Exception if e.getMessage.contains(
-          DAGScheduler.ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER) =>
+      case e: BarrierJobSlotsNumberCheckFailed =>
         logWarning(s"The job $jobId requires to run a barrier stage that requires more slots " +
           "than the total number of slots in the cluster currently.")
         // If jobId doesn't exist in the map, Scala coverts its value null to 0: Int automatically.
@@ -2073,26 +2070,4 @@ private[spark] object DAGScheduler {
 
   // Number of consecutive stage attempts allowed before a stage is aborted
   val DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS = 4
-
-  // Error message when running a barrier stage that have unsupported RDD chain pattern.
-  val ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN =
-    "[SPARK-24820][SPARK-24821]: Barrier execution mode does not allow the following pattern of " +
-      "RDD chain within a barrier stage:\n1. Ancestor RDDs that have different number of " +
-      "partitions from the resulting RDD (eg. union()/coalesce()/first()/take()/" +
-      "PartitionPruningRDD). A workaround for first()/take() can be barrierRdd.collect().head " +
-      "(scala) or barrierRdd.collect()[0] (python).\n" +
-      "2. An RDD that depends on multiple barrier RDDs (eg. barrierRdd1.zip(barrierRdd2))."
-
-  // Error message when running a barrier stage with dynamic resource allocation enabled.
-  val ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION =
-    "[SPARK-24942]: Barrier execution mode does not support dynamic resource allocation for " +
-      "now. You can disable dynamic resource allocation by setting Spark conf " +
-      "\"spark.dynamicAllocation.enabled\" to \"false\"."
-
-  // Error message when running a barrier stage that requires more slots than current total number.
-  val ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER =
-    "[SPARK-24819]: Barrier execution mode does not allow run a barrier stage that requires " +
-      "more slots than the total number of slots in the cluster currently. Please init a new " +
-      "cluster with more CPU cores or repartition the input RDD(s) to reduce the number of " +
-      "slots required to run this barrier stage."
 }
