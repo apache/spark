@@ -29,7 +29,7 @@ trait EncryptionFunSuite {
    */
   final protected def encryptionTest(name: String)(fn: SparkConf => Unit) {
     encryptionTestHelper(name) { case (name, conf) =>
-        test(name)(fn(conf))
+      test(name)(fn(conf))
     }
   }
 

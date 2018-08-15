@@ -435,8 +435,10 @@ private[spark] class BlockManager(
         // stream.
         channel.close()
         // TODO SPARK-25035 Even if we're only going to write the data to disk after this, we end up
-        // using a lot of memory here.  We won't get a jvm OOM, but might get killed by the
-        // OS / cluster manager.  We could at least read the tmp file as a stream.
+        // using a lot of memory here.  With encryption, we'll read the whole file into a regular
+        // byte buffer and OOM.  Without encryption, we'll memory map the file and won't get a jvm
+        // OOM, but might get killed by the OS / cluster manager.  We could at least read the tmp
+        // file as a stream in both cases.
         val buffer = securityManager.getIOEncryptionKey() match {
           case Some(key) =>
             // we need to pass in the size of the unencrypted block
