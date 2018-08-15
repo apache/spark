@@ -263,10 +263,15 @@ private[kafka010] case class InternalKafkaConsumer(
   }
 
   /**
-   * Get the fetched record for the given offset if available. If the Otherwise it will either throw
-   * error
-   * (if failOnDataLoss = true), or return the next available offset within [offset, untilOffset),
-   * or null.
+   * Get the fetched record for the given offset if available.
+   *
+   * If the record is invisible (either a  transaction message, or an aborted message when the
+   * consumer's `isolation.level` is `read_committed`), it will return a `FetchedRecord` with the
+   * next offset to fetch.
+   *
+   * This method also will try the best to detect data loss. If failOnDataLoss` is `false`, it will
+   * throw an exception when we detect an unavailable offset. If `failOnDataLoss` is `true`, this
+   * method will return `null` if the next available record is within [offset, untilOffset).
    *
    * @throws OffsetOutOfRangeException if `offset` is out of range
    * @throws TimeoutException if cannot fetch the record in `pollTimeoutMs` milliseconds.
