@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalog.v2;
 import org.apache.spark.sql.catalyst.TableIdentifier;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
-import org.apache.spark.sql.catalyst.expressions.Expression;
 import org.apache.spark.sql.types.StructType;
 
 import java.util.Arrays;
@@ -89,10 +88,11 @@ public interface TableCatalog extends CatalogProvider {
    * @param properties a string map of table properties
    * @return metadata for the new table
    * @throws TableAlreadyExistsException If a table already exists for the identifier
+   * @throws UnsupportedOperationException If a requested partition transform is not supported
    */
   Table createTable(TableIdentifier ident,
                     StructType schema,
-                    List<Expression> partitions,
+                    List<PartitionTransform> partitions,
                     Map<String, String> properties) throws TableAlreadyExistsException;
 
   /**
