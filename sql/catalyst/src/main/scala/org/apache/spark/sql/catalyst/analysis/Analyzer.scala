@@ -176,6 +176,7 @@ class Analyzer(
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
+      ResolveOutputRelation ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
@@ -2156,7 +2157,7 @@ class Analyzer(
           // trust the `nullable` information.
           // (cls, expr) => cls.isPrimitive && expr.nullable
           val needsNullCheck = (cls: Class[_], expr: Expression) =>
-            cls.isPrimitive && !expr.isInstanceOf[KnowNotNull]
+            cls.isPrimitive && !expr.isInstanceOf[KnownNotNull]
           val inputsNullCheck = parameterTypes.zip(inputs)
             .filter { case (cls, expr) => needsNullCheck(cls, expr) }
             .map { case (_, expr) => IsNull(expr) }
@@ -2166,7 +2167,7 @@ class Analyzer(
           // branch of `If` will be called if any of these checked inputs is null. Thus we can
           // prevent this rule from being applied repeatedly.
           val newInputs = parameterTypes.zip(inputs).map{ case (cls, expr) =>
-            if (needsNullCheck(cls, expr)) KnowNotNull(expr) else expr }
+            if (needsNullCheck(cls, expr)) KnownNotNull(expr) else expr }
           inputsNullCheck
             .map(If(_, Literal.create(null, udf.dataType), udf.copy(children = newInputs)))
             .getOrElse(udf)
@@ -2224,6 +2225,102 @@ class Analyzer(
         // find common column names from both sides
         val joinNames = left.output.map(_.name).intersect(right.output.map(_.name))
         commonNaturalJoinProcessing(left, right, joinType, joinNames, condition)
+    }
+  }
+
+  /**
+   * Resolves columns of an output table from the data in a logical plan. This rule will:
+   *
+   * - Reorder columns when the write is by name
+   * - Insert safe casts when data types do not match
+   * - Insert aliases when column names do not match
+   * - Detect plans that are not compatible with the output table and throw AnalysisException
+   */
+  object ResolveOutputRelation extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+      case append @ AppendData(table, query, isByName)
+          if table.resolved && query.resolved && !append.resolved =>
+        val projection = resolveOutputColumns(table.name, table.output, query, isByName)
+
+        if (projection != query) {
+          append.copy(query = projection)
+        } else {
+          append
+        }
+    }
+
+    def resolveOutputColumns(
+        tableName: String,
+        expected: Seq[Attribute],
+        query: LogicalPlan,
+        byName: Boolean): LogicalPlan = {
+
+      if (expected.size < query.output.size) {
+        throw new AnalysisException(
+          s"""Cannot write to '$tableName', too many data columns:
+             |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
+             |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}""".stripMargin)
+      }
+
+      val errors = new mutable.ArrayBuffer[String]()
+      val resolved: Seq[NamedExpression] = if (byName) {
+        expected.flatMap { tableAttr =>
+          query.resolveQuoted(tableAttr.name, resolver) match {
+            case Some(queryExpr) =>
+              checkField(tableAttr, queryExpr, err => errors += err)
+            case None =>
+              errors += s"Cannot find data for output column '${tableAttr.name}'"
+              None
+          }
+        }
+
+      } else {
+        if (expected.size > query.output.size) {
+          throw new AnalysisException(
+            s"""Cannot write to '$tableName', not enough data columns:
+               |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
+               |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}"""
+                .stripMargin)
+        }
+
+        query.output.zip(expected).flatMap {
+          case (queryExpr, tableAttr) =>
+            checkField(tableAttr, queryExpr, err => errors += err)
+        }
+      }
+
+      if (errors.nonEmpty) {
+        throw new AnalysisException(
+          s"Cannot write incompatible data to table '$tableName':\n- ${errors.mkString("\n- ")}")
+      }
+
+      Project(resolved, query)
+    }
+
+    private def checkField(
+        tableAttr: Attribute,
+        queryExpr: NamedExpression,
+        addError: String => Unit): Option[NamedExpression] = {
+
+      // run the type check first to ensure type errors are present
+      val canWrite = DataType.canWrite(
+        queryExpr.dataType, tableAttr.dataType, resolver, tableAttr.name, addError)
+
+      if (queryExpr.nullable && !tableAttr.nullable) {
+        addError(s"Cannot write nullable values to non-null column '${tableAttr.name}'")
+        None
+
+      } else if (!canWrite) {
+        None
+
+      } else {
+        // always add an UpCast. it will be removed in the optimizer if it is unnecessary.
+        Some(Alias(
+          UpCast(queryExpr, tableAttr.dataType, Seq()), tableAttr.name
+        )(
+          explicitMetadata = Option(tableAttr.metadata)
+        ))
+      }
     }
   }
 

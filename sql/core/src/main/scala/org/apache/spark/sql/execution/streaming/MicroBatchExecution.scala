@@ -394,6 +394,9 @@ class MicroBatchExecution(
               case (src: Source, off) => src.commit(off)
               case (reader: MicroBatchReader, off) =>
                 reader.commit(reader.deserializeOffset(off.json))
+              case (src, _) =>
+                throw new IllegalArgumentException(
+                  s"Unknown source is found at constructNextBatch: $src")
             }
           } else {
             throw new IllegalStateException(s"batch ${currentBatchId - 1} doesn't exist")
