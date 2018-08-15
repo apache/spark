@@ -22,7 +22,6 @@ import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
 
 public final class RecordBinaryComparator extends RecordComparator {
 
-  // TODO(jiangxb) Add test suite for this.
   @Override
   public int compare(
       Object leftObj, long leftOff, int leftLen, Object rightObj, long rightOff, int rightLen) {
