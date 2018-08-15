@@ -2224,19 +2224,30 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-23723: specified encoding is not matched to actual encoding") {
-    val fileName = "test-data/utf16LE.json"
-    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
-    val exception = intercept[SparkException] {
-      spark.read.schema(schema)
-        .option("mode", "FAILFAST")
-        .option("multiline", "true")
-        .options(Map("encoding" -> "UTF-16BE"))
-        .json(testFile(fileName))
-        .count()
+    def doCount(bypassParser: Boolean, multiLine: Boolean): Long = {
+      var result: Long = -1
+      withSQLConf(SQLConf.BYPASS_PARSER_FOR_EMPTY_SCHEMA.key -> bypassParser.toString) {
+        val fileName = "test-data/utf16LE.json"
+        val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+        result = spark.read.schema(schema)
+          .option("mode", "FAILFAST")
+          .option("multiline", multiLine)
+          .options(Map("encoding" -> "UTF-16BE", "lineSep" -> "\n"))
+          .json(testFile(fileName))
+          .count()
+      }
+      result
     }
-    val errMsg = exception.getMessage
 
-    assert(errMsg.contains("Malformed records are detected in record parsing"))
+    Seq((true, true), (false, true), (false, false)).foreach { case (bypassParser, multiLine) =>
+      val exception = intercept[SparkException] {
+        doCount(bypassParser, multiLine)
+      }
+      val errMsg = exception.getMessage
+      assert(errMsg.contains("Malformed records are detected in record parsing"))
+    }
+
+    assert(doCount(bypassParser = true, multiLine = false) == 5)
   }
 
   def checkEncoding(expectedEncoding: String, pathToJsonFiles: String,
