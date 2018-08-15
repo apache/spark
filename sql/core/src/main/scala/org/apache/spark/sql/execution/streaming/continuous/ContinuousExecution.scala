@@ -161,11 +161,6 @@ class ContinuousExecution(
       case ContinuousExecutionRelation(source, options, output) =>
         val readSupport = continuousSources(insertedSourceId)
         insertedSourceId += 1
-
-        val loggedOffset = offsets.offsets(0)
-        val realOffset = loggedOffset.map(off => readSupport.deserializeOffset(off.json))
-        val startOffset = realOffset.getOrElse(readSupport.initialOffset)
-        val scanConfigBuilder = readSupport.newScanConfigBuilder(startOffset)
         val newOutput = readSupport.fullSchema().toAttributes
 
         assert(output.size == newOutput.size,
@@ -173,6 +168,10 @@ class ContinuousExecution(
             s"${Utils.truncatedString(newOutput, ",")}")
         replacements ++= output.zip(newOutput)
 
+        val loggedOffset = offsets.offsets(0)
+        val realOffset = loggedOffset.map(off => readSupport.deserializeOffset(off.json))
+        val startOffset = realOffset.getOrElse(readSupport.initialOffset)
+        val scanConfigBuilder = readSupport.newScanConfigBuilder(startOffset)
         StreamingDataSourceV2Relation(newOutput, source, options, readSupport, scanConfigBuilder)
     }
 
