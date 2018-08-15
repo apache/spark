@@ -2366,34 +2366,27 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(1, 2, 3, 4)
     ).toDF("j")
 
-    def testInvalidLambdaFunctions(): Unit = {
-      val ex1 = intercept[AnalysisException] {
-        dfExample1.selectExpr("transform_keys(i, k -> k)")
-      }
-      assert(ex1.getMessage.contains("The number of lambda function arguments '1' does not match"))
-
-      val ex2 = intercept[AnalysisException] {
-        dfExample1.selectExpr("transform_keys(i, (k, v, x) -> k + 1)")
-      }
-      assert(ex2.getMessage.contains(
-        "The number of lambda function arguments '3' does not match"))
-
-      val ex3 = intercept[RuntimeException] {
-        dfExample1.selectExpr("transform_keys(i, (k, v) -> v)").show()
-      }
-      assert(ex3.getMessage.contains("Cannot use null as map key!"))
-
-      val ex4 = intercept[AnalysisException] {
-        dfExample2.selectExpr("transform_keys(j, (k, v) -> k + 1)")
-      }
-      assert(ex4.getMessage.contains(
-        "data type mismatch: argument 1 requires map type"))
+    val ex1 = intercept[AnalysisException] {
+      dfExample1.selectExpr("transform_keys(i, k -> k)")
     }
+    assert(ex1.getMessage.contains("The number of lambda function arguments '1' does not match"))
 
-    testInvalidLambdaFunctions()
-    dfExample1.cache()
-    dfExample2.cache()
-    testInvalidLambdaFunctions()
+    val ex2 = intercept[AnalysisException] {
+      dfExample1.selectExpr("transform_keys(i, (k, v, x) -> k + 1)")
+    }
+    assert(ex2.getMessage.contains(
+      "The number of lambda function arguments '3' does not match"))
+
+    val ex3 = intercept[RuntimeException] {
+      dfExample1.selectExpr("transform_keys(i, (k, v) -> v)").show()
+    }
+    assert(ex3.getMessage.contains("Cannot use null as map key!"))
+
+    val ex4 = intercept[AnalysisException] {
+      dfExample2.selectExpr("transform_keys(j, (k, v) -> k + 1)")
+    }
+    assert(ex4.getMessage.contains(
+      "data type mismatch: argument 1 requires map type"))
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
