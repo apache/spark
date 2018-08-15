@@ -702,23 +702,20 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   """,
   since = "2.4.0")
 // scalastyle:on line.size.limit
-case class ArraysZipWith(
-                          left: Expression,
-                          right: Expression,
-                          function: Expression)
-  extends HigherOrderFunction with CodegenFallback with ExpectsInputTypes {
+case class ArraysZipWith(left: Expression, right: Expression, function: Expression)
+  extends HigherOrderFunction with CodegenFallback {
 
-  override def inputs: Seq[Expression] = List(left, right)
+  def functionForEval: Expression = functionsForEval.head
+
+  override def arguments: Seq[Expression] = left :: right :: Nil
+
+  override def argumentTypes: Seq[AbstractDataType] = ArrayType :: ArrayType :: Nil
 
   override def functions: Seq[Expression] = List(function)
 
-  def expectingFunctionType: AbstractDataType = AnyDataType
+  override def functionTypes: Seq[AbstractDataType] = AnyDataType :: Nil
 
-  @transient lazy val functionForEval: Expression = functionsForEval.head
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType, expectingFunctionType)
-
-  override def nullable: Boolean = inputs.exists(_.nullable)
+  override def nullable: Boolean = left.nullable || right.nullable
 
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
@@ -739,38 +736,38 @@ case class ArraysZipWith(
       (leftElementType, leftContainsNull) :: (rightElementType, rightContainsNull) :: Nil))
   }
 
-  @transient lazy val (arr1Var, arr2Var) = {
-    val LambdaFunction(_,
-    (arr1Var: NamedLambdaVariable) :: (arr2Var: NamedLambdaVariable) :: Nil, _) = function
-    (arr1Var, arr2Var)
-  }
+  @transient lazy val LambdaFunction(_,
+    Seq(leftElemVar: NamedLambdaVariable, rightElemVar: NamedLambdaVariable), _) = function
 
   override def eval(input: InternalRow): Any = {
     val leftArr = left.eval(input).asInstanceOf[ArrayData]
-    val rightArr = right.eval(input).asInstanceOf[ArrayData]
-
-    if (leftArr == null || rightArr == null) {
+    if (leftArr == null) {
       null
     } else {
-      val resultLength = math.max(leftArr.numElements(), rightArr.numElements())
-      val f = functionForEval
-      val result = new GenericArrayData(new Array[Any](resultLength))
-      var i = 0
-      while (i < resultLength) {
-        if (i < leftArr.numElements()) {
-          arr1Var.value.set(leftArr.get(i, arr1Var.dataType))
-        } else {
-          arr1Var.value.set(null)
+      val rightArr = right.eval(input).asInstanceOf[ArrayData]
+      if (rightArr == null) {
+        null
+      } else {
+        val resultLength = math.max(leftArr.numElements(), rightArr.numElements())
+        val f = functionForEval
+        val result = new GenericArrayData(new Array[Any](resultLength))
+        var i = 0
+        while (i < resultLength) {
+          if (i < leftArr.numElements()) {
+            leftElemVar.value.set(leftArr.get(i, leftElemVar.dataType))
+          } else {
+            leftElemVar.value.set(null)
+          }
+          if (i < rightArr.numElements()) {
+            rightElemVar.value.set(rightArr.get(i, rightElemVar.dataType))
+          } else {
+            rightElemVar.value.set(null)
+          }
+          result.update(i, f.eval(input))
+          i += 1
         }
-        if (i < rightArr.numElements()) {
-          arr2Var.value.set(rightArr.get(i, arr2Var.dataType))
-        } else {
-          arr2Var.value.set(null)
-        }
-        result.update(i, f.eval(input))
-        i += 1
+        result
       }
-      result
     }
   }
 

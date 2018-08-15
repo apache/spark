@@ -2302,64 +2302,75 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(ex5.getMessage.contains("function map_zip_with does not support ordering on type map"))
   }
 
-  test("zip_with function - arrays for primitive type not containing null") {
-    val df1 = Seq(
+  test("arrays zip_with function - for primitive types") {
+    val df1 = Seq[(Seq[Integer], Seq[Integer])](
       (Seq(9001, 9002, 9003), Seq(4, 5, 6)),
       (Seq(1, 2), Seq(3, 4)),
-      (Seq.empty[Int], Seq.empty[Int]),
-      (null, null)
-    ).toDF("val1", "val2")
-    val df2 = Seq(
-      (Seq(1, 2, 3), Seq("a", "b", "c")),
-      (Seq(1, 2, 3), Seq("a", "b"))
-    ).toDF("val1", "val2")
-
-    def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
-      val expectedValue1 = Seq(
-        Row(Seq(9005, 9007, 9009)),
-        Row(Seq(4, 6)),
-        Row(Seq.empty),
-        Row(null))
-      checkAnswer(df1.selectExpr("zip_with(val1, val2, (x, y) -> x + y)"), expectedValue1)
-
-      val expectedValue2 = Seq(
-        Row(Seq(Row("a", 1), Row("b", 2), Row("c", 3))),
-        Row(Seq(Row("a", 1), Row("b", 2), Row(null, 3))))
-      checkAnswer(df2.selectExpr("zip_with(val1, val2, (x, y) -> (y, x))"), expectedValue2)
-    }
-
-    // Test with local relation, the Project will be evaluated without codegen
-    testArrayOfPrimitiveTypeNotContainsNull()
-    // Test with cached relation, the Project will be evaluated with codegen
-    df1.cache()
-    df2.cache()
-    testArrayOfPrimitiveTypeNotContainsNull()
-  }
-
-  test("zip_with function - arrays for primitive type containing null") {
-    val df1 = Seq[(Seq[Integer], Seq[Integer])](
-      (Seq(9001, null, 9003), Seq(4, 5, 6)),
-      (Seq(1, null, 2, 4), Seq(3, 4)),
       (Seq.empty, Seq.empty),
       (null, null)
     ).toDF("val1", "val2")
+    val df2 = Seq[(Seq[Integer], Seq[Long])](
+      (Seq(1, null, 3), Seq(1L, 2L)),
+      (Seq(1, 2, 3), Seq(4L, 11L))
+    ).toDF("val1", "val2")
 
-    def testArrayOfPrimitiveTypeContainsNull(): Unit = {
-      val expectedValue1 = Seq(
-        Row(Seq(9005, null, 9009)),
-        Row(Seq(4, null, null, null)),
-        Row(Seq.empty),
-        Row(null))
-      checkAnswer(df1.selectExpr("zip_with(val1, val2, (x, y) -> x + y)"), expectedValue1)
-    }
+    val expectedValue1 = Seq(
+      Row(Seq(9005, 9007, 9009)),
+      Row(Seq(4, 6)),
+      Row(Seq.empty),
+      Row(null))
+    checkAnswer(df1.selectExpr("zip_with(val1, val2, (x, y) -> x + y)"), expectedValue1)
 
-    // Test with local relation, the Project will be evaluated without codegen
-    testArrayOfPrimitiveTypeContainsNull()
-    // Test with cached relation, the Project will be evaluated with codegen
-    df1.cache()
-    testArrayOfPrimitiveTypeContainsNull()
+    val expectedValue2 = Seq(
+      Row(Seq(Row(1.0, 1), Row(2.0, null), Row(null, 3))),
+      Row(Seq(Row(4L, 1), Row(11L, 2), Row(null, 3))))
+    checkAnswer(df2.selectExpr("zip_with(val1, val2, (x, y) -> (y, x))"), expectedValue2)
   }
 
+  test("arrays zip_with function - for non-primitive types") {
+    val df = Seq(
+      (Seq("a"), Seq("x", "y", "z")),
+      (Seq("a", null), Seq("x", "y")),
+      (Seq.empty[String], Seq.empty[String]),
+      (Seq("a", "b", "c"), null)
+    ).toDF("val1", "val2")
+
+    val expectedValue1 = Seq(
+      Row(Seq(Row("x", "a"), Row("y", null), Row("z", null))),
+      Row(Seq(Row("x", "a"), Row("y", null))),
+      Row(Seq.empty),
+      Row(null))
+    checkAnswer(df.selectExpr("zip_with(val1, val2, (x, y) -> (y, x))"), expectedValue1)
+  }
+
+  test("arrays zip_with function - invalid") {
+    val df = Seq(
+      (Seq("c", "a", "b"), Seq("x", "y", "z"), 1),
+      (Seq("b", null, "c", null), Seq("x"), 2),
+      (Seq.empty, Seq("x", "z"), 3),
+      (null, Seq("x", "z"), 4)
+    ).toDF("a1", "a2", "i")
+
+    val ex1 = intercept[AnalysisException] {
+      df.selectExpr("zip_with(a1, a2, x -> x)")
+    }
+    assert(ex1.getMessage.contains("The number of lambda function arguments '1' does not match"))
+
+    val ex2 = intercept[AnalysisException] {
+      df.selectExpr("zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)")
+    }
+    assert(ex2.getMessage.contains("Invalid number of arguments for function zip_with"))
+
+    val ex3 = intercept[AnalysisException] {
+      df.selectExpr("zip_with(i, a2, (acc, x) -> x)")
+    }
+    assert(ex3.getMessage.contains("data type mismatch: argument 1 requires array type"))
+
+    val ex4 = intercept[AnalysisException] {
+      df.selectExpr("zip_with(a1, a, (acc, x) -> x)")
+    }
+    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
+  }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
