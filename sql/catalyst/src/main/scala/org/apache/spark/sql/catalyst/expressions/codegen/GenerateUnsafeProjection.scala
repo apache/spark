@@ -32,6 +32,8 @@ import org.apache.spark.sql.types._
  */
 object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafeProjection] {
 
+  case class Schema(dataType: DataType, nullable: Boolean)
+
   /** Returns true iff we support this data type. */
   def canSupport(dataType: DataType): Boolean = UserDefinedType.sqlType(dataType) match {
     case NullType => true
@@ -47,17 +49,18 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       ctx: CodegenContext,
       input: String,
       index: String,
-      fieldTypeAndNullables: Seq[(DataType, Boolean)],
+      fieldTypeAndNullables: Seq[Schema],
       rowWriter: String): String = {
     // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
     val tmpInput = ctx.freshName("tmpInput")
-    val fieldEvals = fieldTypeAndNullables.zipWithIndex.map { case ((dt, nullable), i) =>
-      val isNull = if (nullable) {
+    val fieldEvals = fieldTypeAndNullables.zipWithIndex.map { case (dtNullable, i) =>
+      val isNull = if (dtNullable.nullable) {
         JavaCode.isNullExpression(s"$tmpInput.isNullAt($i)")
       } else {
         FalseLiteral
       }
-      ExprCode(isNull, JavaCode.expression(CodeGenerator.getValue(tmpInput, dt, i.toString), dt))
+      ExprCode(isNull, JavaCode.expression(
+        CodeGenerator.getValue(tmpInput, dtNullable.dataType, i.toString), dtNullable.dataType))
     }
 
     val rowWriterClass = classOf[UnsafeRowWriter].getName
@@ -65,7 +68,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       v => s"$v = new $rowWriterClass($rowWriter, ${fieldEvals.length});")
     val previousCursor = ctx.freshName("previousCursor")
     val structExpressions = writeExpressionsToBuffer(
-      ctx, tmpInput, fieldEvals, fieldTypeAndNullables.map(_._1), structRowWriter)
+      ctx, tmpInput, fieldEvals, fieldTypeAndNullables.map(_.dataType), structRowWriter)
     s"""
        |final InternalRow $tmpInput = $input;
        |if ($tmpInput instanceof UnsafeRow) {
@@ -174,11 +177,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val element = CodeGenerator.getValue(tmpInput, et, index)
 
-    val primitiveTypeName = if (CodeGenerator.isPrimitiveType(jt)) {
-      CodeGenerator.primitiveTypeName(et)
-    } else {
-      ""
-    }
     val elementAssignment = if (elementNullable) {
       s"""
          |if ($tmpInput.isNullAt($index)) {
@@ -262,7 +260,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       dt: DataType,
       writer: String): String = dt match {
     case t: StructType =>
-      writeStructToBuffer(ctx, input, index, t.map(e => (e.dataType, e.nullable)), writer)
+      writeStructToBuffer(
+        ctx, input, index, t.map(e => Schema(e.dataType, e.nullable)), writer)
 
     case ArrayType(et, en) =>
       val previousCursor = ctx.freshName("previousCursor")
