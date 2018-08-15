@@ -328,7 +328,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       MapType(StringType, StringType, valueContainsNull = true))
     val as2 = Literal.create(null,
       MapType(StringType, StringType, valueContainsNull = false))
-    val asn = Literal.create(Map.empty[StringType, StringType],
+    val as3 = Literal.create(Map.empty[StringType, StringType],
       MapType(StringType, StringType, valueContainsNull = true))
 
     val concatValue: (Expression, Expression) => Expression = (k, v) => Concat(Seq(k, v))
@@ -340,16 +340,16 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(
       transformKeys(transformKeys(as0, concatValue), concatValue),
       Map("axyxy" -> "xy", "bbyzyz" -> "yz", "ccczxzx" -> "zx"))
-    checkEvaluation(transformKeys(asn, concatValue), Map.empty[String, String])
+    checkEvaluation(transformKeys(as3, concatValue), Map.empty[String, String])
     checkEvaluation(
-      transformKeys(transformKeys(asn, concatValue), convertKeyToKeyLength),
+      transformKeys(transformKeys(as3, concatValue), convertKeyToKeyLength),
       Map.empty[Int, String])
     checkEvaluation(transformKeys(as0, convertKeyToKeyLength),
       Map(2 -> "xy", 3 -> "yz", 4 -> "zx"))
     checkEvaluation(transformKeys(as1, convertKeyToKeyLength),
       Map(2 -> "xy", 3 -> "yz", 4 -> null))
     checkEvaluation(transformKeys(as2, convertKeyToKeyLength), null)
-    checkEvaluation(transformKeys(asn, convertKeyToKeyLength), Map.empty[Int, String])
+    checkEvaluation(transformKeys(as3, convertKeyToKeyLength), Map.empty[Int, String])
 
     val ax0 = Literal.create(
       Map(1 -> "x", 2 -> "y", 3 -> "z"),

@@ -2302,13 +2302,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(ex5.getMessage.contains("function map_zip_with does not support ordering on type map"))
   }
 
-  test("transform keys function - test various primitive data types combinations") {
+  test("transform keys function - primitive data types") {
     val dfExample1 = Seq(
       Map[Int, Int](1 -> 1, 9 -> 9, 8 -> 8, 7 -> 7)
     ).toDF("i")
 
     val dfExample2 = Seq(
-      Map[Int, Double](1 -> 1.0E0, 2 -> 1.4E0, 3 -> 1.7E0)
+      Map[Int, Double](1 -> 1.0, 2 -> 1.40, 3 -> 1.70)
     ).toDF("j")
 
     val dfExample3 = Seq(
@@ -2357,34 +2357,37 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("transform keys function - Invalid lambda functions and exceptions") {
+
     val dfExample1 = Seq(
-      Map[Int, Int](1 -> 1, 9 -> 9, 8 -> 8, 7 -> 7)
+      Map[String, String]("a" -> null)
     ).toDF("i")
 
     val dfExample2 = Seq(
-      Map[String, String]("a" -> "b")
+      Seq(1, 2, 3, 4)
     ).toDF("j")
-
-    val dfExample3 = Seq(
-      Map[String, String]("a" -> null)
-    ).toDF("x")
 
     def testInvalidLambdaFunctions(): Unit = {
       val ex1 = intercept[AnalysisException] {
-        dfExample1.selectExpr("transform_keys(i, k -> k )")
+        dfExample1.selectExpr("transform_keys(i, k -> k)")
       }
       assert(ex1.getMessage.contains("The number of lambda function arguments '1' does not match"))
 
       val ex2 = intercept[AnalysisException] {
-        dfExample2.selectExpr("transform_keys(j, (k, v, x) -> k + 1)")
+        dfExample1.selectExpr("transform_keys(i, (k, v, x) -> k + 1)")
       }
       assert(ex2.getMessage.contains(
-      "The number of lambda function arguments '3' does not match"))
+        "The number of lambda function arguments '3' does not match"))
 
       val ex3 = intercept[RuntimeException] {
-        dfExample3.selectExpr("transform_keys(x, (k, v) -> v)").show()
+        dfExample1.selectExpr("transform_keys(i, (k, v) -> v)").show()
       }
       assert(ex3.getMessage.contains("Cannot use null as map key!"))
+
+      val ex4 = intercept[AnalysisException] {
+        dfExample2.selectExpr("transform_keys(j, (k, v) -> k + 1)")
+      }
+      assert(ex4.getMessage.contains(
+        "data type mismatch: argument 1 requires map type"))
     }
 
     testInvalidLambdaFunctions()

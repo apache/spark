@@ -53,8 +53,8 @@ select exists(ys, y -> y > 30) as v from nested;
 select exists(cast(null as array<int>), y -> y > 30) as v;
                                                                          
 create or replace temporary view nested as values
-  (1, map(1,1,2,2,3,3)),
-  (2, map(4,4,5,5,6,6))
+  (1, map(1, 1, 2, 2, 3, 3)),
+  (2, map(4, 4, 5, 5, 6, 6))
   as t(x, ys);
 
 -- Identity Transform Keys in a map

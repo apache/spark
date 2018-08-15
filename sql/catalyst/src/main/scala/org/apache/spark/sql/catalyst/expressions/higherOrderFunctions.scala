@@ -523,14 +523,14 @@ case class TransformKeys(
     MapType(function.dataType, map.valueType, map.valueContainsNull)
   }
 
-  @transient val MapType(keyType, valueType, valueContainsNull) = argument.dataType
+  @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): TransformKeys = {
     copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
   }
 
   @transient lazy val (keyVar, valueVar) = {
-    val LambdaFunction(
+    @transient lazy val LambdaFunction(
     _, (keyVar: NamedLambdaVariable) :: (valueVar: NamedLambdaVariable) :: Nil, _) = function
     (keyVar, valueVar)
   }
@@ -544,7 +544,7 @@ case class TransformKeys(
       keyVar.value.set(map.keyArray().get(i, keyVar.dataType))
       valueVar.value.set(map.valueArray().get(i, valueVar.dataType))
       val result = f.eval(inputRow)
-      if (result ==  null) {
+      if (result == null) {
         throw new RuntimeException("Cannot use null as map key!")
       }
       resultKeys.update(i, result)
@@ -554,7 +554,7 @@ case class TransformKeys(
   }
 
   override def prettyName: String = "transform_keys"
-  }
+}
 
 /**
  * Merges two given maps into a single map by applying function to the pair of values with
