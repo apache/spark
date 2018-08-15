@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -67,7 +67,7 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
     // Output iterator for results from Python.
     val outputIterator = new PythonUDFRunner(
-        funcs, PythonEvalType.SQL_BATCHED_UDF, argOffsets, sparkContext.conf)
+        funcs, PythonEvalType.SQL_BATCHED_UDF, argOffsets, SparkEnv.get.conf)
       .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler
