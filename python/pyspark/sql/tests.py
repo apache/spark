@@ -3378,9 +3378,11 @@ class SQLTests(ReusedSQLTestCase):
         try:
             self.spark.range(1).write.mode("overwrite").format('csv').save(path)
             filesource_df = self.spark.read.csv(path)
-            datasource_df = self.spark.read.format("org.apache.spark.sql.sources.SimpleScanSource") \
+            datasource_df = self.spark.read \
+                .format("org.apache.spark.sql.sources.SimpleScanSource") \
                 .option('from', 0).option('to', 1).load()
-            datasource_v2_df = self.spark.read.format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+            datasource_v2_df = self.spark.read \
+                .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
                 .load()
 
             filter1 = udf(lambda: False, 'boolean')()
