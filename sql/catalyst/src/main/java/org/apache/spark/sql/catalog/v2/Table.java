@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalog.v2;
 
-import org.apache.spark.sql.catalyst.expressions.Expression;
 import org.apache.spark.sql.types.StructType;
 
 import java.util.List;
@@ -40,8 +39,8 @@ public interface Table {
   StructType schema();
 
   /**
-   * Return the table partitioning expressions.
-   * @return this table's partitioning expressions
+   * Return the table partitioning transforms.
+   * @return this table's partitioning transforms
    */
-  List<Expression> partitionExpressions();
+  List<PartitionTransform> partitioning();
 }
