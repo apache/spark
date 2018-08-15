@@ -112,6 +112,11 @@ abstract class RDD[T: ClassTag](
   /**
    * :: DeveloperApi ::
    * Implemented by subclasses to compute a given partition.
+   *
+   * Spark requires the computing function to always output the same data set(the order can vary)
+   * given the same input data set. For example, a computing function that increases each input
+   * value by 1 is valid, a computing function that increases each input by a random value is
+   * invalid.
    */
   @DeveloperApi
   def compute(split: Partition, context: TaskContext): Iterator[T]
@@ -462,8 +467,11 @@ abstract class RDD[T: ClassTag](
 
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
-        new ShuffledRDD[Int, T, T](mapPartitionsWithIndex(distributePartition),
-        new HashPartitioner(numPartitions)),
+        new ShuffledRDD[Int, T, T](
+          mapPartitionsWithIndex(distributePartition),
+          new HashPartitioner(numPartitions),
+          // round-robin partitioner is order sensitive.
+          orderSensitivePartitioner = true),
         numPartitions,
         partitionCoalescer).values
     } else {
@@ -853,6 +861,11 @@ abstract class RDD[T: ClassTag](
    * second element in each RDD, etc. Assumes that the two RDDs have the *same number of
    * partitions* and the *same number of elements in each partition* (e.g. one was made through
    * a map on the other).
+   *
+   * Note that, `zip` violates the requirement of the RDD computing function. If the order of input
+   * data changes, `zip` will return different result. Because of this, Spark may return unexpected
+   * result if there is a shuffle after `zip`, and the shuffle failed and retried. To workaround
+   * this, users can call `zipPartitions` and sort the input data before zip.
    */
   def zip[U: ClassTag](other: RDD[U]): RDD[(T, U)] = withScope {
     zipPartitions(other, preservesPartitioning = false) { (thisIter, otherIter) =>
@@ -1865,6 +1878,22 @@ abstract class RDD[T: ClassTag](
   // RDD chain.
   @transient protected lazy val isBarrier_ : Boolean =
     dependencies.filter(!_.isInstanceOf[ShuffleDependency[_, _, _]]).exists(_.rdd.isBarrier())
+
+  /**
+   * Whether the RDD's computing function is idempotent. Idempotent means the computing function
+   * not only satisfies the requirement, but also produce the same output sequence(the output order
+   * can't vary) given the same input sequence. Spark assumes all the RDDs are idempotent, except
+   * for the shuffle RDD and RDDs derived from non-idempotent RDD.
+   */
+  // TODO: Add public APIs to allow users to mark their RDD as non-idempotent.
+  // TODO: this can be per-partition. e.g. UnionRDD can have part of its partitions idempotent.
+  private[spark] def isIdempotent: Boolean = {
+    dependencies.forall { dep =>
+      // Shuffle RDD is always considered as non-idempotent, because its computing function needs
+      // to fetch remote shuffle blocks, and these fetched blocks may arrive in a random order.
+      !dep.isInstanceOf[ShuffleDependency[_, _, _]] && dep.rdd.isIdempotent
+    }
+  }
 }
 
 

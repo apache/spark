@@ -1487,6 +1487,44 @@ private[spark] class DAGScheduler(
             failedStages += failedStage
             failedStages += mapStage
             if (noResubmitEnqueued) {
+              // If the map stage is not idempotent(produces data in a different order when retry)
+              // and the shuffle partitioner is order sensitive, we have to retry all the tasks of
+              // the failed stage and its succeeding stages, because the input data of the failed
+              // stage will be changed after the map tasks are re-tried.
+              if (!mapStage.rdd.isIdempotent && mapStage.shuffleDep.orderSensitivePartitioner) {
+                def rollBackStage(stage: Stage): Unit = stage match {
+                  case mapStage: ShuffleMapStage =>
+                    if (mapStage.findMissingPartitions().length < mapStage.numPartitions) {
+                      markStageAsFinished(
+                        mapStage,
+                        Some("preceding non-idempotent shuffle map stage gets retried."),
+                        willRetry = !shouldAbortStage)
+                      mapOutputTracker.unregisterAllMapOutput(mapStage.shuffleDep.shuffleId)
+                      failedStages += mapStage
+                    }
+
+                  case resultStage =>
+                    val numMissingPartitions = resultStage.findMissingPartitions().length
+                    if (numMissingPartitions != resultStage.numPartitions) {
+                      // TODO: support to rollback result tasks.
+                      abortStage(failedStage, "cannot rollback result tasks.", None)
+                    }
+                }
+
+                def rollbackSucceedingStages(stageChain: List[Stage]): Unit = {
+                  if (stageChain.head.id == failedStage.id) {
+                    stageChain.foreach { stage =>
+                      if (!failedStages.contains(stage)) rollBackStage(stage)
+                    }
+                  } else {
+                    stageChain.head.parents.foreach(s => rollbackSucceedingStages(s :: stageChain))
+                  }
+                }
+
+                rollBackStage(failedStage)
+                activeJobs.foreach(job => rollbackSucceedingStages(job.finalStage :: Nil))
+              }
+
               // We expect one executor failure to trigger many FetchFailures in rapid succession,
               // but all of those task failures can typically be handled by a single resubmission of
               // the failed stage.  We avoid flooding the scheduler's event queue with resubmit

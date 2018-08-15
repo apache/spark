@@ -70,7 +70,8 @@ class MyRDD(
     numPartitions: Int,
     dependencies: List[Dependency[_]],
     locations: Seq[Seq[String]] = Nil,
-    @(transient @param) tracker: MapOutputTrackerMaster = null)
+    @(transient @param) tracker: MapOutputTrackerMaster = null,
+    idempotent: Boolean = true)
   extends RDD[(Int, Int)](sc, dependencies) with Serializable {
 
   override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
@@ -79,6 +80,8 @@ class MyRDD(
   override def getPartitions: Array[Partition] = (0 until numPartitions).map(i => new Partition {
     override def index: Int = i
   }).toArray
+
+  override private[spark] def isIdempotent = super.isIdempotent && idempotent
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {
     if (locations.isDefinedAt(partition.index)) {
@@ -2631,6 +2634,94 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     runEvent(ResubmitFailedStages)
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(countSubmittedMapStageAttempts() === 2)
+  }
+
+  test("SPARK-23207: retry all the succeeding stages when a non-idempotent map stage gets " +
+    "re-tried via FetchFailed and shuffle partitioner is order sensitive.") {
+    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, idempotent = false).mapPartitions(iter => iter)
+    assert(!shuffleMapRdd1.isIdempotent)
+    val shuffleDep1 = new ShuffleDependency(
+      shuffleMapRdd1, new HashPartitioner(2), orderSensitivePartitioner = true)
+    val shuffleId1 = shuffleDep1.shuffleId
+
+    val shuffleMapRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+    assert(!shuffleMapRdd2.isIdempotent)
+    val shuffleDep2 = new ShuffleDependency(
+      shuffleMapRdd2, new HashPartitioner(2), orderSensitivePartitioner = false)
+    val shuffleId2 = shuffleDep2.shuffleId
+
+    val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
+    submit(finalRdd, Array(0, 1))
+
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+
+    complete(taskSets(1), Seq(
+      (Success, makeMapStatus("hostC", 2)),
+      (Success, makeMapStatus("hostD", 2))))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
+
+    // The first task of the final stage succeeds
+    runEvent(makeCompletionEvent(
+      taskSets(2).tasks(0), Success, 42,
+      Seq.empty, createFakeTaskInfoWithId(0)))
+
+    // The second task of the final stage failed with fetch failure
+    runEvent(makeCompletionEvent(
+      taskSets(2).tasks(1),
+      FetchFailed(makeBlockManagerId("hostC"), shuffleId2, 0, 0, "ignored"),
+      null))
+
+    var failedStages = scheduler.failedStages.toSeq
+    assert(failedStages.length == 2)
+    // Shuffle blocks of "hostC" is lost, so first task of `shuffleMapRdd2` needs to retry.
+    assert(failedStages.collect {
+      case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
+    }.head.findMissingPartitions() == Seq(0))
+    // The result stage is waiting for the second task to complete. We don't need to rollback this
+    // stage because the partitioner of shuffle 2 is order insensitive.
+    val resultStage = failedStages.collect {
+      case stage: ResultStage => stage
+    }.head
+    assert(resultStage.findMissingPartitions() == Seq(1))
+
+    scheduler.resubmitFailedStages()
+    // reset the final stage, as currently DAGScheduler can't rollback result stage
+    resultStage.activeJob.get.resetAllPartitions()
+
+    // The first task of the second shuffle map stage failed with fetch failure
+    runEvent(makeCompletionEvent(
+      taskSets(3).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0, 0, "ignored"),
+      null))
+
+    failedStages = scheduler.failedStages.toSeq
+    assert(failedStages.length == 2)
+    // Shuffle blocks of "hostA" is lost, so first task of first shuffle map stage needs to retry.
+    assert(failedStages.collect {
+      case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId1 => stage
+    }.head.findMissingPartitions() == Seq(0))
+    // The second shuffle map stage is entirely rollbacked, because the partitioner of shuffle 1 is
+    // order sensitive.
+    assert(failedStages.collect {
+      case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
+    }.head.findMissingPartitions() == Seq(0, 1))
+
+    scheduler.resubmitFailedStages()
+
+    // complete the first task of first shuffle map stage
+    runEvent(makeCompletionEvent(
+      taskSets(0).tasks(0), Success, makeMapStatus("hostA", 2)))
+    // Complete the map stage.
+    completeShuffleMapStageSuccessfully(0, 1, numShufflePartitions = 2)
+    completeShuffleMapStageSuccessfully(1, 2, numShufflePartitions = 2)
+    // Complete the result stage.
+    completeNextResultStageWithSuccess(2, 1)
+
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assertDataStructuresEmpty()
   }
 
   /**
