@@ -169,8 +169,7 @@ class BisectingKMeans private (
     val vectors = input.zip(norms).map { case (x, norm) => new VectorWithNorm(x, norm) }
     var assignments = vectors.map(v => (ROOT_INDEX, v))
     var activeClusters = summarize(d, assignments, dMeasure)
-    val numSamples = activeClusters.values.map(_.size).sum
-    instr.foreach(_.logNumExamples(numSamples))
+    instr.foreach(_.logNumExamples(activeClusters.values.map(_.size).sum))
     val rootSummary = activeClusters(ROOT_INDEX)
     val n = rootSummary.size
     logInfo(s"Number of points: $n.")

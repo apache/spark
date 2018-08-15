@@ -320,8 +320,7 @@ class KMeans private (
       }.collectAsMap()
 
       if (iteration == 0) {
-        val numSamples = collected.values.map(_._2).sum
-        instr.foreach(_.logNumExamples(numSamples))
+        instr.foreach(_.logNumExamples(collected.values.map(_._2).sum))
       }
 
       val newCenters = collected.mapValues { case (sum, count) =>
