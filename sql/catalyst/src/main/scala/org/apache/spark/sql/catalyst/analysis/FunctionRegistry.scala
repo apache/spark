@@ -447,7 +447,7 @@ object FunctionRegistry {
     expression[ArrayExists]("exists"),
     expression[ArrayAggregate]("aggregate"),
     expression[MapZipWith]("map_zip_with"),
-    expression[ArraysZipWith]("zip_with"),
+    expression[ZipWith]("zip_with"),
 
     CreateStruct.registryEntry,
 

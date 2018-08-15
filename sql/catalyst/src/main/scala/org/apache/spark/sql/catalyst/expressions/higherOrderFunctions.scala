@@ -702,7 +702,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   """,
   since = "2.4.0")
 // scalastyle:on line.size.limit
-case class ArraysZipWith(left: Expression, right: Expression, function: Expression)
+case class ZipWith(left: Expression, right: Expression, function: Expression)
   extends HigherOrderFunction with CodegenFallback {
 
   def functionForEval: Expression = functionsForEval.head
@@ -719,7 +719,7 @@ case class ArraysZipWith(left: Expression, right: Expression, function: Expressi
 
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
-  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArraysZipWith = {
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ZipWith = {
     val (leftElementType, leftContainsNull) = left.dataType match {
       case ArrayType(elementType, containsNull) => (elementType, containsNull)
       case _ =>
