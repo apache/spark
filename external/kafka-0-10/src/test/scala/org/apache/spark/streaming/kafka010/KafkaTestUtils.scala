@@ -36,10 +36,10 @@ import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.serialization.StringSerializer
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.Time
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
@@ -73,6 +73,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
   // Flag to test whether the system is correctly started
   private var zkReady = false
   private var brokerReady = false
+  private var leakDetector: AnyRef = null
 
   def zkAddress: String = {
     assert(zkReady, "Zookeeper not setup yet or already torn down, cannot get zookeeper address")
@@ -119,12 +120,22 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
   /** setup the whole embedded servers, including Zookeeper and Kafka brokers */
   def setup(): Unit = {
+    // Set up a KafkaTestUtils leak detector so that we can see where the leak KafkaTestUtils is
+    // created.
+    val exception = new SparkException("It was created at: ")
+    leakDetector = ShutdownHookManager.addShutdownHook { () =>
+      logError("Found a leak KafkaTestUtils.", exception)
+    }
+
     setupEmbeddedZookeeper()
     setupEmbeddedKafkaServer()
   }
 
   /** Teardown the whole servers, including Kafka broker and Zookeeper */
   def teardown(): Unit = {
+    if (leakDetector != null) {
+      ShutdownHookManager.removeShutdownHook(leakDetector)
+    }
     brokerReady = false
     zkReady = false
 
