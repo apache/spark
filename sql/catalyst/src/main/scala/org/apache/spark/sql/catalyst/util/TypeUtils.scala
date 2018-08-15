@@ -78,7 +78,7 @@ object TypeUtils {
    * Returns true if elements of the data type could be used as items of a hash set or as keys
    * of a hash map.
    */
-  def typeSupportsEquals(dataType: DataType): Boolean = dataType match {
+  def typeCanBeHashed(dataType: DataType): Boolean = dataType match {
     case BinaryType => false
     case _: AtomicType => true
     case _ => false

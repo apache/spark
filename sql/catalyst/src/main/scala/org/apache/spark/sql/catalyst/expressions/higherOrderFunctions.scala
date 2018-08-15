@@ -589,7 +589,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
    */
   @transient private lazy val getKeysWithValueIndexes:
       (ArrayData, ArrayData) => mutable.Iterable[(Any, Array[Option[Int]])] = {
-    if (TypeUtils.typeSupportsEquals(keyType)) {
+    if (TypeUtils.typeCanBeHashed(keyType)) {
       getKeysWithIndexesFast
     } else {
       getKeysWithIndexesBruteForce
