@@ -98,6 +98,12 @@ abstract class DataType extends AbstractDataType {
   private[spark] def asNullable: DataType
 
   /**
+   * Returns true if elements of the data type could be used as items in a hash set or as keys
+   * in a hash map.
+   */
+  private[spark] def supportsEquals: Boolean = false
+
+  /**
    * Returns true if any `DataType` of this DataType tree satisfies the given function `f`.
    */
   private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = f(this)
