@@ -400,9 +400,9 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
         None
       }
 
-      val (allocation, setFunc) =
-        ctx.createArrayData(arrayData, childDataType.keyType, numElements,
-          s" $prettyName failed.", elementSize = elementSize)
+      val allocation = ctx.createArrayData(arrayData, childDataType.keyType, numElements,
+        s" $prettyName failed.", elementSize = elementSize)
+      val setFunc = ctx.setArrayElementFunc(childDataType.keyType)
 
       val code = if (isKeyPrimitive && isValuePrimitive) {
         val genCodeForPrimitive = genCodeForPrimitiveElements(
@@ -691,10 +691,11 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     val y = ctx.freshName("y")
     val z = ctx.freshName("z")
 
-    val (allocation, setFunc) =
-      ctx.createArrayData(arrayData, elementType, numElemName, s" $prettyName failed.")
-    val assignment = ctx.createArrayAssignment(arrayData, dataType, elementType, s"$argsName[$y]",
-      setFunc, checkForNull = Some(checkForNull))
+    val allocation = ctx.createArrayData(
+      arrayData, elementType, numElemName, s" $prettyName failed.")
+    val setFunc = ctx.setArrayElementFunc(elementType)
+    val assignment = ctx.createArrayAssignment(arrayData, setFunc, elementType, s"$argsName[$y]",
+      checkForNull)
 
     val concat = ctx.freshName("concat")
     val concatDef =
@@ -1247,10 +1248,12 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
     val indices = ctx.freshName("indices")
     val i = ctx.freshName("i")
 
-    val (initialization, setFunc) =
+    val initialization =
       ctx.createArrayData(arrayData, elementType, numElements, s" $prettyName failed.")
+    val setFunc = ctx.setArrayElementFunc(elementType)
     val assignment =
-      ctx.createArrayAssignment(arrayData, dataType, elementType, childName, setFunc)
+      ctx.createArrayAssignment(arrayData, setFunc, elementType, childName,
+        dataType.asInstanceOf[ArrayType].containsNull)
 
     s"""
        |int $numElements = $childName.numElements();
@@ -1314,10 +1317,12 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
     val i = ctx.freshName("i")
     val j = ctx.freshName("j")
 
-    val (initialization, setFunc) =
+    val initialization =
       ctx.createArrayData(arrayData, elementType, numElements, s" $prettyName failed.")
+    val setFunc = ctx.setArrayElementFunc(elementType)
     val assignment =
-      ctx.createArrayAssignment(arrayData, dataType, elementType, childName, setFunc)
+      ctx.createArrayAssignment(arrayData, setFunc, elementType, childName,
+        dataType.asInstanceOf[ArrayType].containsNull)
 
     s"""
        |final int $numElements = $childName.numElements();
@@ -1721,10 +1726,12 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     val i = ctx.freshName("i")
     val genericArrayData = classOf[GenericArrayData].getName
 
-    val (allocation, setFunc) =
+    val allocation =
       ctx.createArrayData(values, elementType, resLength, s" $prettyName failed.")
+    val setFunc = ctx.setArrayElementFunc(elementType)
     val assignment =
-      ctx.createArrayAssignment(values, dataType, elementType, inputArray, setFunc)
+      ctx.createArrayAssignment(values, setFunc, elementType, inputArray,
+        dataType.asInstanceOf[ArrayType].containsNull)
 
     s"""
        |if ($startIdx < 0 || $startIdx >= $inputArray.numElements()) {
@@ -2395,10 +2402,11 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx)
 
-    val (initialization, setFunc) =
+    val initialization =
       ctx.createArrayData(arrayData, elementType, numElemName, s" $prettyName failed.")
-    val assignment = ctx.createArrayAssignment(
-      arrayData, dataType, elementType, s"args[$y]", setFunc)
+    val setFunc = ctx.setArrayElementFunc(elementType)
+    val assignment = ctx.createArrayAssignment(arrayData, setFunc, elementType, s"args[$y]",
+      dataType.asInstanceOf[ArrayType].containsNull)
 
     val concat = ctx.freshName("concat")
     val concatDef =
@@ -2512,10 +2520,11 @@ case class Flatten(child: Expression) extends UnaryExpression {
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, childVariableName)
 
-    val (allocation, setFunc) =
+    val allocation =
       ctx.createArrayData(tempArrayDataName, elementType, numElemName, s" $prettyName failed.")
-    val assignment = ctx.createArrayAssignment(
-      tempArrayDataName, dataType, elementType, arr, setFunc)
+    val setFunc = ctx.setArrayElementFunc(elementType)
+    val assignment = ctx.createArrayAssignment(tempArrayDataName, setFunc, elementType, arr,
+      dataType.asInstanceOf[ArrayType].containsNull)
 
     s"""
     |$numElemCode
@@ -3028,10 +3037,11 @@ case class ArrayRepeat(left: Expression, right: Expression)
     val k = ctx.freshName("k")
     val (numElemName, numElemCode) = genCodeForNumberOfElements(ctx, count)
 
-    val (allocation, setFunc) =
+    val allocation =
       ctx.createArrayData(tempArrayDataName, elementType, numElemName, s" $prettyName failed.")
-    val assignment = ctx.createArrayAssignment(tempArrayDataName, dataType, elementType, "",
-      setFunc, rhsValue = Some(element), checkForNull = Some(false))
+    val setFunc = ctx.setArrayElementFunc(elementType)
+    val assignment = ctx.createArrayAssignment(tempArrayDataName, setFunc, elementType, "",
+      false, rhsValue = Some(element))
 
     s"""
        |$numElemCode
@@ -3131,10 +3141,10 @@ case class ArrayRemove(left: Expression, right: Expression)
     val getValue = CodeGenerator.getValue(inputArray, elementType, i)
     val isEqual = ctx.genEqual(elementType, value, getValue)
 
-    val (allocation, setFunc) =
+    val allocation =
       ctx.createArrayData(values, elementType, newArraySize, s" $prettyName failed.")
-    val assignment = ctx.createArrayAssignment(
-      values, dataType, elementType, inputArray, setFunc, checkForNull = Some(false))
+    val setFunc = ctx.setArrayElementFunc(elementType)
+    val assignment = ctx.createArrayAssignment(values, setFunc, elementType, inputArray, false)
 
     s"""
        |$allocation
@@ -3163,8 +3173,8 @@ case class ArrayRemove(left: Expression, right: Expression)
  * and [[ArrayExcept]].
  */
 trait ArraySetLike {
-  @transient protected lazy val dt: DataType = NullType
-  @transient protected lazy val et: DataType = NullType
+  protected def dt: DataType
+  protected def et: DataType
 
   @transient protected lazy val canUseSpecializedHashSet = et match {
     case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType => true
@@ -3266,8 +3276,8 @@ case class ArrayDistinct(child: Expression)
 
   @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
-  @transient lazy override val dt = dataType
-  @transient lazy override val et = elementType
+  override def dt = dataType
+  override def et = elementType
 
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
@@ -3397,8 +3407,8 @@ case class ArrayDistinct(child: Expression)
  * Will become common base class for [[ArrayUnion]], [[ArrayIntersect]], and [[ArrayExcept]].
  */
 trait ArrayBinaryLike extends BinaryArrayExpressionWithImplicitCast with ArraySetLike {
-  @transient lazy override val dt = dataType
-  @transient lazy override val et = elementType
+  override def dt = dataType
+  override def et = elementType
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val typeCheckResult = super.checkInputDataTypes()

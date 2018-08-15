@@ -51,20 +51,15 @@ object ArrayData {
       numElements : Long,
       isPrimitiveType: Boolean,
       additionalErrorMessage: String) : ArrayData = {
-    val arraySize = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(numElements, elementSize)
     if (isPrimitiveType && !UnsafeArrayData.shouldUseGenericArrayData(elementSize, numElements)) {
-      val arrayBytes = new Array[Byte](arraySize.toInt)
-      val arrayName = new UnsafeArrayData()
-      Platform.putLong(arrayBytes, Platform.BYTE_ARRAY_OFFSET, numElements)
-      arrayName.pointTo(arrayBytes, Platform.BYTE_ARRAY_OFFSET, arraySize.toInt)
-      arrayName
+      UnsafeArrayData.forPrimitiveArray(Platform.BYTE_ARRAY_OFFSET, numElements.toInt, elementSize)
     } else if (numElements <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toLong) {
       new GenericArrayData(new Array[Any](numElements.toInt))
     } else {
       throw new RuntimeException(s"Cannot create array with $numElements " +
         "elements of data due to exceeding the limit " +
-        s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for ArrayData." +
-        s"$additionalErrorMessage")
+        s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for ArrayData. " +
+        additionalErrorMessage)
     }
   }
 }
