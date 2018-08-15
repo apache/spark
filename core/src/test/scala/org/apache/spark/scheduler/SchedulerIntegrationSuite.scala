@@ -385,6 +385,8 @@ private[spark] abstract class MockBackend(
     }.toIndexedSeq
   }
 
+  override def maxNumConcurrentTasks(): Int = 0
+
   /**
    * This is called by the scheduler whenever it has tasks it would like to schedule, when a tasks
    * completes (which will be in a result-getter thread), and by the reviveOffers thread for delay
