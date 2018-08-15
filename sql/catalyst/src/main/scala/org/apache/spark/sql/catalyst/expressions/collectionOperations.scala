@@ -3276,8 +3276,8 @@ case class ArrayDistinct(child: Expression)
 
   @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
-  override def dt = dataType
-  override def et = elementType
+  override protected def dt: DataType = dataType
+  override protected def et: DataType = elementType
 
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
@@ -3407,8 +3407,8 @@ case class ArrayDistinct(child: Expression)
  * Will become common base class for [[ArrayUnion]], [[ArrayIntersect]], and [[ArrayExcept]].
  */
 trait ArrayBinaryLike extends BinaryArrayExpressionWithImplicitCast with ArraySetLike {
-  override def dt = dataType
-  override def et = elementType
+  override protected def dt: DataType = dataType
+  override protected def et: DataType = elementType
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val typeCheckResult = super.checkInputDataTypes()
