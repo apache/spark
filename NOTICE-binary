@@ -252,15 +252,6 @@ interchange format, which can be obtained at:
   * HOMEPAGE:
     * http://code.google.com/p/protobuf/
 
-This product optionally depends on 'Bouncy Castle Crypto APIs' to generate
-a temporary self-signed X.509 certificate when the JVM does not provide the
-equivalent functionality.  It can be obtained at:
-
-  * LICENSE:
-    * license/LICENSE.bouncycastle.txt (MIT License)
-  * HOMEPAGE:
-    * http://www.bouncycastle.org/
-
 This product optionally depends on 'Snappy', a compression library produced
 by Google Inc, which can be obtained at:
 
