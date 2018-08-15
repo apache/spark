@@ -279,8 +279,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     }
 
     val rowWriterClass = classOf[UnsafeRowWriter]
-    val rowWriter = ctx.addMutableState(rowWriterClass.toString, "rowWriter",
-      v => s"$v = new $rowWriterClass(${expressions.length}, ${numVarLenFields * 32});")
+    val rowWriter = ctx.addMutableState(rowWriterClass.getName, "rowWriter",
+      v => s"$v = new ${rowWriterClass.getName}(${expressions.length}, ${numVarLenFields * 32});")
     val rowWriterExpr = JavaCode.global(rowWriter, rowWriterClass)
     // Evaluate all the subexpression.
     val evalSubexpr = ctx.subexprFunctions.mkString("\n")
