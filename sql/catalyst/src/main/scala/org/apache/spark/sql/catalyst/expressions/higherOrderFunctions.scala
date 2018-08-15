@@ -518,22 +518,19 @@ case class TransformKeys(
 
   override def nullable: Boolean = argument.nullable
 
-  override def dataType: DataType = {
-    val map = argument.dataType.asInstanceOf[MapType]
-    MapType(function.dataType, map.valueType, map.valueContainsNull)
-  }
-
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
+
+  override def dataType: DataType = {
+    MapType(function.dataType, valueType, valueContainsNull)
+  }
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): TransformKeys = {
     copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
   }
 
-  @transient lazy val (keyVar, valueVar) = {
-    @transient lazy val LambdaFunction(
-    _, (keyVar: NamedLambdaVariable) :: (valueVar: NamedLambdaVariable) :: Nil, _) = function
-    (keyVar, valueVar)
-  }
+  @transient lazy val LambdaFunction(
+  _, (keyVar: NamedLambdaVariable) :: (valueVar: NamedLambdaVariable) :: Nil, _) = function
+
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val map = argumentValue.asInstanceOf[MapData]
