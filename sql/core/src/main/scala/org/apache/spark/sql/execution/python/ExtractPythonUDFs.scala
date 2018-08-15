@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExec
 
 
 /**
@@ -133,6 +134,9 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan transformUp {
+    // SPARK-24721: Ignore Python UDFs in DataSourceScan and DataSourceV2Scan
+    case plan: DataSourceScanExec => plan
+    case plan: DataSourceV2ScanExec => plan
     case plan: SparkPlan => extract(plan)
   }
 

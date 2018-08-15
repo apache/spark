@@ -117,15 +117,16 @@ abstract class EvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chil
           }
         }.toArray
       }.toArray
-      val projection = newMutableProjection(allInputs, child.output)
+      val projection = UnsafeProjection.create(allInputs, child.output)
       val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
         StructField(s"_$i", dt)
       })
 
       // Add rows to queue to join later with the result.
       val projectedRowIter = iter.map { inputRow =>
-        queue.add(inputRow.asInstanceOf[UnsafeRow])
-        projection(inputRow)
+        val unsafeRow = projection(inputRow)
+        queue.add(unsafeRow.asInstanceOf[UnsafeRow])
+        unsafeRow
       }
 
       val outputRowIterator = evaluate(

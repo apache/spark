@@ -3367,21 +3367,32 @@ class SQLTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(path)
 
+    # SPARK-24721
     def test_datasource_with_udf_filter_lit_input(self):
-        # SPARK-24721
+        import pandas as pd
+        import numpy as np
+        from pyspark.sql.functions import udf, pandas_udf, lit, col
+
         path = tempfile.mkdtemp()
         shutil.rmtree(path)
         try:
-            from pyspark.sql.functions import udf, lit, col
-
             self.spark.range(1).write.mode("overwrite").format('csv').save(path)
-            df = self.spark.read.csv(path)
-            # Test that filter with lit inputs works with data source
-            result1 = df.filter(udf(lambda x: False, 'boolean')(lit(1)))
-            result2 = df.filter(udf(lambda: False, 'boolean')())
+            filesource_df = self.spark.read.csv(path)
+            datasource_df = self.spark.read.format("org.apache.spark.sql.sources.SimpleScanSource") \
+                .option('from', 0).option('to', 1).load()
+            datasource_v2_df = self.spark.read.format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+                .load()
 
-            self.assertEquals(0, result1.count())
-            self.assertEquals(0, result2.count())
+            filter1 = udf(lambda: False, 'boolean')()
+            filter2 = udf(lambda x: False, 'boolean')(lit(1))
+            filter3 = pandas_udf(lambda x: pd.Series(np.repeat(False, len(x))), 'boolean')(lit(1))
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                for f in [filter1, filter2, filter3]:
+                    result = df.filter(f)
+                    result.explain(True)
+                    self.assertEquals(0, result.count())
+
         finally:
             shutil.rmtree(path)
 
