@@ -706,8 +706,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
                 }
               }.getOrElse {
                 throw new IllegalArgumentException(
-                  "Could not find index of the source to which data was added\n" +
-                    queryToUse.get.logicalPlan.treeString + "\n" + source.toString)
+                  "Could not find index of the source to which data was added")
               }
 
             // Store the expected offset of added data to wait for it later
