@@ -2302,7 +2302,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(ex5.getMessage.contains("function map_zip_with does not support ordering on type map"))
   }
 
-  test("transform values function - test various primitive data types combinations") {
+  test("transform values function - test primitive data types") {
     val dfExample1 = Seq(
       Map[Int, Int](1 -> 1, 9 -> 9, 8 -> 8, 7 -> 7)
     ).toDF("i")
@@ -2316,28 +2316,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     ).toDF("y")
 
     val dfExample4 = Seq(
-      Map[Int, Double](1 -> 1.0E0, 2 -> 1.4E0, 3 -> 1.7E0)
+      Map[Int, Double](1 -> 1.0, 2 -> 1.40, 3 -> 1.70)
     ).toDF("z")
 
     val dfExample5 = Seq(
-      Map[Int, Boolean](25 -> true, 26 -> false)
-    ).toDF("a")
-
-    val dfExample6 = Seq(
-      Map[Int, String](25 -> "ab", 26 -> "cd")
-    ).toDF("b")
-
-    val dfExample7 = Seq(
       Map[Int, Array[Int]](1 -> Array(1, 2))
     ).toDF("c")
-
-    val dfExample8 = Seq(
-      Map[Int, Double](25 -> 26.1E0, 26 -> 31.2E0, 27 -> 37.1E0)
-    ).toDF("d")
-
-    val dfExample10 = Seq(
-      Map[String, String]("s0" -> "abc", "s1" -> "def")
-    ).toDF("f")
 
     def testMapOfPrimitiveTypesCombination(): Unit = {
       checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> k + v)"),
@@ -2373,32 +2357,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Seq(Row(Map(1 -> 0.0, 2 -> 0.6000000000000001, 3 -> 1.3))))
 
       checkAnswer(
-        dfExample5.selectExpr("transform_values(a, (k, v) -> if(v, k + 1, k + 2))"),
-        Seq(Row(Map(25 -> 26, 26 -> 28))))
-
-      checkAnswer(
-        dfExample5.selectExpr("transform_values(a, (k, v) -> v AND k = 25)"),
-        Seq(Row(Map(25 -> true, 26 -> false))))
-
-      checkAnswer(
-        dfExample5.selectExpr("transform_values(a, (k, v) -> v OR k = 26)"),
-        Seq(Row(Map(25 -> true, 26 -> true))))
-
-      checkAnswer(
-        dfExample6.selectExpr("transform_values(b, (k, v) -> k + length(v))"),
-        Seq(Row(Map(25 -> 27, 26 -> 28))))
-
-      checkAnswer(
-        dfExample7.selectExpr("transform_values(c, (k, v) -> k + cardinality(v))"),
+        dfExample5.selectExpr("transform_values(c, (k, v) -> k + cardinality(v))"),
         Seq(Row(Map(1 -> 3))))
-
-      checkAnswer(
-        dfExample8.selectExpr("transform_values(d, (k, v) -> CAST(v - k AS BIGINT))"),
-        Seq(Row(Map(25 -> 1, 26 -> 5, 27 -> 10))))
-
-      checkAnswer(
-        dfExample10.selectExpr("transform_values(f, (k, v) ->  k || ':' || v)"),
-        Seq(Row(Map("s0" -> "s0:abc", "s1" -> "s1:def"))))
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -2408,10 +2368,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     dfExample3.cache()
     dfExample4.cache()
     dfExample5.cache()
-    dfExample6.cache()
-    dfExample7.cache()
-    dfExample8.cache()
-    dfExample10.cache()
     // Test with cached relation, the Project will be evaluated with codegen
     testMapOfPrimitiveTypesCombination()
   }
@@ -2487,6 +2443,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Map[String, String]("a" -> "b")
     ).toDF("j")
 
+    val dfExample3 = Seq(
+      Seq(1, 2, 3, 4)
+    ).toDF("x")
+
     def testInvalidLambdaFunctions(): Unit = {
 
       val ex1 = intercept[AnalysisException] {
@@ -2498,11 +2458,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         dfExample2.selectExpr("transform_values(j, (k, v, x) -> k + 1)")
       }
       assert(ex2.getMessage.contains("The number of lambda function arguments '3' does not match"))
+
+      val ex3 = intercept[AnalysisException] {
+        dfExample3.selectExpr("transform_values(x, (k, v) -> k + 1)")
+      }
+      assert(ex3.getMessage.contains(
+        "data type mismatch: argument 1 requires map type"))
     }
 
     testInvalidLambdaFunctions()
     dfExample1.cache()
     dfExample2.cache()
+    dfExample3.cache()
     testInvalidLambdaFunctions()
   }
 

@@ -167,8 +167,8 @@ NULL
 
 -- !query 17
 create or replace temporary view nested as values
-  (1, map(1,1,2,2,3,3)),
-  (2, map(4,4,5,5,6,6))
+  (1, map(1, 1, 2, 2, 3, 3)),
+  (2, map(4, 4, 5, 5, 6, 6))
   as t(x, ys)
 -- !query 17 schema
 struct<>
