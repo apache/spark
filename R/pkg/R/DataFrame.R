@@ -2870,7 +2870,7 @@ setMethod("intersect",
 #' intersectAllDF <- intersectAll(df1, df2)
 #' }
 #' @rdname intersectAll
-#' @note intersectAll since 2.4
+#' @note intersectAll since 2.4.0
 setMethod("intersectAll",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y) {
@@ -2927,7 +2927,7 @@ setMethod("except",
 #' exceptAllDF <- exceptAll(df1, df2)
 #' }
 #' @rdname exceptAll
-#' @note exceptAll since 2.4
+#' @note exceptAll since 2.4.0
 setMethod("exceptAll",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y) {
