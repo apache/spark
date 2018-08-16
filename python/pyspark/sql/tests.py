@@ -5324,6 +5324,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(path)
 
+
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,
     _pandas_requirement_message or _pyarrow_requirement_message)
