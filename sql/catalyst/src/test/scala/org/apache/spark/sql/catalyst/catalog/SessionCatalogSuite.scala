@@ -185,6 +185,19 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
+  test("after drop the current database, switch the current database to default") {
+    withBasicCatalog { catalog =>
+      catalog.setCurrentDatabase("db1")
+      catalog.dropDatabase("db1", ignoreIfNotExists = true, cascade = true)
+      assert(catalog.getCurrentDatabase == "default")
+
+      // drop the database other than itself will not change the current database
+      catalog.setCurrentDatabase("db2")
+      catalog.dropDatabase("db3", ignoreIfNotExists = true, cascade = true)
+      assert(catalog.getCurrentDatabase == "db2")
+    }
+  }
+
   test("drop current database and drop default database") {
     withBasicCatalog { catalog =>
       catalog.setCurrentDatabase("db1")

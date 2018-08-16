@@ -218,6 +218,10 @@ class SessionCatalog(
       throw new AnalysisException(s"Can not drop default database")
     }
     externalCatalog.dropDatabase(dbName, ignoreIfNotExists, cascade)
+    // if the current database is deleted, the default database will be selected
+    if (dbName == currentDb) {
+      setCurrentDatabase(DEFAULT_DATABASE)
+    }
   }
 
   def alterDatabase(dbDefinition: CatalogDatabase): Unit = {
