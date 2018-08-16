@@ -517,6 +517,7 @@ object EventLoggingListenerSuite {
       conf.set("spark.eventLog.compress", "true")
       conf.set("spark.io.compression.codec", codec)
     }
+    conf.set("spark.eventLog.logStageExecutorMetrics.enabled", "true")
     conf
   }
 

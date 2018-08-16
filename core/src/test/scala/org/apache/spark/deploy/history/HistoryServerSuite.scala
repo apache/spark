@@ -82,6 +82,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set("spark.history.fs.update.interval", "0")
       .set("spark.testing", "true")
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
+      .set("spark.eventLog.logStageExecutorMetrics.enabled", "true")
     conf.setAll(extraConf)
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()

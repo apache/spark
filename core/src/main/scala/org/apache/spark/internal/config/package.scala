@@ -72,7 +72,7 @@ package object config {
   private[spark] val EVENT_LOG_STAGE_EXECUTOR_METRICS =
     ConfigBuilder("spark.eventLog.logStageExecutorMetrics.enabled")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite").booleanConf.createWithDefault(false)
