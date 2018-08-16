@@ -61,7 +61,7 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
           .withLabels(labels.asJava)
           .endMetadata()
         .withNewSpec()
-          .withServiceAccountName("default")
+          .withServiceAccountName(kubernetesTestComponents.serviceAccountName)
           .addNewContainer()
             .withName("spark-example")
             .withImage(image)

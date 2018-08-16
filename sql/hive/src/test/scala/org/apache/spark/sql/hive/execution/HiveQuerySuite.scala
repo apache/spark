@@ -84,7 +84,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   // Testing the Broadcast based join for cartesian join (cross join)
-  // We assume that the Broadcast Join Threshold will works since the src is a small table
+  // We assume that the Broadcast Join Threshold will work since the src is a small table
   private val spark_10484_1 = """
                                 | SELECT a.key, b.key
                                 | FROM src a LEFT JOIN src b WHERE a.key > b.key + 300

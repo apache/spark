@@ -39,7 +39,21 @@ import org.apache.spark.util.Utils
 
 
 /**
- * Functions available for DataFrame operations.
+ * Commonly used functions available for DataFrame operations. Using functions defined here provides
+ * a little bit more compile-time safety to make sure the function exists.
+ *
+ * Spark also includes more built-in functions that are less common and are not defined here.
+ * You can still access them (and all the functions defined here) using the `functions.expr()` API
+ * and calling them through a SQL expression string. You can find the entire list of functions
+ * at SQL API documentation.
+ *
+ * As an example, `isnan` is a function that is defined here. You can use `isnan(col("myCol"))`
+ * to invoke the `isnan` function. This way the programming language's compiler ensures `isnan`
+ * exists and is of the proper form. You can also use `expr("isnan(myCol)")` function to invoke the
+ * same function. In this case, Spark itself will ensure `isnan` exists when it analyzes the query.
+ *
+ * `regr_count` is an example of a function that is built-in but not defined here, because it is
+ * less commonly used. To invoke it, use `expr("regr_count(yCol, xCol)")`.
  *
  * @groupname udf_funcs UDF functions
  * @groupname agg_funcs Aggregate functions
@@ -1646,7 +1660,7 @@ object functions {
   def expm1(e: Column): Column = withExpr { Expm1(e.expr) }
 
   /**
-   * Computes the exponential of the given column.
+   * Computes the exponential of the given column minus one.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -3220,6 +3234,17 @@ object functions {
   def array_distinct(e: Column): Column = withExpr { ArrayDistinct(e.expr) }
 
   /**
+   * Returns an array of the elements in the intersection of the given two arrays,
+   * without duplicates.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_intersect(col1: Column, col2: Column): Column = withExpr {
+    ArrayIntersect(col1.expr, col2.expr)
+  }
+
+  /**
    * Returns an array of the elements in the union of the given two arrays, without duplicates.
    *
    * @group collection_funcs
@@ -3227,6 +3252,17 @@ object functions {
    */
   def array_union(col1: Column, col2: Column): Column = withExpr {
     ArrayUnion(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns an array of the elements in the first array but not in the second array,
+   * without duplicates. The order of elements in the result is not determined
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_except(col1: Column, col2: Column): Column = withExpr {
+    ArrayExcept(col1.expr, col2.expr)
   }
 
   /**
@@ -3303,7 +3339,7 @@ object functions {
 
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
-   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * as keys type, `StructType` or `ArrayType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -3335,7 +3371,7 @@ object functions {
 
   /**
    * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
-   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * as keys type, `StructType` or `ArrayType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -3364,7 +3400,7 @@ object functions {
 
   /**
    * Parses a column containing a JSON string into a `MapType` with `StringType` as keys type,
-   * `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * `StructType` or `ArrayType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -3378,7 +3414,7 @@ object functions {
 
   /**
    * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
-   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * as keys type, `StructType` or `ArrayType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -3395,7 +3431,7 @@ object functions {
 
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
-   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * as keys type, `StructType` or `ArrayType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -3544,6 +3580,16 @@ object functions {
    * @since 2.4.0
    */
   def array_max(e: Column): Column = withExpr { ArrayMax(e.expr) }
+
+  /**
+   * Returns a random permutation of the given array.
+   *
+   * @note The function is non-deterministic.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def shuffle(e: Column): Column = withExpr { Shuffle(e.expr) }
 
   /**
    * Returns a reversed string or an array with reverse order of elements.

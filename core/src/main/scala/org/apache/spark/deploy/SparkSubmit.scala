@@ -181,6 +181,7 @@ private[spark] class SparkSubmit extends Logging {
     if (args.isStandaloneCluster && args.useRest) {
       try {
         logInfo("Running Spark using the REST application submission protocol.")
+        doRunMain()
       } catch {
         // Fail over to use the legacy submission gateway
         case e: SubmitRestConnectionException =>

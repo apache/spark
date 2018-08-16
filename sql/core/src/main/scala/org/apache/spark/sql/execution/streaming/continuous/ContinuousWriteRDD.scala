@@ -17,13 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
-import java.util.concurrent.atomic.AtomicLong
-
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.v2.DataWritingSparkTask.{logError, logInfo}
-import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory}
 import org.apache.spark.util.Utils
 
 /**
@@ -47,7 +44,6 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
       SparkEnv.get)
     EpochTracker.initializeCurrentEpoch(
       context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong)
-
     while (!context.isInterrupted() && !context.isCompleted()) {
       var dataWriter: DataWriter[InternalRow] = null
       // write the data and commit this writer.

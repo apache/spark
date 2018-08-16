@@ -15,27 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.writer;
+package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.InternalRow;
 
 /**
- * A mix-in interface for {@link DataSourceWriter}. Data source writers can implement this
- * interface to write {@link InternalRow} directly and avoid the row conversion at Spark side.
- * This is an experimental and unstable interface, as {@link InternalRow} is not public and may get
- * changed in the future Spark versions.
+ * An interface for reporting custom metrics from streaming sources and sinks
  */
-
-@InterfaceStability.Unstable
-public interface SupportsWriteInternalRow extends DataSourceWriter {
-
-  @Override
-  default DataWriterFactory<Row> createWriterFactory() {
-    throw new IllegalStateException(
-      "createWriterFactory should not be called with SupportsWriteInternalRow.");
-  }
-
-  DataWriterFactory<InternalRow> createInternalRowWriterFactory();
+@InterfaceStability.Evolving
+public interface CustomMetrics {
+  /**
+   * Returns a JSON serialized representation of custom metrics
+   *
+   * @return JSON serialized representation of custom metrics
+   */
+  String json();
 }

@@ -68,10 +68,14 @@ trait CheckAnalysis extends PredicateHelper {
       case e if e.dataType != IntegerType => failAnalysis(
         s"The limit expression must be integer type, but got " +
           e.dataType.catalogString)
-      case e if e.eval().asInstanceOf[Int] < 0 => failAnalysis(
-        "The limit expression must be equal to or greater than 0, but got " +
-          e.eval().asInstanceOf[Int])
-      case e => // OK
+      case e =>
+        e.eval() match {
+          case null => failAnalysis(
+            s"The evaluated limit expression must not be null, but got ${limitExpr.sql}")
+          case v: Int if v < 0 => failAnalysis(
+            s"The limit expression must be equal to or greater than 0, but got $v")
+          case _ => // OK
+        }
     }
   }
 
@@ -86,6 +90,20 @@ trait CheckAnalysis extends PredicateHelper {
         u.failAnalysis(s"Table or view not found: ${u.tableIdentifier}")
 
       case operator: LogicalPlan =>
+        // Check argument data types of higher-order functions downwards first.
+        // If the arguments of the higher-order functions are resolved but the type check fails,
+        // the argument functions will not get resolved, but we should report the argument type
+        // check failure instead of claiming the argument functions are unresolved.
+        operator transformExpressionsDown {
+          case hof: HigherOrderFunction
+              if hof.argumentsResolved && hof.checkArgumentDataTypes().isFailure =>
+            hof.checkArgumentDataTypes() match {
+              case TypeCheckResult.TypeCheckFailure(message) =>
+                hof.failAnalysis(
+                  s"cannot resolve '${hof.sql}' due to argument data type mismatch: $message")
+            }
+        }
+
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
             val from = operator.inputSet.map(_.qualifiedName).mkString(", ")
