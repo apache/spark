@@ -1,9 +1,9 @@
 ---
 layout: global
-title: AVRO Data Source Guide
+title: Avro Data Source Guide
 ---
 
-Since Spark 2.4 release, [Spark SQL](https://spark.apache.org/docs/latest/sql-programming-guide.html) provides support for reading and writing AVRO data.
+Since Spark 2.4 release, [Spark SQL](https://spark.apache.org/docs/latest/sql-programming-guide.html) provides support for reading and writing Avro data.
 
 ## Deploying
 The <code>spark-avro</code> module is external and not included in `spark-submit` or `spark-shell` by default.
@@ -21,8 +21,9 @@ See [Application Submission Guide](submitting-applications.html) for more detail
 
 ## Examples
 
-As `spark-avro` module is external, there is not such API as <code>.avro</code> in <code>DataFrameReader</code> or <code>DataFrameWriter</code>.
-To load/save data in AVRO format, you need to specify the data source option <code>format</code> as short name <code>avro</code> or full name <code>org.apache.spark.sql.avro</code>.
+Since `spark-avro` module is external, there is not such API as <code>.avro</code> in 
+<code>DataFrameReader</code> or <code>DataFrameWriter</code>.
+To load/save data in Avro format, you need to specify the data source option <code>format</code> as short name <code>avro</code> or full name <code>org.apache.spark.sql.avro</code>.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
@@ -64,13 +65,13 @@ write.df(select(df, "name", "favorite_color"), "namesAndFavColors.avro", "avro")
   <tr>
     <td><code>avroSchema</code></td>
     <td>None</td>
-    <td>Optional AVRO schema provided by an user in JSON format.</td>
+    <td>Optional Avro schema provided by an user in JSON format.</td>
     <td>read and write</td>
   </tr>
   <tr>
     <td><code>recordName</code></td>
     <td>topLevelRecord</td>
-    <td>Top level record name in write result, which is required in AVRO spec.</td>
+    <td>Top level record name in write result, which is required in Avro spec.</td>
     <td>write</td>
   </tr>
   <tr>
@@ -81,7 +82,7 @@ write.df(select(df, "name", "favorite_color"), "namesAndFavColors.avro", "avro")
   </tr>
   <tr>
     <td><code>ignoreExtension</code></td>
-    <td>false</td>
+    <td>true</td>
     <td>The option controls ignoring of files without <code>.avro</code> extensions in read. If the option is enabled, all files (with and without <code>.avro</code> extension) are loaded.</td>
     <td>read</td>
   </tr>
@@ -100,9 +101,9 @@ write.df(select(df, "name", "favorite_color"), "namesAndFavColors.avro", "avro")
 </table>
 
 ## Supported types for Avro -> Spark SQL conversion
-Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.8.2/spec.html#schema_primitive) and [complex types](https://avro.apache.org/docs/1.8.2/spec.html#schema_complex) of AVRO.
+Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.8.2/spec.html#schema_primitive) and [complex types](https://avro.apache.org/docs/1.8.2/spec.html#schema_complex) of Avro.
 <table class="table">
-  <tr><th><b>AVRO type</b></th><th><b>Spark SQL type</b></th></tr>
+  <tr><th><b>Avro type</b></th><th><b>Spark SQL type</b></th></tr>
   <tr>
     <td>boolean</td>
     <td>BooleanType</td>
@@ -164,10 +165,10 @@ In addition to the types listed above, it supports reading <code>union</code> ty
 3. <code>union(something, null)</code>, where something is any supported Avro type. This will be mapped to the same Spark SQL type as that of something, with nullable set to true.
 All other union types are considered complex. They will be mapped to StructType where field names are member0, member1, etc., in accordance with members of the union. This is consistent with the behavior when converting between Avro and Parquet.
 
-It also supports reading following AVRO [logical types](https://avro.apache.org/docs/1.8.2/spec.html#Logical+Types):
+It also supports reading the following Avro [logical types](https://avro.apache.org/docs/1.8.2/spec.html#Logical+Types):
 
 <table class="table">
-  <tr><th><b>AVRO logical type</b></th><th><b>Avro type</b></th><th><b>Spark SQL type</b></th></tr>
+  <tr><th><b>Avro logical type</b></th><th><b>Avro type</b></th><th><b>Spark SQL type</b></th></tr>
   <tr>
     <td>date</td>
     <td>int</td>
@@ -233,7 +234,7 @@ Spark supports writing of all Spark SQL types into Avro. For most types, the map
   </tr>
 </table>
 
-You can also specify the whole output AVRO schema with the option <code>avroSchema</code>, so that Spark SQL types can be converted into other Avro types. The following conversions is not by default and require user provided AVRO schema:
+You can also specify the whole output Avro schema with the option <code>avroSchema</code>, so that Spark SQL types can be converted into other Avro types. The following conversions is not by default and require user specified Avro schema:
 
 <table class="table">
   <tr><th><b>Spark SQL type</b></th><th><b>Avro type</b></th><th><b>Avro logical type</b></th></tr>
