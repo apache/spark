@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, JavaCode}
 import org.apache.spark.sql.types._
 
 /**
@@ -111,17 +111,18 @@ class RowBasedHashMapGenerator(
    *
    */
   protected def generateEquals(): String = {
+    val row = JavaCode.variable("row", classOf[UnsafeRow])
 
     def genEqualsForKeys(groupingKeys: Seq[Buffer]): String = {
       groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        s"""(${ctx.genEqual(key.dataType, CodeGenerator.getValue("row",
+        s"""(${ctx.genEqual(key.dataType, CodeGenerator.getValue(row,
           key.dataType, ordinal.toString()), key.name)})"""
       }.mkString(" && ")
     }
 
     s"""
        |private boolean equals(int idx, $groupingKeySignature) {
-       |  UnsafeRow row = batch.getKeyRow(buckets[idx]);
+       |  UnsafeRow $row = batch.getKeyRow(buckets[idx]);
        |  return ${genEqualsForKeys(groupingKeys)};
        |}
      """.stripMargin

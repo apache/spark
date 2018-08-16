@@ -40,6 +40,7 @@ import org.json4s.JsonAST._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
@@ -311,7 +312,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
               toExprCode(s"${value}D")
           }
         case ByteType | ShortType =>
-          ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
+          ExprCode.forNonNullValue(
+            JavaCode.expression(code"($javaType)${value.toString}", dataType))
         case TimestampType | LongType =>
           toExprCode(s"${value}L")
         case _ =>

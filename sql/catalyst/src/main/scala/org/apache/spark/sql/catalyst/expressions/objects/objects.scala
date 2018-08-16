@@ -1091,8 +1091,8 @@ case class CatalystToExternalMap private(
 
     val getLength = s"${genInputData.value}.numElements()"
 
-    val keyArray = ctx.freshName("keyArray")
-    val valueArray = ctx.freshName("valueArray")
+    val keyArray = JavaCode.variable(ctx.freshName("keyArray"), classOf[ArrayData])
+    val valueArray = JavaCode.variable(ctx.freshName("valueArray"), classOf[ArrayData])
     val getKeyArray =
       s"${classOf[ArrayData].getName} $keyArray = ${genInputData.value}.keyArray();"
     val getKeyLoopVar = CodeGenerator.getValue(keyArray, inputDataType(mapType.keyType), loopIndex)

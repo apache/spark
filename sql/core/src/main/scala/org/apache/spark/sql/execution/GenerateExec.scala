@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types._
 
@@ -164,6 +165,7 @@ case class GenerateExec(
 
     // Generate looping variables.
     val index = ctx.freshName("index")
+    val indexVar = JavaCode.variable(index, IntegerType)
 
     // Add a check if the generate outer flag is true.
     val checks = optionalCode(outer, s"($index == -1)")
@@ -172,10 +174,10 @@ case class GenerateExec(
     val position = if (e.position) {
       if (outer) {
         Seq(ExprCode(
-          JavaCode.isNullExpression(s"$index == -1"),
-          JavaCode.variable(index, IntegerType)))
+          JavaCode.isNullExpression(code"$index == -1"),
+          indexVar))
       } else {
-        Seq(ExprCode(FalseLiteral, JavaCode.variable(index, IntegerType)))
+        Seq(ExprCode(FalseLiteral, indexVar))
       }
     } else {
       Seq.empty
@@ -203,8 +205,8 @@ case class GenerateExec(
 
       case MapType(keyType, valueType, valueContainsNull) =>
         // Materialize the key and the value arrays before we enter the loop.
-        val keyArray = ctx.freshName("keyArray")
-        val valueArray = ctx.freshName("valueArray")
+        val keyArray = JavaCode.variable(ctx.freshName("keyArray"), classOf[ArrayData])
+        val valueArray = JavaCode.variable(ctx.freshName("valueArray"), classOf[ArrayData])
         val initArrayData =
           s"""
              |ArrayData $keyArray = ${data.isNull} ? null : ${data.value}.keyArray();
@@ -253,7 +255,7 @@ case class GenerateExec(
     // Generate looping variables.
     val iterator = ctx.freshName("iterator")
     val hasNext = ctx.freshName("hasNext")
-    val current = ctx.freshName("row")
+    val current = JavaCode.variable(ctx.freshName("row"), classOf[InternalRow])
 
     // Add a check if the generate outer flag is true.
     val checks = optionalCode(outer, s"!$hasNext")
@@ -301,7 +303,7 @@ case class GenerateExec(
    */
   private def codeGenAccessor(
       ctx: CodegenContext,
-      source: String,
+      source: ExprValue,
       name: String,
       index: String,
       dt: DataType,

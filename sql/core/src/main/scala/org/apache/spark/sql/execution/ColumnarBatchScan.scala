@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.util.Utils
 
 
 /**
@@ -46,7 +47,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
    */
   private def genCodeColumnVector(
       ctx: CodegenContext,
-      columnVar: String,
+      columnVar: ExprValue,
       ordinal: String,
       dataType: DataType,
       nullable: Boolean): ExprCode = {
@@ -102,7 +103,8 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val (colVars, columnAssigns) = columnVectorClzs.zipWithIndex.map {
       case (columnVectorClz, i) =>
         val name = ctx.addMutableState(columnVectorClz, s"colInstance$i")
-        (name, s"$name = ($columnVectorClz) $batch.column($i);")
+        val expr = JavaCode.global(name, Utils.classForName(columnVectorClz))
+        (expr, s"$expr = ($columnVectorClz) $batch.column($i);")
     }.unzip
 
     val nextBatch = ctx.freshName("nextBatch")

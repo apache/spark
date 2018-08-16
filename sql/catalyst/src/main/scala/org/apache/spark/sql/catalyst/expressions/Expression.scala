@@ -432,7 +432,7 @@ abstract class UnaryExpression extends Expression {
   protected def nullSafeCodeGen(
       ctx: CodegenContext,
       ev: ExprCode,
-      f: String => String): ExprCode = {
+      f: ExprValue => String): ExprCode = {
     val childGen = child.genCode(ctx)
     val resultCode = f(childGen.value)
 
@@ -521,7 +521,7 @@ abstract class BinaryExpression extends Expression {
   protected def nullSafeCodeGen(
       ctx: CodegenContext,
       ev: ExprCode,
-      f: (String, String) => String): ExprCode = {
+      f: (ExprValue, ExprValue) => String): ExprCode = {
     val leftGen = left.genCode(ctx)
     val rightGen = right.genCode(ctx)
     val resultCode = f(leftGen.value, rightGen.value)
@@ -661,7 +661,7 @@ abstract class TernaryExpression extends Expression {
   protected def nullSafeCodeGen(
     ctx: CodegenContext,
     ev: ExprCode,
-    f: (String, String, String) => String): ExprCode = {
+    f: (ExprValue, ExprValue, ExprValue) => String): ExprCode = {
     val leftGen = children(0).genCode(ctx)
     val midGen = children(1).genCode(ctx)
     val rightGen = children(2).genCode(ctx)

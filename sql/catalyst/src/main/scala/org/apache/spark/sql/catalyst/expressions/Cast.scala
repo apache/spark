@@ -762,8 +762,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     val keyToStringFunc = dataToStringFunc("keyToString", kt)
     val valueToStringFunc = dataToStringFunc("valueToString", vt)
     val loopIndex = ctx.freshVariable("loopIndex", IntegerType)
-    val mapKeyArray = JavaCode.expression(s"$map.keyArray()", classOf[ArrayData])
-    val mapValueArray = JavaCode.expression(s"$map.valueArray()", classOf[ArrayData])
+    val mapKeyArray = JavaCode.expression(code"$map.keyArray()", classOf[ArrayData])
+    val mapValueArray = JavaCode.expression(code"$map.valueArray()", classOf[ArrayData])
     val getMapFirstKey = CodeGenerator.getValue(mapKeyArray, kt, JavaCode.literal("0", IntegerType))
     val getMapFirstValue = CodeGenerator.getValue(mapValueArray, vt,
       JavaCode.literal("0", IntegerType))

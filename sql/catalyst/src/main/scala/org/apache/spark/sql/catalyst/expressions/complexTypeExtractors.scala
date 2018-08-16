@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, JavaCode}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
 
@@ -185,7 +185,7 @@ case class GetArrayStructFields(
       val n = ctx.freshName("n")
       val values = ctx.freshName("values")
       val j = ctx.freshName("j")
-      val row = ctx.freshName("row")
+      val row = JavaCode.variable(ctx.freshName("row"), classOf[InternalRow])
       val nullSafeEval = if (field.nullable) {
         s"""
          if ($row.isNullAt($ordinal)) {
@@ -299,10 +299,10 @@ abstract class GetMapValueUtil extends BinaryExpression with ImplicitCastInputTy
   def doGetValueGenCode(ctx: CodegenContext, ev: ExprCode, mapType: MapType): ExprCode = {
     val index = ctx.freshName("index")
     val length = ctx.freshName("length")
-    val keys = ctx.freshName("keys")
+    val keys = JavaCode.variable(ctx.freshName("keys"), classOf[ArrayData])
     val found = ctx.freshName("found")
     val key = ctx.freshName("key")
-    val values = ctx.freshName("values")
+    val values = JavaCode.variable(ctx.freshName("values"), classOf[ArrayData])
     val keyType = mapType.keyType
     val nullCheck = if (mapType.valueContainsNull) {
       s" || $values.isNullAt($index)"

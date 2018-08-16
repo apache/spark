@@ -420,10 +420,11 @@ case class SortMergeJoinExec(
    * Generate a function to scan both left and right to find a match, returns the term for
    * matched one row from left side and buffered rows from right side.
    */
-  private def genScanner(ctx: CodegenContext): (String, String) = {
+  private def genScanner(ctx: CodegenContext): (ExprValue, String) = {
     // Create class member for next row from both sides.
     // Inline mutable state since not many join operations in a task
-    val leftRow = ctx.addMutableState("InternalRow", "leftRow", forceInline = true)
+    val leftRowName = ctx.addMutableState("InternalRow", "leftRow", forceInline = true)
+    val leftRow = JavaCode.global(leftRowName, classOf[InternalRow])
     val rightRow = ctx.addMutableState("InternalRow", "rightRow", forceInline = true)
 
     // Create variables for join keys from both sides.
@@ -512,7 +513,8 @@ case class SortMergeJoinExec(
    * the variables should be declared separately from accessing the columns, we can't use the
    * codegen of BoundReference here.
    */
-  private def createLeftVars(ctx: CodegenContext, leftRow: String): (Seq[ExprCode], Seq[String]) = {
+  private def createLeftVars(ctx: CodegenContext,
+      leftRow: ExprValue): (Seq[ExprCode], Seq[String]) = {
     ctx.INPUT_ROW = leftRow
     left.output.zipWithIndex.map { case (a, i) =>
       val value = ctx.freshName("value")
