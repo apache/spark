@@ -67,7 +67,7 @@ private[spark] abstract class YarnSchedulerBackend(
   protected var appId: Option[ApplicationId] = None
 
   /** Attempt ID. This is unset for client-mode schedulers */
-  private var attemptId: Option[ApplicationAttemptId] = None
+  protected var attemptId: Option[ApplicationAttemptId] = None
 
   /** Scheduler extension services. */
   private val services: SchedulerExtensionServices = new SchedulerExtensionServices()
