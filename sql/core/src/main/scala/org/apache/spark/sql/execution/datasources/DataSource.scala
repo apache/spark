@@ -639,8 +639,8 @@ object DataSource extends Logging {
                   provider1 == "com.databricks.spark.avro") {
                   throw new AnalysisException(
                     s"Failed to find data source: ${provider1.toLowerCase(Locale.ROOT)}. " +
-                    "Please find an Avro package at " +
-                    "http://spark.apache.org/third-party-projects.html")
+                    "AVRO is built-in data source since Spark 2.4. Please deploy the application " +
+                    "as per https://spark.apache.org/docs/latest/avro-data-source.html#deploying")
                 } else {
                   throw new ClassNotFoundException(
                     s"Failed to find data source: $provider1. Please find packages at " +
