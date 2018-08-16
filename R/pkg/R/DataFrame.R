@@ -2869,7 +2869,6 @@ setMethod("intersect",
 #' df2 <- read.json(path2)
 #' intersectAllDF <- intersectAll(df1, df2)
 #' }
-#' @rdname intersectAll
 #' @note intersectAll since 2.4.0
 setMethod("intersectAll",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
@@ -2877,6 +2876,7 @@ setMethod("intersectAll",
             intersected <- callJMethod(x@sdf, "intersectAll", y@sdf)
             dataFrame(intersected)
           })
+
 #' except
 #'
 #' Return a new SparkDataFrame containing rows in this SparkDataFrame
@@ -2896,7 +2896,6 @@ setMethod("intersectAll",
 #' df2 <- read.json(path2)
 #' exceptDF <- except(df, df2)
 #' }
-#' @rdname except
 #' @note except since 1.4.0
 setMethod("except",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
@@ -2926,7 +2925,6 @@ setMethod("except",
 #' df2 <- read.json(path2)
 #' exceptAllDF <- exceptAll(df1, df2)
 #' }
-#' @rdname exceptAll
 #' @note exceptAll since 2.4.0
 setMethod("exceptAll",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
@@ -2934,7 +2932,6 @@ setMethod("exceptAll",
             excepted <- callJMethod(x@sdf, "exceptAll", y@sdf)
             dataFrame(excepted)
           })
-
 
 #' Save the contents of SparkDataFrame to a data source.
 #'
