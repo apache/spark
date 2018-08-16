@@ -1603,7 +1603,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
   }
 
-  test("SPARK-23786: check header on parsing of dataset with projection and column pruning") {
+  test("SPARK-25134: check header on parsing of dataset with projection and column pruning") {
     withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "true") {
       withTempPath { path =>
         val dir = path.getAbsolutePath
@@ -1622,7 +1622,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     }
   }
 
-  test("SPARK-23786: check header on parsing of dataset with projection and no column pruning") {
+  test("SPARK-25134: check header on parsing of dataset with projection and no column pruning") {
     withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false") {
       withTempPath { path =>
         val dir = path.getAbsolutePath
