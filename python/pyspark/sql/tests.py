@@ -4050,6 +4050,8 @@ class ArrowTests(ReusedSQLTestCase):
     def setUpClass(cls):
         from datetime import date, datetime
         from decimal import Decimal
+        from distutils.version import LooseVersion
+        import pyarrow as pa
         ReusedSQLTestCase.setUpClass()
 
         # Synchronize default timezone between Python and Java
@@ -4070,14 +4072,20 @@ class ArrowTests(ReusedSQLTestCase):
             StructField("5_double_t", DoubleType(), True),
             StructField("6_decimal_t", DecimalType(38, 18), True),
             StructField("7_date_t", DateType(), True),
-            StructField("8_timestamp_t", TimestampType(), True),
-            StructField("9_binary_t", BinaryType(), True)])
+            StructField("8_timestamp_t", TimestampType(), True)])
         cls.data = [(u"a", 1, 10, 0.2, 2.0, Decimal("2.0"),
-                     date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1), bytearray(b"a")),
+                     date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
                     (u"b", 2, 20, 0.4, 4.0, Decimal("4.0"),
-                     date(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2), bytearray(b"bb")),
+                     date(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
                     (u"c", 3, 30, 0.8, 6.0, Decimal("6.0"),
-                     date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3), bytearray(b"ccc"))]
+                     date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
+
+        # TODO: remove version check once minimum pyarrow version is 0.10.0
+        if LooseVersion("0.10.0") <= LooseVersion(pa.__version__):
+            cls.schema.add(StructField("9_binary_t", BinaryType(), True))
+            cls.data[0] = cls.data[0] + (bytearray(b"a"),)
+            cls.data[1] = cls.data[1] + (bytearray(b"bb"),)
+            cls.data[2] = cls.data[2] + (bytearray(b"ccc"),)
 
     @classmethod
     def tearDownClass(cls):
@@ -4116,11 +4124,22 @@ class ArrowTests(ReusedSQLTestCase):
                     self.assertPandasEqual(pdf, pd.DataFrame({u'map': [{u'a': 1}]}))
 
     def test_toPandas_fallback_disabled(self):
+        from distutils.version import LooseVersion
+        import pyarrow as pa
+
         schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, 'Unsupported type'):
                 df.toPandas()
+
+        # TODO: remove BinaryType check once minimum pyarrow version is 0.10.0
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            schema = StructType([StructField("binary", BinaryType(), True)])
+            df = self.spark.createDataFrame([(None,)], schema=schema)
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(Exception, 'Unsupported type.*BinaryType'):
+                    df.toPandas()
 
     def test_null_conversion(self):
         df_null = self.spark.createDataFrame([tuple([None for _ in range(len(self.data[0]))])] +
@@ -4242,12 +4261,13 @@ class ArrowTests(ReusedSQLTestCase):
 
     def test_createDataFrame_with_names(self):
         pdf = self.create_pandas_data_frame()
+        new_names = map(str, range(len(self.schema.fieldNames())))
         # Test that schema as a list of column names gets applied
-        df = self.spark.createDataFrame(pdf, schema=list('abcdefghi'))
-        self.assertEquals(df.schema.fieldNames(), list('abcdefghi'))
+        df = self.spark.createDataFrame(pdf, schema=list(new_names))
+        self.assertEquals(df.schema.fieldNames(), new_names)
         # Test that schema as tuple of column names gets applied
-        df = self.spark.createDataFrame(pdf, schema=tuple('abcdefghi'))
-        self.assertEquals(df.schema.fieldNames(), list('abcdefghi'))
+        df = self.spark.createDataFrame(pdf, schema=tuple(new_names))
+        self.assertEquals(df.schema.fieldNames(), new_names)
 
     def test_createDataFrame_column_name_encoding(self):
         import pandas as pd
@@ -4334,12 +4354,21 @@ class ArrowTests(ReusedSQLTestCase):
                     self.assertEqual(df.collect(), [Row(a={u'a': 1})])
 
     def test_createDataFrame_fallback_disabled(self):
+        from distutils.version import LooseVersion
         import pandas as pd
+        import pyarrow as pa
 
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(TypeError, 'Unsupported type'):
                 self.spark.createDataFrame(
                     pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
+
+        # TODO: remove BinaryType check once minimum pyarrow version is 0.10.0
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(TypeError, 'Unsupported type.*BinaryType'):
+                    self.spark.createDataFrame(
+                        pd.DataFrame([[{'a': bytearray(b'aaa')}]]), "a: binary")
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
@@ -4831,12 +4860,21 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_unsupported_types(self):
+        from distutils.version import LooseVersion
+        import pyarrow as pa
         from pyspark.sql.functions import pandas_udf
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     NotImplementedError,
                     'Invalid returnType.*scalar Pandas UDF.*MapType'):
                 pandas_udf(lambda x: x, MapType(StringType(), IntegerType()))
+
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(
+                        NotImplementedError,
+                        'Invalid returnType.*scalar Pandas UDF.*BinaryType'):
+                    pandas_udf(lambda x: x, BinaryType())
 
     def test_vectorized_udf_dates(self):
         from pyspark.sql.functions import pandas_udf, col

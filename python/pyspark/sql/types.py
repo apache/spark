@@ -1578,6 +1578,7 @@ register_input_converter(DateConverter())
 def to_arrow_type(dt):
     """ Convert Spark data type to pyarrow type
     """
+    from distutils.version import LooseVersion
     import pyarrow as pa
     if type(dt) == BooleanType:
         arrow_type = pa.bool_()
@@ -1597,7 +1598,8 @@ def to_arrow_type(dt):
         arrow_type = pa.decimal128(dt.precision, dt.scale)
     elif type(dt) == StringType:
         arrow_type = pa.string()
-    elif type(dt) == BinaryType:
+    # TODO: remove version check once minimum pyarrow version is 0.10.0
+    elif type(dt) == BinaryType and LooseVersion("0.10.0") <= LooseVersion(pa.__version__):
         arrow_type = pa.binary()
     elif type(dt) == DateType:
         arrow_type = pa.date32()
@@ -1625,6 +1627,8 @@ def to_arrow_schema(schema):
 def from_arrow_type(at):
     """ Convert pyarrow type to Spark data type.
     """
+    from distutils.version import LooseVersion
+    import pyarrow as pa
     import pyarrow.types as types
     if types.is_boolean(at):
         spark_type = BooleanType()
@@ -1644,7 +1648,8 @@ def from_arrow_type(at):
         spark_type = DecimalType(precision=at.precision, scale=at.scale)
     elif types.is_string(at):
         spark_type = StringType()
-    elif types.is_binary(at):
+    # TODO: remove version check once minimum pyarrow version is 0.10.0
+    elif types.is_binary(at) and LooseVersion("0.10.0") <= LooseVersion(pa.__version__):
         spark_type = BinaryType()
     elif types.is_date32(at):
         spark_type = DateType()
