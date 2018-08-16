@@ -471,4 +471,52 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       map_zip_with(mbb0, mbbn, concat),
       null)
   }
+
+  test("ZipWith") {
+    def zip_with(
+        left: Expression,
+        right: Expression,
+        f: (Expression, Expression) => Expression): Expression = {
+      val ArrayType(leftT, _) = left.dataType
+      val ArrayType(rightT, _) = right.dataType
+      ZipWith(left, right, createLambda(leftT, true, rightT, true, f))
+    }
+
+    val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val ai1 = Literal.create(Seq(1, 2, 3, 4), ArrayType(IntegerType, containsNull = false))
+    val ai2 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
+    val ai3 = Literal.create(Seq[Integer](1, null), ArrayType(IntegerType, containsNull = true))
+    val ain = Literal.create(null, ArrayType(IntegerType, containsNull = false))
+
+    val add: (Expression, Expression) => Expression = (x, y) => x + y
+    val plusOne: Expression => Expression = x => x + 1
+
+    checkEvaluation(zip_with(ai0, ai1, add), Seq(2, 4, 6, null))
+    checkEvaluation(zip_with(ai3, ai2, add), Seq(2, null, null))
+    checkEvaluation(zip_with(ai2, ai3, add), Seq(2, null, null))
+    checkEvaluation(zip_with(ain, ain, add), null)
+    checkEvaluation(zip_with(ai1, ain, add), null)
+    checkEvaluation(zip_with(ain, ai1, add), null)
+
+    val as0 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType, containsNull = false))
+    val as1 = Literal.create(Seq("a", null, "c"), ArrayType(StringType, containsNull = true))
+    val as2 = Literal.create(Seq("a"), ArrayType(StringType, containsNull = true))
+    val asn = Literal.create(null, ArrayType(StringType, containsNull = false))
+
+    val concat: (Expression, Expression) => Expression = (x, y) => Concat(Seq(x, y))
+
+    checkEvaluation(zip_with(as0, as1, concat), Seq("aa", null, "cc"))
+    checkEvaluation(zip_with(as0, as2, concat), Seq("aa", null, null))
+
+    val aai1 = Literal.create(Seq(Seq(1, 2, 3), null, Seq(4, 5)),
+      ArrayType(ArrayType(IntegerType, containsNull = false), containsNull = true))
+    val aai2 = Literal.create(Seq(Seq(1, 2, 3)),
+      ArrayType(ArrayType(IntegerType, containsNull = false), containsNull = true))
+    checkEvaluation(
+      zip_with(aai1, aai2, (a1, a2) =>
+        Cast(zip_with(transform(a1, plusOne), transform(a2, plusOne), add), StringType)),
+      Seq("[4, 6, 8]", null, null))
+    checkEvaluation(zip_with(aai1, aai1, (a1, a2) => Cast(transform(a1, plusOne), StringType)),
+      Seq("[2, 3, 4]", null, "[5, 6]"))
+  }
 }

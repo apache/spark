@@ -740,3 +740,79 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 
   override def prettyName: String = "map_zip_with"
 }
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(left, right, func) - Merges the two given arrays, element-wise, into a single array using function. If one array is shorter, nulls are appended at the end to match the length of the longer array, before applying function.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), array('a', 'b', 'c'), (x, y) -> (y, x));
+       array(('a', 1), ('b', 3), ('c', 5))
+      > SELECT _FUNC_(array(1, 2), array(3, 4), (x, y) -> x + y));
+       array(4, 6)
+      > SELECT _FUNC_(array('a', 'b', 'c'), array('d', 'e', 'f'), (x, y) -> concat(x, y));
+       array('ad', 'be', 'cf')
+  """,
+  since = "2.4.0")
+// scalastyle:on line.size.limit
+case class ZipWith(left: Expression, right: Expression, function: Expression)
+  extends HigherOrderFunction with CodegenFallback {
+
+  def functionForEval: Expression = functionsForEval.head
+
+  override def arguments: Seq[Expression] = left :: right :: Nil
+
+  override def argumentTypes: Seq[AbstractDataType] = ArrayType :: ArrayType :: Nil
+
+  override def functions: Seq[Expression] = List(function)
+
+  override def functionTypes: Seq[AbstractDataType] = AnyDataType :: Nil
+
+  override def nullable: Boolean = left.nullable || right.nullable
+
+  override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
+
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ZipWith = {
+    val ArrayType(leftElementType, _) = left.dataType
+    val ArrayType(rightElementType, _) = right.dataType
+    copy(function = f(function,
+      (leftElementType, true) :: (rightElementType, true) :: Nil))
+  }
+
+  @transient lazy val LambdaFunction(_,
+    Seq(leftElemVar: NamedLambdaVariable, rightElemVar: NamedLambdaVariable), _) = function
+
+  override def eval(input: InternalRow): Any = {
+    val leftArr = left.eval(input).asInstanceOf[ArrayData]
+    if (leftArr == null) {
+      null
+    } else {
+      val rightArr = right.eval(input).asInstanceOf[ArrayData]
+      if (rightArr == null) {
+        null
+      } else {
+        val resultLength = math.max(leftArr.numElements(), rightArr.numElements())
+        val f = functionForEval
+        val result = new GenericArrayData(new Array[Any](resultLength))
+        var i = 0
+        while (i < resultLength) {
+          if (i < leftArr.numElements()) {
+            leftElemVar.value.set(leftArr.get(i, leftElemVar.dataType))
+          } else {
+            leftElemVar.value.set(null)
+          }
+          if (i < rightArr.numElements()) {
+            rightElemVar.value.set(rightArr.get(i, rightElemVar.dataType))
+          } else {
+            rightElemVar.value.set(null)
+          }
+          result.update(i, f.eval(input))
+          i += 1
+        }
+        result
+      }
+    }
+  }
+
+  override def prettyName: String = "zip_with"
+}
