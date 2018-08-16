@@ -39,6 +39,7 @@ import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.serialization.{StringDeserializer, StringSerializer}
+import org.apache.kafka.common.utils.Exit
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -56,7 +57,7 @@ import org.apache.spark.util.Utils
 class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends Logging {
 
   // Zookeeper related configurations
-  private val zkHost = "localhost"
+  private val zkHost = "127.0.0.1"
   private var zkPort: Int = 0
   private val zkConnectionTimeout = 60000
   private val zkSessionTimeout = 6000
@@ -67,7 +68,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
   private var adminClient: AdminClient = null
 
   // Kafka broker related configurations
-  private val brokerHost = "localhost"
+  private val brokerHost = "127.0.0.1"
   private var brokerPort = 0
   private var brokerConf: KafkaConfig = _
 
@@ -138,40 +139,55 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
 
   /** Teardown the whole servers, including Kafka broker and Zookeeper */
   def teardown(): Unit = {
-    brokerReady = false
-    zkReady = false
-
-    if (producer != null) {
-      producer.close()
-      producer = null
-    }
-
-    if (server != null) {
-      server.shutdown()
-      server.awaitShutdown()
-      server = null
-    }
-
-    // On Windows, `logDirs` is left open even after Kafka server above is completely shut down
-    // in some cases. It leads to test failures on Windows if the directory deletion failure
-    // throws an exception.
-    brokerConf.logDirs.foreach { f =>
-      try {
-        Utils.deleteRecursively(new File(f))
-      } catch {
-        case e: IOException if Utils.isWindows =>
-          logWarning(e.getMessage)
+    // There is a race condition that may kill JVM when terminating the Kafka cluster. We set
+    // a custom Procedure here during the termination in order to keep JVM running and not fail the
+    // tests.
+    val logExitEvent = new Exit.Procedure {
+      override def execute(statusCode: Int, message: String): Unit = {
+        logError(s"Prevent Kafka from killing JVM (statusCode: $statusCode message: $message)")
       }
     }
+    Exit.setExitProcedure(logExitEvent)
+    Exit.setHaltProcedure(logExitEvent)
+    try {
+      brokerReady = false
+      zkReady = false
 
-    if (zkUtils != null) {
-      zkUtils.close()
-      zkUtils = null
-    }
+      if (producer != null) {
+        producer.close()
+        producer = null
+      }
 
-    if (zookeeper != null) {
-      zookeeper.shutdown()
-      zookeeper = null
+      if (server != null) {
+        server.shutdown()
+        server.awaitShutdown()
+        server = null
+      }
+
+      // On Windows, `logDirs` is left open even after Kafka server above is completely shut down
+      // in some cases. It leads to test failures on Windows if the directory deletion failure
+      // throws an exception.
+      brokerConf.logDirs.foreach { f =>
+        try {
+          Utils.deleteRecursively(new File(f))
+        } catch {
+          case e: IOException if Utils.isWindows =>
+            logWarning(e.getMessage)
+        }
+      }
+
+      if (zkUtils != null) {
+        zkUtils.close()
+        zkUtils = null
+      }
+
+      if (zookeeper != null) {
+        zookeeper.shutdown()
+        zookeeper = null
+      }
+    } finally {
+      Exit.resetExitProcedure()
+      Exit.resetHaltProcedure()
     }
   }
 
@@ -299,8 +315,8 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
   protected def brokerConfiguration: Properties = {
     val props = new Properties()
     props.put("broker.id", "0")
-    props.put("host.name", "localhost")
-    props.put("advertised.host.name", "localhost")
+    props.put("host.name", "127.0.0.1")
+    props.put("advertised.host.name", "127.0.0.1")
     props.put("port", brokerPort.toString)
     props.put("log.dir", Utils.createTempDir().getAbsolutePath)
     props.put("zookeeper.connect", zkAddress)
