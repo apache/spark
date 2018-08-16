@@ -35,7 +35,6 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
@@ -74,13 +73,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           .head
       }
     }, new GenericDatumReader[Any]()).getSchema.toString(false)
-  }
-
-  test("resolve avro data source") {
-    Seq("avro", "com.databricks.spark.avro").foreach { provider =>
-      assert(DataSource.lookupDataSource(provider, spark.sessionState.conf) ===
-        classOf[org.apache.spark.sql.avro.AvroFileFormat])
-    }
   }
 
   test("reading from multiple paths") {
@@ -503,7 +495,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     // get the same values back.
     withTempPath { tempDir =>
       val name = "AvroTest"
-      val namespace = "org.apache.spark.avro"
+      val namespace = "com.databricks.spark.avro"
       val parameters = Map("recordName" -> name, "recordNamespace" -> namespace)
 
       val avroDir = tempDir + "/namedAvro"
