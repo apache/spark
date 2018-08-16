@@ -4368,7 +4368,7 @@ class ArrowTests(ReusedSQLTestCase):
             with QuietTest(self.sc):
                 with self.assertRaisesRegexp(TypeError, 'Unsupported type.*BinaryType'):
                     self.spark.createDataFrame(
-                        pd.DataFrame([[{'a': bytearray(b'aaa')}]]), "a: binary")
+                        pd.DataFrame([[{'a': b'aaa'}]]), "a: binary")
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
