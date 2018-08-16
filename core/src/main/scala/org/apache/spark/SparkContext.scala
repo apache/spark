@@ -507,14 +507,11 @@ class SparkContext(config: SparkConf) extends Logging {
       System.setProperty("spark.ui.proxyBase", "/proxy/" + _applicationId)
     }
     _ui.foreach(_.setAppId(_applicationId))
-    _env.blockManager.initialize(_applicationId)
 
-    // The metrics system for Driver need to be set spark.app.id to app ID.
-    // So it should start after we get app ID from the task scheduler and set spark.app.id.
-    _env.metricsSystem.start()
-    // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
-    _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
-
+    // SPARK-25120: EventLoggingListener should register to the ListenerBus before
+    // blockManager initialize because when blockManager initializes, it will create
+    // the event of SparkListenerBlockManagerAdded, and EventLoggingListener could miss it
+    // In this case, the "Executors" tab in Spark history will lose the driver information.
     _eventLogger =
       if (isEventLogEnabled) {
         val logger =
@@ -526,6 +523,14 @@ class SparkContext(config: SparkConf) extends Logging {
       } else {
         None
       }
+
+    _env.blockManager.initialize(_applicationId)
+
+    // The metrics system for Driver need to be set spark.app.id to app ID.
+    // So it should start after we get app ID from the task scheduler and set spark.app.id.
+    _env.metricsSystem.start()
+    // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
+    _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
     // Optionally scale number of executors dynamically based on workload. Exposed for testing.
     val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(_conf)
