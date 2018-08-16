@@ -54,7 +54,8 @@ abstract class CSVDataSource extends Serializable {
       requiredSchema: StructType,
       // Actual schema of data in the csv file
       dataSchema: StructType,
-      caseSensitive: Boolean): Iterator[InternalRow]
+      caseSensitive: Boolean,
+      columnPruning: Boolean): Iterator[InternalRow]
 
   /**
    * Infers the schema from `inputPaths` files.
@@ -211,7 +212,8 @@ object TextInputCSVDataSource extends CSVDataSource {
       parser: UnivocityParser,
       requiredSchema: StructType,
       dataSchema: StructType,
-      caseSensitive: Boolean): Iterator[InternalRow] = {
+      caseSensitive: Boolean,
+      columnPruning: Boolean): Iterator[InternalRow] = {
     val lines = {
       val linesReader = new HadoopFileLinesReader(file, conf)
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
@@ -230,7 +232,7 @@ object TextInputCSVDataSource extends CSVDataSource {
         CSVDataSource.checkHeader(
           header,
           parser.tokenizer,
-          dataSchema,
+          if (columnPruning) requiredSchema else dataSchema,
           file.filePath,
           parser.options.enforceSchema,
           caseSensitive)
@@ -308,10 +310,11 @@ object MultiLineCSVDataSource extends CSVDataSource {
       parser: UnivocityParser,
       requiredSchema: StructType,
       dataSchema: StructType,
-      caseSensitive: Boolean): Iterator[InternalRow] = {
+      caseSensitive: Boolean,
+      columnPruning: Boolean): Iterator[InternalRow] = {
     def checkHeader(header: Array[String]): Unit = {
       CSVDataSource.checkHeaderColumnNames(
-        dataSchema,
+        if (columnPruning) requiredSchema else dataSchema,
         header,
         file.filePath,
         parser.options.enforceSchema,

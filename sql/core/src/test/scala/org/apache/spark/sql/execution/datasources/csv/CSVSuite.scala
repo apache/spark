@@ -1603,6 +1603,44 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
   }
 
+  test("SPARK-23786: check header on parsing of dataset with projection and column pruning") {
+    withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "true") {
+      withTempPath { path =>
+        val dir = path.getAbsolutePath
+        Seq(("a", "b")).toDF("columnA", "columnB").write
+          .format("csv")
+          .option("header", true)
+          .save(dir)
+        checkAnswer(spark.read
+          .format("csv")
+          .option("header", true)
+          .option("enforceSchema", false)
+          .load(dir)
+          .select("columnA"),
+          Row("a"))
+      }
+    }
+  }
+
+  test("SPARK-23786: check header on parsing of dataset with projection and no column pruning") {
+    withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false") {
+      withTempPath { path =>
+        val dir = path.getAbsolutePath
+        Seq(("a", "b")).toDF("columnA", "columnB").write
+          .format("csv")
+          .option("header", true)
+          .save(dir)
+        checkAnswer(spark.read
+          .format("csv")
+          .option("header", true)
+          .option("enforceSchema", false)
+          .load(dir)
+          .select("columnA"),
+          Row("a"))
+      }
+    }
+  }
+
   test("SPARK-24645 skip parsing when columnPruning enabled and partitions scanned only") {
     withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "true") {
       withTempPath { path =>
