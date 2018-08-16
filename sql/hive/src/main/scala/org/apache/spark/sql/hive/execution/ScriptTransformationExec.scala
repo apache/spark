@@ -32,7 +32,7 @@ import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.io.Writable
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{SparkException, TaskContext, TaskKilledException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -308,6 +308,12 @@ private class ScriptTransformationWriterThread(
       }
       threwException = false
     } catch {
+      // TaskKilledException should not be thrown again, otherwise it will be captured by
+      // SparkUncaughtExceptionHandler, then Executor will exit because of TaskKilledException.
+      case e: TaskKilledException =>
+        _exception = e
+        proc.destroy()
+        logWarning(s"thread ${Thread.currentThread().getName} exit cause by ", e)
       case t: Throwable =>
         // An error occurred while writing input, so kill the child process. According to the
         // Javadoc this call will not throw an exception:
