@@ -4761,6 +4761,24 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                         bool_f(col('bool')))
         self.assertEquals(df.collect(), res.collect())
 
+    def test_vectorized_udf_null_binary(self):
+        from distutils.version import LooseVersion
+        import pyarrow as pa
+        from pyspark.sql.functions import pandas_udf, col
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(
+                        NotImplementedError,
+                        'Invalid returnType.*scalar Pandas UDF.*BinaryType'):
+                    pandas_udf(lambda x: x, BinaryType())
+        else:
+            data = [(bytearray(b"a"),), (None,), (bytearray(b"bb"),), (bytearray(b"ccc"),)]
+            schema = StructType().add("binary", BinaryType())
+            df = self.spark.createDataFrame(data, schema)
+            str_f = pandas_udf(lambda x: x, BinaryType())
+            res = df.select(str_f(col('binary')))
+            self.assertEquals(df.collect(), res.collect())
+
     def test_vectorized_udf_array_type(self):
         from pyspark.sql.functions import pandas_udf, col
         data = [([1, 2],), ([3, 4],)]
@@ -4860,21 +4878,12 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_unsupported_types(self):
-        from distutils.version import LooseVersion
-        import pyarrow as pa
         from pyspark.sql.functions import pandas_udf
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     NotImplementedError,
                     'Invalid returnType.*scalar Pandas UDF.*MapType'):
                 pandas_udf(lambda x: x, MapType(StringType(), IntegerType()))
-
-        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            with QuietTest(self.sc):
-                with self.assertRaisesRegexp(
-                        NotImplementedError,
-                        'Invalid returnType.*scalar Pandas UDF.*BinaryType'):
-                    pandas_udf(lambda x: x, BinaryType())
 
     def test_vectorized_udf_dates(self):
         from pyspark.sql.functions import pandas_udf, col
