@@ -2450,7 +2450,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     def testInvalidLambdaFunctions(): Unit = {
 
       val ex1 = intercept[AnalysisException] {
-        dfExample1.selectExpr("transform_values(i, k -> k )")
+        dfExample1.selectExpr("transform_values(i, k -> k)")
       }
       assert(ex1.getMessage.contains("The number of lambda function arguments '1' does not match"))
 

@@ -501,15 +501,15 @@ case class ArrayAggregate(
  * Returns a map that applies the function to each value of the map.
  */
 @ExpressionDescription(
-usage = "_FUNC_(expr, func) - Transforms values in the map using the function.",
-examples = """
+  usage = "_FUNC_(expr, func) - Transforms values in the map using the function.",
+  examples = """
     Examples:
-       > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3)), (k, v) -> v + 1);
+      > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3)), (k, v) -> v + 1);
         map(array(1, 2, 3), array(2, 3, 4))
-       > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + v);
+      > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + v);
         map(array(1, 2, 3), array(2, 4, 6))
   """,
-since = "2.4.0")
+  since = "2.4.0")
 case class TransformValues(
     argument: Expression,
     function: Expression)
@@ -527,7 +527,7 @@ case class TransformValues(
   }
 
   @transient lazy val LambdaFunction(
-  _, (keyVar: NamedLambdaVariable) :: (valueVar: NamedLambdaVariable) :: Nil, _) = function
+    _, (keyVar: NamedLambdaVariable) :: (valueVar: NamedLambdaVariable) :: Nil, _) = function
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val map = argumentValue.asInstanceOf[MapData]
