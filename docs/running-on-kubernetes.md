@@ -769,7 +769,7 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.pyspark.pythonversion</code></td>
+  <td><code>spark.kubernetes.pyspark.pythonVersion</code></td>
   <td><code>"2"</code></td>
   <td>
    This sets the major Python version of the docker image used to run the driver and executor containers. Can either be 2 or 3. 
