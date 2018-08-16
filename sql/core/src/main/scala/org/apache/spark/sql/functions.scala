@@ -3238,6 +3238,25 @@ object functions {
     window(timeColumn, windowDuration, windowDuration, "0 second")
   }
 
+  /**
+   * Group the rows with session, this should be used with group by together and give another
+   * key as the session window key.
+   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
+   *                   The time column must be of TimestampType.
+   * @param windowGap A string specifying the width of the window, e.g. `10 minutes`,
+   *                  `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
+   *                  valid duration identifiers.
+   * @group datetime_funcs
+   * @since 2.4.0
+   */
+  def session_window(
+      timeColumn: Column,
+      windowGap: String): Column = {
+    withExpr {
+      SessionWindowExpression(timeColumn.expr, windowGap)
+    }.as("session_window")
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
   //////////////////////////////////////////////////////////////////////////////////////////////

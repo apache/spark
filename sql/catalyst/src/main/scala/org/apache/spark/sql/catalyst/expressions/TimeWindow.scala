@@ -93,7 +93,7 @@ case class TimeWindow(
   }
 }
 
-case class SessionWindow(
+case class SessionWindowExpression(
     timeColumn: Expression,
     windowGap: Long) extends UnaryExpression
   with ImplicitCastInputTypes
@@ -191,11 +191,11 @@ object TimeWindow {
   }
 }
 
-object SessionWindow {
+object SessionWindowExpression {
   def apply(
       timeColumn: Expression,
-      windowGap: String): SessionWindow = {
-    SessionWindow(timeColumn,
+      windowGap: String): SessionWindowExpression = {
+    SessionWindowExpression(timeColumn,
       TimeWindowUtil.getIntervalInMicroSeconds(windowGap))
   }
 }

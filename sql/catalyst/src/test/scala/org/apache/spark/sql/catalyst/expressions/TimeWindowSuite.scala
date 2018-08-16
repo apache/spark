@@ -139,8 +139,8 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
       ("1 second", 1000000), // 1e6
       ("1 minute", 60000000), // 6e7
       ("2 hours", 7200000000L))) { // 72e9
-      assert(SessionWindow(Literal(10L), text).windowGap === seconds)
-      assert(SessionWindow(Literal(10L), "interval " + text).windowGap === seconds)
+      assert(SessionWindowExpression(Literal(10L), text).windowGap === seconds)
+      assert(SessionWindowExpression(Literal(10L), "interval " + text).windowGap === seconds)
     }
   }
 }

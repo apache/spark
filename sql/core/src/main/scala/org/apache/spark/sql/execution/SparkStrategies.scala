@@ -633,6 +633,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil
       case h: ResolvedHint => planLater(h.child) :: Nil
+      case logical.SessionWindow(exprs, timeColumn, sessionSpec, gap, child) =>
+        SessionWindowExec(exprs, timeColumn, sessionSpec, gap, planLater(child)) :: Nil
       case _ => Nil
     }
   }
