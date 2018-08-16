@@ -301,4 +301,23 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
     Vectors.dense(currL1)
   }
+
+  /**
+   * Sum of each column.
+   *
+   */
+  @Since("2.4.0")
+  override def sum: Vector = {
+    require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+
+    val realSum = Array.ofDim[Double](n)
+
+    var i = 0
+    val len = currMean.length
+    while (i < len) {
+      realSum(i) = currMean(i) * weightSum(i)
+      i += 1
+    }
+    Vectors.dense(realSum)
+  }
 }

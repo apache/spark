@@ -58,6 +58,12 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
       }
     }
 
+    withClue("Getting sum from empty summarizer should throw exception.") {
+      intercept[IllegalArgumentException] {
+        summarizer.sum
+      }
+    }
+
     summarizer.add(Vectors.dense(-1.0, 2.0, 6.0)).add(Vectors.sparse(3, Seq((0, -2.0), (1, 6.0))))
 
     withClue("Adding a new dense sample with different array size should throw exception.") {
@@ -99,6 +105,8 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
     assert(summarizer.variance ~== Vectors.dense(8.0, 4.5, 18.0) absTol 1E-5, "variance mismatch")
 
     assert(summarizer.count === 2)
+
+    assert(summarizer.sum ~== Vectors.dense(2.0, -3.0, 6.0) absTol 1E-5, "sum mismatch")
   }
 
   test("sparse vector input") {
@@ -117,6 +125,8 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
     assert(summarizer.variance ~== Vectors.dense(8.0, 4.5, 18.0) absTol 1E-5, "variance mismatch")
 
     assert(summarizer.count === 2)
+
+    assert(summarizer.sum ~== Vectors.dense(2.0, -3.0, 6.0) absTol 1E-5, "sum mismatch")
   }
 
   test("mixing dense and sparse vector input") {
@@ -142,6 +152,8 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
       "variance mismatch")
 
     assert(summarizer.count === 6)
+
+    assert(summarizer.sum ~== Vectors.dense(3.5, -2.5, -1.1) absTol 1E-5, "sum mismatch")
   }
 
   test("merging two summarizers") {
@@ -171,6 +183,8 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
       "variance mismatch")
 
     assert(summarizer.count === 6)
+
+    assert(summarizer.sum ~== Vectors.dense(3.5, -2.5, -1.1) absTol 1E-5, "sum mismatch")
   }
 
   test("merging summarizer with empty summarizer") {
@@ -206,6 +220,10 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
     assert(summarizer1.variance ~== Vectors.dense(0, 0, 0) absTol 1E-5, "variance mismatch")
 
     assert(summarizer2.variance ~== Vectors.dense(0, 0, 0) absTol 1E-5, "variance mismatch")
+
+    assert(summarizer1.sum ~== Vectors.dense(0.0, -1.0, -3.0) absTol 1E-5, "sum mismatch")
+
+    assert(summarizer2.sum ~== Vectors.dense(0.0, -1.0, -3.0) absTol 1E-5, "sum mismatch")
   }
 
   test("merging summarizer when one side has zero mean (SPARK-4355)") {
@@ -244,6 +262,8 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
     assert(summarizer.normL2 ~== Vectors.dense(0.387298335, 0.762571308141, 0.9715966241192)
       absTol 1E-8, "normL2 mismatch")
     assert(summarizer.normL1 ~== Vectors.dense(0.21, 0.4265, 0.61) absTol 1E-10, "normL1 mismatch")
+    assert(summarizer.sum ~== Vectors.dense(Array(-0.21, -0.0535, -0.22))
+      absTol 1E-10, "sum mismatch")
   }
 
   test("test min/max with weighted samples (SPARK-16561)") {
