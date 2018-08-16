@@ -2852,4 +2852,28 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         spark.sql(s"select * from spark_25084 distribute by ($distributeExprs)").count === count)
     }
   }
+
+  test("SPARK-25135: insert datasource table may all null when select from view") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val cnt = 30
+      spark.range(cnt).selectExpr("cast(id as bigint) as col1", "cast(id as bigint) as col2")
+        .write.mode(SaveMode.Overwrite).parquet(path)
+      withTable("table1", "table2") {
+        spark.sql("CREATE TABLE table1(col1 bigint, col2 bigint) using parquet " +
+          s"location '$path'")
+
+        withView("view1") {
+          spark.sql("create view view1 as select col1, col2 from table1 where col1 > -20")
+
+          spark.sql("create table table2 (COL1 BIGINT, COL2 BIGINT) using parquet")
+
+          spark.sql("insert overwrite table table2 select COL1, COL2 from view1")
+
+          assert(spark.table("table2").count() === cnt)
+          checkAnswer(spark.table("table1"), spark.table("table2"))
+        }
+      }
+    }
+  }
 }

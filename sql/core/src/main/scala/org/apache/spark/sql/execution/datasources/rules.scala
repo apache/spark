@@ -490,7 +490,8 @@ object DDLPreprocessingUtils {
       case (expected, actual) =>
         if (expected.dataType.sameType(actual.dataType) &&
           expected.name == actual.name &&
-          expected.metadata == actual.metadata) {
+          expected.metadata == actual.metadata &&
+          expected.exprId.id == actual.exprId.id) {
           actual
         } else {
           // Renaming is needed for handling the following cases like
