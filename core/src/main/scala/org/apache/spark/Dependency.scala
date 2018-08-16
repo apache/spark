@@ -65,13 +65,6 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
  * @param keyOrdering key ordering for RDD's shuffles
  * @param aggregator map/reduce-side aggregator for RDD's shuffle
  * @param mapSideCombine whether to perform partial aggregation (also known as map-side combine)
- * @param orderSensitivePartitioner whether the partitioner is order sensitive to the input data
- *                                  and will partition shuffle output differently if the input data
- *                                  order changes. For example, hash and range partitioners are
- *                                  order insensitive, round-robin partitioner is order sensitive.
- *                                  This is a property of `ShuffleDependency` instead
- *                                  of `Partitioner`, because it's common that a map task partitions
- *                                  its output by itself and use a dummy partitioner later.
  */
 @DeveloperApi
 class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
@@ -80,8 +73,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     val serializer: Serializer = SparkEnv.get.serializer,
     val keyOrdering: Option[Ordering[K]] = None,
     val aggregator: Option[Aggregator[K, V, C]] = None,
-    val mapSideCombine: Boolean = false,
-    val orderSensitivePartitioner: Boolean = false)
+    val mapSideCombine: Boolean = false)
   extends Dependency[Product2[K, V]] {
 
   if (mapSideCombine) {
@@ -102,6 +94,16 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     shuffleId, _rdd.partitions.length, this)
 
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
+
+  /**
+   * whether the partitioner is order sensitive to the input data and will partition shuffle output
+   * differently if the input data order changes. For example, hash and range partitioners are
+   * order insensitive, round-robin partitioner is order sensitive. This is a property of
+   * `ShuffleDependency` instead of `Partitioner`, because it's common that a map task partitions
+   * its output by itself and use a dummy partitioner later.
+   */
+  // This is defined as a `var` here instead of the constructor, to pass the mima check.
+  private[spark] var orderSensitivePartitioner: Boolean = false
 }
 
 

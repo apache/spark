@@ -2640,14 +2640,14 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     "re-tried via FetchFailed and shuffle partitioner is order sensitive.") {
     val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, idempotent = false).mapPartitions(iter => iter)
     assert(!shuffleMapRdd1.isIdempotent)
-    val shuffleDep1 = new ShuffleDependency(
-      shuffleMapRdd1, new HashPartitioner(2), orderSensitivePartitioner = true)
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
+    shuffleDep1.orderSensitivePartitioner = true
     val shuffleId1 = shuffleDep1.shuffleId
 
     val shuffleMapRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
     assert(!shuffleMapRdd2.isIdempotent)
-    val shuffleDep2 = new ShuffleDependency(
-      shuffleMapRdd2, new HashPartitioner(2), orderSensitivePartitioner = false)
+    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(2))
+    shuffleDep2.orderSensitivePartitioner = false
     val shuffleId2 = shuffleDep2.shuffleId
 
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)

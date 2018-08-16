@@ -43,8 +43,10 @@ private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
 class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     @transient var prev: RDD[_ <: Product2[K, V]],
     part: Partitioner,
-    orderSensitivePartitioner: Boolean = false)
+    orderSensitivePartitioner: Boolean)
   extends RDD[(K, C)](prev.context, Nil) {
+
+  def this(prev: RDD[_ <: Product2[K, V]], part: Partitioner) = this(prev, part, false)
 
   private var userSpecifiedSerializer: Option[Serializer] = None
 
@@ -87,8 +89,10 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
         serializerManager.getSerializer(implicitly[ClassTag[K]], implicitly[ClassTag[V]])
       }
     }
-    List(new ShuffleDependency(
-      prev, part, serializer, keyOrdering, aggregator, mapSideCombine, orderSensitivePartitioner))
+    val dep = new ShuffleDependency(
+      prev, part, serializer, keyOrdering, aggregator, mapSideCombine)
+    dep.orderSensitivePartitioner = orderSensitivePartitioner
+    List(dep)
   }
 
   override val partitioner = Some(part)

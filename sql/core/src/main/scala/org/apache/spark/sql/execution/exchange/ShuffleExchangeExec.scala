@@ -327,9 +327,9 @@ object ShuffleExchangeExec {
       new ShuffleDependency[Int, InternalRow, InternalRow](
         rddWithPartitionIds,
         new PartitionIdPassthrough(part.numPartitions),
-        serializer,
-        // round-robin partitioner is order sensitive if we don't sort the input.
-        orderSensitivePartitioner = isRoundRobin && !SQLConf.get.sortBeforeRepartition)
+        serializer)
+    // round-robin partitioner is order sensitive if we don't sort the input.
+    dependency.orderSensitivePartitioner = isRoundRobin && !SQLConf.get.sortBeforeRepartition
 
     dependency
   }
