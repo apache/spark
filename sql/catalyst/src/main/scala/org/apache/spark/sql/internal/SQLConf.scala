@@ -36,6 +36,7 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -458,6 +459,29 @@ object SQLConf {
       "be carefully chosen to minimize overhead and avoid OOMs in reading data.")
     .intConf
     .createWithDefault(4096)
+
+  val IS_PARQUET_PARTITION_ADAPTIVE_ENABLED = buildConf("spark.sql.parquet.adaptiveFileSplit")
+    .doc("For columnar file format (e.g., Parquet), it's possible that only few (not all) " +
+      "columns are needed. So, it's better to make sure that the total size of the selected " +
+      "columns is about 128 MB "
+    )
+    .booleanConf
+    .createWithDefault(false)
+
+  val PARQUET_STRUCT_LENGTH = buildConf("spark.sql.parquet.struct.length")
+    .doc("Set the default size of struct column")
+    .intConf
+    .createWithDefault(StringType.defaultSize)
+
+  val PARQUET_MAP_LENGTH = buildConf("spark.sql.parquet.map.length")
+    .doc("Set the default size of map column")
+    .intConf
+    .createWithDefault(StringType.defaultSize)
+
+  val PARQUET_ARRAY_LENGTH = buildConf("spark.sql.parquet.array.length")
+    .doc("Set the default size of array column")
+    .intConf
+    .createWithDefault(StringType.defaultSize)
 
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
@@ -1713,6 +1737,14 @@ class SQLConf extends Serializable with Logging {
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
   def parquetRecordFilterEnabled: Boolean = getConf(PARQUET_RECORD_FILTER_ENABLED)
+
+  def isParquetSizeAdaptiveEnabled: Boolean = getConf(IS_PARQUET_PARTITION_ADAPTIVE_ENABLED)
+
+  def parquetStructTypeLength: Int = getConf(PARQUET_STRUCT_LENGTH)
+
+  def parquetMapTypeLength: Int = getConf(PARQUET_MAP_LENGTH)
+
+  def parquetArrayTypeLength: Int = getConf(PARQUET_ARRAY_LENGTH)
 
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
 

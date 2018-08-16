@@ -31,10 +31,11 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
@@ -425,12 +426,44 @@ case class FileSourceScanExec(
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
     val defaultMaxSplitBytes =
       fsRelation.sparkSession.sessionState.conf.filesMaxPartitionBytes
-    val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
+    var openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
     val defaultParallelism = fsRelation.sparkSession.sparkContext.defaultParallelism
     val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
     val bytesPerCore = totalBytes / defaultParallelism
 
-    val maxSplitBytes = Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
+    var maxSplitBytes = Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
+
+    if(fsRelation.sparkSession.sessionState.conf.isParquetSizeAdaptiveEnabled &&
+      (fsRelation.fileFormat.isInstanceOf[ParquetSource] ||
+        fsRelation.fileFormat.isInstanceOf[OrcFileFormat])) {
+      if (relation.dataSchema.map(_.dataType).forall(dataType =>
+        dataType.isInstanceOf[CalendarIntervalType] || dataType.isInstanceOf[StructType]
+          || dataType.isInstanceOf[MapType] || dataType.isInstanceOf[NullType]
+          || dataType.isInstanceOf[AtomicType] || dataType.isInstanceOf[ArrayType])) {
+
+        def getTypeLength(dataType: DataType): Int = {
+          if (dataType.isInstanceOf[StructType]) {
+            fsRelation.sparkSession.sessionState.conf.parquetStructTypeLength
+          } else if (dataType.isInstanceOf[ArrayType]) {
+            fsRelation.sparkSession.sessionState.conf.parquetArrayTypeLength
+          } else if (dataType.isInstanceOf[MapType]) {
+            fsRelation.sparkSession.sessionState.conf.parquetMapTypeLength
+          } else {
+            dataType.defaultSize
+          }
+        }
+
+        val selectedColumnSize = requiredSchema.map(_.dataType).map(getTypeLength(_))
+          .reduceOption(_ + _).getOrElse(StringType.defaultSize)
+        val totalColumnSize = relation.dataSchema.map(_.dataType).map(getTypeLength(_))
+          .reduceOption(_ + _).getOrElse(StringType.defaultSize)
+        val multiplier = totalColumnSize / selectedColumnSize
+        maxSplitBytes = maxSplitBytes * multiplier
+        openCostInBytes = openCostInBytes * multiplier
+      }
+    }
+
+
     logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
       s"open cost is considered as scanning $openCostInBytes bytes.")
 
