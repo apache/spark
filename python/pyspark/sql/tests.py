@@ -4261,7 +4261,7 @@ class ArrowTests(ReusedSQLTestCase):
 
     def test_createDataFrame_with_names(self):
         pdf = self.create_pandas_data_frame()
-        new_names = map(str, range(len(self.schema.fieldNames())))
+        new_names = list(map(str, range(len(self.schema.fieldNames()))))
         # Test that schema as a list of column names gets applied
         df = self.spark.createDataFrame(pdf, schema=list(new_names))
         self.assertEquals(df.schema.fieldNames(), new_names)
