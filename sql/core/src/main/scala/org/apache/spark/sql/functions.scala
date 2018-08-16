@@ -1660,7 +1660,7 @@ object functions {
   def expm1(e: Column): Column = withExpr { Expm1(e.expr) }
 
   /**
-   * Computes the exponential of the given column.
+   * Computes the exponential of the given column minus one.
    *
    * @group math_funcs
    * @since 1.4.0
