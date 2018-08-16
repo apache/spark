@@ -1482,6 +1482,9 @@ SELECT * FROM resultTable
 </div>
 </div>
 
+## AVRO Files
+See the [AVRO data source guide](avro-data-source-guide.html).
+
 ## Troubleshooting
 
  * The JDBC driver class must be visible to the primordial class loader on the client session and on all executors. This is because Java's DriverManager class does a security check that results in it ignoring all drivers not visible to the primordial class loader when one goes to open a connection. One convenient way to do this is to modify compute_classpath.sh on all worker nodes to include your driver JARs.
