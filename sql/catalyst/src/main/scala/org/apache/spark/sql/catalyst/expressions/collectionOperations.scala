@@ -1505,7 +1505,7 @@ case class ArraysOverlap(left: Expression, right: Expression)
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(elementType)
 
-  @transient private lazy val doEvaluation = if (TypeUtils.typeCanBeHashed(elementType)) {
+  @transient private lazy val doEvaluation = if (TypeUtils.typeWithProperEquals(elementType)) {
     fastEval _
   } else {
     bruteForceEval _
@@ -1587,7 +1587,7 @@ case class ArraysOverlap(left: Expression, right: Expression)
     nullSafeCodeGen(ctx, ev, (a1, a2) => {
       val smaller = ctx.freshName("smallerArray")
       val bigger = ctx.freshName("biggerArray")
-      val comparisonCode = if (TypeUtils.typeCanBeHashed(elementType)) {
+      val comparisonCode = if (TypeUtils.typeWithProperEquals(elementType)) {
         fastCodegen(ctx, ev, smaller, bigger)
       } else {
         bruteForceCodegen(ctx, ev, smaller, bigger)
@@ -3425,7 +3425,7 @@ case class ArrayDistinct(child: Expression)
     doEvaluation(data)
   }
 
-  @transient private lazy val doEvaluation = if (TypeUtils.typeCanBeHashed(elementType)) {
+  @transient private lazy val doEvaluation = if (TypeUtils.typeWithProperEquals(elementType)) {
     (data: Array[AnyRef]) => new GenericArrayData(data.distinct.asInstanceOf[Array[Any]])
   } else {
     (data: Array[AnyRef]) => {
@@ -3665,7 +3665,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetLike
   with ComplexTypeMergingExpression {
 
   @transient lazy val evalUnion: (ArrayData, ArrayData) => ArrayData = {
-    if (TypeUtils.typeCanBeHashed(elementType)) {
+    if (TypeUtils.typeWithProperEquals(elementType)) {
       (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
         val hs = new OpenHashSet[Any]
@@ -3882,7 +3882,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetL
   }
 
   @transient lazy val evalIntersect: (ArrayData, ArrayData) => ArrayData = {
-    if (TypeUtils.typeCanBeHashed(elementType)) {
+    if (TypeUtils.typeWithProperEquals(elementType)) {
       (array1, array2) =>
         if (array1.numElements() != 0 && array2.numElements() != 0) {
           val hs = new OpenHashSet[Any]
@@ -4122,7 +4122,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArraySetLike
   }
 
   @transient lazy val evalExcept: (ArrayData, ArrayData) => ArrayData = {
-    if (TypeUtils.typeCanBeHashed(elementType)) {
+    if (TypeUtils.typeWithProperEquals(elementType)) {
       (array1, array2) =>
         val hs = new OpenHashSet[Any]
         var notFoundNullElement = true

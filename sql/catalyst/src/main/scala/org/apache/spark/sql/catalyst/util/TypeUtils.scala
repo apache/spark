@@ -75,10 +75,11 @@ object TypeUtils {
   }
 
   /**
-   * Returns true if elements of the data type could be used as items of a hash set or as keys
-   * of a hash map.
+   * Returns true if the equals method of the elements of the data type is implemented properly.
+   * This also means that they can be safely used in collections relying on the equals method,
+   * as sets or maps.
    */
-  def typeCanBeHashed(dataType: DataType): Boolean = dataType match {
+  def typeWithProperEquals(dataType: DataType): Boolean = dataType match {
     case BinaryType => false
     case _: AtomicType => true
     case _ => false
