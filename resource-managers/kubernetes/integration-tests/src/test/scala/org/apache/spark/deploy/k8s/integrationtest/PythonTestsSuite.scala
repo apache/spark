@@ -40,7 +40,7 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
   test("Run PySpark with Python2 to test a pyfiles example", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.container.image", s"${getTestImageRepo}/spark-py:${getTestImageTag}")
-      .set("spark.kubernetes.pyspark.pythonversion", "2")
+      .set("spark.kubernetes.pyspark.pythonVersion", "2")
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_FILES,
       mainClass = "",
@@ -58,7 +58,7 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
   test("Run PySpark with Python3 to test a pyfiles example", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.container.image", s"${getTestImageRepo}/spark-py:${getTestImageTag}")
-      .set("spark.kubernetes.pyspark.pythonversion", "3")
+      .set("spark.kubernetes.pyspark.pythonVersion", "3")
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_FILES,
       mainClass = "",
