@@ -51,3 +51,12 @@ select exists(ys, y -> y > 30) as v from nested;
 
 -- Check for element existence in a null array
 select exists(cast(null as array<int>), y -> y > 30) as v;
+
+-- Zip with array
+select zip_with(ys, zs, (a, b) -> a + size(b)) as v from nested;
+
+-- Zip with array with concat
+select zip_with(array('a', 'b', 'c'), array('d', 'e', 'f'), (x, y) -> concat(x, y)) as v;
+
+-- Zip with array coalesce
+select zip_with(array('a'), array('d', null, 'f'), (x, y) -> coalesce(x, y)) as v;

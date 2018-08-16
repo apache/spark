@@ -163,3 +163,29 @@ select exists(cast(null as array<int>), y -> y > 30) as v
 struct<v:boolean>
 -- !query 16 output
 NULL
+
+
+-- !query 17
+select zip_with(ys, zs, (a, b) -> a + size(b)) as v from nested
+-- !query 17 schema
+struct<v:array<int>>
+-- !query 17 output
+[13]
+[34,99,null]
+[80,-74]
+
+
+-- !query 18
+select zip_with(array('a', 'b', 'c'), array('d', 'e', 'f'), (x, y) -> concat(x, y)) as v
+-- !query 18 schema
+struct<v:array<string>>
+-- !query 18 output
+["ad","be","cf"]
+
+
+-- !query 19
+select zip_with(array('a'), array('d', null, 'f'), (x, y) -> coalesce(x, y)) as v
+-- !query 19 schema
+struct<v:array<string>>
+-- !query 19 output
+["a",null,"f"]
