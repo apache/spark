@@ -402,13 +402,13 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
         left: Expression,
         right: Expression,
         f: (Expression, Expression) => Expression): Expression = {
-      val ArrayType(leftT, leftContainsNull) = left.dataType.asInstanceOf[ArrayType]
-      val ArrayType(rightT, rightContainsNull) = right.dataType.asInstanceOf[ArrayType]
-      ZipWith(left, right, createLambda(leftT, leftContainsNull, rightT, rightContainsNull, f))
+      val ArrayType(leftT, _) = left.dataType
+      val ArrayType(rightT, _) = right.dataType
+      ZipWith(left, right, createLambda(leftT, true, rightT, true, f))
     }
 
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
-    val ai1 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val ai1 = Literal.create(Seq(1, 2, 3, 4), ArrayType(IntegerType, containsNull = false))
     val ai2 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
     val ai3 = Literal.create(Seq[Integer](1, null), ArrayType(IntegerType, containsNull = true))
     val ain = Literal.create(null, ArrayType(IntegerType, containsNull = false))
@@ -416,7 +416,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val add: (Expression, Expression) => Expression = (x, y) => x + y
     val plusOne: Expression => Expression = x => x + 1
 
-    checkEvaluation(zip_with(ai0, ai1, add), Seq(2, 4, 6))
+    checkEvaluation(zip_with(ai0, ai1, add), Seq(2, 4, 6, null))
     checkEvaluation(zip_with(ai3, ai2, add), Seq(2, null, null))
     checkEvaluation(zip_with(ai2, ai3, add), Seq(2, null, null))
     checkEvaluation(zip_with(ain, ain, add), null)
@@ -439,7 +439,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       ArrayType(ArrayType(IntegerType, containsNull = false), containsNull = true))
     checkEvaluation(
       zip_with(aai1, aai2, (a1, a2) =>
-          Cast(zip_with(transform(a1, plusOne), transform(a2, plusOne), add), StringType)),
+        Cast(zip_with(transform(a1, plusOne), transform(a2, plusOne), add), StringType)),
       Seq("[4, 6, 8]", null, null))
     checkEvaluation(zip_with(aai1, aai1, (a1, a2) => Cast(transform(a1, plusOne), StringType)),
       Seq("[2, 3, 4]", null, "[5, 6]"))

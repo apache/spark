@@ -2322,7 +2322,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df1.selectExpr("zip_with(val1, val2, (x, y) -> x + y)"), expectedValue1)
 
     val expectedValue2 = Seq(
-      Row(Seq(Row(1.0, 1), Row(2.0, null), Row(null, 3))),
+      Row(Seq(Row(1L, 1), Row(2L, null), Row(null, 3))),
       Row(Seq(Row(4L, 1), Row(11L, 2), Row(null, 3))))
     checkAnswer(df2.selectExpr("zip_with(val1, val2, (x, y) -> (y, x))"), expectedValue2)
   }

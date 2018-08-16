@@ -720,20 +720,10 @@ case class ZipWith(left: Expression, right: Expression, function: Expression)
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ZipWith = {
-    val (leftElementType, leftContainsNull) = left.dataType match {
-      case ArrayType(elementType, containsNull) => (elementType, containsNull)
-      case _ =>
-        val ArrayType(elementType, containsNull) = ArrayType.defaultConcreteType
-        (elementType, containsNull)
-    }
-    val (rightElementType, rightContainsNull) = right.dataType match {
-      case ArrayType(elementType, containsNull) => (elementType, containsNull)
-      case _ =>
-        val ArrayType(elementType, containsNull) = ArrayType.defaultConcreteType
-        (elementType, containsNull)
-    }
+    val ArrayType(leftElementType, _) = left.dataType
+    val ArrayType(rightElementType, _) = right.dataType
     copy(function = f(function,
-      (leftElementType, leftContainsNull) :: (rightElementType, rightContainsNull) :: Nil))
+      (leftElementType, true) :: (rightElementType, true) :: Nil))
   }
 
   @transient lazy val LambdaFunction(_,
