@@ -226,10 +226,10 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
-   * Gets the average hash map probe per looking up for the underlying `BytesToBytesMap`.
+   * Gets the collision rate per looking up for the underlying `BytesToBytesMap`.
    */
-  public double getAverageProbesPerLookup() {
-    return map.getAverageProbesPerLookup();
+  public double getHashCollisionsPerLookup() {
+    return map.getAverageProbesPerLookup() - 1.0;
   }
 
   /**

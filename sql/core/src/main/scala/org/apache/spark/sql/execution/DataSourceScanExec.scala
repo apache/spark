@@ -319,7 +319,7 @@ case class FileSourceScanExec(
 
   override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-      "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files"),
+      "filesNum" -> SQLMetrics.createMetric(sparkContext, "number of files read"),
       "metadataTime" -> SQLMetrics.createMetric(sparkContext, "metadata time"),
       "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
 
