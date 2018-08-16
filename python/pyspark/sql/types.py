@@ -1598,8 +1598,11 @@ def to_arrow_type(dt):
         arrow_type = pa.decimal128(dt.precision, dt.scale)
     elif type(dt) == StringType:
         arrow_type = pa.string()
-    # TODO: remove version check once minimum pyarrow version is 0.10.0
-    elif type(dt) == BinaryType and LooseVersion("0.10.0") <= LooseVersion(pa.__version__):
+    elif type(dt) == BinaryType:
+        # TODO: remove version check once minimum pyarrow version is 0.10.0
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            raise TypeError("Unsupported type in conversion to Arrow: " + str(dt) +
+                            "\nPlease install pyarrow >= 0.10.0 for BinaryType support.")
         arrow_type = pa.binary()
     elif type(dt) == DateType:
         arrow_type = pa.date32()
@@ -1648,8 +1651,11 @@ def from_arrow_type(at):
         spark_type = DecimalType(precision=at.precision, scale=at.scale)
     elif types.is_string(at):
         spark_type = StringType()
-    # TODO: remove version check once minimum pyarrow version is 0.10.0
-    elif types.is_binary(at) and LooseVersion("0.10.0") <= LooseVersion(pa.__version__):
+    elif types.is_binary(at):
+        # TODO: remove version check once minimum pyarrow version is 0.10.0
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            raise TypeError("Unsupported type in conversion from Arrow: " + str(at) +
+                            "\nPlease install pyarrow >= 0.10.0 for BinaryType support.")
         spark_type = BinaryType()
     elif types.is_date32(at):
         spark_type = DateType()
