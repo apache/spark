@@ -1497,8 +1497,8 @@ object SQLConf {
     buildConf("spark.sql.legacy.bypassParserForEmptySchema")
       .doc("If required schema passed to a text datasource is empty, the parameter controls " +
         "invocation of underlying parser. For example, if it is set to false, uniVocity parser " +
-        "is invoke by CSV datasource or Jackson parser by JSON datasource. By default, it is set " +
-        "to true which means the parsers is not invoked for empty required schema.")
+        "is invoked by CSV datasource or Jackson parser by JSON datasource. By default, " +
+        "it is set to true which means the parsers is not invoked for empty required schema.")
       .booleanConf
       .createWithDefault(true)
 }
