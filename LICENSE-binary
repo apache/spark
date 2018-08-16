@@ -228,7 +228,6 @@ org.apache.xbean:xbean-asm5-shaded
 com.squareup.okhttp3:logging-interceptor
 com.squareup.okhttp3:okhttp
 com.squareup.okio:okio
-net.java.dev.jets3t:jets3t
 org.apache.spark:spark-catalyst_2.11
 org.apache.spark:spark-kvstore_2.11
 org.apache.spark:spark-launcher_2.11
@@ -447,7 +446,6 @@ org.slf4j:jul-to-slf4j
 org.slf4j:slf4j-api
 org.slf4j:slf4j-log4j12
 com.github.scopt:scopt_2.11
-org.bouncycastle:bcprov-jdk15on
 
 core/src/main/resources/org/apache/spark/ui/static/dagre-d3.min.js
 core/src/main/resources/org/apache/spark/ui/static/*dataTables*
