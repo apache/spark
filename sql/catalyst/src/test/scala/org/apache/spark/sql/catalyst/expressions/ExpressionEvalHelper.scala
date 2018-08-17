@@ -59,12 +59,14 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
     // Make it as method to obtain fresh expression everytime.
     def expr = prepareEvaluation(expression)
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
-    checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
-    checkEvaluationWithGeneratedMutableProjection(expr, catalystValue, inputRow)
+    // checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
+    // checkEvaluationWithGeneratedMutableProjection(expr, catalystValue, inputRow)
+    print(s"checkEvaluation: ${expr.dataType}\n")
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
+      print(s"HERE\n")
       checkEvaluationWithUnsafeProjection(expr, catalystValue, inputRow)
     }
-    checkEvaluationWithOptimization(expr, catalystValue, inputRow)
+    // checkEvaluationWithOptimization(expr, catalystValue, inputRow)
   }
 
   /**
@@ -92,6 +94,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
           var i = 0
           while (isSame && i < result.numElements) {
             isSame = checkResult(result.get(i, et), expected.get(i, et), et)
+            print(s"[$i]: ${result.isNullAt(i)}, ${result.get(i, et)}, ${expected.isNullAt(i)}, ${expected.get(i, et)}, $isSame\n")
             i += 1
           }
           isSame
@@ -223,8 +226,9 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
           }
         } else {
           val lit = InternalRow(expected, expected)
+          val dtAsNullable = expression.dataType.asNullable
           val expectedRow =
-            UnsafeProjection.create(Array(expression.dataType, expression.dataType)).apply(lit)
+            UnsafeProjection.create(Array(dtAsNullable, dtAsNullable)).apply(lit)
           if (unsafeRow != expectedRow) {
             fail("Incorrect evaluation in unsafe mode: " +
               s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
