@@ -40,12 +40,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
 
   override val streamingTimeout = 30.seconds
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    testUtils = new KafkaTestUtils(
-      withBrokerProps = Map("auto.create.topics.enable" -> "false"))
-    testUtils.setup()
-  }
+  override val brokerProps = Map("auto.create.topics.enable" -> "false")
 
   override def afterAll(): Unit = {
     if (testUtils != null) {
