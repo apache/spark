@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import java.io.{File, StringWriter}
+import java.io.StringWriter
 import java.util.{Collections, UUID}
 import java.util.Properties
 
