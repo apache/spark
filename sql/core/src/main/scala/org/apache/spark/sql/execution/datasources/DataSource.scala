@@ -571,7 +571,6 @@ object DataSource extends Logging {
     val nativeOrc = classOf[OrcFileFormat].getCanonicalName
     val socket = classOf[TextSocketSourceProvider].getCanonicalName
     val rate = classOf[RateStreamProvider].getCanonicalName
-    val avro = "org.apache.spark.sql.avro.AvroFileFormat"
 
     Map(
       "org.apache.spark.sql.jdbc" -> jdbc,
@@ -593,7 +592,6 @@ object DataSource extends Logging {
       "org.apache.spark.ml.source.libsvm.DefaultSource" -> libsvm,
       "org.apache.spark.ml.source.libsvm" -> libsvm,
       "com.databricks.spark.csv" -> csv,
-      "com.databricks.spark.avro" -> avro,
       "org.apache.spark.sql.execution.streaming.TextSocketSourceProvider" -> socket,
       "org.apache.spark.sql.execution.streaming.RateSourceProvider" -> rate
     )
@@ -637,6 +635,12 @@ object DataSource extends Logging {
                     "Hive built-in ORC data source must be used with Hive support enabled. " +
                     "Please use the native ORC data source by setting 'spark.sql.orc.impl' to " +
                     "'native'")
+                } else if (provider1.toLowerCase(Locale.ROOT) == "avro" ||
+                  provider1 == "com.databricks.spark.avro") {
+                  throw new AnalysisException(
+                    s"Failed to find data source: ${provider1.toLowerCase(Locale.ROOT)}. " +
+                    "AVRO is built-in data source since Spark 2.4. Please deploy the application " +
+                    "as per https://spark.apache.org/docs/latest/avro-data-source.html#deploying")
                 } else {
                   throw new ClassNotFoundException(
                     s"Failed to find data source: $provider1. Please find packages at " +
