@@ -18,13 +18,13 @@
 package org.apache.spark.sql.hive.client
 
 import java.io.{File, PrintStream}
-import java.util.Locale
+import java.lang.{Iterable => JIterable}
+import java.util.{Locale, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
@@ -82,8 +82,9 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  */
 private[hive] class HiveClientImpl(
     override val version: HiveVersion,
+    warehouseDir: Option[String],
     sparkConf: SparkConf,
-    hadoopConf: Configuration,
+    hadoopConf: JIterable[JMap.Entry[String, String]],
     extraConfig: Map[String, String],
     initClassLoader: ClassLoader,
     val clientLoader: IsolatedClientLoader)
@@ -102,6 +103,8 @@ private[hive] class HiveClientImpl(
     case hive.v1_2 => new Shim_v1_2()
     case hive.v2_0 => new Shim_v2_0()
     case hive.v2_1 => new Shim_v2_1()
+    case hive.v2_2 => new Shim_v2_2()
+    case hive.v2_3 => new Shim_v2_3()
   }
 
   // Create an internal session state for this HiveClientImpl.
@@ -130,7 +133,7 @@ private[hive] class HiveClientImpl(
       if (ret != null) {
         // hive.metastore.warehouse.dir is determined in SharedState after the CliSessionState
         // instance constructed, we need to follow that change here.
-        Option(hadoopConf.get(ConfVars.METASTOREWAREHOUSE.varname)).foreach { dir =>
+        warehouseDir.foreach { dir =>
           ret.getConf.setVar(ConfVars.METASTOREWAREHOUSE, dir)
         }
         ret
@@ -289,12 +292,18 @@ private[hive] class HiveClientImpl(
     state.err = stream
   }
 
-  override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
-    if (databaseExists(databaseName)) {
-      state.setCurrentDatabase(databaseName)
-    } else {
-      throw new NoSuchDatabaseException(databaseName)
+  private def setCurrentDatabaseRaw(db: String): Unit = {
+    if (state.getCurrentDatabase != db) {
+      if (databaseExists(db)) {
+        state.setCurrentDatabase(db)
+      } else {
+        throw new NoSuchDatabaseException(db)
+      }
     }
+  }
+
+  override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
+    setCurrentDatabaseRaw(databaseName)
   }
 
   override def createDatabase(
@@ -344,15 +353,19 @@ private[hive] class HiveClientImpl(
     client.getDatabasesByPattern(pattern).asScala
   }
 
+  private def getRawTableOption(dbName: String, tableName: String): Option[HiveTable] = {
+    Option(client.getTable(dbName, tableName, false /* do not throw exception */))
+  }
+
   override def tableExists(dbName: String, tableName: String): Boolean = withHiveState {
-    Option(client.getTable(dbName, tableName, false /* do not throw exception */)).nonEmpty
+    getRawTableOption(dbName, tableName).nonEmpty
   }
 
   override def getTableOption(
       dbName: String,
       tableName: String): Option[CatalogTable] = withHiveState {
     logDebug(s"Looking up $dbName.$tableName")
-    Option(client.getTable(dbName, tableName, false)).map { h =>
+    getRawTableOption(dbName, tableName).map { h =>
       // Note: Hive separates partition columns and the schema, but for us the
       // partition columns are part of the schema
       val cols = h.getCols.asScala.map(fromHiveColumn)
@@ -596,8 +609,18 @@ private[hive] class HiveClientImpl(
       db: String,
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit = withHiveState {
-    val hiveTable = toHiveTable(getTable(db, table), Some(userName))
-    shim.alterPartitions(client, table, newParts.map { p => toHivePartition(p, hiveTable) }.asJava)
+    // Note: Before altering table partitions in Hive, you *must* set the current database
+    // to the one that contains the table of interest. Otherwise you will end up with the
+    // most helpful error message ever: "Unable to alter partition. alter is not possible."
+    // See HIVE-2742 for more detail.
+    val original = state.getCurrentDatabase
+    try {
+      setCurrentDatabaseRaw(db)
+      val hiveTable = toHiveTable(getTable(db, table), Some(userName))
+      shim.alterPartitions(client, table, newParts.map { toHivePartition(_, hiveTable) }.asJava)
+    } finally {
+      state.setCurrentDatabase(original)
+    }
   }
 
   /**
@@ -823,23 +846,19 @@ private[hive] class HiveClientImpl(
   }
 
   def reset(): Unit = withHiveState {
-    try {
-      client.getAllTables("default").asScala.foreach { t =>
-        logDebug(s"Deleting table $t")
-        val table = client.getTable("default", t)
-        client.getIndexes("default", t, 255).asScala.foreach { index =>
-          shim.dropIndex(client, "default", t, index.getIndexName)
-        }
-        if (!table.isIndexTable) {
-          client.dropTable("default", t)
-        }
+    client.getAllTables("default").asScala.foreach { t =>
+      logDebug(s"Deleting table $t")
+      val table = client.getTable("default", t)
+      client.getIndexes("default", t, 255).asScala.foreach { index =>
+        shim.dropIndex(client, "default", t, index.getIndexName)
       }
-      client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
-        logDebug(s"Dropping Database: $db")
-        client.dropDatabase(db, true, false, true)
+      if (!table.isIndexTable) {
+        client.dropTable("default", t)
       }
-    } finally {
-      runSqlHive("USE default")
+    }
+    client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
+      logDebug(s"Dropping Database: $db")
+      client.dropDatabase(db, true, false, true)
     }
   }
 }
@@ -908,6 +927,9 @@ private[hive] object HiveClientImpl {
       case CatalogTableType.MANAGED =>
         HiveTableType.MANAGED_TABLE
       case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW
+      case t =>
+        throw new IllegalArgumentException(
+          s"Unknown table type is found at toHiveTable: $t")
     })
     // Note: In Hive the schema and partition columns must be disjoint sets
     val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
@@ -980,6 +1002,8 @@ private[hive] object HiveClientImpl {
     tpart.setTableName(ht.getTableName)
     tpart.setValues(partValues.asJava)
     tpart.setSd(storageDesc)
+    tpart.setCreateTime((p.createTime / 1000).toInt)
+    tpart.setLastAccessTime((p.lastAccessTime / 1000).toInt)
     tpart.setParameters(mutable.Map(p.parameters.toSeq: _*).asJava)
     new HivePartition(ht, tpart)
   }
@@ -1004,6 +1028,8 @@ private[hive] object HiveClientImpl {
         compressed = apiPartition.getSd.isCompressed,
         properties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
           .map(_.asScala.toMap).orNull),
+      createTime = apiPartition.getCreateTime.toLong * 1000,
+      lastAccessTime = apiPartition.getLastAccessTime.toLong * 1000,
       parameters = properties,
       stats = readHiveStats(properties))
   }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.util.Locale
 
 import scala.collection.{GenMap, GenSeq}
-import scala.collection.parallel.ForkJoinTaskSupport
+import scala.concurrent.ExecutionContext
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -29,7 +29,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Resolver}
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
+import org.apache.spark.util.ThreadUtils.parmap
 
 // Note: The definition of these commands are based on the ones described in
 // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
@@ -189,8 +190,9 @@ case class DropTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+    val isTempView = catalog.isTemporaryTable(tableName)
 
-    if (!catalog.isTemporaryTable(tableName) && catalog.tableExists(tableName)) {
+    if (!isTempView && catalog.tableExists(tableName)) {
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
       // issue an exception.
       catalog.getTableMetadata(tableName).tableType match {
@@ -204,9 +206,10 @@ case class DropTableCommand(
       }
     }
 
-    if (catalog.isTemporaryTable(tableName) || catalog.tableExists(tableName)) {
+    if (isTempView || catalog.tableExists(tableName)) {
       try {
-        sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName))
+        sparkSession.sharedState.cacheManager.uncacheQuery(
+          sparkSession.table(tableName), cascade = !isTempView)
       } catch {
         case NonFatal(e) => log.warn(e.toString, e)
       }
@@ -314,8 +317,8 @@ case class AlterTableChangeColumnCommand(
     val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
 
-    // Find the origin column from schema by column name.
-    val originColumn = findColumnByName(table.schema, columnName, resolver)
+    // Find the origin column from dataSchema by column name.
+    val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
     // Throw an AnalysisException if the column name/dataType is changed.
     if (!columnEqual(originColumn, newColumn, resolver)) {
       throw new AnalysisException(
@@ -324,7 +327,7 @@ case class AlterTableChangeColumnCommand(
           s"'${newColumn.name}' with type '${newColumn.dataType}'")
     }
 
-    val newSchema = table.schema.fields.map { field =>
+    val newDataSchema = table.dataSchema.fields.map { field =>
       if (field.name == originColumn.name) {
         // Create a new column from the origin column with the new comment.
         addComment(field, newColumn.getComment)
@@ -332,8 +335,7 @@ case class AlterTableChangeColumnCommand(
         field
       }
     }
-    val newTable = table.copy(schema = StructType(newSchema))
-    catalog.alterTable(newTable)
+    catalog.alterTableDataSchema(tableName, StructType(newDataSchema))
 
     Seq.empty[Row]
   }
@@ -345,7 +347,8 @@ case class AlterTableChangeColumnCommand(
     schema.fields.collectFirst {
       case field if resolver(field.name, name) => field
     }.getOrElse(throw new AnalysisException(
-      s"Invalid column reference '$name', table schema is '${schema}'"))
+      s"Can't find column `$name` given table data columns " +
+        s"${schema.fieldNames.mkString("[`", "`, `", "`]")}"))
   }
 
   // Add the comment to a column, if comment is empty, return the original column.
@@ -610,17 +613,18 @@ case class AlterTableRecoverPartitionsCommand(
 
     val root = new Path(table.location)
     logInfo(s"Recover all the partitions in $root")
-    val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    val fs = root.getFileSystem(hadoopConf)
 
     val threshold = spark.conf.get("spark.rdd.parallelListingThreshold", "10").toInt
-    val hadoopConf = spark.sparkContext.hadoopConfiguration
     val pathFilter = getPathFilter(hadoopConf)
 
     val evalPool = ThreadUtils.newForkJoinPool("AlterTableRecoverPartitionsCommand", 8)
     val partitionSpecsAndLocs: Seq[(TablePartitionSpec, Path)] =
       try {
+        implicit val ec = ExecutionContext.fromExecutor(evalPool)
         scanPartitions(spark, fs, pathFilter, root, Map(), table.partitionColumnNames, threshold,
-          spark.sessionState.conf.resolver, new ForkJoinTaskSupport(evalPool)).seq
+          spark.sessionState.conf.resolver)
       } finally {
         evalPool.shutdown()
       }
@@ -652,23 +656,13 @@ case class AlterTableRecoverPartitionsCommand(
       spec: TablePartitionSpec,
       partitionNames: Seq[String],
       threshold: Int,
-      resolver: Resolver,
-      evalTaskSupport: ForkJoinTaskSupport): GenSeq[(TablePartitionSpec, Path)] = {
+      resolver: Resolver)(implicit ec: ExecutionContext): Seq[(TablePartitionSpec, Path)] = {
     if (partitionNames.isEmpty) {
       return Seq(spec -> path)
     }
 
-    val statuses = fs.listStatus(path, filter)
-    val statusPar: GenSeq[FileStatus] =
-      if (partitionNames.length > 1 && statuses.length > threshold || partitionNames.length > 2) {
-        // parallelize the list of partitions here, then we can have better parallelism later.
-        val parArray = statuses.par
-        parArray.tasksupport = evalTaskSupport
-        parArray
-      } else {
-        statuses
-      }
-    statusPar.flatMap { st =>
+    val statuses = fs.listStatus(path, filter).toSeq
+    def handleStatus(st: FileStatus): Seq[(TablePartitionSpec, Path)] = {
       val name = st.getPath.getName
       if (st.isDirectory && name.contains("=")) {
         val ps = name.split("=", 2)
@@ -677,7 +671,7 @@ case class AlterTableRecoverPartitionsCommand(
         val value = ExternalCatalogUtils.unescapePathName(ps(1))
         if (resolver(columnName, partitionNames.head)) {
           scanPartitions(spark, fs, filter, st.getPath, spec ++ Map(partitionNames.head -> value),
-            partitionNames.drop(1), threshold, resolver, evalTaskSupport)
+            partitionNames.drop(1), threshold, resolver)
         } else {
           logWarning(
             s"expected partition column ${partitionNames.head}, but got ${ps(0)}, ignoring it")
@@ -688,6 +682,14 @@ case class AlterTableRecoverPartitionsCommand(
         Seq.empty
       }
     }
+    val result = if (partitionNames.length > 1 &&
+        statuses.length > threshold || partitionNames.length > 2) {
+      parmap(statuses)(handleStatus _)
+    } else {
+      statuses.map(handleStatus)
+    }
+
+    result.flatten
   }
 
   private def gatherPartitionStats(
@@ -697,7 +699,7 @@ case class AlterTableRecoverPartitionsCommand(
       pathFilter: PathFilter,
       threshold: Int): GenMap[String, PartitionStatistics] = {
     if (partitionSpecsAndLocs.length > threshold) {
-      val hadoopConf = spark.sparkContext.hadoopConfiguration
+      val hadoopConf = spark.sessionState.newHadoopConf()
       val serializableConfiguration = new SerializableConfiguration(hadoopConf)
       val serializedPaths = partitionSpecsAndLocs.map(_._2.toString).toArray
 
@@ -890,7 +892,8 @@ object DDLUtils {
    */
   def verifyNotReadPath(query: LogicalPlan, outputPath: Path) : Unit = {
     val inputPaths = query.collect {
-      case LogicalRelation(r: HadoopFsRelation, _, _, _) => r.location.rootPaths
+      case LogicalRelation(r: HadoopFsRelation, _, _, _) =>
+        r.location.rootPaths
     }.flatten
 
     if (inputPaths.contains(outputPath)) {

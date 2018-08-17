@@ -86,7 +86,7 @@ private[sql] object ArrowConverters {
     val root = VectorSchemaRoot.create(arrowSchema, allocator)
     val arrowWriter = ArrowWriter.create(root)
 
-    context.addTaskCompletionListener { _ =>
+    context.addTaskCompletionListener[Unit] { _ =>
       root.close()
       allocator.close()
     }
@@ -137,7 +137,7 @@ private[sql] object ArrowConverters {
       private var schemaRead = StructType(Seq.empty)
       private var rowIter = if (payloadIter.hasNext) nextBatch() else Iterator.empty
 
-      context.addTaskCompletionListener { _ =>
+      context.addTaskCompletionListener[Unit] { _ =>
         closeReader()
         allocator.close()
       }
@@ -175,7 +175,7 @@ private[sql] object ArrowConverters {
           new ArrowColumnVector(vector).asInstanceOf[ColumnVector]
         }.toArray
 
-        val batch = new ColumnarBatch(schemaRead, columns, root.getRowCount)
+        val batch = new ColumnarBatch(columns)
         batch.setNumRows(root.getRowCount)
         batch.rowIterator().asScala
       }

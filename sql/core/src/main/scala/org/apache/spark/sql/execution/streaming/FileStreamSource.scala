@@ -50,7 +50,7 @@ class FileStreamSource(
   @transient private val fs = new Path(path).getFileSystem(hadoopConf)
 
   private val qualifiedBasePath: Path = {
-    fs.makeQualified(new Path(path))  // can contains glob patterns
+    fs.makeQualified(new Path(path))  // can contain glob patterns
   }
 
   private val optionsWithPartitionBasePath = sourceOptions.optionMapWithoutPath ++ {
@@ -166,7 +166,7 @@ class FileStreamSource(
     val newDataSource =
       DataSource(
         sparkSession,
-        paths = files.map(_.path),
+        paths = files.map(f => new Path(new URI(f.path)).toString),
         userSpecifiedSchema = Some(schema),
         partitionColumns = partitionColumns,
         className = fileFormatClassName,

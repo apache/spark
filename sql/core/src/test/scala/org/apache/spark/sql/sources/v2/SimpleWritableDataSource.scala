@@ -26,9 +26,9 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataInputStream, Path}
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.sources.v2.reader.{DataReader, DataSourceV2Reader, ReadTask}
+import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, InputPartition, InputPartitionReader}
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.SerializableConfiguration
@@ -42,10 +42,10 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
 
   private val schema = new StructType().add("i", "long").add("j", "long")
 
-  class Reader(path: String, conf: Configuration) extends DataSourceV2Reader {
+  class Reader(path: String, conf: Configuration) extends DataSourceReader {
     override def readSchema(): StructType = schema
 
-    override def createReadTasks(): JList[ReadTask[Row]] = {
+    override def planInputPartitions(): JList[InputPartition[InternalRow]] = {
       val dataPath = new Path(path)
       val fs = dataPath.getFileSystem(conf)
       if (fs.exists(dataPath)) {
@@ -54,7 +54,9 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
           name.startsWith("_") || name.startsWith(".")
         }.map { f =>
           val serializableConf = new SerializableConfiguration(conf)
-          new SimpleCSVReadTask(f.getPath.toUri.toString, serializableConf): ReadTask[Row]
+          new SimpleCSVInputPartitionReader(
+            f.getPath.toUri.toString,
+            serializableConf): InputPartition[InternalRow]
         }.toList.asJava
       } else {
         Collections.emptyList()
@@ -62,9 +64,14 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
     }
   }
 
-  class Writer(jobId: String, path: String, conf: Configuration) extends DataSourceV2Writer {
-    override def createWriterFactory(): DataWriterFactory[Row] = {
-      new SimpleCSVDataWriterFactory(path, jobId, new SerializableConfiguration(conf))
+  class Writer(jobId: String, path: String, conf: Configuration) extends DataSourceWriter {
+    override def createWriterFactory(): DataWriterFactory[InternalRow] = {
+      SimpleCounter.resetCounter
+      new CSVDataWriterFactory(path, jobId, new SerializableConfiguration(conf))
+    }
+
+    override def onDataWriterCommit(message: WriterCommitMessage): Unit = {
+      SimpleCounter.increaseCounter
     }
 
     override def commit(messages: Array[WriterCommitMessage]): Unit = {
@@ -90,19 +97,7 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
     }
   }
 
-  class InternalRowWriter(jobId: String, path: String, conf: Configuration)
-    extends Writer(jobId, path, conf) with SupportsWriteInternalRow {
-
-    override def createWriterFactory(): DataWriterFactory[Row] = {
-      throw new IllegalArgumentException("not expected!")
-    }
-
-    override def createInternalRowWriterFactory(): DataWriterFactory[InternalRow] = {
-      new InternalRowCSVDataWriterFactory(path, jobId, new SerializableConfiguration(conf))
-    }
-  }
-
-  override def createReader(options: DataSourceV2Options): DataSourceV2Reader = {
+  override def createReader(options: DataSourceOptions): DataSourceReader = {
     val path = new Path(options.get("path").get())
     val conf = SparkContext.getActive.get.hadoopConfiguration
     new Reader(path.toUri.toString, conf)
@@ -112,12 +107,11 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
       jobId: String,
       schema: StructType,
       mode: SaveMode,
-      options: DataSourceV2Options): Optional[DataSourceV2Writer] = {
+      options: DataSourceOptions): Optional[DataSourceWriter] = {
     assert(DataType.equalsStructurally(schema.asNullable, this.schema.asNullable))
     assert(!SparkContext.getActive.get.conf.getBoolean("spark.speculation", false))
 
     val path = new Path(options.get("path").get())
-    val internal = options.get("internal").isPresent
     val conf = SparkContext.getActive.get.hadoopConfiguration
     val fs = path.getFileSystem(conf)
 
@@ -135,28 +129,19 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
       fs.delete(path, true)
     }
 
-    Optional.of(createWriter(jobId, path, conf, internal))
-  }
-
-  private def createWriter(
-      jobId: String, path: Path, conf: Configuration, internal: Boolean): DataSourceV2Writer = {
     val pathStr = path.toUri.toString
-    if (internal) {
-      new InternalRowWriter(jobId, pathStr, conf)
-    } else {
-      new Writer(jobId, pathStr, conf)
-    }
+    Optional.of(new Writer(jobId, pathStr, conf))
   }
 }
 
-class SimpleCSVReadTask(path: String, conf: SerializableConfiguration)
-  extends ReadTask[Row] with DataReader[Row] {
+class SimpleCSVInputPartitionReader(path: String, conf: SerializableConfiguration)
+  extends InputPartition[InternalRow] with InputPartitionReader[InternalRow] {
 
   @transient private var lines: Iterator[String] = _
   @transient private var currentLine: String = _
   @transient private var inputStream: FSDataInputStream = _
 
-  override def createDataReader(): DataReader[Row] = {
+  override def createPartitionReader(): InputPartitionReader[InternalRow] = {
     val filePath = new Path(path)
     val fs = filePath.getFileSystem(conf.value)
     inputStream = fs.open(filePath)
@@ -174,58 +159,44 @@ class SimpleCSVReadTask(path: String, conf: SerializableConfiguration)
     }
   }
 
-  override def get(): Row = Row(currentLine.split(",").map(_.trim.toLong): _*)
+  override def get(): InternalRow = InternalRow(currentLine.split(",").map(_.trim.toLong): _*)
 
   override def close(): Unit = {
     inputStream.close()
   }
 }
 
-class SimpleCSVDataWriterFactory(path: String, jobId: String, conf: SerializableConfiguration)
-  extends DataWriterFactory[Row] {
+private[v2] object SimpleCounter {
+  private var count: Int = 0
 
-  override def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[Row] = {
-    val jobPath = new Path(new Path(path, "_temporary"), jobId)
-    val filePath = new Path(jobPath, s"$jobId-$partitionId-$attemptNumber")
-    val fs = filePath.getFileSystem(conf.value)
-    new SimpleCSVDataWriter(fs, filePath)
+  def increaseCounter: Unit = {
+    count += 1
+  }
+
+  def getCounter: Int = {
+    count
+  }
+
+  def resetCounter: Unit = {
+    count = 0
   }
 }
 
-class SimpleCSVDataWriter(fs: FileSystem, file: Path) extends DataWriter[Row] {
-
-  private val out = fs.create(file)
-
-  override def write(record: Row): Unit = {
-    out.writeBytes(s"${record.getLong(0)},${record.getLong(1)}\n")
-  }
-
-  override def commit(): WriterCommitMessage = {
-    out.close()
-    null
-  }
-
-  override def abort(): Unit = {
-    try {
-      out.close()
-    } finally {
-      fs.delete(file, false)
-    }
-  }
-}
-
-class InternalRowCSVDataWriterFactory(path: String, jobId: String, conf: SerializableConfiguration)
+class CSVDataWriterFactory(path: String, jobId: String, conf: SerializableConfiguration)
   extends DataWriterFactory[InternalRow] {
 
-  override def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[InternalRow] = {
+  override def createDataWriter(
+      partitionId: Int,
+      taskId: Long,
+      epochId: Long): DataWriter[InternalRow] = {
     val jobPath = new Path(new Path(path, "_temporary"), jobId)
-    val filePath = new Path(jobPath, s"$jobId-$partitionId-$attemptNumber")
+    val filePath = new Path(jobPath, s"$jobId-$partitionId-$taskId")
     val fs = filePath.getFileSystem(conf.value)
-    new InternalRowCSVDataWriter(fs, filePath)
+    new CSVDataWriter(fs, filePath)
   }
 }
 
-class InternalRowCSVDataWriter(fs: FileSystem, file: Path) extends DataWriter[InternalRow] {
+class CSVDataWriter(fs: FileSystem, file: Path) extends DataWriter[InternalRow] {
 
   private val out = fs.create(file)
 

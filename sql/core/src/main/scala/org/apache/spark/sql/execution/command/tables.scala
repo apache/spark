@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.Histogram
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
 import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -493,7 +493,7 @@ case class TruncateTableCommand(
     spark.sessionState.refreshTable(tableName.unquotedString)
     // Also try to drop the contents of the table from the columnar cache
     try {
-      spark.sharedState.cacheManager.uncacheQuery(spark.table(table.identifier))
+      spark.sharedState.cacheManager.uncacheQuery(spark.table(table.identifier), cascade = true)
     } catch {
       case NonFatal(e) =>
         log.warn(s"Exception when attempting to uncache table $tableIdentWithDB", e)
@@ -695,10 +695,11 @@ case class DescribeColumnCommand(
       // Show column stats when EXTENDED or FORMATTED is specified.
       buffer += Row("min", cs.flatMap(_.min.map(_.toString)).getOrElse("NULL"))
       buffer += Row("max", cs.flatMap(_.max.map(_.toString)).getOrElse("NULL"))
-      buffer += Row("num_nulls", cs.map(_.nullCount.toString).getOrElse("NULL"))
-      buffer += Row("distinct_count", cs.map(_.distinctCount.toString).getOrElse("NULL"))
-      buffer += Row("avg_col_len", cs.map(_.avgLen.toString).getOrElse("NULL"))
-      buffer += Row("max_col_len", cs.map(_.maxLen.toString).getOrElse("NULL"))
+      buffer += Row("num_nulls", cs.flatMap(_.nullCount.map(_.toString)).getOrElse("NULL"))
+      buffer += Row("distinct_count",
+        cs.flatMap(_.distinctCount.map(_.toString)).getOrElse("NULL"))
+      buffer += Row("avg_col_len", cs.flatMap(_.avgLen.map(_.toString)).getOrElse("NULL"))
+      buffer += Row("max_col_len", cs.flatMap(_.maxLen.map(_.toString)).getOrElse("NULL"))
       val histDesc = for {
         c <- cs
         hist <- c.histogram
@@ -959,6 +960,9 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       case EXTERNAL => " EXTERNAL TABLE"
       case VIEW => " VIEW"
       case MANAGED => " TABLE"
+      case t =>
+        throw new IllegalArgumentException(
+          s"Unknown table type is found at showCreateHiveTable: $t")
     }
 
     builder ++= s"CREATE$tableTypeString ${table.quotedString}"
@@ -981,7 +985,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   private def showHiveTableHeader(metadata: CatalogTable, builder: StringBuilder): Unit = {
     val columns = metadata.schema.filterNot { column =>
       metadata.partitionColumnNames.contains(column.name)
-    }.map(columnToDDLFragment)
+    }.map(_.toDDL)
 
     if (columns.nonEmpty) {
       builder ++= columns.mkString("(", ", ", ")\n")
@@ -993,14 +997,10 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       .foreach(builder.append)
   }
 
-  private def columnToDDLFragment(column: StructField): String = {
-    val comment = column.getComment().map(escapeSingleQuotedString).map(" COMMENT '" + _ + "'")
-    s"${quoteIdentifier(column.name)} ${column.dataType.catalogString}${comment.getOrElse("")}"
-  }
 
   private def showHiveTableNonDataColumns(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.partitionColumnNames.nonEmpty) {
-      val partCols = metadata.partitionSchema.map(columnToDDLFragment)
+      val partCols = metadata.partitionSchema.map(_.toDDL)
       builder ++= partCols.mkString("PARTITIONED BY (", ", ", ")\n")
     }
 
@@ -1071,7 +1071,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
   private def showDataSourceTableDataColumns(
       metadata: CatalogTable, builder: StringBuilder): Unit = {
-    val columns = metadata.schema.fields.map(f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}")
+    val columns = metadata.schema.fields.map(_.toDDL)
     builder ++= columns.mkString("(", ", ", ")\n")
   }
 
@@ -1115,16 +1115,5 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         builder ++= s"INTO ${spec.numBuckets} BUCKETS\n"
       }
     }
-  }
-
-  private def escapeSingleQuotedString(str: String): String = {
-    val builder = StringBuilder.newBuilder
-
-    str.foreach {
-      case '\'' => builder ++= s"\\\'"
-      case ch => builder += ch
-    }
-
-    builder.toString()
   }
 }

@@ -23,7 +23,7 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.status.AppStatusStore
-import org.apache.spark.status.api.v1.{RDDDataDistribution, RDDPartitionInfo}
+import org.apache.spark.status.api.v1.{ExecutorSummary, RDDDataDistribution, RDDPartitionInfo}
 import org.apache.spark.ui._
 import org.apache.spark.util.Utils
 
@@ -53,7 +53,7 @@ private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends Web
     } catch {
       case _: NoSuchElementException =>
         // Rather than crashing, render an "RDD Not Found" page
-        return UIUtils.headerSparkPage("RDD Not Found", Seq.empty[Node], parent)
+        return UIUtils.headerSparkPage(request, "RDD Not Found", Seq.empty[Node], parent)
     }
 
     // Worker table
@@ -72,11 +72,12 @@ private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends Web
     }
     val blockTableHTML = try {
       val _blockTable = new BlockPagedTable(
-        UIUtils.prependBaseUri(parent.basePath) + s"/storage/rdd/?id=${rddId}",
+        UIUtils.prependBaseUri(request, parent.basePath) + s"/storage/rdd/?id=${rddId}",
         rddStorageInfo.partitions.get,
         blockPageSize,
         blockSortColumn,
-        blockSortDesc)
+        blockSortDesc,
+        store.executorList(true))
       _blockTable.table(page)
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
@@ -144,7 +145,8 @@ private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends Web
         {blockTableHTML ++ jsForScrollingDownToBlockTable}
       </div>;
 
-    UIUtils.headerSparkPage("RDD Storage Info for " + rddStorageInfo.name, content, parent)
+    UIUtils.headerSparkPage(
+      request, "RDD Storage Info for " + rddStorageInfo.name, content, parent)
   }
 
   /** Header fields for the worker table */
@@ -182,7 +184,8 @@ private[ui] class BlockDataSource(
     rddPartitions: Seq[RDDPartitionInfo],
     pageSize: Int,
     sortColumn: String,
-    desc: Boolean) extends PagedDataSource[BlockTableRowData](pageSize) {
+    desc: Boolean,
+    executorIdToAddress: Map[String, String]) extends PagedDataSource[BlockTableRowData](pageSize) {
 
   private val data = rddPartitions.map(blockRow).sorted(ordering(sortColumn, desc))
 
@@ -198,7 +201,10 @@ private[ui] class BlockDataSource(
       rddPartition.storageLevel,
       rddPartition.memoryUsed,
       rddPartition.diskUsed,
-      rddPartition.executors.mkString(" "))
+      rddPartition.executors
+        .map { id => executorIdToAddress.get(id).getOrElse(id) }
+        .sorted
+        .mkString(" "))
   }
 
   /**
@@ -226,7 +232,8 @@ private[ui] class BlockPagedTable(
     rddPartitions: Seq[RDDPartitionInfo],
     pageSize: Int,
     sortColumn: String,
-    desc: Boolean) extends PagedTable[BlockTableRowData] {
+    desc: Boolean,
+    executorSummaries: Seq[ExecutorSummary]) extends PagedTable[BlockTableRowData] {
 
   override def tableId: String = "rdd-storage-by-block-table"
 
@@ -243,7 +250,8 @@ private[ui] class BlockPagedTable(
     rddPartitions,
     pageSize,
     sortColumn,
-    desc)
+    desc,
+    executorSummaries.map { ex => (ex.id, ex.hostPort) }.toMap)
 
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")

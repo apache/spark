@@ -25,10 +25,10 @@ all_modules = []
 @total_ordering
 class Module(object):
     """
-    A module is the basic abstraction in our test runner script. Each module consists of a set of
-    source files, a set of test commands, and a set of dependencies on other modules. We use modules
-    to define a dependency graph that lets determine which tests to run based on which files have
-    changed.
+    A module is the basic abstraction in our test runner script. Each module consists of a set
+    of source files, a set of test commands, and a set of dependencies on other modules. We use
+    modules to define a dependency graph that let us determine which tests to run based on which
+    files have changed.
     """
 
     def __init__(self, name, dependencies, source_file_regexes, build_profile_flags=(), environ={},
@@ -170,6 +170,16 @@ hive_thriftserver = Module(
     ]
 )
 
+avro = Module(
+    name="avro",
+    dependencies=[sql],
+    source_file_regexes=[
+        "external/avro",
+    ],
+    sbt_test_goals=[
+        "avro/test",
+    ]
+)
 
 sql_kafka = Module(
     name="sql-kafka-0-10",
@@ -400,6 +410,7 @@ pyspark_sql = Module(
         "pyspark.sql.functions",
         "pyspark.sql.readwriter",
         "pyspark.sql.streaming",
+        "pyspark.sql.udf",
         "pyspark.sql.window",
         "pyspark.sql.tests",
     ]

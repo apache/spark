@@ -43,7 +43,7 @@ getMinPartitions <- function(sc, minPartitions) {
 #'  lines <- textFile(sc, "myfile.txt")
 #'}
 textFile <- function(sc, path, minPartitions = NULL) {
-  # Allow the user to have a more flexible definiton of the text file path
+  # Allow the user to have a more flexible definition of the text file path
   path <- suppressWarnings(normalizePath(path))
   # Convert a string vector of paths to a string containing comma separated paths
   path <- paste(path, collapse = ",")
@@ -71,7 +71,7 @@ textFile <- function(sc, path, minPartitions = NULL) {
 #'  rdd <- objectFile(sc, "myfile")
 #'}
 objectFile <- function(sc, path, minPartitions = NULL) {
-  # Allow the user to have a more flexible definiton of the text file path
+  # Allow the user to have a more flexible definition of the text file path
   path <- suppressWarnings(normalizePath(path))
   # Convert a string vector of paths to a string containing comma separated paths
   path <- paste(path, collapse = ",")
@@ -305,10 +305,11 @@ setCheckpointDirSC <- function(sc, dirName) {
 #' Currently directories are only supported for Hadoop-supported filesystems.
 #' Refer Hadoop-supported filesystems at \url{https://wiki.apache.org/hadoop/HCFS}.
 #'
+#' Note: A path can be added only once. Subsequent additions of the same path are ignored.
+#'
 #' @rdname spark.addFile
 #' @param path The path of the file to be added
 #' @param recursive Whether to add files recursively from the path. Default is FALSE.
-#' @export
 #' @examples
 #'\dontrun{
 #' spark.addFile("~/myfile")
@@ -323,7 +324,6 @@ spark.addFile <- function(path, recursive = FALSE) {
 #'
 #' @rdname spark.getSparkFilesRootDirectory
 #' @return the root directory that contains files added through spark.addFile
-#' @export
 #' @examples
 #'\dontrun{
 #' spark.getSparkFilesRootDirectory()
@@ -344,7 +344,6 @@ spark.getSparkFilesRootDirectory <- function() { # nolint
 #' @rdname spark.getSparkFiles
 #' @param fileName The name of the file added through spark.addFile
 #' @return the absolute path of a file added through spark.addFile.
-#' @export
 #' @examples
 #'\dontrun{
 #' spark.getSparkFiles("myfile")
@@ -391,7 +390,6 @@ spark.getSparkFiles <- function(fileName) {
 #' @param list the list of elements
 #' @param func a function that takes one argument.
 #' @return a list of results (the exact type being determined by the function)
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -412,7 +410,6 @@ spark.lapply <- function(list, func) {
 #'
 #' @rdname setLogLevel
 #' @param level New log level
-#' @export
 #' @examples
 #'\dontrun{
 #' setLogLevel("ERROR")
@@ -431,7 +428,6 @@ setLogLevel <- function(level) {
 #' @rdname setCheckpointDir
 #' @param directory Directory path to checkpoint to
 #' @seealso \link{checkpoint}
-#' @export
 #' @examples
 #'\dontrun{
 #' setCheckpointDir("/checkpoint")

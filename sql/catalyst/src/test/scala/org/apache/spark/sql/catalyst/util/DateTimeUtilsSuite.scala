@@ -490,24 +490,36 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c1.set(1997, 1, 28, 10, 30, 0)
     val c2 = Calendar.getInstance()
     c2.set(1996, 9, 30, 0, 0, 0)
-    assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === 3.94959677)
-    c2.set(2000, 1, 28, 0, 0, 0)
-    assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === -36)
-    c2.set(2000, 1, 29, 0, 0, 0)
-    assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === -36)
-    c2.set(1996, 2, 31, 0, 0, 0)
-    assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === 11)
+    assert(monthsBetween(
+      c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, true, c1.getTimeZone) === 3.94959677)
+    assert(monthsBetween(
+      c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, false, c1.getTimeZone)
+      === 3.9495967741935485)
+    Seq(true, false).foreach { roundOff =>
+      c2.set(2000, 1, 28, 0, 0, 0)
+      assert(monthsBetween(
+        c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, roundOff, c1.getTimeZone) === -36)
+      c2.set(2000, 1, 29, 0, 0, 0)
+      assert(monthsBetween(
+        c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, roundOff, c1.getTimeZone) === -36)
+      c2.set(1996, 2, 31, 0, 0, 0)
+      assert(monthsBetween(
+        c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L, roundOff, c1.getTimeZone) === 11)
+    }
 
     val c3 = Calendar.getInstance(TimeZonePST)
     c3.set(2000, 1, 28, 16, 0, 0)
     val c4 = Calendar.getInstance(TimeZonePST)
     c4.set(1997, 1, 28, 16, 0, 0)
     assert(
-      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, TimeZonePST)
+      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, true, TimeZonePST)
       === 36.0)
     assert(
-      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, TimeZoneGMT)
+      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, true, TimeZoneGMT)
       === 35.90322581)
+    assert(
+      monthsBetween(c3.getTimeInMillis * 1000L, c4.getTimeInMillis * 1000L, false, TimeZoneGMT)
+        === 35.903225806451616)
   }
 
   test("from UTC timestamp") {
@@ -650,18 +662,18 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(daysToMillis(16800, TimeZoneGMT) === c.getTimeInMillis)
 
     // There are some days are skipped entirely in some timezone, skip them here.
-    val skipped_days = Map[String, Int](
-      "Kwajalein" -> 8632,
-      "Pacific/Apia" -> 15338,
-      "Pacific/Enderbury" -> 9131,
-      "Pacific/Fakaofo" -> 15338,
-      "Pacific/Kiritimati" -> 9131,
-      "Pacific/Kwajalein" -> 8632,
-      "MIT" -> 15338)
+    val skipped_days = Map[String, Set[Int]](
+      "Kwajalein" -> Set(8632),
+      "Pacific/Apia" -> Set(15338),
+      "Pacific/Enderbury" -> Set(9130, 9131),
+      "Pacific/Fakaofo" -> Set(15338),
+      "Pacific/Kiritimati" -> Set(9130, 9131),
+      "Pacific/Kwajalein" -> Set(8632),
+      "MIT" -> Set(15338))
     for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
-      val skipped = skipped_days.getOrElse(tz.getID, Int.MinValue)
+      val skipped = skipped_days.getOrElse(tz.getID, Set.empty)
       (-20000 to 20000).foreach { d =>
-        if (d != skipped) {
+        if (!skipped.contains(d)) {
           assert(millisToDays(daysToMillis(d, tz), tz) === d,
             s"Round trip of ${d} did not work in tz ${tz}")
         }

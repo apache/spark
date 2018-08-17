@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.{File, IOException}
 import java.net.URI
+import java.util
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -28,17 +28,17 @@ import scala.util.Random
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
+import org.apache.hadoop.fs._
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
+import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -48,6 +48,7 @@ import org.apache.spark.util.Utils
 class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   with BeforeAndAfter with PrivateMethodTester {
   type MapType = mutable.HashMap[UnsafeRow, UnsafeRow]
+  type ProviderMapType = java.util.concurrent.ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
   import StateStoreCoordinatorSuite._
   import StateStoreTestsHelper._
@@ -65,21 +66,143 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     require(!StateStore.isMaintenanceRunning)
   }
 
+  def updateVersionTo(
+      provider: StateStoreProvider,
+      currentVersion: Int,
+      targetVersion: Int): Int = {
+    var newCurrentVersion = currentVersion
+    for (i <- newCurrentVersion until targetVersion) {
+      newCurrentVersion = incrementVersion(provider, i)
+    }
+    require(newCurrentVersion === targetVersion)
+    newCurrentVersion
+  }
+
+  def incrementVersion(provider: StateStoreProvider, currentVersion: Int): Int = {
+    val store = provider.getStore(currentVersion)
+    put(store, "a", currentVersion + 1)
+    store.commit()
+    currentVersion + 1
+  }
+
+  def checkLoadedVersions(
+      loadedMaps: util.SortedMap[Long, ProviderMapType],
+      count: Int,
+      earliestKey: Long,
+      latestKey: Long): Unit = {
+    assert(loadedMaps.size() === count)
+    assert(loadedMaps.firstKey() === earliestKey)
+    assert(loadedMaps.lastKey() === latestKey)
+  }
+
+  def checkVersion(
+      loadedMaps: util.SortedMap[Long, ProviderMapType],
+      version: Long,
+      expectedData: Map[String, Int]): Unit = {
+
+    val originValueMap = loadedMaps.get(version).asScala.map { entry =>
+      rowToString(entry._1) -> rowToInt(entry._2)
+    }.toMap
+
+    assert(originValueMap === expectedData)
+  }
+
+  test("retaining only two latest versions when MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 2") {
+    val provider = newStoreProvider(opId = Random.nextInt, partition = 0,
+      numOfVersToRetainInMemory = 2)
+
+    var currentVersion = 0
+
+    // commit the ver 1 : cache will have one element
+    currentVersion = incrementVersion(provider, currentVersion)
+    assert(getData(provider) === Set("a" -> 1))
+    var loadedMaps = provider.getLoadedMaps()
+    checkLoadedVersions(loadedMaps, count = 1, earliestKey = 1, latestKey = 1)
+    checkVersion(loadedMaps, 1, Map("a" -> 1))
+
+    // commit the ver 2 : cache will have two elements
+    currentVersion = incrementVersion(provider, currentVersion)
+    assert(getData(provider) === Set("a" -> 2))
+    loadedMaps = provider.getLoadedMaps()
+    checkLoadedVersions(loadedMaps, count = 2, earliestKey = 2, latestKey = 1)
+    checkVersion(loadedMaps, 2, Map("a" -> 2))
+    checkVersion(loadedMaps, 1, Map("a" -> 1))
+
+    // commit the ver 3 : cache has already two elements and adding ver 3 incurs exceeding cache,
+    // and ver 3 will be added but ver 1 will be evicted
+    currentVersion = incrementVersion(provider, currentVersion)
+    assert(getData(provider) === Set("a" -> 3))
+    loadedMaps = provider.getLoadedMaps()
+    checkLoadedVersions(loadedMaps, count = 2, earliestKey = 3, latestKey = 2)
+    checkVersion(loadedMaps, 3, Map("a" -> 3))
+    checkVersion(loadedMaps, 2, Map("a" -> 2))
+  }
+
+  test("failure after committing with MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 1") {
+    val provider = newStoreProvider(opId = Random.nextInt, partition = 0,
+      numOfVersToRetainInMemory = 1)
+
+    var currentVersion = 0
+
+    // commit the ver 1 : cache will have one element
+    currentVersion = incrementVersion(provider, currentVersion)
+    assert(getData(provider) === Set("a" -> 1))
+    var loadedMaps = provider.getLoadedMaps()
+    checkLoadedVersions(loadedMaps, count = 1, earliestKey = 1, latestKey = 1)
+    checkVersion(loadedMaps, 1, Map("a" -> 1))
+
+    // commit the ver 2 : cache has already one elements and adding ver 2 incurs exceeding cache,
+    // and ver 2 will be added but ver 1 will be evicted
+    // this fact ensures cache miss will occur when this partition succeeds commit
+    // but there's a failure afterwards so have to reprocess previous batch
+    currentVersion = incrementVersion(provider, currentVersion)
+    assert(getData(provider) === Set("a" -> 2))
+    loadedMaps = provider.getLoadedMaps()
+    checkLoadedVersions(loadedMaps, count = 1, earliestKey = 2, latestKey = 2)
+    checkVersion(loadedMaps, 2, Map("a" -> 2))
+
+    // suppose there has been failure after committing, and it decided to reprocess previous batch
+    currentVersion = 1
+
+    // committing to existing version which is committed partially but abandoned globally
+    val store = provider.getStore(currentVersion)
+    // negative value to represent reprocessing
+    put(store, "a", -2)
+    store.commit()
+    currentVersion += 1
+
+    // make sure newly committed version is reflected to the cache (overwritten)
+    assert(getData(provider) === Set("a" -> -2))
+    loadedMaps = provider.getLoadedMaps()
+    checkLoadedVersions(loadedMaps, count = 1, earliestKey = 2, latestKey = 2)
+    checkVersion(loadedMaps, 2, Map("a" -> -2))
+  }
+
+  test("no cache data with MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 0") {
+    val provider = newStoreProvider(opId = Random.nextInt, partition = 0,
+      numOfVersToRetainInMemory = 0)
+
+    var currentVersion = 0
+
+    // commit the ver 1 : never cached
+    currentVersion = incrementVersion(provider, currentVersion)
+    assert(getData(provider) === Set("a" -> 1))
+    var loadedMaps = provider.getLoadedMaps()
+    assert(loadedMaps.size() === 0)
+
+    // commit the ver 2 : never cached
+    currentVersion = incrementVersion(provider, currentVersion)
+    assert(getData(provider) === Set("a" -> 2))
+    loadedMaps = provider.getLoadedMaps()
+    assert(loadedMaps.size() === 0)
+  }
+
   test("snapshotting") {
     val provider = newStoreProvider(opId = Random.nextInt, partition = 0, minDeltasForSnapshot = 5)
 
     var currentVersion = 0
-    def updateVersionTo(targetVersion: Int): Unit = {
-      for (i <- currentVersion + 1 to targetVersion) {
-        val store = provider.getStore(currentVersion)
-        put(store, "a", i)
-        store.commit()
-        currentVersion += 1
-      }
-      require(currentVersion === targetVersion)
-    }
 
-    updateVersionTo(2)
+    currentVersion = updateVersionTo(provider, currentVersion, 2)
     require(getData(provider) === Set("a" -> 2))
     provider.doMaintenance()               // should not generate snapshot files
     assert(getData(provider) === Set("a" -> 2))
@@ -90,7 +213,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
 
     // After version 6, snapshotting should generate one snapshot file
-    updateVersionTo(6)
+    currentVersion = updateVersionTo(provider, currentVersion, 6)
     require(getData(provider) === Set("a" -> 6), "store not updated correctly")
     provider.doMaintenance()       // should generate snapshot files
 
@@ -105,7 +228,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       "snapshotting messed up the data of the final version")
 
     // After version 20, snapshotting should generate newer snapshot files
-    updateVersionTo(20)
+    currentVersion = updateVersionTo(provider, currentVersion, 20)
     require(getData(provider) === Set("a" -> 20), "store not updated correctly")
     provider.doMaintenance()       // do snapshot
 
@@ -138,7 +261,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     assert(getData(provider, 19) === Set("a" -> 19))
   }
 
-  test("SPARK-19677: Committing a delta file atop an existing one should not fail on HDFS") {
+  testQuietly("SPARK-19677: Committing a delta file atop an existing one should not fail on HDFS") {
     val conf = new Configuration()
     conf.set("fs.fake.impl", classOf[RenameLikeHDFSFileSystem].getName)
     conf.set("fs.defaultFS", "fake:///")
@@ -344,7 +467,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  test("SPARK-18342: commit fails when rename fails") {
+  testQuietly("SPARK-18342: commit fails when rename fails") {
     import RenameReturnsFalseFileSystem._
     val dir = scheme + "://" + newDir()
     val conf = new Configuration()
@@ -366,7 +489,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     def numTempFiles: Int = {
       if (deltaFileDir.exists) {
-        deltaFileDir.listFiles.map(_.getName).count(n => n.contains("temp") && !n.startsWith("."))
+        deltaFileDir.listFiles.map(_.getName).count(n => n.endsWith(".tmp"))
       } else 0
     }
 
@@ -471,6 +594,43 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
+  test("error writing [version].delta cancels the output stream") {
+
+    val hadoopConf = new Configuration()
+    hadoopConf.set(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
+      classOf[CreateAtomicTestManager].getName)
+    val remoteDir = Utils.createTempDir().getAbsolutePath
+
+    val provider = newStoreProvider(
+      opId = Random.nextInt, partition = 0, dir = remoteDir, hadoopConf = hadoopConf)
+
+    // Disable failure of output stream and generate versions
+    CreateAtomicTestManager.shouldFailInCreateAtomic = false
+    for (version <- 1 to 10) {
+      val store = provider.getStore(version - 1)
+      put(store, version.toString, version) // update "1" -> 1, "2" -> 2, ...
+      store.commit()
+    }
+    val version10Data = (1L to 10).map(_.toString).map(x => x -> x).toSet
+
+    CreateAtomicTestManager.cancelCalledInCreateAtomic = false
+    val store = provider.getStore(10)
+    // Fail commit for next version and verify that reloading resets the files
+    CreateAtomicTestManager.shouldFailInCreateAtomic = true
+    put(store, "11", 11)
+    val e = intercept[IllegalStateException] { quietly { store.commit() } }
+    assert(e.getCause.isInstanceOf[IOException])
+    CreateAtomicTestManager.shouldFailInCreateAtomic = false
+
+    // Abort commit for next version and verify that reloading resets the files
+    CreateAtomicTestManager.cancelCalledInCreateAtomic = false
+    val store2 = provider.getStore(10)
+    put(store2, "11", 11)
+    store2.abort()
+    assert(CreateAtomicTestManager.cancelCalledInCreateAtomic)
+  }
+
   override def newStoreProvider(): HDFSBackedStateStoreProvider = {
     newStoreProvider(opId = Random.nextInt(), partition = 0)
   }
@@ -499,9 +659,11 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       partition: Int,
       dir: String = newDir(),
       minDeltasForSnapshot: Int = SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
+      numOfVersToRetainInMemory: Int = SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get,
       hadoopConf: Configuration = new Configuration): HDFSBackedStateStoreProvider = {
     val sqlConf = new SQLConf()
     sqlConf.setConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT, minDeltasForSnapshot)
+    sqlConf.setConf(SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY, numOfVersToRetainInMemory)
     sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
     val provider = new HDFSBackedStateStoreProvider()
     provider.init(
@@ -720,6 +882,14 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
    * this provider
    */
   def getData(storeProvider: ProviderClass, version: Int): Set[(String, Int)]
+
+  protected def testQuietly(name: String)(f: => Unit): Unit = {
+    test(name) {
+      quietly {
+        f
+      }
+    }
+  }
 }
 
 object StateStoreTestsHelper {

@@ -28,6 +28,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql.{Dataset, Row}
 
 /** Params for Multilayer Perceptron. */
@@ -200,9 +201,11 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
    * @param dataset Training dataset
    * @return Fitted model
    */
-  override protected def train(dataset: Dataset[_]): MultilayerPerceptronClassificationModel = {
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(labelCol, featuresCol, predictionCol, layers, maxIter, tol,
+  override protected def train(
+      dataset: Dataset[_]): MultilayerPerceptronClassificationModel = instrumented { instr =>
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, labelCol, featuresCol, predictionCol, layers, maxIter, tol,
       blockSize, solver, stepSize, seed)
 
     val myLayers = $(layers)
@@ -244,10 +247,7 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
     }
     trainer.setStackSize($(blockSize))
     val mlpModel = trainer.train(data)
-    val model = new MultilayerPerceptronClassificationModel(uid, myLayers, mlpModel.weights)
-
-    instr.logSuccess(model)
-    model
+    new MultilayerPerceptronClassificationModel(uid, myLayers, mlpModel.weights)
   }
 }
 
@@ -302,7 +302,7 @@ class MultilayerPerceptronClassificationModel private[ml] (
    * Predict label for the given features.
    * This internal method is used to implement `transform()` and output [[predictionCol]].
    */
-  override protected def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = {
     mlpModel.predict(features).argmax.toDouble
   }
 
@@ -368,7 +368,7 @@ object MultilayerPerceptronClassificationModel
       val weights = data.getAs[Vector](1)
       val model = new MultilayerPerceptronClassificationModel(metadata.uid, layers, weights)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

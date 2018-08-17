@@ -23,6 +23,7 @@ import java.util.regex.{MatchResult, Pattern}
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -123,18 +124,18 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
-        ev.copy(code = s"""
+        ev.copy(code = code"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
             ${ev.value} = $pattern.matcher(${eval.value}.toString()).matches();
           }
         """)
       } else {
-        ev.copy(code = s"""
+        ev.copy(code = code"""
           boolean ${ev.isNull} = true;
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         """)
       }
     } else {
@@ -198,18 +199,18 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
-        ev.copy(code = s"""
+        ev.copy(code = code"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
             ${ev.value} = $pattern.matcher(${eval.value}.toString()).find(0);
           }
         """)
       } else {
-        ev.copy(code = s"""
+        ev.copy(code = code"""
           boolean ${ev.isNull} = true;
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         """)
       }
     } else {
@@ -271,7 +272,7 @@ case class StringSplit(str: Expression, pattern: Expression)
   usage = "_FUNC_(str, regexp, rep) - Replaces all substrings of `str` that match `regexp` with `rep`.",
   examples = """
     Examples:
-      > SELECT _FUNC_('100-200', '(\d+)', 'num');
+      > SELECT _FUNC_('100-200', '(\\d+)', 'num');
        num-num
   """)
 // scalastyle:on line.size.limit
@@ -370,7 +371,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   usage = "_FUNC_(str, regexp[, idx]) - Extracts a group that matches `regexp`.",
   examples = """
     Examples:
-      > SELECT _FUNC_('100-200', '(\d+)-(\d+)', 1);
+      > SELECT _FUNC_('100-200', '(\\d+)-(\\d+)', 1);
        100
   """)
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)

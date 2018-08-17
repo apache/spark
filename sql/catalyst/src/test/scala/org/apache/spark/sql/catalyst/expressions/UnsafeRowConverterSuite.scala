@@ -24,19 +24,32 @@ import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{IntegerType, LongType, _}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
-class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
+class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestBase {
 
   private def roundedSize(size: Int) = ByteArrayMethods.roundNumberOfBytesToNearestWord(size)
 
-  test("basic conversion with only primitive types") {
-    val fieldTypes: Array[DataType] = Array(LongType, LongType, IntegerType)
-    val converter = UnsafeProjection.create(fieldTypes)
+  private def testBothCodegenAndInterpreted(name: String)(f: => Unit): Unit = {
+    val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
+    for (fallbackMode <- modes) {
+      test(s"$name with $fallbackMode") {
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
+          f
+        }
+      }
+    }
+  }
 
+  testBothCodegenAndInterpreted("basic conversion with only primitive types") {
+    val factory = UnsafeProjection
+    val fieldTypes: Array[DataType] = Array(LongType, LongType, IntegerType)
+    val converter = factory.create(fieldTypes)
     val row = new SpecificInternalRow(fieldTypes)
     row.setLong(0, 0)
     row.setLong(1, 1)
@@ -71,9 +84,10 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     assert(unsafeRow2.getInt(2) === 2)
   }
 
-  test("basic conversion with primitive, string and binary types") {
+  testBothCodegenAndInterpreted("basic conversion with primitive, string and binary types") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(LongType, StringType, BinaryType)
-    val converter = UnsafeProjection.create(fieldTypes)
+    val converter = factory.create(fieldTypes)
 
     val row = new SpecificInternalRow(fieldTypes)
     row.setLong(0, 0)
@@ -90,9 +104,11 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     assert(unsafeRow.getBinary(2) === "World".getBytes(StandardCharsets.UTF_8))
   }
 
-  test("basic conversion with primitive, string, date and timestamp types") {
+  testBothCodegenAndInterpreted(
+      "basic conversion with primitive, string, date and timestamp types") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(LongType, StringType, DateType, TimestampType)
-    val converter = UnsafeProjection.create(fieldTypes)
+    val converter = factory.create(fieldTypes)
 
     val row = new SpecificInternalRow(fieldTypes)
     row.setLong(0, 0)
@@ -119,7 +135,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     (Timestamp.valueOf("2015-06-22 08:10:25"))
   }
 
-  test("null handling") {
+  testBothCodegenAndInterpreted("null handling") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(
       NullType,
       BooleanType,
@@ -135,7 +152,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       DecimalType.SYSTEM_DEFAULT
       // ArrayType(IntegerType)
     )
-    val converter = UnsafeProjection.create(fieldTypes)
+    val converter = factory.create(fieldTypes)
 
     val rowWithAllNullColumns: InternalRow = {
       val r = new SpecificInternalRow(fieldTypes)
@@ -240,7 +257,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     // assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
   }
 
-  test("NaN canonicalization") {
+  testBothCodegenAndInterpreted("NaN canonicalization") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(FloatType, DoubleType)
 
     val row1 = new SpecificInternalRow(fieldTypes)
@@ -251,17 +269,18 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     row2.setFloat(0, java.lang.Float.intBitsToFloat(0x7fffffff))
     row2.setDouble(1, java.lang.Double.longBitsToDouble(0x7fffffffffffffffL))
 
-    val converter = UnsafeProjection.create(fieldTypes)
+    val converter = factory.create(fieldTypes)
     assert(converter.apply(row1).getBytes === converter.apply(row2).getBytes)
   }
 
-  test("basic conversion with struct type") {
+  testBothCodegenAndInterpreted("basic conversion with struct type") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(
       new StructType().add("i", IntegerType),
       new StructType().add("nest", new StructType().add("l", LongType))
     )
 
-    val converter = UnsafeProjection.create(fieldTypes)
+    val converter = factory.create(fieldTypes)
 
     val row = new GenericInternalRow(fieldTypes.length)
     row.update(0, InternalRow(1))
@@ -317,12 +336,13 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     assert(map.getSizeInBytes == 8 + map.keyArray.getSizeInBytes + map.valueArray.getSizeInBytes)
   }
 
-  test("basic conversion with array type") {
+  testBothCodegenAndInterpreted("basic conversion with array type") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(
       ArrayType(IntegerType),
       ArrayType(ArrayType(IntegerType))
     )
-    val converter = UnsafeProjection.create(fieldTypes)
+    val converter = factory.create(fieldTypes)
 
     val row = new GenericInternalRow(fieldTypes.length)
     row.update(0, createArray(1, 2))
@@ -347,12 +367,13 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     assert(unsafeRow.getSizeInBytes == 8 + 8 * 2 + array1Size + array2Size)
   }
 
-  test("basic conversion with map type") {
+  testBothCodegenAndInterpreted("basic conversion with map type") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(
       MapType(IntegerType, IntegerType),
       MapType(IntegerType, MapType(IntegerType, IntegerType))
     )
-    val converter = UnsafeProjection.create(fieldTypes)
+    val converter = factory.create(fieldTypes)
 
     val map1 = createMap(1, 2)(3, 4)
 
@@ -393,12 +414,13 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     assert(unsafeRow.getSizeInBytes == 8 + 8 * 2 + map1Size + map2Size)
   }
 
-  test("basic conversion with struct and array") {
+  testBothCodegenAndInterpreted("basic conversion with struct and array") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(
       new StructType().add("arr", ArrayType(IntegerType)),
       ArrayType(new StructType().add("l", LongType))
     )
-    val converter = UnsafeProjection.create(fieldTypes)
+    val converter = factory.create(fieldTypes)
 
     val row = new GenericInternalRow(fieldTypes.length)
     row.update(0, InternalRow(createArray(1)))
@@ -432,12 +454,13 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       8 + 8 * 2 + field1.getSizeInBytes + roundedSize(field2.getSizeInBytes))
   }
 
-  test("basic conversion with struct and map") {
+  testBothCodegenAndInterpreted("basic conversion with struct and map") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(
       new StructType().add("map", MapType(IntegerType, IntegerType)),
       MapType(IntegerType, new StructType().add("l", LongType))
     )
-    val converter = UnsafeProjection.create(fieldTypes)
+    val converter = factory.create(fieldTypes)
 
     val row = new GenericInternalRow(fieldTypes.length)
     row.update(0, InternalRow(createMap(1)(2)))
@@ -478,12 +501,13 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       8 + 8 * 2 + field1.getSizeInBytes + roundedSize(field2.getSizeInBytes))
   }
 
-  test("basic conversion with array and map") {
+  testBothCodegenAndInterpreted("basic conversion with array and map") {
+    val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(
       ArrayType(MapType(IntegerType, IntegerType)),
       MapType(IntegerType, ArrayType(IntegerType))
     )
-    val converter = UnsafeProjection.create(fieldTypes)
+    val converter = factory.create(fieldTypes)
 
     val row = new GenericInternalRow(fieldTypes.length)
     row.update(0, createArray(createMap(1)(2)))

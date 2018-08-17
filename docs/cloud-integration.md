@@ -27,13 +27,13 @@ description: Introduction to cloud storage support in Apache Spark SPARK_VERSION
 All major cloud providers offer persistent data storage in *object stores*.
 These are not classic "POSIX" file systems.
 In order to store hundreds of petabytes of data without any single points of failure,
-object stores replace the classic filesystem directory tree
+object stores replace the classic file system directory tree
 with a simpler model of `object-name => data`. To enable remote access, operations
 on objects are usually offered as (slow) HTTP REST operations.
 
 Spark can read and write data in object stores through filesystem connectors implemented
 in Hadoop or provided by the infrastructure suppliers themselves.
-These connectors make the object stores look *almost* like filesystems, with directories and files
+These connectors make the object stores look *almost* like file systems, with directories and files
 and the classic operations on them such as list, delete and rename.
 
 
@@ -70,7 +70,7 @@ be safely used as the direct destination of work with the normal rename-based co
 ### Installation
 
 With the relevant libraries on the classpath and Spark configured with valid credentials,
-objects can be can be read or written by using their URLs as the path to data.
+objects can be read or written by using their URLs as the path to data.
 For example `sparkContext.textFile("s3a://landsat-pds/scene_list.gz")` will create
 an RDD of the file `scene_list.gz` stored in S3, using the s3a connector.
 
@@ -104,7 +104,7 @@ Spark jobs must authenticate with the object stores to access data within them.
 and `AWS_SESSION_TOKEN` environment variables and sets the associated authentication options
 for the `s3n` and `s3a` connectors to Amazon S3.
 1. In a Hadoop cluster, settings may be set in the `core-site.xml` file.
-1. Authentication details may be manually added to the Spark configuration in `spark-default.conf`
+1. Authentication details may be manually added to the Spark configuration in `spark-defaults.conf`
 1. Alternatively, they can be programmatically set in the `SparkConf` instance used to configure 
 the application's `SparkContext`.
 
@@ -180,11 +180,12 @@ under the path, not the number of *new* files, so it can become a slow operation
 The size of the window needs to be set to handle this.
 
 1. Files only appear in an object store once they are completely written; there
-is no need for a worklow of write-then-rename to ensure that files aren't picked up
+is no need for a workflow of write-then-rename to ensure that files aren't picked up
 while they are still being written. Applications can write straight to the monitored directory.
 
-1. Streams should only be checkpointed to an store implementing a fast and
-atomic `rename()` operation Otherwise the checkpointing may be slow and potentially unreliable.
+1. Streams should only be checkpointed to a store implementing a fast and
+atomic `rename()` operation.
+Otherwise the checkpointing may be slow and potentially unreliable.
 
 ## Further Reading
 

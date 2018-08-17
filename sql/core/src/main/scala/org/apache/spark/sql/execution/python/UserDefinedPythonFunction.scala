@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonFunction
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDF}
 import org.apache.spark.sql.types.DataType
 
 /**

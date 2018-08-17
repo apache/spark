@@ -97,7 +97,8 @@ class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore
   }
 
   /**
-   * Returns information of all known executors, including host, port, cacheSize, numRunningTasks.
+   * Returns information of all known executors, including host, port, cacheSize, numRunningTasks
+   * and memory metrics.
    */
   def getExecutorInfos: Array[SparkExecutorInfo] = {
     store.executorList(true).map { exec =>
@@ -113,7 +114,11 @@ class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore
         host,
         port,
         cachedMem,
-        exec.activeTasks)
+        exec.activeTasks,
+        exec.memoryMetrics.map(_.usedOffHeapStorageMemory).getOrElse(0L),
+        exec.memoryMetrics.map(_.usedOnHeapStorageMemory).getOrElse(0L),
+        exec.memoryMetrics.map(_.totalOffHeapStorageMemory).getOrElse(0L),
+        exec.memoryMetrics.map(_.totalOnHeapStorageMemory).getOrElse(0L))
     }.toArray
   }
 }

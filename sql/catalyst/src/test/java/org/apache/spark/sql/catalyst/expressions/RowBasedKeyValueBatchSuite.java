@@ -27,7 +27,6 @@ import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -55,36 +54,27 @@ public class RowBasedKeyValueBatchSuite {
   }
 
   private UnsafeRow makeKeyRow(long k1, String k2) {
-    UnsafeRow row = new UnsafeRow(2);
-    BufferHolder holder = new BufferHolder(row, 32);
-    UnsafeRowWriter writer = new UnsafeRowWriter(holder, 2);
-    holder.reset();
+    UnsafeRowWriter writer = new UnsafeRowWriter(2);
+    writer.reset();
     writer.write(0, k1);
     writer.write(1, UTF8String.fromString(k2));
-    row.setTotalSize(holder.totalSize());
-    return row;
+    return writer.getRow();
   }
 
   private UnsafeRow makeKeyRow(long k1, long k2) {
-    UnsafeRow row = new UnsafeRow(2);
-    BufferHolder holder = new BufferHolder(row, 0);
-    UnsafeRowWriter writer = new UnsafeRowWriter(holder, 2);
-    holder.reset();
+    UnsafeRowWriter writer = new UnsafeRowWriter(2);
+    writer.reset();
     writer.write(0, k1);
     writer.write(1, k2);
-    row.setTotalSize(holder.totalSize());
-    return row;
+    return writer.getRow();
   }
 
   private UnsafeRow makeValueRow(long v1, long v2) {
-    UnsafeRow row = new UnsafeRow(2);
-    BufferHolder holder = new BufferHolder(row, 0);
-    UnsafeRowWriter writer = new UnsafeRowWriter(holder, 2);
-    holder.reset();
+    UnsafeRowWriter writer = new UnsafeRowWriter(2);
+    writer.reset();
     writer.write(0, v1);
     writer.write(1, v2);
-    row.setTotalSize(holder.totalSize());
-    return row;
+    return writer.getRow();
   }
 
   private UnsafeRow appendRow(RowBasedKeyValueBatch batch, UnsafeRow key, UnsafeRow value) {
