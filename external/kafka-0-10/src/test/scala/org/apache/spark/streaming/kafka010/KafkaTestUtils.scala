@@ -34,13 +34,12 @@ import kafka.utils.ZkUtils
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.serialization.StringSerializer
-import org.apache.kafka.common.utils.Exit
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.Time
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
@@ -54,7 +53,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
   private val zkHost = "127.0.0.1"
   private var zkPort: Int = 0
   private val zkConnectionTimeout = 60000
-  private val zkSessionTimeout = 6000
+  private val zkSessionTimeout = 10000
 
   private var zookeeper: EmbeddedZookeeper = _
 
@@ -74,6 +73,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
   // Flag to test whether the system is correctly started
   private var zkReady = false
   private var brokerReady = false
+  private var leakDetector: AnyRef = null
 
   def zkAddress: String = {
     assert(zkReady, "Zookeeper not setup yet or already torn down, cannot get zookeeper address")
@@ -120,61 +120,56 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
   /** setup the whole embedded servers, including Zookeeper and Kafka brokers */
   def setup(): Unit = {
+    // Set up a KafkaTestUtils leak detector so that we can see where the leak KafkaTestUtils is
+    // created.
+    val exception = new SparkException("It was created at: ")
+    leakDetector = ShutdownHookManager.addShutdownHook { () =>
+      logError("Found a leak KafkaTestUtils.", exception)
+    }
+
     setupEmbeddedZookeeper()
     setupEmbeddedKafkaServer()
   }
 
   /** Teardown the whole servers, including Kafka broker and Zookeeper */
   def teardown(): Unit = {
-    // There is a race condition that may kill JVM when terminating the Kafka cluster. We set
-    // a custom Procedure here during the termination in order to keep JVM running and not fail the
-    // tests.
-    val logExitEvent = new Exit.Procedure {
-      override def execute(statusCode: Int, message: String): Unit = {
-        logError(s"Prevent Kafka from killing JVM (statusCode: $statusCode message: $message)")
+    if (leakDetector != null) {
+      ShutdownHookManager.removeShutdownHook(leakDetector)
+    }
+    brokerReady = false
+    zkReady = false
+
+    if (producer != null) {
+      producer.close()
+      producer = null
+    }
+
+    if (server != null) {
+      server.shutdown()
+      server.awaitShutdown()
+      server = null
+    }
+
+    // On Windows, `logDirs` is left open even after Kafka server above is completely shut down
+    // in some cases. It leads to test failures on Windows if the directory deletion failure
+    // throws an exception.
+    brokerConf.logDirs.foreach { f =>
+      try {
+        Utils.deleteRecursively(new File(f))
+      } catch {
+        case e: IOException if Utils.isWindows =>
+          logWarning(e.getMessage)
       }
     }
-    Exit.setExitProcedure(logExitEvent)
-    Exit.setHaltProcedure(logExitEvent)
-    try {
-      brokerReady = false
-      zkReady = false
 
-      if (producer != null) {
-        producer.close()
-        producer = null
-      }
+    if (zkUtils != null) {
+      zkUtils.close()
+      zkUtils = null
+    }
 
-      if (server != null) {
-        server.shutdown()
-        server.awaitShutdown()
-        server = null
-      }
-
-      // On Windows, `logDirs` is left open even after Kafka server above is completely shut down
-      // in some cases. It leads to test failures on Windows if the directory deletion failure
-      // throws an exception.
-      brokerConf.logDirs.foreach { f =>
-        try {
-          Utils.deleteRecursively(new File(f))
-        } catch {
-          case e: IOException if Utils.isWindows =>
-            logWarning(e.getMessage)
-        }
-      }
-
-      if (zkUtils != null) {
-        zkUtils.close()
-        zkUtils = null
-      }
-
-      if (zookeeper != null) {
-        zookeeper.shutdown()
-        zookeeper = null
-      }
-    } finally {
-      Exit.resetExitProcedure()
-      Exit.resetHaltProcedure()
+    if (zookeeper != null) {
+      zookeeper.shutdown()
+      zookeeper = null
     }
   }
 
