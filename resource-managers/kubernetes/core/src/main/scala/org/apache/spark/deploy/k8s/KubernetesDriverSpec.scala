@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s
 
-import io.fabric8.kubernetes.api.model.HasMetadata
+import io.fabric8.kubernetes.api.model.{HasMetadata, Pod}
 
 private[spark] case class KubernetesDriverSpec(
     pod: SparkPod,
@@ -24,8 +24,9 @@ private[spark] case class KubernetesDriverSpec(
     systemProperties: Map[String, String])
 
 private[spark] object KubernetesDriverSpec {
-  def initialSpec(initialProps: Map[String, String]): KubernetesDriverSpec = KubernetesDriverSpec(
-    SparkPod.initialPod(),
-    Seq.empty,
-    initialProps)
+  def initialSpec(initialConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesDriverSpec =
+    KubernetesDriverSpec(
+      SparkPod.initialPod(),
+      Seq.empty,
+      initialConf.sparkConf.getAll.toMap)
 }

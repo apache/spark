@@ -16,18 +16,18 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import java.io.StringWriter
+import java.io.{File, StringWriter}
 import java.util.{Collections, UUID}
 import java.util.Properties
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.KubernetesClient
+
 import scala.collection.mutable
 import scala.util.control.NonFatal
-
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkApplication
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesUtils, SparkKubernetesClientFactory}
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
@@ -96,7 +96,6 @@ private[spark] object ClientArguments {
  * @param watcher a watcher that monitors and logs the application status
  */
 private[spark] class Client(
-    builder: KubernetesDriverBuilder,
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf],
     kubernetesClient: KubernetesClient,
     waitForAppCompletion: Boolean,
@@ -105,6 +104,15 @@ private[spark] class Client(
     kubernetesResourceNamePrefix: String) extends Logging {
 
   def run(): Unit = {
+
+    val builder = kubernetesConf.sparkConf.get(KUBERNETES_DRIVER_PODTEMPLATE_FILE)
+      .map(new File(_))
+      .map(file => new KubernetesDriverBuilder(provideInitialSpec = conf =>
+        KubernetesDriverSpec.initialSpec(conf).copy(pod = SparkPod(
+          kubernetesClient.pods().load(file).get(),
+          new ContainerBuilder().build()
+        ))))
+      .getOrElse(new KubernetesDriverBuilder())
     val resolvedDriverSpec = builder.buildFromFeatures(kubernetesConf)
     val configMapName = s"$kubernetesResourceNamePrefix-driver-conf-map"
     val configMap = buildConfigMap(configMapName, resolvedDriverSpec.systemProperties)
@@ -224,7 +232,6 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       clientArguments.mainClass,
       clientArguments.driverArgs,
       clientArguments.maybePyFiles)
-    val builder = new KubernetesDriverBuilder
     val namespace = kubernetesConf.namespace()
     // The master URL has been checked for validity already in SparkSubmit.
     // We just need to get rid of the "k8s://" prefix here.
@@ -241,7 +248,6 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       None,
       None)) { kubernetesClient =>
         val client = new Client(
-          builder,
           kubernetesConf,
           kubernetesClient,
           waitForAppCompletion,

@@ -47,7 +47,10 @@ private[spark] class KubernetesDriverBuilder(
     providePythonStep: (
       KubernetesConf[KubernetesDriverSpecificConf]
       => PythonDriverFeatureStep) =
-      new PythonDriverFeatureStep(_)) {
+      new PythonDriverFeatureStep(_),
+    provideInitialSpec: KubernetesConf[KubernetesDriverSpecificConf]
+      => KubernetesDriverSpec =
+      KubernetesDriverSpec.initialSpec) {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesDriverSpec = {
@@ -77,7 +80,7 @@ private[spark] class KubernetesDriverBuilder(
     val allFeatures = (baseFeatures :+ bindingsStep) ++
       secretFeature ++ envSecretFeature ++ volumesFeature
 
-    var spec = KubernetesDriverSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
+    var spec = provideInitialSpec()
     for (feature <- allFeatures) {
       val configuredPod = feature.configurePod(spec.pod)
       val addedSystemProperties = feature.getAdditionalPodSystemProperties()
