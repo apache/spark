@@ -27,6 +27,9 @@ import java.util.regex.Matcher
  */
 object CodeFormatter {
   val commentHolder = """\/\*(.+?)\*\/""".r
+  val commentRegexp =
+    ("""([ |\t]*?\/\*[\s|\S]*?\*\/[ |\t]*?)|""" + // strip /*comment*/
+      """([ |\t]*?\/\/[\s\S]*?\n)""").r           // strip //comment
 
   def format(code: CodeAndComment, maxLines: Int = -1): String = {
     val formatter = new CodeFormatter
@@ -91,10 +94,7 @@ object CodeFormatter {
   }
 
   def stripExtraNewLinesAndComments(input: String): String = {
-    val commentReg =
-      ("""([ |\t]*?\/\*[\s|\S]*?\*\/[ |\t]*?)|""" +    // strip /*comment*/
-       """([ |\t]*?\/\/[\s\S]*?\n)""").r               // strip //comment
-    val codeWithoutComment = commentReg.replaceAllIn(input, "")
+    val codeWithoutComment = commentRegexp.replaceAllIn(input, "")
     codeWithoutComment.replaceAll("""\n\s*\n""", "\n") // strip ExtraNewLines
   }
 }
