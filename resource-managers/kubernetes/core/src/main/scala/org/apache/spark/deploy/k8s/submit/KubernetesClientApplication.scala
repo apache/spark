@@ -25,6 +25,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
+
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkApplication
 import org.apache.spark.deploy.k8s._

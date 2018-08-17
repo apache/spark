@@ -109,7 +109,7 @@ private[spark] object KubernetesDriverBuilder {
         val container = pod.getSpec.getContainers.stream()
           .filter(_.getName == Constants.DRIVER_CONTAINER_NAME)
           .findFirst()
-            .orElseGet(() => new ContainerBuilder().build())
+          .orElseGet(() => new ContainerBuilder().build())
         KubernetesDriverSpec.initialSpec(conf).copy(pod = SparkPod(pod, container))
       }))
       .getOrElse(new KubernetesDriverBuilder())
