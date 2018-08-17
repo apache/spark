@@ -609,7 +609,13 @@ object DataSource extends Logging {
 
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String, conf: SQLConf): Class[_] = {
-    val provider1 = backwardCompatibilityMap.getOrElse(provider, provider) match {
+    val customBackwardCompatibilityMap =
+      conf.getAllConfs
+        .filter(_._1.startsWith("spark.sql.datasource.map"))
+        .map{ case (k, v) => (k.replaceFirst("^spark.sql.datasource.map.", ""), v) }
+    val compatibilityMap = backwardCompatibilityMap ++ customBackwardCompatibilityMap
+
+    val provider1 = compatibilityMap.getOrElse(provider, provider) match {
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native" =>
         classOf[OrcFileFormat].getCanonicalName
