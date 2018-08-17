@@ -2482,6 +2482,25 @@ test_that("union(), unionByName(), rbind(), except(), and intersect() on a DataF
   unlink(jsonPath2)
 })
 
+test_that("intersectAll() and exceptAll()", {
+  df1 <- createDataFrame(list(list("a", 1), list("a", 1), list("a", 1),
+                              list("a", 1), list("b", 3), list("c", 4)),
+                         schema = c("a", "b"))
+  df2 <- createDataFrame(list(list("a", 1), list("a", 1), list("b", 3)), schema = c("a", "b"))
+  intersectAllExpected <- data.frame("a" = c("a", "a", "b"), "b" = c(1, 1, 3),
+                                       stringsAsFactors = FALSE)
+  exceptAllExpected <- data.frame("a" = c("a", "a", "c"), "b" = c(1, 1, 4),
+                                    stringsAsFactors = FALSE)
+  intersectAllDf <- arrange(intersectAll(df1, df2), df1$a)
+  expect_is(intersectAllDf, "SparkDataFrame")
+  exceptAllDf <- arrange(exceptAll(df1, df2), df1$a)
+  expect_is(exceptAllDf, "SparkDataFrame")
+  intersectAllActual <- collect(intersectAllDf)
+  expect_identical(intersectAllActual, intersectAllExpected)
+  exceptAllActual <- collect(exceptAllDf)
+  expect_identical(exceptAllActual, exceptAllExpected)
+})
+
 test_that("withColumn() and withColumnRenamed()", {
   df <- read.json(jsonPath)
   newDF <- withColumn(df, "newAge", df$age + 2)
