@@ -217,7 +217,12 @@ private[spark] class Executor(
 
   def stop(): Unit = {
     env.metricsSystem.report()
-    heartbeater.stop()
+    try {
+      heartbeater.stop()
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Unable to stop heartbeater", e)
+     }
     threadPool.shutdown()
     if (!isLocal) {
       env.stop()

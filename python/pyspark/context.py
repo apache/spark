@@ -126,7 +126,7 @@ class SparkContext(object):
         self.environment = environment or {}
         # java gateway must have been launched at this point.
         if conf is not None and conf._jconf is not None:
-            # conf has been initialized in JVM properly, so use conf directly. This represent the
+            # conf has been initialized in JVM properly, so use conf directly. This represents the
             # scenario that JVM has been launched before SparkConf is created (e.g. SparkContext is
             # created and then stopped, and we create a new SparkConf and new SparkContext again)
             self._conf = conf
@@ -183,9 +183,10 @@ class SparkContext(object):
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server
-        self._accumulatorServer = accumulators._start_update_server()
+        auth_token = self._gateway.gateway_parameters.auth_token
+        self._accumulatorServer = accumulators._start_update_server(auth_token)
         (host, port) = self._accumulatorServer.server_address
-        self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port)
+        self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port, auth_token)
         self._jsc.sc().register(self._javaAccumulator)
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
@@ -933,10 +934,10 @@ class SparkContext(object):
         >>> def stop_job():
         ...     sleep(5)
         ...     sc.cancelJobGroup("job_to_cancel")
-        >>> supress = lock.acquire()
-        >>> supress = threading.Thread(target=start_job, args=(10,)).start()
-        >>> supress = threading.Thread(target=stop_job).start()
-        >>> supress = lock.acquire()
+        >>> suppress = lock.acquire()
+        >>> suppress = threading.Thread(target=start_job, args=(10,)).start()
+        >>> suppress = threading.Thread(target=stop_job).start()
+        >>> suppress = lock.acquire()
         >>> print(result)
         Cancelled
 

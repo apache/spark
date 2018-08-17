@@ -275,7 +275,7 @@ trait CodegenSupport extends SparkPlan {
       required: AttributeSet): String = {
     val evaluateVars = new StringBuilder
     variables.zipWithIndex.foreach { case (ev, i) =>
-      if (ev.code != "" && required.contains(attributes(i))) {
+      if (ev.code.nonEmpty && required.contains(attributes(i))) {
         evaluateVars.append(ev.code.toString + "\n")
         ev.code = EmptyBlock
       }

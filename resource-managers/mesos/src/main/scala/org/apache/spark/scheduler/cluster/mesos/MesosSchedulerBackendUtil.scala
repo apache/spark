@@ -117,7 +117,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
         case Array(key, value) =>
           Some(param.setKey(key).setValue(value))
         case spec =>
-          logWarning(s"Unable to parse arbitary parameters: $params. "
+          logWarning(s"Unable to parse arbitrary parameters: $params. "
             + "Expected form: \"key=value(, ...)\"")
           None
       }

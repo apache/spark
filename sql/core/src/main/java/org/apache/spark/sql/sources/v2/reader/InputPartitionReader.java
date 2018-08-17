@@ -28,8 +28,7 @@ import org.apache.spark.annotation.InterfaceStability;
  *
  * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.catalyst.InternalRow}
  * for normal data source readers, {@link org.apache.spark.sql.vectorized.ColumnarBatch} for data
- * source readers that mix in {@link SupportsScanColumnarBatch}, or {@link org.apache.spark.sql.Row}
- * for data source readers that mix in {@link SupportsDeprecatedScanRow}.
+ * source readers that mix in {@link SupportsScanColumnarBatch}.
  */
 @InterfaceStability.Evolving
 public interface InputPartitionReader<T> extends Closeable {

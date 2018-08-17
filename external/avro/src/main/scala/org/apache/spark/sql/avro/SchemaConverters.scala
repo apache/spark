@@ -18,17 +18,28 @@
 package org.apache.spark.sql.avro
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
-import org.apache.avro.{Schema, SchemaBuilder}
+import com.fasterxml.jackson.annotation.ObjectIdGenerators.UUIDGenerator
+import org.apache.avro.{LogicalType, LogicalTypes, Schema, SchemaBuilder}
+import org.apache.avro.LogicalTypes.{Date, Decimal, TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
+import org.apache.spark.sql.internal.SQLConf.AvroOutputTimestampType
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.Decimal.{maxPrecisionForBytes, minBytesForPrecision}
 
 /**
  * This object contains method that are used to convert sparkSQL schemas to avro schemas and vice
  * versa.
  */
 object SchemaConverters {
+  private lazy val uuidGenerator = RandomUUIDGenerator(new Random().nextLong())
+
+  private lazy val nullSchema = Schema.create(Schema.Type.NULL)
+
   case class SchemaType(dataType: DataType, nullable: Boolean)
 
   /**
@@ -36,14 +47,26 @@ object SchemaConverters {
    */
   def toSqlType(avroSchema: Schema): SchemaType = {
     avroSchema.getType match {
-      case INT => SchemaType(IntegerType, nullable = false)
+      case INT => avroSchema.getLogicalType match {
+        case _: Date => SchemaType(DateType, nullable = false)
+        case _ => SchemaType(IntegerType, nullable = false)
+      }
       case STRING => SchemaType(StringType, nullable = false)
       case BOOLEAN => SchemaType(BooleanType, nullable = false)
-      case BYTES => SchemaType(BinaryType, nullable = false)
+      case BYTES | FIXED => avroSchema.getLogicalType match {
+        // For FIXED type, if the precision requires more bytes than fixed size, the logical
+        // type will be null, which is handled by Avro library.
+        case d: Decimal => SchemaType(DecimalType(d.getPrecision, d.getScale), nullable = false)
+        case _ => SchemaType(BinaryType, nullable = false)
+      }
+
       case DOUBLE => SchemaType(DoubleType, nullable = false)
       case FLOAT => SchemaType(FloatType, nullable = false)
-      case LONG => SchemaType(LongType, nullable = false)
-      case FIXED => SchemaType(BinaryType, nullable = false)
+      case LONG => avroSchema.getLogicalType match {
+        case _: TimestampMillis | _: TimestampMicros => SchemaType(TimestampType, nullable = false)
+        case _ => SchemaType(LongType, nullable = false)
+      }
+
       case ENUM => SchemaType(StringType, nullable = false)
 
       case RECORD =>
@@ -103,37 +126,67 @@ object SchemaConverters {
       catalystType: DataType,
       nullable: Boolean = false,
       recordName: String = "topLevelRecord",
-      prevNameSpace: String = ""): Schema = {
-    val builder = if (nullable) {
-      SchemaBuilder.builder().nullable()
-    } else {
-      SchemaBuilder.builder()
-    }
-    catalystType match {
+      prevNameSpace: String = "",
+      outputTimestampType: AvroOutputTimestampType.Value = AvroOutputTimestampType.TIMESTAMP_MICROS)
+    : Schema = {
+    val builder = SchemaBuilder.builder()
+
+    val schema = catalystType match {
       case BooleanType => builder.booleanType()
       case ByteType | ShortType | IntegerType => builder.intType()
       case LongType => builder.longType()
-      case DateType => builder.longType()
-      case TimestampType => builder.longType()
+      case DateType =>
+        LogicalTypes.date().addToSchema(builder.intType())
+      case TimestampType =>
+        val timestampType = outputTimestampType match {
+          case AvroOutputTimestampType.TIMESTAMP_MILLIS => LogicalTypes.timestampMillis()
+          case AvroOutputTimestampType.TIMESTAMP_MICROS => LogicalTypes.timestampMicros()
+          case other =>
+            throw new IncompatibleSchemaException(s"Unexpected output timestamp type $other.")
+        }
+        timestampType.addToSchema(builder.longType())
+
       case FloatType => builder.floatType()
       case DoubleType => builder.doubleType()
-      case _: DecimalType | StringType => builder.stringType()
+      case StringType => builder.stringType()
+      case d: DecimalType =>
+        val avroType = LogicalTypes.decimal(d.precision, d.scale)
+        val fixedSize = minBytesForPrecision(d.precision)
+        // Need to avoid naming conflict for the fixed fields
+        val name = prevNameSpace match {
+          case "" => s"$recordName.fixed"
+          case _ => s"$prevNameSpace.$recordName.fixed"
+        }
+        avroType.addToSchema(SchemaBuilder.fixed(name).size(fixedSize))
+
       case BinaryType => builder.bytesType()
       case ArrayType(et, containsNull) =>
-        builder.array().items(toAvroType(et, containsNull, recordName, prevNameSpace))
+        builder.array()
+          .items(toAvroType(et, containsNull, recordName, prevNameSpace, outputTimestampType))
       case MapType(StringType, vt, valueContainsNull) =>
-        builder.map().values(toAvroType(vt, valueContainsNull, recordName, prevNameSpace))
+        builder.map()
+          .values(toAvroType(vt, valueContainsNull, recordName, prevNameSpace, outputTimestampType))
       case st: StructType =>
-        val nameSpace = s"$prevNameSpace.$recordName"
+        val nameSpace = prevNameSpace match {
+          case "" => recordName
+          case _ => s"$prevNameSpace.$recordName"
+        }
+
         val fieldsAssembler = builder.record(recordName).namespace(nameSpace).fields()
         st.foreach { f =>
-          val fieldAvroType = toAvroType(f.dataType, f.nullable, f.name, nameSpace)
+          val fieldAvroType =
+            toAvroType(f.dataType, f.nullable, f.name, nameSpace, outputTimestampType)
           fieldsAssembler.name(f.name).`type`(fieldAvroType).noDefault()
         }
         fieldsAssembler.endRecord()
 
       // This should never happen.
       case other => throw new IncompatibleSchemaException(s"Unexpected type $other.")
+    }
+    if (nullable) {
+      Schema.createUnion(schema, nullSchema)
+    } else {
+      schema
     }
   }
 }

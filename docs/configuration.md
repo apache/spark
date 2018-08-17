@@ -1218,6 +1218,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.broadcast.checksum</code></td>
+  <td>true</td>
+  <td>
+    Whether to enable checksum for broadcast. If enabled, broadcasts will include a checksum, which can
+    help detect corrupted blocks, at the cost of computing and sending a little more data. It's possible
+    to disable it if the network has other mechanisms to guarantee data won't be corrupted during broadcast.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.cores</code></td>
   <td>
     1 in YARN mode, all the available cores on the worker in
@@ -1818,7 +1827,7 @@ Apart from these, the following properties are also available, and may be useful
     executors w.r.t. full parallelism.
     Defaults to 1.0 to give maximum parallelism.
     0.5 will divide the target number of executors by 2
-    The target number of executors computed by the dynamicAllocation can still be overriden
+    The target number of executors computed by the dynamicAllocation can still be overridden
     by the <code>spark.dynamicAllocation.minExecutors</code> and
     <code>spark.dynamicAllocation.maxExecutors</code> settings
   </td>

@@ -709,6 +709,8 @@ object ScalaReflection extends ScalaReflection {
   def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
     case Schema(s: StructType, _) =>
       s.toAttributes
+    case others =>
+      throw new UnsupportedOperationException(s"Attributes for type $others is not supported")
   }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */

@@ -17,15 +17,19 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.UUID
+
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, ReadSupport, ReadSupportWithSchema}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, ReadSupport, WriteSupport}
 import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, SupportsReportStatistics}
+import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -40,16 +44,23 @@ case class DataSourceV2Relation(
     source: DataSourceV2,
     output: Seq[AttributeReference],
     options: Map[String, String],
-    userSpecifiedSchema: Option[StructType])
-  extends LeafNode with MultiInstanceRelation with DataSourceV2StringFormat {
+    tableIdent: Option[TableIdentifier] = None,
+    userSpecifiedSchema: Option[StructType] = None)
+  extends LeafNode with MultiInstanceRelation with NamedRelation with DataSourceV2StringFormat {
 
   import DataSourceV2Relation._
+
+  override def name: String = {
+    tableIdent.map(_.unquotedString).getOrElse(s"${source.name}:unknown")
+  }
 
   override def pushedFilters: Seq[Expression] = Seq.empty
 
   override def simpleString: String = "RelationV2 " + metadataString
 
   def newReader(): DataSourceReader = source.createReader(options, userSpecifiedSchema)
+
+  def newWriter(): DataSourceWriter = source.createWriter(options, schema)
 
   override def computeStats(): Statistics = newReader match {
     case r: SupportsReportStatistics =>
@@ -110,24 +121,17 @@ object DataSourceV2Relation {
       source match {
         case support: ReadSupport =>
           support
-        case _: ReadSupportWithSchema =>
-          // this method is only called if there is no user-supplied schema. if there is no
-          // user-supplied schema and ReadSupport was not implemented, throw a helpful exception.
-          throw new AnalysisException(s"Data source requires a user-supplied schema: $name")
         case _ =>
           throw new AnalysisException(s"Data source is not readable: $name")
       }
     }
 
-    def asReadSupportWithSchema: ReadSupportWithSchema = {
+    def asWriteSupport: WriteSupport = {
       source match {
-        case support: ReadSupportWithSchema =>
+        case support: WriteSupport =>
           support
-        case _: ReadSupport =>
-          throw new AnalysisException(
-            s"Data source does not support user-supplied schema: $name")
         case _ =>
-          throw new AnalysisException(s"Data source is not readable: $name")
+          throw new AnalysisException(s"Data source is not writable: $name")
       }
     }
 
@@ -146,19 +150,34 @@ object DataSourceV2Relation {
       val v2Options = new DataSourceOptions(options.asJava)
       userSpecifiedSchema match {
         case Some(s) =>
-          asReadSupportWithSchema.createReader(s, v2Options)
+          asReadSupport.createReader(s, v2Options)
         case _ =>
           asReadSupport.createReader(v2Options)
       }
+    }
+
+    def createWriter(
+        options: Map[String, String],
+        schema: StructType): DataSourceWriter = {
+      val v2Options = new DataSourceOptions(options.asJava)
+      asWriteSupport.createWriter(UUID.randomUUID.toString, schema, SaveMode.Append, v2Options).get
     }
   }
 
   def create(
       source: DataSourceV2,
       options: Map[String, String],
-      userSpecifiedSchema: Option[StructType]): DataSourceV2Relation = {
+      tableIdent: Option[TableIdentifier] = None,
+      userSpecifiedSchema: Option[StructType] = None): DataSourceV2Relation = {
     val reader = source.createReader(options, userSpecifiedSchema)
+    val ident = tableIdent.orElse(tableFromOptions(options))
     DataSourceV2Relation(
-      source, reader.readSchema().toAttributes, options, userSpecifiedSchema)
+      source, reader.readSchema().toAttributes, options, ident, userSpecifiedSchema)
+  }
+
+  private def tableFromOptions(options: Map[String, String]): Option[TableIdentifier] = {
+    options
+        .get(DataSourceOptions.TABLE_KEY)
+        .map(TableIdentifier(_, options.get(DataSourceOptions.DATABASE_KEY)))
   }
 }

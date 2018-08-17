@@ -416,6 +416,24 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         // these branches can be pruned away
         val (h, t) = branches.span(_._1 != TrueLiteral)
         CaseWhen( h :+ t.head, None)
+
+      case e @ CaseWhen(branches, Some(elseValue))
+          if branches.forall(_._2.semanticEquals(elseValue)) =>
+        // For non-deterministic conditions with side effect, we can not remove it, or change
+        // the ordering. As a result, we try to remove the deterministic conditions from the tail.
+        var hitNonDeterministicCond = false
+        var i = branches.length
+        while (i > 0 && !hitNonDeterministicCond) {
+          hitNonDeterministicCond = !branches(i - 1)._1.deterministic
+          if (!hitNonDeterministicCond) {
+            i -= 1
+          }
+        }
+        if (i == 0) {
+          elseValue
+        } else {
+          e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
+        }
     }
   }
 }
@@ -505,6 +523,7 @@ object NullPropagation extends Rule[LogicalPlan] {
 
       // If the value expression is NULL then transform the In expression to null literal.
       case In(Literal(null, _), _) => Literal.create(null, BooleanType)
+      case InSubquery(Seq(Literal(null, _)), _) => Literal.create(null, BooleanType)
 
       // Non-leaf NullIntolerant expressions will return null, if at least one of its children is
       // a null literal.
