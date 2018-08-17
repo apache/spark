@@ -38,10 +38,12 @@ private[spark] class KubernetesSuite extends SparkFunSuite
 
   import KubernetesSuite._
 
-  protected var testBackend: IntegrationTestBackend = _
-  protected var sparkHomeDir: Path = _
+  private var sparkHomeDir: Path = _
+  private var pyImage: String = _
+  private var rImage: String = _
+
   protected var image: String = _
-  protected var pyImage: String = _
+  protected var testBackend: IntegrationTestBackend = _
   protected var driverPodName: String = _
   protected var kubernetesTestComponents: KubernetesTestComponents = _
   protected var sparkAppConf: SparkAppConf = _
@@ -67,6 +69,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     val imageRepo = getTestImageRepo
     image = s"$imageRepo/spark:$imageTag"
     pyImage = s"$imageRepo/spark-py:$imageTag"
+    rImage = s"$imageRepo/spark-r:$imageTag"
 
     val sparkDistroExamplesJarFile: File = sparkHomeDir.resolve(Paths.get("examples", "jars"))
       .toFile
@@ -239,6 +242,13 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     assert(driverPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-driver")
   }
 
+  protected def doBasicDriverRPodCheck(driverPod: Pod): Unit = {
+    assert(driverPod.getMetadata.getName === driverPodName)
+    assert(driverPod.getSpec.getContainers.get(0).getImage === rImage)
+    assert(driverPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-driver")
+  }
+
+
   protected def doBasicExecutorPodCheck(executorPod: Pod): Unit = {
     assert(executorPod.getSpec.getContainers.get(0).getImage === image)
     assert(executorPod.getSpec.getContainers.get(0).getName === "executor")
@@ -246,6 +256,11 @@ private[spark] class KubernetesSuite extends SparkFunSuite
 
   protected def doBasicExecutorPyPodCheck(executorPod: Pod): Unit = {
     assert(executorPod.getSpec.getContainers.get(0).getImage === pyImage)
+    assert(executorPod.getSpec.getContainers.get(0).getName === "executor")
+  }
+
+  protected def doBasicExecutorRPodCheck(executorPod: Pod): Unit = {
+    assert(executorPod.getSpec.getContainers.get(0).getImage === rImage)
     assert(executorPod.getSpec.getContainers.get(0).getName === "executor")
   }
 
