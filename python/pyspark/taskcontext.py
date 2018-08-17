@@ -16,6 +16,10 @@
 #
 
 from __future__ import print_function
+import socket
+
+from pyspark.java_gateway import do_server_auth
+from pyspark.serializers import UTF8Deserializer
 
 
 class TaskContext(object):
@@ -97,6 +101,36 @@ class TaskContext(object):
         return self._localProperties.get(key, None)
 
 
+def _load_from_socket(port, auth_secret):
+    """
+    Load data from a given socket, this is a blocking method thus only return when the socket
+    connection has been closed.
+    """
+    sock = None
+    # Support for both IPv4 and IPv6.
+    # On most of IPv6-ready systems, IPv6 will take precedence.
+    for res in socket.getaddrinfo("localhost", port, socket.AF_UNSPEC, socket.SOCK_STREAM):
+        af, socktype, proto, canonname, sa = res
+        sock = socket.socket(af, socktype, proto)
+        try:
+            # Do not allow timeout for socket reading operation.
+            sock.settimeout(None)
+            sock.connect(sa)
+        except socket.error:
+            sock.close()
+            sock = None
+            continue
+        break
+    if not sock:
+        raise Exception("could not open socket")
+
+    sockfile = sock.makefile("rwb", 65536)
+    do_server_auth(sockfile, auth_secret)
+
+    # The socket will be automatically closed when garbage-collected.
+    return UTF8Deserializer().loads(sockfile)
+
+
 class BarrierTaskContext(TaskContext):
 
     """
@@ -109,7 +143,8 @@ class BarrierTaskContext(TaskContext):
     .. versionadded:: 2.4.0
     """
 
-    _barrierContext = None
+    _port = None
+    _secret = None
 
     def __init__(self):
         """Construct a BarrierTaskContext, use get instead"""
@@ -133,12 +168,13 @@ class BarrierTaskContext(TaskContext):
         return cls._taskContext
 
     @classmethod
-    def _initialize(cls, ctx):
+    def _initialize(cls, port, secret):
         """
         Initialize BarrierTaskContext, other methods within BarrierTaskContext can only be called
         after BarrierTaskContext is initialized.
         """
-        cls._barrierContext = ctx
+        cls._port = port
+        cls._secret = secret
 
     def barrier(self):
         """
@@ -149,11 +185,11 @@ class BarrierTaskContext(TaskContext):
 
         .. versionadded:: 2.4.0
         """
-        if self._barrierContext is None:
+        if self._port is None or self._secret is None:
             raise Exception("Not supported to call barrier() before initialize " +
                             "BarrierTaskContext.")
         else:
-            self._barrierContext.barrier()
+            _load_from_socket(self._port, self._secret)
 
     def getTaskInfos(self):
         """

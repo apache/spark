@@ -24,13 +24,12 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
-import py4j.GatewayServer
-
-import org.apache.spark._
+import org.apache.spark.{SparkException, _}
 import org.apache.spark.internal.Logging
+import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
-
 
 /**
  * Enumerate the type of command that will be sent to the Python worker
@@ -78,6 +77,15 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
   // TODO: support accumulator in multiple UDF
   protected val accumulator = funcs.head.funcs.head.accumulator
+
+  // Expose a ServerSocket to support method calls via socket from Python side.
+  private[spark] var serverSocket: Option[ServerSocket] = None
+
+  // Authentication helper used when serving method calls via socket from Python side.
+  private lazy val authHelper = {
+    val conf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
+    new SocketAuthHelper(conf)
+  }
 
   def compute(
       inputIterator: Iterator[IN],
@@ -183,37 +191,29 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         dataOut.writeInt(partitionIndex)
         // Python version of driver
         PythonRDD.writeUTF(pythonVer, dataOut)
-        // Init a GatewayServer to port current BarrierTaskContext to Python side.
+        // Init a ServerSocket to accept method calls from Python side.
         val isBarrier = context.isInstanceOf[BarrierTaskContext]
+        if (isBarrier) {
+          serverSocket = Some(new ServerSocket(0, 1, InetAddress.getByName("localhost")))
+        }
+        // A call to accept() for ServerSocket shall block infinitely.
+        serverSocket.map(_.setSoTimeout(0))
         val secret = if (isBarrier) {
-          Utils.createSecret(env.conf)
+          authHelper.secret
         } else {
           ""
         }
-        val gatewayServer: Option[GatewayServer] = if (isBarrier) {
-          Some(new GatewayServer.GatewayServerBuilder()
-            .entryPoint(context.asInstanceOf[BarrierTaskContext])
-            .authToken(secret)
-            .javaPort(0)
-            // TODO We do not have requests from Java to Python, find a better approach other than
-            // filling in DEFAULT_PYTHON_PORT here.
-            .callbackClient(GatewayServer.DEFAULT_PYTHON_PORT, GatewayServer.defaultAddress(),
-              secret)
-            .build())
-        } else {
-          None
+        // Close ServerSocket on task completion.
+        serverSocket.foreach { server =>
+          context.addTaskCompletionListener(_ => server.close())
         }
-        gatewayServer.map(_.start())
-        gatewayServer.foreach { server =>
-          context.addTaskCompletionListener(_ => server.shutdown())
-        }
-        val boundPort: Int = gatewayServer.map(_.getListeningPort).getOrElse(0)
+        val boundPort: Int = serverSocket.map(_.getLocalPort).getOrElse(0)
         if (boundPort == -1) {
-          val message = "GatewayServer to port BarrierTaskContext failed to bind to Java side."
+          val message = "ServerSocket failed to bind to Java side."
           logError(message)
           throw new SparkException(message)
         } else if (isBarrier) {
-          logDebug(s"Started GatewayServer to port BarrierTaskContext on port $boundPort.")
+          logDebug(s"Started ServerSocket on port $boundPort.")
         }
         // Write out the TaskContextInfo
         dataOut.writeBoolean(isBarrier)
@@ -420,6 +420,45 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         }
       }
     }
+  }
+
+  /**
+   * Gateway to call BarrierTaskContext.barrier().
+   */
+  def barrierAndServe(): Unit = {
+    val context = BarrierTaskContext.get()
+    require(serverSocket.isDefined, "No available ServerSocket to redirect the barrier() call.")
+
+    new Thread(s"serve-barrier-${context.partitionId}") {
+      setDaemon(true)
+      override def run() {
+        try {
+          val sock = serverSocket.get.accept()
+          authHelper.authClient(sock)
+
+          val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
+          try {
+            context.barrier()
+            writeUTF("success", out)
+          } catch {
+            case e: SparkException =>
+              writeUTF(e.getMessage, out)
+          } finally {
+            out.close()
+            sock.close()
+          }
+        } catch {
+          case NonFatal(e) =>
+            logError(s"Error while calling BarrierTaskContext.barrier()", e)
+        }
+      }
+    }.start()
+  }
+
+  def writeUTF(str: String, dataOut: DataOutputStream) {
+    val bytes = str.getBytes(StandardCharsets.UTF_8)
+    dataOut.writeInt(bytes.length)
+    dataOut.write(bytes)
   }
 }
 

@@ -269,9 +269,7 @@ def main(infile, outfile):
         taskContext = None
         if isBarrier:
             taskContext = BarrierTaskContext._getOrCreate()
-            params = GatewayParameters(port=boundPort, auth_token=secret, auto_convert=True)
-            barrierContext = JavaGateway(gateway_parameters=params).entry_point
-            BarrierTaskContext._initialize(barrierContext)
+            BarrierTaskContext._initialize(boundPort, secret)
         else:
             taskContext = TaskContext._getOrCreate()
         # read inputs for TaskContext info
