@@ -82,8 +82,11 @@ private[spark] object KubernetesExecutorBuilder {
       .map(new File(_))
       .map(file => new KubernetesExecutorBuilder(provideInitialPod = () => {
         val pod = kubernetesClient.pods().load(file).get()
-        // TODO(osatici) find container
-        SparkPod(pod, new ContainerBuilder().build())
+        val container = pod.getSpec.getContainers.stream()
+          .filter(_.getName == Constants.EXECUTOR_CONTAINER_NAME)
+          .findFirst()
+          .orElseGet(() => new ContainerBuilder().build())
+        SparkPod(pod, container)
       }))
       .getOrElse(new KubernetesExecutorBuilder())
   }

@@ -104,11 +104,14 @@ private[spark] object KubernetesDriverBuilder {
   def apply(kubernetesClient: KubernetesClient, conf: SparkConf): KubernetesDriverBuilder = {
     conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE)
       .map(new File(_))
-      .map(file => new KubernetesDriverBuilder(provideInitialSpec = conf =>
-        KubernetesDriverSpec.initialSpec(conf).copy(pod = SparkPod(
-          kubernetesClient.pods().load(file).get(),
-          new ContainerBuilder().build() // TODO(osatici): infer container from pod
-        ))))
+      .map(file => new KubernetesDriverBuilder(provideInitialSpec = conf => {
+        val pod = kubernetesClient.pods().load(file).get()
+        val container = pod.getSpec.getContainers.stream()
+          .filter(_.getName == Constants.DRIVER_CONTAINER_NAME)
+          .findFirst()
+            .orElseGet(() => new ContainerBuilder().build())
+        KubernetesDriverSpec.initialSpec(conf).copy(pod = SparkPod(pod, container))
+      }))
       .getOrElse(new KubernetesDriverBuilder())
   }
 }
