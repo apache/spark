@@ -363,8 +363,8 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
         left: Expression,
         right: Expression,
         f: (Expression, Expression, Expression) => Expression): Expression = {
-      val MapType(kt, vt1, _) = left.dataType.asInstanceOf[MapType]
-      val MapType(_, vt2, _) = right.dataType.asInstanceOf[MapType]
+      val MapType(kt, vt1, _) = left.dataType
+      val MapType(_, vt2, _) = right.dataType
       MapZipWith(left, right, createLambda(kt, false, vt1, true, vt2, true, f))
     }
 
