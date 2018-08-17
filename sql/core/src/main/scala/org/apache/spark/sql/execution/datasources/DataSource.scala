@@ -571,7 +571,6 @@ object DataSource extends Logging {
     val nativeOrc = classOf[OrcFileFormat].getCanonicalName
     val socket = classOf[TextSocketSourceProvider].getCanonicalName
     val rate = classOf[RateStreamProvider].getCanonicalName
-    val avro = "org.apache.spark.sql.avro.AvroFileFormat"
 
     Map(
       "org.apache.spark.sql.jdbc" -> jdbc,
@@ -593,7 +592,6 @@ object DataSource extends Logging {
       "org.apache.spark.ml.source.libsvm.DefaultSource" -> libsvm,
       "org.apache.spark.ml.source.libsvm" -> libsvm,
       "com.databricks.spark.csv" -> csv,
-      "com.databricks.spark.avro" -> avro,
       "org.apache.spark.sql.execution.streaming.TextSocketSourceProvider" -> socket,
       "org.apache.spark.sql.execution.streaming.RateSourceProvider" -> rate
     )
@@ -616,6 +614,8 @@ object DataSource extends Logging {
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "hive" =>
         "org.apache.spark.sql.hive.orc.OrcFileFormat"
+      case "com.databricks.spark.avro" if conf.enableAvroBackwardCompatibility =>
+        "org.apache.spark.sql.avro.AvroFileFormat"
       case name => name
     }
     val provider2 = s"$provider1.DefaultSource"
@@ -626,6 +626,7 @@ object DataSource extends Logging {
       serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider1)).toList match {
         // the provider format did not match any given registered aliases
         case Nil =>
+          val latestDocsURL = "https://spark.apache.org/docs/latest"
           try {
             Try(loader.loadClass(provider1)).orElse(Try(loader.loadClass(provider2))) match {
               case Success(dataSource) =>
@@ -637,6 +638,17 @@ object DataSource extends Logging {
                     "Hive built-in ORC data source must be used with Hive support enabled. " +
                     "Please use the native ORC data source by setting 'spark.sql.orc.impl' to " +
                     "'native'")
+                } else if (provider1.toLowerCase(Locale.ROOT) == "avro" ||
+                  provider1 == "com.databricks.spark.avro" ||
+                  provider1 == "org.apache.spark.sql.avro") {
+                  throw new AnalysisException(
+                    s"Failed to find data source: $provider1. Avro is built-in data source since " +
+                    "Spark 2.4. Please deploy the application as per " +
+                    s"$latestDocsURL/avro-data-source-guide.html#deploying")
+                } else if (provider1.toLowerCase(Locale.ROOT) == "kafka") {
+                  throw new AnalysisException(
+                    s"Failed to find data source: $provider1. Please deploy the application as" +
+                    s"per $latestDocsURL/structured-streaming-kafka-integration.html#deploying")
                 } else {
                   throw new ClassNotFoundException(
                     s"Failed to find data source: $provider1. Please find packages at " +
