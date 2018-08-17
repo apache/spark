@@ -683,12 +683,6 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     value2Var: NamedLambdaVariable),
     _) = function
 
-  private def keyTypeSupportsEquals = keyType match {
-    case BinaryType => false
-    case _: AtomicType => true
-    case _ => false
-  }
-
   /**
    * The function accepts two key arrays and returns a collection of keys with indexes
    * to value arrays. Indexes are represented as an array of two items. This is a small
@@ -696,7 +690,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
    */
   @transient private lazy val getKeysWithValueIndexes:
       (ArrayData, ArrayData) => mutable.Iterable[(Any, Array[Option[Int]])] = {
-    if (keyTypeSupportsEquals) {
+    if (TypeUtils.typeWithProperEquals(keyType)) {
       getKeysWithIndexesFast
     } else {
       getKeysWithIndexesBruteForce
