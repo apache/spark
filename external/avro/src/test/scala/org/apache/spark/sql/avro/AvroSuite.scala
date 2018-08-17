@@ -79,7 +79,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("resolve avro data source") {
     val databricksAvro = "com.databricks.spark.avro"
     // By default the backward compatibility for com.databricks.spark.avro is enabled.
-    Seq("avro", "org.apache.spark.sql.avro", databricksAvro).foreach { provider =>
+    Seq("avro", "org.apache.spark.sql.avro.AvroFileFormat", databricksAvro).foreach { provider =>
       assert(DataSource.lookupDataSource(provider, spark.sessionState.conf) ===
         classOf[org.apache.spark.sql.avro.AvroFileFormat])
     }
