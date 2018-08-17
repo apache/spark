@@ -82,4 +82,28 @@ class ResolvedDataSourceSuite extends SparkFunSuite with SharedSQLContext {
     }
     assert(error.getMessage.contains("Failed to find data source: asfdwefasdfasdf."))
   }
+
+  test("support custom mapping for data source names") {
+    val csv = classOf[org.apache.spark.sql.execution.datasources.csv.CSVFileFormat]
+
+    // Map a new data source name to a built-in data source
+    withSQLConf("spark.sql.datasource.map.myDatasource" -> csv.getCanonicalName) {
+      assert(getProvidingClass("myDatasource") === csv)
+    }
+
+    // Map a existing built-in data source name to new data source
+    val testDataSource = classOf[TestDataSource]
+    withSQLConf(
+      "spark.sql.datasource.map.org.apache.spark.sql.avro" -> testDataSource.getCanonicalName,
+      "spark.sql.datasource.map.com.databricks.spark.csv" -> testDataSource.getCanonicalName,
+      "spark.sql.datasource.map.com.databricks.spark.avro" -> testDataSource.getCanonicalName) {
+      assert(getProvidingClass("org.apache.spark.sql.avro") === testDataSource)
+      assert(getProvidingClass("com.databricks.spark.csv") === testDataSource)
+      assert(getProvidingClass("com.databricks.spark.avro") === testDataSource)
+    }
+  }
+}
+
+class TestDataSource extends DataSourceRegister {
+  override def shortName(): String = "test"
 }
