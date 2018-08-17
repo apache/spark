@@ -87,7 +87,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       ctx: CodegenContext,
       row: String,
       inputs: Seq[ExprCode],
-      inputType: Seq[DataType],
+      inputTypes: Seq[DataType],
       rowWriter: String,
       isTopLevel: Boolean = false): String = {
     val resetWriter = if (isTopLevel) {
@@ -105,7 +105,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       s"$rowWriter.resetRowWriter();"
     }
 
-    val writeFields = inputs.zip(inputType).zipWithIndex.map {
+    val writeFields = inputs.zip(inputTypes).zipWithIndex.map {
       case ((input, dataType), index) =>
         val dt = UserDefinedType.sqlType(dataType)
 
@@ -154,7 +154,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       ctx: CodegenContext,
       input: String,
       elementType: DataType,
-      elementNullable: Boolean,
+      containsNull: Boolean,
       rowWriter: String): String = {
     // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
     val tmpInput = ctx.freshName("tmpInput")
@@ -177,7 +177,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val element = CodeGenerator.getValue(tmpInput, et, index)
 
-    val elementAssignment = if (elementNullable) {
+    val elementAssignment = if (containsNull) {
       s"""
          |if ($tmpInput.isNullAt($index)) {
          |  $arrayWriter.setNull${elementOrOffsetSize}Bytes($index);
@@ -210,7 +210,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       index: String,
       keyType: DataType,
       valueType: DataType,
-      valueNullable: Boolean,
+      valueContainsNull: Boolean,
       rowWriter: String): String = {
     // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
     val tmpInput = ctx.freshName("tmpInput")
@@ -221,7 +221,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val keyArray = writeArrayToBuffer(
       ctx, s"$tmpInput.keyArray()", keyType, false, rowWriter)
     val valueArray = writeArrayToBuffer(
-      ctx, s"$tmpInput.valueArray()", valueType, valueNullable, rowWriter)
+      ctx, s"$tmpInput.valueArray()", valueType, valueContainsNull, rowWriter)
 
     s"""
        |final MapData $tmpInput = $input;
