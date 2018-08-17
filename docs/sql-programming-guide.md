@@ -1482,8 +1482,8 @@ SELECT * FROM resultTable
 </div>
 </div>
 
-## AVRO Files
-See the [AVRO data source guide](avro-data-source-guide.html).
+## Avro Files
+See the [Apache Avro Data Source Guide](avro-data-source-guide.html).
 
 ## Troubleshooting
 

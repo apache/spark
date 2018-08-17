@@ -1,12 +1,15 @@
 ---
 layout: global
-title: Avro Data Source Guide
+title: Apache Avro Data Source Guide
 ---
 
-Since Spark 2.4 release, [Spark SQL](https://spark.apache.org/docs/latest/sql-programming-guide.html) provides support for reading and writing Avro data.
+* This will become a table of contents (this text will be scraped).
+{:toc}
+
+Since Spark 2.4 release, [Spark SQL](https://spark.apache.org/docs/latest/sql-programming-guide.html) provides built-in support for reading and writing Apache Avro data.
 
 ## Deploying
-The <code>spark-avro</code> module is external and not included in `spark-submit` or `spark-shell` by default.
+The `spark-avro` module is external and not included in `spark-submit` or `spark-shell` by default.
 
 As with any Spark applications, `spark-submit` is used to launch your application. `spark-avro_{{site.SCALA_BINARY_VERSION}}`
 and its dependencies can be directly added to `spark-submit` using `--packages`, such as,
@@ -19,11 +22,11 @@ For experimenting on `spark-shell`, you can also use `--packages` to add `org.ap
 
 See [Application Submission Guide](submitting-applications.html) for more details about submitting applications with external dependencies.
 
-## Examples
+## Load/Save Functions
 
-Since `spark-avro` module is external, there is not such API as <code>.avro</code> in 
-<code>DataFrameReader</code> or <code>DataFrameWriter</code>.
-To load/save data in Avro format, you need to specify the data source option <code>format</code> as short name <code>avro</code> or full name <code>org.apache.spark.sql.avro</code>.
+Since `spark-avro` module is external, there is not such API as `.avro` in 
+`DataFrameReader` or `DataFrameWriter`.
+To load/save data in Avro format, you need to specify the data source option `format` as short name `avro` or full name `org.apache.spark.sql.avro`.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
@@ -59,7 +62,9 @@ write.df(select(df, "name", "favorite_color"), "namesAndFavColors.avro", "avro")
 </div>
 </div>
 
-## Configuration
+## Data Source Options
+
+Data source options of Avro can be set using the `.option` method on `DataFrameReader` or `DataFrameWriter`.
 <table class="table">
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
   <tr>
@@ -90,18 +95,6 @@ write.df(select(df, "name", "favorite_color"), "namesAndFavColors.avro", "avro")
     <td><code>compression</code></td>
     <td>snappy</td>
     <td>The <code>compression</code> option allows to specify a compression codec used in write. Currently supported codecs are <code>uncompressed</code>, <code>snappy</code>, <code>deflate</code>, <code>bzip2</code> and <code>xz</code>. If the option is not set, the configuration <code>spark.sql.avro.compression.codec</code> config is taken into account.</td>
-    <td>write</td>
-  </tr>
-  <tr>
-    <td><code>spark.sql.avro.backwardCompatibility</code></td>
-    <td>true</td>
-    <td>If it is set to true, the data source provider <code>com.databricks.spark.avro</code> is mapped to the built-in module <code>org.apache.spark.sql.avro</code> for backward compatibility.</td>
-    <td>read and write</td>
-  </tr>
-  <tr>
-    <td><code>spark.sql.avro.outputTimestampType</code></td>
-    <td>TIMESTAMP_MICROS</td>
-    <td>Sets which Avro timestamp type to use when Spark writes data to Avro files. Currently supported types are <code>TIMESTAMP_MICROS</code> and <code>TIMESTAMP_MILLIS</code>.</td>
     <td>write</td>
   </tr>
 </table>
@@ -164,11 +157,11 @@ Currently Spark supports reading all [primitive types](https://avro.apache.org/d
   </tr>
 </table>
 
-In addition to the types listed above, it supports reading <code>union</code> types. The following three types are considered basic <code>union</code> types:
+In addition to the types listed above, it supports reading `union` types. The following three types are considered basic `union` types:
 
-1. <code>union(int, long)</code> will be mapped to LongType.
-2. <code>union(float, double)</code> will be mapped to DoubleType.
-3. <code>union(something, null)</code>, where something is any supported Avro type. This will be mapped to the same Spark SQL type as that of something, with nullable set to true.
+1. `union(int, long)` will be mapped to LongType.
+2. `union(float, double)` will be mapped to DoubleType.
+3. `union(something, null)`, where something is any supported Avro type. This will be mapped to the same Spark SQL type as that of something, with nullable set to true.
 All other union types are considered complex. They will be mapped to StructType where field names are member0, member1, etc., in accordance with members of the union. This is consistent with the behavior when converting between Avro and Parquet.
 
 It also supports reading the following Avro [logical types](https://avro.apache.org/docs/1.8.2/spec.html#Logical+Types):
@@ -240,7 +233,7 @@ Spark supports writing of all Spark SQL types into Avro. For most types, the map
   </tr>
 </table>
 
-You can also specify the whole output Avro schema with the option <code>avroSchema</code>, so that Spark SQL types can be converted into other Avro types. The following conversions is not by default and require user specified Avro schema:
+You can also specify the whole output Avro schema with the option `avroSchema`, so that Spark SQL types can be converted into other Avro types. The following conversions is not by default and require user specified Avro schema:
 
 <table class="table">
   <tr><th><b>Spark SQL type</b></th><th><b>Avro type</b></th><th><b>Avro logical type</b></th></tr>
