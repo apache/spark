@@ -93,6 +93,12 @@ write.df(select(df, "name", "favorite_color"), "namesAndFavColors.avro", "avro")
     <td>write</td>
   </tr>
   <tr>
+    <td><code>spark.sql.avro.backwardCompatibility</code></td>
+    <td>true</td>
+    <td>If it is set to true, the data source provider <code>com.databricks.spark.avro</code> is mapped to the built-in module <code>org.apache.spark.sql.avro</code> for backward compatibility.</td>
+    <td>read and write</td>
+  </tr>
+  <tr>
     <td><code>spark.sql.avro.outputTimestampType</code></td>
     <td>TIMESTAMP_MICROS</td>
     <td>Sets which Avro timestamp type to use when Spark writes data to Avro files. Currently supported types are <code>TIMESTAMP_MICROS</code> and <code>TIMESTAMP_MILLIS</code>.</td>
