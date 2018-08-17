@@ -2859,19 +2859,30 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       val cnt = 30
       spark.range(cnt).selectExpr("cast(id as bigint) as col1", "cast(id as bigint) as col2")
         .write.mode(SaveMode.Overwrite).parquet(path)
-      withTable("table1", "table2") {
-        spark.sql("CREATE TABLE table1(col1 bigint, col2 bigint) using parquet " +
-          s"location '$path'")
+      withTable("table1", "table2", "table3", "table4") {
+        spark.sql(s"CREATE TABLE table1(col1 bigint, col2 bigint) using parquet location '$path'")
 
         withView("view1") {
-          spark.sql("create view view1 as select col1, col2 from table1 where col1 > -20")
+          spark.sql("CREATE VIEW view1 as select col1, col2 from table1 where col1 > -20")
 
-          spark.sql("create table table2 (COL1 BIGINT, COL2 BIGINT) using parquet")
-
-          spark.sql("insert overwrite table table2 select COL1, COL2 from view1")
-
+          spark.sql("CREATE TABLE table2 (COL1 BIGINT, COL2 BIGINT) using parquet")
+          spark.sql("INSERT OVERWRITE TABLE table2 select COL1, COL2 from view1")
           assert(spark.table("table2").count() === cnt)
           checkAnswer(spark.table("table1"), spark.table("table2"))
+
+          spark.sql("CREATE TABLE table3 (COL1 BIGINT) using parquet")
+          spark.sql("INSERT OVERWRITE TABLE table3 select COL1 from view1")
+          assert(spark.table("table3").count() === cnt)
+          checkAnswer(spark.table("table1").select("COL1"), spark.table("table3"))
+
+          spark.sql("CREATE TABLE table4 (COL1 BIGINT, COL2 BIGINT, COL3 BIGINT) using parquet")
+          spark.sql("INSERT OVERWRITE TABLE table4 select COL1, COL1, COL2 from view1")
+          assert(spark.table("table4").count() === cnt)
+          checkAnswer(spark.table("table1").select("col1", "col1", "col2"), spark.table("table4"))
+
+          assertThrows[AnalysisException] {
+            spark.sql("INSERT OVERWRITE TABLE table4 select COL1, COL3, COL2 from view1")
+          }
         }
       }
     }
