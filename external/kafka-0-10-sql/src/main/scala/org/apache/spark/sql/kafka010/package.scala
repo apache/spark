@@ -38,4 +38,25 @@ package object kafka010 {   // scalastyle:ignore
         " (check Structured Streaming Kafka integration guide for further details).")
       .intConf
       .createWithDefault(64)
+
+  private[kafka010] val CONSUMER_CACHE_JMX_ENABLED =
+    ConfigBuilder("spark.kafka.consumer.cache.jmx.enable")
+      .doc("Enable or disable JMX for pools created with this configuration instance.")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[kafka010] val CONSUMER_CACHE_MIN_EVICTABLE_IDLE_TIME_MILLIS =
+    ConfigBuilder("spark.kafka.consumer.cache.minEvictableIdleTimeMillis")
+      .doc("The minimum amount of time an object may sit idle in the pool before " +
+        "it is eligible for eviction by the idle object evictor. " +
+        "When non-positive, no objects will be evicted from the pool due to idle time alone.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("5m")
+
+  private[kafka010] val CONSUMER_CACHE_EVICTOR_THREAD_RUN_INTERVAL_MILLIS =
+    ConfigBuilder("spark.kafka.consumer.cache.evictorThreadRunIntervalMillis")
+      .doc("The number of milliseconds to sleep between runs of the idle object evictor thread. " +
+        "When non-positive, no idle object evictor thread will be run.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("3m")
 }

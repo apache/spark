@@ -180,6 +180,8 @@
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.8.1</commons-lang3.version>
+    <!-- org.apache.commons/commons-pool2/-->
+    <commons-pool2.version>2.6.2</commons-pool2.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
     <janino.version>3.0.15</janino.version>
     <jersey.version>2.29</jersey.version>
