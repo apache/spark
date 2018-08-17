@@ -33,7 +33,7 @@ private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
  * @param prev the parent RDD.
  * @param part the partitioner used to partition the RDD
  * @param orderSensitivePartitioner whether the partitioner is order sensitive to the input data.
- *                                  Please refer to the doc of [[ShuffleDependency]] for details.
+ *                                  Please refer to the doc of `ShuffleDependency` for details.
  * @tparam K the key class.
  * @tparam V the value class.
  * @tparam C the combiner class.
