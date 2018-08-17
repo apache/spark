@@ -59,8 +59,10 @@ class FailureSafeParser[IN](
   }
 
   private val skipParsing = {
-    SQLConf.get.bypassParserForEmptySchema && optimizeEmptySchema && schema.isEmpty
+    SQLConf.get.bypassParserForEmptySchema && optimizeEmptySchema && mode == PermissiveMode &&
+      schema.isEmpty
   }
+
   def parse(input: IN): Iterator[InternalRow] = {
     try {
      if (skipParsing) {
