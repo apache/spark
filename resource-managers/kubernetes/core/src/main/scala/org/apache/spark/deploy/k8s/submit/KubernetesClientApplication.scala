@@ -110,7 +110,7 @@ private[spark] class Client(
       .map(file => new KubernetesDriverBuilder(provideInitialSpec = conf =>
         KubernetesDriverSpec.initialSpec(conf).copy(pod = SparkPod(
           kubernetesClient.pods().load(file).get(),
-          new ContainerBuilder().build()
+          new ContainerBuilder().build() // TODO(osatici): infer container from pod
         ))))
       .getOrElse(new KubernetesDriverBuilder())
     val resolvedDriverSpec = builder.buildFromFeatures(kubernetesConf)

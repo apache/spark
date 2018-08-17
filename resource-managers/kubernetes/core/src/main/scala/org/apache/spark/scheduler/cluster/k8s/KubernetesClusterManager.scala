@@ -20,10 +20,10 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 import com.google.common.cache.CacheBuilder
+import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.client.Config
-
 import org.apache.spark.SparkContext
-import org.apache.spark.deploy.k8s.{KubernetesUtils, SparkKubernetesClientFactory}
+import org.apache.spark.deploy.k8s.{KubernetesUtils, SparkKubernetesClientFactory, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
@@ -79,15 +79,22 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val removedExecutorsCache = CacheBuilder.newBuilder()
       .expireAfterWrite(3, TimeUnit.MINUTES)
       .build[java.lang.Long, java.lang.Long]()
+    val builder = sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
+      .map(new File(_))
+      .map(file => new KubernetesExecutorBuilder(provideInitialPod = () =>
+        SparkPod(
+          kubernetesClient.pods().load(file).get(),
+          new ContainerBuilder().build()))) // TODO(osatici): infer container from pod
+      .getOrElse(new KubernetesExecutorBuilder()())
     val executorPodsLifecycleEventHandler = new ExecutorPodsLifecycleManager(
       sc.conf,
-      new KubernetesExecutorBuilder(),
+      builder,
       kubernetesClient,
       snapshotsStore,
       removedExecutorsCache)
 
     val executorPodsAllocator = new ExecutorPodsAllocator(
-      sc.conf, new KubernetesExecutorBuilder(), kubernetesClient, snapshotsStore, new SystemClock())
+      sc.conf, builder, kubernetesClient, snapshotsStore, new SystemClock())
 
     val podsWatchEventSource = new ExecutorPodsWatchSnapshotSource(
       snapshotsStore,

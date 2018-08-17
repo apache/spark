@@ -35,7 +35,8 @@ private[spark] class KubernetesExecutorBuilder(
       new LocalDirsFeatureStep(_),
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
-      new MountVolumesFeatureStep(_)) {
+      new MountVolumesFeatureStep(_),
+    provideInitialPod: () => SparkPod = SparkPod.initialPod) {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf]): SparkPod = {
@@ -53,7 +54,7 @@ private[spark] class KubernetesExecutorBuilder(
 
     val allFeatures = baseFeatures ++ secretFeature ++ secretEnvFeature ++ volumesFeature
 
-    var executorPod = SparkPod.initialPod()
+    var executorPod = provideInitialPod()
     for (feature <- allFeatures) {
       executorPod = feature.configurePod(executorPod)
     }
