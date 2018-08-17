@@ -72,6 +72,12 @@ private[spark] object Constants {
   val ENV_PYSPARK_ARGS = "PYSPARK_APP_ARGS"
   val ENV_PYSPARK_MAJOR_PYTHON_VERSION = "PYSPARK_MAJOR_PYTHON_VERSION"
 
+  // Pod spec templates
+  val EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME = "podSpecTemplate.yml"
+  val EXECUTOR_POD_SPEC_TEMPLATE_FILE =
+    s"$SPARK_CONF_DIR_INTERNAL/$EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME"
+  val POD_TEMPLATE_VOLUME = "podspec-volume"
+
   // Miscellaneous
   val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
   val DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"

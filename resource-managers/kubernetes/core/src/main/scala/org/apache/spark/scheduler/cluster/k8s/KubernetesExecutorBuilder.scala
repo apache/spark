@@ -16,7 +16,7 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, KubernetesRoleSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, EnvSecretsFeatureStep, LocalDirsFeatureStep, MountSecretsFeatureStep}
 
@@ -36,6 +36,9 @@ private[spark] class KubernetesExecutorBuilder(
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
       new MountVolumesFeatureStep(_),
+    provideTemplateVolumeStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+      => TemplateVolumeStep) =
+      new TemplateVolumeStep(_),
     provideInitialPod: () => SparkPod = SparkPod.initialPod) {
 
   def buildFromFeatures(
@@ -51,8 +54,13 @@ private[spark] class KubernetesExecutorBuilder(
     val volumesFeature = if (kubernetesConf.roleVolumes.nonEmpty) {
       Seq(provideVolumesStep(kubernetesConf))
     } else Nil
+    val templateVolumeStep = if (
+      kubernetesConf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined) {
+      Seq(provideTemplateVolumeStep(kubernetesConf))
+    } else Nil
 
-    val allFeatures = baseFeatures ++ secretFeature ++ secretEnvFeature ++ volumesFeature
+    val allFeatures =
+      baseFeatures ++ secretFeature ++ secretEnvFeature ++ volumesFeature ++ templateVolumeStep
 
     var executorPod = provideInitialPod()
     for (feature <- allFeatures) {

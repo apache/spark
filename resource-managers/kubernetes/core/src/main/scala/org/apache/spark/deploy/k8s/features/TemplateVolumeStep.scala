@@ -16,26 +16,36 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import io.fabric8.kubernetes.api.model.{HasMetadata, PodBuilder}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesRoleSpecificConf, SparkPod}
+import io.fabric8.kubernetes.api.model.{Config => _, _}
+
+import org.apache.spark.deploy.k8s._
 
 private[spark] class TemplateVolumeStep(
    conf: KubernetesConf[_ <: KubernetesRoleSpecificConf])
   extends KubernetesFeatureConfigStep {
   def configurePod(pod: SparkPod): SparkPod = {
+    require(conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined)
+    val podTemplateFile = conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get
     val podWithVolume = new PodBuilder(pod.pod)
       .editSpec()
       .addNewVolume()
-      // TODO(osatici): create the volume for the executor podspec template here
+      .withName(Constants.POD_TEMPLATE_VOLUME)
+      .withHostPath(new HostPathVolumeSource(podTemplateFile))
       .endVolume()
       .endSpec()
       .build()
-    SparkPod(podWithVolume, pod.container)
+
+    val containerWithVolume = new ContainerBuilder(pod.container)
+        .withVolumeMounts(new VolumeMountBuilder()
+          .withName(Constants.POD_TEMPLATE_VOLUME)
+          .withMountPath(Constants.EXECUTOR_POD_SPEC_TEMPLATE_FILE)
+          .build())
+        .build()
+    SparkPod(podWithVolume, containerWithVolume)
   }
 
-  def getAdditionalPodSystemProperties(): Map[String, String] = {
-    // TODO(osatici): remap executor podspec template config to point to the mount created above
-  }
+  def getAdditionalPodSystemProperties(): Map[String, String] = Map[String, String](
+    Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE.key -> Constants.EXECUTOR_POD_SPEC_TEMPLATE_FILE)
 
   def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 }
