@@ -26,82 +26,73 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
   import org.apache.spark.sql.catalyst.dsl.expressions._
 
   private def createLambda(
-      expectedDt: DataType,
-      expectedNullable: Boolean,
+      expectedArgInfo: Seq[(DataType, Boolean)],
+      f: Seq[Expression] => Expression)
+      : (Expression, Seq[(DataType, Boolean)]) => LambdaFunction = { (_, argInfo) =>
+    assert(argInfo.size === expectedArgInfo.size)
+    argInfo.zip(expectedArgInfo).foreach {
+      case ((dt, nullable), (expectedDt, expectedNullable)) =>
+        assert(dt === expectedDt)
+        assert(nullable === expectedNullable)
+    }
+
+    val variables = argInfo.zipWithIndex.map { case ((dt, nullable), i) =>
+      NamedLambdaVariable(s"arg$i", dt, nullable)
+    }
+    val function = f(variables)
+    LambdaFunction(function, variables)
+  }
+
+  private def createLambda(
+      expectedArgInfo: (DataType, Boolean),
       f: Expression => Expression)
       : (Expression, Seq[(DataType, Boolean)]) => LambdaFunction = {
-    case (_, (dt, nullable) :: Nil) =>
-      assert(dt === expectedDt)
-      assert(nullable === expectedNullable)
-
-      val lv = NamedLambdaVariable("arg", dt, nullable)
-      val function = f(lv)
-      LambdaFunction(function, Seq(lv))
+    createLambda(Seq(expectedArgInfo), (exprs: Seq[Expression]) => f(exprs.head))
   }
 
   private def createLambda(
-      expectedDt1: DataType,
-      expectedNullable1: Boolean,
-      expectedDt2: DataType,
-      expectedNullable2: Boolean,
+      expectedArgInfo1: (DataType, Boolean),
+      expectedArgInfo2: (DataType, Boolean),
       f: (Expression, Expression) => Expression)
       : (Expression, Seq[(DataType, Boolean)]) => LambdaFunction = {
-    case (_, (dt1, nullable1) :: (dt2, nullable2) :: Nil) =>
-      assert(dt1 === expectedDt1)
-      assert(nullable1 === expectedNullable1)
-      assert(dt2 === expectedDt2)
-      assert(nullable2 === expectedNullable2)
-
-      val lv1 = NamedLambdaVariable("arg1", dt1, nullable1)
-      val lv2 = NamedLambdaVariable("arg2", dt2, nullable2)
-      val function = f(lv1, lv2)
-      LambdaFunction(function, Seq(lv1, lv2))
+    createLambda(
+      Seq(expectedArgInfo1, expectedArgInfo2),
+      (exprs: Seq[Expression]) => f(exprs.head, exprs.tail.head))
   }
 
   private def createLambda(
-      expectedDt1: DataType,
-      expectedNullable1: Boolean,
-      expectedDt2: DataType,
-      expectedNullable2: Boolean,
-      expectedDt3: DataType,
-      expectedNullable3: Boolean,
+      expectedArgInfo1: (DataType, Boolean),
+      expectedArgInfo2: (DataType, Boolean),
+      expectedArgInfo3: (DataType, Boolean),
       f: (Expression, Expression, Expression) => Expression)
       : (Expression, Seq[(DataType, Boolean)]) => LambdaFunction = {
-    case (_, (dt1, nullable1) :: (dt2, nullable2) :: (dt3, nullable3) :: Nil) =>
-      assert(dt1 === expectedDt1)
-      assert(nullable1 === expectedNullable1)
-      assert(dt2 === expectedDt2)
-      assert(nullable2 === expectedNullable2)
-      assert(dt3 === expectedDt3)
-      assert(nullable3 === expectedNullable3)
-
-      val lv1 = NamedLambdaVariable("arg1", dt1, nullable1)
-      val lv2 = NamedLambdaVariable("arg2", dt2, nullable2)
-      val lv3 = NamedLambdaVariable("arg3", dt3, nullable3)
-      val function = f(lv1, lv2, lv3)
-      LambdaFunction(function, Seq(lv1, lv2, lv3))
+    createLambda(
+      Seq(expectedArgInfo1, expectedArgInfo2, expectedArgInfo3),
+      (exprs: Seq[Expression]) => f(exprs.head, exprs.tail.head, exprs.tail.tail.head))
   }
 
   def transform(expr: Expression, f: Expression => Expression): ArrayTransform = {
     val ArrayType(elementType, containsNull) = expr.dataType
-    ArrayTransform(expr, null).bind(createLambda(elementType, containsNull, f))
+    ArrayTransform(expr, null).bind(createLambda((elementType, containsNull), f))
   }
 
   def transform(expr: Expression, f: (Expression, Expression) => Expression): ArrayTransform = {
     val ArrayType(elementType, containsNull) = expr.dataType
     val dummy = LambdaFunction(null,
       Seq(UnresolvedAttribute.quoted("arg1"), UnresolvedAttribute.quoted("arg1")))
-    ArrayTransform(expr, dummy).bind(createLambda(elementType, containsNull, IntegerType, false, f))
+    ArrayTransform(expr, dummy)
+      .bind(createLambda((elementType, containsNull), (IntegerType, false), f))
   }
 
   def filter(expr: Expression, f: Expression => Expression): ArrayFilter = {
     val ArrayType(elementType, containsNull) = expr.dataType
-    ArrayFilter(expr, null).bind(createLambda(elementType, containsNull, f))
+    ArrayFilter(expr, null).bind(createLambda((elementType, containsNull), f))
   }
 
   def transformKeys(expr: Expression, f: (Expression, Expression) => Expression): TransformKeys = {
     val MapType(keyType, valueType, valueContainsNull) = expr.dataType
-    TransformKeys(expr, null).bind(createLambda(keyType, false, valueType, valueContainsNull, f))
+    TransformKeys(expr, null)
+      .bind(createLambda((keyType, false), (valueType, valueContainsNull), f))
   }
 
   def aggregate(
@@ -113,9 +104,9 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val zeroType = zero.dataType
     ArrayAggregate(expr, zero, null, null).bind {
       case (f, argInfo @ _ :: _ :: Nil) =>
-        createLambda(zeroType, true, elementType, containsNull, merge)(f, argInfo)
+        createLambda((zeroType, true), (elementType, containsNull), merge)(f, argInfo)
       case (f, argInfo @ _ :: Nil) =>
-        createLambda(zeroType, true, finish)(f, argInfo)
+        createLambda((zeroType, true), finish)(f, argInfo)
     }
   }
 
@@ -130,7 +121,8 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       expr: Expression,
       f: (Expression, Expression) => Expression): TransformValues = {
     val MapType(keyType, valueType, valueContainsNull) = expr.dataType
-    TransformValues(expr, null).bind(createLambda(keyType, false, valueType, valueContainsNull, f))
+    TransformValues(expr, null)
+      .bind(createLambda((keyType, false), (valueType, valueContainsNull), f))
   }
 
   test("ArrayTransform") {
@@ -177,7 +169,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
   test("MapFilter") {
     def mapFilter(expr: Expression, f: (Expression, Expression) => Expression): MapFilter = {
       val MapType(keyType, valueType, valueContainsNull) = expr.dataType
-      MapFilter(expr, null).bind(createLambda(keyType, false, valueType, valueContainsNull, f))
+      MapFilter(expr, null).bind(createLambda((keyType, false), (valueType, valueContainsNull), f))
     }
     val mii0 = Literal.create(Map(1 -> 0, 2 -> 10, 3 -> -1),
       MapType(IntegerType, IntegerType, valueContainsNull = false))
@@ -258,7 +250,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
   test("ArrayExists") {
     def exists(expr: Expression, f: Expression => Expression): ArrayExists = {
       val ArrayType(elementType, containsNull) = expr.dataType
-      ArrayExists(expr, null).bind(createLambda(elementType, containsNull, f))
+      ArrayExists(expr, null).bind(createLambda((elementType, containsNull), f))
     }
 
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
@@ -465,7 +457,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
         f: (Expression, Expression, Expression) => Expression): MapZipWith = {
       val MapType(kt, vt1, _) = left.dataType
       val MapType(_, vt2, _) = right.dataType
-      MapZipWith(left, right, null).bind(createLambda(kt, false, vt1, true, vt2, true, f))
+      MapZipWith(left, right, null).bind(createLambda((kt, false), (vt1, true), (vt2, true), f))
     }
 
     val mii0 = Literal.create(Map(1 -> 10, 2 -> 20, 3 -> 30),
@@ -583,7 +575,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
         f: (Expression, Expression) => Expression): ZipWith = {
       val ArrayType(leftT, _) = left.dataType
       val ArrayType(rightT, _) = right.dataType
-      ZipWith(left, right, null).bind(createLambda(leftT, true, rightT, true, f))
+      ZipWith(left, right, null).bind(createLambda((leftT, true), (rightT, true), f))
     }
 
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
