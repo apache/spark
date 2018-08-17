@@ -471,6 +471,9 @@ setGeneric("explain", function(x, ...) { standardGeneric("explain") })
 #' @rdname except
 setGeneric("except", function(x, y) { standardGeneric("except") })
 
+#' @rdname exceptAll
+setGeneric("exceptAll", function(x, y) { standardGeneric("exceptAll") })
+
 #' @rdname nafunctions
 setGeneric("fillna", function(x, value, cols = NULL) { standardGeneric("fillna") })
 
@@ -494,6 +497,9 @@ setGeneric("insertInto", function(x, tableName, ...) { standardGeneric("insertIn
 
 #' @rdname intersect
 setGeneric("intersect", function(x, y) { standardGeneric("intersect") })
+
+#' @rdname intersectAll
+setGeneric("intersectAll", function(x, y) { standardGeneric("intersectAll") })
 
 #' @rdname isLocal
 setGeneric("isLocal", function(x) { standardGeneric("isLocal") })

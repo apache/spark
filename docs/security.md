@@ -22,7 +22,12 @@ secrets to be secure.
 
 For other resource managers, `spark.authenticate.secret` must be configured on each of the nodes.
 This secret will be shared by all the daemons and applications, so this deployment configuration is
-not as secure as the above, especially when considering multi-tenant clusters.
+not as secure as the above, especially when considering multi-tenant clusters.  In this
+configuration, a user with the secret can effectively impersonate any other user.
+
+The Rest Submission Server and the MesosClusterDispatcher do not support authentication.  You should
+ensure that all network access to the REST API & MesosClusterDispatcher (port 6066 and 7077
+respectively by default) are restricted to hosts that are trusted to submit jobs.
 
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>

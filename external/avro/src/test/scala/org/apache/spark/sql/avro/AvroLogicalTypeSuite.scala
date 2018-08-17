@@ -267,6 +267,46 @@ class AvroLogicalTypeSuite extends QueryTest with SharedSQLContext with SQLTestU
     }
   }
 
+  test("Logical type: write Decimal with BYTES type") {
+    val specifiedSchema = """
+      {
+        "type" : "record",
+        "name" : "topLevelRecord",
+        "namespace" : "topLevelRecord",
+        "fields" : [ {
+          "name" : "bytes",
+          "type" : [ {
+            "type" : "bytes",
+            "namespace" : "topLevelRecord.bytes",
+            "logicalType" : "decimal",
+            "precision" : 4,
+            "scale" : 2
+          }, "null" ]
+        }, {
+          "name" : "fixed",
+          "type" : [ {
+            "type" : "bytes",
+            "logicalType" : "decimal",
+            "precision" : 4,
+            "scale" : 2
+          }, "null" ]
+        } ]
+      }
+    """
+    withTempDir { dir =>
+      val (avroSchema, avroFile) = decimalSchemaAndFile(dir.getAbsolutePath)
+      assert(specifiedSchema != avroSchema)
+      val expected =
+        decimalInputData.map { x => Row(new java.math.BigDecimal(x), new java.math.BigDecimal(x)) }
+      val df = spark.read.format("avro").load(avroFile)
+
+      withTempPath { path =>
+        df.write.format("avro").option("avroSchema", specifiedSchema).save(path.toString)
+        checkAnswer(spark.read.format("avro").load(path.toString), expected)
+      }
+    }
+  }
+
   test("Logical type: Decimal with too large precision") {
     withTempDir { dir =>
       val schema = new Schema.Parser().parse("""{
