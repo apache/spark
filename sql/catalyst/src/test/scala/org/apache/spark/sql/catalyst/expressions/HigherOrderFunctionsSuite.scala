@@ -101,6 +101,11 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     aggregate(expr, zero, merge, identity)
   }
 
+  def transformValues(expr: Expression, f: (Expression, Expression) => Expression): Expression = {
+    val map = expr.dataType.asInstanceOf[MapType]
+    TransformValues(expr, createLambda(map.keyType, false, map.valueType, map.valueContainsNull, f))
+  }
+
   test("ArrayTransform") {
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
     val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
@@ -356,6 +361,74 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       MapType(IntegerType, StringType, valueContainsNull = false))
 
     checkEvaluation(transformKeys(ax0, plusOne), Map(2 -> "x", 3 -> "y", 4 -> "z"))
+  }
+
+  test("TransformValues") {
+    val ai0 = Literal.create(
+      Map(1 -> 1, 2 -> 2, 3 -> 3),
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val ai1 = Literal.create(
+      Map(1 -> 1, 2 -> null, 3 -> 3),
+      MapType(IntegerType, IntegerType, valueContainsNull = true))
+    val ai2 = Literal.create(
+      Map.empty[Int, Int],
+      MapType(IntegerType, IntegerType, valueContainsNull = true))
+    val ai3 = Literal.create(null, MapType(IntegerType, IntegerType, valueContainsNull = false))
+
+    val plusOne: (Expression, Expression) => Expression = (k, v) => v + 1
+    val valueUpdate: (Expression, Expression) => Expression = (k, v) => k * k
+
+    checkEvaluation(transformValues(ai0, plusOne), Map(1 -> 2, 2 -> 3, 3 -> 4))
+    checkEvaluation(transformValues(ai0, valueUpdate), Map(1 -> 1, 2 -> 4, 3 -> 9))
+    checkEvaluation(
+      transformValues(transformValues(ai0, plusOne), valueUpdate), Map(1 -> 1, 2 -> 4, 3 -> 9))
+    checkEvaluation(transformValues(ai1, plusOne), Map(1 -> 2, 2 -> null, 3 -> 4))
+    checkEvaluation(transformValues(ai1, valueUpdate), Map(1 -> 1, 2 -> 4, 3 -> 9))
+    checkEvaluation(
+      transformValues(transformValues(ai1, plusOne), valueUpdate), Map(1 -> 1, 2 -> 4, 3 -> 9))
+    checkEvaluation(transformValues(ai2, plusOne), Map.empty[Int, Int])
+    checkEvaluation(transformValues(ai3, plusOne), null)
+
+    val as0 = Literal.create(
+      Map("a" -> "xy", "bb" -> "yz", "ccc" -> "zx"),
+      MapType(StringType, StringType, valueContainsNull = false))
+    val as1 = Literal.create(
+      Map("a" -> "xy", "bb" -> null, "ccc" -> "zx"),
+      MapType(StringType, StringType, valueContainsNull = true))
+    val as2 = Literal.create(Map.empty[StringType, StringType],
+      MapType(StringType, StringType, valueContainsNull = true))
+    val as3 = Literal.create(null, MapType(StringType, StringType, valueContainsNull = true))
+
+    val concatValue: (Expression, Expression) => Expression = (k, v) => Concat(Seq(k, v))
+    val valueTypeUpdate: (Expression, Expression) => Expression =
+      (k, v) => Length(v) + 1
+
+    checkEvaluation(
+      transformValues(as0, concatValue), Map("a" -> "axy", "bb" -> "bbyz", "ccc" -> "ccczx"))
+    checkEvaluation(transformValues(as0, valueTypeUpdate),
+      Map("a" -> 3, "bb" -> 3, "ccc" -> 3))
+    checkEvaluation(
+      transformValues(transformValues(as0, concatValue), concatValue),
+      Map("a" -> "aaxy", "bb" -> "bbbbyz", "ccc" -> "cccccczx"))
+    checkEvaluation(transformValues(as1, concatValue),
+      Map("a" -> "axy", "bb" -> null, "ccc" -> "ccczx"))
+    checkEvaluation(transformValues(as1, valueTypeUpdate),
+      Map("a" -> 3, "bb" -> null, "ccc" -> 3))
+    checkEvaluation(
+      transformValues(transformValues(as1, concatValue), concatValue),
+      Map("a" -> "aaxy", "bb" -> null, "ccc" -> "cccccczx"))
+    checkEvaluation(transformValues(as2, concatValue), Map.empty[String, String])
+    checkEvaluation(transformValues(as2, valueTypeUpdate), Map.empty[String, Int])
+    checkEvaluation(
+      transformValues(transformValues(as2, concatValue), valueTypeUpdate),
+      Map.empty[String, Int])
+    checkEvaluation(transformValues(as3, concatValue), null)
+
+    val ax0 = Literal.create(
+      Map(1 -> "x", 2 -> "y", 3 -> "z"),
+      MapType(IntegerType, StringType, valueContainsNull = false))
+
+    checkEvaluation(transformValues(ax0, valueUpdate), Map(1 -> 1, 2 -> 4, 3 -> 9))
   }
 
   test("MapZipWith") {
