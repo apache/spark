@@ -16,8 +16,15 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, KubernetesRoleSpecificConf, SparkPod}
+import java.io.File
+
+import io.fabric8.kubernetes.client.KubernetesClient
+
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
+import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, EnvSecretsFeatureStep, LocalDirsFeatureStep, MountSecretsFeatureStep}
+import org.apache.spark.internal.Logging
 
 private[spark] class KubernetesExecutorBuilder(
     provideBasicStep: (KubernetesConf [KubernetesExecutorSpecificConf])
@@ -37,7 +44,8 @@ private[spark] class KubernetesExecutorBuilder(
       new LocalDirsFeatureStep(_),
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
-      new MountVolumesFeatureStep(_)) {
+      new MountVolumesFeatureStep(_),
+    provideInitialPod: () => SparkPod = SparkPod.initialPod) {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf]): SparkPod = {
@@ -59,10 +67,28 @@ private[spark] class KubernetesExecutorBuilder(
     val allFeatures = baseFeatures ++
       secretFeature ++ secretEnvFeature ++ volumesFeature ++ localFilesFeature
 
-    var executorPod = SparkPod.initialPod()
+    var executorPod = provideInitialPod()
     for (feature <- allFeatures) {
       executorPod = feature.configurePod(executorPod)
     }
     executorPod
+  }
+}
+
+private[spark] object KubernetesExecutorBuilder extends Logging {
+  def apply(kubernetesClient: KubernetesClient, conf: SparkConf): KubernetesExecutorBuilder = {
+    conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
+      .map(new File(_))
+      .map(file => new KubernetesExecutorBuilder(provideInitialPod = () => {
+        try {
+          KubernetesUtils.loadPodFromTemplate(kubernetesClient, file)
+        } catch {
+          case e: Exception =>
+            logError(
+              s"Encountered exception while attempting to load initial pod spec from file", e)
+            throw new SparkException("Could not load executor pod from template file.", e)
+        }
+      }))
+      .getOrElse(new KubernetesExecutorBuilder())
   }
 }

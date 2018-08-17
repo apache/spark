@@ -35,7 +35,7 @@ import org.apache.spark.launcher.SparkLauncher
 
 private[spark] class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
-  with PythonTestsSuite with ClientModeTestsSuite {
+  with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite {
 
   import KubernetesSuite._
 

@@ -24,8 +24,9 @@ private[spark] case class KubernetesDriverSpec(
     systemProperties: Map[String, String])
 
 private[spark] object KubernetesDriverSpec {
-  def initialSpec(initialProps: Map[String, String]): KubernetesDriverSpec = KubernetesDriverSpec(
-    SparkPod.initialPod(),
-    Seq.empty,
-    initialProps)
+  def initialSpec(initialConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesDriverSpec =
+    KubernetesDriverSpec(
+      SparkPod.initialPod(),
+      Seq.empty,
+      initialConf.sparkConf.getAll.toMap)
 }

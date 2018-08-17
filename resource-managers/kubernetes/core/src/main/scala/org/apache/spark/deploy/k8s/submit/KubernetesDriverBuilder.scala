@@ -18,10 +18,14 @@ package org.apache.spark.deploy.k8s.submit
 
 import java.io.File
 
+import io.fabric8.kubernetes.client.KubernetesClient
+
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.util.Utils
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
-import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
-import org.apache.spark.util.Utils
+import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
+import org.apache.spark.internal.Logging
 
 private[spark] class KubernetesDriverBuilder(
     provideBasicStep: (KubernetesConf[KubernetesDriverSpecificConf]) => BasicDriverFeatureStep =
@@ -51,7 +55,11 @@ private[spark] class KubernetesDriverBuilder(
         => JavaDriverFeatureStep) =
       new JavaDriverFeatureStep(_),
     providePythonStep: (KubernetesConf[KubernetesDriverSpecificConf] => PythonDriverFeatureStep) =
-      new PythonDriverFeatureStep(_)) {
+      new PythonDriverFeatureStep(_),
+    providePodTemplateConfigMapStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+      => PodTemplateConfigMapStep) =
+      new PodTemplateConfigMapStep(_),
+    provideInitialPod: () => SparkPod = SparkPod.initialPod) {
 
   import KubernetesDriverBuilder._
 
@@ -71,6 +79,10 @@ private[spark] class KubernetesDriverBuilder(
     } else Nil
     val volumesFeature = if (kubernetesConf.roleVolumes.nonEmpty) {
       Seq(provideVolumesStep(kubernetesConf))
+    } else Nil
+    val podTemplateFeature = if (
+      kubernetesConf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined) {
+      Seq(providePodTemplateConfigMapStep(kubernetesConf))
     } else Nil
 
     val bindingsStep = kubernetesConf.roleSpecificConf.mainAppResource.map {
@@ -94,10 +106,13 @@ private[spark] class KubernetesDriverBuilder(
       Seq(provideMountLocalFilesStep(kubernetesConf))
     } else Nil
 
-    val allFeatures = (baseFeatures :+ bindingsStep) ++
-      secretFeature ++ envSecretFeature ++ volumesFeature ++ providedLocalFilesFeature
+    val allFeatures = (baseFeatures :+ bindingsStep) ++ secretFeature ++
+      envSecretFeature ++ volumesFeature ++ providedLocalFilesFeature ++ podTemplateFeature
 
-    var spec = KubernetesDriverSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
+    var spec = KubernetesDriverSpec(
+      provideInitialPod(),
+      Seq.empty,
+      kubernetesConf.sparkConf.getAll.toMap)
     for (feature <- allFeatures) {
       val configuredPod = feature.configurePod(spec.pod)
       val addedSystemProperties = feature.getAdditionalPodSystemProperties()
@@ -111,8 +126,24 @@ private[spark] class KubernetesDriverBuilder(
   }
 }
 
-private object KubernetesDriverBuilder {
+private[spark] object KubernetesDriverBuilder extends Logging {
   val MAX_SECRET_BUNDLE_SIZE_BYTES = 20480
   val MAX_SECRET_BUNDLE_SIZE_BYTES_STRING =
     Utils.bytesToString(MAX_SECRET_BUNDLE_SIZE_BYTES)
+
+  def apply(kubernetesClient: KubernetesClient, conf: SparkConf): KubernetesDriverBuilder = {
+    conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE)
+      .map(new File(_))
+      .map(file => new KubernetesDriverBuilder(provideInitialPod = () => {
+        try {
+          KubernetesUtils.loadPodFromTemplate(kubernetesClient, file)
+        } catch {
+          case e: Exception =>
+            logError(
+              s"Encountered exception while attempting to load initial pod spec from file", e)
+            throw new SparkException("Could not load driver pod from template file.", e)
+        }
+      }))
+      .getOrElse(new KubernetesDriverBuilder())
+  }
 }

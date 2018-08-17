@@ -129,7 +129,7 @@ private[spark] class BasicExecutorFeatureStep(
       }
 
     val executorContainer = new ContainerBuilder(pod.container)
-      .withName("executor")
+      .withName(Option(pod.container.getName).getOrElse(DEFAULT_EXECUTOR_CONTAINER_NAME))
       .withImage(executorContainerImage)
       .withImagePullPolicy(kubernetesConf.imagePullPolicy())
       .withNewResources()
@@ -163,8 +163,8 @@ private[spark] class BasicExecutorFeatureStep(
     val executorPod = new PodBuilder(pod.pod)
       .editOrNewMetadata()
         .withName(name)
-        .withLabels(kubernetesConf.roleLabels.asJava)
-        .withAnnotations(kubernetesConf.roleAnnotations.asJava)
+        .addToLabels(kubernetesConf.roleLabels.asJava)
+        .addToAnnotations(kubernetesConf.roleAnnotations.asJava)
         .addToOwnerReferences(ownerReference.toSeq: _*)
         .endMetadata()
       .editOrNewSpec()

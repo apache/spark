@@ -16,7 +16,14 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.api.model.PodBuilder
+import java.io.File
+
+import io.fabric8.kubernetes.api.model.{Config => _, _}
+import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.dsl.{MixedOperation, PodResource}
+import org.mockito.Matchers.any
+import org.mockito.Mockito.{mock, never, verify, when}
+import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
@@ -148,5 +155,78 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     stepTypes.foreach { stepType =>
       assert(resolvedPod.pod.getMetadata.getLabels.get(stepType) === stepType)
     }
+  }
+
+  test("Starts with empty executor pod if template is not specified") {
+    val kubernetesClient = mock(classOf[KubernetesClient])
+    val executorBuilder = KubernetesExecutorBuilder.apply(kubernetesClient, new SparkConf())
+    verify(kubernetesClient, never()).pods()
+  }
+
+  test("Starts with executor template if specified") {
+    val pod = constructPodWithPodTemplate(
+      new PodBuilder()
+        .withNewMetadata()
+          .addToLabels("test-label-key", "test-label-value")
+          .endMetadata()
+        .withNewSpec()
+          .addNewContainer()
+            .withName("executor-container")
+            .addToVolumeMounts(
+              new VolumeMountBuilder()
+                .withName("test-volume")
+                .withMountPath("/test")
+                .build())
+            .endContainer()
+          .addNewVolume()
+            .withNewHostPath()
+              .withPath("/test")
+              .endHostPath()
+            .withName("test-volume")
+            .endVolume()
+          .endSpec()
+        .build())
+
+    assert(pod.pod.getMetadata.getLabels.containsKey("test-label-key"))
+    assert(!pod.pod.getSpec.getContainers.asScala.exists(_.getName == "executor-container"))
+    assert(pod.pod.getMetadata.getLabels.get("test-label-key") === "test-label-value")
+    assert(pod.container.getName === "executor-container")
+    assert(pod.container.getVolumeMounts.asScala.exists(_.getName == "test-volume"))
+    assert(pod.pod.getSpec.getVolumes.asScala.exists(_.getName == "test-volume"))
+  }
+
+  private def constructPodWithPodTemplate(pod: Pod) : SparkPod = {
+    val kubernetesClient = mock(classOf[KubernetesClient])
+    val pods =
+      mock(classOf[MixedOperation[Pod, PodList, DoneablePod, PodResource[Pod, DoneablePod]]])
+    val podResource = mock(classOf[PodResource[Pod, DoneablePod]])
+    when(kubernetesClient.pods()).thenReturn(pods)
+    when(pods.load(any(classOf[File]))).thenReturn(podResource)
+    when(podResource.get()).thenReturn(pod)
+
+    val sparkConf = new SparkConf(false)
+      .set("spark.driver.host", "https://driver.host.com")
+      .set(Config.CONTAINER_IMAGE, "spark-executor:latest")
+      .set(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE, "template-file.yaml")
+
+    val kubernetesConf = KubernetesConf(
+      sparkConf,
+      KubernetesExecutorSpecificConf(
+        "executor-id", Some(new PodBuilder()
+            .withNewMetadata()
+              .withName("driver")
+            .endMetadata()
+          .build())),
+      "prefix",
+      "appId",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Nil,
+      Seq.empty[String])
+
+    KubernetesExecutorBuilder.apply(kubernetesClient, sparkConf).buildFromFeatures(kubernetesConf)
   }
 }
