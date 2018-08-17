@@ -433,7 +433,7 @@ case class FileSourceScanExec(
 
     var maxSplitBytes = Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
 
-    if(fsRelation.sparkSession.sessionState.conf.isParquetSizeAdaptiveEnabled &&
+    if(fsRelation.sparkSession.sessionState.conf.isColumnarStorageSplitSizeAdaptiveEnabled &&
       (fsRelation.fileFormat.isInstanceOf[ParquetSource] ||
         fsRelation.fileFormat.isInstanceOf[OrcFileFormat])) {
       if (relation.dataSchema.map(_.dataType).forall(dataType =>
@@ -443,11 +443,11 @@ case class FileSourceScanExec(
 
         def getTypeLength(dataType: DataType): Int = {
           if (dataType.isInstanceOf[StructType]) {
-            fsRelation.sparkSession.sessionState.conf.parquetStructTypeLength
+            fsRelation.sparkSession.sessionState.conf.columnarStructTypeLength
           } else if (dataType.isInstanceOf[ArrayType]) {
-            fsRelation.sparkSession.sessionState.conf.parquetArrayTypeLength
+            fsRelation.sparkSession.sessionState.conf.columnarArrayTypeLength
           } else if (dataType.isInstanceOf[MapType]) {
-            fsRelation.sparkSession.sessionState.conf.parquetMapTypeLength
+            fsRelation.sparkSession.sessionState.conf.columnarMapTypeLength
           } else {
             dataType.defaultSize
           }

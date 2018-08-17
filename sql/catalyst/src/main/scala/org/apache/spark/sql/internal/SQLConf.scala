@@ -460,25 +460,32 @@ object SQLConf {
     .intConf
     .createWithDefault(4096)
 
-  val IS_PARQUET_PARTITION_ADAPTIVE_ENABLED = buildConf("spark.sql.parquet.adaptiveFileSplit")
-    .doc("For columnar file format (e.g., Parquet), it's possible that only few (not all) " +
-      "columns are needed. So, it's better to make sure that the total size of the selected " +
-      "columns is about 128 MB "
-    )
+  val IS_COLUMNAR_PARTITION_ADAPTIVE_ENABLED = buildConf("spark.sql.columnar.adaptiveFileSplit")
+    .doc("When this is enabled, the partition size will adaptively enlarged when reading " +
+      "from columnar storage to make sure the actual input bytes of each task is close to " +
+      "the a proper partition size. When a user set spark.sql.files.maxPartitionBytes, he " +
+      "may think that is the upper bound of a single partition and each task will read at " +
+      "most this amount of data. For row based files, that is right. But for columnar storage, " +
+      "such as Parquet OR ORC, each task may read much less data because of column pruning." +
+      "For example, a 1024 MB file may contains of 10 columns, 5 of which are integer while " +
+      "another 5 are long. If this is a row based file, there will be 8 tasks, each of which " +
+      "will read 128MB. If this is a Parquet or ORC file and the Job only read a single " +
+      "column in long, there will be also 8 tasks, but each task will read much less than " +
+      "128 MB because of column pruning.")
     .booleanConf
     .createWithDefault(false)
 
-  val PARQUET_STRUCT_LENGTH = buildConf("spark.sql.parquet.struct.length")
+  val COLUMNAR_STRUCT_LENGTH = buildConf("spark.sql.columnar.struct.length")
     .doc("Set the default size of struct column")
     .intConf
     .createWithDefault(StringType.defaultSize)
 
-  val PARQUET_MAP_LENGTH = buildConf("spark.sql.parquet.map.length")
+  val COLUMNAR_MAP_LENGTH = buildConf("spark.sql.columnar.map.length")
     .doc("Set the default size of map column")
     .intConf
     .createWithDefault(StringType.defaultSize)
 
-  val PARQUET_ARRAY_LENGTH = buildConf("spark.sql.parquet.array.length")
+  val COLUMNAR_ARRAY_LENGTH = buildConf("spark.sql.columnar.array.length")
     .doc("Set the default size of array column")
     .intConf
     .createWithDefault(StringType.defaultSize)
@@ -1738,13 +1745,14 @@ class SQLConf extends Serializable with Logging {
 
   def parquetRecordFilterEnabled: Boolean = getConf(PARQUET_RECORD_FILTER_ENABLED)
 
-  def isParquetSizeAdaptiveEnabled: Boolean = getConf(IS_PARQUET_PARTITION_ADAPTIVE_ENABLED)
+  def isColumnarStorageSplitSizeAdaptiveEnabled: Boolean =
+    getConf(IS_COLUMNAR_PARTITION_ADAPTIVE_ENABLED)
 
-  def parquetStructTypeLength: Int = getConf(PARQUET_STRUCT_LENGTH)
+  def columnarStructTypeLength: Int = getConf(COLUMNAR_STRUCT_LENGTH)
 
-  def parquetMapTypeLength: Int = getConf(PARQUET_MAP_LENGTH)
+  def columnarMapTypeLength: Int = getConf(COLUMNAR_MAP_LENGTH)
 
-  def parquetArrayTypeLength: Int = getConf(PARQUET_ARRAY_LENGTH)
+  def columnarArrayTypeLength: Int = getConf(COLUMNAR_ARRAY_LENGTH)
 
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
 
