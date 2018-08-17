@@ -19,18 +19,23 @@ package org.apache.spark.sql.kafka010
 
 import scala.collection.JavaConverters._
 
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.kafka010.KafkaWriter.validateQuery
+import org.apache.spark.sql.sources.v2.CustomMetrics
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamWriter, SupportsCustomWriterMetrics}
 import org.apache.spark.sql.types.StructType
 
 /**
  * Dummy commit message. The DataSourceV2 framework requires a commit message implementation but we
  * don't need to really send one.
  */
-case object KafkaWriterCommitMessage extends WriterCommitMessage
+case class KafkaWriterCommitMessage(minOffset: KafkaSourceOffset, maxOffset: KafkaSourceOffset)
+  extends WriterCommitMessage
 
 /**
  * A [[StreamWriter]] for Kafka writing. Responsible for generating the writer factory.
@@ -42,15 +47,25 @@ case object KafkaWriterCommitMessage extends WriterCommitMessage
  */
 class KafkaStreamWriter(
     topic: Option[String], producerParams: Map[String, String], schema: StructType)
-  extends StreamWriter {
+  extends StreamWriter with SupportsCustomWriterMetrics {
+
+  private var customMetrics: KafkaWriterCustomMetrics = _
 
   validateQuery(schema.toAttributes, producerParams.toMap[String, Object].asJava, topic)
 
   override def createWriterFactory(): KafkaStreamWriterFactory =
     KafkaStreamWriterFactory(topic, producerParams, schema)
 
-  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+    customMetrics = KafkaWriterCustomMetrics(messages)
+  }
+
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+
+  override def getCustomMetrics: KafkaWriterCustomMetrics = {
+    customMetrics
+  }
+
 }
 
 /**
@@ -102,7 +117,9 @@ class KafkaStreamDataWriter(
     checkForErrors()
     producer.flush()
     checkForErrors()
-    KafkaWriterCommitMessage
+    val minOffset: KafkaSourceOffset = KafkaSourceOffset(minOffsetAccumulator.toMap)
+    val maxOffset: KafkaSourceOffset = KafkaSourceOffset(maxOffsetAccumulator.toMap)
+    KafkaWriterCommitMessage(minOffset, maxOffset)
   }
 
   def abort(): Unit = {}
@@ -114,5 +131,68 @@ class KafkaStreamDataWriter(
       checkForErrors()
       CachedKafkaProducer.close(new java.util.HashMap[String, Object](producerParams.asJava))
     }
+  }
+}
+
+private[kafka010] case class KafkaWriterCustomMetrics(
+    minOffset: KafkaSourceOffset,
+    maxOffset: KafkaSourceOffset) extends CustomMetrics {
+  override def json(): String = {
+    val jsonVal = ("minOffset" -> parse(minOffset.json)) ~
+      ("maxOffset" -> parse(maxOffset.json))
+    compact(render(jsonVal))
+  }
+
+  override def toString: String = json()
+}
+
+private[kafka010] object KafkaWriterCustomMetrics {
+
+  import Math.{min, max}
+
+  def apply(messages: Array[WriterCommitMessage]): KafkaWriterCustomMetrics = {
+    val minMax = collate(messages)
+    KafkaWriterCustomMetrics(minMax._1, minMax._2)
+  }
+
+  private def collate(messages: Array[WriterCommitMessage]):
+      (KafkaSourceOffset, KafkaSourceOffset) = {
+
+    messages.headOption.flatMap {
+      case x: KafkaWriterCommitMessage =>
+        val lower = messages.map(_.asInstanceOf[KafkaWriterCommitMessage])
+          .map(_.minOffset).reduce(collateLower)
+        val higher = messages.map(_.asInstanceOf[KafkaWriterCommitMessage])
+          .map(_.maxOffset).reduce(collateHigher)
+        Some((lower, higher))
+      case _ => throw new IllegalArgumentException()
+    }.getOrElse((KafkaSourceOffset(), KafkaSourceOffset()))
+  }
+
+  private def collateHigher(o1: KafkaSourceOffset, o2: KafkaSourceOffset): KafkaSourceOffset = {
+    collate(o1, o2, max)
+  }
+
+  private def collateLower(o1: KafkaSourceOffset, o2: KafkaSourceOffset): KafkaSourceOffset = {
+    collate(o1, o2, min)
+  }
+
+  private def collate(
+      o1: KafkaSourceOffset,
+      o2: KafkaSourceOffset,
+      collator: (Long, Long) => Long): KafkaSourceOffset = {
+    val thisOffsets = o1.partitionToOffsets
+    val thatOffsets = o2.partitionToOffsets
+    val collated = (thisOffsets.keySet ++ thatOffsets.keySet)
+      .map(key =>
+        if (!thatOffsets.contains(key)) {
+          key -> thisOffsets(key)
+        } else if (!thisOffsets.contains(key)) {
+          key -> thatOffsets(key)
+        } else {
+          key -> collator(thisOffsets(key), thatOffsets(key))
+        }
+      ).toMap
+    new KafkaSourceOffset(collated)
   }
 }

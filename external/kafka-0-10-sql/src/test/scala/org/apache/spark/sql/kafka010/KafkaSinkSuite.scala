@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.serialization.ByteArraySerializer
+import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
@@ -38,7 +39,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
 
   protected var testUtils: KafkaTestUtils = _
 
-  override val streamingTimeout = 30.seconds
+  override val streamingTimeout: Span = 30.seconds
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -229,6 +230,30 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
     }
   }
 
+  test("streaming - sink progress is produced") {
+    /* ensure sink progress is correctly produced. */
+    val input = MemoryStream[String]
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    val writer = createKafkaWriter(
+      input.toDF(),
+      withTopic = Some(topic),
+      withOutputMode = Some(OutputMode.Update()))()
+
+    try {
+      input.addData("1", "2", "3")
+      failAfter(streamingTimeout) {
+        writer.processAllAvailable()
+      }
+      val topicName = topic.toString
+      val expected = "{\"minOffset\":{\"" + topicName + "\":{\"0\":0}}," +
+        "\"maxOffset\":{\"" + topicName + "\":{\"0\":2}}}"
+      assert(writer.lastProgress.sink.customMetrics == expected)
+    } finally {
+      writer.stop()
+    }
+  }
 
   test("streaming - write data with bad schema") {
     val input = MemoryStream[String]
@@ -417,7 +442,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
     var stream: DataStreamWriter[Row] = null
     withTempDir { checkpointDir =>
       var df = input.toDF()
-      if (withSelectExpr.length > 0) {
+      if (withSelectExpr.nonEmpty) {
         df = df.selectExpr(withSelectExpr: _*)
       }
       stream = df.writeStream

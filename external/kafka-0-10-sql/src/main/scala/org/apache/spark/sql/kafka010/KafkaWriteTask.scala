@@ -18,8 +18,10 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.kafka.clients.producer.{Callback, KafkaProducer, ProducerRecord, RecordMetadata}
+import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection}
@@ -61,12 +63,30 @@ private[kafka010] class KafkaWriteTask(
 private[kafka010] abstract class KafkaRowWriter(
     inputSchema: Seq[Attribute], topic: Option[String]) {
 
+  import scala.collection.JavaConverters._
+
+  protected val minOffsetAccumulator: collection.concurrent.Map[TopicPartition, Long] =
+    new ConcurrentHashMap[TopicPartition, Long]().asScala
+
+  protected val maxOffsetAccumulator: collection.concurrent.Map[TopicPartition, Long] =
+    new ConcurrentHashMap[TopicPartition, Long]().asScala
+
   // used to synchronize with Kafka callbacks
   @volatile protected var failedWrite: Exception = _
   protected val projection = createProjection
 
   private val callback = new Callback() {
+    import Math.{min, max}
+
     override def onCompletion(recordMetadata: RecordMetadata, e: Exception): Unit = {
+      if (recordMetadata != null) {
+        val topicPartition = new TopicPartition(recordMetadata.topic(), recordMetadata.partition())
+        val next = recordMetadata.offset()
+        val currentMin = minOffsetAccumulator.getOrElse(topicPartition, next)
+        minOffsetAccumulator.put(topicPartition, min(currentMin, next))
+        val currentMax = maxOffsetAccumulator.getOrElse(topicPartition, next)
+        maxOffsetAccumulator.put(topicPartition, max(currentMax, next))
+      }
       if (failedWrite == null && e != null) {
         failedWrite = e
       }
