@@ -104,16 +104,8 @@ private[spark] class Client(
     kubernetesResourceNamePrefix: String) extends Logging {
 
   def run(): Unit = {
-
-    val builder = kubernetesConf.sparkConf.get(KUBERNETES_DRIVER_PODTEMPLATE_FILE)
-      .map(new File(_))
-      .map(file => new KubernetesDriverBuilder(provideInitialSpec = conf =>
-        KubernetesDriverSpec.initialSpec(conf).copy(pod = SparkPod(
-          kubernetesClient.pods().load(file).get(),
-          new ContainerBuilder().build() // TODO(osatici): infer container from pod
-        ))))
-      .getOrElse(new KubernetesDriverBuilder())
-    val resolvedDriverSpec = builder.buildFromFeatures(kubernetesConf)
+    val resolvedDriverSpec = KubernetesDriverBuilder(kubernetesClient, kubernetesConf.sparkConf)
+      .buildFromFeatures(kubernetesConf)
     val configMapName = s"$kubernetesResourceNamePrefix-driver-conf-map"
     val configMap = buildConfigMap(configMapName, resolvedDriverSpec.systemProperties)
     // The include of the ENV_VAR for "SPARK_CONF_DIR" is to allow for the

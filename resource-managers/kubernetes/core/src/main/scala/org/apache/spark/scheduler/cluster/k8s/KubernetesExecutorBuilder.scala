@@ -16,6 +16,12 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.io.File
+
+import io.fabric8.kubernetes.api.model.ContainerBuilder
+import io.fabric8.kubernetes.client.KubernetesClient
+
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, EnvSecretsFeatureStep, LocalDirsFeatureStep, MountSecretsFeatureStep}
@@ -67,5 +73,18 @@ private[spark] class KubernetesExecutorBuilder(
       executorPod = feature.configurePod(executorPod)
     }
     executorPod
+  }
+}
+
+private[spark] object KubernetesExecutorBuilder {
+  def apply(kubernetesClient: KubernetesClient, conf: SparkConf): KubernetesExecutorBuilder = {
+    conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
+      .map(new File(_))
+      .map(file => new KubernetesExecutorBuilder(provideInitialPod = () => {
+        val pod = kubernetesClient.pods().load(file).get()
+        // TODO(osatici) find container
+        SparkPod(pod, new ContainerBuilder().build())
+      }))
+      .getOrElse(new KubernetesExecutorBuilder())
   }
 }

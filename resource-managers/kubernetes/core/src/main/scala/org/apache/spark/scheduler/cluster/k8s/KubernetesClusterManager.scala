@@ -80,22 +80,19 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val removedExecutorsCache = CacheBuilder.newBuilder()
       .expireAfterWrite(3, TimeUnit.MINUTES)
       .build[java.lang.Long, java.lang.Long]()
-    val builder = sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
-      .map(new File(_))
-      .map(file => new KubernetesExecutorBuilder(provideInitialPod = () =>
-        SparkPod(
-          kubernetesClient.pods().load(file).get(),
-          new ContainerBuilder().build()))) // TODO(osatici): infer container from pod
-      .getOrElse(new KubernetesExecutorBuilder()())
     val executorPodsLifecycleEventHandler = new ExecutorPodsLifecycleManager(
       sc.conf,
-      builder,
+      KubernetesExecutorBuilder(kubernetesClient, sc.conf),
       kubernetesClient,
       snapshotsStore,
       removedExecutorsCache)
 
     val executorPodsAllocator = new ExecutorPodsAllocator(
-      sc.conf, builder, kubernetesClient, snapshotsStore, new SystemClock())
+      sc.conf,
+      KubernetesExecutorBuilder(kubernetesClient, sc.conf),
+      kubernetesClient,
+      snapshotsStore,
+      new SystemClock())
 
     val podsWatchEventSource = new ExecutorPodsWatchSnapshotSource(
       snapshotsStore,
