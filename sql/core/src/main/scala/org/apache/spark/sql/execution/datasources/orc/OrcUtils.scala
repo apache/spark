@@ -26,7 +26,7 @@ import org.apache.orc.{OrcFile, Reader, TypeDescription}
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types._
@@ -115,8 +115,31 @@ object OrcUtils extends Logging {
           }
         })
       } else {
-        val resolver = if (isCaseSensitive) caseSensitiveResolution else caseInsensitiveResolution
-        Some(requiredSchema.fieldNames.map { name => orcFieldNames.indexWhere(resolver(_, name)) })
+        if (isCaseSensitive) {
+          Some(requiredSchema.fieldNames.map { name =>
+            orcFieldNames.indexWhere(caseSensitiveResolution(_, name))
+          })
+        } else {
+          // Do case-insensitive resolution only if in case-insensitive mode
+          val caseInsensitiveOrcFieldMap = orcFieldNames.zipWithIndex.groupBy(_._1.toLowerCase)
+          Some(requiredSchema.fieldNames.map {
+            requiredFieldName =>
+              caseInsensitiveOrcFieldMap.get(requiredFieldName.toLowerCase).map {
+                matchedOrcFields =>
+                  if (matchedOrcFields.size > 1) {
+                    // Need to fail if there is ambiguity, i.e. more than one field is matched.
+                    val matchedOrcFieldsString =
+                      matchedOrcFields.map(_._1).mkString("[", ", ", "]")
+                    throw new AnalysisException(
+                      s"""Found duplicate field(s) "$requiredFieldName": """ +
+                      s"$matchedOrcFieldsString in case-insensitive modes")
+                  } else {
+                    // Exactly one field is matched
+                    matchedOrcFields(0)._2
+                  }
+              }.getOrElse(-1) // No field matched
+          })
+        }
       }
     }
   }

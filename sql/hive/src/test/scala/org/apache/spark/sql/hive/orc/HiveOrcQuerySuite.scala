@@ -21,10 +21,12 @@ import java.io.File
 
 import com.google.common.io.Files
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.orc.OrcQueryTest
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -215,6 +217,50 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
         sql("CREATE TABLE spark_23340(a array<float>, b array<double>) STORED AS ORC")
         sql("INSERT INTO spark_23340 VALUES (array(), array())")
         checkAnswer(spark.table("spark_23340"), Seq(Row(Array.empty[Float], Array.empty[Double])))
+      }
+    }
+  }
+
+  test("SPARK-25132: case-insensitive field resolution when reading from Parquet/ORC - " +
+    "ORC (hive implementation)") {
+    val (format, impl) = ("orc", "hive")
+    withTempDir { dir =>
+      val tableDir = dir.getCanonicalPath + s"/$format"
+      val tableName = s"spark_25132_${format}_${impl}"
+      withTable(tableName) {
+        val end = 5
+        val data = spark.range(end).selectExpr("id as A", "id * 2 as b", "id * 3 as B")
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          data.write.format(format).mode("overwrite").save(tableDir)
+        }
+        sql(s"CREATE TABLE $tableName (a LONG, b LONG) USING $format LOCATION '$tableDir'")
+        val nulls = (0 until end).map(_ => Row(null))
+
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+          checkAnswer(sql(s"select a from $tableName"), data.select(col("A")))
+          checkAnswer(sql(s"select A from $tableName"), data.select(col("A")))
+
+          // AnalysisException from Executor when reading files is wrapped in SparkException
+          val e1 = intercept[SparkException] {
+            sql(s"select b from $tableName").collect()
+          }
+          assert(
+            e1.getCause.isInstanceOf[AnalysisException] &&
+              e1.getCause.getMessage.contains(
+                """Found duplicate field(s) "b": [b, B] in case-insensitive mode"""))
+          val e2 = intercept[SparkException] {
+            sql(s"select B from $tableName").collect()
+          }
+          assert(
+            e2.getCause.isInstanceOf[AnalysisException] &&
+              e2.getCause.getMessage.contains(
+                """Found duplicate field(s) "b": [b, B] in case-insensitive mode"""))
+        }
+
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          checkAnswer(sql(s"select a from $tableName"), nulls)
+          checkAnswer(sql(s"select b from $tableName"), data.select(col("b")))
+        }
       }
     }
   }

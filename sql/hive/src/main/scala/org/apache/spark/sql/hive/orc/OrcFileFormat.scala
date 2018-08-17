@@ -35,12 +35,14 @@ import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
 import org.apache.orc.OrcConf.COMPRESS
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.orc.OrcOptions
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -123,6 +125,9 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
 
+    hadoopConf.setBoolean(SQLConf.CASE_SENSITIVE.key,
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       // Sets pushed predicates
       OrcFilters.createFilter(requiredSchema, filters.toArray).foreach { f =>
@@ -148,8 +153,6 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       if (isEmptyFile) {
         Iterator.empty
       } else {
-        OrcFileFormat.setRequiredColumns(conf, dataSchema, requiredSchema)
-
         val orcRecordReader = {
           val job = Job.getInstance(conf)
           FileInputFormat.setInputPaths(job, file.filePath)
@@ -160,6 +163,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
           // avoid NameNode call in unwrapOrcStructs per file.
           // Specifically would be helpful for partitioned datasets.
           val orcReader = OrcFile.createReader(filePath, OrcFile.readerOptions(conf))
+          OrcFileFormat.setRequiredColumns(conf, dataSchema, requiredSchema, orcReader)
           new SparkOrcNewRecordReader(orcReader, conf, fileSplit.getStart, fileSplit.getLength)
         }
 
@@ -335,9 +339,79 @@ private[orc] object OrcFileFormat extends HiveInspectors {
   }
 
   def setRequiredColumns(
-      conf: Configuration, dataSchema: StructType, requestedSchema: StructType): Unit = {
-    val ids = requestedSchema.map(a => dataSchema.fieldIndex(a.name): Integer)
-    val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
-    HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
+      conf: Configuration,
+      dataSchema: StructType,
+      requestedSchema: StructType,
+      reader: Reader): Unit = {
+    // Get the list of types contained in the file. The root type is the first type in the list.
+    val orcFieldNames = reader.getTypes.get(0).getFieldNamesList.asScala
+    if (orcFieldNames.isEmpty) {
+      // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.
+      val (sortedIDs, sortedNames) = (null, null)
+      HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
+    } else {
+      if (orcFieldNames.forall(_.startsWith("_col"))) {
+        // This is a ORC file written by Hive, no field names in the physical schema, assume the
+        // physical schema maps to the data scheme by index.
+        assert(orcFieldNames.length <= dataSchema.length, "The given data schema " +
+          s"${dataSchema.catalogString} has less fields than the actual ORC physical schema, " +
+          "no idea which columns were dropped, fail to read.")
+        val ids = requestedSchema.map { requestedField =>
+          val index = dataSchema.fieldIndex(requestedField.name): Integer
+          if (index < orcFieldNames.length) {
+            index
+          } else {
+            throw new IllegalArgumentException(s"Field ${requestedField.name} does not exist.")
+          }
+        }
+        val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
+        HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
+      } else {
+        val caseSensitive = conf.getBoolean(SQLConf.CASE_SENSITIVE.key,
+          SQLConf.CASE_SENSITIVE.defaultValue.get)
+        if (caseSensitive) {
+          val ids = requestedSchema.map { requestedField =>
+            orcFieldNames.indexOf(requestedField.name): Integer
+          }
+          val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
+          HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
+        } else {
+          // Do case-insensitive resolution only if in case-insensitive mode
+          val caseInsensitiveOrcFieldMap =
+            orcFieldNames.zipWithIndex.groupBy(_._1.toLowerCase)
+          val nameIds = requestedSchema.fieldNames.map {
+            requestedFieldName => {
+              caseInsensitiveOrcFieldMap.get(requestedFieldName.toLowerCase).map {
+                matchedOrcFields =>
+                  if (matchedOrcFields.size > 1) {
+                    // Need to fail if there is ambiguity, i.e. more than one field is matched.
+                    val matchedOrcFieldsString =
+                      matchedOrcFields.map(_._1).mkString("[", ", ", "]")
+                    throw new AnalysisException(
+                      s"""Found duplicate field(s) "$requestedFieldName": """ +
+                      s"$matchedOrcFieldsString in case-insensitive mode")
+                  } else {
+                    // Exactly one field is matched
+                    matchedOrcFields(0)
+                  }
+              }.getOrElse(
+                // No field matched, but exists in data schema, filter out later
+                if (dataSchema.fieldNames.count(
+                    caseInsensitiveResolution(_, requestedFieldName)) != 0) {
+                  (requestedFieldName, -1)
+                } else {
+                  // Neither exists in ORC schema, nor in data schema
+                  throw new IllegalArgumentException(
+                    s"Field ${requestedFieldName} does not exist.")
+                }
+              )
+            }
+          }
+          val (sortedIDs, sortedNames) =
+            nameIds.filter(_._2 != -1).map(nameId => (nameId._2: Integer, nameId._1)).sorted.unzip
+          HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
+        }
+      }
+    }
   }
 }
