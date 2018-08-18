@@ -101,6 +101,8 @@ class SessionCatalog(
   @GuardedBy("this")
   protected var currentDb: String = formatDatabaseName(DEFAULT_DATABASE)
 
+  private val validNameFormat = "([\\w_]+)".r
+
   /**
    * Checks if the given name conforms the Hive standard ("[a-zA-Z_0-9]+"),
    * i.e. if this name only contains characters, numbers, and _.
@@ -109,7 +111,6 @@ class SessionCatalog(
    * org.apache.hadoop.hive.metastore.MetaStoreUtils.validateName.
    */
   private def validateName(name: String): Unit = {
-    val validNameFormat = "([\\w_]+)".r
     if (!validNameFormat.pattern.matcher(name).matches()) {
       throw new AnalysisException(s"`$name` is not a valid name for tables/databases. " +
         "Valid names only contain alphabet characters, numbers and _.")
