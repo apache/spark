@@ -81,7 +81,11 @@ private[spark] class ZippedPartitionsRDD2[A: ClassTag, B: ClassTag, V: ClassTag]
     var f: (Iterator[A], Iterator[B]) => Iterator[V],
     var rdd1: RDD[A],
     var rdd2: RDD[B],
-    preservesPartitioning: Boolean = false)
+    preservesPartitioning: Boolean = false,
+    // whether or not the zip function is order-sensitive. If it's order sensitive, it may return
+    // totally different result if the input order changed. As an example, `iter1.zip(iter2)` is
+    // order sensitive.
+    orderSensitiveFunc: Boolean = false)
   extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2), preservesPartitioning) {
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
@@ -94,6 +98,18 @@ private[spark] class ZippedPartitionsRDD2[A: ClassTag, B: ClassTag, V: ClassTag]
     rdd1 = null
     rdd2 = null
     f = null
+  }
+
+  private def isRandomOrder(rdd: RDD[_]): Boolean = {
+    rdd.computingRandomLevel == RDD.RandomLevel.RANDOM_ORDER
+  }
+
+  override private[spark] def computingRandomLevel = {
+    if (orderSensitiveFunc && (isRandomOrder(rdd1) || isRandomOrder(rdd2))) {
+      RDD.RandomLevel.COMPLETE_RANDOM
+    } else {
+      super.computingRandomLevel
+    }
   }
 }
 

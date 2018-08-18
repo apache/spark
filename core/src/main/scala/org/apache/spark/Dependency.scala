@@ -94,16 +94,6 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     shuffleId, _rdd.partitions.length, this)
 
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
-
-  /**
-   * whether the partitioner is order sensitive to the input data and will partition shuffle output
-   * differently if the input data order changes. For example, hash and range partitioners are
-   * order insensitive, round-robin partitioner is order sensitive. This is a property of
-   * `ShuffleDependency` instead of `Partitioner`, because it's common that a map task partitions
-   * its output by itself and use a dummy partitioner later.
-   */
-  // This is defined as a `var` here instead of the constructor, to pass the mima check.
-  private[spark] var orderSensitivePartitioner: Boolean = false
 }
 
 

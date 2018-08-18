@@ -1487,14 +1487,18 @@ private[spark] class DAGScheduler(
             failedStages += failedStage
             failedStages += mapStage
             if (noResubmitEnqueued) {
-              // If the map stage is not idempotent(produces data in a different order when retry)
-              // and the shuffle partitioner is order sensitive, we have to retry all the tasks of
-              // the failed stage and its succeeding stages, because the input data of the failed
-              // stage will be changed after the map tasks are re-tried.
-              if (!mapStage.rdd.isIdempotent && mapStage.shuffleDep.orderSensitivePartitioner) {
+              // If the map stage is COMPLETE_RANDOM, which means the map tasks will return
+              // different result when re-try, we need to re-try all the tasks of the failed
+              // stage and its succeeding stages, because the input data will be changed after the
+              // map tasks are re-tried.
+              // Note that, if map stage is RANDOM_ORDER, we are fine. The shuffle partitioner is
+              // guaranteed to be idempotent, so the input data will not change even if the map
+              // tasks are not re-tried.
+              if (mapStage.rdd.computingRandomLevel == RDD.RandomLevel.COMPLETE_RANDOM) {
                 def rollBackStage(stage: Stage): Unit = stage match {
                   case mapStage: ShuffleMapStage =>
-                    if (mapStage.findMissingPartitions().length < mapStage.numPartitions) {
+                    val numMissingPartitions = mapStage.findMissingPartitions().length
+                    if (numMissingPartitions < mapStage.numTasks) {
                       markStageAsFinished(
                         mapStage,
                         Some("preceding non-idempotent shuffle map stage gets retried."),
@@ -1505,7 +1509,7 @@ private[spark] class DAGScheduler(
 
                   case resultStage =>
                     val numMissingPartitions = resultStage.findMissingPartitions().length
-                    if (numMissingPartitions != resultStage.numPartitions) {
+                    if (numMissingPartitions != resultStage.numTasks) {
                       // TODO: support to rollback result tasks.
                       abortStage(failedStage, "cannot rollback result tasks.", None)
                     }
