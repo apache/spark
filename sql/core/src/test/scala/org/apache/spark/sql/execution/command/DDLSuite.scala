@@ -21,9 +21,7 @@ import java.io.File
 import java.net.URI
 import java.util.Locale
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.fs.permission.{FsAction, FsPermission}
+import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
@@ -2312,8 +2310,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
-
-
 
   Seq(true, false).foreach { shouldDelete =>
     val tcName = if (shouldDelete) "non-existing" else "existed"
