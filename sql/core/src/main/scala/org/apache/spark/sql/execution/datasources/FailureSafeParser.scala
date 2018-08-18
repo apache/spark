@@ -30,7 +30,7 @@ class FailureSafeParser[IN](
     mode: ParseMode,
     schema: StructType,
     columnNameOfCorruptRecord: String,
-    optimizeEmptySchema: Boolean) {
+    isMultiLine: Boolean) {
 
   private val corruptFieldIndex = schema.getFieldIndex(columnNameOfCorruptRecord)
   private val actualSchema = StructType(schema.filterNot(_.name == columnNameOfCorruptRecord))
@@ -58,7 +58,7 @@ class FailureSafeParser[IN](
     }
   }
 
-  private val skipParsing = optimizeEmptySchema && mode == PermissiveMode && schema.isEmpty
+  private val skipParsing = !isMultiLine && mode == PermissiveMode && schema.isEmpty
 
   def parse(input: IN): Iterator[InternalRow] = {
     try {

@@ -286,7 +286,7 @@ private[csv] object UnivocityParser {
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord,
-      optimizeEmptySchema = false)
+      parser.options.multiLine)
     convertStream(inputStream, shouldDropHeader, tokenizer, checkHeader) { tokens =>
       safeParser.parse(tokens)
     }.flatten
@@ -335,7 +335,7 @@ private[csv] object UnivocityParser {
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord,
-      optimizeEmptySchema = true)
+      parser.options.multiLine)
     filteredLines.flatMap(safeParser.parse)
   }
 }

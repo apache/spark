@@ -451,7 +451,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         parsedOptions.parseMode,
         schema,
         parsedOptions.columnNameOfCorruptRecord,
-        optimizeEmptySchema = true)
+        parsedOptions.multiLine)
       iter.flatMap(parser.parse)
     }
     sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = jsonDataset.isStreaming)
@@ -523,7 +523,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         parsedOptions.parseMode,
         schema,
         parsedOptions.columnNameOfCorruptRecord,
-        optimizeEmptySchema = true)
+        parsedOptions.multiLine)
       iter.flatMap(parser.parse)
     }
     sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = csvDataset.isStreaming)

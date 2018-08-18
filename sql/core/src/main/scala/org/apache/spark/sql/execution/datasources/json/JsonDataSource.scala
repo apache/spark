@@ -140,7 +140,7 @@ object TextInputJsonDataSource extends JsonDataSource {
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord,
-      optimizeEmptySchema = true)
+      parser.options.multiLine)
     linesReader.flatMap(safeParser.parse)
   }
 
@@ -225,7 +225,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord,
-      optimizeEmptySchema = false)
+      parser.options.multiLine)
 
     safeParser.parse(
       CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))))
