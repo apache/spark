@@ -818,8 +818,8 @@ abstract class RDD[T: ClassTag](
     new MapPartitionsRDD(
       this,
       (context: TaskContext, index: Int, iter: Iterator[T]) => f(index, iter),
-      preservesPartitioning,
-      orderSensitiveFunc)
+      preservesPartitioning = preservesPartitioning,
+      orderSensitiveFunc = orderSensitiveFunc)
   }
 
   /**
