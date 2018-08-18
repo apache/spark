@@ -2880,6 +2880,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           assert(spark.table("table4").count() === cnt)
           checkAnswer(spark.table("table1").select("col1", "col1", "col2"), spark.table("table4"))
 
+          spark.sql("INSERT OVERWRITE TABLE table4 select 1, COL1, COL2 from view1")
+          assert(spark.table("table4").count() === cnt)
+          checkAnswer(spark.table("table1").selectExpr("1", "col1", "col2"), spark.table("table4"))
+
           assertThrows[AnalysisException] {
             spark.sql("INSERT OVERWRITE TABLE table4 select COL1, COL3, COL2 from view1")
           }

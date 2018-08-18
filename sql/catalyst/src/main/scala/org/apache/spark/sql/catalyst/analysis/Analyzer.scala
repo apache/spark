@@ -901,10 +901,13 @@ class Analyzer(
       // If the projection list contains Stars, expand it.
       case p: Project if containsStar(p.projectList) =>
         p.copy(projectList = buildExpandedProjectList(p.projectList, p.child))
-      case p @ Project(projectList, _ @ SubqueryAlias(_, view: View))
+      case p @ Project(projectList, _ @ SubqueryAlias(_, _ @ View(_, output, _)))
         if projectList.forall(_.resolved) =>
-        val newProjectList = projectList.map { col =>
-          view.output.find(_.name.equalsIgnoreCase(col.name)).get
+        val newProjectList = projectList.map { n =>
+          output.find(_.exprId == n.exprId) match {
+            case Some(a) => a
+            case _ => n
+          }
         }
         p.copy(projectList = newProjectList)
       // If the aggregate function argument contains Stars, expand it.
