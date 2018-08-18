@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalog.Catalog
-import org.apache.spark.sql.catalog.v2.{CatalogProvider, Catalogs}
+import org.apache.spark.sql.catalog.v2.{CatalogProvider, Catalogs, V1TableCatalog}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.encoders._
@@ -614,8 +614,15 @@ class SparkSession private(
 
   @transient private lazy val catalogs = new mutable.HashMap[String, CatalogProvider]()
 
-  private[sql] def catalog(name: String): CatalogProvider = synchronized {
-    catalogs.getOrElseUpdate(name, Catalogs.load(name, sessionState.conf))
+  @transient private lazy val v1CatalogAsV2 = new V1TableCatalog(sessionState)
+
+  private[sql] def catalog(name: Option[String]): CatalogProvider = synchronized {
+    name match {
+      case Some(catalogName) =>
+        catalogs.getOrElseUpdate(catalogName, Catalogs.load(catalogName, sessionState.conf))
+      case _ =>
+        v1CatalogAsV2
+    }
   }
 
   /**
