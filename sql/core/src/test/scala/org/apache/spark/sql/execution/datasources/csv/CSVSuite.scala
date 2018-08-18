@@ -1641,4 +1641,30 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       }
     }
   }
+
+  test("count() for malformed input") {
+    def countForMalformedCSV(expected: Long, input: Seq[String]): Unit = {
+      val schema = new StructType().add("a", IntegerType)
+      val strings = spark.createDataset(input)
+      val df = spark.read.schema(schema).option("header", false).csv(strings)
+
+      assert(df.count() == expected)
+    }
+    def checkCount(expected: Long): Unit = {
+      val validRec = "1"
+      val inputs = Seq(
+        Seq("{-}", validRec),
+        Seq(validRec, "?"),
+        Seq("0xAC", validRec),
+        Seq(validRec, "0.314"),
+        Seq("\\\\\\", validRec)
+      )
+      inputs.foreach { input =>
+        countForMalformedCSV(expected, input)
+      }
+    }
+
+    checkCount(2)
+    countForMalformedCSV(0, Seq(""))
+  }
 }
