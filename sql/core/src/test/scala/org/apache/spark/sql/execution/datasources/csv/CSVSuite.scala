@@ -1663,11 +1663,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         countForMalformedCSV(expected, input)
       }
     }
-    Seq("true", "false").foreach { bypassParser =>
-      withSQLConf(SQLConf.BYPASS_PARSER_FOR_EMPTY_SCHEMA.key -> bypassParser) {
-        checkCount(2)
-        countForMalformedCSV(0, Seq(""))
-      }
-    }
+
+    checkCount(2)
+    countForMalformedCSV(0, Seq(""))
   }
 }

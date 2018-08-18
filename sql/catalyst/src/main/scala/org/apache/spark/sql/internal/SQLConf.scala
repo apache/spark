@@ -1492,15 +1492,6 @@ object SQLConf {
         "This usually speeds up commands that need to list many directories.")
       .booleanConf
       .createWithDefault(true)
-
-  val BYPASS_PARSER_FOR_EMPTY_SCHEMA =
-    buildConf("spark.sql.legacy.bypassParserForEmptySchema")
-      .doc("If required schema passed to a text datasource is empty, the parameter controls " +
-        "invocation of underlying parser. For example, if it is set to false, uniVocity parser " +
-        "is invoked by CSV datasource or Jackson parser by JSON datasource. By default, " +
-        "it is set to true which means the parsers is not invoked for empty required schema.")
-      .booleanConf
-      .createWithDefault(true)
 }
 
 /**
@@ -1902,8 +1893,6 @@ class SQLConf extends Serializable with Logging {
 
   def parallelFileListingInStatsComputation: Boolean =
     getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)
-
-  def bypassParserForEmptySchema: Boolean = getConf(SQLConf.BYPASS_PARSER_FOR_EMPTY_SCHEMA)
 
   /** ********************** SQLConf functionality methods ************ */
 

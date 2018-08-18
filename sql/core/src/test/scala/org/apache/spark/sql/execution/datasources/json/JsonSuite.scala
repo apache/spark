@@ -2511,11 +2511,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         countForMalformedJSON(expected, input)
       }
     }
-    Seq("true", "false").foreach { bypassParser =>
-      withSQLConf(SQLConf.BYPASS_PARSER_FOR_EMPTY_SCHEMA.key -> bypassParser) {
-        checkCount(2)
-        countForMalformedJSON(0, Seq(""))
-      }
-    }
+
+    checkCount(2)
+    countForMalformedJSON(0, Seq(""))
   }
 }
