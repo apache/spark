@@ -19,11 +19,11 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
-import java.util.Date
 
 import scala.language.existentials
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.permission.{FsAction, FsPermission}
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.scalatest.BeforeAndAfterEach
@@ -257,7 +257,102 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
         spark.sql("ALTER TABLE t1 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
       }.getMessage
       assert(err.contains("Cannot recognize hive type string:"))
-   }
+    }
+  }
+
+  test("Normal table should inherit database permission") {
+    val db = "test_inherit_permission"
+    withSQLConf(SQLConf.DATA_SOURCE_TABLE_INHERIT_PERMS.key -> "true") {
+      withDatabase(db) {
+        sql(s"CREATE DATABASE $db")
+        val dbLocation = spark.sessionState.catalog.getDatabaseMetadata(db).locationUri
+        val fs = FileSystem.get(spark.sessionState.newHadoopConf())
+        val dbLocationPath = new Path(dbLocation)
+
+        /*
+        Only test permission because ChecksumFileSystem doesn't support getAclStatus.
+        So manual test ACL:
+        spark-sql -e "create table spark_25085(id int)"
+        hdfs dfs -getfacl /user/hive/warehouse/spark_25085
+        hdfs dfs -setfacl -m user:SPARK-25085:rw- /user/hive/warehouse/spark_25085
+        spark-sql -e "insert overwrite table spark_25085 values(1), (2)"
+        hdfs dfs -getfacl /user/hive/warehouse/spark_25085
+        */
+        val defaultPermission = fs.getFileStatus(dbLocationPath).getPermission
+        val defaultOtherAction = defaultPermission.getOtherAction
+
+        val newPermission = if (defaultOtherAction.implies(FsAction.ALL)) {
+          new FsPermission(FsAction.ALL, FsAction.ALL, FsAction.READ_WRITE)
+        } else {
+          new FsPermission(FsAction.ALL, FsAction.ALL, FsAction.ALL)
+        }
+
+        fs.setPermission(dbLocationPath, newPermission)
+
+        withTable("datasource_table", "hive_table") {
+          spark.sql("use test_inherit_permission")
+          spark.sql("create table datasource_table(a int) using parquet")
+          spark.sql("create table hive_table(a int)")
+
+          Seq("datasource_table", "hive_table").foreach { tableName =>
+            val tableLocation = spark.sessionState.catalog
+              .getTableMetadata(TableIdentifier(tableName)).location
+            val tablePath = new Path(tableLocation)
+
+            spark.sql(s"INSERT OVERWRITE table $tableName SELECT 2 WHERE true")
+
+            assert(spark.table(tableName).count() === 1)
+            assert(fs.getFileStatus(tablePath).getPermission === newPermission)
+            assert(fs.getFileStatus(tablePath).getPermission !== defaultPermission)
+
+            fs.listStatus(tablePath).foreach { file =>
+              assert(fs.getFileStatus(file.getPath).getPermission === newPermission)
+              assert(fs.getFileStatus(file.getPath).getPermission !== defaultPermission)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("External table shouldn't change location permission after insert overwrite") {
+    Seq("datasource_table", "hive_table").foreach { tableName =>
+      withSQLConf(SQLConf.DATA_SOURCE_TABLE_INHERIT_PERMS.key -> "true") {
+        withTempPath { dir =>
+          val fs = FileSystem.get(spark.sessionState.newHadoopConf())
+          val tableLocation = new Path(s"${dir.toURI}/$tableName")
+          fs.mkdirs(tableLocation)
+
+          if ("hive_table".equals(tableName)) {
+            spark.sql(s"CREATE EXTERNAL TABLE $tableName(a int) LOCATION '${tableLocation.toUri}'")
+          } else {
+            spark.sql(s"CREATE TABLE $tableName(a int) " +
+              s"USING parquet LOCATION '${tableLocation.toUri}'")
+          }
+
+          val defaultPermission = fs.getFileStatus(tableLocation).getPermission
+
+          val newPermission = if (defaultPermission.getOtherAction.implies(FsAction.ALL)) {
+            new FsPermission(FsAction.ALL, FsAction.ALL, FsAction.READ_WRITE)
+          } else {
+            new FsPermission(FsAction.ALL, FsAction.ALL, FsAction.ALL)
+          }
+
+          fs.setPermission(tableLocation, newPermission)
+
+          spark.sql(s"INSERT OVERWRITE table $tableName SELECT 1 WHERE true")
+
+          assert(spark.table(tableName).count() === 1)
+          assert(fs.getFileStatus(tableLocation).getPermission === newPermission)
+          assert(fs.getFileStatus(tableLocation).getPermission !== defaultPermission)
+
+          fs.listStatus(tableLocation).foreach { file =>
+            assert(fs.getFileStatus(file.getPath).getPermission === newPermission)
+            assert(fs.getFileStatus(file.getPath).getPermission !== defaultPermission)
+          }
+        }
+      }
+    }
   }
 }
 

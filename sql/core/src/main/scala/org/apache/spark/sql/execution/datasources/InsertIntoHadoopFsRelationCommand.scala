@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.IOException
 
-import com.google.common.base.{Joiner, Predicate}
+import com.google.common.base.Predicate
 import com.google.common.collect.Iterables
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, FsShell, Path}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.fs.permission._
 import org.apache.hadoop.hdfs.DFSConfigKeys.{DFS_NAMENODE_ACLS_ENABLED_DEFAULT, DFS_NAMENODE_ACLS_ENABLED_KEY}
 
@@ -76,9 +76,6 @@ case class InsertIntoHadoopFsRelationCommand(
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-
-    val (group, permission, aclStatus) = getFullFileStatus(conf, hadoopConf, fs, outputPath)
-
     val partitionsTrackedByCatalog = sparkSession.sessionState.conf.manageFilesourcePartitions &&
       catalogTable.isDefined &&
       catalogTable.get.partitionColumnNames.nonEmpty &&
@@ -116,6 +113,8 @@ case class InsertIntoHadoopFsRelationCommand(
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = outputPath.toString,
       dynamicPartitionOverwrite = dynamicPartitionOverwrite)
+
+    val (permission, aclStatus) = getFullFileStatus(conf, hadoopConf, pathExists, fs, outputPath)
 
     val doInsertion = (mode, pathExists) match {
       case (SaveMode.ErrorIfExists, true) =>
@@ -194,8 +193,8 @@ case class InsertIntoHadoopFsRelationCommand(
       // refresh data cache if table is cached
       sparkSession.catalog.refreshByPath(outputPath.toString)
 
-      if (conf.isDataSouceTableInheritPerms && group != null) {
-        setFullFileStatus(hadoopConf, group, permission, aclStatus, fs, outputPath)
+      if (conf.isDataSouceTableInheritPerms) {
+        setFullFileStatus(hadoopConf, permission, aclStatus, fs, outputPath)
       }
 
       if (catalogTable.nonEmpty) {
@@ -280,60 +279,62 @@ case class InsertIntoHadoopFsRelationCommand(
   private def getFullFileStatus(
       conf: SQLConf,
       hadoopConf: Configuration,
+      pathExists: Boolean,
       fs: FileSystem,
-      file: Path): (String, FsPermission, AclStatus) = {
-    if (conf.isDataSouceTableInheritPerms && fs.exists(file)) {
-      val fileStatus = fs.getFileStatus(file)
-      val aclStatus = if (isExtendedAclEnabled(hadoopConf)) fs.getAclStatus(file) else null
-      (fileStatus.getGroup, fileStatus.getPermission, aclStatus)
-    } else {
-      (null, null, null)
+      file: Path): (Option[FsPermission], Option[AclStatus]) = {
+    var permission: Option[FsPermission] = None
+    var aclStatus: Option[AclStatus] = None
+    if (conf.isDataSouceTableInheritPerms && pathExists) {
+      permission = Some(fs.getFileStatus(file).getPermission)
+      if (isExtendedAclEnabled(hadoopConf)) aclStatus = Some(fs.getAclStatus(file))
     }
+    (permission, aclStatus)
   }
 
   private def setFullFileStatus(
       hadoopConf: Configuration,
-      group: String,
-      permission: FsPermission,
-      aclStatus: AclStatus,
+      permission: Option[FsPermission],
+      aclStatus: Option[AclStatus],
       fs: FileSystem,
-      target: Path): Unit = {
+      outputPath: Path): Unit = {
     try {
-      // use FsShell to change group, permissions, and extended ACL's recursively
-      val fsShell = new FsShell
-      fsShell.setConf(hadoopConf)
-      fsShell.run(Array[String]("-chgrp", "-R", group, target.toString))
-      if (isExtendedAclEnabled(hadoopConf) && aclStatus != null) {
-        // Attempt extended Acl operations only if its enabled,
-        // but don't fail the operation regardless.
-        try {
-          val aclEntries = aclStatus.getEntries
-          Iterables.removeIf(aclEntries, new Predicate[AclEntry]() {
-            override def apply(input: AclEntry): Boolean = input.getName == null
-          })
-          // the ACL api's also expect the tradition
-          // user/group/other permission in the form of ACL
-          aclEntries.add((new AclEntry.Builder).setScope(AclEntryScope.ACCESS)
-            .setType(AclEntryType.USER).setPermission(permission.getUserAction).build)
-          aclEntries.add((new AclEntry.Builder).setScope(AclEntryScope.ACCESS)
-            .setType(AclEntryType.GROUP).setPermission(permission.getGroupAction).build)
-          aclEntries.add((new AclEntry.Builder).setScope(AclEntryScope.ACCESS)
-            .setType(AclEntryType.OTHER).setPermission(permission.getOtherAction).build)
-          // construct the -setfacl command
-          val aclEntry = Joiner.on(",").join(aclStatus.getEntries)
-          fsShell.run(Array[String]("-setfacl", "-R", "--set", aclEntry, target.toString))
-        } catch {
-          case e: Exception =>
-            logWarning(s"Skipping ACL inheritance: File system for path $target " +
-              s"does not support ACLs but $DFS_NAMENODE_ACLS_ENABLED_KEY is set to true: $e", e)
+      if (isExtendedAclEnabled(hadoopConf)) aclStatus.foreach { acl =>
+
+        val aclEntries = acl.getEntries
+        Iterables.removeIf(aclEntries, new Predicate[AclEntry]() {
+          override def apply(input: AclEntry): Boolean = input.getName == null
+        })
+
+        permission.foreach { perm =>
+          val user = new AclEntry.Builder().setScope(AclEntryScope.ACCESS)
+            .setType(AclEntryType.USER).setPermission(perm.getUserAction).build()
+          aclEntries.add(user)
+          val group = new AclEntry.Builder().setScope(AclEntryScope.ACCESS)
+            .setType(AclEntryType.GROUP).setPermission(perm.getGroupAction).build()
+          aclEntries.add(group)
+          val other = new AclEntry.Builder().setScope(AclEntryScope.ACCESS)
+            .setType(AclEntryType.OTHER).setPermission(perm.getOtherAction).build()
+          aclEntries.add(other)
+        }
+
+        fs.setAcl(outputPath, aclEntries)
+        val iter = fs.listFiles(outputPath, true)
+        while (iter.hasNext) {
+          val path = iter.next().getPath
+          fs.setAcl(path, aclEntries)
         }
       } else {
-        val perm = Integer.toString(permission.toShort, 8)
-        fsShell.run(Array[String]("-chmod", "-R", perm, target.toString))
+        permission.foreach { perm =>
+          fs.setPermission(outputPath, perm)
+          val iter = fs.listFiles(outputPath, true)
+          while (iter.hasNext) {
+            fs.setPermission(iter.next().getPath, perm)
+          }
+        }
       }
     } catch {
       case e: Exception =>
-        throw new IOException(s"Unable to set permissions of $target", e)
+        logWarning(s"Unable to set permissions/ACLs of $outputPath: $e", e)
     }
   }
 }
