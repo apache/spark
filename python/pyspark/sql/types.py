@@ -1397,6 +1397,8 @@ def _create_row_inbound_converter(dataType):
 
 
 def _create_row(fields, values):
+    if len(values) > len(fields):
+        raise ValueError("Can not create %s by %s" % (fields, values))
     row = Row(*values)
     row.__fields__ = fields
     return row
