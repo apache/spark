@@ -101,10 +101,17 @@ trait PlanTestBase extends PredicateHelper { self: Suite =>
       case sample: Sample =>
         sample.copy(seed = 0L)
       case Join(left, right, joinType, condition) if condition.isDefined =>
+        val newJoinType = joinType match {
+          case ExistenceJoin(a: Attribute) =>
+            val newAttr = AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
+            ExistenceJoin(newAttr)
+          case other => other
+        }
+
         val newCondition =
           splitConjunctivePredicates(condition.get).map(rewriteEqual).sortBy(_.hashCode())
             .reduce(And)
-        Join(left, right, joinType, Some(newCondition))
+        Join(left, right, newJoinType, Some(newCondition))
     }
   }
 
