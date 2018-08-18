@@ -185,7 +185,7 @@ It also supports reading the following Avro [logical types](https://avro.apache.
   </tr>
   <tr>
     <td>decimal</td>
-    <td>bytes</td>
+    <td>fixed</td>
     <td>DecimalType</td>
   </tr>
   <tr>
@@ -233,7 +233,7 @@ Spark supports writing of all Spark SQL types into Avro. For most types, the map
   </tr>
 </table>
 
-You can also specify the whole output Avro schema with the option `avroSchema`, so that Spark SQL types can be converted into other Avro types. The following conversions is not by default and require user specified Avro schema:
+You can also specify the whole output Avro schema with the option `avroSchema`, so that Spark SQL types can be converted into other Avro types. The following conversions are not applied by default and require user specified Avro schema:
 
 <table class="table">
   <tr><th><b>Spark SQL type</b></th><th><b>Avro type</b></th><th><b>Avro logical type</b></th></tr>
