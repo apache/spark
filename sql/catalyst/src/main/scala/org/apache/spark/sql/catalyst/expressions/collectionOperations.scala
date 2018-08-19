@@ -400,11 +400,11 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
         None
       }
 
-      val allocation = ctx.createArrayData(arrayData, childDataType.keyType, numElements,
+      val allocation = CodeGenerator.createArrayData(arrayData, childDataType.keyType, numElements,
         s" $prettyName failed.", elementSize = elementSize)
-      val setFunc = ctx.setArrayElementFunc(childDataType.keyType)
 
       val code = if (isKeyPrimitive && isValuePrimitive) {
+        val setFunc = CodeGenerator.setArrayElementFunc(childDataType.keyType)
         val genCodeForPrimitive = genCodeForPrimitiveElements(
           ctx, arrayData, keys, values, ev.value, numElements, structSize, setFunc)
         s"""
@@ -454,9 +454,9 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
     val baseOffset = Platform.BYTE_ARRAY_OFFSET
     val wordSize = UnsafeRow.WORD_SIZE
     val structSizeAsLong = s"${structSize}L"
-    val valueTypeName = CodeGenerator.primitiveTypeName(childDataType.valueType)
 
-    val valueAssignment = s"$unsafeRow.set$valueTypeName(1, ${getValue(values, z)});"
+    val setFunc = CodeGenerator.setArrayElementFunc(childDataType.valueType)
+    val valueAssignment = s"$unsafeRow.$setFunc(1, ${getValue(values, z)});"
     val valueAssignmentChecked = if (childDataType.valueContainsNull) {
       s"""
          |if ($values.isNullAt($z)) {
@@ -691,11 +691,10 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     val y = ctx.freshName("y")
     val z = ctx.freshName("z")
 
-    val allocation = ctx.createArrayData(
+    val allocation = CodeGenerator.createArrayData(
       arrayData, elementType, numElemName, s" $prettyName failed.")
-    val setFunc = ctx.setArrayElementFunc(elementType)
-    val assignment = ctx.createArrayAssignment(arrayData, setFunc, elementType, s"$argsName[$y]",
-      checkForNull)
+    val assignment = CodeGenerator.createArrayAssignment(
+      arrayData, elementType, s"$argsName[$y]", checkForNull)
 
     val concat = ctx.freshName("concat")
     val concatDef =
@@ -848,13 +847,13 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
     val valueSize = dataType.valueType.defaultSize
     val kByteSize = s"UnsafeArrayData.calculateSizeOfUnderlyingByteArray($numEntries, $keySize)"
     val vByteSize = s"UnsafeArrayData.calculateSizeOfUnderlyingByteArray($numEntries, $valueSize)"
-    val keyTypeName = CodeGenerator.primitiveTypeName(dataType.keyType)
-    val valueTypeName = CodeGenerator.primitiveTypeName(dataType.valueType)
+    val setFuncKey = CodeGenerator.setArrayElementFunc(dataType.keyType)
+    val setFuncValue = CodeGenerator.setArrayElementFunc(dataType.valueType)
 
-    val keyAssignment = (key: String, idx: String) => s"$keyArrayData.set$keyTypeName($idx, $key);"
+    val keyAssignment = (key: String, idx: String) => s"$keyArrayData.$setFuncKey($idx, $key);"
     val valueAssignment = (entry: String, idx: String) => {
       val value = CodeGenerator.getValue(entry, dataType.valueType, "1")
-      val valueNullUnsafeAssignment = s"$valueArrayData.set$valueTypeName($idx, $value);"
+      val valueNullUnsafeAssignment = s"$valueArrayData.$setFuncValue($idx, $value);"
       if (dataType.valueContainsNull) {
         s"""
            |if ($entry.isNullAt(1)) {
@@ -1248,12 +1247,10 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
     val indices = ctx.freshName("indices")
     val i = ctx.freshName("i")
 
-    val initialization =
-      ctx.createArrayData(arrayData, elementType, numElements, s" $prettyName failed.")
-    val setFunc = ctx.setArrayElementFunc(elementType)
-    val assignment =
-      ctx.createArrayAssignment(arrayData, setFunc, elementType, childName,
-        dataType.asInstanceOf[ArrayType].containsNull)
+    val initialization = CodeGenerator.createArrayData(
+      arrayData, elementType, numElements, s" $prettyName failed.")
+    val assignment = CodeGenerator.createArrayAssignment(arrayData, elementType, childName,
+      dataType.asInstanceOf[ArrayType].containsNull)
 
     s"""
        |int $numElements = $childName.numElements();
@@ -1317,12 +1314,10 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
     val i = ctx.freshName("i")
     val j = ctx.freshName("j")
 
-    val initialization =
-      ctx.createArrayData(arrayData, elementType, numElements, s" $prettyName failed.")
-    val setFunc = ctx.setArrayElementFunc(elementType)
-    val assignment =
-      ctx.createArrayAssignment(arrayData, setFunc, elementType, childName,
-        dataType.asInstanceOf[ArrayType].containsNull)
+    val initialization = CodeGenerator.createArrayData(
+      arrayData, elementType, numElements, s" $prettyName failed.")
+    val assignment = CodeGenerator.createArrayAssignment(
+      arrayData, elementType, childName, dataType.asInstanceOf[ArrayType].containsNull)
 
     s"""
        |final int $numElements = $childName.numElements();
@@ -1726,12 +1721,10 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     val i = ctx.freshName("i")
     val genericArrayData = classOf[GenericArrayData].getName
 
-    val allocation =
-      ctx.createArrayData(values, elementType, resLength, s" $prettyName failed.")
-    val setFunc = ctx.setArrayElementFunc(elementType)
-    val assignment =
-      ctx.createArrayAssignment(values, setFunc, elementType, inputArray,
-        dataType.asInstanceOf[ArrayType].containsNull)
+    val allocation = CodeGenerator.createArrayData(
+      values, elementType, resLength, s" $prettyName failed.")
+    val assignment = CodeGenerator.createArrayAssignment(values, elementType, inputArray,
+      dataType.asInstanceOf[ArrayType].containsNull)
 
     s"""
        |if ($startIdx < 0 || $startIdx >= $inputArray.numElements()) {
@@ -2402,11 +2395,10 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx)
 
-    val initialization =
-      ctx.createArrayData(arrayData, elementType, numElemName, s" $prettyName failed.")
-    val setFunc = ctx.setArrayElementFunc(elementType)
-    val assignment = ctx.createArrayAssignment(arrayData, setFunc, elementType, s"args[$y]",
-      dataType.asInstanceOf[ArrayType].containsNull)
+    val initialization = CodeGenerator.createArrayData(
+      arrayData, elementType, numElemName, s" $prettyName failed.")
+    val assignment = CodeGenerator.createArrayAssignment(
+      arrayData, elementType, s"args[$y]", dataType.asInstanceOf[ArrayType].containsNull)
 
     val concat = ctx.freshName("concat")
     val concatDef =
@@ -2520,11 +2512,10 @@ case class Flatten(child: Expression) extends UnaryExpression {
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, childVariableName)
 
-    val allocation =
-      ctx.createArrayData(tempArrayDataName, elementType, numElemName, s" $prettyName failed.")
-    val setFunc = ctx.setArrayElementFunc(elementType)
-    val assignment = ctx.createArrayAssignment(tempArrayDataName, setFunc, elementType, arr,
-      dataType.asInstanceOf[ArrayType].containsNull)
+    val allocation = CodeGenerator.createArrayData(
+      tempArrayDataName, elementType, numElemName, s" $prettyName failed.")
+    val assignment = CodeGenerator.createArrayAssignment(
+      tempArrayDataName, elementType, arr, dataType.asInstanceOf[ArrayType].containsNull)
 
     s"""
     |$numElemCode
@@ -3037,11 +3028,10 @@ case class ArrayRepeat(left: Expression, right: Expression)
     val k = ctx.freshName("k")
     val (numElemName, numElemCode) = genCodeForNumberOfElements(ctx, count)
 
-    val allocation =
-      ctx.createArrayData(tempArrayDataName, elementType, numElemName, s" $prettyName failed.")
-    val setFunc = ctx.setArrayElementFunc(elementType)
-    val assignment = ctx.createArrayAssignment(tempArrayDataName, setFunc, elementType, "",
-      false, rhsValue = Some(element))
+    val allocation = CodeGenerator.createArrayData(
+      tempArrayDataName, elementType, numElemName, s" $prettyName failed.")
+    val assignment = CodeGenerator.createArrayAssignment(
+      tempArrayDataName, elementType, "",false, rhsValue = Some(element))
 
     s"""
        |$numElemCode
@@ -3141,10 +3131,10 @@ case class ArrayRemove(left: Expression, right: Expression)
     val getValue = CodeGenerator.getValue(inputArray, elementType, i)
     val isEqual = ctx.genEqual(elementType, value, getValue)
 
-    val allocation =
-      ctx.createArrayData(values, elementType, newArraySize, s" $prettyName failed.")
-    val setFunc = ctx.setArrayElementFunc(elementType)
-    val assignment = ctx.createArrayAssignment(values, setFunc, elementType, inputArray, false)
+    val allocation = CodeGenerator.createArrayData(
+      values, elementType, newArraySize, s" $prettyName failed.")
+    val assignment = CodeGenerator.createArrayAssignment(
+      values, elementType, inputArray, false)
 
     s"""
        |$allocation
@@ -3183,12 +3173,6 @@ trait ArraySetLike {
 
   @transient protected lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(et)
-
-  @transient protected lazy val elementTypeSupportEquals = et match {
-    case BinaryType => false
-    case _: AtomicType => true
-    case _ => false
-  }
 
   protected def genGetValue(array: String, i: String): String =
     CodeGenerator.getValue(array, et, i)

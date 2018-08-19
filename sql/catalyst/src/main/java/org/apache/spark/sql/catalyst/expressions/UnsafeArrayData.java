@@ -473,8 +473,8 @@ public final class UnsafeArrayData extends ArrayData {
     return result;
   }
 
-  public static UnsafeArrayData forPrimitiveArray(int offset, int length, int elementSize) {
-    return fromPrimitiveArray(null, offset, length, elementSize);
+  public static UnsafeArrayData forPrimitiveArray(int length, int elementSize) {
+    return fromPrimitiveArray(null, 0, length, elementSize);
   }
 
   public static boolean shouldUseGenericArrayData(int elementSize, long length) {

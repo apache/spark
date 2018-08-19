@@ -747,95 +747,6 @@ class CodegenContext {
   }
 
   /**
-   * Generates code of setter for an [[ArrayData]]
-   *
-   * @param elementType data type of the elements in an [[ArrayData]]
-   *
-   * @return code representing a setter of an assignment for an [[ArrayData]]
-   */
-  def setArrayElementFunc(dataType: DataType): String = {
-    val isPrimitiveType = CodeGenerator.isPrimitiveType(dataType)
-    if (isPrimitiveType) {
-      s"set${CodeGenerator.primitiveTypeName(dataType)}"
-    } else {
-      "update"
-    }
-  }
-
-  /**
-   * Generates code creating a [[UnsafeArrayData]] or [[GenericArrayData]] based on
-   * given parameters.
-   *
-   * @param arrayName name of the array to create
-   * @param elementType data type of the elements in source array
-   * @param numElements code representing the number of elements the array should contain
-   * @param additionalErrorMessage string to include in the error message
-   * @param elementSize optional value which shows the size of an element of the allocated
-   *                    [[UnsafeArrayData]] or [[GenericArrayData]]
-   *
-   * @return code representing the allocation of [[ArrayData]]
-   *         code representing a setter of an assignment for the generated array
-   */
-  def createArrayData(
-      arrayName: String,
-      elementType: DataType,
-      numElements: String,
-      additionalErrorMessage: String,
-      elementSize: Option[Int] = None): String = {
-    val (isPrimitiveType, elemSize) = if (elementSize.isDefined) {
-      (false, elementSize.get)
-    } else {
-      (CodeGenerator.isPrimitiveType(elementType), elementType.defaultSize)
-    }
-
-    s"""
-       |ArrayData $arrayName = ArrayData.allocateArrayData(
-       |  $elemSize, $numElements, $isPrimitiveType, "$additionalErrorMessage");
-     """.stripMargin
-  }
-
-  /**
-   * Generates assignment code for a [[ArrayData]]
-   *
-   * @param arrayName name of the array to create
-   * @param setFunc string to include in the error message
-   * @param elementType data type of the elements in source array
-   * @param srcArray code representing the number of elements the array should contain
-   * @param needNullCheck value which shows whether a nullcheck is required for the returning
-   *                      assignment
-   * @param rhsValue optional expression for the right-hand side of the returning assignment
-   *
-   * @return code representing an assignment to each element of the [[ArrayData]], which requires
-   *         a pair of destination and source loop index variables
-   */
-  def createArrayAssignment(
-      arrayName: String,
-      setFunc: String,
-      elementType: DataType,
-      srcArray: String,
-      needNullCheck: Boolean,
-      rhsValue: Option[String] = None): (String, String) => String = {
-    val getValue = (srcLoopIndex: String) => if (rhsValue.isDefined) {
-      rhsValue.get
-    } else {
-      CodeGenerator.getValue(srcArray, elementType, srcLoopIndex)
-    }
-
-    (dstLoopIndex: String, srcLoopIndex: String) =>
-      if (needNullCheck) {
-        s"""
-           |if ($srcArray.isNullAt($srcLoopIndex)) {
-           |  $arrayName.setNullAt($dstLoopIndex);
-           |} else {
-           |  $arrayName.$setFunc($dstLoopIndex, ${getValue(srcLoopIndex)});
-           |}
-         """.stripMargin
-      } else {
-        s"$arrayName.$setFunc($dstLoopIndex, ${getValue(srcLoopIndex)});"
-      }
-  }
-
-  /**
    * Generates code to do null safe execution, i.e. only execute the code when the input is not
    * null by adding null check if necessary.
    *
@@ -1510,6 +1421,94 @@ object CodeGenerator extends Logging {
       case udt: UserDefinedType[_] => getValue(input, udt.sqlType, ordinal)
       case _ => s"($jt)$input.get($ordinal, null)"
     }
+  }
+
+  /**
+   * Generates code of setter for an [[ArrayData]]
+   *
+   * @param dataType data type of the elements in an [[ArrayData]]
+   *
+   * @return code representing a setter of an assignment for an [[ArrayData]]
+   */
+  def setArrayElementFunc(dataType: DataType): String = {
+    val isPrimitiveType = CodeGenerator.isPrimitiveType(dataType)
+    if (isPrimitiveType) {
+      s"set${CodeGenerator.primitiveTypeName(dataType)}"
+    } else {
+      "update"
+    }
+  }
+
+  /**
+   * Generates code creating a [[UnsafeArrayData]] or [[GenericArrayData]] based on
+   * given parameters.
+   *
+   * @param arrayName name of the array to create
+   * @param elementType data type of the elements in source array
+   * @param numElements code representing the number of elements the array should contain
+   * @param additionalErrorMessage string to include in the error message
+   * @param elementSize optional value which shows the size of an element of the allocated
+   *                    [[UnsafeArrayData]] or [[GenericArrayData]]
+   *
+   * @return code representing the allocation of [[ArrayData]]
+   *         code representing a setter of an assignment for the generated array
+   */
+  def createArrayData(
+      arrayName: String,
+      elementType: DataType,
+      numElements: String,
+      additionalErrorMessage: String,
+      elementSize: Option[Int] = None): String = {
+    val (isPrimitiveType, elemSize) = if (elementSize.isDefined) {
+      (false, elementSize.get)
+    } else {
+      (CodeGenerator.isPrimitiveType(elementType), elementType.defaultSize)
+    }
+
+    s"""
+       |ArrayData $arrayName = ArrayData.allocateArrayData(
+       |  $elemSize, $numElements, $isPrimitiveType, "$additionalErrorMessage");
+     """.stripMargin
+  }
+
+  /**
+   * Generates assignment code for a [[ArrayData]]
+   *
+   * @param arrayName name of the array to create
+   * @param elementType data type of the elements in destination and source arrays
+   * @param srcArray code representing the number of elements the array should contain
+   * @param needNullCheck value which shows whether a nullcheck is required for the returning
+   *                      assignment
+   * @param rhsValue optional expression for the right-hand side of the returning assignment
+   *
+   * @return code representing an assignment to each element of the [[ArrayData]], which requires
+   *         a pair of destination and source loop index variables
+   */
+  def createArrayAssignment(
+      arrayName: String,
+      elementType: DataType,
+      srcArray: String,
+      needNullCheck: Boolean,
+      rhsValue: Option[String] = None): (String, String) => String = {
+    val getValue = (srcLoopIndex: String) => if (rhsValue.isDefined) {
+      rhsValue.get
+    } else {
+      CodeGenerator.getValue(srcArray, elementType, srcLoopIndex)
+    }
+    val setFunc = CodeGenerator.setArrayElementFunc(elementType)
+
+    (dstLoopIndex: String, srcLoopIndex: String) =>
+      if (needNullCheck) {
+        s"""
+           |if ($srcArray.isNullAt($srcLoopIndex)) {
+           |  $arrayName.setNullAt($dstLoopIndex);
+           |} else {
+           |  $arrayName.$setFunc($dstLoopIndex, ${getValue(srcLoopIndex)});
+           |}
+         """.stripMargin
+      } else {
+        s"$arrayName.$setFunc($dstLoopIndex, ${getValue(srcLoopIndex)});"
+      }
   }
 
   /**

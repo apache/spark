@@ -48,11 +48,11 @@ object ArrayData {
    */
   def allocateArrayData(
       elementSize: Int,
-      numElements : Long,
+      numElements: Long,
       isPrimitiveType: Boolean,
-      additionalErrorMessage: String) : ArrayData = {
+      additionalErrorMessage: String): ArrayData = {
     if (isPrimitiveType && !UnsafeArrayData.shouldUseGenericArrayData(elementSize, numElements)) {
-      UnsafeArrayData.forPrimitiveArray(Platform.BYTE_ARRAY_OFFSET, numElements.toInt, elementSize)
+      UnsafeArrayData.forPrimitiveArray(numElements.toInt, elementSize)
     } else if (numElements <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toLong) {
       new GenericArrayData(new Array[Any](numElements.toInt))
     } else {
