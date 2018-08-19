@@ -3031,7 +3031,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
     val allocation = CodeGenerator.createArrayData(
       tempArrayDataName, elementType, numElemName, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(
-      tempArrayDataName, elementType, "",false, rhsValue = Some(element))
+      tempArrayDataName, elementType, "", false, rhsValue = Some(element))
 
     s"""
        |$numElemCode
