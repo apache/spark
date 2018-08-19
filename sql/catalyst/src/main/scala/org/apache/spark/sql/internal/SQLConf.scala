@@ -971,6 +971,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val SUPPORT_PARTIAL_AGGREGATION = buildConf("spark.sql.execution.supportPartialAggregation")
+    .internal()
+    .doc("Decides whether partial aggregation is supported or not by the UDAF")
+    .booleanConf
+    .createWithDefault(true)
+
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
     .doc("Whether to delete the expired log files in file stream sink.")
@@ -1769,6 +1775,8 @@ class SQLConf extends Serializable with Logging {
   def enableTwoLevelAggMap: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP)
 
   def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
+
+  def supportPartialAggregation: Boolean = getConf(SUPPORT_PARTIAL_AGGREGATION)
 
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 
