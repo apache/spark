@@ -62,6 +62,10 @@ private[spark] class YarnClientSchedulerBackend(
     super.start()
     waitForApplication()
 
+    // set the attemptId as its available now
+    this.attemptId = Option(client.getApplicationReport(this.appId.get)
+      .getCurrentApplicationAttemptId())
+
     monitorThread = asyncMonitorApplication()
     monitorThread.start()
   }
