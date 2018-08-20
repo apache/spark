@@ -164,10 +164,10 @@ class ParquetSchemaPruningSuite
     }
 
     withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-      test(s"Native Parquet reader - without partition data column - $testName") {
+      test(s"Parquet-mr reader - without partition data column - $testName") {
         withContacts(testThunk)
       }
-      test(s"Native Parquet reader - with partition data column - $testName") {
+      test(s"Parquet-mr reader - with partition data column - $testName") {
         withContactsWithDataPartitionColumn(testThunk)
       }
     }
