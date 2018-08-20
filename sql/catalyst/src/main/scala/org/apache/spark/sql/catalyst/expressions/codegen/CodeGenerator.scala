@@ -1451,7 +1451,6 @@ object CodeGenerator extends Logging {
    *                    [[UnsafeArrayData]] or [[GenericArrayData]]
    *
    * @return code representing the allocation of [[ArrayData]]
-   *         code representing a setter of an assignment for the generated array
    */
   def createArrayData(
       arrayName: String,
@@ -1472,7 +1471,7 @@ object CodeGenerator extends Logging {
   }
 
   /**
-   * Generates assignment code for a [[ArrayData]]
+   * Generates assignment code for an [[ArrayData]]
    *
    * @param arrayName name of the array to create
    * @param elementType data type of the elements in destination and source arrays
