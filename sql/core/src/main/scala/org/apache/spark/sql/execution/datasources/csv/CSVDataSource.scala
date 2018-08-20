@@ -182,25 +182,6 @@ object CSVDataSource extends Logging {
       }
     }
   }
-
-  /**
-   * Checks that CSV header contains the same column names as fields names in the given schema
-   * by taking into account case sensitivity.
-   */
-  def checkHeader(
-      header: String,
-      parser: CsvParser,
-      schema: StructType,
-      fileName: String,
-      enforceSchema: Boolean,
-      caseSensitive: Boolean): Unit = {
-    checkHeaderColumnNames(
-        schema,
-        parser.parseLine(header),
-        fileName,
-        enforceSchema,
-        caseSensitive)
-  }
 }
 
 object TextInputCSVDataSource extends CSVDataSource {
@@ -229,10 +210,9 @@ object TextInputCSVDataSource extends CSVDataSource {
       // Note: if there are only comments in the first block, the header would probably
       // be not extracted.
       CSVUtils.extractHeader(lines, parser.options).foreach { header =>
-        CSVDataSource.checkHeader(
-          header,
-          parser.tokenizer,
+        CSVDataSource.checkHeaderColumnNames(
           if (columnPruning) requiredSchema else dataSchema,
+          parser.tokenizer.parseLine(header),
           file.filePath,
           parser.options.enforceSchema,
           caseSensitive)
