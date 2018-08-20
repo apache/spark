@@ -45,7 +45,7 @@ COPY examples /opt/spark/examples
 COPY data /opt/spark/data
 RUN if [ -z "$SPARK_USER" ]; then \
     addgroup -g 2000 sparkpod && \
-    adduser -D -u 1000 -G sparkpod sparkpod \
+    adduser -D -u 1000 -G sparkpod sparkpod; \
     fi
 
 ENV SPARK_HOME /opt/spark
