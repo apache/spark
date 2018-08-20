@@ -87,9 +87,6 @@ case class RowDataSourceScanExec(
 
   def output: Seq[Attribute] = requiredColumnsIndex.map(fullOutput)
 
-  override val nodeName: String =
-    s"Scan FileSource ${tableIdentifier.map(_.unquotedString).getOrElse(relation)}"
-
   override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
@@ -181,9 +178,6 @@ case class FileSourceScanExec(
       false
     }
   }
-
-  override val nodeName: String =
-    s"Scan FileSource ${tableIdentifier.map(_.unquotedString).getOrElse(relation.location)}"
 
   override def vectorTypes: Option[Seq[String]] =
     relation.fileFormat.vectorTypes(

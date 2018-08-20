@@ -27,6 +27,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.SparkException
 import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
 import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsWithState
 import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
@@ -1229,6 +1230,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
       timeoutType: GroupStateTimeout = GroupStateTimeout.NoTimeout,
       batchTimestampMs: Long = NO_TIMESTAMP): FlatMapGroupsWithStateExec = {
     val stateFormatVersion = spark.conf.get(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
+    val emptyRdd = spark.sparkContext.emptyRDD[InternalRow]
     MemoryStream[Int]
       .toDS
       .groupByKey(x => x)
@@ -1237,7 +1239,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
         case FlatMapGroupsWithState(f, k, v, g, d, o, s, m, _, t, _) =>
           FlatMapGroupsWithStateExec(
             f, k, v, g, d, o, None, s, stateFormatVersion, m, t,
-            Some(currentBatchTimestamp), Some(currentBatchWatermark), RDDScanExec(g, null, "rdd"))
+            Some(currentBatchTimestamp), Some(currentBatchWatermark),
+            RDDScanExec(g, emptyRdd, "rdd"))
       }.get
   }
 

@@ -42,9 +42,6 @@ case class DataSourceV2ScanExec(
     @transient reader: DataSourceReader)
   extends LeafExecNode with DataSourceV2StringFormat with ColumnarBatchScan {
 
-  override val nodeName: String =
-    s"Scan DataSourceV2 ${output.map(_.name).mkString("[", ", ", "]")}"
-
   override def simpleString: String = "ScanV2 " + metadataString
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.

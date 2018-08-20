@@ -2552,4 +2552,25 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(numJobs == 1)
     }
   }
+
+  test("SPARK-23034 show rdd/relation names in RDD/In-Memory table scan nodes") {
+    val tableName = "testTable"
+    withTable(tableName) {
+      Seq((1, 2)).toDF("a", "b").write.saveAsTable(tableName)
+      spark.catalog.cacheTable(tableName)
+      val output1 = new java.io.ByteArrayOutputStream()
+      Console.withOut(output1) {
+        spark.table(tableName).explain(extended = false)
+      }
+      assert(output1.toString.contains(s"Scan in-memory $tableName"))
+    }
+
+    val rddWithName = spark.sparkContext.parallelize(Row(1, "abc") :: Nil).setName("testRdd")
+    val df2 = spark.createDataFrame(rddWithName, StructType.fromDDL("c0 int, c1 string")).cache
+    val output2 = new java.io.ByteArrayOutputStream()
+    Console.withOut(output2) {
+      df2.explain(extended = false)
+    }
+    assert(output2.toString.contains("Scan ExistingRDD testRdd"))
+  }
 }

@@ -51,11 +51,10 @@ trait CodegenSupport extends SparkPlan {
     case _: SortMergeJoinExec => "smj"
     case _: RDDScanExec => "rdd"
     case _: DataSourceScanExec => "scan"
-    case _: LocalTableScanExec => "local_scan"
-    case _: InMemoryTableScanExec => "in_mem_scan"
+    case _: InMemoryTableScanExec => "memscan"
     case _ =>
-      // Java variable names can only have alpha-numeric characters, underscores and `$` (the use of
-      // later two is discouraged)
+      // Java variable names can only have alpha-numeric characters, underscores, and `$`
+      // (the later two letters are discouraged for simplicity).
       nodeName.toLowerCase(Locale.ROOT).replaceAll("\\P{Alnum}", "")
   }
 
