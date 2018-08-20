@@ -384,7 +384,12 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
     }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = removeRedundantAliases(plan, AttributeSet.empty)
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    plan match {
+      case c: Command => c
+      case _ => removeRedundantAliases(plan, AttributeSet.empty)
+    }
+  }
 }
 
 /**
