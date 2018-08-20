@@ -84,7 +84,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         classOf[org.apache.spark.sql.avro.AvroFileFormat])
     }
 
-    withSQLConf(SQLConf.ENABLE_AVRO_BACKWARD_COMPATIBILITY.key -> "false") {
+    withSQLConf(SQLConf.LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED.key -> "false") {
       val message = intercept[AnalysisException] {
         DataSource.lookupDataSource(databricksAvro, spark.sessionState.conf)
       }.getMessage
