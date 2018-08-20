@@ -138,8 +138,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     partitions: Int,
     rdd: RDD[_ <: Product2[K, V]],
     private var ascending: Boolean = true,
-    val samplePointsPerPartitionHint: Int = 20,
-    val sampleCacheEnabled: Boolean = false)
+    val samplePointsPerPartitionHint: Int = 20)
   extends Partitioner {
 
   // A constructor declared in order to maintain backward compatibility for Java, when we add the
@@ -174,7 +173,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
         Array.empty
       } else {
         // already got the whole data
-        if (sampleCacheEnabled && numItems == numSampled) {
+        if (numItems == numSampled) {
           // get the sampled data
           sampledArray = new Array[K](numSampled)
           var curPos = 0

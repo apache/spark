@@ -226,8 +226,7 @@ object ShuffleExchangeExec {
           numPartitions,
           rddForSampling,
           ascending = true,
-          samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition,
-          sampleCacheEnabled = SQLConf.get.rangeExchangeSampleCacheEnabled)
+          samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
       case SinglePartition =>
         new Partitioner {
           override def numPartitions: Int = 1

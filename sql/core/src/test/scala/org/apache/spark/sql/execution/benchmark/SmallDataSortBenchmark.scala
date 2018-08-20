@@ -69,14 +69,18 @@ object SmallDataSortBenchmark {
       dataset.createOrReplaceTempView("src")
 
       benchmark.addCase("with optimization", 10) { _ =>
-        spark.conf.set("spark.sql.execution.rangeExchange.sampleCache.enabled", "true")
+        // 334 * 3 > 1000, the optimization works
+        spark.conf.set("spark.sql.shuffle.partitions", dataset.rdd.getNumPartitions)
+        spark.conf.set("spark.sql.execution.rangeExchange.sampleSizePerPartition", "334")
         val result = spark.
           sql(s"select * from src where key = $key order by value").collectAsList().size()
 
       }
 
       benchmark.addCase("without optimization", 10) { _ =>
-        spark.conf.set("spark.sql.execution.rangeExchange.sampleCache.enabled", "false")
+        // 333 * 3 < 1000, the optimization doesn't work
+        spark.conf.set("spark.sql.shuffle.partitions", dataset.rdd.getNumPartitions)
+        spark.conf.set("spark.sql.execution.rangeExchange.sampleSizePerPartition", "333")
         val result = spark.
           sql(s"select * from src where key = $key order by value").collectAsList().size()
 
