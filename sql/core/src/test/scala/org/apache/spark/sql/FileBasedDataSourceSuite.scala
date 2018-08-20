@@ -448,19 +448,20 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
           checkAnswer(sql(s"select a from $tableName"), data.select("A"))
           checkAnswer(sql(s"select A from $tableName"), data.select("A"))
 
-          // AnalysisException from executors is wrapped as SparkException on driver side
+          // RuntimeException is triggered at executor side, which is then wrapped as
+          // SparkException at driver side
           val e1 = intercept[SparkException] {
             sql(s"select b from $tableName").collect()
           }
           assert(
-            e1.getCause.isInstanceOf[AnalysisException] &&
+            e1.getCause.isInstanceOf[RuntimeException] &&
               e1.getCause.getMessage.contains(
                 """Found duplicate field(s) "b": [b, B] in case-insensitive mode"""))
           val e2 = intercept[SparkException] {
             sql(s"select B from $tableName").collect()
           }
           assert(
-            e2.getCause.isInstanceOf[AnalysisException] &&
+            e2.getCause.isInstanceOf[RuntimeException] &&
               e2.getCause.getMessage.contains(
                 """Found duplicate field(s) "b": [b, B] in case-insensitive mode"""))
         }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.util.{Map => JMap, TimeZone}
+import java.util.{Locale, Map => JMap, TimeZone}
 
 import scala.collection.JavaConverters._
 
@@ -29,7 +29,6 @@ import org.apache.parquet.schema._
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -305,15 +304,15 @@ private[parquet] object ParquetReadSupport {
     } else {
       // Do case-insensitive resolution only if in case-insensitive mode
       val caseInsensitiveParquetFieldMap =
-        parquetRecord.getFields.asScala.groupBy(_.getName.toLowerCase)
+        parquetRecord.getFields.asScala.groupBy(_.getName.toLowerCase(Locale.ROOT))
       structType.map { f =>
         caseInsensitiveParquetFieldMap
-          .get(f.name.toLowerCase)
+          .get(f.name.toLowerCase(Locale.ROOT))
           .map { parquetTypes =>
             if (parquetTypes.size > 1) {
               // Need to fail if there is ambiguity, i.e. more than one field is matched
               val parquetTypesString = parquetTypes.map(_.getName).mkString("[", ", ", "]")
-              throw new AnalysisException(s"""Found duplicate field(s) "${f.name}": """ +
+              throw new RuntimeException(s"""Found duplicate field(s) "${f.name}": """ +
                 s"$parquetTypesString in case-insensitive mode")
             } else {
               clipParquetType(parquetTypes.head, f.dataType, caseSensitive)
