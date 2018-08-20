@@ -203,12 +203,12 @@ class BarrierTaskContext(TaskContext):
 
         .. versionadded:: 2.4.0
         """
-        if self._barrierContext is None:
+        if self._port is None or self._secret is None:
             raise Exception("Not supported to call getTaskInfos() before initialize " +
                             "BarrierTaskContext.")
         else:
-            java_list = self._barrierContext.getTaskInfos()
-            return [BarrierTaskInfo(h) for h in java_list]
+            addresses = self._localProperties.get("addresses", "")
+            return [BarrierTaskInfo(h.strip()) for h in addresses.split(",")]
 
 
 class BarrierTaskInfo(object):
@@ -220,5 +220,5 @@ class BarrierTaskInfo(object):
     .. versionadded:: 2.4.0
     """
 
-    def __init__(self, jobj):
-        self.address = jobj.address()
+    def __init__(self, address):
+        self.address = address

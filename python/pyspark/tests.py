@@ -607,6 +607,21 @@ class TaskContextTests(PySparkTestCase):
         times = rdd.barrier().mapPartitions(f).map(context_barrier).collect()
         self.assertTrue(max(times) - min(times) < 1)
 
+    def test_barrier_infos(self):
+        """
+        Verify that BarrierTaskContext.getTaskInfos() returns a list of all task infos in the
+        barrier stage.
+        """
+        rdd = self.sc.parallelize(range(10), 4)
+
+        def f(iterator):
+            yield sum(iterator)
+
+        taskInfos = rdd.barrier().mapPartitions(f).map(lambda x: BarrierTaskContext.get()
+                                                       .getTaskInfos()).collect()
+        self.assertTrue(len(taskInfos) == 4)
+        self.assertTrue(len(taskInfos[0]) == 4)
+
 
 class RDDTests(ReusedPySparkTestCase):
 

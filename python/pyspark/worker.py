@@ -25,8 +25,6 @@ import time
 import socket
 import traceback
 
-from py4j.java_gateway import JavaGateway, GatewayParameters
-
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.java_gateway import do_server_auth
