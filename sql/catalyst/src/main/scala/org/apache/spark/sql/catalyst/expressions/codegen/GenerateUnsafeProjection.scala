@@ -53,14 +53,13 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       rowWriter: String): String = {
     // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
     val tmpInput = ctx.freshName("tmpInput")
-    val fieldEvals = fieldTypeAndNullables.zipWithIndex.map { case (dtNullable, i) =>
-      val isNull = if (dtNullable.nullable) {
+    val fieldEvals = fieldTypeAndNullables.zipWithIndex.map { case (Schema(dt, nullable), i) =>
+      val isNull = if (nullable) {
         JavaCode.isNullExpression(s"$tmpInput.isNullAt($i)")
       } else {
         FalseLiteral
       }
-      ExprCode(isNull, JavaCode.expression(
-        CodeGenerator.getValue(tmpInput, dtNullable.dataType, i.toString), dtNullable.dataType))
+      ExprCode(isNull, JavaCode.expression(CodeGenerator.getValue(tmpInput, dt, i.toString), dt))
     }
 
     val rowWriterClass = classOf[UnsafeRowWriter].getName

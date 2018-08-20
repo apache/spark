@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType}
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
  * A test suite for testing [[ExpressionEvalHelper]].
