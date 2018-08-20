@@ -156,7 +156,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
 
   private var ordering = implicitly[Ordering[K]]
 
-  private var sampledArray: Array[K] = _
+  @transient private var sampledArray: Array[K] = _
 
   // An array of upper bounds for the first (partitions - 1) partitions
   private var rangeBounds: Array[K] = {
