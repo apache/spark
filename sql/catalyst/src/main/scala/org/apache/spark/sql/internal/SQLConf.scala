@@ -1477,6 +1477,18 @@ object SQLConf {
         "This usually speeds up commands that need to list many directories.")
       .booleanConf
       .createWithDefault(true)
+
+  val SQL_SHOW_DEFAULT_MAX_ROWS = buildConf("spark.sql.show.defaultNumRows")
+    .doc("the default number of rows to show when the show function is called without a user" +
+      " specified max number of rows.")
+    .intConf
+    .createWithDefault(20)
+
+  val SQL_SHOW_TRUNCATE_MAX_CHARS_PER_COLUMN = buildConf("spark.sql.show.truncateMaxCharsPerColumn")
+    .doc("the default max characters per column to show before truncation when" +
+      "the show function is called with truncate.")
+    .intConf
+    .createWithDefault(20)
 }
 
 /**
@@ -1875,6 +1887,11 @@ class SQLConf extends Serializable with Logging {
 
   def parallelFileListingInStatsComputation: Boolean =
     getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)
+
+  def sqlShowDefaultMaxRecordsToShow: Int = getConf(SQLConf.SQL_SHOW_DEFAULT_MAX_ROWS)
+
+  def sqlShowDefaultMaxCharsPerTruncatedRow: Int =
+    getConf(SQLConf.SQL_SHOW_TRUNCATE_MAX_CHARS_PER_COLUMN)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -969,6 +969,21 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkShowString(ds, expected)
   }
 
+
+  test("SPARK-24442 Show should follow spark.show.default.number.of.rows") {
+    withSQLConf("spark.sql.show.defaultNumRows" -> "100") {
+      (1 to 1000).toDS().as[Int].show
+    }
+  }
+
+  test("SPARK-24442 Show should follow spark.show.default.truncate.characters.per.column") {
+    withSQLConf("spark.sql.show.truncateMaxCharsPerColumn" -> "30") {
+      (1 to 1000).map(x => "123456789_123456789_123456789_")
+        .toDS().as[String]
+        .show
+    }
+  }
+
   test(
     "SPARK-15112: EmbedDeserializerInFilter should not optimize plan fragment that changes schema"
   ) {
