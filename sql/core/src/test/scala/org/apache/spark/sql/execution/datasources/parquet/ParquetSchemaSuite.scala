@@ -24,7 +24,6 @@ import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
@@ -1591,7 +1590,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           .add("a", nestedType, nullable = true)
           .add("c", IntegerType, nullable = true)
       }
-      assertThrows[AnalysisException] {
+      assertThrows[RuntimeException] {
         ParquetReadSupport.clipParquetSchema(
           MessageTypeParser.parseMessageType(parquetSchema), catalystSchema, caseSensitive = false)
       }
