@@ -465,7 +465,7 @@ $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{
           \frac{rel_{D_i}(R_i(j))}{\text{ln}(j+2)}} \\
         \text{Where} \\
         \hspace{5 mm} n = \text{min}\left(\text{max}\left(|R_i|,|D_i|\right),k\right) \\
-        \hspace{5 mm} IDCG(D, k) = \sum_{j=0}^{\text{min}(\left|D\right|, k)} \frac{1}{\text{ln}(j+2)}$
+        \hspace{5 mm} IDCG(D, k) = \sum_{j=0}^{\text{min}(\left|D\right|, k) - 1} \frac{1}{\text{ln}(j+2)}$
       </td>
       <td>
         <a href="https://en.wikipedia.org/wiki/Discounted_cumulative_gain#Normalized_DCG">NDCG at k</a> is a
