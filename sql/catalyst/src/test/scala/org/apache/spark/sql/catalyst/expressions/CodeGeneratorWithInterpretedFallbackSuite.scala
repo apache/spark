@@ -18,11 +18,26 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType}
 
 class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanTestBase {
+
+  object FailedCodegenProjection
+      extends CodeGeneratorWithInterpretedFallback[Seq[Expression], UnsafeProjection] {
+
+    override protected def createCodeGeneratedObject(in: Seq[Expression]): UnsafeProjection = {
+      val invalidCode = new CodeAndComment("invalid code", Map.empty)
+      CodeGenerator.compile(invalidCode)
+      null.asInstanceOf[UnsafeProjection]
+    }
+
+    override protected def createInterpretedObject(in: Seq[Expression]): UnsafeProjection = {
+      InterpretedUnsafeProjection.createProjection(in)
+    }
+  }
 
   test("UnsafeProjection with codegen factory mode") {
     val input = Seq(LongType, IntegerType)
@@ -37,6 +52,15 @@ class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanT
     val noCodegen = CodegenObjectFactoryMode.NO_CODEGEN.toString
     withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> noCodegen) {
       val obj = UnsafeProjection.createObject(input)
+      assert(obj.isInstanceOf[InterpretedUnsafeProjection])
+    }
+  }
+
+  test("fallback to the interpreter mode") {
+    val input = Seq(IntegerType).zipWithIndex.map(x => BoundReference(x._2, x._1, true))
+    val fallback = CodegenObjectFactoryMode.FALLBACK.toString
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallback) {
+      val obj = FailedCodegenProjection.createObject(input)
       assert(obj.isInstanceOf[InterpretedUnsafeProjection])
     }
   }

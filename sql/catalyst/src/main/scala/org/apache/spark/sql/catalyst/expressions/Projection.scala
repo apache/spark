@@ -180,7 +180,10 @@ object UnsafeProjection
     try {
       GenerateUnsafeProjection.generate(unsafeExprs, subexpressionEliminationEnabled)
     } catch {
-      case CodegenError(_) => InterpretedUnsafeProjection.createProjection(unsafeExprs)
+      case _: Exception =>
+        // We should have already see error message in `CodeGenerator`
+        logError("Expr codegen disabled and falls back to the interpreter mode")
+        InterpretedUnsafeProjection.createProjection(unsafeExprs)
     }
   }
 }
