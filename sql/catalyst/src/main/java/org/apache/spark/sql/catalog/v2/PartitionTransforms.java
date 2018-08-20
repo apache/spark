@@ -121,7 +121,7 @@ public class PartitionTransforms {
     return new DateAndHour(colName);
   }
 
-  private abstract static class SingleColumnTransform implements PartitionTransform {
+  abstract static class SingleColumnTransform implements PartitionTransform {
     private final String[] colNames;
 
     private SingleColumnTransform(String colName) {

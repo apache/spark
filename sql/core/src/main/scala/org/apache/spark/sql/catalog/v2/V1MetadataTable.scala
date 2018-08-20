@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalog.v2
 
 import java.util
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.SaveMode
@@ -70,7 +71,7 @@ private[sql] class V1MetadataTable(
   override lazy val partitioning: util.List[PartitionTransform] = {
     val partitions = new util.ArrayList[PartitionTransform]()
 
-    v1Table.partitionColumnNames.foreach(col => partitions.add(identity(col)))
+    v1Table.partitionColumnNames.foreach(col => partitions.add(identity(col): PartitionTransform))
     v1Table.bucketSpec.map(spec =>
       partitions.add(bucket(spec.numBuckets, spec.bucketColumnNames: _*)))
 
