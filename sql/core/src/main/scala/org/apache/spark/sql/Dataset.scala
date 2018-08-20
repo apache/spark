@@ -764,7 +764,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def show(): Unit = show(20)
+  def show(): Unit = show(sqlContext.conf.sqlShowDefaultMaxRows)
 
   /**
    * Displays the top 20 rows of Dataset in a tabular form.
@@ -775,7 +775,8 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def show(truncate: Boolean): Unit = show(20, truncate)
+  def show(truncate: Boolean): Unit =
+    show(sqlContext.conf.sqlShowDefaultMaxRows, truncate)
 
   /**
    * Displays the Dataset in a tabular form. For example:
@@ -796,7 +797,7 @@ class Dataset[T] private[sql](
    */
   // scalastyle:off println
   def show(numRows: Int, truncate: Boolean): Unit = if (truncate) {
-    println(showString(numRows, truncate = 20))
+    println(showString(numRows, truncate = sqlContext.conf.sqlShowTruncateMaxCharsPerColumn))
   } else {
     println(showString(numRows, truncate = 0))
   }

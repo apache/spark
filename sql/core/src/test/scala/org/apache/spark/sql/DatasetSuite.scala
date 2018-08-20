@@ -1138,7 +1138,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     // scalastyle:on nonascii
     val ds = df.as[ClassData]
     val expected =
-      // scalastyle:off nonascii
+    // scalastyle:off nonascii
       """+---+----+---+
         ||  b|   a|  c|
         |+---+----+---+
@@ -1162,6 +1162,41 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
         |""".stripMargin
     // scalastyle:on nonascii
     checkShowString(ds, expected)
+  }
+
+  test("SPARK-24442 Show should follow spark.show.default.number.of.rows") {
+    withSQLConf(SQLConf.SQL_SHOW_DEFAULT_MAX_ROWS.key -> "2") {
+      val outputStream = new java.io.ByteArrayOutputStream()
+      Console.withOut(outputStream) {
+        (1 to 1000).toDS().as[Int].show
+      }
+      assert(outputStream.toString.contains("""+-----+
+                                              ||value|
+                                              |+-----+
+                                              ||    1|
+                                              ||    2|
+                                              |+-----+
+                                              |only showing top 2 rows""".stripMargin))
+
+    }
+  }
+
+  test("SPARK-24442 allow 10 chars per column") {
+    withSQLConf(SQLConf.SQL_SHOW_TRUNCATE_MAX_CHARS_PER_COLUMN.key -> "10") {
+      val outputStream = new java.io.ByteArrayOutputStream()
+      Console.withOut(outputStream) {
+        (1 to 2).map(x => "123456789_123456789_123456789_")
+          .toDS().as[String]
+          .show
+      }
+      assert(outputStream.toString.contains("""+----------+
+                                              ||     value|
+                                              |+----------+
+                                              ||1234567...|
+                                              ||1234567...|
+                                              |+----------+""".stripMargin))
+
+    }
   }
 
   test(

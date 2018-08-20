@@ -2050,6 +2050,19 @@ object SQLConf {
       .stringConf
       .createWithDefault(
         "https://maven-central.storage-download.googleapis.com/repos/central/data/")
+
+  val SQL_SHOW_DEFAULT_MAX_ROWS = buildConf("spark.sql.show.defaultNumRows")
+    .doc("the default number of rows to show when the show function is called without a user" +
+      " specified max number of rows.")
+    .intConf
+    .createWithDefault(20)
+
+  val SQL_SHOW_TRUNCATE_MAX_CHARS_PER_COLUMN = buildConf("spark.sql.show.truncateMaxCharsPerColumn")
+    .doc("the default max characters per column to show before truncation when" +
+      "the show function is called with truncate.")
+    .intConf
+    .createWithDefault(20)
+
 }
 
 /**
@@ -2549,6 +2562,11 @@ class SQLConf extends Serializable with Logging {
   def defaultV2Catalog: Option[String] = getConf(DEFAULT_V2_CATALOG)
 
   def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
+
+  def sqlShowDefaultMaxRows: Int = getConf(SQLConf.SQL_SHOW_DEFAULT_MAX_ROWS)
+
+  def sqlShowTruncateMaxCharsPerColumn: Int =
+    getConf(SQLConf.SQL_SHOW_TRUNCATE_MAX_CHARS_PER_COLUMN)
 
   /** ********************** SQLConf functionality methods ************ */
 
