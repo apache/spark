@@ -296,18 +296,17 @@ private[parquet] object ParquetReadSupport {
     if (caseSensitive) {
       val caseSensitiveParquetFieldMap =
         parquetRecord.getFields.asScala.map(f => f.getName -> f).toMap
-      structType.map { f => {
+      structType.map { f =>
         caseSensitiveParquetFieldMap
           .get(f.name)
           .map(clipParquetType(_, f.dataType, caseSensitive))
           .getOrElse(toParquet.convertField(f))
       }
-      }
     } else {
       // Do case-insensitive resolution only if in case-insensitive mode
       val caseInsensitiveParquetFieldMap =
         parquetRecord.getFields.asScala.groupBy(_.getName.toLowerCase)
-      structType.map { f => {
+      structType.map { f =>
         caseInsensitiveParquetFieldMap
           .get(f.name.toLowerCase)
           .map {
@@ -321,7 +320,6 @@ private[parquet] object ParquetReadSupport {
                 clipParquetType(parquetTypes.head, f.dataType, caseSensitive)
               }
           }.getOrElse(toParquet.convertField(f))
-      }
       }
     }
   }
