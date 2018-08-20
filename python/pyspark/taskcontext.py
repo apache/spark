@@ -19,7 +19,7 @@ from __future__ import print_function
 import socket
 
 from pyspark.java_gateway import do_server_auth
-from pyspark.serializers import UTF8Deserializer
+from pyspark.serializers import write_with_length, UTF8Deserializer
 
 
 class TaskContext(object):
@@ -125,6 +125,8 @@ def _load_from_socket(port, auth_secret):
         raise Exception("could not open socket")
 
     sockfile = sock.makefile("rwb", 65536)
+    write_with_length("run".encode("utf-8"), sockfile)
+    sockfile.flush()
     do_server_auth(sockfile, auth_secret)
 
     # The socket will be automatically closed when garbage-collected.

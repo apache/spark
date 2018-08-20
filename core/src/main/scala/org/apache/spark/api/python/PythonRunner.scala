@@ -24,7 +24,6 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, _}
 import org.apache.spark.internal.Logging
@@ -195,9 +194,34 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         val isBarrier = context.isInstanceOf[BarrierTaskContext]
         if (isBarrier) {
           serverSocket = Some(new ServerSocket(0, 1, InetAddress.getByName("localhost")))
+          // A call to accept() for ServerSocket shall block infinitely.
+          serverSocket.map(_.setSoTimeout(0))
+          new Thread("accept-connections") {
+            setDaemon(true)
+
+            override def run(): Unit = {
+              while (!serverSocket.get.isClosed()) {
+                var sock: Socket = null
+                try {
+                  sock = serverSocket.get.accept()
+                  sock.setSoTimeout(10000)
+                  val cmdString = readUtf8(sock)
+                  if (cmdString.equals("run")) {
+                    sock.setSoTimeout(0)
+                    barrierAndServe(sock)
+                  }
+                } catch {
+                  case _: SocketException =>
+                    // No barrier() call from Python side, continue.
+                } finally {
+                  if (sock != null) {
+                    sock.close()
+                  }
+                }
+              }
+            }
+          }.start()
         }
-        // A call to accept() for ServerSocket shall block infinitely.
-        serverSocket.map(_.setSoTimeout(0))
         val secret = if (isBarrier) {
           authHelper.secret
         } else {
@@ -281,6 +305,26 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           if (!worker.isClosed) {
             Utils.tryLog(worker.shutdownOutput())
           }
+      }
+    }
+
+    /**
+     * Gateway to call BarrierTaskContext.barrier().
+     */
+    def barrierAndServe(sock: Socket): Unit = {
+      require(serverSocket.isDefined, "No available ServerSocket to redirect the barrier() call.")
+
+      authHelper.authClient(sock)
+
+      val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
+      try {
+        context.asInstanceOf[BarrierTaskContext].barrier()
+        writeUTF("success", out)
+      } catch {
+        case e: SparkException =>
+          writeUTF(e.getMessage, out)
+      } finally {
+        out.close()
       }
     }
   }
@@ -422,43 +466,18 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
   }
 
-  /**
-   * Gateway to call BarrierTaskContext.barrier().
-   */
-  def barrierAndServe(): Unit = {
-    val context = BarrierTaskContext.get()
-    require(serverSocket.isDefined, "No available ServerSocket to redirect the barrier() call.")
-
-    new Thread(s"serve-barrier-${context.partitionId}") {
-      setDaemon(true)
-      override def run() {
-        try {
-          val sock = serverSocket.get.accept()
-          authHelper.authClient(sock)
-
-          val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
-          try {
-            context.barrier()
-            writeUTF("success", out)
-          } catch {
-            case e: SparkException =>
-              writeUTF(e.getMessage, out)
-          } finally {
-            out.close()
-            sock.close()
-          }
-        } catch {
-          case NonFatal(e) =>
-            logError(s"Error while calling BarrierTaskContext.barrier()", e)
-        }
-      }
-    }.start()
-  }
-
   def writeUTF(str: String, dataOut: DataOutputStream) {
     val bytes = str.getBytes(StandardCharsets.UTF_8)
     dataOut.writeInt(bytes.length)
     dataOut.write(bytes)
+  }
+
+  def readUtf8(s: Socket): String = {
+    val din = new DataInputStream(s.getInputStream())
+    val len = din.readInt()
+    val bytes = new Array[Byte](len)
+    din.readFully(bytes)
+    new String(bytes, UTF_8)
   }
 }
 
