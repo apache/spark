@@ -309,16 +309,15 @@ private[parquet] object ParquetReadSupport {
       structType.map { f =>
         caseInsensitiveParquetFieldMap
           .get(f.name.toLowerCase)
-          .map {
-            parquetTypes =>
-              if (parquetTypes.size > 1) {
-                // Need to fail if there is ambiguity, i.e. more than one field is matched
-                val parquetTypesString = parquetTypes.map(_.getName).mkString("[", ", ", "]")
-                throw new AnalysisException(s"""Found duplicate field(s) "${f.name}": """ +
-                  s"$parquetTypesString in case-insensitive mode")
-              } else {
-                clipParquetType(parquetTypes.head, f.dataType, caseSensitive)
-              }
+          .map { parquetTypes =>
+            if (parquetTypes.size > 1) {
+              // Need to fail if there is ambiguity, i.e. more than one field is matched
+              val parquetTypesString = parquetTypes.map(_.getName).mkString("[", ", ", "]")
+              throw new AnalysisException(s"""Found duplicate field(s) "${f.name}": """ +
+                s"$parquetTypesString in case-insensitive mode")
+            } else {
+              clipParquetType(parquetTypes.head, f.dataType, caseSensitive)
+            }
           }.getOrElse(toParquet.convertField(f))
       }
     }
