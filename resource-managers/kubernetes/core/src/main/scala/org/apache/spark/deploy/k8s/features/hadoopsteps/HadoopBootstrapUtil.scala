@@ -68,6 +68,11 @@ private[spark] object HadoopBootstrapUtil {
                   .build())
                 .endConfigMap()
               .endVolume()
+        // TODO: (ifilonenko) make configurable PU(G)ID
+          .editOrNewSecurityContext()
+            .withRunAsUser(1000L)
+            .withFsGroup(2000L)
+            .endSecurityContext()
           .endSpec()
         .build()
       val kerberizedContainer = new ContainerBuilder(pod.container)
@@ -83,13 +88,9 @@ private[spark] object HadoopBootstrapUtil {
           .withName(ENV_HADOOP_TOKEN_FILE_LOCATION)
           .withValue(s"$SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR/$dtSecretItemKey")
           .endEnv()
-        // TODO (ifilonenko): This has the correct user as ` userName` however
-        // since the user to which the keytab has access to might not be on the k8s
-        // nodes, this atm leaves us with the option to use `root`. Next step is to
-        // support customization of the UNIX username.
         .addNewEnv()
           .withName(ENV_SPARK_USER)
-          .withValue("root")
+          .withValue(userName)
           .endEnv()
         .build()
     SparkPod(kerberizedPod, kerberizedContainer)

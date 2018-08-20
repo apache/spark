@@ -495,7 +495,7 @@ case class JsonTuple(children: Seq[Expression])
 }
 
 /**
- * Converts an json input string to a [[StructType]] or [[ArrayType]] of [[StructType]]s
+ * Converts an json input string to a [[StructType]], [[ArrayType]] or [[MapType]]
  * with the specified schema.
  */
 // scalastyle:off line.size.limit
@@ -544,17 +544,10 @@ case class JsonToStructs(
       timeZoneId = None)
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
-    case _: StructType | ArrayType(_: StructType, _) | _: MapType =>
+    case _: StructType | _: ArrayType | _: MapType =>
       super.checkInputDataTypes()
     case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input schema ${nullableSchema.catalogString} must be a struct or an array of structs.")
-  }
-
-  @transient
-  lazy val rowSchema = nullableSchema match {
-    case st: StructType => st
-    case ArrayType(st: StructType, _) => st
-    case mt: MapType => mt
+      s"Input schema ${nullableSchema.catalogString} must be a struct, an array or a map.")
   }
 
   // This converts parsed rows to the desired output by the given schema.
@@ -562,8 +555,8 @@ case class JsonToStructs(
   lazy val converter = nullableSchema match {
     case _: StructType =>
       (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
-    case ArrayType(_: StructType, _) =>
-      (rows: Seq[InternalRow]) => new GenericArrayData(rows)
+    case _: ArrayType =>
+      (rows: Seq[InternalRow]) => rows.head.getArray(0)
     case _: MapType =>
       (rows: Seq[InternalRow]) => rows.head.getMap(0)
   }
@@ -571,7 +564,7 @@ case class JsonToStructs(
   @transient
   lazy val parser =
     new JacksonParser(
-      rowSchema,
+      nullableSchema,
       new JSONOptions(options + ("mode" -> FailFastMode.name), timeZoneId.get))
 
   override def dataType: DataType = nullableSchema
@@ -632,7 +625,7 @@ case class JsonToStructs(
        {"a":1,"b":2}
       > SELECT _FUNC_(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'));
        {"time":"26/08/2015"}
-      > SELECT _FUNC_(array(named_struct('a', 1, 'b', 2));
+      > SELECT _FUNC_(array(named_struct('a', 1, 'b', 2)));
        [{"a":1,"b":2}]
       > SELECT _FUNC_(map('a', named_struct('b', 1)));
        {"a":{"b":1}}

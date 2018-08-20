@@ -33,14 +33,16 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming.LongOffset
+import org.apache.spark.sql.execution.streaming.continuous.TextSocketContinuousReader
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceOptions, DataSourceV2, MicroBatchReadSupport}
 import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader}
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReader, MicroBatchReader, Offset}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
-object TextSocketMicroBatchReader {
+// Shared object for micro-batch and continuous reader
+object TextSocketReader {
   val SCHEMA_REGULAR = StructType(StructField("value", StringType) :: Nil)
   val SCHEMA_TIMESTAMP = StructType(StructField("value", StringType) ::
     StructField("timestamp", TimestampType) :: Nil)
@@ -137,9 +139,9 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
 
   override def readSchema(): StructType = {
     if (options.getBoolean("includeTimestamp", false)) {
-      TextSocketMicroBatchReader.SCHEMA_TIMESTAMP
+      TextSocketReader.SCHEMA_TIMESTAMP
     } else {
-      TextSocketMicroBatchReader.SCHEMA_REGULAR
+      TextSocketReader.SCHEMA_REGULAR
     }
   }
 
@@ -226,7 +228,7 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
 }
 
 class TextSocketSourceProvider extends DataSourceV2
-  with MicroBatchReadSupport with DataSourceRegister with Logging {
+  with MicroBatchReadSupport with ContinuousReadSupport with DataSourceRegister with Logging {
 
   private def checkParameters(params: DataSourceOptions): Unit = {
     logWarning("The socket source should not be used for production applications! " +
@@ -256,6 +258,17 @@ class TextSocketSourceProvider extends DataSourceV2
     }
 
     new TextSocketMicroBatchReader(options)
+  }
+
+  override def createContinuousReader(
+      schema: Optional[StructType],
+      checkpointLocation: String,
+      options: DataSourceOptions): ContinuousReader = {
+    checkParameters(options)
+    if (schema.isPresent) {
+      throw new AnalysisException("The socket source does not support a user-specified schema.")
+    }
+    new TextSocketContinuousReader(options)
   }
 
   /** String that represents the format that this data source provider uses. */

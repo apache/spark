@@ -1660,7 +1660,7 @@ object functions {
   def expm1(e: Column): Column = withExpr { Expm1(e.expr) }
 
   /**
-   * Computes the exponential of the given column.
+   * Computes the exponential of the given column minus one.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -3339,7 +3339,7 @@ object functions {
 
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
-   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * as keys type, `StructType` or `ArrayType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -3371,7 +3371,7 @@ object functions {
 
   /**
    * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
-   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * as keys type, `StructType` or `ArrayType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -3400,7 +3400,7 @@ object functions {
 
   /**
    * Parses a column containing a JSON string into a `MapType` with `StringType` as keys type,
-   * `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * `StructType` or `ArrayType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -3414,7 +3414,7 @@ object functions {
 
   /**
    * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
-   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * as keys type, `StructType` or `ArrayType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -3431,7 +3431,7 @@ object functions {
 
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
-   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * as keys type, `StructType` or `ArrayType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.

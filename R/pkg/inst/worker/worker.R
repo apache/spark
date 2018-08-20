@@ -62,7 +62,7 @@ compute <- function(mode, partition, serializer, deserializer, key,
       # Transform the result data.frame back to a list of rows
       output <- split(output, seq(nrow(output)))
     } else {
-      # Serialize the ouput to a byte array
+      # Serialize the output to a byte array
       stopifnot(serializer == "byte")
     }
   } else {

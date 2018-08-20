@@ -181,8 +181,9 @@ def main():
     short_commit_hash = ghprb_actual_commit[0:7]
 
     # format: http://linux.die.net/man/1/timeout
-    # must be less than the timeout configured on Jenkins (currently 350m)
-    tests_timeout = "300m"
+    # must be less than the timeout configured on Jenkins. Usually Jenkins's timeout is higher
+    # then this. Please consult with the build manager or a committer when it should be increased.
+    tests_timeout = "400m"
 
     # Array to capture all test names to run on the pull request. These tests are represented
     # by their file equivalents in the dev/tests/ directory.

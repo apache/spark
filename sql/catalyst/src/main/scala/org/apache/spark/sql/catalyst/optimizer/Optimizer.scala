@@ -135,7 +135,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     Batch("Subquery", Once,
       OptimizeSubqueries) ::
     Batch("Replace Operators", fixedPoint,
-      RewriteExcepAll,
+      RewriteExceptAll,
       RewriteIntersectAll,
       ReplaceIntersectWithSemiJoin,
       ReplaceExceptWithFilter,
@@ -189,8 +189,11 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ReplaceIntersectWithSemiJoin.ruleName ::
       ReplaceExceptWithFilter.ruleName ::
       ReplaceExceptWithAntiJoin.ruleName ::
+      RewriteExceptAll.ruleName ::
+      RewriteIntersectAll.ruleName ::
       ReplaceDistinctWithAggregate.ruleName ::
       PullupCorrelatedPredicates.ruleName ::
+      RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName :: Nil
 
   /**
@@ -1462,7 +1465,7 @@ object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
  * }}}
  */
 
-object RewriteExcepAll extends Rule[LogicalPlan] {
+object RewriteExceptAll extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Except(left, right, true) =>
       assert(left.output.size == right.output.size)
