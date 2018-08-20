@@ -130,6 +130,16 @@ private[spark] class Executor(
   private val urlClassLoader = createClassLoader()
   private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
 
+  // One thread will handle loading all of the plugins on this executor
+  val executorPluginThread = new Thread {
+    override def run: Unit = {
+      conf.get(EXECUTOR_PLUGINS).foreach { classes =>
+        Utils.loadExtensions(classOf[ExecutorPlugin], classes, conf)
+      }
+    }
+  }
+  executorPluginThread.start
+
   // Set the classloader for serializer
   env.serializer.setDefaultClassLoader(replClassLoader)
   // SPARK-21928.  SerializerManager's internal instance of Kryo might get used in netty threads
