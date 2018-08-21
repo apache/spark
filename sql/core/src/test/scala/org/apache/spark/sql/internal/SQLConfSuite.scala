@@ -291,11 +291,12 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     // explicitParentVal is Some(v) if we have called spark.conf.set(parent.key, v) or None if we
     // have not called explicitly set a conf value for parent.key
     def testCorrectValues(explicitParentVal: Option[Boolean]): Unit = {
+      val explicitParentString = explicitParentVal.map(_.toString)
+
       // The order of precedence should be:
       // 1. Explicit value if one was set
       // 2. Otherwise, client default if one was provided
       // 3. Otherwise, builder default (either scalar default or a fallback conf default)
-      val explicitParentString = explicitParentVal.map(_.toString)
 
       // Using the ConfigBuilder directly should use the builder default
       assert(spark.conf.get(parent) == explicitParentVal.getOrElse(false))
