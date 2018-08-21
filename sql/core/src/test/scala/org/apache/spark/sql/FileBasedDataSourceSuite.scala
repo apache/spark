@@ -483,9 +483,9 @@ object TestingUDT {
   class IntervalUDT extends UserDefinedType[IntervalData] {
 
     override def sqlType: DataType = CalendarIntervalType
-    override def serialize(obj: IntervalData): Any =
+    override def writeRow(obj: IntervalData): Row =
       throw new NotImplementedError("Not implemented")
-    override def deserialize(datum: Any): IntervalData =
+    override def readRow(row: Row): IntervalData =
       throw new NotImplementedError("Not implemented")
     override def userClass: Class[IntervalData] = classOf[IntervalData]
   }
@@ -496,8 +496,9 @@ object TestingUDT {
   private[sql] class NullUDT extends UserDefinedType[NullData] {
 
     override def sqlType: DataType = NullType
-    override def serialize(obj: NullData): Any = throw new NotImplementedError("Not implemented")
-    override def deserialize(datum: Any): NullData =
+    override def writeRow(obj: NullData): Row =
+      throw new NotImplementedError("Not implemented")
+    override def readRow(row: Row): NullData =
       throw new NotImplementedError("Not implemented")
     override def userClass: Class[NullData] = classOf[NullData]
   }
