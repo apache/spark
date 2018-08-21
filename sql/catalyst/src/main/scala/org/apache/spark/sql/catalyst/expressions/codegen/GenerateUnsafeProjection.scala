@@ -49,11 +49,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       ctx: CodegenContext,
       input: String,
       index: String,
-      fieldTypeAndNullables: Seq[Schema],
+      schemas: Seq[Schema],
       rowWriter: String): String = {
     // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
     val tmpInput = ctx.freshName("tmpInput")
-    val fieldEvals = fieldTypeAndNullables.zipWithIndex.map { case (Schema(dt, nullable), i) =>
+    val fieldEvals = schemas.zipWithIndex.map { case (Schema(dt, nullable), i) =>
       val isNull = if (nullable) {
         JavaCode.isNullExpression(s"$tmpInput.isNullAt($i)")
       } else {
@@ -67,7 +67,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       v => s"$v = new $rowWriterClass($rowWriter, ${fieldEvals.length});")
     val previousCursor = ctx.freshName("previousCursor")
     val structExpressions = writeExpressionsToBuffer(
-      ctx, tmpInput, fieldEvals, fieldTypeAndNullables.map(_.dataType), structRowWriter)
+      ctx, tmpInput, fieldEvals, schemas, structRowWriter)
     s"""
        |final InternalRow $tmpInput = $input;
        |if ($tmpInput instanceof UnsafeRow) {
@@ -86,7 +86,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       ctx: CodegenContext,
       row: String,
       inputs: Seq[ExprCode],
-      inputTypes: Seq[DataType],
+      schemas: Seq[Schema],
       rowWriter: String,
       isTopLevel: Boolean = false): String = {
     val resetWriter = if (isTopLevel) {
@@ -104,8 +104,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       s"$rowWriter.resetRowWriter();"
     }
 
-    val writeFields = inputs.zip(inputTypes).zipWithIndex.map {
-      case ((input, dataType), index) =>
+    val writeFields = inputs.zip(schemas).zipWithIndex.map {
+      case ((input, Schema(dataType, nullable)), index) =>
         val dt = UserDefinedType.sqlType(dataType)
 
         val setNull = dt match {
@@ -116,7 +116,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         }
 
         val writeField = writeElement(ctx, input.value, index.toString, dt, rowWriter)
-        if (input.isNull == FalseLiteral) {
+        if (input.isNull == FalseLiteral || !nullable) {
           s"""
              |${input.code}
              |${writeField.trim}
@@ -288,10 +288,10 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       expressions: Seq[Expression],
       useSubexprElimination: Boolean = false): ExprCode = {
     val exprEvals = ctx.generateExpressions(expressions, useSubexprElimination)
-    val exprTypes = expressions.map(_.dataType)
+    val exprSchemas = expressions.map(e => Schema(e.dataType, e.nullable))
 
-    val numVarLenFields = exprTypes.count {
-      case dt => !UnsafeRow.isFixedLength(dt)
+    val numVarLenFields = exprSchemas.count {
+      case Schema(dt, _) => !UnsafeRow.isFixedLength(dt)
       // TODO: consider large decimal and interval type
     }
 
@@ -303,7 +303,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val evalSubexpr = ctx.subexprFunctions.mkString("\n")
 
     val writeExpressions = writeExpressionsToBuffer(
-      ctx, ctx.INPUT_ROW, exprEvals, exprTypes, rowWriter, isTopLevel = true)
+      ctx, ctx.INPUT_ROW, exprEvals, exprSchemas, rowWriter, isTopLevel = true)
 
     val code =
       code"""
