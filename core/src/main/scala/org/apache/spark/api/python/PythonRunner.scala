@@ -82,10 +82,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   private[spark] var serverSocket: Option[ServerSocket] = None
 
   // Authentication helper used when serving method calls via socket from Python side.
-  private lazy val authHelper = {
-    val conf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
-    new SocketAuthHelper(conf)
-  }
+  private lazy val authHelper = new SocketAuthHelper(SparkEnv.get.conf)
 
   def compute(
       inputIterator: Iterator[IN],

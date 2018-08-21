@@ -113,7 +113,10 @@ private[spark] object PythonRDD extends Logging {
   private val workerBroadcasts = new mutable.WeakHashMap[Socket, mutable.Set[Long]]()
 
   // Authentication helper used when serving iterator data.
-  private lazy val authHelper = new SocketAuthHelper(SparkEnv.get.conf)
+  private lazy val authHelper = {
+    val conf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
+    new SocketAuthHelper(conf)
+  }
 
   def getWorkerBroadcasts(worker: Socket): mutable.Set[Long] = {
     synchronized {
