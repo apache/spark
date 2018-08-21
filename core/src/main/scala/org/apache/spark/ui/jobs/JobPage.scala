@@ -18,18 +18,18 @@
 package org.apache.spark.ui.jobs
 
 import java.util.Locale
+
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.{Buffer, ListBuffer}
 import scala.xml.{Node, NodeSeq, Unparsed, Utility}
-
 import org.apache.commons.lang3.StringEscapeUtils
-
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui._
+import org.apache.spark.ui.scope.RDDOperationGraph
 
 /** Page showing statistics and stage list for a given job */
 private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIPage("job") {
@@ -337,7 +337,9 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       store.executorList(false), appStartTime)
 
     val operationGraphContent = store.asOption(store.operationGraphForJob(jobId)) match {
-      case Some(operationGraph) => UIUtils.showDagVizForJob(jobId, operationGraph)
+      case Some(operationGraph) => UIUtils.showDagVizForJob(jobId, operationGraph.sortWith(
+        _.rootCluster.id.replaceAll(RDDOperationGraph.STAGE_CLUSTER_PREFIX, "").toInt
+          < _.rootCluster.id.replaceAll(RDDOperationGraph.STAGE_CLUSTER_PREFIX, "").toInt))
       case None =>
         <div id="no-info">
           <p>No DAG visualization information to display for job {jobId}</p>
