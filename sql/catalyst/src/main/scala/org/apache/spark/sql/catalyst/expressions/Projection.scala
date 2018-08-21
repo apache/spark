@@ -182,7 +182,7 @@ object UnsafeProjection
     } catch {
       case _: Exception =>
         // We should have already see error message in `CodeGenerator`
-        logError("Expr codegen disabled and falls back to the interpreter mode")
+        logError("Expr codegen error and falls back to interpreter mode")
         InterpretedUnsafeProjection.createProjection(unsafeExprs)
     }
   }
