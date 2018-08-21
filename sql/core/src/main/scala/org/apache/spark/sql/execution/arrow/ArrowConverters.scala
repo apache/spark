@@ -18,24 +18,24 @@
 package org.apache.spark.sql.execution.arrow
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, OutputStream}
-import java.nio.ByteBuffer
 import java.nio.channels.{Channels, SeekableByteChannel}
 
 import scala.collection.JavaConverters._
 
-import org.apache.arrow.flatbuf.{Message, MessageHeader}
+import org.apache.arrow.flatbuf.MessageHeader
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector._
-import org.apache.arrow.vector.ipc.{ReadChannel, WriteChannel}
+import org.apache.arrow.vector.ipc.{ArrowStreamWriter, ReadChannel, WriteChannel}
 import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ByteBufferOutputStream, Utils}
 
 
 /**
@@ -63,9 +63,7 @@ private[sql] class ArrowBatchStreamWriter(
    * End the Arrow stream, does not close output stream.
    */
   def end(): Unit = {
-    // Write End of Stream
-    // TODO: this could be a static function in ArrowStreamWriter
-    writeChannel.writeIntLittleEndian(0)
+    ArrowStreamWriter.writeEndOfStream(writeChannel)
   }
 }
 
@@ -186,8 +184,8 @@ private[sql] object ArrowConverters {
       batchBytes: Array[Byte],
       allocator: BufferAllocator): ArrowRecordBatch = {
     val in = new ByteArrayInputStream(batchBytes)
-    MessageSerializer.deserializeMessageBatch(new ReadChannel(Channels.newChannel(in)), allocator)
-      .asInstanceOf[ArrowRecordBatch]  // throws IOException
+    MessageSerializer.deserializeRecordBatch(
+      new ReadChannel(Channels.newChannel(in)), allocator)  // throws IOException
   }
 
   /**
@@ -228,28 +226,8 @@ private[sql] object ArrowConverters {
    */
   private[sql] def getBatchesFromStream(in: SeekableByteChannel): Iterator[Array[Byte]] = {
 
-    // TODO: this could be moved to Arrow
-    def readMessageLength(in: ReadChannel): Int = {
-      val buffer = ByteBuffer.allocate(4)
-      if (in.readFully(buffer) != 4) {
-        return 0
-      }
-      MessageSerializer.bytesToInt(buffer.array())
-    }
-
-    // TODO: this could be moved to Arrow
-    def loadMessage(in: ReadChannel, messageLength: Int, buffer: ByteBuffer): Message = {
-      if (in.readFully(buffer) != messageLength) {
-        throw new java.io.IOException(
-          "Unexpected end of stream trying to read message.")
-      }
-      buffer.rewind()
-      Message.getRootAsMessage(buffer)
-    }
-
     // Create an iterator to get each serialized ArrowRecordBatch from a stream
     new Iterator[Array[Byte]] {
-      val inputChannel = new ReadChannel(in)
       var batch: Array[Byte] = readNextBatch()
 
       override def hasNext: Boolean = batch != null
@@ -261,26 +239,42 @@ private[sql] object ArrowConverters {
       }
 
       def readNextBatch(): Array[Byte] = {
-        val messageLength = readMessageLength(inputChannel)
-        if (messageLength == 0) {
+        val msgMetadata = MessageSerializer.readMessage(new ReadChannel(in))
+        if (msgMetadata == null) {
           return null
         }
 
-        val buffer = ByteBuffer.allocate(messageLength)
-        val msg = loadMessage(inputChannel, messageLength, buffer)
-        val bodyLength = msg.bodyLength().toInt
+        // Get the length of the body, which has not be read at this point
+        val bodyLength = msgMetadata.getMessageBodyLength.toInt
 
-        if (msg.headerType() == MessageHeader.RecordBatch) {
-          val allbuf = ByteBuffer.allocate(4 + messageLength + bodyLength)
-          allbuf.put(WriteChannel.intToBytes(messageLength))
-          allbuf.put(buffer)
-          inputChannel.readFully(allbuf)
-          allbuf.array()
+        // Only care about RecordBatch data, skip Schema and unsupported Dictionary messages
+        if (msgMetadata.getMessage.headerType() == MessageHeader.RecordBatch) {
+
+          // Create output backed by buffer to hold msg length (int32), msg metadata, msg body
+          val bbout = new ByteBufferOutputStream(4 + msgMetadata.getMessageLength + bodyLength)
+
+          // Write message metadata to buffer output stream
+          MessageSerializer.writeMessageBuffer(
+            new WriteChannel(Channels.newChannel(bbout)),
+            msgMetadata.getMessageLength,
+            msgMetadata.getMessageBuffer)
+
+          // Get a zero-copy ByteBuffer with metadata already written
+          bbout.close()
+          val bb = bbout.toByteBuffer
+          bb.position(bbout.getCount())
+
+          // Read message body directly into the ByteBuffer to avoid copy, return backed byte array
+          bb.limit(bb.capacity())
+          JavaUtils.readFully(in, bb)
+          bb.array()
         } else {
           if (bodyLength > 0) {
             // Skip message body if not a record batch
             in.position(in.position() + bodyLength)
           }
+
+          // Proceed to next message
           readNextBatch()
         }
       }
