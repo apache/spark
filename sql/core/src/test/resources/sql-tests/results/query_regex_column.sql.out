@@ -183,7 +183,7 @@ struct<>
 -- !query 20
 SELECT p.`(KEY)?+.+`, b, testdata2.`(b)?+.+` FROM testData p join testData2 ON p.key = testData2.a WHERE key < 3
 -- !query 20 schema
-struct<value1:string,value2:string,b:int,A:int,c:int,d:int>
+struct<value1:string,value2:string,B:int,A:int,c:int,d:int>
 -- !query 20 output
 1	11	1	1	1	2
 1	11	2	1	1	2
@@ -194,7 +194,7 @@ struct<value1:string,value2:string,b:int,A:int,c:int,d:int>
 -- !query 21
 SELECT p.`(key)?+.+`, b, testdata2.`(b)?+.+` FROM testData p join testData2 ON p.key = testData2.a WHERE key < 3
 -- !query 21 schema
-struct<value1:string,value2:string,b:int,A:int,c:int,d:int>
+struct<value1:string,value2:string,B:int,A:int,c:int,d:int>
 -- !query 21 output
 1	11	1	1	1	2
 1	11	2	1	1	2

@@ -177,7 +177,7 @@ package object expressions  {
       // Collect matching attributes given a name and a lookup.
       def collectMatches(name: String, candidates: Option[Seq[Attribute]]): Seq[Attribute] = {
         candidates.toSeq.flatMap(_.collect {
-          case a if resolver(a.name, name) => a.withName(name)
+          case a if resolver(a.name, name) => a
         })
       }
 

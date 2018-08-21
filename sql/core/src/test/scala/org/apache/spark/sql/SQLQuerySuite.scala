@@ -2853,55 +2853,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-25135: insert table may all null when select from view") {
-    withTempDir { dir =>
-      val path = dir.getCanonicalPath
-      val cnt = 30
-      spark.range(cnt).selectExpr("cast(id as bigint) as col1", "cast(id as bigint) as col2")
-        .write.mode(SaveMode.Overwrite).parquet(path)
-      withTable("table1", "table2", "table3", "table4") {
-        spark.sql(s"CREATE TABLE table1(col1 bigint, col2 bigint) using parquet location '$path'")
-
-        withView("view1", "view2") {
-          spark.sql("CREATE VIEW view1 as select col1, col2 from table1 where col1 > -20")
-
-          spark.sql("CREATE TABLE table2 (COL1 BIGINT, COL2 BIGINT) using parquet")
-          spark.sql("INSERT OVERWRITE TABLE table2 select COL1, COL2 from view1")
-          assert(spark.table("table2").count() === cnt)
-          checkAnswer(spark.table("table1"), spark.table("table2"))
-
-          spark.sql("CREATE TABLE table3 (COL1 BIGINT) using parquet")
-          spark.sql("INSERT OVERWRITE TABLE table3 select COL1 from view1")
-          assert(spark.table("table3").count() === cnt)
-          checkAnswer(spark.table("table1").select("COL1"), spark.table("table3"))
-
-          spark.sql("CREATE TABLE table4 (COL1 BIGINT, COL2 BIGINT, COL3 BIGINT) using parquet")
-          spark.sql("INSERT OVERWRITE TABLE table4 select COL1, COL1, COL2 from view1")
-          assert(spark.table("table4").count() === cnt)
-          checkAnswer(spark.table("table1").select("col1", "col1", "col2"), spark.table("table4"))
-
-          spark.sql("INSERT OVERWRITE TABLE table4 select 1, COL1, COL2 from view1")
-          assert(spark.table("table4").count() === cnt)
-          checkAnswer(spark.table("table1").selectExpr("1", "col1", "col2"), spark.table("table4"))
-
-          assertThrows[AnalysisException] {
-            spark.sql("INSERT OVERWRITE TABLE table4 select COL1, COL3, COL2 from view1")
-          }
-
-          spark.sql("CREATE TEMP VIEW view2 as select col1, 1 as col2 from view1")
-
-          spark.sql("INSERT OVERWRITE TABLE table2 select COL1, COL2 from view2")
-          assert(spark.table("table2").count() === cnt)
-          checkAnswer(spark.table("table1").selectExpr("col1", "1"), spark.table("table2"))
-
-          spark.sql("INSERT OVERWRITE TABLE table2 select col1, COL2 from view2")
-          assert(spark.table("table2").count() === cnt)
-          checkAnswer(spark.table("table1").selectExpr("col1", "1"), spark.table("table2"))
-        }
-      }
-    }
-  }
-
   test("SPARK-25144 'distinct' causes memory leak") {
     val ds = List(Foo(Some("bar"))).toDS
     val result = ds.flatMap(_.bar).distinct

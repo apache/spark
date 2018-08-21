@@ -326,33 +326,6 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
     case a => a
   }
 
-  private def removeSpecialRedundantAliases(
-      plan: LogicalPlan,
-      currentNextAttrPairs: mutable.Buffer[(Attribute, Attribute)],
-      newNode: LogicalPlan,
-      blacklist: AttributeSet): LogicalPlan = {
-    // Create the attribute mapping. Note that the currentNextAttrPairs can contain duplicate
-    // keys in case of Union (this is caused by the PushProjectionThroughUnion rule); in this
-    // case we use the the first mapping (which should be provided by the first child).
-    val mapping = AttributeMap(currentNextAttrPairs)
-
-    // Create a an expression cleaning function for nodes that can actually produce redundant
-    // aliases, use identity otherwise.
-    val clean: Expression => Expression = plan match {
-      case _: Project => removeRedundantAlias(_, blacklist)
-      case _: Aggregate => removeRedundantAlias(_, blacklist)
-      case _: Window => removeRedundantAlias(_, blacklist)
-      case _ => identity[Expression]
-    }
-
-    // Transform the expressions.
-    newNode.mapExpressions { expr =>
-      clean(expr.transform {
-        case a: Attribute => mapping.getOrElse(a, a)
-      })
-    }
-  }
-
   /**
    * Remove redundant alias expression from a LogicalPlan and its subtree. A blacklist is used to
    * prevent the removal of seemingly redundant aliases used to deduplicate the input for a (self)
@@ -374,22 +347,11 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         val newRight = removeRedundantAliases(right, blacklist ++ newLeft.outputSet)
         val mapping = AttributeMap(
           createAttributeMapping(left, newLeft) ++
-            createAttributeMapping(right, newRight))
+          createAttributeMapping(right, newRight))
         val newCondition = condition.map(_.transform {
           case a: Attribute => mapping.getOrElse(a, a)
         })
         Join(newLeft, newRight, joinType, newCondition)
-
-      case command: Command =>
-        // Add child.outputSet to blacklist otherwise
-        // the schema written in the file may not match the schema of the table.
-        val currentNextAttrPairs = mutable.Buffer.empty[(Attribute, Attribute)]
-        val newNode = command.mapChildren { child =>
-          val newChild = removeRedundantAliases(child, blacklist ++ child.outputSet)
-          currentNextAttrPairs ++= createAttributeMapping(child, newChild)
-          newChild
-        }
-        removeSpecialRedundantAliases(plan, currentNextAttrPairs, newNode, blacklist)
 
       case _ =>
         // Remove redundant aliases in the subtree(s).
@@ -399,7 +361,27 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
           currentNextAttrPairs ++= createAttributeMapping(child, newChild)
           newChild
         }
-        removeSpecialRedundantAliases(plan, currentNextAttrPairs, newNode, blacklist)
+
+        // Create the attribute mapping. Note that the currentNextAttrPairs can contain duplicate
+        // keys in case of Union (this is caused by the PushProjectionThroughUnion rule); in this
+        // case we use the the first mapping (which should be provided by the first child).
+        val mapping = AttributeMap(currentNextAttrPairs)
+
+        // Create a an expression cleaning function for nodes that can actually produce redundant
+        // aliases, use identity otherwise.
+        val clean: Expression => Expression = plan match {
+          case _: Project => removeRedundantAlias(_, blacklist)
+          case _: Aggregate => removeRedundantAlias(_, blacklist)
+          case _: Window => removeRedundantAlias(_, blacklist)
+          case _ => identity[Expression]
+        }
+
+        // Transform the expressions.
+        newNode.mapExpressions { expr =>
+          clean(expr.transform {
+            case a: Attribute => mapping.getOrElse(a, a)
+          })
+        }
     }
   }
 
