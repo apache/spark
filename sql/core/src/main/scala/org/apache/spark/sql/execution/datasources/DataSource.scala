@@ -642,8 +642,8 @@ object DataSource extends Logging {
                   provider1 == "com.databricks.spark.avro" ||
                   provider1 == "org.apache.spark.sql.avro") {
                   throw new AnalysisException(
-                    s"Failed to find data source: $provider1. Avro is built-in data source since " +
-                    "Spark 2.4. Please deploy the application as per " +
+                    s"Failed to find data source: $provider1. Avro is built-in but external data " +
+                    "source module since Spark 2.4. Please deploy the application as per " +
                     s"$latestDocsURL/avro-data-source-guide.html#deploying")
                 } else if (provider1.toLowerCase(Locale.ROOT) == "kafka") {
                   throw new AnalysisException(
