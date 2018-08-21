@@ -20,6 +20,7 @@ import java.io.File
 
 import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
+import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s._
@@ -54,6 +55,9 @@ private[spark] class KubernetesDriverBuilder(
       KubernetesConf[KubernetesDriverSpecificConf]
       => PythonDriverFeatureStep) =
       new PythonDriverFeatureStep(_),
+    provideTemplateVolumeStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+      => TemplateVolumeStep) =
+    new TemplateVolumeStep(_),
     provideInitialSpec: KubernetesConf[KubernetesDriverSpecificConf]
       => KubernetesDriverSpec =
       KubernetesDriverSpec.initialSpec) {
@@ -75,6 +79,10 @@ private[spark] class KubernetesDriverBuilder(
     val volumesFeature = if (kubernetesConf.roleVolumes.nonEmpty) {
       Seq(provideVolumesStep(kubernetesConf))
     } else Nil
+    val templateVolumeFeature = if (
+      kubernetesConf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined) {
+      Seq(provideTemplateVolumeStep(kubernetesConf))
+    } else Nil
 
     val bindingsStep = kubernetesConf.roleSpecificConf.mainAppResource.map {
         case JavaMainAppResource(_) =>
@@ -84,9 +92,9 @@ private[spark] class KubernetesDriverBuilder(
       .getOrElse(provideJavaStep(kubernetesConf))
 
     val allFeatures = (baseFeatures :+ bindingsStep) ++
-      secretFeature ++ envSecretFeature ++ volumesFeature
+      secretFeature ++ envSecretFeature ++ volumesFeature ++ templateVolumeFeature
 
-    var spec = provideInitialSpec()
+    var spec = provideInitialSpec(kubernetesConf)
     for (feature <- allFeatures) {
       val configuredPod = feature.configurePod(spec.pod)
       val addedSystemProperties = feature.getAdditionalPodSystemProperties()
@@ -106,10 +114,10 @@ private[spark] object KubernetesDriverBuilder {
       .map(new File(_))
       .map(file => new KubernetesDriverBuilder(provideInitialSpec = conf => {
         val pod = kubernetesClient.pods().load(file).get()
-        val container = pod.getSpec.getContainers.stream()
+        val container = pod.getSpec.getContainers.asScala
           .filter(_.getName == Constants.DRIVER_CONTAINER_NAME)
-          .findFirst()
-          .orElseGet(() => new ContainerBuilder().build())
+          .headOption
+          .getOrElse(new ContainerBuilder().build())
         KubernetesDriverSpec.initialSpec(conf).copy(pod = SparkPod(pod, container))
       }))
       .getOrElse(new KubernetesDriverBuilder())

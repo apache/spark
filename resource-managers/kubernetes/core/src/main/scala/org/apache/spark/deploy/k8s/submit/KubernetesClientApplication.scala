@@ -17,12 +17,10 @@
 package org.apache.spark.deploy.k8s.submit
 
 import java.io.StringWriter
-import java.util.{Collections, UUID}
-import java.util.Properties
+import java.util.{Collections, Properties, UUID}
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.KubernetesClient
-
 import scala.collection.mutable
 import scala.util.control.NonFatal
 

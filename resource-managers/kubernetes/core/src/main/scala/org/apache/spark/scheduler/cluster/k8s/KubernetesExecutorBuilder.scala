@@ -20,6 +20,7 @@ import java.io.File
 
 import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
+import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s._
@@ -42,9 +43,6 @@ private[spark] class KubernetesExecutorBuilder(
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
       new MountVolumesFeatureStep(_),
-    provideTemplateVolumeStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
-      => TemplateVolumeStep) =
-      new TemplateVolumeStep(_),
     provideInitialPod: () => SparkPod = SparkPod.initialPod) {
 
   def buildFromFeatures(
@@ -60,13 +58,9 @@ private[spark] class KubernetesExecutorBuilder(
     val volumesFeature = if (kubernetesConf.roleVolumes.nonEmpty) {
       Seq(provideVolumesStep(kubernetesConf))
     } else Nil
-    val templateVolumeStep = if (
-      kubernetesConf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined) {
-      Seq(provideTemplateVolumeStep(kubernetesConf))
-    } else Nil
 
     val allFeatures =
-      baseFeatures ++ secretFeature ++ secretEnvFeature ++ volumesFeature ++ templateVolumeStep
+      baseFeatures ++ secretFeature ++ secretEnvFeature ++ volumesFeature
 
     var executorPod = provideInitialPod()
     for (feature <- allFeatures) {
@@ -82,10 +76,10 @@ private[spark] object KubernetesExecutorBuilder {
       .map(new File(_))
       .map(file => new KubernetesExecutorBuilder(provideInitialPod = () => {
         val pod = kubernetesClient.pods().load(file).get()
-        val container = pod.getSpec.getContainers.stream()
+        val container = pod.getSpec.getContainers.asScala
           .filter(_.getName == Constants.EXECUTOR_CONTAINER_NAME)
-          .findFirst()
-          .orElseGet(() => new ContainerBuilder().build())
+          .headOption
+          .getOrElse(new ContainerBuilder().build())
         SparkPod(pod, container)
       }))
       .getOrElse(new KubernetesExecutorBuilder())
