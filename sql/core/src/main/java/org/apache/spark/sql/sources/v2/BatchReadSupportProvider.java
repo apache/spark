@@ -26,14 +26,14 @@ import org.apache.spark.sql.types.StructType;
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
  * provide data reading ability for batch processing.
  *
- * This interface is used when end users want to use a data source implementation directly, e.g.
+ * This interface is used to return {@link BatchReadSupport} instances when end users run
  * {@code SparkSession.read.format(...).option(...).load()}.
  */
 @InterfaceStability.Evolving
 public interface BatchReadSupportProvider extends DataSourceV2 {
 
   /**
-   * Creates a {@link BatchReadSupport} to scan the data from this data source with a user
+   * Returns a {@link BatchReadSupport} instance to load the data from this data source with a user
    * specified schema.
    *
    * By default this method throws {@link UnsupportedOperationException}, implementations should
@@ -43,15 +43,15 @@ public interface BatchReadSupportProvider extends DataSourceV2 {
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.
    */
-  default BatchReadSupport createBatchReadSupport(StructType schema, DataSourceOptions options) {
+  default BatchReadSupport getBatchReadSupport(StructType schema, DataSourceOptions options) {
     return DataSourceV2Utils.failForUserSpecifiedSchema(this);
   }
 
   /**
-   * Creates a {@link BatchReadSupport} to scan the data from this data source.
+   * Returns a {@link BatchReadSupport} instance to scan the data from this data source.
    *
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.
    */
-  BatchReadSupport createBatchReadSupport(DataSourceOptions options);
+  BatchReadSupport getBatchReadSupport(DataSourceOptions options);
 }

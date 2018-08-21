@@ -36,7 +36,7 @@ public class JavaSimpleDataSourceV2 implements DataSourceV2, BatchReadSupportPro
   }
 
   @Override
-  public BatchReadSupport createBatchReadSupport(DataSourceOptions options) {
+  public BatchReadSupport getBatchReadSupport(DataSourceOptions options) {
     return new ReadSupport();
   }
 }

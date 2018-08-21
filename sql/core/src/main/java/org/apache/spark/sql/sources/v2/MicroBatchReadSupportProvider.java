@@ -26,15 +26,15 @@ import org.apache.spark.sql.types.StructType;
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
  * provide data reading ability for micro-batch stream processing.
  *
- * This interface is used when end users want to use a data source implementation directly, e.g.
- * {@code SparkSession.readStream.format(...).option(...).load()}.
+ * This interface is used to return {@link MicroBatchReadSupport} instances when end users run
+ * {@code SparkSession.readStream.format(...).option(...).load()} with a micro-batch trigger.
  */
 @InterfaceStability.Evolving
 public interface MicroBatchReadSupportProvider extends DataSourceV2 {
 
   /**
-   * Creates a {@link MicroBatchReadSupport} to scan the data from this streaming data source with
-   * a user specified schema.
+   * Returns a {@link MicroBatchReadSupport} instance to scan the data from this streaming data
+   * source with a user specified schema.
    *
    * By default this method throws {@link UnsupportedOperationException}, implementations should
    * override this method to handle user specified schema.
@@ -46,7 +46,7 @@ public interface MicroBatchReadSupportProvider extends DataSourceV2 {
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.
    */
-  default MicroBatchReadSupport createMicroBatchReadSupport(
+  default MicroBatchReadSupport getMicroBatchReadSupport(
       StructType schema,
       String checkpointLocation,
       DataSourceOptions options) {
@@ -54,7 +54,8 @@ public interface MicroBatchReadSupportProvider extends DataSourceV2 {
   }
 
   /**
-   * Creates a {@link MicroBatchReadSupport} to scan the data from this streaming data source.
+   * Returns a {@link MicroBatchReadSupport} instance to scan the data from this streaming data
+   * source.
    *
    * @param checkpointLocation a path to Hadoop FS scratch space that can be used for failure
    *                           recovery. Readers for the same logical source in the same query
@@ -62,7 +63,7 @@ public interface MicroBatchReadSupportProvider extends DataSourceV2 {
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.
    */
-  MicroBatchReadSupport createMicroBatchReadSupport(
+  MicroBatchReadSupport getMicroBatchReadSupport(
       String checkpointLocation,
       DataSourceOptions options);
 }

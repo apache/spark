@@ -675,7 +675,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           "kafka.bootstrap.servers" -> testUtils.brokerAddress,
           "subscribe" -> topic
         ) ++ Option(minPartitions).map { p => "minPartitions" -> p}
-        val readSupport = provider.createMicroBatchReadSupport(
+        val readSupport = provider.getMicroBatchReadSupport(
           dir.getAbsolutePath, new DataSourceOptions(options.asJava))
         val config = readSupport.newScanConfigBuilder(
           KafkaSourceOffset(Map(tp -> 0L)),

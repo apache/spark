@@ -148,7 +148,7 @@ class ContinuousExecution(
         val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
         nextSourceId += 1
 
-        dataSource.createContinuousReadSupport(
+        dataSource.getContinuousReadSupport(
           metadataPath,
           new DataSourceOptions(extraReaderOptions.asJava))
     }
@@ -185,7 +185,7 @@ class ContinuousExecution(
           "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
     }
 
-    val writer = sink.createStreamingWriteSupport(
+    val writer = sink.getStreamingWriteSupport(
       s"$runId",
       triggerLogicalPlan.schema,
       outputMode,

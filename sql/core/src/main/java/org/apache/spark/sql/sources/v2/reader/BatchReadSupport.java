@@ -20,13 +20,14 @@ package org.apache.spark.sql.sources.v2.reader;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * An interface that defines how to scan the data from data source for batch processing.
+ * An interface that defines how to load the data from data source for batch processing.
  *
- * The execution engine will create an instance of this interface at the start of a batch query,
- * then call {@link #newScanConfigBuilder()} and create an instance of {@link ScanConfig}. The
+ * The execution engine will get an instance of this interface from a data source provider
+ * (e.g. {@link org.apache.spark.sql.sources.v2.BatchReadSupportProvider}) at the start of a batch
+ * query, then call {@link #newScanConfigBuilder()} to create an instance of {@link ScanConfig}. The
  * {@link ScanConfigBuilder} can apply operator pushdown and keep the pushdown result in
  * {@link ScanConfig}. The {@link ScanConfig} will be used to create input partitions and reader
- * factory to process data from the data source.
+ * factory to scan data from the data source.
  */
 @InterfaceStability.Evolving
 public interface BatchReadSupport extends ReadSupport {

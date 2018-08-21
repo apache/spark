@@ -48,7 +48,7 @@ import org.apache.spark.sql.types.StructType
 class MemorySinkV2 extends DataSourceV2 with StreamingWriteSupportProvider
   with MemorySinkBase with Logging {
 
-  override def createStreamingWriteSupport(
+  override def getStreamingWriteSupport(
       queryId: String,
       schema: StructType,
       mode: OutputMode,

@@ -117,7 +117,7 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPa
 
   // ContinuousReadSupportProvider implementation
   // This is necessary because of how StreamTest finds the source for AddDataMemory steps.
-  override def createContinuousReadSupport(
+  override def getContinuousReadSupport(
       checkpointLocation: String,
       options: DataSourceOptions): ContinuousReadSupport = this
 }

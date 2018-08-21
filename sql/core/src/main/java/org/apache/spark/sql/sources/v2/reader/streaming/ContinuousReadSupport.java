@@ -24,16 +24,17 @@ import org.apache.spark.sql.sources.v2.reader.ScanConfig;
 import org.apache.spark.sql.sources.v2.reader.ScanConfigBuilder;
 
 /**
- * An interface that defines how to scan the data from data source for continuous streaming
+ * An interface that defines how to load the data from data source for continuous streaming
  * processing.
  *
- * The execution engine will create an instance of this interface at the start of a streaming query,
- * then call {@link #newScanConfigBuilder(Offset)} and create an instance of {@link ScanConfig} for
- * the duration of the streaming query or until {@link #needsReconfiguration(ScanConfig)} is true.
- * The {@link ScanConfig} will be used to create input partitions and reader factory to process data
- * for its duration. At the end {@link #stop()} will be called when the streaming execution is
- * completed. Note that a single query may have multiple executions due to restart or failure
- * recovery.
+ * The execution engine will get an instance of this interface from a data source provider
+ * (e.g. {@link org.apache.spark.sql.sources.v2.ContinuousReadSupportProvider}) at the start of a
+ * streaming query, then call {@link #newScanConfigBuilder(Offset)} to create an instance of
+ * {@link ScanConfig} for the duration of the streaming query or until
+ * {@link #needsReconfiguration(ScanConfig)} is true. The {@link ScanConfig} will be used to create
+ * input partitions and reader factory to scan data for its duration. At the end {@link #stop()}
+ * will be called when the streaming execution is completed. Note that a single query may have
+ * multiple executions due to restart or failure recovery.
  */
 @InterfaceStability.Evolving
 public interface ContinuousReadSupport extends StreamingReadSupport, BaseStreamingSource {

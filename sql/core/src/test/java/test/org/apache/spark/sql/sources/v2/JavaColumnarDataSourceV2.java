@@ -108,7 +108,7 @@ public class JavaColumnarDataSourceV2 implements DataSourceV2, BatchReadSupportP
   }
 
   @Override
-  public BatchReadSupport createBatchReadSupport(DataSourceOptions options) {
+  public BatchReadSupport getBatchReadSupport(DataSourceOptions options) {
     return new ReadSupport();
   }
 }

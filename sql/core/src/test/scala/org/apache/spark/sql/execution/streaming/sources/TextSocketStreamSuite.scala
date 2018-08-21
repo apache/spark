@@ -175,15 +175,15 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
   test("params not given") {
     val provider = new TextSocketSourceProvider
     intercept[AnalysisException] {
-      provider.createMicroBatchReadSupport(
+      provider.getMicroBatchReadSupport(
         "", new DataSourceOptions(Map.empty[String, String].asJava))
     }
     intercept[AnalysisException] {
-      provider.createMicroBatchReadSupport(
+      provider.getMicroBatchReadSupport(
         "", new DataSourceOptions(Map("host" -> "localhost").asJava))
     }
     intercept[AnalysisException] {
-      provider.createMicroBatchReadSupport(
+      provider.getMicroBatchReadSupport(
         "", new DataSourceOptions(Map("port" -> "1234").asJava))
     }
   }
@@ -193,7 +193,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     val params = Map("host" -> "localhost", "port" -> "1234", "includeTimestamp" -> "fasle")
     intercept[AnalysisException] {
       val a = new DataSourceOptions(params.asJava)
-      provider.createMicroBatchReadSupport("", a)
+      provider.getMicroBatchReadSupport("", a)
     }
   }
 
@@ -204,7 +204,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       StructField("area", StringType) :: Nil)
     val params = Map("host" -> "localhost", "port" -> "1234")
     val exception = intercept[UnsupportedOperationException] {
-      provider.createMicroBatchReadSupport(
+      provider.getMicroBatchReadSupport(
         userSpecifiedSchema, "", new DataSourceOptions(params.asJava))
     }
     assert(exception.getMessage.contains(
