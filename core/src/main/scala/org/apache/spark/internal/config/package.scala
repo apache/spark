@@ -568,6 +568,13 @@ package object config {
       .checkValue(v => v > 0, "The value should be a positive integer.")
       .createWithDefault(2000)
 
+  private[spark] val MEMORY_MAP_LIMIT_FOR_TESTS =
+    ConfigBuilder("spark.storage.memoryMapLimitForTests")
+      .internal()
+      .doc("For testing only, controls the size of chunks when memory mapping a file")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(Int.MaxValue)
+
   private[spark] val BARRIER_SYNC_TIMEOUT =
     ConfigBuilder("spark.barrier.sync.timeout")
       .doc("The timeout in seconds for each barrier() call from a barrier task. If the " +
