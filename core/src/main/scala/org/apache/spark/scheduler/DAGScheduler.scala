@@ -1478,9 +1478,11 @@ private[spark] class DAGScheduler(
                 mapOutputTracker.unregisterAllMapOutput(failedMapStage.shuffleDep.shuffleId)
 
               case failedResultStage: ResultStage =>
-                // Mark all the partitions of the result stage to be not finished, to ensure retry
-                // all the tasks on resubmitted stage attempt.
-                failedResultStage.activeJob.map(_.resetAllPartitions())
+                // Abort the failed result stage since we may have committed output for some
+                // partitions.
+                val reason = "Could not recover from a failed barrier ResultStage. Most recent " +
+                  s"failure reason: $failureMessage"
+                abortStage(failedResultStage, reason, None)
             }
           }
 
@@ -1553,62 +1555,75 @@ private[spark] class DAGScheduler(
 
         // Always fail the current stage and retry all the tasks when a barrier task fail.
         val failedStage = stageIdToStage(task.stageId)
-        logInfo(s"Marking $failedStage (${failedStage.name}) as failed due to a barrier task " +
-          "failed.")
-        val message = s"Stage failed because barrier task $task finished unsuccessfully.\n" +
-          failure.toErrorString
-        try {
-          // killAllTaskAttempts will fail if a SchedulerBackend does not implement killTask.
-          val reason = s"Task $task from barrier stage $failedStage (${failedStage.name}) failed."
-          taskScheduler.killAllTaskAttempts(stageId, interruptThread = false, reason)
-        } catch {
-          case e: UnsupportedOperationException =>
-            // Cannot continue with barrier stage if failed to cancel zombie barrier tasks.
-            // TODO SPARK-24877 leave the zombie tasks and ignore their completion events.
-            logWarning(s"Could not kill all tasks for stage $stageId", e)
-            abortStage(failedStage, "Could not kill zombie barrier tasks for stage " +
-              s"$failedStage (${failedStage.name})", Some(e))
-        }
-        markStageAsFinished(failedStage, Some(message))
-
-        failedStage.failedAttemptIds.add(task.stageAttemptId)
-        // TODO Refactor the failure handling logic to combine similar code with that of
-        // FetchFailed.
-        val shouldAbortStage =
-          failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts ||
-            disallowStageRetryForTest
-
-        if (shouldAbortStage) {
-          val abortMessage = if (disallowStageRetryForTest) {
-            "Barrier stage will not retry stage due to testing config. Most recent failure " +
-              s"reason: $message"
-          } else {
-            s"""$failedStage (${failedStage.name})
-               |has failed the maximum allowable number of
-               |times: $maxConsecutiveStageAttempts.
-               |Most recent failure reason: $message""".stripMargin.replaceAll("\n", " ")
-          }
-          abortStage(failedStage, abortMessage, None)
+        if (failedStage.latestInfo.attemptNumber != task.stageAttemptId) {
+          logInfo(s"Ignoring task failure from $task as it's from $failedStage attempt" +
+            s" ${task.stageAttemptId} and there is a more recent attempt for that stage " +
+            s"(attempt ${failedStage.latestInfo.attemptNumber}) running")
         } else {
-          failedStage match {
-            case failedMapStage: ShuffleMapStage =>
-              // Mark all the map as broken in the map stage, to ensure retry all the tasks on
-              // resubmitted stage attempt.
-              mapOutputTracker.unregisterAllMapOutput(failedMapStage.shuffleDep.shuffleId)
-
-            case failedResultStage: ResultStage =>
-              // Mark all the partitions of the result stage to be not finished, to ensure retry
-              // all the tasks on resubmitted stage attempt.
-              failedResultStage.activeJob.map(_.resetAllPartitions())
+          logInfo(s"Marking $failedStage (${failedStage.name}) as failed due to a barrier task " +
+            "failed.")
+          val message = s"Stage failed because barrier task $task finished unsuccessfully.\n" +
+            failure.toErrorString
+          try {
+            // killAllTaskAttempts will fail if a SchedulerBackend does not implement killTask.
+            val reason = s"Task $task from barrier stage $failedStage (${failedStage.name}) " +
+              "failed."
+            taskScheduler.killAllTaskAttempts(stageId, interruptThread = false, reason)
+          } catch {
+            case e: UnsupportedOperationException =>
+              // Cannot continue with barrier stage if failed to cancel zombie barrier tasks.
+              // TODO SPARK-24877 leave the zombie tasks and ignore their completion events.
+              logWarning(s"Could not kill all tasks for stage $stageId", e)
+              abortStage(failedStage, "Could not kill zombie barrier tasks for stage " +
+                s"$failedStage (${failedStage.name})", Some(e))
           }
+          markStageAsFinished(failedStage, Some(message))
 
-          // update failedStages and make sure a ResubmitFailedStages event is enqueued
-          failedStages += failedStage
-          logInfo(s"Resubmitting $failedStage (${failedStage.name}) due to barrier stage " +
-            "failure.")
-          messageScheduler.schedule(new Runnable {
-            override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
-          }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
+          failedStage.failedAttemptIds.add(task.stageAttemptId)
+          // TODO Refactor the failure handling logic to combine similar code with that of
+          // FetchFailed.
+          val shouldAbortStage =
+            failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts ||
+              disallowStageRetryForTest
+
+          if (shouldAbortStage) {
+            val abortMessage = if (disallowStageRetryForTest) {
+              "Barrier stage will not retry stage due to testing config. Most recent failure " +
+                s"reason: $message"
+            } else {
+              s"""$failedStage (${failedStage.name})
+                 |has failed the maximum allowable number of
+                 |times: $maxConsecutiveStageAttempts.
+                 |Most recent failure reason: $message
+               """.stripMargin.replaceAll("\n", " ")
+            }
+            abortStage(failedStage, abortMessage, None)
+          } else {
+            failedStage match {
+              case failedMapStage: ShuffleMapStage =>
+                // Mark all the map as broken in the map stage, to ensure retry all the tasks on
+                // resubmitted stage attempt.
+                mapOutputTracker.unregisterAllMapOutput(failedMapStage.shuffleDep.shuffleId)
+
+              case failedResultStage: ResultStage =>
+                // Abort the failed result stage since we may have committed output for some
+                // partitions.
+                val reason = "Could not recover from a failed barrier ResultStage. Most recent " +
+                  s"failure reason: $message"
+                abortStage(failedResultStage, reason, None)
+            }
+            // In case multiple task failures triggered for a single stage attempt, ensure we only
+            // resubmit the failed stage once.
+            val noResubmitEnqueued = !failedStages.contains(failedStage)
+            failedStages += failedStage
+            if (noResubmitEnqueued) {
+              logInfo(s"Resubmitting $failedStage (${failedStage.name}) due to barrier stage " +
+                "failure.")
+              messageScheduler.schedule(new Runnable {
+                override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
+              }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
+            }
+          }
         }
 
       case Resubmitted =>
