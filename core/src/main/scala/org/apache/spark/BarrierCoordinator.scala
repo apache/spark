@@ -65,7 +65,7 @@ private[spark] class BarrierCoordinator(
 
   // Record all active stage attempts that make barrier() call(s), and the corresponding internal
   // state.
-  private val states = new ConcurrentHashMap[ContextBarrierId, ContextBarrierState]
+  private[spark] val states = new ConcurrentHashMap[ContextBarrierId, ContextBarrierState]
 
   override def onStart(): Unit = {
     super.onStart()
@@ -90,14 +90,14 @@ private[spark] class BarrierCoordinator(
    * @param numTasks Number of tasks of the barrier stage, all barrier() calls from the stage shall
    *                 collect `numTasks` requests to succeed.
    */
-  private class ContextBarrierState(
+  private[spark] class ContextBarrierState(
       val barrierId: ContextBarrierId,
       val numTasks: Int) {
 
     // There may be multiple barrier() calls from a barrier stage attempt, `barrierEpoch` is used
     // to identify each barrier() call. It shall get increased when a barrier() call succeeds, or
     // reset when a barrier() call fails due to timeout.
-    private var barrierEpoch: Int = 0
+    private[spark] var barrierEpoch: Int = 0
 
     // An array of RPCCallContexts for barrier tasks that are waiting for reply of a barrier()
     // call.
