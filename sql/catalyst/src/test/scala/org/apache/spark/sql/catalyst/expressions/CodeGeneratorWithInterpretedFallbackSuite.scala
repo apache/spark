@@ -30,8 +30,9 @@ class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanT
 
     override protected def createCodeGeneratedObject(in: Seq[Expression]): UnsafeProjection = {
       val invalidCode = new CodeAndComment("invalid code", Map.empty)
+      // We assume this compilation throws an exception
       CodeGenerator.compile(invalidCode)
-      null.asInstanceOf[UnsafeProjection]
+      null
     }
 
     override protected def createInterpretedObject(in: Seq[Expression]): UnsafeProjection = {
@@ -40,9 +41,9 @@ class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanT
   }
 
   test("UnsafeProjection with codegen factory mode") {
-    val input = Seq(LongType, IntegerType)
-      .zipWithIndex.map(x => BoundReference(x._2, x._1, true))
-
+    val input = Seq(IntegerType).zipWithIndex.map { case (tpe, ordinal) =>
+      BoundReference(ordinal, tpe, nullable = true)
+    }
     val codegenOnly = CodegenObjectFactoryMode.CODEGEN_ONLY.toString
     withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenOnly) {
       val obj = UnsafeProjection.createObject(input)
@@ -57,7 +58,7 @@ class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanT
   }
 
   test("fallback to the interpreter mode") {
-    val input = Seq(IntegerType).zipWithIndex.map(x => BoundReference(x._2, x._1, true))
+    val input = Seq(BoundReference(0, IntegerType, nullable = true))
     val fallback = CodegenObjectFactoryMode.FALLBACK.toString
     withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallback) {
       val obj = FailedCodegenProjection.createObject(input)

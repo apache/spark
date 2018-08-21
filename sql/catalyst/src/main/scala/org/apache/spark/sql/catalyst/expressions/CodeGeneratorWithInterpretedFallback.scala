@@ -50,8 +50,8 @@ abstract class CodeGeneratorWithInterpretedFallback[IN, OUT] extends Logging {
           createCodeGeneratedObject(in)
         } catch {
           case _: Exception =>
-            // We should have already see error message in `CodeGenerator`
-            logWarning("Expr codegen error and falls back to interpreter mode")
+            // We should have already seen the error message in `CodeGenerator`
+            logWarning("Expr codegen error and falling back to interpreter mode")
             createInterpretedObject(in)
         }
     }
