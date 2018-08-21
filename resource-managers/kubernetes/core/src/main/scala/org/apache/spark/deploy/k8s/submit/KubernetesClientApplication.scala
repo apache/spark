@@ -95,6 +95,7 @@ private[spark] object ClientArguments {
  * @param watcher a watcher that monitors and logs the application status
  */
 private[spark] class Client(
+    builder: KubernetesDriverBuilder,
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf],
     kubernetesClient: KubernetesClient,
     waitForAppCompletion: Boolean,
@@ -103,8 +104,7 @@ private[spark] class Client(
     kubernetesResourceNamePrefix: String) extends Logging {
 
   def run(): Unit = {
-    val resolvedDriverSpec = KubernetesDriverBuilder(kubernetesClient, kubernetesConf.sparkConf)
-      .buildFromFeatures(kubernetesConf)
+    val resolvedDriverSpec = builder.buildFromFeatures(kubernetesConf)
     val configMapName = s"$kubernetesResourceNamePrefix-driver-conf-map"
     val configMap = buildConfigMap(configMapName, resolvedDriverSpec.systemProperties)
     // The include of the ENV_VAR for "SPARK_CONF_DIR" is to allow for the
@@ -239,6 +239,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       None,
       None)) { kubernetesClient =>
         val client = new Client(
+          KubernetesDriverBuilder(kubernetesClient, kubernetesConf.sparkConf),
           kubernetesConf,
           kubernetesClient,
           waitForAppCompletion,
