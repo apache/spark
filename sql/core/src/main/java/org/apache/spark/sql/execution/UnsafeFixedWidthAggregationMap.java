@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution;
 import java.io.IOException;
 
 import org.apache.spark.SparkEnv;
-import org.apache.spark.memory.TaskMemoryManager;
+import org.apache.spark.TaskContext;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
@@ -84,7 +84,7 @@ public final class UnsafeFixedWidthAggregationMap {
    * @param emptyAggregationBuffer the default value for new keys (a "zero" of the agg. function)
    * @param aggregationBufferSchema the schema of the aggregation buffer, used for row conversion.
    * @param groupingKeySchema the schema of the grouping key, used for row conversion.
-   * @param taskMemoryManager the memory manager used to allocate our Unsafe memory structures.
+   * @param taskContext the current task context.
    * @param initialCapacity the initial capacity of the map (a sizing hint to avoid re-hashing).
    * @param pageSizeBytes the data page size, in bytes; limits the maximum record size.
    * @param enablePerfMetrics if true, performance metrics will be recorded (has minor perf impact)
@@ -93,7 +93,7 @@ public final class UnsafeFixedWidthAggregationMap {
       InternalRow emptyAggregationBuffer,
       StructType aggregationBufferSchema,
       StructType groupingKeySchema,
-      TaskMemoryManager taskMemoryManager,
+      TaskContext taskContext,
       int initialCapacity,
       long pageSizeBytes,
       boolean enablePerfMetrics) {
@@ -101,13 +101,20 @@ public final class UnsafeFixedWidthAggregationMap {
     this.currentAggregationBuffer = new UnsafeRow(aggregationBufferSchema.length());
     this.groupingKeyProjection = UnsafeProjection.create(groupingKeySchema);
     this.groupingKeySchema = groupingKeySchema;
-    this.map =
-      new BytesToBytesMap(taskMemoryManager, initialCapacity, pageSizeBytes, enablePerfMetrics);
+    this.map = new BytesToBytesMap(
+      taskContext.taskMemoryManager(), initialCapacity, pageSizeBytes, enablePerfMetrics);
     this.enablePerfMetrics = enablePerfMetrics;
 
     // Initialize the buffer for aggregation value
     final UnsafeProjection valueProjection = UnsafeProjection.create(aggregationBufferSchema);
     this.emptyAggregationBuffer = valueProjection.apply(emptyAggregationBuffer).getBytes();
+
+    // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be freed at
+    // the end of the task. This is necessary to avoid memory leaks in when the downstream operator
+    // does not fully consume the aggregation map's output (e.g. aggregate followed by limit).
+    taskContext.addTaskCompletionListener(context -> {
+      free();
+    });
   }
 
   /**
