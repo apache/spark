@@ -111,22 +111,23 @@ private[spark] class KubernetesDriverBuilder (
 
 private[spark] object KubernetesDriverBuilder extends Logging {
   def apply(kubernetesClient: KubernetesClient, conf: SparkConf): KubernetesDriverBuilder = {
-    try {
-      conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE)
-        .map(new File(_))
-        .map(file => new KubernetesDriverBuilder(provideInitialSpec = conf => {
+    conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE)
+      .map(new File(_))
+      .map(file => new KubernetesDriverBuilder(provideInitialSpec = conf => {
+        try {
           val pod = kubernetesClient.pods().load(file).get()
           val container = pod.getSpec.getContainers.asScala
             .filter(_.getName == Constants.DRIVER_CONTAINER_NAME)
             .headOption
             .getOrElse(new ContainerBuilder().build())
           KubernetesDriverSpec.initialSpec(conf).copy(pod = SparkPod(pod, container))
-        }))
-        .getOrElse(new KubernetesDriverBuilder())
-    } catch {
-      case e: Exception =>
-        logWarning(s"Encountered exception while attempting to load initial pod spec from file", e)
-        new KubernetesDriverBuilder()
-    }
+        } catch {
+          case e: Exception =>
+            logWarning(
+              s"Encountered exception while attempting to load initial pod spec from file", e)
+            KubernetesDriverSpec.initialSpec(conf)
+        }
+      }))
+      .getOrElse(new KubernetesDriverBuilder())
   }
 }
