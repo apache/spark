@@ -1954,14 +1954,7 @@ class SQLConf extends Serializable with Logging {
         entry.valueConverter(defaultValue)
       }
     }
-    Option(settings.get(key)).getOrElse {
-      // If the key is not set, need to check whether the config entry is registered and is
-      // a fallback conf, so that we can check its parent.
-      sqlConfEntries.get(key) match {
-        case e: FallbackConfigEntry[_] => getConfString(e.fallback.key, defaultValue)
-        case _ => defaultValue
-      }
-    }
+    Option(settings.get(key)).getOrElse(defaultValue)
   }
 
   /**
