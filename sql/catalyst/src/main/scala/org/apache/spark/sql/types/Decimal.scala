@@ -197,7 +197,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
-  override def toString: String = toBigDecimal.toString()
+  override def toString: String = toBigDecimal.bigDecimal.toPlainString()
 
   def toDebugString: String = {
     if (decimalVal.ne(null)) {
