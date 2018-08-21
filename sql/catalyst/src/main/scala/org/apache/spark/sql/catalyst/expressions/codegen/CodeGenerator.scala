@@ -1424,22 +1424,6 @@ object CodeGenerator extends Logging {
   }
 
   /**
-   * Generates code of setter for an [[ArrayData]]
-   *
-   * @param dataType data type of the elements in an [[ArrayData]]
-   *
-   * @return code representing a setter of an assignment for an [[ArrayData]]
-   */
-  def setArrayElementFunc(dataType: DataType): String = {
-    val isPrimitiveType = CodeGenerator.isPrimitiveType(dataType)
-    if (isPrimitiveType) {
-      s"set${CodeGenerator.primitiveTypeName(dataType)}"
-    } else {
-      "update"
-    }
-  }
-
-  /**
    * Generates code creating a [[UnsafeArrayData]] or [[GenericArrayData]] based on
    * given parameters.
    *
@@ -1487,27 +1471,11 @@ object CodeGenerator extends Logging {
       arrayName: String,
       elementType: DataType,
       srcArray: String,
-      needNullCheck: Boolean,
-      rhsValue: Option[String] = None): (String, String) => String = {
-    val getValue = (srcLoopIndex: String) => if (rhsValue.isDefined) {
-      rhsValue.get
-    } else {
-      CodeGenerator.getValue(srcArray, elementType, srcLoopIndex)
-    }
-    val setFunc = CodeGenerator.setArrayElementFunc(elementType)
-
+      needNullCheck: Boolean): (String, String) => String = {
     (dstLoopIndex: String, srcLoopIndex: String) =>
-      if (needNullCheck) {
-        s"""
-           |if ($srcArray.isNullAt($srcLoopIndex)) {
-           |  $arrayName.setNullAt($dstLoopIndex);
-           |} else {
-           |  $arrayName.$setFunc($dstLoopIndex, ${getValue(srcLoopIndex)});
-           |}
-         """.stripMargin
-      } else {
-        s"$arrayName.$setFunc($dstLoopIndex, ${getValue(srcLoopIndex)});"
-      }
+      CodeGenerator.setArrayElement(arrayName, elementType, dstLoopIndex,
+        CodeGenerator.getValue(srcArray, elementType, srcLoopIndex),
+        if (needNullCheck) Some(s"$srcArray.isNullAt($srcLoopIndex)") else None)
   }
 
   /**
@@ -1575,6 +1543,34 @@ object CodeGenerator extends Logging {
       case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
       case _ =>
         throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
+    }
+  }
+
+  /**
+   * Generates code of setter for an [[ArrayData]].
+   */
+  def setArrayElement(
+      array: String,
+      elementType: DataType,
+      i: String,
+      value: String,
+      isNull: Option[String] = None): String = {
+    val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
+    val setFunc = if (isPrimitiveType) {
+      s"set${CodeGenerator.primitiveTypeName(elementType)}"
+    } else {
+      "update"
+    }
+    if (isNull.isDefined && isPrimitiveType) {
+      s"""
+         |if (${isNull.get}) {
+         |  $array.setNullAt($i);
+         |} else {
+         |  $array.$setFunc($i, $value);
+         |}
+       """.stripMargin
+    } else {
+      s"$array.$setFunc($i, $value);"
     }
   }
 

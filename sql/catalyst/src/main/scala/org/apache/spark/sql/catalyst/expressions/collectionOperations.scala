@@ -404,9 +404,8 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
         s" $prettyName failed.", elementSize = elementSize)
 
       val code = if (isKeyPrimitive && isValuePrimitive) {
-        val setFunc = CodeGenerator.setArrayElementFunc(childDataType.keyType)
         val genCodeForPrimitive = genCodeForPrimitiveElements(
-          ctx, arrayData, keys, values, ev.value, numElements, structSize, setFunc)
+          ctx, arrayData, keys, values, ev.value, numElements, structSize)
         s"""
            |if ($arrayData instanceof UnsafeArrayData) {
            |  $genCodeForPrimitive
@@ -441,8 +440,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
       values: String,
       resultArrayData: String,
       numElements: String,
-      structSize: Int,
-      setFuncForKey: String): String = {
+      structSize: Int): String = {
     val unsafeArrayData = ctx.freshName("unsafeArrayData")
     val baseObject = ctx.freshName("baseObject")
     val unsafeRow = ctx.freshName("unsafeRow")
@@ -455,19 +453,10 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
     val wordSize = UnsafeRow.WORD_SIZE
     val structSizeAsLong = s"${structSize}L"
 
-    val setFunc = CodeGenerator.setArrayElementFunc(childDataType.valueType)
-    val valueAssignment = s"$unsafeRow.$setFunc(1, ${getValue(values, z)});"
-    val valueAssignmentChecked = if (childDataType.valueContainsNull) {
-      s"""
-         |if ($values.isNullAt($z)) {
-         |  $unsafeRow.setNullAt(1);
-         |} else {
-         |  $valueAssignment
-         |}
-       """.stripMargin
-    } else {
-      valueAssignment
-    }
+    val setKey =
+      CodeGenerator.setArrayElement(unsafeRow, childDataType.keyType, "0", getKey(keys, z))
+    val valueAssignment = CodeGenerator.createArrayAssignment(
+      unsafeRow, childDataType.valueType, values, childDataType.valueContainsNull)(z, "1")
 
     s"""
        |UnsafeArrayData $unsafeArrayData = (UnsafeArrayData)$arrayData;
@@ -478,8 +467,8 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
        |  long $offset = $structsOffset + $z * $structSizeAsLong;
        |  $unsafeArrayData.setLong($z, ($offset << 32) + $structSizeAsLong);
        |  $unsafeRow.pointTo($baseObject, $baseOffset + $offset, $structSize);
-       |  $unsafeRow.$setFuncForKey(0, ${getKey(keys, z)});
-       |  $valueAssignmentChecked
+       |  $setKey
+       |  $valueAssignment
        |}
        |$resultArrayData = $arrayData;
      """.stripMargin
@@ -847,25 +836,12 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
     val valueSize = dataType.valueType.defaultSize
     val kByteSize = s"UnsafeArrayData.calculateSizeOfUnderlyingByteArray($numEntries, $keySize)"
     val vByteSize = s"UnsafeArrayData.calculateSizeOfUnderlyingByteArray($numEntries, $valueSize)"
-    val setFuncKey = CodeGenerator.setArrayElementFunc(dataType.keyType)
-    val setFuncValue = CodeGenerator.setArrayElementFunc(dataType.valueType)
 
-    val keyAssignment = (key: String, idx: String) => s"$keyArrayData.$setFuncKey($idx, $key);"
-    val valueAssignment = (entry: String, idx: String) => {
-      val value = CodeGenerator.getValue(entry, dataType.valueType, "1")
-      val valueNullUnsafeAssignment = s"$valueArrayData.$setFuncValue($idx, $value);"
-      if (dataType.valueContainsNull) {
-        s"""
-           |if ($entry.isNullAt(1)) {
-           |  $valueArrayData.setNullAt($idx);
-           |} else {
-           |  $valueNullUnsafeAssignment
-           |}
-         """.stripMargin
-      } else {
-        valueNullUnsafeAssignment
-      }
-    }
+    val keyAssignment = (key: String, idx: String) =>
+      CodeGenerator.setArrayElement(keyArrayData, dataType.keyType, idx, key)
+    val valueAssignment = (entry: String, idx: String) =>
+      CodeGenerator.createArrayAssignment(
+        valueArrayData, dataType.valueType, entry, dataType.valueContainsNull)(idx, "1")
     val assignmentLoop = genCodeForAssignmentLoop(
       ctx,
       childVariable,
@@ -3030,15 +3006,15 @@ case class ArrayRepeat(left: Expression, right: Expression)
 
     val allocation = CodeGenerator.createArrayData(
       tempArrayDataName, elementType, numElemName, s" $prettyName failed.")
-    val assignment = CodeGenerator.createArrayAssignment(
-      tempArrayDataName, elementType, "", false, rhsValue = Some(element))
+    val assignment =
+      CodeGenerator.setArrayElement(tempArrayDataName, elementType, k, element)
 
     s"""
        |$numElemCode
        |$allocation
        |if (!$leftIsNull) {
        |  for (int $k = 0; $k < $tempArrayDataName.numElements(); $k++) {
-       |    ${assignment(k, "")}
+       |    $assignment
        |  }
        |} else {
        |  for (int $k = 0; $k < $tempArrayDataName.numElements(); $k++) {
