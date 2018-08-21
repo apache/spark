@@ -63,7 +63,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
         class_name = cls.__name__
         conf = SparkConf().set("spark.default.parallelism", 1)
         cls.sc = SparkContext(appName=class_name, conf=conf)
-        cls.sc.setCheckpointDir("/tmp")
+        cls.sc.setCheckpointDir(tempfile.mkdtemp())
 
     @classmethod
     def tearDownClass(cls):
@@ -779,6 +779,12 @@ class StreamingContextTests(PySparkStreamingTestCase):
 
         self.assertEqual([2, 3, 1], self._take(dstream, 3))
 
+    def test_transform_pairrdd(self):
+        # This regression test case is for SPARK-17756.
+        dstream = self.ssc.queueStream(
+            [[1], [2], [3]]).transform(lambda rdd: rdd.cartesian(rdd))
+        self.assertEqual([(1, 1), (2, 2), (3, 3)], self._take(dstream, 3))
+
     def test_get_active(self):
         self.assertEqual(StreamingContext.getActive(), None)
 
@@ -816,7 +822,7 @@ class StreamingContextTests(PySparkStreamingTestCase):
         self.ssc = StreamingContext.getActiveOrCreate(None, setupFunc)
         self.assertTrue(self.setupCalled)
 
-        # Verify that getActiveOrCreate() retuns active context and does not call the setupFunc
+        # Verify that getActiveOrCreate() returns active context and does not call the setupFunc
         self.ssc.start()
         self.setupCalled = False
         self.assertEqual(StreamingContext.getActiveOrCreate(None, setupFunc), self.ssc)
@@ -1549,7 +1555,9 @@ if __name__ == "__main__":
         kinesis_jar_present = True
         jars = "%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, kinesis_asl_assembly_jar)
 
-    os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
+    existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
+    jars_args = "--jars %s" % jars
+    os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, existing_args])
     testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests, CheckpointTests,
                  StreamingListenerTests]
 

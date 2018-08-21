@@ -18,15 +18,14 @@
 package org.apache.spark.sql.execution.streaming.continuous
 
 import java.io.Closeable
-import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, TimeUnit}
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Partition, SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader}
 import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset
 import org.apache.spark.util.ThreadUtils
 
@@ -38,24 +37,22 @@ import org.apache.spark.util.ThreadUtils
  * offsets across epochs. Each compute() should call the next() method here until null is returned.
  */
 class ContinuousQueuedDataReader(
-    factory: DataReaderFactory[UnsafeRow],
+    partition: ContinuousDataSourceRDDPartition,
     context: TaskContext,
     dataQueueSize: Int,
     epochPollIntervalMs: Long) extends Closeable {
-  private val reader = factory.createDataReader()
+  private val reader = partition.inputPartition.createPartitionReader()
 
   // Important sequencing - we must get our starting point before the provider threads start running
   private var currentOffset: PartitionOffset =
     ContinuousDataSourceRDD.getContinuousReader(reader).getOffset
-  private var currentEpoch: Long =
-    context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
   /**
    * The record types in the read buffer.
    */
   sealed trait ContinuousRecord
   case object EpochMarker extends ContinuousRecord
-  case class ContinuousRow(row: UnsafeRow, offset: PartitionOffset) extends ContinuousRecord
+  case class ContinuousRow(row: InternalRow, offset: PartitionOffset) extends ContinuousRecord
 
   private val queue = new ArrayBlockingQueue[ContinuousRecord](dataQueueSize)
 
@@ -73,7 +70,7 @@ class ContinuousQueuedDataReader(
   dataReaderThread.setDaemon(true)
   dataReaderThread.start()
 
-  context.addTaskCompletionListener(_ => {
+  context.addTaskCompletionListener[Unit](_ => {
     this.close()
   })
 
@@ -82,12 +79,12 @@ class ContinuousQueuedDataReader(
   }
 
   /**
-   * Return the next UnsafeRow to be read in the current epoch, or null if the epoch is done.
+   * Return the next row to be read in the current epoch, or null if the epoch is done.
    *
    * After returning null, the [[ContinuousDataSourceRDD]] compute() for the following epoch
    * will call next() again to start getting rows.
    */
-  def next(): UnsafeRow = {
+  def next(): InternalRow = {
     val POLL_TIMEOUT_MS = 1000
     var currentEntry: ContinuousRecord = null
 
@@ -116,8 +113,7 @@ class ContinuousQueuedDataReader(
     currentEntry match {
       case EpochMarker =>
         epochCoordEndpoint.send(ReportPartitionOffset(
-          context.partitionId(), currentEpoch, currentOffset))
-        currentEpoch += 1
+          partition.index, EpochTracker.getCurrentEpoch.get, currentOffset))
         null
       case ContinuousRow(row, offset) =>
         currentOffset = offset
@@ -132,7 +128,7 @@ class ContinuousQueuedDataReader(
 
   /**
    * The data component of [[ContinuousQueuedDataReader]]. Pushes (row, offset) to the queue when
-   * a new row arrives to the [[DataReader]].
+   * a new row arrives to the [[InputPartitionReader]].
    */
   class DataReaderThread extends Thread(
       s"continuous-reader--${context.partitionId()}--" +
@@ -185,7 +181,7 @@ class ContinuousQueuedDataReader(
 
     private val epochCoordEndpoint = EpochCoordinatorRef.get(
       context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY), SparkEnv.get)
-    // Note that this is *not* the same as the currentEpoch in [[ContinuousDataQueuedReader]]! That
+    // Note that this is *not* the same as the currentEpoch in [[ContinuousWriteRDD]]! That
     // field represents the epoch wrt the data being processed. The currentEpoch here is just a
     // counter to ensure we send the appropriate number of markers if we fall behind the driver.
     private var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong

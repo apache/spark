@@ -50,7 +50,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       }
 
       assert(sizes.size === 1, s"number of Join nodes is wrong:\n ${df.queryExecution}")
-      assert(sizes.head === BigInt(96),
+      assert(sizes.head === BigInt(128),
         s"expected exact size 96 for table 'test', got: ${sizes.head}")
     }
   }
@@ -200,6 +200,24 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     Seq("true", "false").foreach { histogramEnabled =>
       withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> histogramEnabled) {
         checkColStats(df, mutable.LinkedHashMap(expectedColStats: _*))
+      }
+    }
+  }
+
+  test("SPARK-25028: column stats collection for null partitioning columns") {
+    val table = "analyze_partition_with_null"
+    withTempDir { dir =>
+      withTable(table) {
+        sql(s"""
+             |CREATE TABLE $table (value string, name string)
+             |USING PARQUET
+             |PARTITIONED BY (name)
+             |LOCATION '${dir.toURI}'""".stripMargin)
+        val df = Seq(("a", null), ("b", null)).toDF("value", "name")
+        df.write.mode("overwrite").insertInto(table)
+        sql(s"ANALYZE TABLE $table PARTITION (name) COMPUTE STATISTICS")
+        val partitions = spark.sessionState.catalog.listPartitions(TableIdentifier(table))
+        assert(partitions.head.stats.get.rowCount.get == 2)
       }
     }
   }

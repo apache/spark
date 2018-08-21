@@ -17,8 +17,10 @@
 
 package org.apache.spark.ml.util
 
-import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
-import org.apache.spark.sql.{Column, Dataset}
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Column, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType}
 
@@ -58,6 +60,13 @@ private[spark] object DatasetUtils {
         transferUDF(col(colName))
       case other =>
         throw new IllegalArgumentException(s"$other column cannot be cast to Vector")
+    }
+  }
+
+  def columnToOldVector(dataset: Dataset[_], colName: String): RDD[OldVector] = {
+    dataset.select(columnToVector(dataset, colName))
+      .rdd.map {
+      case Row(point: Vector) => OldVectors.fromML(point)
     }
   }
 }

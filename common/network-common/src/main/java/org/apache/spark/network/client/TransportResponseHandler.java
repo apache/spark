@@ -212,8 +212,8 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       if (entry != null) {
         StreamCallback callback = entry.getValue();
         if (resp.byteCount > 0) {
-          StreamInterceptor interceptor = new StreamInterceptor(this, resp.streamId, resp.byteCount,
-            callback);
+          StreamInterceptor<ResponseMessage> interceptor = new StreamInterceptor<>(
+            this, resp.streamId, resp.byteCount, callback);
           try {
             TransportFrameDecoder frameDecoder = (TransportFrameDecoder)
               channel.pipeline().get(TransportFrameDecoder.HANDLER_NAME);

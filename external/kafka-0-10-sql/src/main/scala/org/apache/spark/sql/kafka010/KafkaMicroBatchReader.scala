@@ -24,17 +24,19 @@ import java.nio.charset.StandardCharsets
 import scala.collection.JavaConverters._
 
 import org.apache.commons.io.IOUtils
+import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
-import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory, SupportsScanUnsafeRow}
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
+import org.apache.spark.sql.sources.v2.{CustomMetrics, DataSourceOptions}
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset, SupportsCustomReaderMetrics}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.UninterruptibleThread
 
@@ -61,14 +63,14 @@ private[kafka010] class KafkaMicroBatchReader(
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
-  extends MicroBatchReader with SupportsScanUnsafeRow with Logging {
+  extends MicroBatchReader with SupportsCustomReaderMetrics with Logging {
 
   private var startPartitionOffsets: PartitionOffsetMap = _
   private var endPartitionOffsets: PartitionOffsetMap = _
 
   private val pollTimeoutMs = options.getLong(
     "kafkaConsumer.pollTimeoutMs",
-    SparkEnv.get.conf.getTimeAsMs("spark.network.timeout", "120s"))
+    SparkEnv.get.conf.getTimeAsSeconds("spark.network.timeout", "120s") * 1000L)
 
   private val maxOffsetsPerTrigger =
     Option(options.get("maxOffsetsPerTrigger").orElse(null)).map(_.toLong)
@@ -101,7 +103,7 @@ private[kafka010] class KafkaMicroBatchReader(
         }
   }
 
-  override def createUnsafeRowReaderFactories(): ju.List[DataReaderFactory[UnsafeRow]] = {
+  override def planInputPartitions(): ju.List[InputPartition[InternalRow]] = {
     // Find the new partitions, and get their earliest offsets
     val newPartitions = endPartitionOffsets.keySet.diff(startPartitionOffsets.keySet)
     val newPartitionInitialOffsets = kafkaOffsetReader.fetchEarliestOffsets(newPartitions.toSeq)
@@ -142,11 +144,11 @@ private[kafka010] class KafkaMicroBatchReader(
     val reuseKafkaConsumer = offsetRanges.map(_.topicPartition).toSet.size == offsetRanges.size
 
     // Generate factories based on the offset ranges
-    val factories = offsetRanges.map { range =>
-      new KafkaMicroBatchDataReaderFactory(
-        range, executorKafkaParams, pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer)
-    }
-    factories.map(_.asInstanceOf[DataReaderFactory[UnsafeRow]]).asJava
+    offsetRanges.map { range =>
+      new KafkaMicroBatchInputPartition(
+        range, executorKafkaParams, pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer
+      ): InputPartition[InternalRow]
+    }.asJava
   }
 
   override def getStartOffset: Offset = {
@@ -155,6 +157,10 @@ private[kafka010] class KafkaMicroBatchReader(
 
   override def getEndOffset: Offset = {
     KafkaSourceOffset(endPartitionOffsets)
+  }
+
+  override def getCustomMetrics: CustomMetrics = {
+    KafkaCustomMetrics(kafkaOffsetReader.fetchLatestOffsets(), endPartitionOffsets)
   }
 
   override def deserializeOffset(json: String): Offset = {
@@ -299,27 +305,28 @@ private[kafka010] class KafkaMicroBatchReader(
   }
 }
 
-/** A [[DataReaderFactory]] for reading Kafka data in a micro-batch streaming query. */
-private[kafka010] case class KafkaMicroBatchDataReaderFactory(
+/** A [[InputPartition]] for reading Kafka data in a micro-batch streaming query. */
+private[kafka010] case class KafkaMicroBatchInputPartition(
     offsetRange: KafkaOffsetRange,
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean,
-    reuseKafkaConsumer: Boolean) extends DataReaderFactory[UnsafeRow] {
+    reuseKafkaConsumer: Boolean) extends InputPartition[InternalRow] {
 
   override def preferredLocations(): Array[String] = offsetRange.preferredLoc.toArray
 
-  override def createDataReader(): DataReader[UnsafeRow] = new KafkaMicroBatchDataReader(
-    offsetRange, executorKafkaParams, pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer)
+  override def createPartitionReader(): InputPartitionReader[InternalRow] =
+    new KafkaMicroBatchInputPartitionReader(offsetRange, executorKafkaParams, pollTimeoutMs,
+      failOnDataLoss, reuseKafkaConsumer)
 }
 
-/** A [[DataReader]] for reading Kafka data in a micro-batch streaming query. */
-private[kafka010] case class KafkaMicroBatchDataReader(
+/** A [[InputPartitionReader]] for reading Kafka data in a micro-batch streaming query. */
+private[kafka010] case class KafkaMicroBatchInputPartitionReader(
     offsetRange: KafkaOffsetRange,
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean,
-    reuseKafkaConsumer: Boolean) extends DataReader[UnsafeRow] with Logging {
+    reuseKafkaConsumer: Boolean) extends InputPartitionReader[InternalRow] with Logging {
 
   private val consumer = KafkaDataConsumer.acquire(
     offsetRange.topicPartition, executorKafkaParams, reuseKafkaConsumer)
@@ -377,4 +384,19 @@ private[kafka010] case class KafkaMicroBatchDataReader(
       range
     }
   }
+}
+
+/**
+ * Currently reports per topic-partition lag.
+ * This is the difference between the offset of the latest available data
+ * in a topic-partition and the latest offset that has been processed.
+ */
+private[kafka010] case class KafkaCustomMetrics(
+    latestOffsets: Map[TopicPartition, Long],
+    processedOffsets: Map[TopicPartition, Long]) extends CustomMetrics {
+  override def json(): String = {
+    JsonUtils.partitionLags(latestOffsets, processedOffsets)
+  }
+
+  override def toString: String = json()
 }

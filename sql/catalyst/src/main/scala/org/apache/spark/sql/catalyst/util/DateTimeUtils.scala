@@ -96,9 +96,9 @@ object DateTimeUtils {
     }
   }
 
-  def getThreadLocalDateFormat(): DateFormat = {
+  def getThreadLocalDateFormat(timeZone: TimeZone): DateFormat = {
     val sdf = threadLocalDateFormat.get()
-    sdf.setTimeZone(defaultTimeZone())
+    sdf.setTimeZone(timeZone)
     sdf
   }
 
@@ -144,7 +144,11 @@ object DateTimeUtils {
   }
 
   def dateToString(days: SQLDate): String =
-    getThreadLocalDateFormat.format(toJavaDate(days))
+    getThreadLocalDateFormat(defaultTimeZone()).format(toJavaDate(days))
+
+  def dateToString(days: SQLDate, timeZone: TimeZone): String = {
+    getThreadLocalDateFormat(timeZone).format(toJavaDate(days))
+  }
 
   // Converts Timestamp to string according to Hive TimestampWritable convention.
   def timestampToString(us: SQLTimestamp): String = {
@@ -885,13 +889,13 @@ object DateTimeUtils {
 
   /**
    * Returns number of months between time1 and time2. time1 and time2 are expressed in
-   * microseconds since 1.1.1970.
+   * microseconds since 1.1.1970. If time1 is later than time2, the result is positive.
    *
-   * If time1 and time2 having the same day of month, or both are the last day of month,
-   * it returns an integer (time under a day will be ignored).
+   * If time1 and time2 are on the same day of month, or both are the last day of month,
+   * returns, time of day will be ignored.
    *
    * Otherwise, the difference is calculated based on 31 days per month.
-   * If `roundOff` is set to true, the result is rounded to 8 decimal places.
+   * The result is rounded to 8 decimal places if `roundOff` is set to true.
    */
   def monthsBetween(
       time1: SQLTimestamp,

@@ -155,7 +155,7 @@ private[kafka010] case class InternalKafkaConsumer(
     var toFetchOffset = offset
     var consumerRecord: ConsumerRecord[Array[Byte], Array[Byte]] = null
     // We want to break out of the while loop on a successful fetch to avoid using "return"
-    // which may causes a NonLocalReturnControl exception when this method is used as a function.
+    // which may cause a NonLocalReturnControl exception when this method is used as a function.
     var isFetchComplete = false
 
     while (toFetchOffset != UNKNOWN_OFFSET && !isFetchComplete) {
@@ -395,7 +395,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
         // likely running on a beefy machine that can handle a large number of simultaneously
         // active consumers.
 
-        if (entry.getValue.inUse == false && this.size > capacity) {
+        if (!entry.getValue.inUse && this.size > capacity) {
           logWarning(
             s"KafkaConsumer cache hitting max capacity of $capacity, " +
               s"removing consumer for ${entry.getKey}")

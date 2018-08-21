@@ -1967,6 +1967,22 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("column resolution scenarios with hive table") {
+    val currentDb = spark.catalog.currentDatabase
+    withTempDatabase { db1 =>
+      try {
+        spark.catalog.setCurrentDatabase(db1)
+        spark.sql("CREATE TABLE t1(i1 int) STORED AS parquet")
+        spark.sql("INSERT INTO t1 VALUES(1)")
+        checkAnswer(spark.sql(s"SELECT $db1.t1.i1 FROM t1"), Row(1))
+        checkAnswer(spark.sql(s"SELECT $db1.t1.i1 FROM $db1.t1"), Row(1))
+        checkAnswer(spark.sql(s"SELECT $db1.t1.* FROM $db1.t1"), Row(1))
+      } finally {
+        spark.catalog.setCurrentDatabase(currentDb)
+      }
+    }
+  }
+
   test("SPARK-17409: Do Not Optimize Query in CTAS (Hive Serde Table) More Than Once") {
     withTable("bar") {
       withTempView("foo") {
@@ -2053,7 +2069,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       val deleteOnExitField = classOf[FileSystem].getDeclaredField("deleteOnExit")
       deleteOnExitField.setAccessible(true)
 
-      val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+      val fs = FileSystem.get(spark.sessionState.newHadoopConf())
       val setOfPath = deleteOnExitField.get(fs).asInstanceOf[Set[Path]]
 
       val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
@@ -2099,7 +2115,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   Seq("orc", "parquet").foreach { format =>
     test(s"SPARK-18355 Read data from a hive table with a new column - $format") {
-      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      val client =
+        spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
 
       Seq("true", "false").foreach { value =>
         withSQLConf(

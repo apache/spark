@@ -522,7 +522,7 @@ Here are the details of all the sources in Spark.
         <br/>
         <code>maxFilesPerTrigger</code>: maximum number of new files to be considered in every trigger (default: no max)
         <br/>
-        <code>latestFirst</code>: whether to processs the latest new files first, useful when there is a large backlog of files (default: false)
+        <code>latestFirst</code>: whether to process the latest new files first, useful when there is a large backlog of files (default: false)
         <br/>
         <code>fileNameOnly</code>: whether to check new files based on only the filename instead of on the full path (default: false). With this set to `true`, the following files would be considered as the same file, because their filenames, "dataset.txt", are the same:
         <br/>
@@ -926,7 +926,7 @@ event time. For a specific window starting at time `T`, the engine will maintain
 data to update the state until `(max event time seen by the engine - late threshold > T)`. 
 In other words, late data within the threshold will be aggregated, 
 but data later than the threshold will start getting dropped
-(see [later]((#semantic-guarantees-of-aggregation-with-watermarking))
+(see [later](#semantic-guarantees-of-aggregation-with-watermarking)
 in the section for the exact guarantees). Let's understand this with an example. We can
 easily define watermarking on the previous example using `withWatermark()` as shown below.
 
@@ -1162,7 +1162,7 @@ In other words, you will have to do the following additional steps in the join.
 old rows of one input is not going to be required (i.e. will not satisfy the time constraint) for
 matches with the other input. This constraint can be defined in one of the two ways.
 
-    1. Time range join conditions (e.g. `...JOIN ON leftTime BETWEN rightTime AND rightTime + INTERVAL 1 HOUR`),
+    1. Time range join conditions (e.g. `...JOIN ON leftTime BETWEEN rightTime AND rightTime + INTERVAL 1 HOUR`),
 
     1. Join on event-time windows (e.g. `...JOIN ON leftTimeWindow = rightTimeWindow`).
 

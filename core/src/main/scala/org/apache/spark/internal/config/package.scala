@@ -72,6 +72,9 @@ package object config {
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite").booleanConf.createWithDefault(false)
 
+  private[spark] val EVENT_LOG_CALLSITE_FORM =
+    ConfigBuilder("spark.eventLog.callsite").stringConf.createWithDefault("short")
+
   private[spark] val EXECUTOR_CLASS_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH).stringConf.createOptional
 
@@ -342,7 +345,7 @@ package object config {
         "a property key or value, the value is redacted from the environment UI and various logs " +
         "like YARN and event logs.")
       .regexConf
-      .createWithDefault("(?i)secret|password|url|user|username".r)
+      .createWithDefault("(?i)secret|password".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
@@ -351,6 +354,11 @@ package object config {
         "dummy value. This is currently used to redact the output of SQL explain commands.")
       .regexConf
       .createOptional
+
+  private[spark] val AUTH_SECRET_BIT_LENGTH =
+    ConfigBuilder("spark.authenticate.secretBitLength")
+      .intConf
+      .createWithDefault(256)
 
   private[spark] val NETWORK_AUTH_ENABLED =
     ConfigBuilder("spark.authenticate")
@@ -424,7 +432,11 @@ package object config {
         "external shuffle service, this feature can only be worked when external shuffle" +
         "service is newer than Spark 2.2.")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(Long.MaxValue)
+      // fetch-to-mem is guaranteed to fail if the message is bigger than 2 GB, so we might
+      // as well use fetch-to-disk in that case.  The message includes some metadata in addition
+      // to the block data itself (in particular UploadBlock has a lot of metadata), so we leave
+      // extra room.
+      .createWithDefault(Int.MaxValue - 512)
 
   private[spark] val TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES =
     ConfigBuilder("spark.taskMetrics.trackUpdatedBlockStatuses")
@@ -478,10 +490,11 @@ package object config {
 
   private[spark] val FORCE_DOWNLOAD_SCHEMES =
     ConfigBuilder("spark.yarn.dist.forceDownloadSchemes")
-      .doc("Comma-separated list of schemes for which files will be downloaded to the " +
+      .doc("Comma-separated list of schemes for which resources will be downloaded to the " +
         "local disk prior to being added to YARN's distributed cache. For use in cases " +
         "where the YARN service does not support schemes that are supported by Spark, like http, " +
-        "https and ftp.")
+        "https and ftp, or jars required to be in the local YARN client's classpath. Wildcard " +
+        "'*' is denoted to download resources for all the schemes.")
       .stringConf
       .toSequence
       .createWithDefault(Nil)
@@ -547,4 +560,48 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("1h")
 
+  private[spark] val SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS =
+    ConfigBuilder("spark.shuffle.minNumPartitionsToHighlyCompress")
+      .internal()
+      .doc("Number of partitions to determine if MapStatus should use HighlyCompressedMapStatus")
+      .intConf
+      .checkValue(v => v > 0, "The value should be a positive integer.")
+      .createWithDefault(2000)
+
+  private[spark] val BARRIER_SYNC_TIMEOUT =
+    ConfigBuilder("spark.barrier.sync.timeout")
+      .doc("The timeout in seconds for each barrier() call from a barrier task. If the " +
+        "coordinator didn't receive all the sync messages from barrier tasks within the " +
+        "configed time, throw a SparkException to fail all the tasks. The default value is set " +
+        "to 31536000(3600 * 24 * 365) so the barrier() call shall wait for one year.")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(v => v > 0, "The value should be a positive time value.")
+      .createWithDefaultString("365d")
+
+  private[spark] val BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL =
+    ConfigBuilder("spark.scheduler.barrier.maxConcurrentTasksCheck.interval")
+      .doc("Time in seconds to wait between a max concurrent tasks check failure and the next " +
+        "check. A max concurrent tasks check ensures the cluster can launch more concurrent " +
+        "tasks than required by a barrier stage on job submitted. The check can fail in case " +
+        "a cluster has just started and not enough executors have registered, so we wait for a " +
+        "little while and try to perform the check again. If the check fails more than a " +
+        "configured max failure times for a job then fail current job submission. Note this " +
+        "config only applies to jobs that contain one or more barrier stages, we won't perform " +
+        "the check on non-barrier jobs.")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefaultString("15s")
+
+  private[spark] val BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES =
+    ConfigBuilder("spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures")
+      .doc("Number of max concurrent tasks check failures allowed before fail a job submission. " +
+        "A max concurrent tasks check ensures the cluster can launch more concurrent tasks than " +
+        "required by a barrier stage on job submitted. The check can fail in case a cluster " +
+        "has just started and not enough executors have registered, so we wait for a little " +
+        "while and try to perform the check again. If the check fails more than a configured " +
+        "max failure times for a job then fail current job submission. Note this config only " +
+        "applies to jobs that contain one or more barrier stages, we won't perform the check on " +
+        "non-barrier jobs.")
+      .intConf
+      .checkValue(v => v > 0, "The max failures should be a positive value.")
+      .createWithDefault(40)
 }

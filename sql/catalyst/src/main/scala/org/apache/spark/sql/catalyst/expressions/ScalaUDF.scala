@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -1030,7 +1031,7 @@ case class ScalaUDF(
        """.stripMargin
 
     ev.copy(code =
-      s"""
+      code"""
          |$evalCode
          |${initArgs.mkString("\n")}
          |$callFunc
@@ -1047,8 +1048,9 @@ case class ScalaUDF(
 
   lazy val udfErrorMessage = {
     val funcCls = function.getClass.getSimpleName
-    val inputTypes = children.map(_.dataType.simpleString).mkString(", ")
-    s"Failed to execute user defined function($funcCls: ($inputTypes) => ${dataType.simpleString})"
+    val inputTypes = children.map(_.dataType.catalogString).mkString(", ")
+    val outputType = dataType.catalogString
+    s"Failed to execute user defined function($funcCls: ($inputTypes) => $outputType)"
   }
 
   override def eval(input: InternalRow): Any = {
