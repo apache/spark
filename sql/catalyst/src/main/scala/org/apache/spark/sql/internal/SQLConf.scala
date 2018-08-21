@@ -134,7 +134,7 @@ object SQLConf {
         .exists(_.getId == Thread.currentThread().getId)
       if (isSchedulerEventLoopThread) {
         // DAGScheduler event loop thread does not have an active SparkSession, the `confGetter`
-        // will return `fallbackConf` which is unexpected. Here we requires the caller to get the
+        // will return `fallbackConf` which is unexpected. Here we require the caller to get the
         // conf within `withExistingConf`, otherwise fail the query.
         val conf = existingConf.get()
         if (conf != null) {
