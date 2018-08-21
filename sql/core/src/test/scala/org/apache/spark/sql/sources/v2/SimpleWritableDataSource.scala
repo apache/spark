@@ -101,13 +101,13 @@ class SimpleWritableDataSource extends DataSourceV2
     }
   }
 
-  override def getBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
+  override def createBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
     val path = new Path(options.get("path").get())
     val conf = SparkContext.getActive.get.hadoopConfiguration
     new ReadSupport(path.toUri.toString, conf)
   }
 
-  override def getBatchWriteSupport(
+  override def createBatchWriteSupport(
       queryId: String,
       schema: StructType,
       mode: SaveMode,

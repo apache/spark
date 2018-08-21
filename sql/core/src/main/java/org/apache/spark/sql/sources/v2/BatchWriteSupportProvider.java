@@ -28,14 +28,14 @@ import org.apache.spark.sql.types.StructType;
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
  * provide data writing ability for batch processing.
  *
- * This interface is used to return {@link BatchWriteSupport} instances when end users run
+ * This interface is used to create {@link BatchWriteSupport} instances when end users run
  * {@code Dataset.write.format(...).option(...).save()}.
  */
 @InterfaceStability.Evolving
 public interface BatchWriteSupportProvider extends DataSourceV2 {
 
   /**
-   * Returns an optional {@link BatchWriteSupport} instance to save the data to this data source.
+   * Creates an optional {@link BatchWriteSupport} instance to save the data to this data source.
    * Data sources can return None if there is no writing needed to be done according to the save
    * mode.
    *
@@ -49,7 +49,7 @@ public interface BatchWriteSupportProvider extends DataSourceV2 {
    *                case-insensitive string-to-string map.
    * @return a write support to write data to this data source.
    */
-  Optional<BatchWriteSupport> getBatchWriteSupport(
+  Optional<BatchWriteSupport> createBatchWriteSupport(
       String queryId,
       StructType schema,
       SaveMode mode,

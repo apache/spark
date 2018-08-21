@@ -94,7 +94,7 @@ class MicroBatchExecution(
         v2ToExecutionRelationMap.getOrElseUpdate(s, {
           // Materialize source to avoid creating it in every batch
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
-          val readSupport = dataSourceV2.getMicroBatchReadSupport(
+          val readSupport = dataSourceV2.createMicroBatchReadSupport(
             metadataPath,
             new DataSourceOptions(options.asJava))
           nextSourceId += 1
@@ -496,7 +496,7 @@ class MicroBatchExecution(
     val triggerLogicalPlan = sink match {
       case _: Sink => newAttributePlan
       case s: StreamingWriteSupportProvider =>
-        val writer = s.getStreamingWriteSupport(
+        val writer = s.createStreamingWriteSupport(
           s"$runId",
           newAttributePlan.schema,
           outputMode,

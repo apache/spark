@@ -177,9 +177,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
         val schema = try {
           val tmpCheckpointPath = Utils.createTempDir(namePrefix = s"tempCP").getCanonicalPath
           tempReadSupport = if (userSpecifiedSchema.isDefined) {
-            s.getMicroBatchReadSupport(userSpecifiedSchema.get, tmpCheckpointPath, options)
+            s.createMicroBatchReadSupport(userSpecifiedSchema.get, tmpCheckpointPath, options)
           } else {
-            s.getMicroBatchReadSupport(tmpCheckpointPath, options)
+            s.createMicroBatchReadSupport(tmpCheckpointPath, options)
           }
           tempReadSupport.fullSchema()
         } finally {
@@ -199,9 +199,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
         val schema = try {
           val tmpCheckpointPath = Utils.createTempDir(namePrefix = s"tempCP").getCanonicalPath
           tempReadSupport = if (userSpecifiedSchema.isDefined) {
-            s.getContinuousReadSupport(userSpecifiedSchema.get, tmpCheckpointPath, options)
+            s.createContinuousReadSupport(userSpecifiedSchema.get, tmpCheckpointPath, options)
           } else {
-            s.getContinuousReadSupport(tmpCheckpointPath, options)
+            s.createContinuousReadSupport(tmpCheckpointPath, options)
           }
           tempReadSupport.fullSchema()
         } finally {

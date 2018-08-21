@@ -32,10 +32,6 @@ import org.apache.spark.sql.sources.v2.writer.DataWriter;
  * Note that, the writer factory will be serialized and sent to executors, then the data writer
  * will be created on executors and do the actual writing. So this interface must be
  * serializable and {@link DataWriter} doesn't need to be.
- *
- * If Spark fails to execute any methods in the implementations of this interface or in the returned
- * {@link DataWriter} (by throwing an exception), corresponding Spark task would fail and
- * get retried until hitting the maximum retry times.
  */
 @InterfaceStability.Evolving
 public interface StreamingDataWriterFactory extends Serializable {
@@ -45,6 +41,9 @@ public interface StreamingDataWriterFactory extends Serializable {
    * object instance when sending data to the data writer, for better performance. Data writers
    * are responsible for defensive copies if necessary, e.g. copy the data before buffer it in a
    * list.
+   *
+   * If this method fails (by throwing an exception), the corresponding Spark write task would fail
+   * and get retried until hitting the maximum retry times.
    *
    * @param partitionId A unique id of the RDD partition that the returned writer will process.
    *                    Usually Spark processes many RDD partitions at the same time,

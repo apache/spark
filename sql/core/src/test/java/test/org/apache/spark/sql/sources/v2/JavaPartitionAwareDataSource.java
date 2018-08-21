@@ -108,7 +108,7 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, BatchReadSupp
   }
 
   @Override
-  public BatchReadSupport getBatchReadSupport(DataSourceOptions options) {
+  public BatchReadSupport createBatchReadSupport(DataSourceOptions options) {
     return new ReadSupport();
   }
 }

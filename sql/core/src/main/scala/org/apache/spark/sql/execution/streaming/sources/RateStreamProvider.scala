@@ -42,7 +42,7 @@ class RateStreamProvider extends DataSourceV2
   with MicroBatchReadSupportProvider with ContinuousReadSupportProvider with DataSourceRegister {
   import RateStreamProvider._
 
-  override def getMicroBatchReadSupport(
+  override def createMicroBatchReadSupport(
       checkpointLocation: String,
       options: DataSourceOptions): MicroBatchReadSupport = {
       if (options.get(ROWS_PER_SECOND).isPresent) {
@@ -73,7 +73,7 @@ class RateStreamProvider extends DataSourceV2
     new RateStreamMicroBatchReadSupport(options, checkpointLocation)
   }
 
-  override def getContinuousReadSupport(
+  override def createContinuousReadSupport(
      checkpointLocation: String,
      options: DataSourceOptions): ContinuousReadSupport = {
     new RateStreamContinuousReadSupport(options)

@@ -56,7 +56,7 @@ case class WriteToDataSourceV2Exec(writeSupport: BatchWriteSupport, query: Spark
     val rdd = query.execute()
     val messages = new Array[WriterCommitMessage](rdd.partitions.length)
 
-    logInfo(s"Start processing data source writer: $writeSupport. " +
+    logInfo(s"Start processing data source write support: $writeSupport. " +
       s"The input RDD has ${messages.length} partitions.")
 
     try {
@@ -71,21 +71,21 @@ case class WriteToDataSourceV2Exec(writeSupport: BatchWriteSupport, query: Spark
         }
       )
 
-      logInfo(s"Data source writer $writeSupport is committing.")
+      logInfo(s"Data source write support $writeSupport is committing.")
       writeSupport.commit(messages)
-      logInfo(s"Data source writer $writeSupport committed.")
+      logInfo(s"Data source write support $writeSupport committed.")
     } catch {
       case cause: Throwable =>
-        logError(s"Data source writer $writeSupport is aborting.")
+        logError(s"Data source write support $writeSupport is aborting.")
         try {
           writeSupport.abort(messages)
         } catch {
           case t: Throwable =>
-            logError(s"Data source writer $writeSupport failed to abort.")
+            logError(s"Data source write support $writeSupport failed to abort.")
             cause.addSuppressed(t)
             throw new SparkException("Writing job failed.", cause)
         }
-        logError(s"Data source writer $writeSupport aborted.")
+        logError(s"Data source write support $writeSupport aborted.")
         cause match {
           // Only wrap non fatal exceptions.
           case NonFatal(e) => throw new SparkException("Writing job aborted.", e)

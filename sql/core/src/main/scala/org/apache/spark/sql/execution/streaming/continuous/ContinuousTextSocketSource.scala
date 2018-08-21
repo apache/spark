@@ -142,14 +142,7 @@ class TextSocketContinuousReadSupport(options: DataSourceOptions)
 
   override def createContinuousReaderFactory(
       config: ScanConfig): ContinuousPartitionReaderFactory = {
-    new ContinuousPartitionReaderFactory {
-      override def createReader(
-          partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
-        val p = partition.asInstanceOf[TextSocketContinuousInputPartition]
-        new TextSocketContinuousPartitionReader(
-          p.driverEndpointName, p.partitionId, p.startOffset, p.includeTimestamp)
-      }
-    }
+    TextSocketReaderFactory
   }
 
   override def commit(end: Offset): Unit = synchronized {
@@ -236,6 +229,16 @@ case class TextSocketContinuousInputPartition(
     partitionId: Int,
     startOffset: Int,
     includeTimestamp: Boolean) extends InputPartition
+
+
+object TextSocketReaderFactory extends ContinuousPartitionReaderFactory {
+
+  override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
+    val p = partition.asInstanceOf[TextSocketContinuousInputPartition]
+    new TextSocketContinuousPartitionReader(
+      p.driverEndpointName, p.partitionId, p.startOffset, p.includeTimestamp)
+  }
+}
 
 
 /**

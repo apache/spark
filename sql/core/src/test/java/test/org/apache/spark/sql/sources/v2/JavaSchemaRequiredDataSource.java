@@ -44,12 +44,12 @@ public class JavaSchemaRequiredDataSource implements DataSourceV2, BatchReadSupp
   }
 
   @Override
-  public BatchReadSupport getBatchReadSupport(DataSourceOptions options) {
+  public BatchReadSupport createBatchReadSupport(DataSourceOptions options) {
     throw new IllegalArgumentException("requires a user-supplied schema");
   }
 
   @Override
-  public BatchReadSupport getBatchReadSupport(StructType schema, DataSourceOptions options) {
+  public BatchReadSupport createBatchReadSupport(StructType schema, DataSourceOptions options) {
     return new ReadSupport(schema);
   }
 }

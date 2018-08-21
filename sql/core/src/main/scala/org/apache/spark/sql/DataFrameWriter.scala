@@ -251,7 +251,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
             }
 
           } else {
-            val writer = provider.getBatchWriteSupport(
+            val writer = provider.createBatchWriteSupport(
               UUID.randomUUID().toString,
               df.logicalPlan.output.toStructType,
               mode,

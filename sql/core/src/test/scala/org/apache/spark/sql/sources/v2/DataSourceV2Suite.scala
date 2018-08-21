@@ -365,7 +365,7 @@ class SimpleSinglePartitionSource extends DataSourceV2 with BatchReadSupportProv
     }
   }
 
-  override def getBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
+  override def createBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
     new ReadSupport
   }
 }
@@ -379,7 +379,7 @@ class SimpleDataSourceV2 extends DataSourceV2 with BatchReadSupportProvider {
     }
   }
 
-  override def getBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
+  override def createBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
     new ReadSupport
   }
 }
@@ -418,7 +418,7 @@ class AdvancedDataSourceV2 extends DataSourceV2 with BatchReadSupportProvider {
     }
   }
 
-  override def getBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
+  override def createBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
     new ReadSupport
   }
 }
@@ -483,11 +483,11 @@ class SchemaRequiredDataSource extends DataSourceV2 with BatchReadSupportProvide
       Array.empty
   }
 
-  override def getBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
+  override def createBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
     throw new IllegalArgumentException("requires a user-supplied schema")
   }
 
-  override def getBatchReadSupport(
+  override def createBatchReadSupport(
       schema: StructType, options: DataSourceOptions): BatchReadSupport = {
     new ReadSupport(schema)
   }
@@ -505,7 +505,7 @@ class ColumnarDataSourceV2 extends DataSourceV2 with BatchReadSupportProvider {
     }
   }
 
-  override def getBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
+  override def createBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
     new ReadSupport
   }
 }
@@ -582,7 +582,7 @@ class PartitionAwareDataSource extends DataSourceV2 with BatchReadSupportProvide
     }
   }
 
-  override def getBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
+  override def createBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
     new ReadSupport
   }
 }

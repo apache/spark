@@ -243,14 +243,14 @@ class TextSocketSourceProvider extends DataSourceV2
     }
   }
 
-  override def getMicroBatchReadSupport(
+  override def createMicroBatchReadSupport(
       checkpointLocation: String,
       options: DataSourceOptions): MicroBatchReadSupport = {
     checkParameters(options)
     new TextSocketMicroBatchReadSupport(options)
   }
 
-  override def getContinuousReadSupport(
+  override def createContinuousReadSupport(
       checkpointLocation: String,
       options: DataSourceOptions): ContinuousReadSupport = {
     checkParameters(options)

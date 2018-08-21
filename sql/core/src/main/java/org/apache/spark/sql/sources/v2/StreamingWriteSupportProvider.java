@@ -27,14 +27,14 @@ import org.apache.spark.sql.types.StructType;
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
  * provide data writing ability for structured streaming.
  *
- * This interface is used to return {@link StreamingWriteSupport} instances when end users run
+ * This interface is used to create {@link StreamingWriteSupport} instances when end users run
  * {@code Dataset.writeStream.format(...).option(...).start()}.
  */
 @InterfaceStability.Evolving
 public interface StreamingWriteSupportProvider extends DataSourceV2, BaseStreamingSink {
 
   /**
-   * Returns a {@link StreamingWriteSupport} instance to save the data to this data source.
+   * Creates a {@link StreamingWriteSupport} instance to save the data to this data source.
    *
    * @param queryId A unique string for the writing query. It's possible that there are many
    *                writing queries running at the same time, and the returned
@@ -45,7 +45,7 @@ public interface StreamingWriteSupportProvider extends DataSourceV2, BaseStreami
    * @param options the options for the returned data source writer, which is an immutable
    *                case-insensitive string-to-string map.
    */
-  StreamingWriteSupport getStreamingWriteSupport(
+  StreamingWriteSupport createStreamingWriteSupport(
       String queryId,
       StructType schema,
       OutputMode mode,

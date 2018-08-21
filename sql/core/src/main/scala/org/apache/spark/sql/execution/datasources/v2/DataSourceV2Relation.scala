@@ -152,16 +152,16 @@ object DataSourceV2Relation {
       val v2Options = new DataSourceOptions(options.asJava)
       userSpecifiedSchema match {
         case Some(s) =>
-          asReadSupportProvider.getBatchReadSupport(s, v2Options)
+          asReadSupportProvider.createBatchReadSupport(s, v2Options)
         case _ =>
-          asReadSupportProvider.getBatchReadSupport(v2Options)
+          asReadSupportProvider.createBatchReadSupport(v2Options)
       }
     }
 
     def createWriteSupport(
         options: Map[String, String],
         schema: StructType): BatchWriteSupport = {
-      asWriteSupportProvider.getBatchWriteSupport(
+      asWriteSupportProvider.createBatchWriteSupport(
         UUID.randomUUID().toString,
         schema,
         SaveMode.Append,

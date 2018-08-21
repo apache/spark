@@ -54,7 +54,7 @@ class RateSourceSuite extends StreamTest {
     withTempDir { temp =>
       DataSource.lookupDataSource("rate", spark.sqlContext.conf).newInstance() match {
         case ds: MicroBatchReadSupportProvider =>
-          val readSupport = ds.getMicroBatchReadSupport(
+          val readSupport = ds.createMicroBatchReadSupport(
             temp.getCanonicalPath, DataSourceOptions.empty())
           assert(readSupport.isInstanceOf[RateStreamMicroBatchReadSupport])
         case _ =>
@@ -290,7 +290,7 @@ class RateSourceSuite extends StreamTest {
   test("continuous in registry") {
     DataSource.lookupDataSource("rate", spark.sqlContext.conf).newInstance() match {
       case ds: ContinuousReadSupportProvider =>
-        val readSupport = ds.getContinuousReadSupport(
+        val readSupport = ds.createContinuousReadSupport(
           "", DataSourceOptions.empty())
         assert(readSupport.isInstanceOf[RateStreamContinuousReadSupport])
       case _ =>
