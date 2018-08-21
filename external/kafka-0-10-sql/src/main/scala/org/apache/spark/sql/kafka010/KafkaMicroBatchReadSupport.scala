@@ -22,6 +22,7 @@ import java.io._
 import java.nio.charset.StandardCharsets
 
 import org.apache.commons.io.IOUtils
+import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
@@ -32,9 +33,9 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset, SimpleStreamingScanConfig, SimpleStreamingScanConfigBuilder}
 import org.apache.spark.sql.execution.streaming.sources.RateControlMicroBatchReadSupport
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
-import org.apache.spark.sql.sources.v2.DataSourceOptions
+import org.apache.spark.sql.sources.v2.{CustomMetrics, DataSourceOptions}
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset, SupportsCustomReaderMetrics}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.UninterruptibleThread
 
@@ -61,7 +62,7 @@ private[kafka010] class KafkaMicroBatchReadSupport(
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
-  extends RateControlMicroBatchReadSupport with Logging {
+  extends RateControlMicroBatchReadSupport with SupportsCustomReaderMetrics with Logging {
 
   private val pollTimeoutMs = options.getLong(
     "kafkaConsumer.pollTimeoutMs",
@@ -150,6 +151,12 @@ private[kafka010] class KafkaMicroBatchReadSupport(
 
   override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
     KafkaMicroBatchReaderFactory
+  }
+
+  override def getCustomMetrics(config: ScanConfig): CustomMetrics = {
+    val endPartitionOffsets = config.asInstanceOf[SimpleStreamingScanConfig]
+      .end.get.asInstanceOf[KafkaSourceOffset].partitionToOffsets
+    KafkaCustomMetrics(kafkaOffsetReader.fetchLatestOffsets(), endPartitionOffsets)
   }
 
   override def deserializeOffset(json: String): Offset = {
@@ -372,4 +379,19 @@ private[kafka010] case class KafkaMicroBatchPartitionReader(
       range
     }
   }
+}
+
+/**
+ * Currently reports per topic-partition lag.
+ * This is the difference between the offset of the latest available data
+ * in a topic-partition and the latest offset that has been processed.
+ */
+private[kafka010] case class KafkaCustomMetrics(
+    latestOffsets: Map[TopicPartition, Long],
+    processedOffsets: Map[TopicPartition, Long]) extends CustomMetrics {
+  override def json(): String = {
+    JsonUtils.partitionLags(latestOffsets, processedOffsets)
+  }
+
+  override def toString: String = json()
 }

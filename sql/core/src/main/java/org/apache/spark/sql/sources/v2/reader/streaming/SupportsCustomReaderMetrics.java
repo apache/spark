@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources.v2.reader.streaming;
 
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.sources.v2.CustomMetrics;
+import org.apache.spark.sql.sources.v2.reader.ScanConfig;
 
 /**
  * A mix in interface for {@link StreamingReadSupport}. Data sources can implement this interface
@@ -31,10 +32,10 @@ public interface SupportsCustomReaderMetrics extends StreamingReadSupport {
   /**
    * Returns custom metrics specific to this data source.
    */
-  CustomMetrics getCustomMetrics();
+  CustomMetrics getCustomMetrics(ScanConfig config);
 
   /**
-   * Invoked if the custom metrics returned by {@link #getCustomMetrics()} is invalid
+   * Invoked if the custom metrics returned by {@link #getCustomMetrics(ScanConfig)} is invalid
    * (e.g. Invalid data that cannot be parsed). Throwing an error here would ensure that
    * your custom metrics work right and correct values are reported always. The default action
    * on invalid metrics is to ignore it.
