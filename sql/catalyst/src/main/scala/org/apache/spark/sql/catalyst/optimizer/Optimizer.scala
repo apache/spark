@@ -193,6 +193,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       RewriteIntersectAll.ruleName ::
       ReplaceDistinctWithAggregate.ruleName ::
       PullupCorrelatedPredicates.ruleName ::
+      RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName :: Nil
 
   /**

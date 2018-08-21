@@ -14,16 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.submit
 
-private[spark] sealed trait MainAppResource
+package org.apache.spark.sql.kafka010
 
-private[spark] sealed trait NonJVMResource
+import org.scalatest.BeforeAndAfterAll
 
-private[spark] case class JavaMainAppResource(primaryResource: String) extends MainAppResource
+import org.apache.spark.SparkFunSuite
 
-private[spark] case class PythonMainAppResource(primaryResource: String)
-  extends MainAppResource with NonJVMResource
+/** A trait to clean cached Kafka producers in `afterAll` */
+trait KafkaTest extends BeforeAndAfterAll {
+  self: SparkFunSuite =>
 
-private[spark] case class RMainAppResource(primaryResource: String)
-  extends MainAppResource with NonJVMResource
+  override def afterAll(): Unit = {
+    super.afterAll()
+    CachedKafkaProducer.clear()
+  }
+}

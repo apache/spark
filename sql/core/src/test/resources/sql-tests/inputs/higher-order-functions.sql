@@ -74,3 +74,12 @@ select transform_keys(ys, (k, v) -> k + 1) as v from nested;
 
 -- Transform Keys in a map using values
 select transform_keys(ys, (k, v) -> k + v) as v from nested;
+
+-- Identity Transform values in a map
+select transform_values(ys, (k, v) -> v) as v from nested;
+
+-- Transform values in a map by adding constant
+select transform_values(ys, (k, v) -> v + 1) as v from nested;
+
+-- Transform values in a map using values
+select transform_values(ys, (k, v) -> k + v) as v from nested;

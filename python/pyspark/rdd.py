@@ -53,7 +53,7 @@ from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, ExternalMerger, \
     get_used_memory, ExternalSorter, ExternalGroupBy
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.util import fail_on_stopiteration
+from pyspark.util import fail_on_stopiteration, _exception_message
 
 
 __all__ = ["RDD"]
@@ -143,6 +143,7 @@ def _parse_memory(s):
 def _load_from_socket(sock_info, serializer):
     port, auth_secret = sock_info
     sock = None
+    errors = []
     # Support for both IPv4 and IPv6.
     # On most of IPv6-ready systems, IPv6 will take precedence.
     for res in socket.getaddrinfo("localhost", port, socket.AF_UNSPEC, socket.SOCK_STREAM):
@@ -151,13 +152,15 @@ def _load_from_socket(sock_info, serializer):
         try:
             sock.settimeout(15)
             sock.connect(sa)
-        except socket.error:
+        except socket.error as e:
+            emsg = _exception_message(e)
+            errors.append("tried to connect to %s, but an error occured: %s" % (sa, emsg))
             sock.close()
             sock = None
             continue
         break
     if not sock:
-        raise Exception("could not open socket")
+        raise Exception("could not open socket: %s" % errors)
     # The RDD materialization time is unpredicable, if we set a timeout for socket reading
     # operation, it will very possibly fail. See SPARK-18281.
     sock.settimeout(None)

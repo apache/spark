@@ -450,7 +450,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         input => rawParser.parse(input, createParser, UTF8String.fromString),
         parsedOptions.parseMode,
         schema,
-        parsedOptions.columnNameOfCorruptRecord)
+        parsedOptions.columnNameOfCorruptRecord,
+        parsedOptions.multiLine)
       iter.flatMap(parser.parse)
     }
     sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = jsonDataset.isStreaming)
@@ -505,10 +506,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
 
     val linesWithoutHeader: RDD[String] = maybeFirstLine.map { firstLine =>
-      CSVDataSource.checkHeader(
-        firstLine,
-        new CsvParser(parsedOptions.asParserSettings),
+      val parser = new CsvParser(parsedOptions.asParserSettings)
+      val columnNames = parser.parseLine(firstLine)
+      CSVDataSource.checkHeaderColumnNames(
         actualSchema,
+        columnNames,
         csvDataset.getClass.getCanonicalName,
         parsedOptions.enforceSchema,
         sparkSession.sessionState.conf.caseSensitiveAnalysis)
@@ -521,7 +523,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         input => Seq(rawParser.parse(input)),
         parsedOptions.parseMode,
         schema,
-        parsedOptions.columnNameOfCorruptRecord)
+        parsedOptions.columnNameOfCorruptRecord,
+        parsedOptions.multiLine)
       iter.flatMap(parser.parse)
     }
     sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = csvDataset.isStreaming)
