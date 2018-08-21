@@ -92,7 +92,8 @@ class SparkSession private(
 
   // If there is no active SparkSession, uses the default SQL conf. Otherwise, use the session's.
   SQLConf.setSQLConfGetter(() => {
-    SparkSession.getActiveSession.map(_.sessionState.conf).getOrElse(SQLConf.getFallbackConf)
+    SparkSession.getActiveSession.filterNot(_.sparkContext.isStopped).map(_.sessionState.conf)
+      .getOrElse(SQLConf.getFallbackConf)
   })
 
   /**

@@ -495,7 +495,7 @@ case class JsonTuple(children: Seq[Expression])
 }
 
 /**
- * Converts an json input string to a [[StructType]] or [[ArrayType]] of [[StructType]]s
+ * Converts an json input string to a [[StructType]], [[ArrayType]] or [[MapType]]
  * with the specified schema.
  */
 // scalastyle:off line.size.limit
@@ -514,9 +514,10 @@ case class JsonToStructs(
     schema: DataType,
     options: Map[String, String],
     child: Expression,
-    timeZoneId: Option[String],
-    forceNullableSchema: Boolean)
+    timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
+
+  val forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA)
 
   // The JSON input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
@@ -531,8 +532,7 @@ case class JsonToStructs(
       schema = JsonExprUtils.evalSchemaExpr(schema),
       options = options,
       child = child,
-      timeZoneId = None,
-      forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
+      timeZoneId = None)
 
   def this(child: Expression, schema: Expression) = this(child, schema, Map.empty[String, String])
 
@@ -541,26 +541,13 @@ case class JsonToStructs(
       schema = JsonExprUtils.evalSchemaExpr(schema),
       options = JsonExprUtils.convertToMapData(options),
       child = child,
-      timeZoneId = None,
-      forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
-
-  // Used in `org.apache.spark.sql.functions`
-  def this(schema: DataType, options: Map[String, String], child: Expression) =
-    this(schema, options, child, timeZoneId = None,
-      forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA))
+      timeZoneId = None)
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
-    case _: StructType | ArrayType(_: StructType, _) | _: MapType =>
+    case _: StructType | _: ArrayType | _: MapType =>
       super.checkInputDataTypes()
     case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input schema ${nullableSchema.simpleString} must be a struct or an array of structs.")
-  }
-
-  @transient
-  lazy val rowSchema = nullableSchema match {
-    case st: StructType => st
-    case ArrayType(st: StructType, _) => st
-    case mt: MapType => mt
+      s"Input schema ${nullableSchema.catalogString} must be a struct, an array or a map.")
   }
 
   // This converts parsed rows to the desired output by the given schema.
@@ -568,8 +555,8 @@ case class JsonToStructs(
   lazy val converter = nullableSchema match {
     case _: StructType =>
       (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
-    case ArrayType(_: StructType, _) =>
-      (rows: Seq[InternalRow]) => new GenericArrayData(rows)
+    case _: ArrayType =>
+      (rows: Seq[InternalRow]) => rows.head.getArray(0)
     case _: MapType =>
       (rows: Seq[InternalRow]) => rows.head.getMap(0)
   }
@@ -577,7 +564,7 @@ case class JsonToStructs(
   @transient
   lazy val parser =
     new JacksonParser(
-      rowSchema,
+      nullableSchema,
       new JSONOptions(options + ("mode" -> FailFastMode.name), timeZoneId.get))
 
   override def dataType: DataType = nullableSchema
@@ -638,7 +625,7 @@ case class JsonToStructs(
        {"a":1,"b":2}
       > SELECT _FUNC_(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'));
        {"time":"26/08/2015"}
-      > SELECT _FUNC_(array(named_struct('a', 1, 'b', 2));
+      > SELECT _FUNC_(array(named_struct('a', 1, 'b', 2)));
        [{"a":1,"b":2}]
       > SELECT _FUNC_(map('a', named_struct('b', 1)));
        {"a":{"b":1}}
@@ -735,7 +722,7 @@ case class StructsToJson(
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
     case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input type ${child.dataType.simpleString} must be a struct, array of structs or " +
+      s"Input type ${child.dataType.catalogString} must be a struct, array of structs or " +
           "a map or array of map.")
   }
 
@@ -796,7 +783,7 @@ object JsonExprUtils {
       }
     case m: CreateMap =>
       throw new AnalysisException(
-        s"A type of keys and values in map() must be string, but got ${m.dataType}")
+        s"A type of keys and values in map() must be string, but got ${m.dataType.catalogString}")
     case _ =>
       throw new AnalysisException("Must use a map() function for options")
   }

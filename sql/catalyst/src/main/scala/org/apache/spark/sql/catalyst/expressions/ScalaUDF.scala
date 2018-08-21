@@ -1048,8 +1048,9 @@ case class ScalaUDF(
 
   lazy val udfErrorMessage = {
     val funcCls = function.getClass.getSimpleName
-    val inputTypes = children.map(_.dataType.simpleString).mkString(", ")
-    s"Failed to execute user defined function($funcCls: ($inputTypes) => ${dataType.simpleString})"
+    val inputTypes = children.map(_.dataType.catalogString).mkString(", ")
+    val outputType = dataType.catalogString
+    s"Failed to execute user defined function($funcCls: ($inputTypes) => $outputType)"
   }
 
   override def eval(input: InternalRow): Any = {

@@ -21,7 +21,12 @@ import java.{util => ju}
 import java.util.Optional
 import java.util.concurrent.CountDownLatch
 
+import scala.collection.mutable
+
 import org.apache.commons.lang3.RandomStringUtils
+import org.json4s.NoTypeHints
+import org.json4s.jackson.JsonMethods._
+import org.json4s.jackson.Serialization
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
@@ -29,8 +34,9 @@ import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Literal, Rand, Randn, Shuffle, Uuid}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.TestForeachWriter
 import org.apache.spark.sql.functions._
@@ -227,10 +233,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       }
 
       // getBatch should take 100 ms the first time it is called
-      override def planUnsafeInputPartitions(): ju.List[InputPartition[UnsafeRow]] = {
+      override def planInputPartitions(): ju.List[InputPartition[InternalRow]] = {
         synchronized {
           clock.waitTillTime(1350)
-          super.planUnsafeInputPartitions()
+          super.planInputPartitions()
         }
       }
     }
@@ -464,9 +470,37 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         assert(gauges.get("latency").getValue.asInstanceOf[Long] == 0)
         assert(gauges.get("processingRate-total").getValue.asInstanceOf[Double] == 0.0)
         assert(gauges.get("inputRate-total").getValue.asInstanceOf[Double] == 0.0)
+        assert(gauges.get("eventTime-watermark").getValue.asInstanceOf[Long] == 0)
+        assert(gauges.get("states-rowsTotal").getValue.asInstanceOf[Long] == 0)
+        assert(gauges.get("states-usedBytes").getValue.asInstanceOf[Long] == 0)
         sq.stop()
       }
     }
+  }
+
+  test("Check if custom metrics are reported") {
+    val streamInput = MemoryStream[Int]
+    implicit val formats = Serialization.formats(NoTypeHints)
+    testStream(streamInput.toDF(), useV2Sink = true)(
+      AddData(streamInput, 1, 2, 3),
+      CheckAnswer(1, 2, 3),
+      AssertOnQuery { q =>
+        val lastProgress = getLastProgressWithData(q)
+        assert(lastProgress.nonEmpty)
+        assert(lastProgress.get.numInputRows == 3)
+        assert(lastProgress.get.sink.customMetrics == "{\"numRows\":3}")
+        true
+      },
+      AddData(streamInput, 4, 5, 6, 7),
+      CheckAnswer(1, 2, 3, 4, 5, 6, 7),
+      AssertOnQuery { q =>
+        val lastProgress = getLastProgressWithData(q)
+        assert(lastProgress.nonEmpty)
+        assert(lastProgress.get.numInputRows == 4)
+        assert(lastProgress.get.sink.customMetrics == "{\"numRows\":7}")
+        true
+      }
+    )
   }
 
   test("input row calculation with same V1 source used twice in self-join") {
@@ -832,6 +866,62 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     testStream(otherDf, OutputMode.Complete())(
       AddData(stream, (1, 1), (2, 4)),
       CheckLastBatch(("A", 1)))
+  }
+
+  test("Uuid in streaming query should not produce same uuids in each execution") {
+    val uuids = mutable.ArrayBuffer[String]()
+    def collectUuid: Seq[Row] => Unit = { rows: Seq[Row] =>
+      rows.foreach(r => uuids += r.getString(0))
+    }
+
+    val stream = MemoryStream[Int]
+    val df = stream.toDF().select(new Column(Uuid()))
+    testStream(df)(
+      AddData(stream, 1),
+      CheckAnswer(collectUuid),
+      AddData(stream, 2),
+      CheckAnswer(collectUuid)
+    )
+    assert(uuids.distinct.size == 2)
+  }
+
+  test("Rand/Randn in streaming query should not produce same results in each execution") {
+    val rands = mutable.ArrayBuffer[Double]()
+    def collectRand: Seq[Row] => Unit = { rows: Seq[Row] =>
+      rows.foreach { r =>
+        rands += r.getDouble(0)
+        rands += r.getDouble(1)
+      }
+    }
+
+    val stream = MemoryStream[Int]
+    val df = stream.toDF().select(new Column(new Rand()), new Column(new Randn()))
+    testStream(df)(
+      AddData(stream, 1),
+      CheckAnswer(collectRand),
+      AddData(stream, 2),
+      CheckAnswer(collectRand)
+    )
+    assert(rands.distinct.size == 4)
+  }
+
+  test("Shuffle in streaming query should not produce same results in each execution") {
+    val rands = mutable.ArrayBuffer[Seq[Int]]()
+    def collectShuffle: Seq[Row] => Unit = { rows: Seq[Row] =>
+      rows.foreach { r =>
+        rands += r.getSeq[Int](0)
+      }
+    }
+
+    val stream = MemoryStream[Int]
+    val df = stream.toDF().select(new Column(new Shuffle(Literal.create[Seq[Int]](0 until 100))))
+    testStream(df)(
+      AddData(stream, 1),
+      CheckAnswer(collectShuffle),
+      AddData(stream, 2),
+      CheckAnswer(collectShuffle)
+    )
+    assert(rands.distinct.size == 2)
   }
 
   test("StreamingRelationV2/StreamingExecutionRelation/ContinuousExecutionRelation.toJSON " +

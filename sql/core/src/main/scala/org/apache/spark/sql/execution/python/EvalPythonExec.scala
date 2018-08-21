@@ -97,7 +97,7 @@ abstract class EvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chil
       // combine input with output from Python.
       val queue = HybridRowQueue(context.taskMemoryManager(),
         new File(Utils.getLocalDir(SparkEnv.get.conf)), child.output.length)
-      context.addTaskCompletionListener { ctx =>
+      context.addTaskCompletionListener[Unit] { ctx =>
         queue.close()
       }
 

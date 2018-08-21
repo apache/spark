@@ -26,6 +26,7 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasPredictionCol
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.fpm.{AssociationRules => MLlibAssociationRules,
   FPGrowth => MLlibFPGrowth}
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
@@ -106,7 +107,7 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     val inputType = schema($(itemsCol)).dataType
     require(inputType.isInstanceOf[ArrayType],
-      s"The input column must be ArrayType, but got $inputType.")
+      s"The input column must be ${ArrayType.simpleString}, but got ${inputType.catalogString}.")
     SchemaUtils.appendColumn(schema, $(predictionCol), schema($(itemsCol)).dataType)
   }
 }
@@ -158,11 +159,12 @@ class FPGrowth @Since("2.2.0") (
     genericFit(dataset)
   }
 
-  private def genericFit[T: ClassTag](dataset: Dataset[_]): FPGrowthModel = {
+  private def genericFit[T: ClassTag](dataset: Dataset[_]): FPGrowthModel = instrumented { instr =>
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(params: _*)
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, params: _*)
     val data = dataset.select($(itemsCol))
     val items = data.where(col($(itemsCol)).isNotNull).rdd.map(r => r.getSeq[Any](0).toArray)
     val mllibFP = new MLlibFPGrowth().setMinSupport($(minSupport))
@@ -185,9 +187,7 @@ class FPGrowth @Since("2.2.0") (
       items.unpersist()
     }
 
-    val model = copyValues(new FPGrowthModel(uid, frequentItems)).setParent(this)
-    instr.logSuccess(model)
-    model
+    copyValues(new FPGrowthModel(uid, frequentItems)).setParent(this)
   }
 
   @Since("2.2.0")

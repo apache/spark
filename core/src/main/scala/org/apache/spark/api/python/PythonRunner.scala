@@ -94,7 +94,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     // Start a thread to feed the process input from our parent's iterator
     val writerThread = newWriterThread(env, worker, inputIterator, partitionIndex, context)
 
-    context.addTaskCompletionListener { _ =>
+    context.addTaskCompletionListener[Unit] { _ =>
       writerThread.shutdownOnTaskCompletion()
       if (!reuseWorker || !released.get) {
         try {

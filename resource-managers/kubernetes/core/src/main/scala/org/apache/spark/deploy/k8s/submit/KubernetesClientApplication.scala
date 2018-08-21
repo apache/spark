@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkApplication
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkKubernetesClientFactory}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
@@ -60,6 +60,8 @@ private[spark] object ClientArguments {
         mainAppResource = Some(JavaMainAppResource(primaryJavaResource))
       case Array("--primary-py-file", primaryPythonResource: String) =>
         mainAppResource = Some(PythonMainAppResource(primaryPythonResource))
+      case Array("--primary-r-file", primaryRFile: String) =>
+        mainAppResource = Some(RMainAppResource(primaryRFile))
       case Array("--other-py-files", pyFiles: String) =>
         maybePyFiles = Some(pyFiles)
       case Array("--main-class", clazz: String) =>
@@ -228,7 +230,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
     val namespace = kubernetesConf.namespace()
     // The master URL has been checked for validity already in SparkSubmit.
     // We just need to get rid of the "k8s://" prefix here.
-    val master = sparkConf.get("spark.master").substring("k8s://".length)
+    val master = KubernetesUtils.parseMasterUrl(sparkConf.get("spark.master"))
     val loggingInterval = if (waitForAppCompletion) Some(sparkConf.get(REPORT_INTERVAL)) else None
 
     val watcher = new LoggingPodStatusWatcherImpl(kubernetesAppId, loggingInterval)

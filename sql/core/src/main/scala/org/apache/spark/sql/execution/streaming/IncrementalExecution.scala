@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.expressions.CurrentBatchTimestamp
+import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, 
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.util.Utils
 
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
@@ -77,6 +78,7 @@ class IncrementalExecution(
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
         logInfo(s"Current batch timestamp = $timestamp")
         ts.toLiteral
+      case e: ExpressionWithRandomSeed => e.withNewSeed(Utils.random.nextLong())
     }
   }
 

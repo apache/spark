@@ -65,6 +65,7 @@ private[spark] object Config extends Logging {
       "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver.mounted"
+  val KUBERNETES_AUTH_CLIENT_MODE_PREFIX = "spark.kubernetes.authenticate"
   val OAUTH_TOKEN_CONF_SUFFIX = "oauthToken"
   val OAUTH_TOKEN_FILE_CONF_SUFFIX = "oauthTokenFile"
   val CLIENT_KEY_FILE_CONF_SUFFIX = "clientKeyFile"
@@ -90,7 +91,7 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.submitInDriver")
     .internal()
     .booleanConf
-    .createOptional
+    .createWithDefault(false)
 
   val KUBERNETES_EXECUTOR_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.executor.limit.cores")
@@ -138,6 +139,19 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_R_MAIN_APP_RESOURCE =
+    ConfigBuilder("spark.kubernetes.r.mainAppResource")
+      .doc("The main app resource for SparkR jobs")
+      .internal()
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_R_APP_ARGS =
+    ConfigBuilder("spark.kubernetes.r.appArgs")
+      .doc("The app arguments for SparkR Jobs")
+      .internal()
+      .stringConf
+      .createOptional
 
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
@@ -204,7 +218,7 @@ private[spark] object Config extends Logging {
       .createWithDefault(0.1)
 
   val PYSPARK_MAJOR_PYTHON_VERSION =
-    ConfigBuilder("spark.kubernetes.pyspark.pythonversion")
+    ConfigBuilder("spark.kubernetes.pyspark.pythonVersion")
       .doc("This sets the major Python version. Either 2 or 3. (Python2 or Python3)")
       .stringConf
       .checkValue(pv => List("2", "3").contains(pv),

@@ -21,7 +21,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{MapOutputStatistics, SparkConf, SparkFunSuite}
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.exchange.{ExchangeCoordinator, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{ExchangeCoordinator, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
@@ -50,7 +50,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       expectedPartitionStartIndices: Array[Int]): Unit = {
     val mapOutputStatistics = bytesByPartitionIdArray.zipWithIndex.map {
       case (bytesByPartitionId, index) =>
-        new MapOutputStatistics(index, bytesByPartitionId)
+        new MapOutputStatistics(index, bytesByPartitionId, Array[Long](1))
     }
     val estimatedPartitionStartIndices =
       coordinator.estimatePartitionStartIndices(mapOutputStatistics)
@@ -58,7 +58,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("test estimatePartitionStartIndices - 1 Exchange") {
-    val coordinator = new ExchangeCoordinator(1, 100L)
+    val coordinator = new ExchangeCoordinator(100L)
 
     {
       // All bytes per partition are 0.
@@ -105,7 +105,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("test estimatePartitionStartIndices - 2 Exchanges") {
-    val coordinator = new ExchangeCoordinator(2, 100L)
+    val coordinator = new ExchangeCoordinator(100L)
 
     {
       // If there are multiple values of the number of pre-shuffle partitions,
@@ -114,8 +114,8 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0, 0)
       val mapOutputStatistics =
         Array(
-          new MapOutputStatistics(0, bytesByPartitionId1),
-          new MapOutputStatistics(1, bytesByPartitionId2))
+          new MapOutputStatistics(0, bytesByPartitionId1, Array[Long](0)),
+          new MapOutputStatistics(1, bytesByPartitionId2, Array[Long](0)))
       intercept[AssertionError](coordinator.estimatePartitionStartIndices(mapOutputStatistics))
     }
 
@@ -199,7 +199,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("test estimatePartitionStartIndices and enforce minimal number of reducers") {
-    val coordinator = new ExchangeCoordinator(2, 100L, Some(2))
+    val coordinator = new ExchangeCoordinator(100L, Some(2))
 
     {
       // The minimal number of post-shuffle partitions is not enforced because
@@ -479,5 +479,18 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
 
       withSparkSession(test, 6144, minNumPostShufflePartitions)
     }
+  }
+
+  test("SPARK-24705 adaptive query execution works correctly when exchange reuse enabled") {
+    val test = { spark: SparkSession =>
+      spark.sql("SET spark.sql.exchange.reuse=true")
+      val df = spark.range(1).selectExpr("id AS key", "id AS value")
+      val resultDf = df.join(df, "key").join(df, "key")
+      val sparkPlan = resultDf.queryExecution.executedPlan
+      assert(sparkPlan.collect { case p: ReusedExchangeExec => p }.length == 1)
+      assert(sparkPlan.collect { case p @ ShuffleExchangeExec(_, _, Some(c)) => p }.length == 3)
+      checkAnswer(resultDf, Row(0, 0, 0, 0) :: Nil)
+    }
+    withSparkSession(test, 4, None)
   }
 }

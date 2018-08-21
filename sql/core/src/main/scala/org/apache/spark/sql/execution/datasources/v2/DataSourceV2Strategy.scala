@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.{sources, Strategy}
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, Repartition}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
@@ -125,19 +125,19 @@ object DataSourceV2Strategy extends Strategy {
       val filterCondition = postScanFilters.reduceLeftOption(And)
       val withFilter = filterCondition.map(FilterExec(_, scan)).getOrElse(scan)
 
-      val withProjection = if (withFilter.output != project) {
-        ProjectExec(project, withFilter)
-      } else {
-        withFilter
-      }
-
-      withProjection :: Nil
+      // always add the projection, which will produce unsafe rows required by some operators
+      ProjectExec(project, withFilter) :: Nil
 
     case r: StreamingDataSourceV2Relation =>
-      DataSourceV2ScanExec(r.output, r.source, r.options, r.pushedFilters, r.reader) :: Nil
+      // ensure there is a projection, which will produce unsafe rows required by some operators
+      ProjectExec(r.output,
+        DataSourceV2ScanExec(r.output, r.source, r.options, r.pushedFilters, r.reader)) :: Nil
 
     case WriteToDataSourceV2(writer, query) =>
       WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
+
+    case AppendData(r: DataSourceV2Relation, query, _) =>
+      WriteToDataSourceV2Exec(r.newWriter(), planLater(query)) :: Nil
 
     case WriteToContinuousDataSource(writer, query) =>
       WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil

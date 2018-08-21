@@ -125,7 +125,7 @@ case class AggregateInPandasExec(
       // combine input with output from Python.
       val queue = HybridRowQueue(context.taskMemoryManager(),
         new File(Utils.getLocalDir(SparkEnv.get.conf)), groupingExpressions.length)
-      context.addTaskCompletionListener { _ =>
+      context.addTaskCompletionListener[Unit] { _ =>
         queue.close()
       }
 

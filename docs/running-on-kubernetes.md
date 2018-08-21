@@ -117,6 +117,45 @@ If the local proxy is running at localhost:8001, `--master k8s://http://127.0.0.
 spark-submit. Finally, notice that in the above example we specify a jar with a specific URI with a scheme of `local://`.
 This URI is the location of the example jar that is already in the Docker image.
 
+## Client Mode
+
+Starting with Spark 2.4.0, it is possible to run Spark applications on Kubernetes in client mode. When your application
+runs in client mode, the driver can run inside a pod or on a physical host. When running an application in client mode,
+it is recommended to account for the following factors:
+
+### Client Mode Networking
+
+Spark executors must be able to connect to the Spark driver over a hostname and a port that is routable from the Spark
+executors. The specific network configuration that will be required for Spark to work in client mode will vary per
+setup. If you run your driver inside a Kubernetes pod, you can use a
+[headless service](https://kubernetes.io/docs/concepts/services-networking/service/#headless-services) to allow your
+driver pod to be routable from the executors by a stable hostname. When deploying your headless service, ensure that
+the service's label selector will only match the driver pod and no other pods; it is recommended to assign your driver
+pod a sufficiently unique label and to use that label in the label selector of the headless service. Specify the driver's
+hostname via `spark.driver.host` and your spark driver's port to `spark.driver.port`.
+
+### Client Mode Executor Pod Garbage Collection
+
+If you run your Spark driver in a pod, it is highly recommended to set `spark.driver.pod.name` to the name of that pod.
+When this property is set, the Spark scheduler will deploy the executor pods with an
+[OwnerReference](https://kubernetes.io/docs/concepts/workloads/controllers/garbage-collection/), which in turn will
+ensure that once the driver pod is deleted from the cluster, all of the application's executor pods will also be deleted.
+The driver will look for a pod with the given name in the namespace specified by `spark.kubernetes.namespace`, and
+an OwnerReference pointing to that pod will be added to each executor pod's OwnerReferences list. Be careful to avoid
+setting the OwnerReference to a pod that is not actually that driver pod, or else the executors may be terminated
+prematurely when the wrong pod is deleted.
+
+If your application is not running inside a pod, or if `spark.driver.pod.name` is not set when your application is
+actually running in a pod, keep in mind that the executor pods may not be properly deleted from the cluster when the
+application exits. The Spark scheduler attempts to delete these pods, but if the network request to the API server fails
+for any reason, these pods will remain in the cluster. The executor processes should exit when they cannot reach the
+driver, so the executor pods should not consume compute resources (cpu and memory) in the cluster after your application
+exits.
+
+### Authentication Parameters
+
+Use the exact prefix `spark.kubernetes.authenticate` for Kubernetes authentication parameters in client mode.
+
 ## Dependency Management
 
 If your application's dependencies are all hosted in remote locations like HDFS or HTTP servers, they may be referred to
@@ -258,10 +297,6 @@ RBAC authorization and how to configure Kubernetes service accounts for pods, pl
 [Using RBAC Authorization](https://kubernetes.io/docs/admin/authorization/rbac/) and
 [Configure Service Accounts for Pods](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/).
 
-## Client Mode
-
-Client mode is not currently supported.
-
 ## Future Work
 
 There are several Spark on Kubernetes features that are currently being incubated in a fork -
@@ -354,7 +389,7 @@ specific to Spark on Kubernetes.
   <td>
     Path to the CA cert file for connecting to the Kubernetes API server over TLS when starting the driver. This file
     must be located on the submitting machine's disk. Specify this as a path as opposed to a URI (i.e. do not provide
-    a scheme).
+    a scheme). In client mode, use <code>spark.kubernetes.authenticate.caCertFile</code> instead.
   </td>
 </tr>
 <tr>
@@ -363,7 +398,7 @@ specific to Spark on Kubernetes.
   <td>
     Path to the client key file for authenticating against the Kubernetes API server when starting the driver. This file
     must be located on the submitting machine's disk. Specify this as a path as opposed to a URI (i.e. do not provide
-    a scheme).
+    a scheme). In client mode, use <code>spark.kubernetes.authenticate.clientKeyFile</code> instead.
   </td>
 </tr>
 <tr>
@@ -372,7 +407,7 @@ specific to Spark on Kubernetes.
   <td>
     Path to the client cert file for authenticating against the Kubernetes API server when starting the driver. This
     file must be located on the submitting machine's disk. Specify this as a path as opposed to a URI (i.e. do not
-    provide a scheme).
+    provide a scheme). In client mode, use <code>spark.kubernetes.authenticate.clientCertFile</code> instead.
   </td>
 </tr>
 <tr>
@@ -381,7 +416,7 @@ specific to Spark on Kubernetes.
   <td>
     OAuth token to use when authenticating against the Kubernetes API server when starting the driver. Note
     that unlike the other authentication options, this is expected to be the exact string value of the token to use for
-    the authentication.
+    the authentication. In client mode, use <code>spark.kubernetes.authenticate.oauthToken</code> instead.
   </td>
 </tr>
 <tr>
@@ -390,7 +425,7 @@ specific to Spark on Kubernetes.
   <td>
     Path to the OAuth token file containing the token to use when authenticating against the Kubernetes API server when starting the driver.
     This file must be located on the submitting machine's disk. Specify this as a path as opposed to a URI (i.e. do not
-    provide a scheme).
+    provide a scheme). In client mode, use <code>spark.kubernetes.authenticate.oauthTokenFile</code> instead.
   </td>
 </tr>
 <tr>
@@ -399,7 +434,8 @@ specific to Spark on Kubernetes.
   <td>
     Path to the CA cert file for connecting to the Kubernetes API server over TLS from the driver pod when requesting
     executors. This file must be located on the submitting machine's disk, and will be uploaded to the driver pod.
-    Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
+    Specify this as a path as opposed to a URI (i.e. do not provide a scheme). In client mode, use
+    <code>spark.kubernetes.authenticate.caCertFile</code> instead.
   </td>
 </tr>
 <tr>
@@ -407,10 +443,9 @@ specific to Spark on Kubernetes.
   <td>(none)</td>
   <td>
     Path to the client key file for authenticating against the Kubernetes API server from the driver pod when requesting
-    executors. This file must be located on the submitting machine's disk, and will be uploaded to the driver pod.
-    Specify this as a path as opposed to a URI (i.e. do not provide a scheme). If this is specified, it is highly
-    recommended to set up TLS for the driver submission server, as this value is sensitive information that would be
-    passed to the driver pod in plaintext otherwise.
+    executors. This file must be located on the submitting machine's disk, and will be uploaded to the driver pod as
+    a Kubernetes secret. Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
+    In client mode, use <code>spark.kubernetes.authenticate.clientKeyFile</code> instead.
   </td>
 </tr>
 <tr>
@@ -419,7 +454,8 @@ specific to Spark on Kubernetes.
   <td>
     Path to the client cert file for authenticating against the Kubernetes API server from the driver pod when
     requesting executors. This file must be located on the submitting machine's disk, and will be uploaded to the
-    driver pod. Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
+    driver pod as a Kubernetes secret. Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
+    In client mode, use <code>spark.kubernetes.authenticate.clientCertFile</code> instead.
   </td>
 </tr>
 <tr>
@@ -428,9 +464,8 @@ specific to Spark on Kubernetes.
   <td>
     OAuth token to use when authenticating against the Kubernetes API server from the driver pod when
     requesting executors. Note that unlike the other authentication options, this must be the exact string value of
-    the token to use for the authentication. This token value is uploaded to the driver pod. If this is specified, it is
-    highly recommended to set up TLS for the driver submission server, as this value is sensitive information that would
-    be passed to the driver pod in plaintext otherwise.
+    the token to use for the authentication. This token value is uploaded to the driver pod as a Kubernetes secret.
+    In client mode, use <code>spark.kubernetes.authenticate.oauthToken</code> instead.
   </td>
 </tr>
 <tr>
@@ -439,9 +474,8 @@ specific to Spark on Kubernetes.
   <td>
     Path to the OAuth token file containing the token to use when authenticating against the Kubernetes API server from the driver pod when
     requesting executors. Note that unlike the other authentication options, this file must contain the exact string value of
-    the token to use for the authentication. This token value is uploaded to the driver pod. If this is specified, it is
-    highly recommended to set up TLS for the driver submission server, as this value is sensitive information that would
-    be passed to the driver pod in plaintext otherwise.
+    the token to use for the authentication. This token value is uploaded to the driver pod as a secret. In client mode, use
+    <code>spark.kubernetes.authenticate.oauthTokenFile</code> instead.
   </td>
 </tr>
 <tr>
@@ -450,7 +484,8 @@ specific to Spark on Kubernetes.
   <td>
     Path to the CA cert file for connecting to the Kubernetes API server over TLS from the driver pod when requesting
     executors. This path must be accessible from the driver pod.
-    Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
+    Specify this as a path as opposed to a URI (i.e. do not provide a scheme). In client mode, use
+    <code>spark.kubernetes.authenticate.caCertFile</code> instead.
   </td>
 </tr>
 <tr>
@@ -459,7 +494,8 @@ specific to Spark on Kubernetes.
   <td>
     Path to the client key file for authenticating against the Kubernetes API server from the driver pod when requesting
     executors. This path must be accessible from the driver pod.
-    Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
+    Specify this as a path as opposed to a URI (i.e. do not provide a scheme). In client mode, use
+    <code>spark.kubernetes.authenticate.clientKeyFile</code> instead.
   </td>
 </tr>
 <tr>
@@ -468,7 +504,8 @@ specific to Spark on Kubernetes.
   <td>
     Path to the client cert file for authenticating against the Kubernetes API server from the driver pod when
     requesting executors. This path must be accessible from the driver pod.
-    Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
+    Specify this as a path as opposed to a URI (i.e. do not provide a scheme). In client mode, use
+    <code>spark.kubernetes.authenticate.clientCertFile</code> instead.
   </td>
 </tr>
 <tr>
@@ -477,7 +514,8 @@ specific to Spark on Kubernetes.
   <td>
     Path to the file containing the OAuth token to use when authenticating against the Kubernetes API server from the driver pod when
     requesting executors. This path must be accessible from the driver pod.
-    Note that unlike the other authentication options, this file must contain the exact string value of the token to use for the authentication.
+    Note that unlike the other authentication options, this file must contain the exact string value of the token to use
+    for the authentication. In client mode, use <code>spark.kubernetes.authenticate.oauthTokenFile</code> instead.
   </td>
 </tr>
 <tr>
@@ -486,7 +524,48 @@ specific to Spark on Kubernetes.
   <td>
     Service account that is used when running the driver pod. The driver pod uses this service account when requesting
     executor pods from the API server. Note that this cannot be specified alongside a CA cert file, client key file,
-    client cert file, and/or OAuth token.
+    client cert file, and/or OAuth token. In client mode, use <code>spark.kubernetes.authenticate.serviceAccountName</code> instead.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.caCertFile</code></td>
+  <td>(none)</td>
+  <td>
+    In client mode, path to the CA cert file for connecting to the Kubernetes API server over TLS when
+    requesting executors. Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.clientKeyFile</code></td>
+  <td>(none)</td>
+  <td>
+    In client mode, path to the client key file for authenticating against the Kubernetes API server
+    when requesting executors. Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.clientCertFile</code></td>
+  <td>(none)</td>
+  <td>
+    In client mode, path to the client cert file for authenticating against the Kubernetes API server
+    when requesting executors. Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.oauthToken</code></td>
+  <td>(none)</td>
+  <td>
+    In client mode, the OAuth token to use when authenticating against the Kubernetes API server when
+    requesting executors. Note that unlike the other authentication options, this must be the exact string value of
+    the token to use for the authentication.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.oauthTokenFile</code></td>
+  <td>(none)</td>
+  <td>
+    In client mode, path to the file containing the OAuth token to use when authenticating against the Kubernetes API
+    server when requesting executors.
   </td>
 </tr>
 <tr>
@@ -529,8 +608,11 @@ specific to Spark on Kubernetes.
   <td><code>spark.kubernetes.driver.pod.name</code></td>
   <td>(none)</td>
   <td>
-    Name of the driver pod. If not set, the driver pod name is set to "spark.app.name" suffixed by the current timestamp
-    to avoid name conflicts.
+    Name of the driver pod. In cluster mode, if this is not set, the driver pod name is set to "spark.app.name"
+    suffixed by the current timestamp to avoid name conflicts. In client mode, if your application is running
+    inside a pod, it is highly recommended to set this to the name of the pod your driver is running in. Setting this
+    value in client mode allows the driver to become the owner of its executor pods, which in turn allows the executor
+    pods to be garbage collected by the cluster.
   </td>
 </tr>
 <tr>
@@ -687,7 +769,7 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.pyspark.pythonversion</code></td>
+  <td><code>spark.kubernetes.pyspark.pythonVersion</code></td>
   <td><code>"2"</code></td>
   <td>
    This sets the major Python version of the docker image used to run the driver and executor containers. Can either be 2 or 3. 

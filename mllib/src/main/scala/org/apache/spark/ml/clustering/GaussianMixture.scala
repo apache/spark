@@ -29,6 +29,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat.distribution.MultivariateGaussian
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatrix,
   Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
@@ -335,13 +336,13 @@ class GaussianMixture @Since("2.0.0") (
   private val numSamples = 5
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): GaussianMixtureModel = {
+  override def fit(dataset: Dataset[_]): GaussianMixtureModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
 
     val sc = dataset.sparkSession.sparkContext
     val numClusters = $(k)
 
-    val instances: RDD[Vector] = dataset
+    val instances = dataset
       .select(DatasetUtils.columnToVector(dataset, getFeaturesCol)).rdd.map {
       case Row(features: Vector) => features
     }.cache()
@@ -352,8 +353,9 @@ class GaussianMixture @Since("2.0.0") (
       s"than ${GaussianMixture.MAX_NUM_FEATURES} features because the size of the covariance" +
       s" matrix is quadratic in the number of features.")
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(featuresCol, predictionCol, probabilityCol, k, maxIter, seed, tol)
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, featuresCol, predictionCol, probabilityCol, k, maxIter, seed, tol)
     instr.logNumFeatures(numFeatures)
 
     val shouldDistributeGaussians = GaussianMixture.shouldDistributeGaussians(
@@ -383,6 +385,11 @@ class GaussianMixture @Since("2.0.0") (
 
       bcWeights.destroy(blocking = false)
       bcGaussians.destroy(blocking = false)
+
+      if (iter == 0) {
+        val numSamples = sums.count
+        instr.logNumExamples(numSamples)
+      }
 
       /*
          Create new distributions based on the partial assignments
@@ -416,6 +423,7 @@ class GaussianMixture @Since("2.0.0") (
       iter += 1
     }
 
+    instances.unpersist(false)
     val gaussianDists = gaussians.map { case (mean, covVec) =>
       val cov = GaussianMixture.unpackUpperTriangularMatrix(numFeatures, covVec.values)
       new MultivariateGaussian(mean, cov)
@@ -423,12 +431,10 @@ class GaussianMixture @Since("2.0.0") (
 
     val model = copyValues(new GaussianMixtureModel(uid, weights, gaussianDists)).setParent(this)
     val summary = new GaussianMixtureSummary(model.transform(dataset),
-      $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood)
-    model.setSummary(Some(summary))
+      $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood, iter)
     instr.logNamedValue("logLikelihood", logLikelihood)
     instr.logNamedValue("clusterSizes", summary.clusterSizes)
-    instr.logSuccess(model)
-    model
+    model.setSummary(Some(summary))
   }
 
   @Since("2.0.0")
@@ -687,6 +693,7 @@ private class ExpectationAggregator(
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
  * @param logLikelihood  Total log-likelihood for this model on the given data.
+ * @param numIter  Number of iterations.
  */
 @Since("2.0.0")
 @Experimental
@@ -696,8 +703,9 @@ class GaussianMixtureSummary private[clustering] (
     @Since("2.0.0") val probabilityCol: String,
     featuresCol: String,
     k: Int,
-    @Since("2.2.0") val logLikelihood: Double)
-  extends ClusteringSummary(predictions, predictionCol, featuresCol, k) {
+    @Since("2.2.0") val logLikelihood: Double,
+    numIter: Int)
+  extends ClusteringSummary(predictions, predictionCol, featuresCol, k, numIter) {
 
   /**
    * Probability of each cluster.
