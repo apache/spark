@@ -19,6 +19,8 @@ package org.apache.spark.memory;
 
 import java.io.IOException;
 
+import org.apache.spark.unsafe.memory.MemoryBlock;
+
 public class TestMemoryConsumer extends MemoryConsumer {
   public TestMemoryConsumer(TaskMemoryManager memoryManager, MemoryMode mode) {
     super(memoryManager, 1024L, mode);
@@ -42,6 +44,11 @@ public class TestMemoryConsumer extends MemoryConsumer {
   void free(long size) {
     used -= size;
     taskMemoryManager.releaseExecutionMemory(size, this);
+  }
+
+  public void freePage(MemoryBlock page) {
+    used -= page.size();
+    taskMemoryManager.freePage(page, this);
   }
 }
 
