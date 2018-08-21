@@ -165,8 +165,16 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     }
 
     override def metrics: StateStoreMetrics = {
-      StateStoreMetrics(mapToUpdate.size(), SizeEstimator.estimate(mapToUpdate),
-        getCustomMetricsForProvider())
+      // NOTE: we provide estimation of cache size as "memoryUsedBytes", and size of state for
+      // current version as "stateOnCurrentVersionSizeBytes"
+      val metricsFromProvider: Map[String, Long] = getMetricsForProvider()
+
+      val customMetrics = metricsFromProvider.flatMap { case (name, value) =>
+        // just allow searching from list cause the list is small enough
+        supportedCustomMetrics.find(_.name == name).map(_ -> value)
+      } + (metricStateOnCurrentVersionSizeBytes -> SizeEstimator.estimate(mapToUpdate))
+
+      StateStoreMetrics(mapToUpdate.size(), metricsFromProvider("memoryUsedBytes"), customMetrics)
     }
 
     /**
@@ -181,10 +189,10 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     }
   }
 
-  def getCustomMetricsForProvider(): Map[StateStoreCustomMetric, Long] = synchronized {
-    Map(metricProviderLoaderMapSizeBytes -> SizeEstimator.estimate(loadedMaps),
-      metricLoadedMapCacheHit -> loadedMapCacheHitCount.sum(),
-      metricLoadedMapCacheMiss -> loadedMapCacheMissCount.sum())
+  def getMetricsForProvider(): Map[String, Long] = synchronized {
+    Map("memoryUsedBytes" -> SizeEstimator.estimate(loadedMaps),
+      metricLoadedMapCacheHit.name -> loadedMapCacheHitCount.sum(),
+      metricLoadedMapCacheMiss.name -> loadedMapCacheMissCount.sum())
   }
 
   /** Get the state store for making updates to create a new `version` of the store. */
@@ -232,7 +240,8 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   }
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = {
-    metricProviderLoaderMapSizeBytes :: metricLoadedMapCacheHit :: metricLoadedMapCacheMiss :: Nil
+    metricStateOnCurrentVersionSizeBytes :: metricLoadedMapCacheHit :: metricLoadedMapCacheMiss ::
+      Nil
   }
 
   override def toString(): String = {
@@ -256,9 +265,9 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   private val loadedMapCacheHitCount: LongAdder = new LongAdder
   private val loadedMapCacheMissCount: LongAdder = new LongAdder
 
-  private lazy val metricProviderLoaderMapSizeBytes: StateStoreCustomSizeMetric =
-    StateStoreCustomSizeMetric("providerLoadedMapSizeBytes",
-      "estimated size of states cache in provider")
+  private lazy val metricStateOnCurrentVersionSizeBytes: StateStoreCustomSizeMetric =
+    StateStoreCustomSizeMetric("stateOnCurrentVersionSizeBytes",
+      "estimated size of state only on current version")
 
   private lazy val metricLoadedMapCacheHit: StateStoreCustomMetric =
     StateStoreCustomSumMetric("loadedMapCacheHitCount",

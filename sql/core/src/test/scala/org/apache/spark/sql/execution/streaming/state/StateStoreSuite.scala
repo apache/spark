@@ -193,6 +193,22 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     assert(store.metrics.memoryUsedBytes > noDataMemoryUsed)
   }
 
+  test("reports memory usage on current version") {
+    def getSizeOfStateForCurrentVersion(metrics: StateStoreMetrics): Long = {
+      val metricPair = metrics.customMetrics.find(_._1.name == "stateOnCurrentVersionSizeBytes")
+      assert(metricPair.isDefined)
+      metricPair.get._2
+    }
+
+    val provider = newStoreProvider()
+    val store = provider.getStore(0)
+    val noDataMemoryUsed = getSizeOfStateForCurrentVersion(store.metrics)
+
+    put(store, "a", 1)
+    store.commit()
+    assert(getSizeOfStateForCurrentVersion(store.metrics) > noDataMemoryUsed)
+  }
+
   test("StateStore.get") {
     quietly {
       val dir = newDir()
@@ -515,7 +531,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
 
     def getLoadedMapSizeMetric(metrics: StateStoreMetrics): Long = {
-      getCustomMetric(metrics, "providerLoadedMapSizeBytes")
+      metrics.memoryUsedBytes
     }
 
     def assertCacheHitAndMiss(
