@@ -159,7 +159,7 @@ case class WindowInPandasExec(
         windowInputSchema,
         sessionLocalTimeZone,
         pythonRunnerConf,
-        sparkContext.conf).compute(pythonInput, context.partitionId(), context)
+        SparkEnv.get.conf).compute(pythonInput, context.partitionId(), context)
 
       val joined = new JoinedRow
       val resultProj = createResultProjection(expressions)
