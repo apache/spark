@@ -209,19 +209,35 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_slice(self):
         """Basic operation test for DStream.slice."""
-        eol_python2 = dt.datetime(2020, 1, 1)
-        five_secs = dt.timedelta(seconds=5)
-        input = [eol_python2 - five_secs, eol_python2]
+        import datetime as dt
+        self.ssc = StreamingContext(self.sc, 1.0)
+        self.ssc.remember(4.0)
+        input = [[1], [2], [3], [4]]
+        stream = self.ssc.queueStream([self.sc.parallelize(d, 1) for d in input])
 
-        def func(dstream):
-            return dstream.slice()
-        expected = [[dt.datetime(2019, 12, 31, 23, 55)],
-                    [dt.datetime(2019, 12, 31, 23, 56)],
-                    [dt.datetime(2019, 12, 31, 23, 57)],
-                    [dt.datetime(2019, 12, 31, 23, 58)],
-                    [dt.datetime(2019, 12, 31, 23, 59)],
-                    [dt.datetime(2020, 1, 1)]]
-        self._test_func(input, func, expected)
+        time_vals = []
+
+        def get_times(t, rdd):
+            if rdd and len(time_vals) < len(input):
+                time_vals.append(t)
+
+        stream.foreachRDD(get_times)
+
+        self.ssc.start()
+        self.wait_for(time_vals, 4)
+        begin_time = time_vals[0]
+
+        def get_sliced(begin_delta, end_delta):
+            begin = begin_time + dt.timedelta(seconds=begin_delta)
+            end = begin_time + dt.timedelta(seconds=end_delta)
+            rdds = stream.slice(begin, end)
+            result_list = [rdd.collect() for rdd in rdds]
+            return [r for result in result_list for r in result]
+
+        self.assertEqual(set([1]), set(get_sliced(0, 0)))
+        self.assertEqual(set([2, 3]), set(get_sliced(1, 2)))
+        self.assertEqual(set([2, 3, 4]), set(get_sliced(1, 4)))
+        self.assertEqual(set([1, 2, 3, 4]), set(get_sliced(0, 4)))
 
     def test_reduce(self):
         """Basic operation test for DStream.reduce."""
