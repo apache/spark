@@ -56,9 +56,7 @@ private[sql] class ArrowBatchStreamWriter(
    * Consume iterator to write each serialized ArrowRecordBatch to the stream.
    */
   def writeBatches(arrowBatchIter: Iterator[Array[Byte]]): Unit = {
-    arrowBatchIter.foreach { batchBytes =>
-      writeChannel.write(batchBytes)
-    }
+    arrowBatchIter.foreach(writeChannel.write)
   }
 
   /**
@@ -249,7 +247,6 @@ private[sql] object ArrowConverters {
       Message.getRootAsMessage(buffer)
     }
 
-
     // Create an iterator to get each serialized ArrowRecordBatch from a stream
     new Iterator[Array[Byte]] {
       val inputChannel = new ReadChannel(in)
@@ -271,7 +268,7 @@ private[sql] object ArrowConverters {
 
         val buffer = ByteBuffer.allocate(messageLength)
         val msg = loadMessage(inputChannel, messageLength, buffer)
-        val bodyLength = msg.bodyLength().asInstanceOf[Int]
+        val bodyLength = msg.bodyLength().toInt
 
         if (msg.headerType() == MessageHeader.RecordBatch) {
           val allbuf = ByteBuffer.allocate(4 + messageLength + bodyLength)

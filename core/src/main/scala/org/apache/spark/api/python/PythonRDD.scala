@@ -404,8 +404,8 @@ private[spark] object PythonRDD extends Logging {
   }
 
   /**
-   * Create a socket server and background thread to execute the block of code
-   * for the given DataOutputStream.
+   * Create a socket server and background thread to execute the writeFunc
+   * with the given OutputStream.
    *
    * The socket server can only accept one connection, or close if no connection
    * in 15 seconds.
@@ -416,7 +416,8 @@ private[spark] object PythonRDD extends Logging {
    * The thread will terminate after the block of code is executed or any
    * exceptions happen.
    */
-  private[spark] def serveToStream(threadName: String)(block: OutputStream => Unit): Array[Any] = {
+  private[spark] def serveToStream(
+      threadName: String)(writeFunc: OutputStream => Unit): Array[Any] = {
     val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
     // Close the socket if no connection in 15 seconds
     serverSocket.setSoTimeout(15000)
@@ -430,7 +431,7 @@ private[spark] object PythonRDD extends Logging {
 
           val out = new BufferedOutputStream(sock.getOutputStream)
           Utils.tryWithSafeFinally {
-            block(out)
+            writeFunc(out)
           } {
             out.close()
             sock.close()
