@@ -55,6 +55,9 @@
 # - SPARK_DAEMON_JAVA_OPTS, to set config properties for all daemons (e.g. "-Dx=y")
 # - SPARK_DAEMON_CLASSPATH, to set the classpath for all daemons
 # - SPARK_PUBLIC_DNS, to set the public dns name of the master or workers
+# - SPARK_EXECUTOR_LAUNCH_PREFIX, to set prefix of executor launch command lines,
+#                                 only support standalone mode, YARN client mode should use
+#                                 spark.yarn.appMasterEnv.SPARK_EXECUTOR_LAUNCH_PREFIX
 
 # Generic options for the daemons used in the standalone deploy mode
 # - SPARK_CONF_DIR      Alternate conf dir. (Default: ${SPARK_HOME}/conf)
