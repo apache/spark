@@ -265,6 +265,19 @@ private[spark] class DiskBlockObjectWriter(
   }
 
   /**
+   * Notify the writer that n record(s) worth of bytes has been written with OutputStream#write.
+   */
+  def recordWritten(n: Int): Unit = {
+    val preNumRecordsWritten = numRecordsWritten
+    numRecordsWritten += n
+    writeMetrics.incRecordsWritten(n)
+
+    if (numRecordsWritten / 16384 != preNumRecordsWritten / 16384) {
+      updateBytesWritten()
+    }
+  }
+
+  /**
    * Report the number of bytes written in this writer's shuffle write metrics.
    * Note that this is only valid before the underlying streams are closed.
    */

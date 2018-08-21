@@ -189,6 +189,8 @@ final class ShuffleExternalSorter extends MemoryConsumer {
 
     int currentPartition = -1;
     final FileSegment committedSegment;
+    int bufferOffset = 0;
+    int numRecordsWritten = 0;
     try (DiskBlockObjectWriter writer =
         blockManager.getDiskWriter(blockId, file, ser, fileBufferSizeBytes, writeMetricsToUse)) {
 
@@ -200,6 +202,12 @@ final class ShuffleExternalSorter extends MemoryConsumer {
         if (partition != currentPartition) {
           // Switch to the new partition
           if (currentPartition != -1) {
+            if (bufferOffset > 0) {
+              writer.write(writeBuffer, 0, bufferOffset);
+              writer.recordWritten(numRecordsWritten);
+              bufferOffset = 0;
+              numRecordsWritten = 0;
+            }
             final FileSegment fileSegment = writer.commitAndGet();
             spillInfo.partitionLengths[currentPartition] = fileSegment.length();
           }
@@ -213,13 +221,23 @@ final class ShuffleExternalSorter extends MemoryConsumer {
         long recordReadPosition = recordOffsetInPage + uaoSize; // skip over record length
         while (dataRemaining > 0) {
           final int toTransfer = Math.min(diskWriteBufferSize, dataRemaining);
-          Platform.copyMemory(
-            recordPage, recordReadPosition, writeBuffer, Platform.BYTE_ARRAY_OFFSET, toTransfer);
-          writer.write(writeBuffer, 0, toTransfer);
+          if (bufferOffset > 0 && bufferOffset + toTransfer > diskWriteBufferSize) {
+            writer.write(writeBuffer, 0, bufferOffset);
+            writer.recordWritten(numRecordsWritten);
+            bufferOffset = 0;
+            numRecordsWritten = 0;
+          }
+          Platform.copyMemory(recordPage, recordReadPosition,
+                  writeBuffer, Platform.BYTE_ARRAY_OFFSET + bufferOffset, toTransfer);
+          bufferOffset += toTransfer;
           recordReadPosition += toTransfer;
           dataRemaining -= toTransfer;
         }
-        writer.recordWritten();
+        numRecordsWritten++;
+      }
+      if (bufferOffset > 0) {
+        writer.write(writeBuffer, 0, bufferOffset);
+        writer.recordWritten(numRecordsWritten);
       }
 
       committedSegment = writer.commitAndGet();
