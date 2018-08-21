@@ -21,7 +21,7 @@ import org.mockito.Mockito
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesExecutorSpecificConf, KubernetesRoleSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, SparkPod}
 
 class LocalDirsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   private val defaultLocalDir = "/var/data/default-local-dir"
@@ -44,7 +44,9 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       Map.empty,
       Map.empty,
       Map.empty,
-      Map.empty)
+      Map.empty,
+      Nil,
+      Seq.empty[String])
   }
 
   test("Resolve to default local dir if neither env nor configuration are set") {

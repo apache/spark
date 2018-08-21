@@ -57,6 +57,7 @@ object Literal {
     case b: Byte => Literal(b, ByteType)
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(UTF8String.fromString(s), StringType)
+    case c: Char => Literal(UTF8String.fromString(c.toString), StringType)
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal => Literal(Decimal(d), DecimalType.fromBigDecimal(d))
     case d: JavaBigDecimal =>
@@ -185,7 +186,7 @@ object Literal {
     case map: MapType => create(Map(), map)
     case struct: StructType =>
       create(InternalRow.fromSeq(struct.fields.map(f => default(f.dataType).value)), struct)
-    case udt: UserDefinedType[_] => default(udt.sqlType)
+    case udt: UserDefinedType[_] => Literal(default(udt.sqlType).value, udt)
     case other =>
       throw new RuntimeException(s"no default for type $dataType")
   }

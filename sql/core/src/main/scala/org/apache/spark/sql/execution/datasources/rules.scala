@@ -39,7 +39,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
     sparkSession.sessionState.conf.runSQLonFile && u.tableIdentifier.database.isDefined
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedRelation if maybeSQLFile(u) =>
       try {
         val dataSource = DataSource(
@@ -73,7 +73,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
   // catalog is a def and not a val/lazy val as the latter would introduce a circular reference
   private def catalog = sparkSession.sessionState.catalog
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // When we CREATE TABLE without specifying the table schema, we should fail the query if
     // bucketing information is specified, as we can't infer bucketing from data files currently.
     // Since the runtime inferred partition columns could be different from what user specified,
@@ -281,7 +281,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
     schema.filter(f => normalizedPartitionCols.contains(f.name)).map(_.dataType).foreach {
       case _: AtomicType => // OK
-      case other => failAnalysis(s"Cannot use ${other.simpleString} for partition column")
+      case other => failAnalysis(s"Cannot use ${other.catalogString} for partition column")
     }
 
     normalizedPartitionCols
@@ -307,7 +307,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
         normalizedBucketSpec.sortColumnNames.map(schema(_)).map(_.dataType).foreach {
           case dt if RowOrdering.isOrderable(dt) => // OK
-          case other => failAnalysis(s"Cannot use ${other.simpleString} for sorting column")
+          case other => failAnalysis(s"Cannot use ${other.catalogString} for sorting column")
         }
 
         Some(normalizedBucketSpec)
@@ -365,7 +365,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoTable(table, _, query, _, _) if table.resolved && query.resolved =>
       table match {
         case relation: HiveTableRelation =>

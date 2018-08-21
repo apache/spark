@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import java.io.IOException
-import java.net.InetSocketAddress
+import java.net.{InetSocketAddress, SocketException}
 import java.nio.ByteBuffer
 import java.nio.channels.ServerSocketChannel
 import java.sql.Timestamp
@@ -33,11 +32,13 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.continuous._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupport}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
-import org.apache.spark.sql.streaming.StreamTest
+import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types._
 
 class TextSocketStreamSuite extends StreamTest with SharedSQLContext with BeforeAndAfterEach {
 
@@ -101,7 +102,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     serverThread = new ServerThread()
     serverThread.start()
 
-    withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
+    withSQLConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false") {
       val ref = spark
       import ref.implicits._
 
@@ -130,7 +131,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     serverThread = new ServerThread()
     serverThread.start()
 
-    withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
+    withSQLConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false") {
       val socket = spark
         .readStream
         .format("socket")
@@ -216,20 +217,11 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       "socket source does not support a user-specified schema"))
   }
 
-  test("no server up") {
-    val provider = new TextSocketSourceProvider
-    val parameters = Map("host" -> "localhost", "port" -> "0")
-    intercept[IOException] {
-      batchReader = provider.createMicroBatchReader(
-        Optional.empty(), "", new DataSourceOptions(parameters.asJava))
-    }
-  }
-
   test("input row metrics") {
     serverThread = new ServerThread()
     serverThread.start()
 
-    withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
+    withSQLConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false") {
       val ref = spark
       import ref.implicits._
 
@@ -256,6 +248,161 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     }
   }
 
+  test("verify ServerThread only accepts the first connection") {
+    serverThread = new ServerThread()
+    serverThread.start()
+
+    withSQLConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false") {
+      val ref = spark
+      import ref.implicits._
+
+      val socket = spark
+        .readStream
+        .format("socket")
+        .options(Map("host" -> "localhost", "port" -> serverThread.port.toString))
+        .load()
+        .as[String]
+
+      assert(socket.schema === StructType(StructField("value", StringType) :: Nil))
+
+      testStream(socket)(
+        StartStream(),
+        AddSocketData("hello"),
+        CheckAnswer("hello"),
+        AddSocketData("world"),
+        CheckLastBatch("world"),
+        CheckAnswer("hello", "world"),
+        StopStream
+      )
+
+      // we are trying to connect to the server once again which should fail
+      try {
+        val socket2 = spark
+          .readStream
+          .format("socket")
+          .options(Map("host" -> "localhost", "port" -> serverThread.port.toString))
+          .load()
+          .as[String]
+
+        testStream(socket2)(
+          StartStream(),
+          AddSocketData("hello"),
+          CheckAnswer("hello"),
+          AddSocketData("world"),
+          CheckLastBatch("world"),
+          CheckAnswer("hello", "world"),
+          StopStream
+        )
+
+        fail("StreamingQueryException is expected!")
+      } catch {
+        case e: StreamingQueryException if e.cause.isInstanceOf[SocketException] => // pass
+      }
+    }
+  }
+
+  test("continuous data") {
+    serverThread = new ServerThread()
+    serverThread.start()
+
+    val reader = new TextSocketContinuousReader(
+      new DataSourceOptions(Map("numPartitions" -> "2", "host" -> "localhost",
+        "port" -> serverThread.port.toString).asJava))
+    reader.setStartOffset(Optional.empty())
+    val tasks = reader.planInputPartitions()
+    assert(tasks.size == 2)
+
+    val numRecords = 10
+    val data = scala.collection.mutable.ListBuffer[Int]()
+    val offsets = scala.collection.mutable.ListBuffer[Int]()
+    import org.scalatest.time.SpanSugar._
+    failAfter(5 seconds) {
+      // inject rows, read and check the data and offsets
+      for (i <- 0 until numRecords) {
+        serverThread.enqueue(i.toString)
+      }
+      tasks.asScala.foreach {
+        case t: TextSocketContinuousInputPartition =>
+          val r = t.createPartitionReader().asInstanceOf[TextSocketContinuousInputPartitionReader]
+          for (i <- 0 until numRecords / 2) {
+            r.next()
+            offsets.append(r.getOffset().asInstanceOf[ContinuousRecordPartitionOffset].offset)
+            data.append(r.get().get(0, DataTypes.StringType).asInstanceOf[String].toInt)
+            // commit the offsets in the middle and validate if processing continues
+            if (i == 2) {
+              commitOffset(t.partitionId, i + 1)
+            }
+          }
+          assert(offsets.toSeq == Range.inclusive(1, 5))
+          assert(data.toSeq == Range(t.partitionId, 10, 2))
+          offsets.clear()
+          data.clear()
+        case _ => throw new IllegalStateException("Unexpected task type")
+      }
+      assert(reader.getStartOffset.asInstanceOf[TextSocketOffset].offsets == List(3, 3))
+      reader.commit(TextSocketOffset(List(5, 5)))
+      assert(reader.getStartOffset.asInstanceOf[TextSocketOffset].offsets == List(5, 5))
+    }
+
+    def commitOffset(partition: Int, offset: Int): Unit = {
+      val offsetsToCommit = reader.getStartOffset.asInstanceOf[TextSocketOffset]
+        .offsets.updated(partition, offset)
+      reader.commit(TextSocketOffset(offsetsToCommit))
+      assert(reader.getStartOffset.asInstanceOf[TextSocketOffset].offsets == offsetsToCommit)
+    }
+  }
+
+  test("continuous data - invalid commit") {
+    serverThread = new ServerThread()
+    serverThread.start()
+
+    val reader = new TextSocketContinuousReader(
+      new DataSourceOptions(Map("numPartitions" -> "2", "host" -> "localhost",
+        "port" -> serverThread.port.toString).asJava))
+    reader.setStartOffset(Optional.of(TextSocketOffset(List(5, 5))))
+    // ok to commit same offset
+    reader.setStartOffset(Optional.of(TextSocketOffset(List(5, 5))))
+    assertThrows[IllegalStateException] {
+      reader.commit(TextSocketOffset(List(6, 6)))
+    }
+  }
+
+  test("continuous data with timestamp") {
+    serverThread = new ServerThread()
+    serverThread.start()
+
+    val reader = new TextSocketContinuousReader(
+      new DataSourceOptions(Map("numPartitions" -> "2", "host" -> "localhost",
+        "includeTimestamp" -> "true",
+        "port" -> serverThread.port.toString).asJava))
+    reader.setStartOffset(Optional.empty())
+    val tasks = reader.planInputPartitions()
+    assert(tasks.size == 2)
+
+    val numRecords = 4
+    // inject rows, read and check the data and offsets
+    for (i <- 0 until numRecords) {
+      serverThread.enqueue(i.toString)
+    }
+    tasks.asScala.foreach {
+      case t: TextSocketContinuousInputPartition =>
+        val r = t.createPartitionReader().asInstanceOf[TextSocketContinuousInputPartitionReader]
+        for (i <- 0 until numRecords / 2) {
+          r.next()
+          assert(r.get().get(0, TextSocketReader.SCHEMA_TIMESTAMP)
+            .isInstanceOf[(String, Timestamp)])
+        }
+      case _ => throw new IllegalStateException("Unexpected task type")
+    }
+  }
+
+  /**
+   * This class tries to mimic the behavior of netcat, so that we can ensure
+   * TextSocketStream supports netcat, which only accepts the first connection
+   * and exits the process when the first connection is closed.
+   *
+   * Please refer SPARK-24466 for more details.
+   */
   private class ServerThread extends Thread with Logging {
     private val serverSocketChannel = ServerSocketChannel.open()
     serverSocketChannel.bind(new InetSocketAddress(0))
@@ -265,36 +412,24 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
 
     override def run(): Unit = {
       try {
+        val clientSocketChannel = serverSocketChannel.accept()
+
+        // Close server socket channel immediately to mimic the behavior that
+        // only first connection will be made and deny any further connections
+        // Note that the first client socket channel will be available
+        serverSocketChannel.close()
+
+        clientSocketChannel.configureBlocking(false)
+        clientSocketChannel.socket().setTcpNoDelay(true)
+
         while (true) {
-          val clientSocketChannel = serverSocketChannel.accept()
-          clientSocketChannel.configureBlocking(false)
-          clientSocketChannel.socket().setTcpNoDelay(true)
-
-          // Check whether remote client is closed but still send data to this closed socket.
-          // This happens in DataStreamReader where a source will be created to get the schema.
-          var remoteIsClosed = false
-          var cnt = 0
-          while (cnt < 3 && !remoteIsClosed) {
-            if (clientSocketChannel.read(ByteBuffer.allocate(1)) != -1) {
-              cnt += 1
-              Thread.sleep(100)
-            } else {
-              remoteIsClosed = true
-            }
-          }
-
-          if (remoteIsClosed) {
-            logInfo(s"remote client ${clientSocketChannel.socket()} is closed")
-          } else {
-            while (true) {
-              val line = messageQueue.take() + "\n"
-              clientSocketChannel.write(ByteBuffer.wrap(line.getBytes("UTF-8")))
-            }
-          }
+          val line = messageQueue.take() + "\n"
+          clientSocketChannel.write(ByteBuffer.wrap(line.getBytes("UTF-8")))
         }
       } catch {
         case e: InterruptedException =>
       } finally {
+        // no harm to call close() again...
         serverSocketChannel.close()
       }
     }

@@ -24,7 +24,7 @@ import java.util.regex.Pattern
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.yarn.api.records._
@@ -66,7 +66,8 @@ private[yarn] class YarnAllocator(
     appAttemptId: ApplicationAttemptId,
     securityMgr: SecurityManager,
     localResources: Map[String, LocalResource],
-    resolver: SparkRackResolver)
+    resolver: SparkRackResolver,
+    clock: Clock = new SystemClock)
   extends Logging {
 
   import YarnAllocator._
@@ -102,18 +103,14 @@ private[yarn] class YarnAllocator(
   private var executorIdCounter: Int =
     driverRef.askSync[Int](RetrieveLastAllocatedExecutorId)
 
-  // Queue to store the timestamp of failed executors
-  private val failedExecutorsTimeStamps = new Queue[Long]()
+  private[spark] val failureTracker = new FailureTracker(sparkConf, clock)
 
-  private var clock: Clock = new SystemClock
-
-  private val executorFailuresValidityInterval =
-    sparkConf.get(EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS).getOrElse(-1L)
+  private val allocatorBlacklistTracker =
+    new YarnAllocatorBlacklistTracker(sparkConf, amClient, failureTracker)
 
   @volatile private var targetNumExecutors =
     SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf)
 
-  private var currentNodeBlacklist = Set.empty[String]
 
   // Executor loss reason requests that are pending - maps from executor ID for inquiry to a
   // list of requesters that should be responded to once we find out why the given executor
@@ -149,42 +146,32 @@ private[yarn] class YarnAllocator(
 
   private val labelExpression = sparkConf.get(EXECUTOR_NODE_LABEL_EXPRESSION)
 
-
   // A map to store preferred hostname and possible task numbers running on it.
   private var hostToLocalTaskCounts: Map[String, Int] = Map.empty
 
   // Number of tasks that have locality preferences in active stages
-  private var numLocalityAwareTasks: Int = 0
+  private[yarn] var numLocalityAwareTasks: Int = 0
 
   // A container placement strategy based on pending tasks' locality preference
   private[yarn] val containerPlacementStrategy =
     new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resource, resolver)
 
-  /**
-   * Use a different clock for YarnAllocator. This is mainly used for testing.
-   */
-  def setClock(newClock: Clock): Unit = {
-    clock = newClock
-  }
-
   def getNumExecutorsRunning: Int = runningExecutors.size()
 
-  def getNumExecutorsFailed: Int = synchronized {
-    val endTime = clock.getTimeMillis()
+  def getNumReleasedContainers: Int = releasedContainers.size()
 
-    while (executorFailuresValidityInterval > 0
-      && failedExecutorsTimeStamps.nonEmpty
-      && failedExecutorsTimeStamps.head < endTime - executorFailuresValidityInterval) {
-      failedExecutorsTimeStamps.dequeue()
-    }
+  def getNumExecutorsFailed: Int = failureTracker.numFailedExecutors
 
-    failedExecutorsTimeStamps.size
-  }
+  def isAllNodeBlacklisted: Boolean = allocatorBlacklistTracker.isAllNodeBlacklisted
 
   /**
    * A sequence of pending container requests that have not yet been fulfilled.
    */
   def getPendingAllocate: Seq[ContainerRequest] = getPendingAtLocation(ANY_HOST)
+
+  def numContainersPendingAllocate: Int = synchronized {
+    getPendingAllocate.size
+  }
 
   /**
    * A sequence of pending container requests at the given location that have not yet been
@@ -204,9 +191,8 @@ private[yarn] class YarnAllocator(
    * @param localityAwareTasks number of locality aware tasks to be used as container placement hint
    * @param hostToLocalTaskCount a map of preferred hostname to possible task counts to be used as
    *                             container placement hint.
-   * @param nodeBlacklist a set of blacklisted nodes, which is passed in to avoid allocating new
-    *                      containers on them. It will be used to update the application master's
-    *                      blacklist.
+   * @param nodeBlacklist blacklisted nodes, which is passed in to avoid allocating new containers
+   *                      on them. It will be used to update the application master's blacklist.
    * @return Whether the new requested total is different than the old value.
    */
   def requestTotalExecutorsWithPreferredLocalities(
@@ -220,19 +206,7 @@ private[yarn] class YarnAllocator(
     if (requestedTotal != targetNumExecutors) {
       logInfo(s"Driver requested a total number of $requestedTotal executor(s).")
       targetNumExecutors = requestedTotal
-
-      // Update blacklist infomation to YARN ResouceManager for this application,
-      // in order to avoid allocating new Containers on the problematic nodes.
-      val blacklistAdditions = nodeBlacklist -- currentNodeBlacklist
-      val blacklistRemovals = currentNodeBlacklist -- nodeBlacklist
-      if (blacklistAdditions.nonEmpty) {
-        logInfo(s"adding nodes to YARN application master's blacklist: $blacklistAdditions")
-      }
-      if (blacklistRemovals.nonEmpty) {
-        logInfo(s"removing nodes from YARN application master's blacklist: $blacklistRemovals")
-      }
-      amClient.updateBlacklist(blacklistAdditions.toList.asJava, blacklistRemovals.toList.asJava)
-      currentNodeBlacklist = nodeBlacklist
+      allocatorBlacklistTracker.setSchedulerBlacklistedNodes(nodeBlacklist)
       true
     } else {
       false
@@ -268,6 +242,7 @@ private[yarn] class YarnAllocator(
     val allocateResponse = amClient.allocate(progressIndicator)
 
     val allocatedContainers = allocateResponse.getAllocatedContainers()
+    allocatorBlacklistTracker.setNumClusterNodes(allocateResponse.getNumClusterNodes)
 
     if (allocatedContainers.size > 0) {
       logDebug(("Allocated containers: %d. Current executor count: %d. " +
@@ -602,8 +577,9 @@ private[yarn] class YarnAllocator(
               completedContainer.getDiagnostics,
               PMEM_EXCEEDED_PATTERN))
           case _ =>
-            // Enqueue the timestamp of failed executor
-            failedExecutorsTimeStamps.enqueue(clock.getTimeMillis())
+            // all the failures which not covered above, like:
+            // disk failure, kill by app master or resource manager, ...
+            allocatorBlacklistTracker.handleResourceAllocationFailure(hostOpt)
             (true, "Container marked as failed: " + containerId + onHostStr +
               ". Exit status: " + completedContainer.getExitStatus +
               ". Diagnostics: " + completedContainer.getDiagnostics)

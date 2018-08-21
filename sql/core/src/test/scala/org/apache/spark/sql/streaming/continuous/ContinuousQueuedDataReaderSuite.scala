@@ -19,12 +19,12 @@ package org.apache.spark.sql.streaming.continuous
 
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue}
 
-import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Mockito._
 import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.{SparkEnv, SparkFunSuite, TaskContext}
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.reader.InputPartition
@@ -73,8 +73,8 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
    */
   private def setup(): (BlockingQueue[UnsafeRow], ContinuousQueuedDataReader) = {
     val queue = new ArrayBlockingQueue[UnsafeRow](1024)
-    val factory = new InputPartition[UnsafeRow] {
-      override def createPartitionReader() = new ContinuousInputPartitionReader[UnsafeRow] {
+    val factory = new InputPartition[InternalRow] {
+      override def createPartitionReader() = new ContinuousInputPartitionReader[InternalRow] {
         var index = -1
         var curr: UnsafeRow = _
 
@@ -92,7 +92,7 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
       }
     }
     val reader = new ContinuousQueuedDataReader(
-      factory,
+      new ContinuousDataSourceRDDPartition(0, factory),
       mockContext,
       dataQueueSize = sqlContext.conf.continuousStreamingExecutorQueueSize,
       epochPollIntervalMs = sqlContext.conf.continuousStreamingExecutorPollIntervalMs)

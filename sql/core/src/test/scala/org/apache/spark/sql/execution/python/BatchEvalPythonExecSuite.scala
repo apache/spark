@@ -115,3 +115,10 @@ class MyDummyPythonUDF extends UserDefinedPythonFunction(
   dataType = BooleanType,
   pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
   udfDeterministic = true)
+
+class MyDummyScalarPandasUDF extends UserDefinedPythonFunction(
+  name = "dummyScalarPandasUDF",
+  func = new DummyUDF,
+  dataType = BooleanType,
+  pythonEvalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+  udfDeterministic = true)

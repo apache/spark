@@ -915,8 +915,7 @@ JavaPairDStream<String, Integer> runningCounts = pairs.updateStateByKey(updateFu
 The update function will be called for each word, with `newValues` having a sequence of 1's (from
 the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
 Java code, take a look at the example
-[JavaStatefulNetworkWordCount.java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming
-/JavaStatefulNetworkWordCount.java).
+[JavaStatefulNetworkWordCount.java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaStatefulNetworkWordCount.java).
 
 </div>
 <div data-lang="python" markdown="1">
@@ -2176,6 +2175,8 @@ the input data stream (using `inputStream.repartition(<number of partitions>)`).
 This distributes the received batches of data across the specified number of machines in the cluster
 before further processing.
 
+For direct stream, please refer to [Spark Streaming + Kafka Integration Guide](streaming-kafka-integration.html)
+
 ### Level of Parallelism in Data Processing
 {:.no_toc}
 Cluster resources can be under-utilized if the number of parallel tasks used in any stage of the
@@ -2468,7 +2469,7 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
     - [Kafka Integration Guide](streaming-kafka-integration.html)
     - [Kinesis Integration Guide](streaming-kinesis-integration.html)
     - [Custom Receiver Guide](streaming-custom-receivers.html)
-* Third-party DStream data sources can be found in [Third Party Projects](http://spark.apache.org/third-party-projects.html)
+* Third-party DStream data sources can be found in [Third Party Projects](https://spark.apache.org/third-party-projects.html)
 * API documentation
   - Scala docs
     * [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) and

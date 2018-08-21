@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.sources.v2.writer.{DataSourceWriter, DataWriterFactory, SupportsWriteInternalRow, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.{DataSourceWriter, DataWriterFactory, WriterCommitMessage}
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 
 /**
@@ -27,28 +26,12 @@ import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
  * the non-streaming interface, forwarding the batch ID determined at construction to a wrapped
  * streaming writer.
  */
-class MicroBatchWriter(batchId: Long, writer: StreamWriter) extends DataSourceWriter {
+class MicroBatchWriter(batchId: Long, val writer: StreamWriter) extends DataSourceWriter {
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
     writer.commit(batchId, messages)
   }
 
   override def abort(messages: Array[WriterCommitMessage]): Unit = writer.abort(batchId, messages)
 
-  override def createWriterFactory(): DataWriterFactory[Row] = writer.createWriterFactory()
-}
-
-class InternalRowMicroBatchWriter(batchId: Long, writer: StreamWriter)
-  extends DataSourceWriter with SupportsWriteInternalRow {
-  override def commit(messages: Array[WriterCommitMessage]): Unit = {
-    writer.commit(batchId, messages)
-  }
-
-  override def abort(messages: Array[WriterCommitMessage]): Unit = writer.abort(batchId, messages)
-
-  override def createInternalRowWriterFactory(): DataWriterFactory[InternalRow] =
-    writer match {
-      case w: SupportsWriteInternalRow => w.createInternalRowWriterFactory()
-      case _ => throw new IllegalStateException(
-        "InternalRowMicroBatchWriter should only be created with base writer support")
-    }
+  override def createWriterFactory(): DataWriterFactory[InternalRow] = writer.createWriterFactory()
 }

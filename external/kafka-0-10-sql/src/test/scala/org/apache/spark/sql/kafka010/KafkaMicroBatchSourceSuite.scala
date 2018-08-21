@@ -31,12 +31,13 @@ import scala.util.Random
 
 import org.apache.kafka.clients.producer.RecordMetadata
 import org.apache.kafka.common.TopicPartition
+import org.json4s.DefaultFormats
+import org.json4s.jackson.JsonMethods._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Dataset, ForeachWriter, SparkSession}
-import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Update
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
@@ -49,7 +50,7 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
 import org.apache.spark.sql.types.StructType
 
-abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
+abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with KafkaTest {
 
   protected var testUtils: KafkaTestUtils = _
 
@@ -290,6 +291,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribePattern", s"$topicPrefix-.*")
       .option("failOnDataLoss", "false")
 
@@ -467,6 +469,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribe", topic)
       // If a topic is deleted and we try to poll data starting from offset 0,
       // the Kafka consumer will just block until timeout and return an empty result.
@@ -678,7 +681,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           Optional.of[OffsetV2](KafkaSourceOffset(Map(tp -> 0L))),
           Optional.of[OffsetV2](KafkaSourceOffset(Map(tp -> 100L)))
         )
-        val factories = reader.planUnsafeInputPartitions().asScala
+        val factories = reader.planInputPartitions().asScala
           .map(_.asInstanceOf[KafkaMicroBatchInputPartition])
         withClue(s"minPartitions = $minPartitions generated factories $factories\n\t") {
           assert(factories.size == numPartitionsGenerated)
@@ -697,6 +700,41 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
     intercept[IllegalArgumentException] { test(minPartitions = "1.0", 1, true) }
     intercept[IllegalArgumentException] { test(minPartitions = "0", 1, true) }
     intercept[IllegalArgumentException] { test(minPartitions = "-1", 1, true) }
+  }
+
+  test("custom lag metrics") {
+    import testImplicits._
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 2)
+    testUtils.sendMessages(topic, (1 to 100).map(_.toString).toArray)
+    require(testUtils.getLatestOffsets(Set(topic)).size === 2)
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("subscribe", topic)
+      .option("startingOffsets", s"earliest")
+      .option("maxOffsetsPerTrigger", 10)
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+
+    implicit val formats = DefaultFormats
+
+    val mapped = kafka.map(kv => kv._2.toInt + 1)
+    testStream(mapped)(
+      StartStream(trigger = OneTimeTrigger),
+      AssertOnQuery { query =>
+        query.awaitTermination()
+        val source = query.lastProgress.sources(0)
+        // masOffsetsPerTrigger is 10, and there are two partitions containing 50 events each
+        // so 5 events should be processed from each partition and a lag of 45 events
+        val custom = parse(source.customMetrics)
+          .extract[Map[String, Map[String, Map[String, Long]]]]
+        custom("lag")(topic)("0") == 45 && custom("lag")(topic)("1") == 45
+      }
+    )
   }
 
 }
@@ -1103,6 +1141,7 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
         .option("kafka.metadata.max.age.ms", "1")
         .option("subscribePattern", "stress.*")
         .option("failOnDataLoss", "false")
+        .option("kafka.default.api.timeout.ms", "3000")
         .load()
         .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
         .as[(String, String)]
@@ -1173,7 +1212,8 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
         // 30 seconds delay (kafka.log.LogManager.InitialTaskDelayMs) so this test should run at
         // least 30 seconds.
         props.put("log.cleaner.backoff.ms", "100")
-        props.put("log.segment.bytes", "40")
+        // The size of RecordBatch V2 increases to support transactional write.
+        props.put("log.segment.bytes", "70")
         props.put("log.retention.bytes", "40")
         props.put("log.retention.check.interval.ms", "100")
         props.put("delete.retention.ms", "10")
@@ -1215,6 +1255,7 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribePattern", "failOnDataLoss.*")
       .option("startingOffsets", "earliest")
       .option("failOnDataLoss", "false")

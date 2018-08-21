@@ -90,7 +90,7 @@ private[sql] object ArrowConverters {
     val unloader = new VectorUnloader(root)
     val arrowWriter = ArrowWriter.create(root)
 
-    context.addTaskCompletionListener { _ =>
+    context.addTaskCompletionListener[Unit] { _ =>
       root.close()
       allocator.close()
     }
@@ -144,7 +144,7 @@ private[sql] object ArrowConverters {
     new Iterator[InternalRow] {
       private var rowIter = if (arrowBatchIter.hasNext) nextBatch() else Iterator.empty
 
-      context.addTaskCompletionListener { _ =>
+      context.addTaskCompletionListener[Unit] { _ =>
         root.close()
         allocator.close()
       }

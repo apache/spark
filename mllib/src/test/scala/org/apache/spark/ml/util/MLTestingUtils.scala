@@ -74,7 +74,7 @@ object MLTestingUtils extends SparkFunSuite {
       estimator.fit(dfWithStringLabels)
     }
     assert(thrown.getMessage.contains(
-      "Column label must be of type NumericType but was actually of type StringType"))
+      "Column label must be of type numeric but was actually of type string"))
 
     estimator match {
       case weighted: Estimator[M] with HasWeightCol =>
@@ -86,7 +86,7 @@ object MLTestingUtils extends SparkFunSuite {
           weighted.fit(dfWithStringWeights)
         }
         assert(thrown.getMessage.contains(
-          "Column weight must be of type NumericType but was actually of type StringType"))
+          "Column weight must be of type numeric but was actually of type string"))
       case _ =>
     }
   }
@@ -104,7 +104,7 @@ object MLTestingUtils extends SparkFunSuite {
       evaluator.evaluate(dfWithStringLabels)
     }
     assert(thrown.getMessage.contains(
-      "Column label must be of type NumericType but was actually of type StringType"))
+      "Column label must be of type numeric but was actually of type string"))
   }
 
   def genClassifDFWithNumericLabelCol(

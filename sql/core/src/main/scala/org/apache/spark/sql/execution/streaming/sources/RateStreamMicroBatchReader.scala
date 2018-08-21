@@ -29,6 +29,7 @@ import org.apache.commons.io.IOUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.v2.DataSourceOptions
@@ -134,7 +135,7 @@ class RateStreamMicroBatchReader(options: DataSourceOptions, checkpointLocation:
     LongOffset(json.toLong)
   }
 
-  override def planInputPartitions(): java.util.List[InputPartition[Row]] = {
+  override def planInputPartitions(): java.util.List[InputPartition[InternalRow]] = {
     val startSeconds = LongOffset.convert(start).map(_.offset).getOrElse(0L)
     val endSeconds = LongOffset.convert(end).map(_.offset).getOrElse(0L)
     assert(startSeconds <= endSeconds, s"startSeconds($startSeconds) > endSeconds($endSeconds)")
@@ -169,7 +170,7 @@ class RateStreamMicroBatchReader(options: DataSourceOptions, checkpointLocation:
     (0 until numPartitions).map { p =>
       new RateStreamMicroBatchInputPartition(
         p, numPartitions, rangeStart, rangeEnd, localStartTimeMs, relativeMsPerValue)
-        : InputPartition[Row]
+        : InputPartition[InternalRow]
     }.toList.asJava
   }
 
@@ -188,9 +189,9 @@ class RateStreamMicroBatchInputPartition(
     rangeStart: Long,
     rangeEnd: Long,
     localStartTimeMs: Long,
-    relativeMsPerValue: Double) extends InputPartition[Row] {
+    relativeMsPerValue: Double) extends InputPartition[InternalRow] {
 
-  override def createPartitionReader(): InputPartitionReader[Row] =
+  override def createPartitionReader(): InputPartitionReader[InternalRow] =
     new RateStreamMicroBatchInputPartitionReader(partitionId, numPartitions, rangeStart, rangeEnd,
       localStartTimeMs, relativeMsPerValue)
 }
@@ -201,22 +202,18 @@ class RateStreamMicroBatchInputPartitionReader(
     rangeStart: Long,
     rangeEnd: Long,
     localStartTimeMs: Long,
-    relativeMsPerValue: Double) extends InputPartitionReader[Row] {
-  private var count = 0
+    relativeMsPerValue: Double) extends InputPartitionReader[InternalRow] {
+  private var count: Long = 0
 
   override def next(): Boolean = {
     rangeStart + partitionId + numPartitions * count < rangeEnd
   }
 
-  override def get(): Row = {
+  override def get(): InternalRow = {
     val currValue = rangeStart + partitionId + numPartitions * count
     count += 1
     val relative = math.round((currValue - rangeStart) * relativeMsPerValue)
-    Row(
-      DateTimeUtils.toJavaTimestamp(
-        DateTimeUtils.fromMillis(relative + localStartTimeMs)),
-      currValue
-    )
+    InternalRow(DateTimeUtils.fromMillis(relative + localStartTimeMs), currValue)
   }
 
   override def close(): Unit = {}
