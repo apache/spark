@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
+import org.mockito.Mockito
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
@@ -33,6 +35,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val PYSPARK_STEP_TYPE = "pyspark-bindings"
   private val ENV_SECRETS_STEP_TYPE = "env-secrets"
   private val MOUNT_VOLUMES_STEP_TYPE = "mount-volumes"
+  private val TEMPLATE_VOLUME_STEP_TYPE = "template-volume"
 
   private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     BASIC_STEP_TYPE, classOf[BasicDriverFeatureStep])
@@ -61,6 +64,10 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val mountVolumesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     MOUNT_VOLUMES_STEP_TYPE, classOf[MountVolumesFeatureStep])
 
+  private val templateVolumeStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    TEMPLATE_VOLUME_STEP_TYPE, classOf[TemplateVolumeStep]
+  )
+
   private val builderUnderTest: KubernetesDriverBuilder =
     new KubernetesDriverBuilder(
       _ => basicFeatureStep,
@@ -71,7 +78,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       _ => localDirsStep,
       _ => mountVolumesStep,
       _ => javaStep,
-      _ => pythonStep)
+      _ => pythonStep,
+      _ => templateVolumeStep)
 
   test("Apply fundamental steps all the time.") {
     val conf = KubernetesConf(
@@ -209,6 +217,36 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       LOCAL_DIRS_STEP_TYPE,
       MOUNT_VOLUMES_STEP_TYPE,
       JAVA_STEP_TYPE)
+  }
+
+  test("Apply template volume step if executor template is present.") {
+    val sparkConf = Mockito.spy(new SparkConf(false))
+    Mockito.doReturn(Option("filename")).when(sparkConf)
+      .get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
+    val conf = KubernetesConf(
+      sparkConf,
+      KubernetesDriverSpecificConf(
+        Some(JavaMainAppResource("example.jar")),
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Nil,
+      Seq.empty[String])
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf),
+      BASIC_STEP_TYPE,
+      CREDENTIALS_STEP_TYPE,
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
+      JAVA_STEP_TYPE,
+      TEMPLATE_VOLUME_STEP_TYPE)
   }
 
 
