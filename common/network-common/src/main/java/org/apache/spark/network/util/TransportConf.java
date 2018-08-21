@@ -281,4 +281,23 @@ public class TransportConf {
   public long maxChunksBeingTransferred() {
     return conf.getLong("spark.shuffle.maxChunksBeingTransferred", Long.MAX_VALUE);
   }
+
+  /**
+   * Number of threads to process ChunkFetchRequest. Shuffle server will use a separate
+   * EventLoopGroup to process ChunkFetchRequest messages. Although when calling the
+   * async writeAndFlush on the underlying channel to send response back to client,
+   * the I/O on the channel is still being handled by
+   * {@link org.apache.spark.network.server.TransportServer}'s default EventLoopGroup
+   * that's registered with the Channel, by waiting inside the ChunkFetchRequest handler
+   * threads for the completion of sending back responses, we are able to put a limit on
+   * the max number of threads from TransportServer's default EventLoopGroup that are
+   * going to be consumed by writing response to ChunkFetchRequest, which are I/O intensive
+   * and could take long time to process due to disk contentions. By configuring a slightly
+   * higher number of shuffler server threads, we are able to reserve some threads for
+   * handling other RPC messages, thus making the Client less likely to experience timeout
+   * when sending RPC messages to the shuffle server. Default to 0, which is 2*#cores.
+   */
+  public int chunkFetchHandlerThreads() {
+    return conf.getInt("spark.shuffle.server.chunkFetchHandlerThreads", 0);
+  }
 }
