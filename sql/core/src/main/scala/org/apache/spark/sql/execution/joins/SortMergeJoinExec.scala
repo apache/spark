@@ -1032,11 +1032,11 @@ private class SortMergeFullOuterJoinScanner(
     rightIndex = 0
 
     while (leftRowKey != null && keyOrdering.compare(leftRowKey, matchingKey) == 0) {
-      leftMatches.add(leftRow.copy().asInstanceOf[UnsafeRow])
+      leftMatches.add(leftRow.asInstanceOf[UnsafeRow])
       advancedLeft()
     }
     while (rightRowKey != null && keyOrdering.compare(rightRowKey, matchingKey) == 0) {
-      rightMatches.add(rightRow.copy().asInstanceOf[UnsafeRow])
+      rightMatches.add(rightRow.asInstanceOf[UnsafeRow])
       advancedRight()
     }
 
