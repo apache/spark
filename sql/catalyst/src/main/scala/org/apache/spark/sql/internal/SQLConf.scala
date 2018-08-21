@@ -1469,6 +1469,13 @@ object SQLConf {
     .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
     .createWithDefault(Deflater.DEFAULT_COMPRESSION)
 
+  val LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED =
+    buildConf("spark.sql.legacy.replaceDatabricksSparkAvro.enabled")
+      .doc("If it is set to true, the data source provider com.databricks.spark.avro is mapped " +
+        "to the built-in but external Avro data source module for backward compatibility.")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_SETOPS_PRECEDENCE_ENABLED =
     buildConf("spark.sql.legacy.setopsPrecedence.enabled")
       .internal()
@@ -1880,6 +1887,9 @@ class SQLConf extends Serializable with Logging {
   def avroCompressionCodec: String = getConf(SQLConf.AVRO_COMPRESSION_CODEC)
 
   def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
+
+  def replaceDatabricksSparkAvroEnabled: Boolean =
+    getConf(SQLConf.LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED)
 
   def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
 
