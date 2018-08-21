@@ -759,9 +759,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         )
       }
 
-      // FULL OUTER JOIN still does not use [[ExternalAppendOnlyUnsafeRowArray]]
-      // so should not cause any spill
-      assertNotSpilled(sparkContext, "full outer join") {
+      assertSpilled(sparkContext, "full outer join") {
         checkAnswer(
           sql(
             """

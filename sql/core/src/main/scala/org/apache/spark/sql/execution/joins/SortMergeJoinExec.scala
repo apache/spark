@@ -248,7 +248,9 @@ case class SortMergeJoinExec(
             rightIter = RowIterator.fromScala(rightIter),
             boundCondition,
             leftNullRow,
-            rightNullRow)
+            rightNullRow,
+            inMemoryThreshold,
+            spillThreshold)
 
           new FullOuterIterator(
             smjScanner,
@@ -966,7 +968,9 @@ private class SortMergeFullOuterJoinScanner(
     rightIter: RowIterator,
     boundCondition: InternalRow => Boolean,
     leftNullRow: InternalRow,
-    rightNullRow: InternalRow)  {
+    rightNullRow: InternalRow,
+    inMemoryThreshold: Int,
+    spillThreshold: Int)  {
   private[this] val joinedRow: JoinedRow = new JoinedRow()
   private[this] var leftRow: InternalRow = _
   private[this] var leftRowKey: InternalRow = _
@@ -975,8 +979,10 @@ private class SortMergeFullOuterJoinScanner(
 
   private[this] var leftIndex: Int = 0
   private[this] var rightIndex: Int = 0
-  private[this] val leftMatches: ArrayBuffer[InternalRow] = new ArrayBuffer[InternalRow]
-  private[this] val rightMatches: ArrayBuffer[InternalRow] = new ArrayBuffer[InternalRow]
+  private[this] val leftMatches: ExternalAppendOnlyUnsafeRowArray =
+    new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
+  private[this] val rightMatches: ExternalAppendOnlyUnsafeRowArray =
+    new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
   private[this] var leftMatched: BitSet = new BitSet(1)
   private[this] var rightMatched: BitSet = new BitSet(1)
 
@@ -1028,23 +1034,23 @@ private class SortMergeFullOuterJoinScanner(
     rightIndex = 0
 
     while (leftRowKey != null && keyOrdering.compare(leftRowKey, matchingKey) == 0) {
-      leftMatches += leftRow.copy()
+      leftMatches.add(leftRow.copy().asInstanceOf[UnsafeRow])
       advancedLeft()
     }
     while (rightRowKey != null && keyOrdering.compare(rightRowKey, matchingKey) == 0) {
-      rightMatches += rightRow.copy()
+      rightMatches.add(rightRow.copy().asInstanceOf[UnsafeRow])
       advancedRight()
     }
 
-    if (leftMatches.size <= leftMatched.capacity) {
-      leftMatched.clearUntil(leftMatches.size)
+    if (leftMatches.length <= leftMatched.capacity) {
+      leftMatched.clearUntil(leftMatches.length)
     } else {
-      leftMatched = new BitSet(leftMatches.size)
+      leftMatched = new BitSet(leftMatches.length)
     }
-    if (rightMatches.size <= rightMatched.capacity) {
-      rightMatched.clearUntil(rightMatches.size)
+    if (rightMatches.length <= rightMatched.capacity) {
+      rightMatched.clearUntil(rightMatches.length)
     } else {
-      rightMatched = new BitSet(rightMatches.size)
+      rightMatched = new BitSet(rightMatches.length)
     }
   }
 
@@ -1058,31 +1064,37 @@ private class SortMergeFullOuterJoinScanner(
    * @return true if a valid match is found, false otherwise.
    */
   private def scanNextInBuffered(): Boolean = {
-    while (leftIndex < leftMatches.size) {
-      while (rightIndex < rightMatches.size) {
-        joinedRow(leftMatches(leftIndex), rightMatches(rightIndex))
-        if (boundCondition(joinedRow)) {
-          leftMatched.set(leftIndex)
-          rightMatched.set(rightIndex)
+    val leftMatchesIterator = leftMatches.generateIterator(leftIndex)
+
+    while (leftMatchesIterator.hasNext) {
+      val leftCurRow = leftMatchesIterator.next()
+      val rightMatchesIterator = rightMatches.generateIterator(rightIndex)
+      while (rightMatchesIterator.hasNext) {
+          joinedRow(leftCurRow, rightMatchesIterator.next())
+          if (boundCondition(joinedRow)) {
+            leftMatched.set(leftIndex)
+            rightMatched.set(rightIndex)
+            rightIndex += 1
+            return true
+          }
           rightIndex += 1
-          return true
-        }
-        rightIndex += 1
       }
       rightIndex = 0
       if (!leftMatched.get(leftIndex)) {
         // the left row has never matched any right row, join it with null row
-        joinedRow(leftMatches(leftIndex), rightNullRow)
+        joinedRow(leftCurRow, rightNullRow)
         leftIndex += 1
         return true
       }
       leftIndex += 1
     }
 
-    while (rightIndex < rightMatches.size) {
+    val rightMatchesIterator = rightMatches.generateIterator(rightIndex)
+    while (rightMatchesIterator.hasNext) {
+      val rightCurRow = rightMatchesIterator.next()
       if (!rightMatched.get(rightIndex)) {
         // the right row has never matched any left row, join it with null row
-        joinedRow(leftNullRow, rightMatches(rightIndex))
+        joinedRow(leftNullRow, rightCurRow)
         rightIndex += 1
         return true
       }
@@ -1099,7 +1111,7 @@ private class SortMergeFullOuterJoinScanner(
 
   def advanceNext(): Boolean = {
     // If we already buffered some matching rows, use them directly
-    if (leftIndex <= leftMatches.size || rightIndex <= rightMatches.size) {
+    if (leftIndex <= leftMatches.length || rightIndex <= rightMatches.length) {
       if (scanNextInBuffered()) {
         return true
       }
