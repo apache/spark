@@ -51,7 +51,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
 
   test("collect to arrow record batch") {
     val indexData = (1 to 6).toDF("i")
-    val arrowBatches = indexData.getArrowBatchRdd.collect()
+    val arrowBatches = indexData.toArrowBatchRdd.collect()
     assert(arrowBatches.nonEmpty)
     assert(arrowBatches.length == indexData.rdd.getNumPartitions)
     val allocator = new RootAllocator(Long.MaxValue)
@@ -1153,7 +1153,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |}
        """.stripMargin
 
-    val arrowBatches = testData2.getArrowBatchRdd.collect()
+    val arrowBatches = testData2.toArrowBatchRdd.collect()
     // NOTE: testData2 should have 2 partitions -> 2 arrow batches
     assert(arrowBatches.length === 2)
     val schema = testData2.schema
@@ -1168,17 +1168,17 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
   }
 
   test("empty frame collect") {
-    val arrowBatches = spark.emptyDataFrame.getArrowBatchRdd.collect()
+    val arrowBatches = spark.emptyDataFrame.toArrowBatchRdd.collect()
     assert(arrowBatches.isEmpty)
 
     val filteredDF = List[Int](1, 2, 3, 4, 5, 6).toDF("i")
-    val filteredArrowBatches = filteredDF.filter("i < 0").getArrowBatchRdd.collect()
+    val filteredArrowBatches = filteredDF.filter("i < 0").toArrowBatchRdd.collect()
     assert(filteredArrowBatches.isEmpty)
   }
 
   test("empty partition collect") {
     val emptyPart = spark.sparkContext.parallelize(Seq(1), 2).toDF("i")
-    val arrowBatches = emptyPart.getArrowBatchRdd.collect()
+    val arrowBatches = emptyPart.toArrowBatchRdd.collect()
     assert(arrowBatches.length === 1)
     val allocator = new RootAllocator(Long.MaxValue)
     val arrowRecordBatches = arrowBatches.map(ArrowConverters.loadBatch(_, allocator))
@@ -1192,7 +1192,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     val maxRecordsPerBatch = 3
     spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", maxRecordsPerBatch)
     val df = spark.sparkContext.parallelize(1 to totalRecords, 2).toDF("i")
-    val arrowBatches = df.getArrowBatchRdd.collect()
+    val arrowBatches = df.toArrowBatchRdd.collect()
     assert(arrowBatches.length >= 4)
     val allocator = new RootAllocator(Long.MaxValue)
     val arrowRecordBatches = arrowBatches.map(ArrowConverters.loadBatch(_, allocator))
@@ -1217,8 +1217,8 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
       assert(msg.getCause.getClass === classOf[UnsupportedOperationException])
     }
 
-    runUnsupported { mapData.toDF().getArrowBatchRdd.collect() }
-    runUnsupported { complexData.getArrowBatchRdd.collect() }
+    runUnsupported { mapData.toDF().toArrowBatchRdd.collect() }
+    runUnsupported { complexData.toArrowBatchRdd.collect() }
   }
 
   test("test Arrow Validator") {
@@ -1379,7 +1379,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
   private def collectAndValidate(
       df: DataFrame, json: String, file: String, timeZoneId: String = null): Unit = {
     // NOTE: coalesce to single partition because can only load 1 batch in validator
-    val batchBytes = df.coalesce(1).getArrowBatchRdd.collect().head
+    val batchBytes = df.coalesce(1).toArrowBatchRdd.collect().head
     val tempFile = new File(tempDataPath, file)
     Files.write(json, tempFile, StandardCharsets.UTF_8)
     validateConversion(df.schema, batchBytes, tempFile, timeZoneId)

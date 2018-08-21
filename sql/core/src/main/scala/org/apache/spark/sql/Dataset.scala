@@ -3246,7 +3246,7 @@ class Dataset[T] private[sql](
       PythonRDD.serveToStream("serve-Arrow") { outputStream =>
         val out = new DataOutputStream(outputStream)
         val batchWriter = new ArrowBatchStreamWriter(schema, out, timeZoneId)
-        val arrowBatchRdd = getArrowBatchRdd(plan)
+        val arrowBatchRdd = toArrowBatchRdd(plan)
         val numPartitions = arrowBatchRdd.partitions.length
 
         // Batches ordered by (index of partition, batch # in partition) tuple
@@ -3386,7 +3386,7 @@ class Dataset[T] private[sql](
   }
 
   /** Convert to an RDD of serialized ArrowRecordBatches. */
-  private[sql] def getArrowBatchRdd(plan: SparkPlan): RDD[Array[Byte]] = {
+  private[sql] def toArrowBatchRdd(plan: SparkPlan): RDD[Array[Byte]] = {
     val schemaCaptured = this.schema
     val maxRecordsPerBatch = sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
@@ -3398,7 +3398,7 @@ class Dataset[T] private[sql](
   }
 
   // This is only used in tests, for now.
-  private[sql] def getArrowBatchRdd: RDD[Array[Byte]] = {
-    getArrowBatchRdd(queryExecution.executedPlan)
+  private[sql] def toArrowBatchRdd: RDD[Array[Byte]] = {
+    toArrowBatchRdd(queryExecution.executedPlan)
   }
 }

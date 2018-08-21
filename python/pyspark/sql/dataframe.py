@@ -2097,7 +2097,7 @@ class DataFrame(object):
 
                     # Collect un-ordered list of batches, and list of correct order indices
                     batches, batch_order = self._collectAsArrow()
-                    if batches:
+                    if len(batches) > 0:
                         # Re-order the batch list with correct order to build a table
                         table = pyarrow.Table.from_batches([batches[i] for i in batch_order])
                         pdf = table.to_pandas()
