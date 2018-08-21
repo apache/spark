@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import datetime as dt
 import glob
 import os
 import sys
@@ -180,7 +179,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self._test_func(input, func, expected)
 
     def test_flatMap(self):
-        """Basic operation test for DStream.faltMap."""
+        """Basic operation test for DStream.flatMap."""
         input = [range(1, 5), range(5, 9), range(9, 13)]
 
         def func(dstream):
