@@ -313,7 +313,7 @@ private[kafka010] case class InternalKafkaConsumer(
     if (!fetchedData.hasNext()) {
       assert(offset <= offsetAfterPoll,
         s"seek to $offset and poll but the offset was reset to $offsetAfterPoll")
-      FetchedRecord(null, offsetAfterPoll)
+      fetchedRecord.withRecord(null, offsetAfterPoll)
     } else {
       val record = fetchedData.next()
       nextOffsetInFetchedData = record.offset + 1
