@@ -33,7 +33,10 @@ import org.apache.spark.annotation.InterfaceStability;
 public interface DataWriterFactory<T> extends Serializable {
 
   /**
-   * Returns a data writer to do the actual writing work.
+   * Returns a data writer to do the actual writing work. Note that, Spark will reuse the same data
+   * object instance when sending data to the data writer, for better performance. Data writers
+   * are responsible for defensive copies if necessary, e.g. copy the data before buffer it in a
+   * list.
    *
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.

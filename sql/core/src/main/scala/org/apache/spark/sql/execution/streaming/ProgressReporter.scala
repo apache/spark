@@ -22,14 +22,22 @@ import java.util.{Date, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.util.control.NonFatal
+
+import org.json4s.JsonAST.JValue
+import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExec
-import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExec, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
+import org.apache.spark.sql.sources.v2.CustomMetrics
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, SupportsCustomReaderMetrics}
+import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
+import org.apache.spark.sql.sources.v2.writer.streaming.SupportsCustomWriterMetrics
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.util.Clock
@@ -56,8 +64,6 @@ trait ProgressReporter extends Logging {
   protected def logicalPlan: LogicalPlan
   protected def lastExecution: QueryExecution
   protected def newData: Map[BaseStreamingSource, LogicalPlan]
-  protected def availableOffsets: StreamProgress
-  protected def committedOffsets: StreamProgress
   protected def sources: Seq[BaseStreamingSource]
   protected def sink: BaseStreamingSink
   protected def offsetSeqMetadata: OffsetSeqMetadata
@@ -68,8 +74,11 @@ trait ProgressReporter extends Logging {
   // Local timestamps and counters.
   private var currentTriggerStartTimestamp = -1L
   private var currentTriggerEndTimestamp = -1L
+  private var currentTriggerStartOffsets: Map[BaseStreamingSource, String] = _
+  private var currentTriggerEndOffsets: Map[BaseStreamingSource, String] = _
   // TODO: Restore this from the checkpoint when possible.
   private var lastTriggerStartTimestamp = -1L
+
   private val currentDurationsMs = new mutable.HashMap[String, Long]()
 
   /** Flag that signals whether any error with input metrics have already been logged */
@@ -114,7 +123,18 @@ trait ProgressReporter extends Logging {
     lastTriggerStartTimestamp = currentTriggerStartTimestamp
     currentTriggerStartTimestamp = triggerClock.getTimeMillis()
     currentStatus = currentStatus.copy(isTriggerActive = true)
+    currentTriggerStartOffsets = null
+    currentTriggerEndOffsets = null
     currentDurationsMs.clear()
+  }
+
+  /**
+   * Record the offsets range this trigger will process. Call this before updating
+   * `committedOffsets` in `StreamExecution` to make sure that the correct range is recorded.
+   */
+  protected def recordTriggerOffsets(from: StreamProgress, to: StreamProgress): Unit = {
+    currentTriggerStartOffsets = from.mapValues(_.json)
+    currentTriggerEndOffsets = to.mapValues(_.json)
   }
 
   private def updateProgress(newProgress: StreamingQueryProgress): Unit = {
@@ -130,6 +150,7 @@ trait ProgressReporter extends Logging {
 
   /** Finalizes the query progress and adds it to list of recent status updates. */
   protected def finishTrigger(hasNewData: Boolean): Unit = {
+    assert(currentTriggerStartOffsets != null && currentTriggerEndOffsets != null)
     currentTriggerEndTimestamp = triggerClock.getTimeMillis()
 
     val executionStats = extractExecutionStats(hasNewData)
@@ -143,18 +164,51 @@ trait ProgressReporter extends Logging {
     }
     logDebug(s"Execution stats: $executionStats")
 
+    // extracts and validates custom metrics from readers and writers
+    def extractMetrics(
+        getMetrics: () => Option[CustomMetrics],
+        onInvalidMetrics: (Exception) => Unit): Option[String] = {
+      try {
+        getMetrics().map(m => {
+          val json = m.json()
+          parse(json)
+          json
+        })
+      } catch {
+        case ex: Exception if NonFatal(ex) =>
+          onInvalidMetrics(ex)
+          None
+      }
+    }
+
     val sourceProgress = sources.distinct.map { source =>
+      val customReaderMetrics = source match {
+        case s: SupportsCustomReaderMetrics =>
+          extractMetrics(() => Option(s.getCustomMetrics), s.onInvalidMetrics)
+
+        case _ => None
+      }
+
       val numRecords = executionStats.inputRows.getOrElse(source, 0L)
       new SourceProgress(
         description = source.toString,
-        startOffset = committedOffsets.get(source).map(_.json).orNull,
-        endOffset = availableOffsets.get(source).map(_.json).orNull,
+        startOffset = currentTriggerStartOffsets.get(source).orNull,
+        endOffset = currentTriggerEndOffsets.get(source).orNull,
         numInputRows = numRecords,
         inputRowsPerSecond = numRecords / inputTimeSec,
-        processedRowsPerSecond = numRecords / processingTimeSec
+        processedRowsPerSecond = numRecords / processingTimeSec,
+        customReaderMetrics.orNull
       )
     }
-    val sinkProgress = new SinkProgress(sink.toString)
+
+    val customWriterMetrics = dataSourceWriter match {
+      case Some(s: SupportsCustomWriterMetrics) =>
+        extractMetrics(() => Option(s.getCustomMetrics), s.onInvalidMetrics)
+
+      case _ => None
+    }
+
+    val sinkProgress = new SinkProgress(sink.toString, customWriterMetrics.orNull)
 
     val newProgress = new StreamingQueryProgress(
       id = id,
@@ -181,6 +235,18 @@ trait ProgressReporter extends Logging {
     }
 
     currentStatus = currentStatus.copy(isTriggerActive = false)
+  }
+
+  /** Extract writer from the executed query plan. */
+  private def dataSourceWriter: Option[DataSourceWriter] = {
+    if (lastExecution == null) return None
+    lastExecution.executedPlan.collect {
+      case p if p.isInstanceOf[WriteToDataSourceV2Exec] =>
+        p.asInstanceOf[WriteToDataSourceV2Exec].writer
+    }.headOption match {
+      case Some(w: MicroBatchWriter) => Some(w.writer)
+      case _ => None
+    }
   }
 
   /** Extract statistics about stateful operators from the executed query plan. */
@@ -246,7 +312,7 @@ trait ProgressReporter extends Logging {
       // DataSourceV2ScanExec records the number of rows it has read using SQLMetrics. However,
       // just collecting all DataSourceV2ScanExec nodes and getting the metric is not correct as
       // a DataSourceV2ScanExec instance may be referred to in the execution plan from two (or
-      // even multiple times) points and considering it twice will leads to double counting. We
+      // even multiple times) points and considering it twice will lead to double counting. We
       // can't dedup them using their hashcode either because two different instances of
       // DataSourceV2ScanExec can have the same hashcode but account for separate sets of
       // records read, and deduping them to consider only one of them would be undercounting the

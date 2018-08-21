@@ -22,8 +22,8 @@ import java.util.{ArrayList, List => JList}
 import test.org.apache.spark.sql.sources.v2._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanExec}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
@@ -120,17 +120,6 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("unsafe row scan implementation") {
-    Seq(classOf[UnsafeRowDataSourceV2], classOf[JavaUnsafeRowDataSourceV2]).foreach { cls =>
-      withClue(cls.getName) {
-        val df = spark.read.format(cls.getName).load()
-        checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
-        checkAnswer(df.select('j), (0 until 10).map(i => Row(-i)))
-        checkAnswer(df.filter('i > 5), (6 until 10).map(i => Row(i, -i)))
-      }
-    }
-  }
-
   test("columnar batch scan implementation") {
     Seq(classOf[BatchDataSourceV2], classOf[JavaBatchDataSourceV2]).foreach { cls =>
       withClue(cls.getName) {
@@ -145,8 +134,8 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
   test("schema required data source") {
     Seq(classOf[SchemaRequiredDataSource], classOf[JavaSchemaRequiredDataSource]).foreach { cls =>
       withClue(cls.getName) {
-        val e = intercept[AnalysisException](spark.read.format(cls.getName).load())
-        assert(e.message.contains("requires a user-supplied schema"))
+        val e = intercept[IllegalArgumentException](spark.read.format(cls.getName).load())
+        assert(e.getMessage.contains("requires a user-supplied schema"))
 
         val schema = new StructType().add("i", "int").add("s", "string")
         val df = spark.read.format(cls.getName).schema(schema).load()
@@ -203,33 +192,33 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         val path = file.getCanonicalPath
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
 
-        spark.range(10).select('id, -'id).write.format(cls.getName)
+        spark.range(10).select('id as 'i, -'id as 'j).write.format(cls.getName)
           .option("path", path).save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(10).select('id, -'id))
 
         // test with different save modes
-        spark.range(10).select('id, -'id).write.format(cls.getName)
+        spark.range(10).select('id as 'i, -'id as 'j).write.format(cls.getName)
           .option("path", path).mode("append").save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(10).union(spark.range(10)).select('id, -'id))
 
-        spark.range(5).select('id, -'id).write.format(cls.getName)
+        spark.range(5).select('id as 'i, -'id as 'j).write.format(cls.getName)
           .option("path", path).mode("overwrite").save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(5).select('id, -'id))
 
-        spark.range(5).select('id, -'id).write.format(cls.getName)
+        spark.range(5).select('id as 'i, -'id as 'j).write.format(cls.getName)
           .option("path", path).mode("ignore").save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(5).select('id, -'id))
 
         val e = intercept[Exception] {
-          spark.range(5).select('id, -'id).write.format(cls.getName)
+          spark.range(5).select('id as 'i, -'id as 'j).write.format(cls.getName)
             .option("path", path).mode("error").save()
         }
         assert(e.getMessage.contains("data already exists"))
@@ -246,20 +235,13 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
           }
         }
         // this input data will fail to read middle way.
-        val input = spark.range(10).select(failingUdf('id).as('i)).select('i, -'i)
+        val input = spark.range(10).select(failingUdf('id).as('i)).select('i, -'i as 'j)
         val e2 = intercept[SparkException] {
           input.write.format(cls.getName).option("path", path).mode("overwrite").save()
         }
         assert(e2.getMessage.contains("Writing job aborted"))
         // make sure we don't have partial data.
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
-
-        // test internal row writer
-        spark.range(5).select('id, -'id).write.format(cls.getName)
-          .option("path", path).option("internal", "true").mode("overwrite").save()
-        checkAnswer(
-          spark.read.format(cls.getName).option("path", path).load(),
-          spark.range(5).select('id, -'id))
       }
     }
   }
@@ -271,7 +253,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
 
         val numPartition = 6
-        spark.range(0, 10, 1, numPartition).select('id, -'id).write.format(cls.getName)
+        spark.range(0, 10, 1, numPartition).select('id as 'i, -'id as 'j).write.format(cls.getName)
           .option("path", path).save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
@@ -347,7 +329,7 @@ class SimpleSinglePartitionSource extends DataSourceV2 with ReadSupport {
   class Reader extends DataSourceReader {
     override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
 
-    override def planInputPartitions(): JList[InputPartition[Row]] = {
+    override def planInputPartitions(): JList[InputPartition[InternalRow]] = {
       java.util.Arrays.asList(new SimpleInputPartition(0, 5))
     }
   }
@@ -360,7 +342,7 @@ class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {
   class Reader extends DataSourceReader {
     override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
 
-    override def planInputPartitions(): JList[InputPartition[Row]] = {
+    override def planInputPartitions(): JList[InputPartition[InternalRow]] = {
       java.util.Arrays.asList(new SimpleInputPartition(0, 5), new SimpleInputPartition(5, 10))
     }
   }
@@ -369,11 +351,11 @@ class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {
 }
 
 class SimpleInputPartition(start: Int, end: Int)
-  extends InputPartition[Row]
-  with InputPartitionReader[Row] {
+  extends InputPartition[InternalRow]
+  with InputPartitionReader[InternalRow] {
   private var current = start - 1
 
-  override def createPartitionReader(): InputPartitionReader[Row] =
+  override def createPartitionReader(): InputPartitionReader[InternalRow] =
     new SimpleInputPartition(start, end)
 
   override def next(): Boolean = {
@@ -381,7 +363,7 @@ class SimpleInputPartition(start: Int, end: Int)
     current < end
   }
 
-  override def get(): Row = Row(current, -current)
+  override def get(): InternalRow = InternalRow(current, -current)
 
   override def close(): Unit = {}
 }
@@ -415,12 +397,12 @@ class AdvancedDataSourceV2 extends DataSourceV2 with ReadSupport {
       requiredSchema
     }
 
-    override def planInputPartitions(): JList[InputPartition[Row]] = {
-      val lowerBound = filters.collect {
+    override def planInputPartitions(): JList[InputPartition[InternalRow]] = {
+      val lowerBound = filters.collectFirst {
         case GreaterThan("i", v: Int) => v
-      }.headOption
+      }
 
-      val res = new ArrayList[InputPartition[Row]]
+      val res = new ArrayList[InputPartition[InternalRow]]
 
       if (lowerBound.isEmpty) {
         res.add(new AdvancedInputPartition(0, 5, requiredSchema))
@@ -440,11 +422,11 @@ class AdvancedDataSourceV2 extends DataSourceV2 with ReadSupport {
 }
 
 class AdvancedInputPartition(start: Int, end: Int, requiredSchema: StructType)
-  extends InputPartition[Row] with InputPartitionReader[Row] {
+  extends InputPartition[InternalRow] with InputPartitionReader[InternalRow] {
 
   private var current = start - 1
 
-  override def createPartitionReader(): InputPartitionReader[Row] = {
+  override def createPartitionReader(): InputPartitionReader[InternalRow] = {
     new AdvancedInputPartition(start, end, requiredSchema)
   }
 
@@ -455,62 +437,30 @@ class AdvancedInputPartition(start: Int, end: Int, requiredSchema: StructType)
     current < end
   }
 
-  override def get(): Row = {
+  override def get(): InternalRow = {
     val values = requiredSchema.map(_.name).map {
       case "i" => current
       case "j" => -current
     }
-    Row.fromSeq(values)
+    InternalRow.fromSeq(values)
   }
 }
 
 
-class UnsafeRowDataSourceV2 extends DataSourceV2 with ReadSupport {
-
-  class Reader extends DataSourceReader with SupportsScanUnsafeRow {
-    override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
-
-    override def planUnsafeInputPartitions(): JList[InputPartition[UnsafeRow]] = {
-      java.util.Arrays.asList(new UnsafeRowInputPartitionReader(0, 5),
-        new UnsafeRowInputPartitionReader(5, 10))
-    }
-  }
-
-  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
-}
-
-class UnsafeRowInputPartitionReader(start: Int, end: Int)
-  extends InputPartition[UnsafeRow] with InputPartitionReader[UnsafeRow] {
-
-  private val row = new UnsafeRow(2)
-  row.pointTo(new Array[Byte](8 * 3), 8 * 3)
-
-  private var current = start - 1
-
-  override def createPartitionReader(): InputPartitionReader[UnsafeRow] = this
-
-  override def next(): Boolean = {
-    current += 1
-    current < end
-  }
-  override def get(): UnsafeRow = {
-    row.setInt(0, current)
-    row.setInt(1, -current)
-    row
-  }
-
-  override def close(): Unit = {}
-}
-
-class SchemaRequiredDataSource extends DataSourceV2 with ReadSupportWithSchema {
+class SchemaRequiredDataSource extends DataSourceV2 with ReadSupport {
 
   class Reader(val readSchema: StructType) extends DataSourceReader {
-    override def planInputPartitions(): JList[InputPartition[Row]] =
+    override def planInputPartitions(): JList[InputPartition[InternalRow]] =
       java.util.Collections.emptyList()
   }
 
-  override def createReader(schema: StructType, options: DataSourceOptions): DataSourceReader =
+  override def createReader(options: DataSourceOptions): DataSourceReader = {
+    throw new IllegalArgumentException("requires a user-supplied schema")
+  }
+
+  override def createReader(schema: StructType, options: DataSourceOptions): DataSourceReader = {
     new Reader(schema)
+  }
 }
 
 class BatchDataSourceV2 extends DataSourceV2 with ReadSupport {
@@ -571,7 +521,7 @@ class PartitionAwareDataSource extends DataSourceV2 with ReadSupport {
   class Reader extends DataSourceReader with SupportsReportPartitioning {
     override def readSchema(): StructType = new StructType().add("a", "int").add("b", "int")
 
-    override def planInputPartitions(): JList[InputPartition[Row]] = {
+    override def planInputPartitions(): JList[InputPartition[InternalRow]] = {
       // Note that we don't have same value of column `a` across partitions.
       java.util.Arrays.asList(
         new SpecificInputPartitionReader(Array(1, 1, 3), Array(4, 4, 6)),
@@ -594,20 +544,20 @@ class PartitionAwareDataSource extends DataSourceV2 with ReadSupport {
 }
 
 class SpecificInputPartitionReader(i: Array[Int], j: Array[Int])
-  extends InputPartition[Row]
-  with InputPartitionReader[Row] {
+  extends InputPartition[InternalRow]
+  with InputPartitionReader[InternalRow] {
   assert(i.length == j.length)
 
   private var current = -1
 
-  override def createPartitionReader(): InputPartitionReader[Row] = this
+  override def createPartitionReader(): InputPartitionReader[InternalRow] = this
 
   override def next(): Boolean = {
     current += 1
     current < i.length
   }
 
-  override def get(): Row = Row(i(current), j(current))
+  override def get(): InternalRow = InternalRow(i(current), j(current))
 
   override def close(): Unit = {}
 }

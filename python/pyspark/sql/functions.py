@@ -2033,6 +2033,63 @@ def array_distinct(col):
     return Column(sc._jvm.functions.array_distinct(_to_java_column(col)))
 
 
+@ignore_unicode_prefix
+@since(2.4)
+def array_intersect(col1, col2):
+    """
+    Collection function: returns an array of the elements in the intersection of col1 and col2,
+    without duplicates.
+
+    :param col1: name of column containing array
+    :param col2: name of column containing array
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
+    >>> df.select(array_intersect(df.c1, df.c2)).collect()
+    [Row(array_intersect(c1, c2)=[u'a', u'c'])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_intersect(_to_java_column(col1), _to_java_column(col2)))
+
+
+@ignore_unicode_prefix
+@since(2.4)
+def array_union(col1, col2):
+    """
+    Collection function: returns an array of the elements in the union of col1 and col2,
+    without duplicates.
+
+    :param col1: name of column containing array
+    :param col2: name of column containing array
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
+    >>> df.select(array_union(df.c1, df.c2)).collect()
+    [Row(array_union(c1, c2)=[u'b', u'a', u'c', u'd', u'f'])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_union(_to_java_column(col1), _to_java_column(col2)))
+
+
+@ignore_unicode_prefix
+@since(2.4)
+def array_except(col1, col2):
+    """
+    Collection function: returns an array of the elements in col1 but not in col2,
+    without duplicates.
+
+    :param col1: name of column containing array
+    :param col2: name of column containing array
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
+    >>> df.select(array_except(df.c1, df.c2)).collect()
+    [Row(array_except(c1, c2)=[u'b'])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_except(_to_java_column(col1), _to_java_column(col2)))
+
+
 @since(1.4)
 def explode(col):
     """Returns a new row for each element in the given array or map.
@@ -2184,7 +2241,7 @@ def json_tuple(col, *fields):
 def from_json(col, schema, options={}):
     """
     Parses a column containing a JSON string into a :class:`MapType` with :class:`StringType`
-    as keys type, :class:`StructType` or :class:`ArrayType` of :class:`StructType`\\s with
+    as keys type, :class:`StructType` or :class:`ArrayType` with
     the specified schema. Returns `null`, in the case of an unparseable string.
 
     :param col: string column in json format
@@ -2212,6 +2269,11 @@ def from_json(col, schema, options={}):
     >>> schema = schema_of_json(lit('''{"a": 0}'''))
     >>> df.select(from_json(df.value, schema).alias("json")).collect()
     [Row(json=Row(a=1))]
+    >>> data = [(1, '''[1, 2, 3]''')]
+    >>> schema = ArrayType(IntegerType())
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=[1, 2, 3])]
     """
 
     sc = SparkContext._active_spark_context
@@ -2361,6 +2423,23 @@ def array_sort(col):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_sort(_to_java_column(col)))
+
+
+@since(2.4)
+def shuffle(col):
+    """
+    Collection function: Generates a random permutation of the given array.
+
+    .. note:: The function is non-deterministic.
+
+    :param col: name of column or expression
+
+    >>> df = spark.createDataFrame([([1, 20, 3, 5],), ([1, 20, None, 3],)], ['data'])
+    >>> df.select(shuffle(df.data).alias('s')).collect()  # doctest: +SKIP
+    [Row(s=[3, 1, 5, 20]), Row(s=[20, None, 3, 1])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.shuffle(_to_java_column(col)))
 
 
 @since(1.5)
@@ -2530,6 +2609,28 @@ def map_concat(*cols):
         cols = cols[0]
     jc = sc._jvm.functions.map_concat(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
+
+
+@since(2.4)
+def sequence(start, stop, step=None):
+    """
+    Generate a sequence of integers from `start` to `stop`, incrementing by `step`.
+    If `step` is not set, incrementing by 1 if `start` is less than or equal to `stop`,
+    otherwise -1.
+
+    >>> df1 = spark.createDataFrame([(-2, 2)], ('C1', 'C2'))
+    >>> df1.select(sequence('C1', 'C2').alias('r')).collect()
+    [Row(r=[-2, -1, 0, 1, 2])]
+    >>> df2 = spark.createDataFrame([(4, -4, -2)], ('C1', 'C2', 'C3'))
+    >>> df2.select(sequence('C1', 'C2', 'C3').alias('r')).collect()
+    [Row(r=[4, 2, 0, -2, -4])]
+    """
+    sc = SparkContext._active_spark_context
+    if step is None:
+        return Column(sc._jvm.functions.sequence(_to_java_column(start), _to_java_column(stop)))
+    else:
+        return Column(sc._jvm.functions.sequence(
+            _to_java_column(start), _to_java_column(stop), _to_java_column(step)))
 
 
 # ---------------------------- User Defined Function ----------------------------------
@@ -2752,8 +2853,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        >>> @pandas_udf("double", PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
        ... def mean_udf(v):
        ...     return v.mean()
-       >>> w = Window.partitionBy('id') \\
-       ...           .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+       >>> w = Window \\
+       ...     .partitionBy('id') \\
+       ...     .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
        >>> df.withColumn('mean_v', mean_udf(df['v']).over(w)).show()  # doctest: +SKIP
        +---+----+------+
        | id|   v|mean_v|
