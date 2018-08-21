@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -180,7 +182,7 @@ object UnsafeProjection
     try {
       GenerateUnsafeProjection.generate(unsafeExprs, subexpressionEliminationEnabled)
     } catch {
-      case _: Exception =>
+      case NonFatal(_) =>
         // We should have already seen the error message in `CodeGenerator`
         logWarning("Expr codegen error and falling back to interpreter mode")
         InterpretedUnsafeProjection.createProjection(unsafeExprs)

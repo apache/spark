@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -49,7 +51,7 @@ abstract class CodeGeneratorWithInterpretedFallback[IN, OUT] extends Logging {
         try {
           createCodeGeneratedObject(in)
         } catch {
-          case _: Exception =>
+          case NonFatal(_) =>
             // We should have already seen the error message in `CodeGenerator`
             logWarning("Expr codegen error and falling back to interpreter mode")
             createInterpretedObject(in)
