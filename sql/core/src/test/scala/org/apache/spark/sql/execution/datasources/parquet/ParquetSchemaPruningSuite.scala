@@ -199,6 +199,69 @@ class ParquetSchemaPruningSuite
     }
   }
 
+  case class MixedCaseColumn(a: String, B: Int)
+  case class MixedCase(id: Int, CoL1: String, coL2: MixedCaseColumn)
+
+  private val mixedCaseData =
+    MixedCase(0, "r0c1", MixedCaseColumn("abc", 1)) ::
+    MixedCase(1, "r1c1", MixedCaseColumn("123", 2)) ::
+    Nil
+
+  testMixedCasePruning("select with exact column names") {
+    val query = sql("select CoL1, coL2.B from mixedcase")
+    checkScan(query, "struct<CoL1:string,coL2:struct<B:int>>")
+    checkAnswer(query.orderBy("id"),
+      Row("r0c1", 1) ::
+      Row("r1c1", 2) ::
+      Nil)
+  }
+
+  testMixedCasePruning("select with lowercase column names") {
+    val query = sql("select col1, col2.b from mixedcase")
+    checkScan(query, "struct<CoL1:string,coL2:struct<B:int>>")
+    checkAnswer(query.orderBy("id"),
+      Row("r0c1", 1) ::
+      Row("r1c1", 2) ::
+      Nil)
+  }
+
+  testMixedCasePruning("select with different-case column names") {
+    val query = sql("select cOL1, cOl2.b from mixedcase")
+    checkScan(query, "struct<CoL1:string,coL2:struct<B:int>>")
+    checkAnswer(query.orderBy("id"),
+      Row("r0c1", 1) ::
+      Row("r1c1", 2) ::
+      Nil)
+  }
+
+  testMixedCasePruning("filter with different-case column names") {
+    val query = sql("select id from mixedcase where Col2.b = 2")
+    // Pruning with filters is currently unsupported. As-is, the file reader will read the id column
+    // and the entire coL2 struct. Once pruning with filters has been implemented we can uncomment
+    // this line
+    // checkScan(query, "struct<id:int,coL2:struct<B:int>>")
+    checkAnswer(query.orderBy("id"), Row(1) :: Nil)
+  }
+
+  private def testMixedCasePruning(testName: String)(testThunk: => Unit) {
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+      test(s"Spark vectorized reader - mixed-case schema - $testName") {
+        withMixedCaseData(testThunk)
+      }
+    }
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+      test(s"Parquet-mr reader - mixed-case schema - $testName") {
+        withMixedCaseData(testThunk)
+      }
+    }
+  }
+
+  private def withMixedCaseData(testThunk: => Unit) {
+    withParquetTable(mixedCaseData, "mixedcase") {
+      testThunk
+    }
+  }
+
   private val schemaEquality = new Equality[StructType] {
     override def areEqual(a: StructType, b: Any): Boolean =
       b match {

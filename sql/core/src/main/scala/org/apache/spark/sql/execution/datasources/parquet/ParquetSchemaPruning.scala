@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -45,7 +45,9 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
       case op @ PhysicalOperation(projects, filters,
           l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _))
         if canPruneRelation(hadoopFsRelation) =>
-        val requestedRootFields = identifyRootFields(projects, filters)
+        val (normalizedProjects, normalizedFilters) =
+          normalizeAttributeRefNames(l, projects, filters)
+        val requestedRootFields = identifyRootFields(normalizedProjects, normalizedFilters)
 
         // If requestedRootFields includes a nested field, continue. Otherwise,
         // return op
@@ -64,7 +66,8 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
             val prunedRelation = buildPrunedRelation(l, prunedParquetRelation)
             val projectionOverSchema = ProjectionOverSchema(prunedDataSchema)
 
-            buildNewProjection(projects, filters, prunedRelation, projectionOverSchema)
+            buildNewProjection(normalizedProjects, normalizedFilters, prunedRelation,
+              projectionOverSchema)
           } else {
             op
           }
@@ -78,6 +81,27 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
    */
   private def canPruneRelation(fsRelation: HadoopFsRelation) =
     fsRelation.fileFormat.isInstanceOf[ParquetFileFormat]
+
+  /**
+   * Normalizes the names of the attribute references in the given projects and filters to reflect
+   * the names in the given logical relation. This makes it possible to compare attributes and
+   * fields by name. Returns a tuple with the normalized projects and filters, respectively.
+   */
+  private def normalizeAttributeRefNames(
+      logicalRelation: LogicalRelation,
+      projects: Seq[NamedExpression],
+      filters: Seq[Expression]): (Seq[NamedExpression], Seq[Expression]) = {
+    val normalizedAttNameMap = logicalRelation.output.map(att => (att.exprId, att.name)).toMap
+    val normalizedProjects = projects.map(_.transform {
+      case att: AttributeReference if normalizedAttNameMap.contains(att.exprId) =>
+        att.withName(normalizedAttNameMap(att.exprId))
+    }).map { case expr: NamedExpression => expr }
+    val normalizedFilters = filters.map(_.transform {
+      case att: AttributeReference if normalizedAttNameMap.contains(att.exprId) =>
+        att.withName(normalizedAttNameMap(att.exprId))
+    })
+    (normalizedProjects, normalizedFilters)
+  }
 
   /**
    * Returns the set of fields from the Parquet file that the query plan needs.
@@ -142,15 +166,19 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
     sortLeftFieldsByRight(mergedDataSchema, fileDataSchema).asInstanceOf[StructType]
   }
 
+  /**
+   * Builds a pruned logical relation from the output of the output relation and the schema of the
+   * pruned base relation.
+   */
   private def buildPrunedRelation(
       outputRelation: LogicalRelation,
-      parquetRelation: HadoopFsRelation) = {
+      prunedBaseRelation: HadoopFsRelation) = {
     // We need to replace the expression ids of the pruned relation output attributes
     // with the expression ids of the original relation output attributes so that
     // references to the original relation's output are not broken
     val outputIdMap = outputRelation.output.map(att => (att.name, att.exprId)).toMap
     val prunedRelationOutput =
-      parquetRelation
+      prunedBaseRelation
         .schema
         .toAttributes
         .map {
@@ -158,7 +186,7 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
             att.withExprId(outputIdMap(att.name))
           case att => att
         }
-    outputRelation.copy(relation = parquetRelation, output = prunedRelationOutput)
+    outputRelation.copy(relation = prunedBaseRelation, output = prunedRelationOutput)
   }
 
   /**
