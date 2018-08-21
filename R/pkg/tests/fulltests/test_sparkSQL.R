@@ -3641,8 +3641,8 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
                c("name", "description", "dataType", "nullable", "isPartition", "isBucket"))
   expect_equal(collect(c)[[1]][[1]], "speed")
   expect_error(listColumns("zxwtyswklpf", "default"),
-       paste("Error in listColumns : analysis error - Table",
-             "'zxwtyswklpf' does not exist in database 'default'"))
+               paste("Error in listColumns : analysis error - Table",
+                     "'zxwtyswklpf' does not exist in database 'default'"))
 
   f <- listFunctions()
   expect_true(nrow(f) >= 200) # 250
@@ -3651,7 +3651,8 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   expect_equal(take(orderBy(f, "className"), 1)$className,
                "org.apache.spark.sql.catalyst.expressions.Abs")
   expect_error(listFunctions("zxwtyswklpf_db"),
-        "Error in listFunctions : analysis error - Database 'zxwtyswklpf_db' does not exist")
+               paste("Error in listFunctions : analysis error - Database",
+                     "'zxwtyswklpf_db' does not exist"))
 
   # recoverPartitions does not work with tempory view
   expect_error(recoverPartitions("cars"),
