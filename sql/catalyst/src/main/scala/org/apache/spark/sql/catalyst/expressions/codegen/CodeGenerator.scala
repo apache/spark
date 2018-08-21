@@ -1462,7 +1462,6 @@ object CodeGenerator extends Logging {
    * @param srcArray code representing the number of elements the array should contain
    * @param needNullCheck value which shows whether a nullcheck is required for the returning
    *                      assignment
-   * @param rhsValue optional expression for the right-hand side of the returning assignment
    *
    * @return code representing an assignment to each element of the [[ArrayData]], which requires
    *         a pair of destination and source loop index variables
