@@ -19,7 +19,7 @@ from __future__ import print_function
 import socket
 
 from pyspark.java_gateway import do_server_auth
-from pyspark.serializers import write_with_length, UTF8Deserializer
+from pyspark.serializers import write_int, UTF8Deserializer
 
 
 class TaskContext(object):
@@ -101,10 +101,15 @@ class TaskContext(object):
         return self._localProperties.get(key, None)
 
 
+BARRIER_FUNCTION = 1
+
+
 def _load_from_socket(port, auth_secret):
     """
     Load data from a given socket, this is a blocking method thus only return when the socket
     connection has been closed.
+
+    This is copied from context.py, while modified the message protocol.
     """
     sock = None
     # Support for both IPv4 and IPv6.
@@ -124,13 +129,25 @@ def _load_from_socket(port, auth_secret):
     if not sock:
         raise Exception("could not open socket")
 
+    # We don't really need a socket file here, it's just for convenience that we can reuse the
+    # do_server_auth() function and data serialization methods.
     sockfile = sock.makefile("rwb", 65536)
-    write_with_length("run".encode("utf-8"), sockfile)
+
+    # Make a barrier() function call.
+    write_int(BARRIER_FUNCTION, sockfile)
     sockfile.flush()
+
+    # Do server auth.
     do_server_auth(sockfile, auth_secret)
 
-    # The socket will be automatically closed when garbage-collected.
-    return UTF8Deserializer().loads(sockfile)
+    # Collect result.
+    res = UTF8Deserializer().loads(sockfile)
+
+    # Release resources.
+    sockfile.close()
+    sock.close()
+
+    return res
 
 
 class BarrierTaskContext(TaskContext):

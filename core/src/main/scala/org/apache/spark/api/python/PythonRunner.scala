@@ -25,10 +25,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{SparkException, _}
+import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
+
 
 /**
  * Enumerate the type of command that will be sent to the Python worker
@@ -193,7 +194,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         // Init a ServerSocket to accept method calls from Python side.
         val isBarrier = context.isInstanceOf[BarrierTaskContext]
         if (isBarrier) {
-          serverSocket = Some(new ServerSocket(0, 1, InetAddress.getByName("localhost")))
+          serverSocket = Some(new ServerSocket(/* port */ 0,
+            /* backlog */ 1,
+            InetAddress.getByName("localhost")))
           // A call to accept() for ServerSocket shall block infinitely.
           serverSocket.map(_.setSoTimeout(0))
           new Thread("accept-connections") {
@@ -204,15 +207,25 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
                 var sock: Socket = null
                 try {
                   sock = serverSocket.get.accept()
+                  // Wait for function call from python side.
                   sock.setSoTimeout(10000)
-                  val cmdString = readUtf8(sock)
-                  if (cmdString.equals("run")) {
-                    sock.setSoTimeout(0)
-                    barrierAndServe(sock)
+                  val input = new DataInputStream(sock.getInputStream())
+                  input.readInt() match {
+                    case BarrierTaskContextMessageProtocol.BARRIER_FUNCTION =>
+                      // The barrier() function may wait infinitely, socket shall not timeout
+                      // before the function finishes.
+                      sock.setSoTimeout(0)
+                      barrierAndServe(sock)
+
+                    case _ =>
+                      val out = new DataOutputStream(new BufferedOutputStream(
+                        sock.getOutputStream))
+                      writeUTF(BarrierTaskContextMessageProtocol.ERROR_UNRECOGNIZED_FUNCTION, out)
                   }
                 } catch {
-                  case _: SocketException =>
-                    // No barrier() call from Python side, continue.
+                  case e: SocketException if e.getMessage.contains("Socket closed") =>
+                    // It is possible that the ServerSocket is not closed, but the native socket
+                    // has already been closed, we shall catch and silently ignore this case.
                 } finally {
                   if (sock != null) {
                     sock.close()
@@ -319,13 +332,19 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
       try {
         context.asInstanceOf[BarrierTaskContext].barrier()
-        writeUTF("success", out)
+        writeUTF(BarrierTaskContextMessageProtocol.BARRIER_RESULT_SUCCESS, out)
       } catch {
         case e: SparkException =>
           writeUTF(e.getMessage, out)
       } finally {
         out.close()
       }
+    }
+
+    def writeUTF(str: String, dataOut: DataOutputStream) {
+      val bytes = str.getBytes(UTF_8)
+      dataOut.writeInt(bytes.length)
+      dataOut.write(bytes)
     }
   }
 
@@ -465,20 +484,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       }
     }
   }
-
-  def writeUTF(str: String, dataOut: DataOutputStream) {
-    val bytes = str.getBytes(StandardCharsets.UTF_8)
-    dataOut.writeInt(bytes.length)
-    dataOut.write(bytes)
-  }
-
-  def readUtf8(s: Socket): String = {
-    val din = new DataInputStream(s.getInputStream())
-    val len = din.readInt()
-    val bytes = new Array[Byte](len)
-    din.readFully(bytes)
-    new String(bytes, UTF_8)
-  }
 }
 
 private[spark] object PythonRunner {
@@ -562,4 +567,10 @@ private[spark] object SpecialLengths {
   val END_OF_STREAM = -4
   val NULL = -5
   val START_ARROW_STREAM = -6
+}
+
+private[spark] object BarrierTaskContextMessageProtocol {
+  val BARRIER_FUNCTION = 1
+  val BARRIER_RESULT_SUCCESS = "success"
+  val ERROR_UNRECOGNIZED_FUNCTION = "Not recognized function call from python side."
 }
