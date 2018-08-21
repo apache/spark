@@ -138,7 +138,8 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     partitions: Int,
     rdd: RDD[_ <: Product2[K, V]],
     private var ascending: Boolean = true,
-    val samplePointsPerPartitionHint: Int = 20)
+    val samplePointsPerPartitionHint: Int = 20,
+    needCacheSample: Boolean = false)
   extends Partitioner {
 
   // A constructor declared in order to maintain backward compatibility for Java, when we add the
@@ -168,19 +169,22 @@ class RangePartitioner[K : Ordering : ClassTag, V](
       // Assume the input partitions are roughly balanced and over-sample a little bit.
       val sampleSizePerPartition = math.ceil(3.0 * sampleSize / rdd.partitions.length).toInt
       val (numItems, sketched) = RangePartitioner.sketch(rdd.map(_._1), sampleSizePerPartition)
-      val numSampled = sketched.map(_._3.length).sum
       if (numItems == 0L) {
         Array.empty
       } else {
-        // already got the whole data
-        if (numItems == numSampled) {
-          // get the sampled data
-          sampledArray = new Array[K](numSampled)
-          var curPos = 0
-          sketched.foreach(_._3.foreach(sampleRow => {
-            sampledArray(curPos) = sampleRow
-            curPos += 1
-          }))
+        // Try to cache the sample
+        if (needCacheSample) {
+          val numSampled = sketched.map(_._3.length).sum
+          // We already got the whole data, so cache them.
+          // ShuffleExchangeExec can reuse this cache instead of getting the data again
+          if (numItems == numSampled) {
+            sampledArray = new Array[K](numSampled)
+            var curPos = 0
+            sketched.foreach(_._3.foreach(sampleRow => {
+              sampledArray(curPos) = sampleRow
+              curPos += 1
+            }))
+          }
         }
         // If a partition contains much more than the average number of items, we re-sample from it
         // to ensure that enough items are collected from that partition.

@@ -159,11 +159,14 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
 
   test("RangPartitioner getSampledArray") {
     val rdd = sc.parallelize(1 to 1000).map(x => (x, null)).repartition(10)
+    // needCacheSample = false
+    var partitioner = new RangePartitioner(10, rdd, true, 20, false)
+    assert(partitioner.getSampledArray === null)
     // 10 * 20 * 3 < 1000, the sample array is null
-    var partitioner = new RangePartitioner(10, rdd, true, 20)
+    partitioner = new RangePartitioner(10, rdd, true, 20, true)
     assert(partitioner.getSampledArray === null)
     // 10 * 50 * 3 > 1000, the sample array stores the whole data
-    partitioner = new RangePartitioner(10, rdd, true, 50)
+    partitioner = new RangePartitioner(10, rdd, true, 50, true)
     assert(partitioner.getSampledArray.toSet === rdd.map(tuple => tuple._1).collect().toSet)
   }
 
