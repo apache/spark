@@ -1603,6 +1603,39 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
   }
 
+  test("SPARK-25134: check header on parsing of dataset with projection and column pruning") {
+    withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "true") {
+      Seq(false, true).foreach { multiLine =>
+        withTempPath { path =>
+          val dir = path.getAbsolutePath
+          Seq(("a", "b")).toDF("columnA", "columnB").write
+            .format("csv")
+            .option("header", true)
+            .save(dir)
+
+          // schema with one column
+          checkAnswer(spark.read
+            .format("csv")
+            .option("header", true)
+            .option("enforceSchema", false)
+            .option("multiLine", multiLine)
+            .load(dir)
+            .select("columnA"),
+            Row("a"))
+
+          // empty schema
+          assert(spark.read
+            .format("csv")
+            .option("header", true)
+            .option("enforceSchema", false)
+            .option("multiLine", multiLine)
+            .load(dir)
+            .count() === 1L)
+        }
+      }
+    }
+  }
+
   test("SPARK-24645 skip parsing when columnPruning enabled and partitions scanned only") {
     withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "true") {
       withTempPath { path =>
