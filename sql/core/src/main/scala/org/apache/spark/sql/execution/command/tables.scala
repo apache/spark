@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import java.io.File
-import java.net.URI
+import java.net.{URI, URISyntaxException}
 import java.nio.file.FileSystems
 
 import scala.collection.mutable.ArrayBuffer
@@ -306,7 +306,7 @@ case class LoadDataCommand(
     val loadPath = {
       if (isLocal) {
         val localFS = FileContext.getLocalFSFileContext()
-        Utils.makeQualified(FsConstants.LOCAL_FS_URI, localFS.getWorkingDirectory(), new Path(path))
+        makeQualified(FsConstants.LOCAL_FS_URI, localFS.getWorkingDirectory(), new Path(path))
       } else {
         val loadPath = new Path(path)
         // Follow Hive's behavior:
@@ -323,7 +323,7 @@ case class LoadDataCommand(
         // by considering the wild card scenario in mind.as per old logic query param  is
         // been considered while creating URI instance and if path contains wild card char '?'
         // the remaining charecters after '?' will be removed while forming URI instance
-        Utils.makeQualified(defaultFS, uriPath, loadPath)
+        makeQualified(defaultFS, uriPath, loadPath)
       }
     }
     val fs = loadPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
@@ -362,6 +362,38 @@ case class LoadDataCommand(
 
     CommandUtils.updateTableStats(sparkSession, targetTable)
     Seq.empty[Row]
+  }
+
+  /**
+   * Returns a qualified path object. Method ported from org.apache.hadoop.fs.Path class.
+   *
+   * @param defaultUri default uri corresponding to the filesystem provided.
+   * @param workingDir the working directory for the particular child path wd-relative names.
+   * @param path       Path instance based on the path string specified by the user.
+   * @return qualified path object
+   */
+  private def makeQualified(defaultUri: URI, workingDir: Path, path: Path): Path = {
+    val pathUri = {
+      if (!path.isAbsolute()) new Path(workingDir, path).toUri() else path.toUri()
+    }
+    if (pathUri.getScheme == null || pathUri.getAuthority == null &&
+      defaultUri.getAuthority != null) {
+      val scheme = if (pathUri.getScheme == null) defaultUri.getScheme else pathUri.getScheme
+      val authority = if (pathUri.getAuthority == null) {
+        if (defaultUri.getAuthority == null) "" else defaultUri.getAuthority
+      } else {
+        pathUri.getAuthority
+      }
+      try {
+        val newUri = new URI(scheme, authority, pathUri.getPath, pathUri.getFragment)
+        new Path(newUri)
+      } catch {
+        case e: URISyntaxException =>
+          throw new IllegalArgumentException(e)
+      }
+    } else {
+      path
+    }
   }
 }
 
