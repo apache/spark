@@ -27,19 +27,21 @@ import org.apache.spark.sql.sources.v2.reader.*;
  *
  * The execution engine will get an instance of this interface from a data source provider
  * (e.g. {@link org.apache.spark.sql.sources.v2.MicroBatchReadSupportProvider}) at the start of a
- * streaming query, then call {@link #newScanConfigBuilder(Offset, Offset)} to create an instance of
- * {@link ScanConfig} for each micro-batch. The {@link ScanConfig} will be used to create input
- * partitions and reader factory to scan a micro-batch. At the end {@link #stop()} will be called
- * when the streaming execution is completed. Note that a single query may have multiple executions
- * due to restart or failure recovery.
+ * streaming query, then call {@link #newScanConfigBuilder(Offset, Offset)} and create an instance
+ * of {@link ScanConfig} for each micro-batch. The {@link ScanConfig} will be used to create input
+ * partitions and reader factory to scan a micro-batch with a Spark job. At the end {@link #stop()}
+ * will be called when the streaming execution is completed. Note that a single query may have
+ * multiple executions due to restart or failure recovery.
  */
 @InterfaceStability.Evolving
 public interface MicroBatchReadSupport extends StreamingReadSupport, BaseStreamingSource {
 
   /**
-   * Returns a builder of {@link ScanConfig}. The builder can take some query specific information
-   * to do operators pushdown, take streaming offsets, etc., and keep these information in the
-   * created {@link ScanConfig}.
+   * Returns a builder of {@link ScanConfig}. Spark will call this method and create a
+   * {@link ScanConfig} for each data scanning job.
+   *
+   * The builder can take some query specific information to do operators pushdown, store streaming
+   * offsets, etc., and keep these information in the created {@link ScanConfig}.
    *
    * This is the first step of the data scan. All other methods in {@link MicroBatchReadSupport}
    * needs to take {@link ScanConfig} as an input.

@@ -21,9 +21,9 @@ import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.types.StructType;
 
 /**
- * An interface that carries query specific information for the data scan, like operator pushdown
- * information and streaming query offsets. This is defined as an empty interface, and data sources
- * should define their own {@link ScanConfig} classes.
+ * An interface that carries query specific information for the data scanning job, like operator
+ * pushdown information and streaming query offsets. This is defined as an empty interface, and data
+ * sources should define their own {@link ScanConfig} classes.
  *
  * For APIs that take a {@link ScanConfig} as input, like
  * {@link ReadSupport#planInputPartitions(ScanConfig)},

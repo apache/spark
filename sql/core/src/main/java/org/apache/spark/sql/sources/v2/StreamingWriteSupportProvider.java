@@ -34,7 +34,8 @@ import org.apache.spark.sql.types.StructType;
 public interface StreamingWriteSupportProvider extends DataSourceV2, BaseStreamingSink {
 
   /**
-   * Creates a {@link StreamingWriteSupport} instance to save the data to this data source.
+   * Creates a {@link StreamingWriteSupport} instance to save the data to this data source, which is
+   * called by Spark at the beginning of each streaming query.
    *
    * @param queryId A unique string for the writing query. It's possible that there are many
    *                writing queries running at the same time, and the returned

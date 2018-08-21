@@ -34,7 +34,8 @@ public interface MicroBatchReadSupportProvider extends DataSourceV2 {
 
   /**
    * Creates a {@link MicroBatchReadSupport} instance to scan the data from this streaming data
-   * source with a user specified schema.
+   * source with a user specified schema, which is called by Spark at the beginning of each
+   * micro-batch streaming query.
    *
    * By default this method throws {@link UnsupportedOperationException}, implementations should
    * override this method to handle user specified schema.
@@ -55,7 +56,7 @@ public interface MicroBatchReadSupportProvider extends DataSourceV2 {
 
   /**
    * Creates a {@link MicroBatchReadSupport} instance to scan the data from this streaming data
-   * source.
+   * source, which is called by Spark at the beginning of each micro-batch streaming query.
    *
    * @param checkpointLocation a path to Hadoop FS scratch space that can be used for failure
    *                           recovery. Readers for the same logical source in the same query

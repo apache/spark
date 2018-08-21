@@ -73,6 +73,8 @@ private[kafka010] class KafkaMicroBatchReadSupport(
 
   private val rangeCalculator = KafkaOffsetRangeCalculator(options)
 
+  private var endPartitionOffsets: KafkaSourceOffset = _
+
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
    * called in StreamExecutionThread. Otherwise, interrupting a thread while running
@@ -85,11 +87,12 @@ private[kafka010] class KafkaMicroBatchReadSupport(
   override def latestOffset(start: Offset): Offset = {
     val startPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
     val latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets()
-    KafkaSourceOffset(maxOffsetsPerTrigger.map { maxOffsets =>
+    endPartitionOffsets = KafkaSourceOffset(maxOffsetsPerTrigger.map { maxOffsets =>
       rateLimit(maxOffsets, startPartitionOffsets, latestPartitionOffsets)
     }.getOrElse {
       latestPartitionOffsets
     })
+    endPartitionOffsets
   }
 
   override def fullSchema(): StructType = KafkaOffsetReader.kafkaSchema
@@ -153,10 +156,11 @@ private[kafka010] class KafkaMicroBatchReadSupport(
     KafkaMicroBatchReaderFactory
   }
 
-  override def getCustomMetrics(config: ScanConfig): CustomMetrics = {
-    val endPartitionOffsets = config.asInstanceOf[SimpleStreamingScanConfig]
-      .end.get.asInstanceOf[KafkaSourceOffset].partitionToOffsets
-    KafkaCustomMetrics(kafkaOffsetReader.fetchLatestOffsets(), endPartitionOffsets)
+  // TODO: figure out the life cycle of custom metrics, and make this method take `ScanConfig` as
+  // a parameter.
+  override def getCustomMetrics(): CustomMetrics = {
+    KafkaCustomMetrics(
+      kafkaOffsetReader.fetchLatestOffsets(), endPartitionOffsets.partitionToOffsets)
   }
 
   override def deserializeOffset(json: String): Offset = {

@@ -34,7 +34,10 @@ public interface BatchReadSupportProvider extends DataSourceV2 {
 
   /**
    * Creates a {@link BatchReadSupport} instance to load the data from this data source with a user
-   * specified schema.
+   * specified schema, which is called by Spark at the beginning of each batch query.
+   *
+   * Spark will call this method at the beginning of each batch query to create a
+   * {@link BatchReadSupport} instance.
    *
    * By default this method throws {@link UnsupportedOperationException}, implementations should
    * override this method to handle user specified schema.
@@ -48,7 +51,8 @@ public interface BatchReadSupportProvider extends DataSourceV2 {
   }
 
   /**
-   * Creates a {@link BatchReadSupport} instance to scan the data from this data source.
+   * Creates a {@link BatchReadSupport} instance to scan the data from this data source, which is
+   * called by Spark at the beginning of each batch query.
    *
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.

@@ -32,10 +32,10 @@ public interface SupportsCustomReaderMetrics extends StreamingReadSupport {
   /**
    * Returns custom metrics specific to this data source.
    */
-  CustomMetrics getCustomMetrics(ScanConfig config);
+  CustomMetrics getCustomMetrics();
 
   /**
-   * Invoked if the custom metrics returned by {@link #getCustomMetrics(ScanConfig)} is invalid
+   * Invoked if the custom metrics returned by {@link #getCustomMetrics()} is invalid
    * (e.g. Invalid data that cannot be parsed). Throwing an error here would ensure that
    * your custom metrics work right and correct values are reported always. The default action
    * on invalid metrics is to ignore it.

@@ -35,7 +35,9 @@ import org.apache.spark.sql.types.StructType;
 public interface BatchWriteSupportProvider extends DataSourceV2 {
 
   /**
-   * Creates an optional {@link BatchWriteSupport} instance to save the data to this data source.
+   * Creates an optional {@link BatchWriteSupport} instance to save the data to this data source,
+   * which is called by Spark at the beginning of each batch query.
+   *
    * Data sources can return None if there is no writing needed to be done according to the save
    * mode.
    *
