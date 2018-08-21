@@ -21,6 +21,7 @@ import org.scalatest.Matchers
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.{Millis, Span}
 
+import org.apache.spark.internal.config
 import org.apache.spark.security.EncryptionFunSuite
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -154,6 +155,21 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     sc.parallelize(1 to 10).count()
   }
 
+  private def testCaching(testName: String, conf: SparkConf, storageLevel: StorageLevel): Unit = {
+    test(testName) {
+      testCaching(conf, storageLevel)
+    }
+    if (storageLevel.replication > 1) {
+      // also try with block replication as a stream
+      val uploadStreamConf = new SparkConf()
+      uploadStreamConf.setAll(conf.getAll)
+      uploadStreamConf.set(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM, 1L)
+      test(s"$testName (with replication as stream)") {
+        testCaching(uploadStreamConf, storageLevel)
+      }
+    }
+  }
+
   private def testCaching(conf: SparkConf, storageLevel: StorageLevel): Unit = {
     sc = new SparkContext(conf.setMaster(clusterUrl).setAppName("test"))
     TestUtils.waitUntilExecutorsUp(sc, 2, 30000)
@@ -169,7 +185,10 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val blockManager = SparkEnv.get.blockManager
     val blockTransfer = blockManager.blockTransferService
     val serializerManager = SparkEnv.get.serializerManager
-    blockManager.master.getLocations(blockId).foreach { cmId =>
+    val locations = blockManager.master.getLocations(blockId)
+    assert(locations.size === storageLevel.replication,
+      s"; got ${locations.size} replicas instead of ${storageLevel.replication}")
+    locations.foreach { cmId =>
       val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
         blockId.toString, null)
       val deserialized = serializerManager.dataDeserializeStream(blockId,
@@ -189,8 +208,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     "caching in memory and disk, replicated" -> StorageLevel.MEMORY_AND_DISK_2,
     "caching in memory and disk, serialized, replicated" -> StorageLevel.MEMORY_AND_DISK_SER_2
   ).foreach { case (testName, storageLevel) =>
-    encryptionTest(testName) { conf =>
-      testCaching(conf, storageLevel)
+    encryptionTestHelper(testName) { case (name, conf) =>
+      testCaching(name, conf, storageLevel)
     }
   }
 
