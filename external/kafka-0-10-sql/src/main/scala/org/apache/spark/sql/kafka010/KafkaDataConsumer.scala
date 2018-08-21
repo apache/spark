@@ -40,8 +40,8 @@ private[kafka010] sealed trait KafkaDataConsumer {
    * `read_committed`), it will be skipped and this method will try to fetch next available record
    * within [offset, untilOffset).
    *
-   * This method also will try the best to detect data loss. If `failOnDataLoss` is `false`, it will
-   * throw an exception when we detect an unavailable offset. If `failOnDataLoss` is `true`, this
+   * This method also will try its best to detect data loss. If `failOnDataLoss` is `true`, it will
+   * throw an exception when we detect an unavailable offset. If `failOnDataLoss` is `false`, this
    * method will try to fetch next available record within [offset, untilOffset).
    *
    * When this method tries to skip offsets due to either invisible messages or data loss and
@@ -97,9 +97,17 @@ private[kafka010] case class InternalKafkaConsumer(
    * instead.
    */
   private case class FetchedRecord(
-    record: Option[ConsumerRecord[Array[Byte], Array[Byte]]],
-    nextOffsetToFetch: Long
-  )
+      var record: ConsumerRecord[Array[Byte], Array[Byte]],
+      var nextOffsetToFetch: Long) {
+
+    def withRecord(
+        record: ConsumerRecord[Array[Byte], Array[Byte]],
+        nextOffsetToFetch: Long): FetchedRecord = {
+      this.record = record
+      this.nextOffsetToFetch = nextOffsetToFetch
+      this
+    }
+  }
 
   private val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
 
@@ -115,6 +123,12 @@ private[kafka010] case class InternalKafkaConsumer(
   @volatile private var fetchedData =
     ju.Collections.emptyListIterator[ConsumerRecord[Array[Byte], Array[Byte]]]
   @volatile private var nextOffsetInFetchedData = UNKNOWN_OFFSET
+
+  /**
+   * The fetched record returned from the `fetchData` method. This is a reusable private object to
+   * avoid memory allocation.
+   */
+  private val fetchedRecord: FetchedRecord = FetchedRecord(null, UNKNOWN_OFFSET)
 
   /**
    * The next available offset returned by Kafka after polling. This is the next offset after
@@ -175,7 +189,7 @@ private[kafka010] case class InternalKafkaConsumer(
     while (toFetchOffset != UNKNOWN_OFFSET && !isFetchComplete) {
       try {
         fetchedRecord = fetchData(toFetchOffset, untilOffset, pollTimeoutMs, failOnDataLoss)
-        if (fetchedRecord.record.nonEmpty) {
+        if (fetchedRecord.record != null) {
           isFetchComplete = true
         } else {
           toFetchOffset = fetchedRecord.nextOffsetToFetch
@@ -198,7 +212,7 @@ private[kafka010] case class InternalKafkaConsumer(
     }
 
     if (isFetchComplete) {
-      fetchedRecord.record.get
+      fetchedRecord.record
     } else {
       resetFetchedData()
       null
@@ -269,8 +283,8 @@ private[kafka010] case class InternalKafkaConsumer(
    * consumer's `isolation.level` is `read_committed`), it will return a `FetchedRecord` with the
    * next offset to fetch.
    *
-   * This method also will try the best to detect data loss. If failOnDataLoss` is `false`, it will
-   * throw an exception when we detect an unavailable offset. If `failOnDataLoss` is `true`, this
+   * This method also will try the best to detect data loss. If `failOnDataLoss` is true`, it will
+   * throw an exception when we detect an unavailable offset. If `failOnDataLoss` is `false`, this
    * method will return `null` if the next available record is within [offset, untilOffset).
    *
    * @throws OffsetOutOfRangeException if `offset` is out of range
@@ -290,7 +304,7 @@ private[kafka010] case class InternalKafkaConsumer(
       if (offset < offsetAfterPoll) {
         // Offsets in [offset, offsetAfterPoll) are missing. We should skip them.
         resetFetchedData()
-        return FetchedRecord(None, offsetAfterPoll)
+        return fetchedRecord.withRecord(null, offsetAfterPoll)
       } else {
         poll(offset, pollTimeoutMs)
       }
@@ -299,7 +313,7 @@ private[kafka010] case class InternalKafkaConsumer(
     if (!fetchedData.hasNext()) {
       assert(offset <= offsetAfterPoll,
         s"seek to $offset and poll but the offset was reset to $offsetAfterPoll")
-      FetchedRecord(None, offsetAfterPoll)
+      FetchedRecord(null, offsetAfterPoll)
     } else {
       val record = fetchedData.next()
       nextOffsetInFetchedData = record.offset + 1
@@ -314,7 +328,7 @@ private[kafka010] case class InternalKafkaConsumer(
           assert(fetchedData.hasPrevious, "fetchedData cannot move back")
           fetchedData.previous()
           nextOffsetInFetchedData = record.offset
-          return FetchedRecord(None, record.offset)
+          return fetchedRecord.withRecord(null, record.offset)
         }
         // This may happen when some records aged out but their offsets already got verified
         if (failOnDataLoss) {
@@ -327,7 +341,7 @@ private[kafka010] case class InternalKafkaConsumer(
             null
           } else {
             reportDataLoss(false, s"Skip missing records in [$offset, ${record.offset})")
-            FetchedRecord(Some(record), nextOffsetInFetchedData)
+            fetchedRecord.withRecord(record, nextOffsetInFetchedData)
           }
         }
       } else if (record.offset < offset) {
@@ -336,7 +350,7 @@ private[kafka010] case class InternalKafkaConsumer(
         throw new IllegalStateException(
           s"Tried to fetch $offset but the returned record offset was ${record.offset}")
       } else {
-        FetchedRecord(Some(record), nextOffsetInFetchedData)
+        fetchedRecord.withRecord(record, nextOffsetInFetchedData)
       }
     }
   }
