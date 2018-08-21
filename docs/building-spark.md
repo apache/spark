@@ -45,7 +45,7 @@ Other build examples can be found below.
 ## Building a Runnable Distribution
 
 To create a Spark distribution like those distributed by the
-[Spark Downloads](http://spark.apache.org/downloads.html) page, and that is laid out so as
+[Spark Downloads](https://spark.apache.org/downloads.html) page, and that is laid out so as
 to be runnable, use `./dev/make-distribution.sh` in the project root directory. It can be configured
 with Maven profile settings and so on like the direct Maven build. Example:
 
@@ -164,7 +164,7 @@ prompt.
 Developers who compile Spark frequently may want to speed up compilation; e.g., by using Zinc
 (for developers who build with Maven) or by avoiding re-compilation of the assembly JAR (for
 developers who build with SBT).  For more information about how to do this, refer to the
-[Useful Developer Tools page](http://spark.apache.org/developer-tools.html#reducing-build-times).
+[Useful Developer Tools page](https://spark.apache.org/developer-tools.html#reducing-build-times).
 
 ## Encrypted Filesystems
 
@@ -182,7 +182,7 @@ to the `sharedSettings` val. See also [this PR](https://github.com/apache/spark/
 ## IntelliJ IDEA or Eclipse
 
 For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troubleshooting, refer to the
-[Useful Developer Tools page](http://spark.apache.org/developer-tools.html).
+[Useful Developer Tools page](https://spark.apache.org/developer-tools.html).
 
 
 # Running Tests
@@ -203,7 +203,7 @@ The following is an example of a command to run the tests:
 ## Running Individual Tests
 
 For information about how to run individual tests, refer to the
-[Useful Developer Tools page](http://spark.apache.org/developer-tools.html#running-individual-tests).
+[Useful Developer Tools page](https://spark.apache.org/developer-tools.html#running-individual-tests).
 
 ## PySpark pip installable
 
