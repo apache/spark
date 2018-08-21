@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s
 
-import io.fabric8.kubernetes.api.model.{HasMetadata, Pod}
+import io.fabric8.kubernetes.api.model.HasMetadata
 
 private[spark] case class KubernetesDriverSpec(
     pod: SparkPod,

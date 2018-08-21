@@ -16,10 +16,17 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import org.mockito.Mockito
+import java.io.File
+
+import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodBuilder, PodList}
+import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.dsl.{MixedOperation, PodResource}
+import org.mockito.Matchers._
+import org.mockito.Mockito._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.Config.CONTAINER_IMAGE
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep}
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
@@ -220,8 +227,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   }
 
   test("Apply template volume step if executor template is present.") {
-    val sparkConf = Mockito.spy(new SparkConf(false))
-    Mockito.doReturn(Option("filename")).when(sparkConf)
+    val sparkConf = spy(new SparkConf(false))
+    doReturn(Option("filename")).when(sparkConf)
       .get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
     val conf = KubernetesConf(
       sparkConf,
@@ -249,7 +256,6 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       TEMPLATE_VOLUME_STEP_TYPE)
   }
 
-
   private def validateStepTypesApplied(resolvedSpec: KubernetesDriverSpec, stepTypes: String*)
     : Unit = {
     assert(resolvedSpec.systemProperties.size === stepTypes.size)
@@ -259,5 +265,73 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
         KubernetesFeaturesTestUtils.getSecretsForStepType(stepType)))
       assert(resolvedSpec.systemProperties(stepType) === stepType)
     }
+  }
+
+  test("Start with empty pod if template is not specified") {
+    val kubernetesClient = mock(classOf[KubernetesClient])
+    val driverBuilder = KubernetesDriverBuilder.apply(kubernetesClient, new SparkConf())
+    verify(kubernetesClient, never()).pods()
+  }
+
+  test("Starts with template if specified") {
+    val spec = getSpecWithPodTemplate(
+      new PodBuilder()
+        .withNewMetadata()
+        .addToLabels("test-label-key", "test-label-value")
+        .endMetadata()
+        .withNewSpec()
+        .addNewContainer()
+        .withName(Constants.DRIVER_CONTAINER_NAME)
+        .endContainer()
+        .endSpec()
+        .build())
+
+    assert(spec.pod.pod.getMetadata.getLabels.containsKey("test-label-key"))
+    assert(spec.pod.pod.getMetadata.getLabels.get("test-label-key") === "test-label-value")
+    assert(spec.pod.container.getName === Constants.DRIVER_CONTAINER_NAME)
+  }
+
+  test("Starts with empty pod if bad template") {
+    val spec = getSpecWithPodTemplate(
+      new PodBuilder()
+        .withNewMetadata()
+        .addToLabels("test-label-key", "test-label-value")
+        .endMetadata()
+        .build())
+
+    assert(!spec.pod.pod.getMetadata.getLabels.containsKey("test-label-key"))
+  }
+
+  private def getSpecWithPodTemplate(pod: Pod) : KubernetesDriverSpec = {
+    val kubernetesClient = mock(classOf[KubernetesClient])
+    val pods =
+      mock(classOf[MixedOperation[Pod, PodList, DoneablePod, PodResource[Pod, DoneablePod]]])
+    val podResource = mock(classOf[PodResource[Pod, DoneablePod]])
+    when(kubernetesClient.pods()).thenReturn(pods)
+    when(pods.load(any(classOf[File]))).thenReturn(podResource)
+    when(podResource.get()).thenReturn(pod)
+
+    val sparkConf = new SparkConf(false)
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE, "template-file.yaml")
+
+    val kubernetesConf = new KubernetesConf(
+      sparkConf,
+      KubernetesDriverSpecificConf(
+        Some(JavaMainAppResource("example.jar")),
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Nil,
+      Seq.empty[String])
+
+    KubernetesDriverBuilder.apply(kubernetesClient, sparkConf).buildFromFeatures(kubernetesConf)
   }
 }
