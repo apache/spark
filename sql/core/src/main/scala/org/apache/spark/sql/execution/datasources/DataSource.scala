@@ -626,7 +626,6 @@ object DataSource extends Logging {
       serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider1)).toList match {
         // the provider format did not match any given registered aliases
         case Nil =>
-          val latestDocsURL = "https://spark.apache.org/docs/latest"
           try {
             Try(loader.loadClass(provider1)).orElse(Try(loader.loadClass(provider2))) match {
               case Success(dataSource) =>
@@ -644,11 +643,12 @@ object DataSource extends Logging {
                   throw new AnalysisException(
                     s"Failed to find data source: $provider1. Avro is built-in but external data " +
                     "source module since Spark 2.4. Please deploy the application as per " +
-                    s"$latestDocsURL/avro-data-source-guide.html#deploying")
+                    "the deployment section of \"Apache Avro Data Source Guide\".")
                 } else if (provider1.toLowerCase(Locale.ROOT) == "kafka") {
                   throw new AnalysisException(
-                    s"Failed to find data source: $provider1. Please deploy the application as" +
-                    s"per $latestDocsURL/structured-streaming-kafka-integration.html#deploying")
+                    s"Failed to find data source: $provider1. Please deploy the application as " +
+                    "per the deployment section of " +
+                    "\"Structured Streaming + Kafka Integration Guide\".")
                 } else {
                   throw new ClassNotFoundException(
                     s"Failed to find data source: $provider1. Please find packages at " +
