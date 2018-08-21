@@ -20,8 +20,6 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit._
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -167,6 +165,18 @@ trait WatermarkSupport extends UnaryExecNode {
       }
     }
   }
+
+  protected def removeKeysOlderThanWatermark(
+      storeManager: StreamingAggregationStateManager,
+      store: StateStore): Unit = {
+    if (watermarkPredicateForKeys.nonEmpty) {
+      storeManager.keys(store).foreach { keyRow =>
+        if (watermarkPredicateForKeys.get.eval(keyRow)) {
+          storeManager.remove(store, keyRow)
+        }
+      }
+    }
+  }
 }
 
 object WatermarkSupport {
@@ -201,8 +211,12 @@ object WatermarkSupport {
 case class StateStoreRestoreExec(
     keyExpressions: Seq[Attribute],
     stateInfo: Option[StatefulOperatorStateInfo],
+    stateFormatVersion: Int,
     child: SparkPlan)
   extends UnaryExecNode with StateStoreReader {
+
+  private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
+    keyExpressions, child.output, stateFormatVersion)
 
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
@@ -210,11 +224,10 @@ case class StateStoreRestoreExec(
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
       keyExpressions.toStructType,
-      child.output.toStructType,
+      stateManager.getStateValueSchema,
       indexOrdinal = None,
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
-        val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
         val hasInput = iter.hasNext
         if (!hasInput && keyExpressions.isEmpty) {
           // If our `keyExpressions` are empty, we're getting a global aggregation. In that case
@@ -224,10 +237,10 @@ case class StateStoreRestoreExec(
           store.iterator().map(_.value)
         } else {
           iter.flatMap { row =>
-            val key = getKey(row)
-            val savedState = store.get(key)
+            val key = stateManager.getKey(row.asInstanceOf[UnsafeRow])
+            val restoredRow = stateManager.get(store, key)
             numOutputRows += 1
-            Option(savedState).toSeq :+ row
+            Option(restoredRow).toSeq :+ row
           }
         }
     }
@@ -254,8 +267,12 @@ case class StateStoreSaveExec(
     stateInfo: Option[StatefulOperatorStateInfo] = None,
     outputMode: Option[OutputMode] = None,
     eventTimeWatermark: Option[Long] = None,
+    stateFormatVersion: Int,
     child: SparkPlan)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
+
+  private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
+    keyExpressions, child.output, stateFormatVersion)
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
@@ -265,11 +282,10 @@ case class StateStoreSaveExec(
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
       keyExpressions.toStructType,
-      child.output.toStructType,
+      stateManager.getStateValueSchema,
       indexOrdinal = None,
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
-        val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
         val numOutputRows = longMetric("numOutputRows")
         val numUpdatedStateRows = longMetric("numUpdatedStateRows")
         val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
@@ -282,19 +298,18 @@ case class StateStoreSaveExec(
             allUpdatesTimeMs += timeTakenMs {
               while (iter.hasNext) {
                 val row = iter.next().asInstanceOf[UnsafeRow]
-                val key = getKey(row)
-                store.put(key, row)
+                stateManager.put(store, row)
                 numUpdatedStateRows += 1
               }
             }
             allRemovalsTimeMs += 0
             commitTimeMs += timeTakenMs {
-              store.commit()
+              stateManager.commit(store)
             }
             setStoreMetrics(store)
-            store.iterator().map { rowPair =>
+            stateManager.values(store).map { valueRow =>
               numOutputRows += 1
-              rowPair.value
+              valueRow
             }
 
           // Update and output only rows being evicted from the StateStore
@@ -304,14 +319,13 @@ case class StateStoreSaveExec(
               val filteredIter = iter.filter(row => !watermarkPredicateForData.get.eval(row))
               while (filteredIter.hasNext) {
                 val row = filteredIter.next().asInstanceOf[UnsafeRow]
-                val key = getKey(row)
-                store.put(key, row)
+                stateManager.put(store, row)
                 numUpdatedStateRows += 1
               }
             }
 
             val removalStartTimeNs = System.nanoTime
-            val rangeIter = store.getRange(None, None)
+            val rangeIter = stateManager.iterator(store)
 
             new NextIterator[InternalRow] {
               override protected def getNext(): InternalRow = {
@@ -319,7 +333,7 @@ case class StateStoreSaveExec(
                 while(rangeIter.hasNext && removedValueRow == null) {
                   val rowPair = rangeIter.next()
                   if (watermarkPredicateForKeys.get.eval(rowPair.key)) {
-                    store.remove(rowPair.key)
+                    stateManager.remove(store, rowPair.key)
                     removedValueRow = rowPair.value
                   }
                 }
@@ -333,7 +347,7 @@ case class StateStoreSaveExec(
 
               override protected def close(): Unit = {
                 allRemovalsTimeMs += NANOSECONDS.toMillis(System.nanoTime - removalStartTimeNs)
-                commitTimeMs += timeTakenMs { store.commit() }
+                commitTimeMs += timeTakenMs { stateManager.commit(store) }
                 setStoreMetrics(store)
               }
             }
@@ -352,8 +366,7 @@ case class StateStoreSaveExec(
               override protected def getNext(): InternalRow = {
                 if (baseIterator.hasNext) {
                   val row = baseIterator.next().asInstanceOf[UnsafeRow]
-                  val key = getKey(row)
-                  store.put(key, row)
+                  stateManager.put(store, row)
                   numOutputRows += 1
                   numUpdatedStateRows += 1
                   row
@@ -367,8 +380,10 @@ case class StateStoreSaveExec(
                 allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
 
                 // Remove old aggregates if watermark specified
-                allRemovalsTimeMs += timeTakenMs { removeKeysOlderThanWatermark(store) }
-                commitTimeMs += timeTakenMs { store.commit() }
+                allRemovalsTimeMs += timeTakenMs {
+                  removeKeysOlderThanWatermark(stateManager, store)
+                }
+                commitTimeMs += timeTakenMs { stateManager.commit(store) }
                 setStoreMetrics(store)
               }
             }

@@ -102,19 +102,21 @@ class IncrementalExecution(
   val state = new Rule[SparkPlan] {
 
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
-      case StateStoreSaveExec(keys, None, None, None,
+      case StateStoreSaveExec(keys, None, None, None, stateFormatVersion,
              UnaryExecNode(agg,
-               StateStoreRestoreExec(_, None, child))) =>
+               StateStoreRestoreExec(_, None, _, child))) =>
         val aggStateInfo = nextStatefulOperationStateInfo
         StateStoreSaveExec(
           keys,
           Some(aggStateInfo),
           Some(outputMode),
           Some(offsetSeqMetadata.batchWatermarkMs),
+          stateFormatVersion,
           agg.withNewChildren(
             StateStoreRestoreExec(
               keys,
               Some(aggStateInfo),
+              stateFormatVersion,
               child) :: Nil))
 
       case StreamingDeduplicateExec(keys, child, None, None) =>
