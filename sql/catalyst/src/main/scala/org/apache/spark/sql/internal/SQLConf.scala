@@ -1422,6 +1422,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  object TypeCoercionMode extends Enumeration {
+    val default, hive = Value
+  }
+
+  val typeCoercionMode =
+    buildConf("spark.sql.typeCoercion.mode")
+      .internal()
+      .doc("Since Spark 2.4, the 'hive' mode is introduced for Hive compatiblity. " +
+        "Spark SQL has its native type cocersion mode, which is enabled by default.")
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .checkValues(TypeCoercionMode.values.map(_.toString))
+      .createWithDefault(TypeCoercionMode.default.toString)
+
+
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
       .internal()
