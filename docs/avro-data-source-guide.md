@@ -26,7 +26,8 @@ See [Application Submission Guide](submitting-applications.html) for more detail
 
 Since `spark-avro` module is external, there is not such API as `.avro` in 
 `DataFrameReader` or `DataFrameWriter`.
-To load/save data in Avro format, you need to specify the data source option `format` as short name `avro` or full name `org.apache.spark.sql.avro`.
+
+To load/save data in Avro format, you need to specify the data source option `format` as `avro`(or `org.apache.spark.sql.avro`).
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
@@ -176,7 +177,7 @@ Data source options of Avro can be set using the `.option` method on `DataFrameR
 </table>
 
 ## Configuration
-Configuration of Parquet can be done using the `setConf` method on SparkSession or by running `SET key=value` commands using SQL.
+Configuration of Avro can be done using the `setConf` method on SparkSession or by running `SET key=value` commands using SQL.
 <table class="table">
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th></tr>
   <tr>
