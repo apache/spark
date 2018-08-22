@@ -116,7 +116,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         }
 
         val writeField = writeElement(ctx, input.value, index.toString, dt, rowWriter)
-        if (input.isNull == FalseLiteral || !nullable) {
+        if (!nullable) {
           s"""
              |${input.code}
              |${writeField.trim}
