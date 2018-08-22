@@ -44,31 +44,19 @@ class RowBasedHashMapGenerator(
     groupingKeySchema, bufferSchema) {
 
   override protected def initializeAggregateHashMap(): String = {
-    val generatedKeySchema: String =
-      s"new org.apache.spark.sql.types.StructType()" +
-        groupingKeySchema.map { key =>
-          val keyName = ctx.addReferenceObj("keyName", key.name)
-          key.dataType match {
-            case d: DecimalType =>
-              s""".add($keyName, org.apache.spark.sql.types.DataTypes.createDecimalType(
-                  |${d.precision}, ${d.scale}))""".stripMargin
-            case _ =>
-              s""".add($keyName, org.apache.spark.sql.types.DataTypes.${key.dataType})"""
-          }
-        }.mkString("\n").concat(";")
+    val generatedKeyColTypes = groupingKeySchema
+      .zipWithIndex.map { case (t, i) => (s"_col$i", t.dataType) }
+    val generatedKeySchemaTypes = generatedKeyColTypes
+      .foldLeft(new StructType())((schema, colType) => schema.add(colType._1, colType._2))
+    val generatedKeySchema =
+      ctx.addReferenceObj("generatedKeySchemaTerm", generatedKeySchemaTypes)
 
-    val generatedValueSchema: String =
-      s"new org.apache.spark.sql.types.StructType()" +
-        bufferSchema.map { key =>
-          val keyName = ctx.addReferenceObj("keyName", key.name)
-          key.dataType match {
-            case d: DecimalType =>
-              s""".add($keyName, org.apache.spark.sql.types.DataTypes.createDecimalType(
-                  |${d.precision}, ${d.scale}))""".stripMargin
-            case _ =>
-              s""".add($keyName, org.apache.spark.sql.types.DataTypes.${key.dataType})"""
-          }
-        }.mkString("\n").concat(";")
+    val generatedValueColTypes = bufferSchema
+      .zipWithIndex.map { case (t, i) => (s"_col$i", t.dataType) }
+    val generatedValueTypes = generatedValueColTypes
+      .foldLeft(new StructType())((schema, colType) => schema.add(colType._1, colType._2))
+    val generatedValueSchema =
+      ctx.addReferenceObj("generatedValueSchemaTerm", generatedValueTypes)
 
     s"""
        |  private org.apache.spark.sql.catalyst.expressions.RowBasedKeyValueBatch batch;
@@ -78,8 +66,8 @@ class RowBasedHashMapGenerator(
        |  private int numBuckets = (int) (capacity / loadFactor);
        |  private int maxSteps = 2;
        |  private int numRows = 0;
-       |  private org.apache.spark.sql.types.StructType keySchema = $generatedKeySchema
-       |  private org.apache.spark.sql.types.StructType valueSchema = $generatedValueSchema
+       |  private org.apache.spark.sql.types.StructType keySchema = $generatedKeySchema;
+       |  private org.apache.spark.sql.types.StructType valueSchema = $generatedValueSchema;
        |  private Object emptyVBase;
        |  private long emptyVOff;
        |  private int emptyVLen;

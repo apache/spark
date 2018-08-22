@@ -52,31 +52,18 @@ class VectorizedHashMapGenerator(
     groupingKeySchema, bufferSchema) {
 
   override protected def initializeAggregateHashMap(): String = {
-    val generatedSchema: String =
-      s"new org.apache.spark.sql.types.StructType()" +
-        (groupingKeySchema ++ bufferSchema).map { key =>
-          val keyName = ctx.addReferenceObj("keyName", key.name)
-          key.dataType match {
-            case d: DecimalType =>
-              s""".add($keyName, org.apache.spark.sql.types.DataTypes.createDecimalType(
-                  |${d.precision}, ${d.scale}))""".stripMargin
-            case _ =>
-              s""".add($keyName, org.apache.spark.sql.types.DataTypes.${key.dataType})"""
-          }
-        }.mkString("\n").concat(";")
+    val generatedColTypes = (groupingKeySchema ++ bufferSchema)
+      .zipWithIndex.map { case (t, i) => (s"_col$i", t.dataType) }
+    val generatedSchemaTypes = generatedColTypes
+      .foldLeft(new StructType())((schema, colType) => schema.add(colType._1, colType._2))
+    val generatedSchema = ctx.addReferenceObj("generatedSchemaTerm", generatedSchemaTypes)
 
-    val generatedAggBufferSchema: String =
-      s"new org.apache.spark.sql.types.StructType()" +
-        bufferSchema.map { key =>
-          val keyName = ctx.addReferenceObj("keyName", key.name)
-          key.dataType match {
-            case d: DecimalType =>
-              s""".add($keyName, org.apache.spark.sql.types.DataTypes.createDecimalType(
-                  |${d.precision}, ${d.scale}))""".stripMargin
-            case _ =>
-              s""".add($keyName, org.apache.spark.sql.types.DataTypes.${key.dataType})"""
-          }
-        }.mkString("\n").concat(";")
+    val generatedAggBufferColTypes = bufferSchema
+      .zipWithIndex.map { case (t, i) => (s"_col$i", t.dataType) }
+    val generatedAggBufferTypes = generatedAggBufferColTypes
+      .foldLeft(new StructType())((schema, colType) => schema.add(colType._1, colType._2))
+    val generatedAggBufferSchema =
+      ctx.addReferenceObj("generatedAggBufferSchemaTerm", generatedAggBufferTypes)
 
     s"""
        |  private ${classOf[OnHeapColumnVector].getName}[] vectors;
@@ -88,9 +75,9 @@ class VectorizedHashMapGenerator(
        |  private int numBuckets = (int) (capacity / loadFactor);
        |  private int maxSteps = 2;
        |  private int numRows = 0;
-       |  private org.apache.spark.sql.types.StructType schema = $generatedSchema
+       |  private org.apache.spark.sql.types.StructType schema = $generatedSchema;
        |  private org.apache.spark.sql.types.StructType aggregateBufferSchema =
-       |    $generatedAggBufferSchema
+       |    $generatedAggBufferSchema;
        |
        |  public $generatedClassName() {
        |    vectors = ${classOf[OnHeapColumnVector].getName}.allocateColumns(capacity, schema);
