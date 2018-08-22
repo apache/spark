@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.StructType;
  * <p>
  * This is used to implement INSERT OVERWRITE ... PARTITIONS.
  */
-public interface BatchPartitionOverwriteSupport {
+public interface BatchPartitionOverwriteSupport extends BatchWriteSupport {
   /**
    * Creates a {@link WriteConfig} for a batch overwrite operation, where the data partitions
    * written by the job replace any partitions that already exist in the output table.
