@@ -143,6 +143,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
   @volatile private var finished = false
   @volatile private var finalStatus = getDefaultFinalStatus
   @volatile private var finalMsg: String = ""
+  private val finalMsgLimitSize = sparkConf.get(AM_FINAL_MSG_LIMIT).toInt
   @volatile private var userClassThread: Thread = _
 
   @volatile private var reporterThread: Thread = _
@@ -368,7 +369,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         }
         logInfo(s"Final app status: $finalStatus, exitCode: $exitCode" +
           Option(msg).map(msg => s", (reason: $msg)").getOrElse(""))
-        finalMsg = msg
+        finalMsg = if (msg == null || msg.length <= finalMsgLimitSize) {
+          msg
+        } else {
+          msg.substring(0, finalMsgLimitSize)
+        }
         finished = true
         if (!inShutdown && Thread.currentThread() != reporterThread && reporterThread != null) {
           logDebug("shutting down reporter thread")
