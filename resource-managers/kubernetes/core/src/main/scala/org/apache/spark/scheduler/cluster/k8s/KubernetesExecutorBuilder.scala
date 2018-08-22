@@ -18,9 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.io.File
 
-import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
-import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s._
@@ -75,12 +73,10 @@ private[spark] object KubernetesExecutorBuilder {
     conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
       .map(new File(_))
       .map(file => new KubernetesExecutorBuilder(provideInitialPod = () => {
-        val pod = kubernetesClient.pods().load(file).get()
-        val container = pod.getSpec.getContainers.asScala
-          .filter(_.getName == Constants.EXECUTOR_CONTAINER_NAME)
-          .headOption
-          .getOrElse(new ContainerBuilder().build())
-        SparkPod(pod, container)
+        KubernetesUtils.loadPodFromTemplate(
+          kubernetesClient,
+          file,
+          Constants.EXECUTOR_CONTAINER_NAME)
       }))
       .getOrElse(new KubernetesExecutorBuilder())
   }

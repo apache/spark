@@ -24,7 +24,7 @@ import io.fabric8.kubernetes.client.dsl.{MixedOperation, PodResource}
 import org.mockito.Matchers._
 import org.mockito.Mockito._
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config.CONTAINER_IMAGE
 import org.apache.spark.deploy.k8s.features._
@@ -292,14 +292,15 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   }
 
   test("Starts with empty pod if bad template") {
-    val spec = getSpecWithPodTemplate(
-      new PodBuilder()
-        .withNewMetadata()
-        .addToLabels("test-label-key", "test-label-value")
-        .endMetadata()
-        .build())
-
-    assert(!spec.pod.pod.getMetadata.getLabels.containsKey("test-label-key"))
+    val exception = intercept[SparkException] {
+      getSpecWithPodTemplate(
+        new PodBuilder()
+          .withNewMetadata()
+          .addToLabels("test-label-key", "test-label-value")
+          .endMetadata()
+          .build())
+    }
+    assert(exception.getMessage.contains("Could not load driver pod from template file."))
   }
 
   private def getSpecWithPodTemplate(pod: Pod) : KubernetesDriverSpec = {

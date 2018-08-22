@@ -16,10 +16,16 @@
  */
 package org.apache.spark.deploy.k8s
 
-import org.apache.spark.SparkConf
+import java.io.File
+
+import io.fabric8.kubernetes.client.KubernetesClient
+import scala.collection.JavaConverters._
+
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-private[spark] object KubernetesUtils {
+private[spark] object KubernetesUtils extends Logging {
 
   /**
    * Extract and parse Spark configuration properties with a given name prefix and
@@ -56,6 +62,24 @@ private[spark] object KubernetesUtils {
     fileScheme match {
       case "local" => fileUri.getPath
       case _ => uri
+    }
+  }
+
+  def loadPodFromTemplate(kubernetesClient: KubernetesClient,
+                          templateFile: File,
+                          containerName: String): SparkPod = {
+    try {
+      val pod = kubernetesClient.pods().load(templateFile).get()
+      val container = pod.getSpec.getContainers.asScala
+        .filter(_.getName == containerName)
+        .headOption
+      require(container.isDefined)
+      SparkPod(pod, container.get)
+    } catch {
+      case e: Exception =>
+        logError(
+          s"Encountered exception while attempting to load initial pod spec from file", e)
+        throw new SparkException("Could not load driver pod from template file.", e)
     }
   }
 
