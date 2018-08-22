@@ -1492,8 +1492,8 @@ private[spark] class DAGScheduler(
               // stage and its succeeding stages, because the input data will be changed after the
               // map tasks are re-tried.
               // Note that, if map stage is RANDOM_ORDER, we are fine. The shuffle partitioner is
-              // guaranteed to be idempotent, so the input data will not change even if the map
-              // tasks are not re-tried.
+              // guaranteed to be idempotent, so the input data of the reducers will not change even
+              // if the map tasks are not re-tried.
               if (mapStage.rdd.computingRandomLevel == RDD.RandomLevel.COMPLETE_RANDOM) {
                 def rollBackStage(stage: Stage): Unit = stage match {
                   case mapStage: ShuffleMapStage =>
@@ -1501,7 +1501,7 @@ private[spark] class DAGScheduler(
                     if (numMissingPartitions < mapStage.numTasks) {
                       markStageAsFinished(
                         mapStage,
-                        Some("preceding non-idempotent shuffle map stage gets retried."),
+                        Some("preceding shuffle map stage with random output gets retried."),
                         willRetry = !shouldAbortStage)
                       mapOutputTracker.unregisterAllMapOutput(mapStage.shuffleDep.shuffleId)
                       failedStages += mapStage
@@ -1509,9 +1509,14 @@ private[spark] class DAGScheduler(
 
                   case resultStage =>
                     val numMissingPartitions = resultStage.findMissingPartitions().length
-                    if (numMissingPartitions != resultStage.numTasks) {
+                    if (numMissingPartitions < resultStage.numTasks) {
                       // TODO: support to rollback result tasks.
-                      abortStage(failedStage, "cannot rollback result tasks.", None)
+                      val errorMessage = "A shuffle map stage with random output was failed and " +
+                        s"retried. However, Spark cannot rollback the result stage $resultStage " +
+                        "to re-process the input data, and has to fail this job. Please " +
+                        "eliminate the randomness by checkpointing the RDD before " +
+                        "repartition/zip and try again."
+                      abortStage(failedStage, errorMessage, None)
                     }
                 }
 
