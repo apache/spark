@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -138,81 +137,6 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
     withCoordinator
   }
 
-  private def resolveOutputPartitioningByAliases(
-      exprs: Seq[NamedExpression],
-      partitioning: Partitioning): Partitioning = {
-    val aliasSeq = exprs.flatMap(_.collectFirst {
-      case a @ Alias(child, _) => (child, a.toAttribute)
-    })
-    def mayReplaceExprWithAlias(e: Expression): Expression = {
-      aliasSeq.find { case (c, _) => c.semanticEquals(e) }.map(_._2).getOrElse(e)
-    }
-    def mayReplacePartitioningExprsWithAliases(p: Partitioning): Partitioning = p match {
-      case hash @ HashPartitioning(exprs, _) =>
-        hash.copy(expressions = exprs.map(mayReplaceExprWithAlias))
-      case range @ RangePartitioning(ordering, _) =>
-        range.copy(ordering = ordering.map { order =>
-          order.copy(
-            child = mayReplaceExprWithAlias(order.child),
-            sameOrderExpressions = order.sameOrderExpressions.map(mayReplaceExprWithAlias)
-          )
-        })
-      case _ => p
-    }
-
-    partitioning match {
-      case pc @ PartitioningCollection(ps) =>
-        pc.copy(partitionings = ps.map(mayReplacePartitioningExprsWithAliases))
-      case _ =>
-        mayReplacePartitioningExprsWithAliases(partitioning)
-    }
-  }
-
-  // If projects and aggregates have aliases in output expressions, we should respect
-  // these aliases so as to check if the operators satisfy their output distribution requirements.
-  // If we don't respect aliases, this rule wrongly adds shuffle operations, e.g.,
-  //
-  // spark.range(10).selectExpr("id AS key", "0").repartition($"key").write.saveAsTable("df1")
-  // spark.range(10).selectExpr("id AS key", "0").repartition($"key").write.saveAsTable("df2")
-  // sql("""
-  //   SELECT * FROM
-  //     (SELECT key AS k from df1) t1
-  //   INNER JOIN
-  //     (SELECT key AS k from df2) t2
-  //   ON t1.k = t2.k
-  // """).explain
-  //
-  // == Physical Plan ==
-  // *SortMergeJoin [k#56L], [k#57L], Inner
-  // :- *Sort [k#56L ASC NULLS FIRST], false, 0
-  // :  +- Exchange hashpartitioning(k#56L, 200) // <--- Unnecessary shuffle operation
-  // :     +- *Project [key#39L AS k#56L]
-  // :        +- Exchange hashpartitioning(key#39L, 200)
-  // :           +- *Project [id#36L AS key#39L]
-  // :              +- *Range (0, 10, step=1, splits=Some(4))
-  // +- *Sort [k#57L ASC NULLS FIRST], false, 0
-  //    +- ReusedExchange [k#57L], Exchange hashpartitioning(k#56L, 200)
-  private def isSatisfiedByAliasedOutputPartitioning(
-      child: SparkPlan,
-      distribution: Distribution): Boolean = {
-    val outputExprs = child match {
-      case ProjectExec(projectList, _) => projectList
-      case HashAggregateExec(_, _, _, _, _, resultExprs, _) => resultExprs
-      case ObjectHashAggregateExec(_, _, _, _, _, resultExprs, _) => resultExprs
-      case SortAggregateExec(_, _, _, _, _, resultExprs, _) => resultExprs
-      case _ => Seq.empty
-    }
-    def hasAlias(exprs: Seq[NamedExpression]) =
-      exprs.exists(_.collectFirst { case _: Alias => true }.isDefined)
-    if (hasAlias(outputExprs)) {
-      val newOutputPartitioning =
-        resolveOutputPartitioningByAliases(outputExprs, child.outputPartitioning)
-      newOutputPartitioning.satisfies(distribution)
-    } else {
-      false
-    }
-  }
-
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
     val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution
     val requiredChildOrderings: Seq[Seq[SortOrder]] = operator.requiredChildOrdering
@@ -223,8 +147,6 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
     // Ensure that the operator's children satisfy their output distribution requirements.
     children = children.zip(requiredChildDistributions).map {
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
-        child
-      case (child, distribution) if isSatisfiedByAliasedOutputPartitioning(child, distribution) =>
         child
       case (child, BroadcastDistribution(mode)) =>
         BroadcastExchangeExec(mode, child)
