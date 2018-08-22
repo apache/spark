@@ -441,13 +441,15 @@ private[spark] class DAGScheduler(
       func: (TaskContext, Iterator[_]) => _,
       partitions: Array[Int],
       jobId: Int,
-      callSite: CallSite): ResultStage = {
+      callSite: CallSite,
+      taskOverwritable: Boolean): ResultStage = {
     checkBarrierStageWithDynamicAllocation(rdd)
     checkBarrierStageWithNumSlots(rdd)
     checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
-    val stage = new ResultStage(id, rdd, func, partitions, parents, jobId, callSite)
+    val stage = new ResultStage(
+      id, rdd, func, partitions, parents, jobId, callSite, taskOverwritable)
     stageIdToStage(id) = stage
     updateJobIdStageIdMaps(jobId, stage)
     stage
@@ -678,7 +680,8 @@ private[spark] class DAGScheduler(
       partitions: Seq[Int],
       callSite: CallSite,
       resultHandler: (Int, U) => Unit,
-      properties: Properties): JobWaiter[U] = {
+      properties: Properties,
+      taskOverwritable: Boolean = false): JobWaiter[U] = {
     // Check to make sure we are not launching a task on a partition that does not exist.
     val maxPartitions = rdd.partitions.length
     partitions.find(p => p >= maxPartitions || p < 0).foreach { p =>
@@ -698,7 +701,7 @@ private[spark] class DAGScheduler(
     val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions.toArray, callSite, waiter,
-      SerializationUtils.clone(properties)))
+      SerializationUtils.clone(properties), taskOverwritable))
     waiter
   }
 
@@ -722,9 +725,11 @@ private[spark] class DAGScheduler(
       partitions: Seq[Int],
       callSite: CallSite,
       resultHandler: (Int, U) => Unit,
-      properties: Properties): Unit = {
+      properties: Properties,
+      taskOverwritable: Boolean = false): Unit = {
     val start = System.nanoTime
-    val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
+    val waiter = submitJob(
+      rdd, func, partitions, callSite, resultHandler, properties, taskOverwritable)
     ThreadUtils.awaitReady(waiter.completionFuture, Duration.Inf)
     waiter.completionFuture.value.get match {
       case scala.util.Success(_) =>
@@ -954,12 +959,13 @@ private[spark] class DAGScheduler(
       partitions: Array[Int],
       callSite: CallSite,
       listener: JobListener,
-      properties: Properties) {
+      properties: Properties,
+      taskOverwritable: Boolean) {
     var finalStage: ResultStage = null
     try {
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
-      finalStage = createResultStage(finalRDD, func, partitions, jobId, callSite)
+      finalStage = createResultStage(finalRDD, func, partitions, jobId, callSite, taskOverwritable)
     } catch {
       case e: BarrierJobSlotsNumberCheckFailed =>
         logWarning(s"The job $jobId requires to run a barrier stage that requires more slots " +
@@ -973,7 +979,7 @@ private[spark] class DAGScheduler(
           messageScheduler.schedule(
             new Runnable {
               override def run(): Unit = eventProcessLoop.post(JobSubmitted(jobId, finalRDD, func,
-                partitions, callSite, listener, properties))
+                partitions, callSite, listener, properties, taskOverwritable))
             },
             timeIntervalNumTasksCheck,
             TimeUnit.SECONDS
@@ -1507,16 +1513,19 @@ private[spark] class DAGScheduler(
                       failedStages += mapStage
                     }
 
-                  case resultStage =>
+                  case resultStage: ResultStage =>
                     val numMissingPartitions = resultStage.findMissingPartitions().length
                     if (numMissingPartitions < resultStage.numTasks) {
-                      // TODO: support to rollback result tasks.
-                      val errorMessage = "A shuffle map stage with random output was failed and " +
-                        s"retried. However, Spark cannot rollback the result stage $resultStage " +
-                        "to re-process the input data, and has to fail this job. Please " +
-                        "eliminate the randomness by checkpointing the RDD before " +
-                        "repartition/zip and try again."
-                      abortStage(failedStage, errorMessage, None)
+                      if (resultStage.taskOverwritable) {
+                        resultStage.activeJob.foreach(_.resetAllPartitions())
+                      } else {
+                        val errorMessage = "A shuffle map stage with random output was failed " +
+                          "and retried. However, Spark cannot rollback the result stage " +
+                          s"$resultStage to re-process the input data, and has to fail this job. " +
+                          "Please eliminate the randomness by checkpointing the RDD before " +
+                          "repartition/zip and try again."
+                        abortStage(failedStage, errorMessage, None)
+                      }
                     }
                 }
 
@@ -2043,8 +2052,16 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
   }
 
   private def doOnReceive(event: DAGSchedulerEvent): Unit = event match {
-    case JobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties) =>
-      dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties)
+    case j: JobSubmitted =>
+      dagScheduler.handleJobSubmitted(
+        j.jobId,
+        j.finalRDD,
+        j.func,
+        j.partitions,
+        j.callSite,
+        j.listener,
+        j.properties,
+        j.taskOverwritable)
 
     case MapStageSubmitted(jobId, dependency, callSite, listener, properties) =>
       dagScheduler.handleMapStageSubmitted(jobId, dependency, callSite, listener, properties)
