@@ -166,15 +166,14 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with Kaf
         topic: String,
         producer: KafkaProducer[String, String])(
         func: KafkaProducer[String, String] => Unit): AssertOnQuery = {
-      AssertOnQuery(_ => {
+      Execute("Run Kafka Producer")(_ => {
         func(producer)
         // This is a hack for the race condition that the committed message may be not visible to
         // consumer for a short time.
         // Looks like after the following call returns, the consumer can always read the committed
         // messages.
         testUtils.getLatestOffsets(Set(topic))
-        true
-      }, "Run Kafka Producer")
+      })
     }
   }
 
@@ -635,7 +634,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .option("maxOffsetsPerTrigger", 3)
       .option("subscribe", topic)
       .option("startingOffsets", "earliest")
-      // Set a short timeout to make the test fast. When a batch contains no committed date
+      // Set a short timeout to make the test fast. When a batch doesn't contain any visible data
       // messages, "poll" will wait until timeout.
       .option("kafkaConsumer.pollTimeoutMs", 5000)
     val kafka = reader.load()
@@ -657,35 +656,32 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       true
     }
 
-    val producer = testUtils.createProducer(usingTrascation = true)
-    try {
-      producer.initTransactions()
-
+    // The message values are the same as their offsets to make the test easy to follow
+    testUtils.withTranscationalProducer { producer =>
       testStream(mapped)(
         StartStream(ProcessingTime(100), clock),
         waitUntilBatchProcessed,
-        // 1 from smallest, 1 from middle, 8 from biggest
         CheckAnswer(),
         WithKafkaProducer(topic, producer) { producer =>
           // Send 5 messages. They should be visible only after being committed.
           producer.beginTransaction()
-          (1 to 5).foreach { i =>
+          (0 to 4).foreach { i =>
             producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
           }
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
         // Should not see any uncommitted messages
-        CheckAnswer(),
+        CheckNewAnswer(),
         WithKafkaProducer(topic, producer) { producer =>
           producer.commitTransaction()
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer(1 to 3: _*), // offset 0, 1, 2
+        CheckNewAnswer(0, 1, 2), // offset 0, 1, 2
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer(1 to 5: _*), // offset: 3, 4, 5* [* means it's not a committed data message]
+        CheckNewAnswer(3, 4), // offset: 3, 4, 5* [* means it's not a committed data message]
         WithKafkaProducer(topic, producer) { producer =>
           // Send 5 messages and abort the transaction. They should not be read.
           producer.beginTransaction()
@@ -696,49 +692,47 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer(1 to 5: _*), // offset: 6*, 7*, 8*
+        CheckNewAnswer(), // offset: 6*, 7*, 8*
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer(1 to 5: _*), // offset: 9*, 10*, 11*
+        CheckNewAnswer(), // offset: 9*, 10*, 11*
         WithKafkaProducer(topic, producer) { producer =>
           // Send 5 messages again. The consumer should skip the above aborted messages and read
           // them.
           producer.beginTransaction()
-          (11 to 15).foreach { i =>
+          (12 to 16).foreach { i =>
             producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
           }
           producer.commitTransaction()
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer((1 to 5) ++ (11 to 13): _*), // offset: 12, 13, 14
+        CheckNewAnswer(12, 13, 14), // offset: 12, 13, 14
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer((1 to 5) ++ (11 to 15): _*),  // offset: 15, 16, 17*
+        CheckNewAnswer(15, 16),  // offset: 15, 16, 17*
         WithKafkaProducer(topic, producer) { producer =>
           producer.beginTransaction()
-          producer.send(new ProducerRecord[String, String](topic, "16")).get()
-          producer.commitTransaction()
-          producer.beginTransaction()
-          producer.send(new ProducerRecord[String, String](topic, "17")).get()
-          producer.commitTransaction()
-          producer.beginTransaction()
           producer.send(new ProducerRecord[String, String](topic, "18")).get()
-          producer.send(new ProducerRecord[String, String](topic, "19")).get()
+          producer.commitTransaction()
+          producer.beginTransaction()
+          producer.send(new ProducerRecord[String, String](topic, "20")).get()
+          producer.commitTransaction()
+          producer.beginTransaction()
+          producer.send(new ProducerRecord[String, String](topic, "22")).get()
+          producer.send(new ProducerRecord[String, String](topic, "23")).get()
           producer.commitTransaction()
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer((1 to 5) ++ (11 to 17): _*), // offset: 18, 19*, 20
+        CheckNewAnswer(18, 20), // offset: 18, 19*, 20
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer((1 to 5) ++ (11 to 19): _*), // offset: 21*, 22, 23
+        CheckNewAnswer(22, 23), // offset: 21*, 22, 23
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer((1 to 5) ++ (11 to 19): _*) // offset: 24*
+        CheckNewAnswer() // offset: 24*
       )
-    } finally {
-      producer.close()
     }
   }
 
@@ -761,7 +755,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .option("maxOffsetsPerTrigger", 3)
       .option("subscribe", topic)
       .option("startingOffsets", "earliest")
-      // Set a short timeout to make the test fast. When a batch contains no committed date
+      // Set a short timeout to make the test fast. When a batch doesn't contain any visible data
       // messages, "poll" will wait until timeout.
       .option("kafkaConsumer.pollTimeoutMs", 5000)
     val kafka = reader.load()
@@ -771,7 +765,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     val clock = new StreamManualClock
 
-    val waitUntilBatchProcessed = AssertOnQuery { q =>
+    val waitUntilBatchProcessed = Execute { q =>
       eventually(Timeout(streamingTimeout)) {
         if (!q.exception.isDefined) {
           assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
@@ -780,34 +774,30 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       if (q.exception.isDefined) {
         throw q.exception.get
       }
-      true
     }
 
-    val producer = testUtils.createProducer(usingTrascation = true)
-    try {
-      producer.initTransactions()
-
+    // The message values are the same as their offsets to make the test easy to follow
+    testUtils.withTranscationalProducer { producer =>
       testStream(mapped)(
         StartStream(ProcessingTime(100), clock),
         waitUntilBatchProcessed,
-        // 1 from smallest, 1 from middle, 8 from biggest
-        CheckAnswer(),
+        CheckNewAnswer(),
         WithKafkaProducer(topic, producer) { producer =>
           // Send 5 messages. They should be visible only after being committed.
           producer.beginTransaction()
-          (1 to 5).foreach { i =>
+          (0 to 4).foreach { i =>
             producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
           }
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer(1 to 3: _*), // offset 0, 1, 2
+        CheckNewAnswer(0, 1, 2), // offset 0, 1, 2
         WithKafkaProducer(topic, producer) { producer =>
           producer.commitTransaction()
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer(1 to 5: _*), // offset: 3, 4, 5* [* means it's not a committed data message]
+        CheckNewAnswer(3, 4), // offset: 3, 4, 5* [* means it's not a committed data message]
         WithKafkaProducer(topic, producer) { producer =>
           // Send 5 messages and abort the transaction. They should not be read.
           producer.beginTransaction()
@@ -818,49 +808,47 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer(1 to 8: _*), // offset: 6, 7, 8
+        CheckNewAnswer(6, 7, 8), // offset: 6, 7, 8
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer(1 to 10: _*), // offset: 9, 10, 11*
+        CheckNewAnswer(9, 10), // offset: 9, 10, 11*
         WithKafkaProducer(topic, producer) { producer =>
           // Send 5 messages again. The consumer should skip the above aborted messages and read
           // them.
           producer.beginTransaction()
-          (11 to 15).foreach { i =>
+          (12 to 16).foreach { i =>
             producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
           }
           producer.commitTransaction()
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer(1 to 13: _*), // offset: 12, 13, 14
+        CheckNewAnswer(12, 13, 14), // offset: 12, 13, 14
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer(1 to 15: _*),  // offset: 15, 16, 17*
+        CheckNewAnswer(15, 16),  // offset: 15, 16, 17*
         WithKafkaProducer(topic, producer) { producer =>
           producer.beginTransaction()
-          producer.send(new ProducerRecord[String, String](topic, "16")).get()
-          producer.commitTransaction()
-          producer.beginTransaction()
-          producer.send(new ProducerRecord[String, String](topic, "17")).get()
-          producer.commitTransaction()
-          producer.beginTransaction()
           producer.send(new ProducerRecord[String, String](topic, "18")).get()
-          producer.send(new ProducerRecord[String, String](topic, "19")).get()
+          producer.commitTransaction()
+          producer.beginTransaction()
+          producer.send(new ProducerRecord[String, String](topic, "20")).get()
+          producer.commitTransaction()
+          producer.beginTransaction()
+          producer.send(new ProducerRecord[String, String](topic, "22")).get()
+          producer.send(new ProducerRecord[String, String](topic, "23")).get()
           producer.commitTransaction()
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer(1 to 17: _*), // offset: 18, 19*, 20
+        CheckNewAnswer(18, 20), // offset: 18, 19*, 20
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer(1 to 19: _*), // offset: 21*, 22, 23
+        CheckNewAnswer(22, 23), // offset: 21*, 22, 23
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
-        CheckAnswer(1 to 19: _*) // offset: 24*
+        CheckNewAnswer() // offset: 24*
       )
-    } finally {
-      producer.close()
     }
   }
 }

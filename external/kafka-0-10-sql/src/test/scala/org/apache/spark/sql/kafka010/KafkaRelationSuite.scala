@@ -239,8 +239,7 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
   test("read Kafka transactional messages: read_committed") {
     val topic = newTopic()
     testUtils.createTopic(topic)
-    val producer = testUtils.createProducer(usingTrascation = true)
-    try {
+    testUtils.withTranscationalProducer { producer =>
       val df = spark
         .read
         .format("kafka")
@@ -250,7 +249,6 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
         .load()
         .selectExpr("CAST(value AS STRING)")
 
-      producer.initTransactions()
       producer.beginTransaction()
       (1 to 5).foreach { i =>
         producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
@@ -281,16 +279,13 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
 
       // Should skip aborted messages and read new committed ones.
       checkAnswer(df, ((1 to 5) ++ (11 to 15)).map(_.toString).toDF)
-    } finally {
-      producer.close()
     }
   }
 
   test("read Kafka transactional messages: read_uncommitted") {
     val topic = newTopic()
     testUtils.createTopic(topic)
-    val producer = testUtils.createProducer(usingTrascation = true)
-    try {
+    testUtils.withTranscationalProducer { producer =>
       val df = spark
         .read
         .format("kafka")
@@ -300,7 +295,6 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
         .load()
         .selectExpr("CAST(value AS STRING)")
 
-      producer.initTransactions()
       producer.beginTransaction()
       (1 to 5).foreach { i =>
         producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
@@ -331,8 +325,6 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
 
       // Should read all messages
       checkAnswer(df, (1 to 15).map(_.toString).toDF)
-    } finally {
-      producer.close()
     }
   }
 }

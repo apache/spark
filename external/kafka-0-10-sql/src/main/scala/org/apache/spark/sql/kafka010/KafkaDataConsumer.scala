@@ -93,52 +93,63 @@ private[kafka010] case class InternalKafkaConsumer(
   /**
    * The internal object to store the fetched data from Kafka consumer and the next offset to poll.
    *
-   * @param records the pre-fetched Kafka records.
-   * @param nextOffsetInFetchedData the next offset in `records`. We use this to verify if we should
-   *                                check if the pre-fetched data is still valid.
-   * @param offsetAfterPoll the Kafka offset after calling `poll`. We will use this offset to poll
-   *                        when `records` is drained.
+   * @param _records the pre-fetched Kafka records.
+   * @param _nextOffsetInFetchedData the next offset in `records`. We use this to verify if we
+   *                                 should check if the pre-fetched data is still valid.
+   * @param _offsetAfterPoll the Kafka offset after calling `poll`. We will use this offset to
+   *                           poll when `records` is drained.
    */
   private case class FetchedData(
-      private var records: ju.ListIterator[ConsumerRecord[Array[Byte], Array[Byte]]],
-      var nextOffsetInFetchedData: Long,
-      var offsetAfterPoll: Long) {
+      private var _records: ju.ListIterator[ConsumerRecord[Array[Byte], Array[Byte]]],
+      private var _nextOffsetInFetchedData: Long,
+      private var _offsetAfterPoll: Long) {
 
     def withNewPoll(
         records: ju.ListIterator[ConsumerRecord[Array[Byte], Array[Byte]]],
         offsetAfterPoll: Long): FetchedData = {
-      this.records = records
-      this.nextOffsetInFetchedData = UNKNOWN_OFFSET
-      this.offsetAfterPoll = offsetAfterPoll
+      this._records = records
+      this._nextOffsetInFetchedData = UNKNOWN_OFFSET
+      this._offsetAfterPoll = offsetAfterPoll
       this
     }
 
     /** Whether there are more elements */
-    def hasNext: Boolean = records.hasNext
+    def hasNext: Boolean = _records.hasNext
 
     /** Move `records` forward and return the next record. */
     def next(): ConsumerRecord[Array[Byte], Array[Byte]] = {
-      val record = records.next()
-      nextOffsetInFetchedData = record.offset + 1
+      val record = _records.next()
+      _nextOffsetInFetchedData = record.offset + 1
       record
     }
 
     /** Move `records` backward and return the previous record. */
     def previous(): ConsumerRecord[Array[Byte], Array[Byte]] = {
-      assert(records.hasPrevious, "fetchedData cannot move back")
-      val record = records.previous()
-      nextOffsetInFetchedData = record.offset
+      assert(_records.hasPrevious, "fetchedData cannot move back")
+      val record = _records.previous()
+      _nextOffsetInFetchedData = record.offset
       record
     }
 
     /** Reset the internal pre-fetched data. */
     def reset(): Unit = {
-      records = ju.Collections.emptyListIterator()
+      _records = ju.Collections.emptyListIterator()
     }
+
+    /**
+     * Returns the next offset in `records`. We use this to verify if we should check if the
+     * pre-fetched data is still valid.
+     */
+    def nextOffsetInFetchedData: Long = _nextOffsetInFetchedData
+
+    /**
+     * Returns the next offset to poll after draining the pre-fetched records.
+     */
+    def offsetAfterPoll: Long = _offsetAfterPoll
   }
 
   /**
-   * The internal object returned by the `fetchData` method. If `record` is empty, it means it is
+   * The internal object returned by the `fetchRecord` method. If `record` is empty, it means it is
    * invisible (either a transaction message, or an aborted message when the consumer's
    * `isolation.level` is `read_committed`), and the caller should use `nextOffsetToFetch` to fetch
    * instead.
@@ -176,7 +187,7 @@ private[kafka010] case class InternalKafkaConsumer(
     UNKNOWN_OFFSET)
 
   /**
-   * The fetched record returned from the `fetchData` method. This is a reusable private object to
+   * The fetched record returned from the `fetchRecord` method. This is a reusable private object to
    * avoid memory allocation.
    */
   private val fetchedRecord: FetchedRecord = FetchedRecord(null, UNKNOWN_OFFSET)
@@ -235,7 +246,7 @@ private[kafka010] case class InternalKafkaConsumer(
 
     while (toFetchOffset != UNKNOWN_OFFSET && !isFetchComplete) {
       try {
-        fetchedRecord = fetchData(toFetchOffset, untilOffset, pollTimeoutMs, failOnDataLoss)
+        fetchedRecord = fetchRecord(toFetchOffset, untilOffset, pollTimeoutMs, failOnDataLoss)
         if (fetchedRecord.record != null) {
           isFetchComplete = true
         } else {
@@ -337,27 +348,31 @@ private[kafka010] case class InternalKafkaConsumer(
    * @throws OffsetOutOfRangeException if `offset` is out of range
    * @throws TimeoutException if cannot fetch the record in `pollTimeoutMs` milliseconds.
    */
-  private def fetchData(
+  private def fetchRecord(
       offset: Long,
       untilOffset: Long,
       pollTimeoutMs: Long,
       failOnDataLoss: Boolean): FetchedRecord = {
     if (offset != fetchedData.nextOffsetInFetchedData) {
       // This is the first fetch, or the fetched data has been reset.
-      // Seek to the offset because we may call seekToBeginning or seekToEnd before this.
-      poll(offset, pollTimeoutMs)
-    } else if (!fetchedData.hasNext) {
-      // The last pre-fetched data has been drained.
+      // Fetch records from Kafka and update `fetchedData`.
+      fetchData(offset, pollTimeoutMs)
+    } else if (!fetchedData.hasNext) { // The last pre-fetched data has been drained.
       if (offset < fetchedData.offsetAfterPoll) {
-        // Offsets in [offset, offsetAfterPoll) are missing. We should skip them.
+        // Offsets in [offset, fetchedData.offsetAfterPoll) are invisible. Return a record to ask
+        // the next call to start from `fetchedData.offsetAfterPoll`.
         fetchedData.reset()
         return fetchedRecord.withRecord(null, fetchedData.offsetAfterPoll)
       } else {
-        poll(offset, pollTimeoutMs)
+        // Fetch records from Kafka and update `fetchedData`.
+        fetchData(offset, pollTimeoutMs)
       }
     }
 
     if (!fetchedData.hasNext) {
+      // When we reach here, we have already tried to poll from Kafka. As `fetchedData` is still
+      // empty, all messages in [offset, fetchedData.offsetAfterPoll) are invisible. Return a
+      // record to ask the next call to start from `fetchedData.offsetAfterPoll`.
       assert(offset <= fetchedData.offsetAfterPoll,
         s"seek to $offset and poll but the offset was reset to ${fetchedData.offsetAfterPoll}")
       fetchedRecord.withRecord(null, fetchedData.offsetAfterPoll)
@@ -370,7 +385,7 @@ private[kafka010] case class InternalKafkaConsumer(
         if (range.earliest <= offset) {
           // `offset` is still valid but the corresponding message is invisible. We should skip it
           // and jump to `record.offset`. Here we move `fetchedData` back so that the next call of
-          // `fetchData` can just return `record` directly.
+          // `fetchRecord` can just return `record` directly.
           fetchedData.previous()
           return fetchedRecord.withRecord(null, record.offset)
         }
@@ -378,11 +393,13 @@ private[kafka010] case class InternalKafkaConsumer(
         if (failOnDataLoss) {
           reportDataLoss(true, s"Cannot fetch records in [$offset, ${record.offset})")
           // Never happen as "reportDataLoss" will throw an exception
-          null
+          throw new IllegalStateException(
+            "reportDataLoss didn't throw an exception when 'failOnDataLoss' is true")
         } else {
           if (record.offset >= untilOffset) {
             reportDataLoss(false, s"Skip missing records in [$offset, $untilOffset)")
-            null
+            // Set `nextOffsetToFetch` to `untilOffset` to finish the current batch.
+            fetchedRecord.withRecord(null, untilOffset)
           } else {
             reportDataLoss(false, s"Skip missing records in [$offset, ${record.offset})")
             fetchedRecord.withRecord(record, fetchedData.nextOffsetInFetchedData)
@@ -438,16 +455,16 @@ private[kafka010] case class InternalKafkaConsumer(
   }
 
   /**
-   * Poll messages from Kafka starting from `offset` and set `fetchedData` and `offsetAfterPoll`.
-   * `fetchedData` may be empty if the Kafka fetches some messages but all of them are not visible
-   * messages (either transaction messages, or aborted messages when `isolation.level` is
-   * `read_committed`).
+   * Poll messages from Kafka starting from `offset` and update `fetchedData`. `fetchedData` may be
+   * empty if the Kafka consumer fetches some messages but all of them are not visible messages
+   * (either transaction messages, or aborted messages when `isolation.level` is `read_committed`).
    *
    * @throws OffsetOutOfRangeException if `offset` is out of range.
    * @throws TimeoutException if the consumer position is not changed after polling. It means the
    *                          consumer polls nothing before timeout.
    */
-  private def poll(offset: Long, pollTimeoutMs: Long): Unit = {
+  private def fetchData(offset: Long, pollTimeoutMs: Long): Unit = {
+    // Seek to the offset because we may call seekToBeginning or seekToEnd before this.
     seek(offset)
     val p = consumer.poll(pollTimeoutMs)
     val r = p.records(topicPartition)

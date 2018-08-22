@@ -347,12 +347,17 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     props
   }
 
-  def createProducer(usingTrascation: Boolean): KafkaProducer[String, String] = {
+  /** Call `f` with a `KafkaProducer` that has initialized transactions. */
+  def withTranscationalProducer(f: KafkaProducer[String, String] => Unit): Unit = {
     val props = producerConfiguration
-    if (usingTrascation) {
-      props.put("transactional.id", UUID.randomUUID().toString)
+    props.put("transactional.id", UUID.randomUUID().toString)
+    val producer = new KafkaProducer[String, String](props)
+    try {
+      producer.initTransactions()
+      f(producer)
+    } finally {
+      producer.close()
     }
-    new KafkaProducer[String, String](props)
   }
 
   private def consumerConfiguration: Properties = {

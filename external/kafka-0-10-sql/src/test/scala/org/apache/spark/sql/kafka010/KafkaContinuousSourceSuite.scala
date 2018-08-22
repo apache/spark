@@ -33,13 +33,13 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
     withTable(table) {
       val topic = newTopic()
       testUtils.createTopic(topic)
-      val producer = testUtils.createProducer(usingTrascation = true)
-      try {
+      testUtils.withTranscationalProducer { producer =>
         val df = spark
           .readStream
           .format("kafka")
           .option("kafka.bootstrap.servers", testUtils.brokerAddress)
           .option("kafka.isolation.level", "read_committed")
+          .option("startingOffsets", "earliest")
           .option("subscribe", topic)
           .load()
           .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
@@ -53,7 +53,6 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
           .trigger(ContinuousTrigger(100))
           .start()
         try {
-          producer.initTransactions()
           producer.beginTransaction()
           (1 to 5).foreach { i =>
             producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
@@ -91,8 +90,6 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
         } finally {
           q.stop()
         }
-      } finally {
-        producer.close()
       }
     }
   }
@@ -102,13 +99,13 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
     withTable(table) {
       val topic = newTopic()
       testUtils.createTopic(topic)
-      val producer = testUtils.createProducer(usingTrascation = true)
-      try {
+      testUtils.withTranscationalProducer { producer =>
         val df = spark
           .readStream
           .format("kafka")
           .option("kafka.bootstrap.servers", testUtils.brokerAddress)
           .option("kafka.isolation.level", "read_uncommitted")
+          .option("startingOffsets", "earliest")
           .option("subscribe", topic)
           .load()
           .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
@@ -122,14 +119,13 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
           .trigger(ContinuousTrigger(100))
           .start()
         try {
-          producer.initTransactions()
           producer.beginTransaction()
           (1 to 5).foreach { i =>
             producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
           }
 
           eventually(timeout(streamingTimeout)) {
-            // Should read all committed messages
+            // Should read uncommitted messages
             checkAnswer(spark.table(table), (1 to 5).toDF)
           }
 
@@ -147,7 +143,7 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
           producer.abortTransaction()
 
           eventually(timeout(streamingTimeout)) {
-            // Should not read aborted messages
+            // Should read aborted messages
             checkAnswer(spark.table(table), (1 to 10).toDF)
           }
 
@@ -155,17 +151,21 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
           (11 to 15).foreach { i =>
             producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
           }
+
+          eventually(timeout(streamingTimeout)) {
+            // Should read all messages including committed, aborted and uncommitted messages
+            checkAnswer(spark.table(table), (1 to 15).toDF)
+          }
+
           producer.commitTransaction()
 
           eventually(timeout(streamingTimeout)) {
-            // Should skip aborted messages and read new committed ones.
+            // Should read all messages including committed and aborted messages
             checkAnswer(spark.table(table), (1 to 15).toDF)
           }
         } finally {
           q.stop()
         }
-      } finally {
-        producer.close()
       }
     }
   }
