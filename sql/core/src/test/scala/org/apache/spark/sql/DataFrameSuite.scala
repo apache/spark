@@ -2536,7 +2536,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       // triggers one Spark job per RDD partition.
       Seq(1 -> "a", 2 -> "b").toDF("i", "p")
         // The data set has 2 partitions, so Spark will write at least 2 json files.
-        // Use a non-splittable compression (gzip), to make sure the json scan RDD has at lease 2
+        // Use a non-splittable compression (gzip), to make sure the json scan RDD has at least 2
         // partitions.
         .write.partitionBy("p").option("compression", "gzip").json(path.getCanonicalPath)
 
