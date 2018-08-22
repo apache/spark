@@ -82,6 +82,19 @@ object SQLConf {
   /** See [[get]] for more information. */
   def getFallbackConf: SQLConf = fallbackConf.get()
 
+  private lazy val existingConf = new ThreadLocal[SQLConf] {
+    override def initialValue: SQLConf = null
+  }
+
+  def withExistingConf[T](conf: SQLConf)(f: => T): T = {
+    existingConf.set(conf)
+    try {
+      f
+    } finally {
+      existingConf.remove()
+    }
+  }
+
   /**
    * Defines a getter that returns the SQLConf within scope.
    * See [[get]] for more information.
@@ -116,16 +129,24 @@ object SQLConf {
     if (TaskContext.get != null) {
       new ReadOnlySQLConf(TaskContext.get())
     } else {
-      if (Utils.isTesting && SparkContext.getActive.isDefined) {
+      val isSchedulerEventLoopThread = SparkContext.getActive
+        .map(_.dagScheduler.eventProcessLoop.eventThread)
+        .exists(_.getId == Thread.currentThread().getId)
+      if (isSchedulerEventLoopThread) {
         // DAGScheduler event loop thread does not have an active SparkSession, the `confGetter`
-        // will return `fallbackConf` which is unexpected. Here we prevent it from happening.
-        val schedulerEventLoopThread =
-          SparkContext.getActive.get.dagScheduler.eventProcessLoop.eventThread
-        if (schedulerEventLoopThread.getId == Thread.currentThread().getId) {
+        // will return `fallbackConf` which is unexpected. Here we require the caller to get the
+        // conf within `withExistingConf`, otherwise fail the query.
+        val conf = existingConf.get()
+        if (conf != null) {
+          conf
+        } else if (Utils.isTesting) {
           throw new RuntimeException("Cannot get SQLConf inside scheduler event loop thread.")
+        } else {
+          confGetter.get()()
         }
+      } else {
+        confGetter.get()()
       }
-      confGetter.get()()
     }
   }
 
