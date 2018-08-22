@@ -853,17 +853,12 @@ class FeatureTests(SparkSessionTestCase):
 
         sizeHint = VectorSizeHint(
             inputCol="vector",
-            handleInvalid="skip",
-            size=3)
+            handleInvalid="skip")
+        sizeHint.setSize(3)
+        self.assertEqual(sizeHint.getSize(), 3)
 
-        assembler = VectorAssembler(
-            inputCols=["id", "vector"],
-            outputCol="features")
-
-        pipeline = Pipeline(stages=[sizeHint, assembler])
-        pipelineModel = pipeline.fit(df)
-        output = pipelineModel.transform(df).head().features
-        expected = DenseVector([0.0, 0.0, 10.0, 0.5])
+        output = sizeHint.transform(df).head().vector
+        expected = DenseVector([0.0, 10.0, 0.5])
         self.assertEqual(output, expected)
 
 
