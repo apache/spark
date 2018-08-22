@@ -18,7 +18,7 @@
 package org.apache.spark.sql.sources.v2
 
 import java.io.{BufferedReader, InputStreamReader, IOException}
-import java.util.{Optional, UUID}
+import java.util.UUID
 
 import scala.collection.JavaConverters._
 
@@ -26,7 +26,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.v2.BatchWriteConfig
 import org.apache.spark.sql.sources.v2.reader._
@@ -112,32 +111,15 @@ class SimpleWritableDataSource extends DataSourceV2
     new ReadSupport(path.toUri.toString, conf)
   }
 
-  override def createBatchWriteSupport(
-      mode: SaveMode,
-      options: DataSourceOptions): Optional[BatchWriteSupport] = {
+  override def createBatchWriteSupport(options: DataSourceOptions): BatchWriteSupport = {
     assert(DataType.equalsStructurally(schema.asNullable, this.schema.asNullable))
     assert(!SparkContext.getActive.get.conf.getBoolean("spark.speculation", false))
 
     val path = new Path(options.get("path").get())
     val conf = SparkContext.getActive.get.hadoopConfiguration
     val fs = path.getFileSystem(conf)
-
-    if (mode == SaveMode.ErrorIfExists) {
-      if (fs.exists(path)) {
-        throw new RuntimeException("data already exists.")
-      }
-    }
-    if (mode == SaveMode.Ignore) {
-      if (fs.exists(path)) {
-        return Optional.empty()
-      }
-    }
-    if (mode == SaveMode.Overwrite) {
-      fs.delete(path, true)
-    }
-
     val pathStr = path.toUri.toString
-    Optional.of(new WriteSupport(UUID.randomUUID.toString, pathStr, conf))
+    new WriteSupport(UUID.randomUUID.toString, pathStr, conf)
   }
 }
 

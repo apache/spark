@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.sources.v2;
 
-import java.util.Optional;
-
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.sources.v2.writer.BatchWriteSupport;
 
 /**
@@ -37,15 +34,9 @@ public interface BatchWriteSupportProvider extends DataSourceV2 {
    * Creates a {@link BatchWriteSupport} instance to save the data to a data source. Called by
    * Spark at the beginning of each batch query.
    *
-   * Data sources can return None if there is no writing needed to be done according to the save
-   * mode.
-   *
-   * @param mode the save mode which determines what to do when the data are already in this data
-   *             source, please refer to {@link SaveMode} for more details.
    * @param options the options for the returned data source writer, which is an immutable
    *                case-insensitive string-to-string map.
    * @return a write support to write data to this data source.
    */
-  // TODO: remove SaveMode
-  Optional<BatchWriteSupport> createBatchWriteSupport(SaveMode mode, DataSourceOptions options);
+  BatchWriteSupport createBatchWriteSupport(DataSourceOptions options);
 }

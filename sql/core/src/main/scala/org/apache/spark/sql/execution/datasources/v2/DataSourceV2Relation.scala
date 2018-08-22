@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
@@ -157,9 +157,7 @@ object DataSourceV2Relation {
     }
 
     def createWriteSupport(options: Map[String, String]): BatchWriteSupport = {
-      asWriteSupportProvider.createBatchWriteSupport(
-        SaveMode.Append,
-        new DataSourceOptions(options.asJava)).get
+      asWriteSupportProvider.createBatchWriteSupport(new DataSourceOptions(options.asJava))
     }
   }
 

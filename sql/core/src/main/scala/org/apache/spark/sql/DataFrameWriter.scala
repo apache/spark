@@ -21,6 +21,8 @@ import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
@@ -29,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable,
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, WriteToDataSourceV2}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.StructType
@@ -245,23 +247,60 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               DataSourceV2Utils.extractSessionConfigs(source, df.sparkSession.sessionState.conf)
 
           val relation = DataSourceV2Relation.create(source, options.toMap)
+          val v2Options = new DataSourceOptions(options.asJava)
+          val identifier = tableIdent(relation.options)
 
-          if (mode == SaveMode.Append) {
-            runCommand(df.sparkSession, "save") {
-              AppendData.byName(relation, df.logicalPlan)
-            }
+          // determine whether the table exists, or throw an exception if it cannot be determined
+          val (exists, name) = identifier match {
+            case Some(table) =>
+              (df.sparkSession.sessionState.catalog.tableExists(table), table.unquotedString)
 
-          } else {
-            val v2Options = new DataSourceOptions(options.asJava)
-            val maybeWriter = provider.createBatchWriteSupport(mode, v2Options)
-
-            if (maybeWriter.isPresent) {
-              val writer = maybeWriter.get
-              val writeConfig = writer.createWriteConfig(df.schema, v2Options)
-              runCommand(df.sparkSession, "save") {
-                WriteToDataSourceV2(writer, writeConfig, df.logicalPlan)
+            case _ if v2Options.paths.nonEmpty =>
+              val conf = df.sparkSession.sparkContext.hadoopConfiguration
+              val pathExists = v2Options.paths.map(new Path(_)).exists { path =>
+                path.getFileSystem(conf).exists(path)
               }
-            }
+              (pathExists, v2Options.paths.mkString(","))
+
+            case _ =>
+              // not a metastore or path table
+              throw new AnalysisException(
+                s"Could not determine whether source exists: $v2Options")
+          }
+
+          (exists, mode) match {
+            case (true, SaveMode.Ignore) =>
+            // Do nothing.
+
+            case (true, SaveMode.ErrorIfExists) =>
+              throw new AnalysisException(s"Cannot write: data already exists in $name")
+
+            case (true, SaveMode.Overwrite) =>
+              // TODO: this should be a RTAS operation
+              // delete the existing data
+              identifier match {
+                case Some(table) =>
+                  df.sparkSession.sessionState.catalog.dropTable(
+                    table, ignoreIfNotExists = true, purge = false)
+
+                case _ =>
+                  // at least one path exists because the table exists
+                  val conf = df.sparkSession.sparkContext.hadoopConfiguration
+                  v2Options.paths.map(new Path(_)).foreach { path =>
+                    val fs = path.getFileSystem(conf)
+                    fs.delete(path, true /* recursive */ )
+                  }
+              }
+
+              runCommand(df.sparkSession, "save") {
+                AppendData.byName(relation, df.logicalPlan)
+              }
+
+            case _ =>
+              // TODO: when the table doens't exist, this should be a CTAS operation
+              runCommand(df.sparkSession, "save") {
+                AppendData.byName(relation, df.logicalPlan)
+              }
           }
 
         // Streaming also uses the data source V2 API. So it may be that the data source implements
@@ -283,6 +322,18 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         partitionColumns = partitioningColumns.getOrElse(Nil),
         options = extraOptions.toMap).planForWriting(mode, df.logicalPlan)
     }
+  }
+
+  private def pathExists(session: SparkSession, options: DataSourceOptions): Boolean = {
+    options.paths.map(new Path(_)).exists { path =>
+      val fs = path.getFileSystem(session.sparkContext.hadoopConfiguration)
+      fs.exists(path)
+    }
+  }
+
+  private def tableIdent(options: Map[String, String]): Option[TableIdentifier] = {
+    options.get(DataSourceOptions.TABLE_KEY)
+        .map(TableIdentifier(_, options.get(DataSourceOptions.DATABASE_KEY)))
   }
 
   /**
