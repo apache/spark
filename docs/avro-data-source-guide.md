@@ -64,7 +64,8 @@ write.df(select(df, "name", "favorite_color"), "namesAndFavColors.avro", "avro")
 </div>
 
 ## to_avro() and from_avro()
-Spark SQL provides function `to_avro` to encode a struct as a string and `from_avro()` to retrieve the struct as a complex type.
+The Avro package provides function `to_avro` to encode a struct as binary and `from_avro()` to retrieve the 
+struct as a complex type.
 
 Using Avro record as columns are useful when reading from or writing to a streaming source like Kafka. Each 
 Kafka key-value record will be augmented with some metadata, such as the ingestion timestamp into Kafka, the offset in Kafka, etc.
@@ -107,17 +108,17 @@ val ds = output
 </div>
 <div data-lang="java" markdown="1">
 {% highlight java %}
-import org.apache.spark.sql.avro.*
+import org.apache.spark.sql.avro.*;
 
 // `from_avro` requires Avro schema in JSON string format.
-String jsonFormatSchema = new String(Files.readAllBytes(Paths.get("./examples/src/main/resources/user.avsc")))
+String jsonFormatSchema = new String(Files.readAllBytes(Paths.get("./examples/src/main/resources/user.avsc")));
 
 Dataset<Row> df = spark
   .readStream()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "topic1")
-  .load()
+  .load();
 
 // 1. Decode the Avro data into a struct;
 // 2. Filter by column `favorite_color`;
@@ -125,14 +126,14 @@ Dataset<Row> df = spark
 DataFrame output = df
   .select(from_avro(col("value"), jsonFormatSchema).as("user"))
   .where("user.favorite_color == \"red\"")
-  .select(to_avro(col("user.name")).as("value"))
+  .select(to_avro(col("user.name")).as("value"));
 
 StreamingQuery ds = output
   .writeStream()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("topic", "topic2")
-  .start()
+  .start();
 
 {% endhighlight %}
 </div>
@@ -217,7 +218,7 @@ applications. Read the [Advanced Dependency Management](https://spark.apache
 Submission Guide for more details. 
 
 ## Supported types for Avro -> Spark SQL conversion
-Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.8.2/spec.html#schema_primitive) and [complex types](https://avro.apache.org/docs/1.8.2/spec.html#schema_complex) of Avro.
+Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.8.2/spec.html#schema_primitive) and [complex types](https://avro.apache.org/docs/1.8.2/spec.html#schema_complex) under records of Avro.
 <table class="table">
   <tr><th><b>Avro type</b></th><th><b>Spark SQL type</b></th></tr>
   <tr>
@@ -334,7 +335,7 @@ Spark supports writing of all Spark SQL types into Avro. For most types, the map
     <td></td>
   </tr>
   <tr>
-    <td>Date</td>
+    <td>DateType</td>
     <td>int</td>
     <td>date</td>
   </tr>
