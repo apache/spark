@@ -523,6 +523,7 @@ object NullPropagation extends Rule[LogicalPlan] {
 
       // If the value expression is NULL then transform the In expression to null literal.
       case In(Literal(null, _), _) => Literal.create(null, BooleanType)
+      case InSubquery(Seq(Literal(null, _)), _) => Literal.create(null, BooleanType)
 
       // Non-leaf NullIntolerant expressions will return null, if at least one of its children is
       // a null literal.

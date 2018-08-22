@@ -323,8 +323,6 @@ case class WindowExec(
         fetchNextRow()
 
         // Manage the current partition.
-        val inputFields = child.output.length
-
         val buffer: ExternalAppendOnlyUnsafeRowArray =
           new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
 

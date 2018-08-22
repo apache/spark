@@ -22,13 +22,12 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
-import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
-class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLContext {
+class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest {
 
   import testImplicits._
 

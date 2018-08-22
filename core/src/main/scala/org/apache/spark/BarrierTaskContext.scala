@@ -17,12 +17,17 @@
 
 package org.apache.spark
 
-import java.util.Properties
+import java.util.{Properties, Timer, TimerTask}
+
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.rpc.{RpcEndpointRef, RpcTimeout}
+import org.apache.spark.util.{RpcUtils, Utils}
 
 /** A [[TaskContext]] with extra info and tooling for a barrier stage. */
 class BarrierTaskContext(
@@ -39,6 +44,22 @@ class BarrierTaskContext(
   extends TaskContextImpl(stageId, stageAttemptNumber, partitionId, taskAttemptId, attemptNumber,
       taskMemoryManager, localProperties, metricsSystem, taskMetrics) {
 
+  // Find the driver side RPCEndpointRef of the coordinator that handles all the barrier() calls.
+  private val barrierCoordinator: RpcEndpointRef = {
+    val env = SparkEnv.get
+    RpcUtils.makeDriverRef("barrierSync", env.conf, env.rpcEnv)
+  }
+
+  private val timer = new Timer("Barrier task timer for barrier() calls.")
+
+  // Local barrierEpoch that identify a barrier() call from current task, it shall be identical
+  // with the driver side epoch.
+  private var barrierEpoch = 0
+
+  // Number of tasks of the current barrier stage, a barrier() call must collect enough requests
+  // from different tasks within the same barrier stage attempt to succeed.
+  private lazy val numTasks = getTaskInfos().size
+
   /**
    * :: Experimental ::
    * Sets a global barrier and waits until all tasks in this stage hit this barrier. Similar to
@@ -51,7 +72,8 @@ class BarrierTaskContext(
    * 1. Only call barrier() function on a subset of all the tasks in the same barrier stage, it
    * shall lead to timeout of the function call.
    * {{{
-   *   rdd.barrier().mapPartitions { (iter, context) =>
+   *   rdd.barrier().mapPartitions { iter =>
+   *       val context = BarrierTaskContext.get()
    *       if (context.partitionId() == 0) {
    *           // Do nothing.
    *       } else {
@@ -64,7 +86,8 @@ class BarrierTaskContext(
    * 2. Include barrier() function in a try-catch code block, this may lead to timeout of the
    * second function call.
    * {{{
-   *   rdd.barrier().mapPartitions { (iter, context) =>
+   *   rdd.barrier().mapPartitions { iter =>
+   *       val context = BarrierTaskContext.get()
    *       try {
    *           // Do something that might throw an Exception.
    *           doSomething()
@@ -80,7 +103,44 @@ class BarrierTaskContext(
   @Experimental
   @Since("2.4.0")
   def barrier(): Unit = {
-    // TODO SPARK-24817 implement global barrier.
+    logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) has entered " +
+      s"the global sync, current barrier epoch is $barrierEpoch.")
+    logTrace("Current callSite: " + Utils.getCallSite())
+
+    val startTime = System.currentTimeMillis()
+    val timerTask = new TimerTask {
+      override def run(): Unit = {
+        logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) waiting " +
+          s"under the global sync since $startTime, has been waiting for " +
+          s"${(System.currentTimeMillis() - startTime) / 1000} seconds, current barrier epoch " +
+          s"is $barrierEpoch.")
+      }
+    }
+    // Log the update of global sync every 60 seconds.
+    timer.schedule(timerTask, 60000, 60000)
+
+    try {
+      barrierCoordinator.askSync[Unit](
+        message = RequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
+          barrierEpoch),
+        // Set a fixed timeout for RPC here, so users shall get a SparkException thrown by
+        // BarrierCoordinator on timeout, instead of RPCTimeoutException from the RPC framework.
+        timeout = new RpcTimeout(31536000 /* = 3600 * 24 * 365 */ seconds, "barrierTimeout"))
+      barrierEpoch += 1
+      logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) finished " +
+        "global sync successfully, waited for " +
+        s"${(System.currentTimeMillis() - startTime) / 1000} seconds, current barrier epoch is " +
+        s"$barrierEpoch.")
+    } catch {
+      case e: SparkException =>
+        logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) failed " +
+          "to perform global sync, waited for " +
+          s"${(System.currentTimeMillis() - startTime) / 1000} seconds, current barrier epoch " +
+          s"is $barrierEpoch.")
+        throw e
+    } finally {
+      timerTask.cancel()
+    }
   }
 
   /**
@@ -93,4 +153,12 @@ class BarrierTaskContext(
     val addressesStr = localProperties.getProperty("addresses", "")
     addressesStr.split(",").map(_.trim()).map(new BarrierTaskInfo(_))
   }
+}
+
+object BarrierTaskContext {
+  /**
+   * Return the currently active BarrierTaskContext. This can be called inside of user functions to
+   * access contextual information about running barrier tasks.
+   */
+  def get(): BarrierTaskContext = TaskContext.get().asInstanceOf[BarrierTaskContext]
 }

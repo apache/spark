@@ -38,7 +38,8 @@ import org.apache.spark.annotation.InterfaceStability
 class StateOperatorProgress private[sql](
     val numRowsTotal: Long,
     val numRowsUpdated: Long,
-    val memoryUsedBytes: Long
+    val memoryUsedBytes: Long,
+    val customMetrics: ju.Map[String, JLong] = new ju.HashMap()
   ) extends Serializable {
 
   /** The compact JSON representation of this progress. */
@@ -48,12 +49,20 @@ class StateOperatorProgress private[sql](
   def prettyJson: String = pretty(render(jsonValue))
 
   private[sql] def copy(newNumRowsUpdated: Long): StateOperatorProgress =
-    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes)
+    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes, customMetrics)
 
   private[sql] def jsonValue: JValue = {
     ("numRowsTotal" -> JInt(numRowsTotal)) ~
     ("numRowsUpdated" -> JInt(numRowsUpdated)) ~
-    ("memoryUsedBytes" -> JInt(memoryUsedBytes))
+    ("memoryUsedBytes" -> JInt(memoryUsedBytes)) ~
+    ("customMetrics" -> {
+      if (!customMetrics.isEmpty) {
+        val keys = customMetrics.keySet.asScala.toSeq.sorted
+        keys.map { k => k -> JInt(customMetrics.get(k).toLong) : JObject }.reduce(_ ~ _)
+      } else {
+        JNothing
+      }
+    })
   }
 
   override def toString: String = prettyJson
@@ -163,7 +172,27 @@ class SourceProgress protected[sql](
   val endOffset: String,
   val numInputRows: Long,
   val inputRowsPerSecond: Double,
-  val processedRowsPerSecond: Double) extends Serializable {
+  val processedRowsPerSecond: Double,
+  val customMetrics: String) extends Serializable {
+
+  /** SourceProgress without custom metrics. */
+  protected[sql] def this(
+      description: String,
+      startOffset: String,
+      endOffset: String,
+      numInputRows: Long,
+      inputRowsPerSecond: Double,
+      processedRowsPerSecond: Double) {
+
+    this(
+      description,
+      startOffset,
+      endOffset,
+      numInputRows,
+      inputRowsPerSecond,
+      processedRowsPerSecond,
+      null)
+  }
 
   /** The compact JSON representation of this progress. */
   def json: String = compact(render(jsonValue))
@@ -178,12 +207,18 @@ class SourceProgress protected[sql](
       if (value.isNaN || value.isInfinity) JNothing else JDouble(value)
     }
 
-    ("description" -> JString(description)) ~
+    val jsonVal = ("description" -> JString(description)) ~
       ("startOffset" -> tryParse(startOffset)) ~
       ("endOffset" -> tryParse(endOffset)) ~
       ("numInputRows" -> JInt(numInputRows)) ~
       ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
       ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond))
+
+    if (customMetrics != null) {
+      jsonVal ~ ("customMetrics" -> parse(customMetrics))
+    } else {
+      jsonVal
+    }
   }
 
   private def tryParse(json: String) = try {
@@ -202,7 +237,13 @@ class SourceProgress protected[sql](
  */
 @InterfaceStability.Evolving
 class SinkProgress protected[sql](
-    val description: String) extends Serializable {
+    val description: String,
+    val customMetrics: String) extends Serializable {
+
+  /** SinkProgress without custom metrics. */
+  protected[sql] def this(description: String) {
+    this(description, null)
+  }
 
   /** The compact JSON representation of this progress. */
   def json: String = compact(render(jsonValue))
@@ -213,6 +254,12 @@ class SinkProgress protected[sql](
   override def toString: String = prettyJson
 
   private[sql] def jsonValue: JValue = {
-    ("description" -> JString(description))
+    val jsonVal = ("description" -> JString(description))
+
+    if (customMetrics != null) {
+      jsonVal ~ ("customMetrics" -> parse(customMetrics))
+    } else {
+      jsonVal
+    }
   }
 }

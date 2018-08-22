@@ -90,10 +90,12 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val mi0 = Literal.create(Map(1 -> 1, 2 -> null, 3 -> 2), MapType(IntegerType, IntegerType))
     val mi1 = Literal.create(Map[Int, Int](), MapType(IntegerType, IntegerType))
     val mi2 = Literal.create(null, MapType(IntegerType, IntegerType))
+    val mid0 = Literal.create(Map(1 -> 1.1, 2 -> 2.2), MapType(IntegerType, DoubleType))
 
     checkEvaluation(MapEntries(mi0), Seq(r(1, 1), r(2, null), r(3, 2)))
     checkEvaluation(MapEntries(mi1), Seq.empty)
     checkEvaluation(MapEntries(mi2), null)
+    checkEvaluation(MapEntries(mid0), Seq(r(1, 1.1), r(2, 2.2)))
 
     // Non-primitive-type keys/values
     val ms0 = Literal.create(Map("a" -> "c", "b" -> null), MapType(StringType, StringType))
@@ -1362,10 +1364,16 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a02 = Literal.create(Seq(1, 2, null, 4, 5), ArrayType(IntegerType, containsNull = true))
     val a03 = Literal.create(Seq(-5, 4, -3, 2, 4), ArrayType(IntegerType, containsNull = false))
     val a04 = Literal.create(Seq.empty[Int], ArrayType(IntegerType, containsNull = false))
-    val a05 = Literal.create(Seq[Byte](1, 2, 3), ArrayType(ByteType, containsNull = false))
-    val a06 = Literal.create(Seq[Byte](4, 2), ArrayType(ByteType, containsNull = false))
-    val a07 = Literal.create(Seq[Short](1, 2, 3), ArrayType(ShortType, containsNull = false))
-    val a08 = Literal.create(Seq[Short](4, 2), ArrayType(ShortType, containsNull = false))
+    val abl0 = Literal.create(Seq[Boolean](true, true), ArrayType(BooleanType, false))
+    val abl1 = Literal.create(Seq[Boolean](false, false), ArrayType(BooleanType, false))
+    val ab0 = Literal.create(Seq[Byte](1, 2, 3, 2), ArrayType(ByteType, false))
+    val ab1 = Literal.create(Seq[Byte](4, 2, 4), ArrayType(ByteType, false))
+    val as0 = Literal.create(Seq[Short](1, 2, 3, 2), ArrayType(ShortType, false))
+    val as1 = Literal.create(Seq[Short](4, 2, 4), ArrayType(ShortType, false))
+    val af0 = Literal.create(Seq[Float](1.1F, 2.2F, 3.3F, 2.2F), ArrayType(FloatType, false))
+    val af1 = Literal.create(Seq[Float](4.4F, 2.2F, 4.4F), ArrayType(FloatType, false))
+    val ad0 = Literal.create(Seq[Double](1.1, 2.2, 3.3, 2.2), ArrayType(DoubleType, false))
+    val ad1 = Literal.create(Seq[Double](4.4, 2.2, 4.4), ArrayType(DoubleType, false))
 
     val a10 = Literal.create(Seq(1L, 2L, 3L), ArrayType(LongType, containsNull = false))
     val a11 = Literal.create(Seq(4L, 2L), ArrayType(LongType, containsNull = false))
@@ -1384,8 +1392,11 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayUnion(a02, a03), Seq(1, 2, null, 4, 5, -5, -3))
     checkEvaluation(ArrayUnion(a03, a02), Seq(-5, 4, -3, 2, 1, null, 5))
     checkEvaluation(ArrayUnion(a02, a04), Seq(1, 2, null, 4, 5))
-    checkEvaluation(ArrayUnion(a05, a06), Seq[Byte](1, 2, 3, 4))
-    checkEvaluation(ArrayUnion(a07, a08), Seq[Short](1, 2, 3, 4))
+    checkEvaluation(ArrayUnion(abl0, abl1), Seq[Boolean](true, false))
+    checkEvaluation(ArrayUnion(ab0, ab1), Seq[Byte](1, 2, 3, 4))
+    checkEvaluation(ArrayUnion(as0, as1), Seq[Short](1, 2, 3, 4))
+    checkEvaluation(ArrayUnion(af0, af1), Seq[Float](1.1F, 2.2F, 3.3F, 4.4F))
+    checkEvaluation(ArrayUnion(ad0, ad1), Seq[Double](1.1, 2.2, 3.3, 4.4))
 
     checkEvaluation(ArrayUnion(a10, a11), Seq(1L, 2L, 3L, 4L))
     checkEvaluation(ArrayUnion(a12, a13), Seq(1L, 2L, null, 4L, 5L, -5L, -3L, -1L))
@@ -1480,7 +1491,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Shuffle(as7, Some(0)), null)
     checkEvaluation(Shuffle(aa, Some(0)), Seq(Seq("e"), Seq("a", "b"), Seq("c", "d")))
 
-    val r = new Random()
+    val r = new Random(1234)
     val seed1 = Some(r.nextLong())
     assert(evaluateWithoutCodegen(Shuffle(ai0, seed1)) ===
       evaluateWithoutCodegen(Shuffle(ai0, seed1)))

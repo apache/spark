@@ -20,12 +20,13 @@ package org.apache.spark.rdd
 import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.parallel.ForkJoinTaskSupport
+import scala.concurrent.ExecutionContext
 import scala.concurrent.forkjoin.ForkJoinPool
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Dependency, Partition, RangeDependency, SparkContext, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.ThreadUtils.parmap
 import org.apache.spark.util.Utils
 
 /**
@@ -59,8 +60,7 @@ private[spark] class UnionPartition[T: ClassTag](
 }
 
 object UnionRDD {
-  private[spark] lazy val partitionEvalTaskSupport =
-    new ForkJoinTaskSupport(new ForkJoinPool(8))
+  private[spark] lazy val threadPool = new ForkJoinPool(8)
 }
 
 @DeveloperApi
@@ -74,14 +74,13 @@ class UnionRDD[T: ClassTag](
     rdds.length > conf.getInt("spark.rdd.parallelListingThreshold", 10)
 
   override def getPartitions: Array[Partition] = {
-    val parRDDs = if (isPartitionListingParallel) {
-      val parArray = rdds.par
-      parArray.tasksupport = UnionRDD.partitionEvalTaskSupport
-      parArray
+    val partitionLengths = if (isPartitionListingParallel) {
+      implicit val ec = ExecutionContext.fromExecutor(UnionRDD.threadPool)
+      parmap(rdds)(_.partitions.length)
     } else {
-      rdds
+      rdds.map(_.partitions.length)
     }
-    val array = new Array[Partition](parRDDs.map(_.partitions.length).seq.sum)
+    val array = new Array[Partition](partitionLengths.sum)
     var pos = 0
     for ((rdd, rddIndex) <- rdds.zipWithIndex; split <- rdd.partitions) {
       array(pos) = new UnionPartition(pos, rdd, rddIndex, split.index)
