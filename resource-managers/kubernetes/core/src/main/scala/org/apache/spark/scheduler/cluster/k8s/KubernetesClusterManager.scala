@@ -24,7 +24,7 @@ import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.client.Config
 
 import org.apache.spark.SparkContext
-import org.apache.spark.deploy.k8s.{KubernetesUtils, SparkKubernetesClientFactory, SparkPod}
+import org.apache.spark.deploy.k8s.{Constants, KubernetesUtils, SparkKubernetesClientFactory, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
@@ -69,6 +69,13 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       sc.conf,
       defaultServiceAccountToken,
       defaultServiceAccountCaCrt)
+
+    if (sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined) {
+      KubernetesUtils.loadPodFromTemplate(
+        kubernetesClient,
+        new File(sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get),
+        Constants.EXECUTOR_CONTAINER_NAME)
+    }
 
     val requestExecutorsService = ThreadUtils.newDaemonCachedThreadPool(
       "kubernetes-executor-requests")
