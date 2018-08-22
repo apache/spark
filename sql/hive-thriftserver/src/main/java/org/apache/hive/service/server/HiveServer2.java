@@ -38,6 +38,7 @@ import org.apache.hive.service.cli.CLIService;
 import org.apache.hive.service.cli.thrift.ThriftBinaryCLIService;
 import org.apache.hive.service.cli.thrift.ThriftCLIService;
 import org.apache.hive.service.cli.thrift.ThriftHttpCLIService;
+import org.apache.spark.util.ShutdownHookManager;
 
 /**
  * HiveServer2.
@@ -67,13 +68,17 @@ public class HiveServer2 extends CompositeService {
     super.init(hiveConf);
 
     // Add a shutdown hook for catching SIGTERM & SIGINT
-    final HiveServer2 hiveServer2 = this;
-    Runtime.getRuntime().addShutdownHook(new Thread() {
-      @Override
-      public void run() {
-        hiveServer2.stop();
-      }
-    });
+    // this must be higher than the Hadoop Filesystem priority of 10,
+    // which the default priority is.
+    ShutdownHookManager.addShutdownHook(
+        () -> {
+          try {
+            stop();
+          } catch (Throwable e) {
+            LOG.warn("Ignoring Exception while stopping Hive Server from shutdown hook", e);
+          }
+          return null;
+        });
   }
 
   public static boolean isHTTPTransportMode(HiveConf hiveConf) {
