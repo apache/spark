@@ -181,7 +181,7 @@ class Analyzer(
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       TimeWindowing ::
-      SessionWindowing ::
+      ResolveSessionWindow ::
       ResolveInlineTables(conf) ::
       ResolveHigherOrderFunctions(catalog) ::
       ResolveLambdaVariables(conf) ::
@@ -2735,11 +2735,11 @@ object TimeWindowing extends Rule[LogicalPlan] {
 }
 
 /**
- * Maps a time column to multiple time windows using the Expand operator. Since it's non-trivial to
- * figure out how many windows a time column can map to, we over-estimate the number of windows and
- * filter out the rows where the time column is not inside the time window.
+ * Replace the [[SessionWindowExpression]] in Aggregate node, this rule will add [[SessionWindow]]
+ * as the current Aggregate's new child. It will throw [[AnalysisException]] while
+ * [[SessionWindowExpression]] is the only column in group by.
  */
-object SessionWindowing extends Rule[LogicalPlan] {
+object ResolveSessionWindow extends Rule[LogicalPlan] {
 
   private def hasWindowFunction(groupList: Seq[Expression]): Boolean =
     groupList.exists(hasWindowFunction)
@@ -2775,14 +2775,16 @@ object SessionWindowing extends Rule[LogicalPlan] {
         val windowAttr = AttributeReference(
           WINDOW_COL_NAME, window.dataType, metadata = metadata)()
 
-        // TODO: Hack here, we should add more check here.
-        // session window expression can't be resolved now, so the rest expression
-        // in groupingExpressions is the partitionExpression we want.
-        val partitionExpression = groupingExpr.filter(_.resolved)
+        // check partitionExpression in groupingExpr
+        val partitionExpression = groupingExpr.filterNot(hasWindowFunction)
+        if (partitionExpression.isEmpty) {
+          p.failAnalysis("Cannot use session_window as the only group by column.")
+        }
 
         val withWindow = SessionWindow(
           windowAttr, window.timeColumn, partitionExpression, window.windowGap, child)
 
+        // replace session_window column into windowAttr
         val newGroupingExpr = groupingExpr.map { _.transform {
           case s: SessionWindowExpression =>
             windowAttr

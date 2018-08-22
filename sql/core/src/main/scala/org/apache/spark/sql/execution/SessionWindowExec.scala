@@ -20,19 +20,23 @@ package org.apache.spark.sql.execution
 import scala.collection.mutable
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{LongType, TimestampType}
 
 /**
- * The physical plan for [[org.apache.spark.sql.catalyst.plans.logical.SessionWindow]]
+ * Used for calculating the session window start and end for each row, so this plan requires
+ * child distributed by sessionSpec and sorted by time column in each part. The value for
+ * window start is time value of the first row in this window, the value for window end is
+ * time value of the last row plus the windowGap.
  *
- * @param windowExpressions
- * @param sessionSpec
- * @param windowGap window gap in micro second
- * @param child
+ * @param windowExpressions session window expression for the exec node.
+ * @param sessionSpec the partition key of this session window, it is the rest column of
+ *                    groupingExpr in parent aggregate node.
+ * @param windowGap window gap in micro second.
+ * @param child child plan for this node.
  */
 case class SessionWindowExec(
     windowExpressions: NamedExpression,
@@ -50,7 +54,7 @@ case class SessionWindowExec(
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(SortOrder(timeColumn, Ascending)) :: Nil
+    Seq(sessionSpec.map(SortOrder(_, Ascending)) :+ SortOrder(timeColumn, Ascending))
 
   override def output: Seq[Attribute] = child.output ++ Seq(windowExpressions.toAttribute)
 
@@ -76,7 +80,26 @@ case class SessionWindowExec(
         var nextGroup: UnsafeRow = null
         var nextRowAvailable: Boolean = false
 
-        // Manage the time window
+        // Manage the time window.
+        // Considering about windowGap = 3min, the windowResultWithBoundary for partition a in
+        // below scenario is [(1, (start: 00:00, end: 00:03)), (3, (start: 00:05, end: 00:10))].
+        // The partition b will use a new windowResultWithBoundary to keep tracking
+        // IndexWithinPartition and corresponding session window start and end.
+        // -------------------------------------------------------------------------------------
+        // |   Partition    |   IndexWithinPartition    |              RowValue                |
+        // |----------------|---------------------------|--------------|-----------------------|
+        // |       -        |             -             |     time     |   session_spec_key    |
+        // |----------------|---------------------------|--------------|-----------------------|
+        // |        a       |             0             |    00:00     |          a            |
+        // |                |---------------------------|--------------|-----------------------|
+        // |                |             1             |    00:01     |          a            |
+        // |                |---------------------------|--------------|-----------------------|
+        // |                |             2             |    00:05     |          a            |
+        // |                |---------------------------|--------------|-----------------------|
+        // |                |             3             |    00:07     |          a            |
+        // |----------------|---------------------------|--------------|-----------------------|
+        // |        b       |             0             |    00:00     |          b            |
+        //         ...                   ...                  ...                ...
         var rowIndexWithinPartition = 0
         var lastTime: Long = _
         var windowStartTime: Long = _
@@ -107,11 +130,6 @@ case class SessionWindowExec(
         }
 
         fetchNextRow()
-        // Init the first value of last time and window start time.
-        if (nextRowAvailable) {
-          lastTime = getTimeFromRow(nextRow)
-          windowStartTime = lastTime
-        }
 
         val buffer: ExternalAppendOnlyUnsafeRowArray =
           new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
@@ -122,8 +140,10 @@ case class SessionWindowExec(
 
         private[this] def fetchNextPartition() {
           // Collect all the rows in the current partition.
-          // Before we start to fetch new input rows, make a copy of nextGroup.
+          // Before we start to fetch new input rows, make a copy of nextGroup and initialize
+          // value of windowStartTime.
           val currentGroup = nextGroup.copy()
+          windowStartTime = getTimeFromRow(nextRow)
 
           // clear last partition
           buffer.clear()

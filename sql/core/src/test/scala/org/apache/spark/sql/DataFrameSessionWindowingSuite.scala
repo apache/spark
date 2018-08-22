@@ -32,10 +32,10 @@ class DataFrameSessionWindowingSuite
   private def withTempTable(f: String => Unit): Unit = {
     val tableName = "temp"
     Seq(
-      ("2016-03-27 19:39:27", "a", 4),
-      ("2016-03-27 19:39:34", "a", 1),
-      ("2016-03-27 19:39:56", "a", 3),
-      ("2016-03-27 19:39:56", "b", 2)
+      ("2018-08-22 19:39:27", "a", 4),
+      ("2018-08-22 19:39:34", "a", 1),
+      ("2018-08-22 19:39:56", "a", 3),
+      ("2018-08-22 19:39:56", "b", 2)
     ).toDF("time", "key", "value").createOrReplaceTempView(tableName)
     try {
       f(tableName)
@@ -56,9 +56,9 @@ class DataFrameSessionWindowingSuite
           .select($"session_window.start".cast(StringType),
             $"session_window.end".cast(StringType), $"key", $"res"),
         Seq(
-          Row("2016-03-27 19:39:27", "2016-03-27 19:39:44", "a", 5),
-          Row("2016-03-27 19:39:56", "2016-03-27 19:40:06", "a", 3),
-          Row("2016-03-27 19:39:56", "2016-03-27 19:40:06", "b", 2)
+          Row("2018-08-22 19:39:27", "2018-08-22 19:39:44", "a", 5),
+          Row("2018-08-22 19:39:56", "2018-08-22 19:40:06", "a", 3),
+          Row("2018-08-22 19:39:56", "2018-08-22 19:40:06", "b", 2)
         )
       )
     }
@@ -66,10 +66,10 @@ class DataFrameSessionWindowingSuite
 
   test("session window with single key as session window key") {
     val df = Seq(
-      ("2016-03-27 19:39:27", "a", 4),
-      ("2016-03-27 19:39:34", "a", 1),
-      ("2016-03-27 19:39:56", "a", 3),
-      ("2016-03-27 19:39:56", "b", 2)).toDF("time", "key", "value")
+      ("2018-08-22 19:39:27", "a", 4),
+      ("2018-08-22 19:39:34", "a", 1),
+      ("2018-08-22 19:39:56", "a", 3),
+      ("2018-08-22 19:39:56", "b", 2)).toDF("time", "key", "value")
     checkAnswer(
       df.groupBy(session_window($"time", "10 seconds"), $"key")
         .agg(sum($"value").as("res"))
@@ -77,9 +77,66 @@ class DataFrameSessionWindowingSuite
         .select($"session_window.start".cast(StringType),
           $"session_window.end".cast(StringType), $"key", $"res"),
       Seq(
-        Row("2016-03-27 19:39:27", "2016-03-27 19:39:44", "a", 5),
-        Row("2016-03-27 19:39:56", "2016-03-27 19:40:06", "a", 3),
-        Row("2016-03-27 19:39:56", "2016-03-27 19:40:06", "b", 2))
+        Row("2018-08-22 19:39:27", "2018-08-22 19:39:44", "a", 5),
+        Row("2018-08-22 19:39:56", "2018-08-22 19:40:06", "a", 3),
+        Row("2018-08-22 19:39:56", "2018-08-22 19:40:06", "b", 2))
     )
   }
+
+  test("test session window exec with multi group by") {
+    // key with b1 and a2 will be partitioned into same task
+    val df = Seq(
+      ("2018-08-22 19:39:34", "a", "2", 1),
+      ("2018-08-22 19:39:56", "b", "1", 2),
+      ("2018-08-22 19:39:56", "a", "2", 3),
+      ("2018-08-22 19:39:27", "a", "1", 4),
+      ("2018-08-22 19:39:27", "a", "2", 4),
+      ("2018-08-22 19:39:34", "a", "1", 1),
+      ("2018-08-22 19:39:56", "a", "1", 3),
+      ("2018-08-22 19:39:56", "b", "2", 2)).toDF("time", "key1", "key2", "value")
+    checkAnswer(
+      df.groupBy(session_window($"time", "10 seconds"), $"key1", $"key2")
+        .agg(sum($"value").as("res"))
+        .orderBy($"session_window.start".asc, $"key1".asc, $"key2".asc)
+        .select($"session_window.start".cast(StringType),
+          $"session_window.end".cast(StringType), $"key1", $"key2", $"res"),
+      Seq(
+        Row("2018-08-22 19:39:27", "2018-08-22 19:39:44", "a", "1", 5),
+        Row("2018-08-22 19:39:27", "2018-08-22 19:39:44", "a", "2", 5),
+        Row("2018-08-22 19:39:56", "2018-08-22 19:40:06", "a", "1", 3),
+        Row("2018-08-22 19:39:56", "2018-08-22 19:40:06", "a", "2", 3),
+        Row("2018-08-22 19:39:56", "2018-08-22 19:40:06", "b", "1", 2),
+        Row("2018-08-22 19:39:56", "2018-08-22 19:40:06", "b", "2", 2))
+    )
+  }
+
+  test("test session window exec including multi keys in one partition") {
+    withSQLConf("spark.sql.shuffle.partitions" -> "1") {
+      // key with b1 and a2 will be partitioned into same task
+      val df = Seq(
+        ("2018-08-22 19:39:34", "a2", 1),
+        ("2018-08-22 19:39:56", "b1", 2),
+        ("2018-08-22 19:39:56", "a2", 3),
+        ("2018-08-22 19:39:27", "a1", 4),
+        ("2018-08-22 19:39:27", "a2", 4),
+        ("2018-08-22 19:39:34", "a1", 1),
+        ("2018-08-22 19:39:56", "a1", 3),
+        ("2018-08-22 19:39:56", "b2", 2)).toDF("time", "key", "value")
+      checkAnswer(
+        df.groupBy(session_window($"time", "10 seconds"), $"key")
+          .agg(sum($"value").as("res"))
+          .orderBy($"session_window.start".asc, $"key".asc)
+          .select($"session_window.start".cast(StringType),
+            $"session_window.end".cast(StringType), $"key", $"res"),
+        Seq(
+          Row("2018-08-22 19:39:27", "2018-08-22 19:39:44", "a1", 5),
+          Row("2018-08-22 19:39:27", "2018-08-22 19:39:44", "a2", 5),
+          Row("2018-08-22 19:39:56", "2018-08-22 19:40:06", "a1", 3),
+          Row("2018-08-22 19:39:56", "2018-08-22 19:40:06", "a2", 3),
+          Row("2018-08-22 19:39:56", "2018-08-22 19:40:06", "b1", 2),
+          Row("2018-08-22 19:39:56", "2018-08-22 19:40:06", "b2", 2))
+      )
+    }
+  }
+
 }

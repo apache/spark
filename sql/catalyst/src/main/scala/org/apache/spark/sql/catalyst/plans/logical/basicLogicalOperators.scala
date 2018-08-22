@@ -621,8 +621,7 @@ case class SessionWindow(
   override def output: Seq[Attribute] =
     windowExpressions.toAttribute +: child.output
 
-  // the attribute of session window was produced in this node.
-  override def producedAttributes: AttributeSet = outputSet -- inputSet
+  override def producedAttributes: AttributeSet = AttributeSet(windowExpressions.toAttribute)
 }
 
 object Expand {
