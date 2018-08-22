@@ -758,6 +758,7 @@ private[deploy] class Worker(
 private[deploy] object Worker extends Logging {
   val SYSTEM_NAME = "sparkWorker"
   val ENDPOINT_NAME = "Worker"
+  private val SSL_NODE_LOCAL_CONFIG_PATTERN = """\-Dspark\.ssl\.useNodeLocalConf\=(.+)""".r
 
   def main(argStrings: Array[String]) {
     Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler(
@@ -803,9 +804,8 @@ private[deploy] object Worker extends Logging {
   }
 
   def isUseLocalNodeSSLConfig(cmd: Command): Boolean = {
-    val pattern = """\-Dspark\.ssl\.useNodeLocalConf\=(.+)""".r
     val result = cmd.javaOpts.collectFirst {
-      case pattern(_result) => _result.toBoolean
+      case SSL_NODE_LOCAL_CONFIG_PATTERN(_result) => _result.toBoolean
     }
     result.getOrElse(false)
   }
