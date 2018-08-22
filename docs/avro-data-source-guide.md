@@ -24,7 +24,7 @@ See [Application Submission Guide](submitting-applications.html) for more detail
 
 ## Load and Save Functions
 
-Since `spark-avro` module is external, there is not such API as `.avro` in 
+Since `spark-avro` module is external, there is no `.avro` API in 
 `DataFrameReader` or `DataFrameWriter`.
 
 To load/save data in Avro format, you need to specify the data source option `format` as `avro`(or `org.apache.spark.sql.avro`).
