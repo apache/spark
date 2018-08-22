@@ -15,25 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader;
+package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.InternalRow;
-
-import java.util.List;
+import org.apache.spark.sql.sources.v2.reader.{ScanConfig, ScanConfigBuilder}
+import org.apache.spark.sql.types.StructType
 
 /**
- * A mix-in interface for {@link DataSourceReader}. Data source readers can implement this
- * interface to output {@link Row} instead of {@link InternalRow}.
- * This is an experimental and unstable interface.
+ * A very simple [[ScanConfigBuilder]] implementation that creates a simple [[ScanConfig]] to
+ * carry schema and offsets for streaming data sources.
  */
-@InterfaceStability.Unstable
-public interface SupportsDeprecatedScanRow extends DataSourceReader {
-  default List<InputPartition<InternalRow>> planInputPartitions() {
-    throw new IllegalStateException(
-        "planInputPartitions not supported by default within SupportsDeprecatedScanRow");
-  }
+class SimpleStreamingScanConfigBuilder(
+    schema: StructType,
+    start: Offset,
+    end: Option[Offset] = None)
+  extends ScanConfigBuilder {
 
-  List<InputPartition<Row>> planRowInputPartitions();
+  override def build(): ScanConfig = SimpleStreamingScanConfig(schema, start, end)
 }
+
+case class SimpleStreamingScanConfig(
+    readSchema: StructType,
+    start: Offset,
+    end: Option[Offset])
+  extends ScanConfig

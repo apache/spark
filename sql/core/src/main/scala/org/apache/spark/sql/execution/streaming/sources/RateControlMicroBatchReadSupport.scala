@@ -17,21 +17,15 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.sources.v2.writer.{DataSourceWriter, DataWriterFactory, WriterCommitMessage}
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset}
 
-/**
- * A [[DataSourceWriter]] used to hook V2 stream writers into a microbatch plan. It implements
- * the non-streaming interface, forwarding the batch ID determined at construction to a wrapped
- * streaming writer.
- */
-class MicroBatchWriter(batchId: Long, val writer: StreamWriter) extends DataSourceWriter {
-  override def commit(messages: Array[WriterCommitMessage]): Unit = {
-    writer.commit(batchId, messages)
+// A special `MicroBatchReadSupport` that can get latestOffset with a start offset.
+trait RateControlMicroBatchReadSupport extends MicroBatchReadSupport {
+
+  override def latestOffset(): Offset = {
+    throw new IllegalAccessException(
+      "latestOffset should not be called for RateControlMicroBatchReadSupport")
   }
 
-  override def abort(messages: Array[WriterCommitMessage]): Unit = writer.abort(batchId, messages)
-
-  override def createWriterFactory(): DataWriterFactory[InternalRow] = writer.createWriterFactory()
+  def latestOffset(start: Offset): Offset
 }

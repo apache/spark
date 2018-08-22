@@ -18,28 +18,13 @@
 package org.apache.spark.sql.sources.v2.writer;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.SaveMode;
-import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.sources.v2.DataSourceOptions;
-import org.apache.spark.sql.sources.v2.StreamWriteSupport;
-import org.apache.spark.sql.sources.v2.WriteSupport;
-import org.apache.spark.sql.streaming.OutputMode;
-import org.apache.spark.sql.types.StructType;
 
 /**
- * A data source writer that is returned by
- * {@link WriteSupport#createWriter(String, StructType, SaveMode, DataSourceOptions)}/
- * {@link StreamWriteSupport#createStreamWriter(
- * String, StructType, OutputMode, DataSourceOptions)}.
- * It can mix in various writing optimization interfaces to speed up the data saving. The actual
- * writing logic is delegated to {@link DataWriter}.
- *
- * If an exception was throw when applying any of these writing optimizations, the action will fail
- * and no Spark job will be submitted.
+ * An interface that defines how to write the data to data source for batch processing.
  *
  * The writing procedure is:
- *   1. Create a writer factory by {@link #createWriterFactory()}, serialize and send it to all the
- *      partitions of the input data(RDD).
+ *   1. Create a writer factory by {@link #createBatchWriterFactory()}, serialize and send it to all
+ *      the partitions of the input data(RDD).
  *   2. For each partition, create the data writer, and write the data of the partition with this
  *      writer. If all the data are written successfully, call {@link DataWriter#commit()}. If
  *      exception happens during the writing, call {@link DataWriter#abort()}.
@@ -53,7 +38,7 @@ import org.apache.spark.sql.types.StructType;
  * Please refer to the documentation of commit/abort methods for detailed specifications.
  */
 @InterfaceStability.Evolving
-public interface DataSourceWriter {
+public interface BatchWriteSupport {
 
   /**
    * Creates a writer factory which will be serialized and sent to executors.
@@ -61,7 +46,7 @@ public interface DataSourceWriter {
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    */
-  DataWriterFactory<InternalRow> createWriterFactory();
+  DataWriterFactory createBatchWriterFactory();
 
   /**
    * Returns whether Spark should use the commit coordinator to ensure that at most one task for

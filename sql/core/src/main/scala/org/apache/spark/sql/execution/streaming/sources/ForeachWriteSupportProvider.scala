@@ -22,9 +22,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.python.PythonForeachWriter
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, StreamWriteSupport}
-import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory, WriterCommitMessage}
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, StreamingWriteSupportProvider}
+import org.apache.spark.sql.sources.v2.writer.{DataWriter, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteSupport}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -37,20 +37,21 @@ import org.apache.spark.sql.types.StructType
  *                  a [[ExpressionEncoder]] or a direct converter function.
  * @tparam T The expected type of the sink.
  */
-case class ForeachWriterProvider[T](
+case class ForeachWriteSupportProvider[T](
     writer: ForeachWriter[T],
-    converter: Either[ExpressionEncoder[T], InternalRow => T]) extends StreamWriteSupport {
+    converter: Either[ExpressionEncoder[T], InternalRow => T])
+  extends StreamingWriteSupportProvider {
 
-  override def createStreamWriter(
+  override def createStreamingWriteSupport(
       queryId: String,
       schema: StructType,
       mode: OutputMode,
-      options: DataSourceOptions): StreamWriter = {
-    new StreamWriter {
+      options: DataSourceOptions): StreamingWriteSupport = {
+    new StreamingWriteSupport {
       override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
       override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
 
-      override def createWriterFactory(): DataWriterFactory[InternalRow] = {
+      override def createStreamingWriterFactory(): StreamingDataWriterFactory = {
         val rowConverter: InternalRow => T = converter match {
           case Left(enc) =>
             val boundEnc = enc.resolveAndBind(
@@ -68,16 +69,16 @@ case class ForeachWriterProvider[T](
   }
 }
 
-object ForeachWriterProvider {
+object ForeachWriteSupportProvider {
   def apply[T](
       writer: ForeachWriter[T],
-      encoder: ExpressionEncoder[T]): ForeachWriterProvider[_] = {
+      encoder: ExpressionEncoder[T]): ForeachWriteSupportProvider[_] = {
     writer match {
       case pythonWriter: PythonForeachWriter =>
-        new ForeachWriterProvider[UnsafeRow](
+        new ForeachWriteSupportProvider[UnsafeRow](
           pythonWriter, Right((x: InternalRow) => x.asInstanceOf[UnsafeRow]))
       case _ =>
-        new ForeachWriterProvider[T](writer, Left(encoder))
+        new ForeachWriteSupportProvider[T](writer, Left(encoder))
     }
   }
 }
@@ -85,8 +86,8 @@ object ForeachWriterProvider {
 case class ForeachWriterFactory[T](
     writer: ForeachWriter[T],
     rowConverter: InternalRow => T)
-  extends DataWriterFactory[InternalRow] {
-  override def createDataWriter(
+  extends StreamingDataWriterFactory {
+  override def createWriter(
       partitionId: Int,
       taskId: Long,
       epochId: Long): ForeachDataWriter[T] = {

@@ -20,7 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Paths}
-import java.util.{Locale, Optional, Properties}
+import java.util.{Locale, Properties}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -44,11 +44,9 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
-import org.apache.spark.sql.types.StructType
 
 abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with KafkaTest {
 
@@ -118,14 +116,16 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with Kaf
         query.nonEmpty,
         "Cannot add data when there is no query for finding the active kafka source")
 
-      val sources = {
+      val sources: Seq[BaseStreamingSource] = {
         query.get.logicalPlan.collect {
           case StreamingExecutionRelation(source: KafkaSource, _) => source
-          case StreamingExecutionRelation(source: KafkaMicroBatchReader, _) => source
+          case StreamingExecutionRelation(source: KafkaMicroBatchReadSupport, _) => source
         } ++ (query.get.lastExecution match {
           case null => Seq()
           case e => e.logical.collect {
-            case StreamingDataSourceV2Relation(_, _, _, reader: KafkaContinuousReader) => reader
+            case r: StreamingDataSourceV2Relation
+                if r.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
+              r.readSupport.asInstanceOf[KafkaContinuousReadSupport]
           }
         })
       }.distinct
@@ -650,7 +650,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
       makeSureGetOffsetCalled,
       AssertOnQuery { query =>
         query.logicalPlan.collect {
-          case StreamingExecutionRelation(_: KafkaMicroBatchReader, _) => true
+          case StreamingExecutionRelation(_: KafkaMicroBatchReadSupport, _) => true
         }.nonEmpty
       }
     )
@@ -675,17 +675,16 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           "kafka.bootstrap.servers" -> testUtils.brokerAddress,
           "subscribe" -> topic
         ) ++ Option(minPartitions).map { p => "minPartitions" -> p}
-        val reader = provider.createMicroBatchReader(
-          Optional.empty[StructType], dir.getAbsolutePath, new DataSourceOptions(options.asJava))
-        reader.setOffsetRange(
-          Optional.of[OffsetV2](KafkaSourceOffset(Map(tp -> 0L))),
-          Optional.of[OffsetV2](KafkaSourceOffset(Map(tp -> 100L)))
-        )
-        val factories = reader.planInputPartitions().asScala
+        val readSupport = provider.createMicroBatchReadSupport(
+          dir.getAbsolutePath, new DataSourceOptions(options.asJava))
+        val config = readSupport.newScanConfigBuilder(
+          KafkaSourceOffset(Map(tp -> 0L)),
+          KafkaSourceOffset(Map(tp -> 100L))).build()
+        val inputPartitions = readSupport.planInputPartitions(config)
           .map(_.asInstanceOf[KafkaMicroBatchInputPartition])
-        withClue(s"minPartitions = $minPartitions generated factories $factories\n\t") {
-          assert(factories.size == numPartitionsGenerated)
-          factories.foreach { f => assert(f.reuseKafkaConsumer == reusesConsumers) }
+        withClue(s"minPartitions = $minPartitions generated factories $inputPartitions\n\t") {
+          assert(inputPartitions.size == numPartitionsGenerated)
+          inputPartitions.foreach { f => assert(f.reuseKafkaConsumer == reusesConsumers) }
         }
       }
     }

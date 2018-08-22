@@ -19,27 +19,24 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.io._
 import java.nio.charset.StandardCharsets
-import java.util.Optional
 import java.util.concurrent.TimeUnit
-
-import scala.collection.JavaConverters._
 
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ManualClock, SystemClock}
 
-class RateStreamMicroBatchReader(options: DataSourceOptions, checkpointLocation: String)
-  extends MicroBatchReader with Logging {
+class RateStreamMicroBatchReadSupport(options: DataSourceOptions, checkpointLocation: String)
+  extends MicroBatchReadSupport with Logging {
   import RateStreamProvider._
 
   private[sources] val clock = {
@@ -106,38 +103,30 @@ class RateStreamMicroBatchReader(options: DataSourceOptions, checkpointLocation:
 
   @volatile private var lastTimeMs: Long = creationTimeMs
 
-  private var start: LongOffset = _
-  private var end: LongOffset = _
+  override def initialOffset(): Offset = LongOffset(0L)
 
-  override def readSchema(): StructType = SCHEMA
-
-  override def setOffsetRange(start: Optional[Offset], end: Optional[Offset]): Unit = {
-    this.start = start.orElse(LongOffset(0L)).asInstanceOf[LongOffset]
-    this.end = end.orElse {
-      val now = clock.getTimeMillis()
-      if (lastTimeMs < now) {
-        lastTimeMs = now
-      }
-      LongOffset(TimeUnit.MILLISECONDS.toSeconds(lastTimeMs - creationTimeMs))
-    }.asInstanceOf[LongOffset]
-  }
-
-  override def getStartOffset(): Offset = {
-    if (start == null) throw new IllegalStateException("start offset not set")
-    start
-  }
-  override def getEndOffset(): Offset = {
-    if (end == null) throw new IllegalStateException("end offset not set")
-    end
+  override def latestOffset(): Offset = {
+    val now = clock.getTimeMillis()
+    if (lastTimeMs < now) {
+      lastTimeMs = now
+    }
+    LongOffset(TimeUnit.MILLISECONDS.toSeconds(lastTimeMs - creationTimeMs))
   }
 
   override def deserializeOffset(json: String): Offset = {
     LongOffset(json.toLong)
   }
 
-  override def planInputPartitions(): java.util.List[InputPartition[InternalRow]] = {
-    val startSeconds = LongOffset.convert(start).map(_.offset).getOrElse(0L)
-    val endSeconds = LongOffset.convert(end).map(_.offset).getOrElse(0L)
+  override def fullSchema(): StructType = SCHEMA
+
+  override def newScanConfigBuilder(start: Offset, end: Offset): ScanConfigBuilder = {
+    new SimpleStreamingScanConfigBuilder(fullSchema(), start, Some(end))
+  }
+
+  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
+    val sc = config.asInstanceOf[SimpleStreamingScanConfig]
+    val startSeconds = sc.start.asInstanceOf[LongOffset].offset
+    val endSeconds = sc.end.get.asInstanceOf[LongOffset].offset
     assert(startSeconds <= endSeconds, s"startSeconds($startSeconds) > endSeconds($endSeconds)")
     if (endSeconds > maxSeconds) {
       throw new ArithmeticException("Integer overflow. Max offset with " +
@@ -153,7 +142,7 @@ class RateStreamMicroBatchReader(options: DataSourceOptions, checkpointLocation:
       s"rangeStart: $rangeStart, rangeEnd: $rangeEnd")
 
     if (rangeStart == rangeEnd) {
-      return List.empty.asJava
+      return Array.empty
     }
 
     val localStartTimeMs = creationTimeMs + TimeUnit.SECONDS.toMillis(startSeconds)
@@ -170,8 +159,11 @@ class RateStreamMicroBatchReader(options: DataSourceOptions, checkpointLocation:
     (0 until numPartitions).map { p =>
       new RateStreamMicroBatchInputPartition(
         p, numPartitions, rangeStart, rangeEnd, localStartTimeMs, relativeMsPerValue)
-        : InputPartition[InternalRow]
-    }.toList.asJava
+    }.toArray
+  }
+
+  override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
+    RateStreamMicroBatchReaderFactory
   }
 
   override def commit(end: Offset): Unit = {}
@@ -183,26 +175,29 @@ class RateStreamMicroBatchReader(options: DataSourceOptions, checkpointLocation:
     s"numPartitions=${options.get(NUM_PARTITIONS).orElse("default")}"
 }
 
-class RateStreamMicroBatchInputPartition(
+case class RateStreamMicroBatchInputPartition(
     partitionId: Int,
     numPartitions: Int,
     rangeStart: Long,
     rangeEnd: Long,
     localStartTimeMs: Long,
-    relativeMsPerValue: Double) extends InputPartition[InternalRow] {
+    relativeMsPerValue: Double) extends InputPartition
 
-  override def createPartitionReader(): InputPartitionReader[InternalRow] =
-    new RateStreamMicroBatchInputPartitionReader(partitionId, numPartitions, rangeStart, rangeEnd,
-      localStartTimeMs, relativeMsPerValue)
+object RateStreamMicroBatchReaderFactory extends PartitionReaderFactory {
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    val p = partition.asInstanceOf[RateStreamMicroBatchInputPartition]
+    new RateStreamMicroBatchPartitionReader(p.partitionId, p.numPartitions, p.rangeStart,
+      p.rangeEnd, p.localStartTimeMs, p.relativeMsPerValue)
+  }
 }
 
-class RateStreamMicroBatchInputPartitionReader(
+class RateStreamMicroBatchPartitionReader(
     partitionId: Int,
     numPartitions: Int,
     rangeStart: Long,
     rangeEnd: Long,
     localStartTimeMs: Long,
-    relativeMsPerValue: Double) extends InputPartitionReader[InternalRow] {
+    relativeMsPerValue: Double) extends PartitionReader[InternalRow] {
   private var count: Long = 0
 
   override def next(): Boolean = {

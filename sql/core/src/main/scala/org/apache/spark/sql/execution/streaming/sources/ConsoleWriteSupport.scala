@@ -19,16 +19,15 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.writer.{DataWriterFactory, WriterCommitMessage}
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
+import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteSupport}
 import org.apache.spark.sql.types.StructType
 
 /** Common methods used to create writes for the the console sink */
-class ConsoleWriter(schema: StructType, options: DataSourceOptions)
-    extends StreamWriter with Logging {
+class ConsoleWriteSupport(schema: StructType, options: DataSourceOptions)
+    extends StreamingWriteSupport with Logging {
 
   // Number of rows to display, by default 20 rows
   protected val numRowsToShow = options.getInt("numRows", 20)
@@ -39,7 +38,7 @@ class ConsoleWriter(schema: StructType, options: DataSourceOptions)
   assert(SparkSession.getActiveSession.isDefined)
   protected val spark = SparkSession.getActiveSession.get
 
-  def createWriterFactory(): DataWriterFactory[InternalRow] = PackedRowWriterFactory
+  def createStreamingWriterFactory(): StreamingDataWriterFactory = PackedRowWriterFactory
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
     // We have to print a "Batch" label for the epoch for compatibility with the pre-data source V2

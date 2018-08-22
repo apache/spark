@@ -25,16 +25,15 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousInputPartitionReader, ContinuousReader, Offset, PartitionOffset}
+import org.apache.spark.sql.sources.v2.reader.streaming._
 import org.apache.spark.sql.types.StructType
 
 /**
- * A [[ContinuousReader]] for data from kafka.
+ * A [[ContinuousReadSupport]] for data from kafka.
  *
  * @param offsetReader  a reader used to get kafka offsets. Note that the actual data will be
  *                      read by per-task consumers generated later.
@@ -47,70 +46,49 @@ import org.apache.spark.sql.types.StructType
  *                       scenarios, where some offsets after the specified initial ones can't be
  *                       properly read.
  */
-class KafkaContinuousReader(
+class KafkaContinuousReadSupport(
     offsetReader: KafkaOffsetReader,
     kafkaParams: ju.Map[String, Object],
     sourceOptions: Map[String, String],
     metadataPath: String,
     initialOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
-  extends ContinuousReader with Logging {
-
-  private lazy val session = SparkSession.getActiveSession.get
-  private lazy val sc = session.sparkContext
+  extends ContinuousReadSupport with Logging {
 
   private val pollTimeoutMs = sourceOptions.getOrElse("kafkaConsumer.pollTimeoutMs", "512").toLong
 
-  // Initialized when creating reader factories. If this diverges from the partitions at the latest
-  // offsets, we need to reconfigure.
-  // Exposed outside this object only for unit tests.
-  @volatile private[sql] var knownPartitions: Set[TopicPartition] = _
-
-  override def readSchema: StructType = KafkaOffsetReader.kafkaSchema
-
-  private var offset: Offset = _
-  override def setStartOffset(start: ju.Optional[Offset]): Unit = {
-    offset = start.orElse {
-      val offsets = initialOffsets match {
-        case EarliestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchEarliestOffsets())
-        case LatestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchLatestOffsets())
-        case SpecificOffsetRangeLimit(p) => offsetReader.fetchSpecificOffsets(p, reportDataLoss)
-      }
-      logInfo(s"Initial offsets: $offsets")
-      offsets
+  override def initialOffset(): Offset = {
+    val offsets = initialOffsets match {
+      case EarliestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchEarliestOffsets())
+      case LatestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchLatestOffsets())
+      case SpecificOffsetRangeLimit(p) => offsetReader.fetchSpecificOffsets(p, reportDataLoss)
     }
+    logInfo(s"Initial offsets: $offsets")
+    offsets
   }
 
-  override def getStartOffset(): Offset = offset
+  override def fullSchema(): StructType = KafkaOffsetReader.kafkaSchema
+
+  override def newScanConfigBuilder(start: Offset): ScanConfigBuilder = {
+    new KafkaContinuousScanConfigBuilder(fullSchema(), start, offsetReader, reportDataLoss)
+  }
 
   override def deserializeOffset(json: String): Offset = {
     KafkaSourceOffset(JsonUtils.partitionOffsets(json))
   }
 
-  override def planInputPartitions(): ju.List[InputPartition[InternalRow]] = {
-    import scala.collection.JavaConverters._
-
-    val oldStartPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(offset)
-
-    val currentPartitionSet = offsetReader.fetchEarliestOffsets().keySet
-    val newPartitions = currentPartitionSet.diff(oldStartPartitionOffsets.keySet)
-    val newPartitionOffsets = offsetReader.fetchEarliestOffsets(newPartitions.toSeq)
-
-    val deletedPartitions = oldStartPartitionOffsets.keySet.diff(currentPartitionSet)
-    if (deletedPartitions.nonEmpty) {
-      reportDataLoss(s"Some partitions were deleted: $deletedPartitions")
-    }
-
-    val startOffsets = newPartitionOffsets ++
-      oldStartPartitionOffsets.filterKeys(!deletedPartitions.contains(_))
-    knownPartitions = startOffsets.keySet
-
+  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
+    val startOffsets = config.asInstanceOf[KafkaContinuousScanConfig].startOffsets
     startOffsets.toSeq.map {
       case (topicPartition, start) =>
         KafkaContinuousInputPartition(
-          topicPartition, start, kafkaParams, pollTimeoutMs, failOnDataLoss
-        ): InputPartition[InternalRow]
-    }.asJava
+          topicPartition, start, kafkaParams, pollTimeoutMs, failOnDataLoss)
+    }.toArray
+  }
+
+  override def createContinuousReaderFactory(
+      config: ScanConfig): ContinuousPartitionReaderFactory = {
+    KafkaContinuousReaderFactory
   }
 
   /** Stop this source and free any resources it has allocated. */
@@ -127,8 +105,9 @@ class KafkaContinuousReader(
     KafkaSourceOffset(mergedMap)
   }
 
-  override def needsReconfiguration(): Boolean = {
-    knownPartitions != null && offsetReader.fetchLatestOffsets().keySet != knownPartitions
+  override def needsReconfiguration(config: ScanConfig): Boolean = {
+    val knownPartitions = config.asInstanceOf[KafkaContinuousScanConfig].knownPartitions
+    offsetReader.fetchLatestOffsets().keySet != knownPartitions
   }
 
   override def toString(): String = s"KafkaSource[$offsetReader]"
@@ -162,21 +141,49 @@ case class KafkaContinuousInputPartition(
     startOffset: Long,
     kafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean) extends ContinuousInputPartition[InternalRow] {
+    failOnDataLoss: Boolean) extends InputPartition
 
-  override def createContinuousReader(
-      offset: PartitionOffset): InputPartitionReader[InternalRow] = {
-    val kafkaOffset = offset.asInstanceOf[KafkaSourcePartitionOffset]
-    require(kafkaOffset.topicPartition == topicPartition,
-      s"Expected topicPartition: $topicPartition, but got: ${kafkaOffset.topicPartition}")
-    new KafkaContinuousInputPartitionReader(
-      topicPartition, kafkaOffset.partitionOffset, kafkaParams, pollTimeoutMs, failOnDataLoss)
+object KafkaContinuousReaderFactory extends ContinuousPartitionReaderFactory {
+  override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
+    val p = partition.asInstanceOf[KafkaContinuousInputPartition]
+    new KafkaContinuousPartitionReader(
+      p.topicPartition, p.startOffset, p.kafkaParams, p.pollTimeoutMs, p.failOnDataLoss)
   }
+}
 
-  override def createPartitionReader(): KafkaContinuousInputPartitionReader = {
-    new KafkaContinuousInputPartitionReader(
-      topicPartition, startOffset, kafkaParams, pollTimeoutMs, failOnDataLoss)
+class KafkaContinuousScanConfigBuilder(
+    schema: StructType,
+    startOffset: Offset,
+    offsetReader: KafkaOffsetReader,
+    reportDataLoss: String => Unit)
+  extends ScanConfigBuilder {
+
+  override def build(): ScanConfig = {
+    val oldStartPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(startOffset)
+
+    val currentPartitionSet = offsetReader.fetchEarliestOffsets().keySet
+    val newPartitions = currentPartitionSet.diff(oldStartPartitionOffsets.keySet)
+    val newPartitionOffsets = offsetReader.fetchEarliestOffsets(newPartitions.toSeq)
+
+    val deletedPartitions = oldStartPartitionOffsets.keySet.diff(currentPartitionSet)
+    if (deletedPartitions.nonEmpty) {
+      reportDataLoss(s"Some partitions were deleted: $deletedPartitions")
+    }
+
+    val startOffsets = newPartitionOffsets ++
+      oldStartPartitionOffsets.filterKeys(!deletedPartitions.contains(_))
+    KafkaContinuousScanConfig(schema, startOffsets)
   }
+}
+
+case class KafkaContinuousScanConfig(
+    readSchema: StructType,
+    startOffsets: Map[TopicPartition, Long])
+  extends ScanConfig {
+
+  // Created when building the scan config builder. If this diverges from the partitions at the
+  // latest offsets, we need to reconfigure the kafka read support.
+  def knownPartitions: Set[TopicPartition] = startOffsets.keySet
 }
 
 /**
@@ -189,12 +196,12 @@ case class KafkaContinuousInputPartition(
  * @param failOnDataLoss Flag indicating whether data reader should fail if some offsets
  *                       are skipped.
  */
-class KafkaContinuousInputPartitionReader(
+class KafkaContinuousPartitionReader(
     topicPartition: TopicPartition,
     startOffset: Long,
     kafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean) extends ContinuousInputPartitionReader[InternalRow] {
+    failOnDataLoss: Boolean) extends ContinuousPartitionReader[InternalRow] {
   private val consumer = KafkaDataConsumer.acquire(topicPartition, kafkaParams, useCache = false)
   private val converter = new KafkaRecordToUnsafeRowConverter
 
