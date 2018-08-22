@@ -20,7 +20,6 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 import com.google.common.cache.CacheBuilder
-import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.client.Config
 
 import org.apache.spark.SparkContext
