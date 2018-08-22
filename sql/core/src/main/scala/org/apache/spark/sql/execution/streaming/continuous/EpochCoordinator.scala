@@ -25,7 +25,7 @@ import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeR
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, PartitionOffset}
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingWriteConfig, StreamingWriteSupport}
 import org.apache.spark.util.RpcUtils
 
 private[continuous] sealed trait EpochCoordinatorMessage extends Serializable
@@ -83,6 +83,7 @@ private[sql] object EpochCoordinatorRef extends Logging {
    */
   def create(
       writeSupport: StreamingWriteSupport,
+      writeConfig: StreamingWriteConfig,
       readSupport: ContinuousReadSupport,
       query: ContinuousExecution,
       epochCoordinatorId: String,
@@ -90,7 +91,7 @@ private[sql] object EpochCoordinatorRef extends Logging {
       session: SparkSession,
       env: SparkEnv): RpcEndpointRef = synchronized {
     val coordinator = new EpochCoordinator(
-      writeSupport, readSupport, query, startEpoch, session, env.rpcEnv)
+      writeSupport, writeConfig, readSupport, query, startEpoch, session, env.rpcEnv)
     val ref = env.rpcEnv.setupEndpoint(endpointName(epochCoordinatorId), coordinator)
     logInfo("Registered EpochCoordinator endpoint")
     ref
@@ -116,6 +117,7 @@ private[sql] object EpochCoordinatorRef extends Logging {
  */
 private[continuous] class EpochCoordinator(
     writeSupport: StreamingWriteSupport,
+    writeConfig: StreamingWriteConfig,
     readSupport: ContinuousReadSupport,
     query: ContinuousExecution,
     startEpoch: Long,
@@ -198,7 +200,7 @@ private[continuous] class EpochCoordinator(
       s"and is ready to be committed. Committing epoch $epoch.")
     // Sequencing is important here. We must commit to the writer before recording the commit
     // in the query, or we will end up dropping the commit if we restart in the middle.
-    writeSupport.commit(epoch, messages.toArray)
+    writeSupport.commit(writeConfig, epoch, messages.toArray)
     query.commit(epoch)
   }
 

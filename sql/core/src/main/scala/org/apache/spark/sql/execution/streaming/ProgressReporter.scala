@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalP
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExec, WriteToDataSourceV2Exec}
-import org.apache.spark.sql.execution.streaming.sources.MicroBatchWritSupport
+import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriteSupport
 import org.apache.spark.sql.sources.v2.CustomMetrics
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, SupportsCustomReaderMetrics}
 import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingWriteSupport, SupportsCustomWriterMetrics}
@@ -242,7 +242,7 @@ trait ProgressReporter extends Logging {
       case p if p.isInstanceOf[WriteToDataSourceV2Exec] =>
         p.asInstanceOf[WriteToDataSourceV2Exec].writeSupport
     }.headOption match {
-      case Some(w: MicroBatchWritSupport) => Some(w.writeSupport)
+      case Some(w: MicroBatchWriteSupport) => Some(w.writeSupport)
       case _ => None
     }
   }

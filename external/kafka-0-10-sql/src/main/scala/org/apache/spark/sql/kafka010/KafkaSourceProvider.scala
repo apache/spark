@@ -269,8 +269,6 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
   override def createStreamingWriteSupport(
       queryId: String,
-      schema: StructType,
-      mode: OutputMode,
       options: DataSourceOptions): StreamingWriteSupport = {
     import scala.collection.JavaConverters._
 
@@ -279,10 +277,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     // We convert the options argument from V2 -> Java map -> scala mutable -> scala immutable.
     val producerParams = kafkaParamsForProducer(options.asMap.asScala.toMap)
 
-    KafkaWriter.validateQuery(
-      schema.toAttributes, new java.util.HashMap[String, Object](producerParams.asJava), topic)
-
-    new KafkaStreamingWriteSupport(topic, producerParams, schema)
+    new KafkaStreamingWriteSupport(topic, producerParams)
   }
 
   private def strategy(caseInsensitiveParams: Map[String, String]) =

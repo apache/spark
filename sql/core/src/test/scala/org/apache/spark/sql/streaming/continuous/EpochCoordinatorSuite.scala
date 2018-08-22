@@ -29,7 +29,7 @@ import org.apache.spark.sql.LocalSparkSession
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, PartitionOffset}
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingWriteConfig, StreamingWriteSupport}
 import org.apache.spark.sql.test.TestSparkSession
 
 class EpochCoordinatorSuite
@@ -46,14 +46,15 @@ class EpochCoordinatorSuite
 
   override def beforeEach(): Unit = {
     val reader = mock[ContinuousReadSupport]
+    val writeConfig = mock[StreamingWriteConfig]
     writeSupport = mock[StreamingWriteSupport]
     query = mock[ContinuousExecution]
     orderVerifier = inOrder(writeSupport, query)
 
     spark = new TestSparkSession()
 
-    epochCoordinator
-      = EpochCoordinatorRef.create(writeSupport, reader, query, "test", 1, spark, SparkEnv.get)
+    epochCoordinator = EpochCoordinatorRef.create(
+      writeSupport, writeConfig, reader, query, "test", 1, spark, SparkEnv.get)
   }
 
   test("single epoch") {
@@ -209,12 +210,12 @@ class EpochCoordinatorSuite
   }
 
   private def verifyCommit(epoch: Long): Unit = {
-    orderVerifier.verify(writeSupport).commit(eqTo(epoch), any())
+    orderVerifier.verify(writeSupport).commit(any(), eqTo(epoch), any())
     orderVerifier.verify(query).commit(epoch)
   }
 
   private def verifyNoCommitFor(epoch: Long): Unit = {
-    verify(writeSupport, never()).commit(eqTo(epoch), any())
+    verify(writeSupport, never()).commit(any(), eqTo(epoch), any())
     verify(query, never()).commit(epoch)
   }
 

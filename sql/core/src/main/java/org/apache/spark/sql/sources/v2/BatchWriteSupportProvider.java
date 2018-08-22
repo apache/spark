@@ -22,7 +22,6 @@ import java.util.Optional;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.sources.v2.writer.BatchWriteSupport;
-import org.apache.spark.sql.types.StructType;
 
 /**
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
@@ -35,25 +34,18 @@ import org.apache.spark.sql.types.StructType;
 public interface BatchWriteSupportProvider extends DataSourceV2 {
 
   /**
-   * Creates an optional {@link BatchWriteSupport} instance to save the data to this data source,
-   * which is called by Spark at the beginning of each batch query.
+   * Creates a {@link BatchWriteSupport} instance to save the data to a data source. Called by
+   * Spark at the beginning of each batch query.
    *
    * Data sources can return None if there is no writing needed to be done according to the save
    * mode.
    *
-   * @param queryId A unique string for the writing query. It's possible that there are many
-   *                writing queries running at the same time, and the returned
-   *                {@link BatchWriteSupport} can use this id to distinguish itself from others.
-   * @param schema the schema of the data to be written.
    * @param mode the save mode which determines what to do when the data are already in this data
    *             source, please refer to {@link SaveMode} for more details.
    * @param options the options for the returned data source writer, which is an immutable
    *                case-insensitive string-to-string map.
    * @return a write support to write data to this data source.
    */
-  Optional<BatchWriteSupport> createBatchWriteSupport(
-      String queryId,
-      StructType schema,
-      SaveMode mode,
-      DataSourceOptions options);
+  // TODO: remove SaveMode
+  Optional<BatchWriteSupport> createBatchWriteSupport(SaveMode mode, DataSourceOptions options);
 }

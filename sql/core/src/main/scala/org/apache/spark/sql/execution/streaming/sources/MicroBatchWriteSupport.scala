@@ -18,27 +18,38 @@
 package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.sources.v2.writer.{BatchWriteSupport, DataWriter, DataWriterFactory, WriterCommitMessage}
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteSupport}
+import org.apache.spark.sql.sources.v2.DataSourceOptions
+import org.apache.spark.sql.sources.v2.writer.{BatchWriteSupport, DataWriter, DataWriterFactory, WriteConfig, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteConfig, StreamingWriteSupport}
+import org.apache.spark.sql.types.StructType
 
 /**
  * A [[BatchWriteSupport]] used to hook V2 stream writers into a microbatch plan. It implements
  * the non-streaming interface, forwarding the epoch ID determined at construction to a wrapped
  * streaming write support.
  */
-class MicroBatchWritSupport(eppchId: Long, val writeSupport: StreamingWriteSupport)
+class MicroBatchWriteSupport(eppchId: Long, val writeSupport: StreamingWriteSupport)
   extends BatchWriteSupport {
 
-  override def commit(messages: Array[WriterCommitMessage]): Unit = {
-    writeSupport.commit(eppchId, messages)
+  override def createWriteConfig(
+      schema: StructType,
+      options: DataSourceOptions): WriteConfig =
+    // write config must be created with the wrapped streaming write support instead of this
+    // because it will be passed back to the wrapped write support, which requires an output mode.
+    throw new UnsupportedOperationException(
+      "WriteConfig for micro-batch must be created by the wrapped StreamingWriteSupport")
+
+  override def commit(config: WriteConfig, messages: Array[WriterCommitMessage]): Unit = {
+    writeSupport.commit(config.asInstanceOf[StreamingWriteConfig], eppchId, messages)
   }
 
-  override def abort(messages: Array[WriterCommitMessage]): Unit = {
-    writeSupport.abort(eppchId, messages)
+  override def abort(config: WriteConfig, messages: Array[WriterCommitMessage]): Unit = {
+    writeSupport.abort(config.asInstanceOf[StreamingWriteConfig], eppchId, messages)
   }
 
-  override def createBatchWriterFactory(): DataWriterFactory = {
-    new MicroBatchWriterFactory(eppchId, writeSupport.createStreamingWriterFactory())
+  override def createBatchWriterFactory(config: WriteConfig): DataWriterFactory = {
+    new MicroBatchWriterFactory(eppchId,
+      writeSupport.createStreamingWriterFactory(config.asInstanceOf[StreamingWriteConfig]))
   }
 }
 

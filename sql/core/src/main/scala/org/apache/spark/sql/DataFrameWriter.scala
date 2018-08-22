@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.{Locale, Properties, UUID}
+import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
 
@@ -245,21 +245,21 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               DataSourceV2Utils.extractSessionConfigs(source, df.sparkSession.sessionState.conf)
 
           val relation = DataSourceV2Relation.create(source, options.toMap)
+
           if (mode == SaveMode.Append) {
             runCommand(df.sparkSession, "save") {
               AppendData.byName(relation, df.logicalPlan)
             }
 
           } else {
-            val writer = provider.createBatchWriteSupport(
-              UUID.randomUUID().toString,
-              df.logicalPlan.output.toStructType,
-              mode,
-              new DataSourceOptions(options.asJava))
+            val v2Options = new DataSourceOptions(options.asJava)
+            val maybeWriter = provider.createBatchWriteSupport(mode, v2Options)
 
-            if (writer.isPresent) {
+            if (maybeWriter.isPresent) {
+              val writer = maybeWriter.get
+              val writeConfig = writer.createWriteConfig(df.schema, v2Options)
               runCommand(df.sparkSession, "save") {
-                WriteToDataSourceV2(writer.get, df.logicalPlan)
+                WriteToDataSourceV2(writer, writeConfig, df.logicalPlan)
               }
             }
           }

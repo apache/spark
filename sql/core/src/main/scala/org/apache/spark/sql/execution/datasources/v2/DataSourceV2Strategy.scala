@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.sql.{sources, Strategy}
@@ -26,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, Rep
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
+import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReadSupport
 
@@ -143,14 +145,17 @@ object DataSourceV2Strategy extends Strategy {
         DataSourceV2ScanExec(
           r.output, r.source, r.options, r.pushedFilters, r.readSupport, scanConfig)) :: Nil
 
-    case WriteToDataSourceV2(writer, query) =>
-      WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
+    case WriteToDataSourceV2(writer, writeConfig, query) =>
+      WriteToDataSourceV2Exec(writer, writeConfig, planLater(query)) :: Nil
 
     case AppendData(r: DataSourceV2Relation, query, _) =>
-      WriteToDataSourceV2Exec(r.newWriteSupport(), planLater(query)) :: Nil
+      val writeSupport = r.newWriteSupport()
+      val writeConfig = writeSupport.createWriteConfig(
+        query.schema, new DataSourceOptions(r.options.asJava))
+      WriteToDataSourceV2Exec(r.newWriteSupport(), writeConfig, planLater(query)) :: Nil
 
-    case WriteToContinuousDataSource(writer, query) =>
-      WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil
+    case WriteToContinuousDataSource(writer, config, query) =>
+      WriteToContinuousDataSourceExec(writer, config, planLater(query)) :: Nil
 
     case Repartition(1, false, child) =>
       val isContinuous = child.find {

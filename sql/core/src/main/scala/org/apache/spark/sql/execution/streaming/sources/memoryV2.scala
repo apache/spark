@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.{Append, Comp
 import org.apache.spark.sql.execution.streaming.{MemorySinkBase, Sink}
 import org.apache.spark.sql.sources.v2.{CustomMetrics, DataSourceOptions, DataSourceV2, StreamingWriteSupportProvider}
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteSupport, SupportsCustomWriterMetrics}
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteConfig, StreamingWriteSupport, SupportsCustomWriterMetrics}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -50,10 +50,8 @@ class MemorySinkV2 extends DataSourceV2 with StreamingWriteSupportProvider
 
   override def createStreamingWriteSupport(
       queryId: String,
-      schema: StructType,
-      mode: OutputMode,
       options: DataSourceOptions): StreamingWriteSupport = {
-    new MemoryStreamingWriteSupport(this, mode, schema)
+    new MemoryStreamingWriteSupport(this)
   }
 
   private case class AddedData(batchId: Long, data: Array[Row])
@@ -134,24 +132,33 @@ class MemoryV2CustomMetrics(sink: MemorySinkV2) extends CustomMetrics {
   override def json(): String = Serialization.write(Map("numRows" -> sink.numRows))
 }
 
-class MemoryStreamingWriteSupport(
-    val sink: MemorySinkV2, outputMode: OutputMode, schema: StructType)
+class MemoryStreamingWriteSupport(val sink: MemorySinkV2)
   extends StreamingWriteSupport with SupportsCustomWriterMetrics {
 
   private val customMemoryV2Metrics = new MemoryV2CustomMetrics(sink)
 
-  override def createStreamingWriterFactory: MemoryWriterFactory = {
-    MemoryWriterFactory(outputMode, schema)
+  override def createWriteConfig(schema: StructType,
+      mode: OutputMode,
+      options: DataSourceOptions): StreamingWriteConfig = StreamWriteConfig(schema, mode, options)
+
+  override def createStreamingWriterFactory(config: StreamingWriteConfig): MemoryWriterFactory = {
+    MemoryWriterFactory(config.outputMode, config.writeSchema)
   }
 
-  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+  override def commit(
+      config: StreamingWriteConfig,
+      epochId: Long,
+      messages: Array[WriterCommitMessage]): Unit = {
     val newRows = messages.flatMap {
       case message: MemoryWriterCommitMessage => message.data
     }
-    sink.write(epochId, outputMode, newRows)
+    sink.write(epochId, config.outputMode, newRows)
   }
 
-  override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+  override def abort(
+      config: StreamingWriteConfig,
+      epochId: Long,
+      messages: Array[WriterCommitMessage]): Unit = {
     // Don't accept any of the new input.
   }
 

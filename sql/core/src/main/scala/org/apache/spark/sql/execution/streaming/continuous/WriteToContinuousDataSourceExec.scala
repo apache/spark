@@ -26,18 +26,21 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.StreamExecution
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingWriteConfig, StreamingWriteSupport}
 
 /**
  * The physical plan for writing data into a continuous processing [[StreamingWriteSupport]].
  */
-case class WriteToContinuousDataSourceExec(writeSupport: StreamingWriteSupport, query: SparkPlan)
+case class WriteToContinuousDataSourceExec(
+    writeSupport: StreamingWriteSupport,
+    writeConfig: StreamingWriteConfig,
+    query: SparkPlan)
     extends SparkPlan with Logging {
   override def children: Seq[SparkPlan] = Seq(query)
   override def output: Seq[Attribute] = Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val writerFactory = writeSupport.createStreamingWriterFactory()
+    val writerFactory = writeSupport.createStreamingWriterFactory(writeConfig)
     val rdd = new ContinuousWriteRDD(query.execute(), writerFactory)
 
     logInfo(s"Start processing data source write support: $writeSupport. " +

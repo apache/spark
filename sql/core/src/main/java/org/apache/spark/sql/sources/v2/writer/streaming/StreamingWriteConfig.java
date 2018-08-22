@@ -15,19 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.continuous
+package org.apache.spark.sql.sources.v2.writer.streaming;
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingWriteConfig, StreamingWriteSupport}
+import org.apache.spark.sql.sources.v2.writer.WriteConfig;
+import org.apache.spark.sql.streaming.OutputMode;
 
 /**
- * The logical plan for writing data in a continuous stream.
+ * A {@link WriteConfig} for streaming writes.
  */
-case class WriteToContinuousDataSource(
-    writeSupport: StreamingWriteSupport,
-    config: StreamingWriteConfig,
-    query: LogicalPlan) extends LogicalPlan {
-  override def children: Seq[LogicalPlan] = Seq(query)
-  override def output: Seq[Attribute] = Nil
+public interface StreamingWriteConfig extends WriteConfig {
+  /**
+   * Returns the streaming output mode for this write.
+   */
+  OutputMode outputMode();
 }

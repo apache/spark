@@ -22,12 +22,17 @@ import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteSupport}
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteConfig, StreamingWriteSupport}
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
 /** Common methods used to create writes for the the console sink */
-class ConsoleWriteSupport(schema: StructType, options: DataSourceOptions)
+class ConsoleWriteSupport(options: DataSourceOptions)
     extends StreamingWriteSupport with Logging {
+
+  override def createWriteConfig(schema: StructType,
+      mode: OutputMode,
+      options: DataSourceOptions): StreamingWriteConfig = StreamWriteConfig(schema, mode, options)
 
   // Number of rows to display, by default 20 rows
   protected val numRowsToShow = options.getInt("numRows", 20)
@@ -38,15 +43,22 @@ class ConsoleWriteSupport(schema: StructType, options: DataSourceOptions)
   assert(SparkSession.getActiveSession.isDefined)
   protected val spark = SparkSession.getActiveSession.get
 
-  def createStreamingWriterFactory(): StreamingDataWriterFactory = PackedRowWriterFactory
+  override def createStreamingWriterFactory(
+      config: StreamingWriteConfig): StreamingDataWriterFactory = PackedRowWriterFactory
 
-  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+  override def commit(
+      config: StreamingWriteConfig,
+      epochId: Long,
+      messages: Array[WriterCommitMessage]): Unit = {
     // We have to print a "Batch" label for the epoch for compatibility with the pre-data source V2
     // behavior.
-    printRows(messages, schema, s"Batch: $epochId")
+    printRows(messages, config.writeSchema, s"Batch: $epochId")
   }
 
-  def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+  def abort(
+      config: StreamingWriteConfig,
+      epochId: Long,
+      messages: Array[WriterCommitMessage]): Unit = {}
 
   protected def printRows(
       commitMessages: Array[WriterCommitMessage],

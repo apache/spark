@@ -35,7 +35,10 @@ import org.apache.spark.util.Utils
  * specific logical plans, like [[org.apache.spark.sql.catalyst.plans.logical.AppendData]].
  */
 @deprecated("Use specific logical plans like AppendData instead", "2.4.0")
-case class WriteToDataSourceV2(writeSupport: BatchWriteSupport, query: LogicalPlan)
+case class WriteToDataSourceV2(
+    writeSupport: BatchWriteSupport,
+    writeConfig: WriteConfig,
+    query: LogicalPlan)
   extends LogicalPlan {
   override def children: Seq[LogicalPlan] = Seq(query)
   override def output: Seq[Attribute] = Nil
@@ -44,15 +47,18 @@ case class WriteToDataSourceV2(writeSupport: BatchWriteSupport, query: LogicalPl
 /**
  * The physical plan for writing data into data source v2.
  */
-case class WriteToDataSourceV2Exec(writeSupport: BatchWriteSupport, query: SparkPlan)
+case class WriteToDataSourceV2Exec(
+    writeSupport: BatchWriteSupport,
+    writeConfig: WriteConfig,
+    query: SparkPlan)
   extends SparkPlan {
 
   override def children: Seq[SparkPlan] = Seq(query)
   override def output: Seq[Attribute] = Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val writerFactory = writeSupport.createBatchWriterFactory()
-    val useCommitCoordinator = writeSupport.useCommitCoordinator
+    val writerFactory = writeSupport.createBatchWriterFactory(writeConfig)
+    val useCommitCoordinator = writeSupport.useCommitCoordinator(writeConfig)
     val rdd = query.execute()
     val messages = new Array[WriterCommitMessage](rdd.partitions.length)
 
@@ -67,18 +73,18 @@ case class WriteToDataSourceV2Exec(writeSupport: BatchWriteSupport, query: Spark
         rdd.partitions.indices,
         (index, message: WriterCommitMessage) => {
           messages(index) = message
-          writeSupport.onDataWriterCommit(message)
+          writeSupport.onDataWriterCommit(writeConfig, message)
         }
       )
 
       logInfo(s"Data source write support $writeSupport is committing.")
-      writeSupport.commit(messages)
+      writeSupport.commit(writeConfig, messages)
       logInfo(s"Data source write support $writeSupport committed.")
     } catch {
       case cause: Throwable =>
         logError(s"Data source write support $writeSupport is aborting.")
         try {
-          writeSupport.abort(messages)
+          writeSupport.abort(writeConfig, messages)
         } catch {
           case t: Throwable =>
             logError(s"Data source write support $writeSupport failed to abort.")

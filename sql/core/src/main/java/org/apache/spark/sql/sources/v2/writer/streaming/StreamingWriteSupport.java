@@ -18,8 +18,11 @@
 package org.apache.spark.sql.sources.v2.writer.streaming;
 
 import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.writer.DataWriter;
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage;
+import org.apache.spark.sql.streaming.OutputMode;
+import org.apache.spark.sql.types.StructType;
 
 /**
  * An interface that defines how to write the data to data source for streaming processing.
@@ -31,12 +34,24 @@ import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage;
 public interface StreamingWriteSupport {
 
   /**
+   * Creates a {@link StreamingWriteConfig} for a streaming write operation.
+   *
+   * @param schema schema of the data that will be written
+   * @param mode output mode for the streaming write
+   * @param options options to configure the write operation
+   * @return a new WriteConfig
+   */
+  // TODO: replace DataSourceOptions with CaseInsensitiveStringMap
+  StreamingWriteConfig createWriteConfig(
+      StructType schema, OutputMode mode, DataSourceOptions options);
+
+  /**
    * Creates a writer factory which will be serialized and sent to executors.
    *
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    */
-  StreamingDataWriterFactory createStreamingWriterFactory();
+  StreamingDataWriterFactory createStreamingWriterFactory(StreamingWriteConfig config);
 
   /**
    * Commits this writing job for the specified epoch with a list of commit messages. The commit
@@ -45,18 +60,18 @@ public interface StreamingWriteSupport {
    *
    * If this method fails (by throwing an exception), this writing job is considered to have been
    * failed, and the execution engine will attempt to call
-   * {@link #abort(long, WriterCommitMessage[])}.
+   * {@link #abort(StreamingWriteConfig, long, WriterCommitMessage[])}.
    *
    * The execution engine may call `commit` multiple times for the same epoch in some circumstances.
    * To support exactly-once data semantics, implementations must ensure that multiple commits for
    * the same epoch are idempotent.
    */
-  void commit(long epochId, WriterCommitMessage[] messages);
+  void commit(StreamingWriteConfig config, long epochId, WriterCommitMessage[] messages);
 
   /**
    * Aborts this writing job because some data writers are failed and keep failing when retried, or
-   * the Spark job fails with some unknown reasons, or {@link #commit(long, WriterCommitMessage[])}
-   * fails.
+   * the Spark job fails with some unknown reasons, or
+   * {@link #commit(StreamingWriteConfig, long, WriterCommitMessage[])} fails.
    *
    * If this method fails (by throwing an exception), the underlying data source may require manual
    * cleanup.
@@ -67,5 +82,5 @@ public interface StreamingWriteSupport {
    * driver when the abort is triggered. So this is just a "best effort" for data sources to
    * clean up the data left by data writers.
    */
-  void abort(long epochId, WriterCommitMessage[] messages);
+  void abort(StreamingWriteConfig config, long epochId, WriterCommitMessage[] messages);
 }

@@ -24,8 +24,8 @@ import org.apache.spark.annotation.InterfaceStability;
 
 /**
  * A commit message returned by {@link DataWriter#commit()} and will be sent back to the driver side
- * as the input parameter of {@link BatchWriteSupport#commit(WriterCommitMessage[])} or
- * {@link StreamingWriteSupport#commit(long, WriterCommitMessage[])}.
+ * as the input parameter of {@link BatchWriteSupport#commit(WriteConfig,WriterCommitMessage[])} or
+ * {@link StreamingWriteSupport#commit(WriteConfig, long, WriterCommitMessage[])}.
  *
  * This is an empty interface, data sources should define their own message class and use it when
  * generating messages at executor side and handling the messages at driver side.

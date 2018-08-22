@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.python.PythonForeachWriter
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, StreamingWriteSupportProvider}
 import org.apache.spark.sql.sources.v2.writer.{DataWriter, WriterCommitMessage}
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteSupport}
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteConfig, StreamingWriteSupport}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -44,18 +44,30 @@ case class ForeachWriteSupportProvider[T](
 
   override def createStreamingWriteSupport(
       queryId: String,
-      schema: StructType,
-      mode: OutputMode,
       options: DataSourceOptions): StreamingWriteSupport = {
     new StreamingWriteSupport {
-      override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
-      override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+      override def createWriteConfig(
+          schema: StructType,
+          mode: OutputMode,
+          options: DataSourceOptions): StreamingWriteConfig =
+        StreamWriteConfig(schema, mode, options)
 
-      override def createStreamingWriterFactory(): StreamingDataWriterFactory = {
+      override def commit(
+          config: StreamingWriteConfig,
+          epochId: Long,
+          messages: Array[WriterCommitMessage]): Unit = {}
+
+      override def abort(
+          config: StreamingWriteConfig,
+          epochId: Long,
+          messages: Array[WriterCommitMessage]): Unit = {}
+
+      override def createStreamingWriterFactory(
+          config: StreamingWriteConfig): StreamingDataWriterFactory = {
         val rowConverter: InternalRow => T = converter match {
           case Left(enc) =>
             val boundEnc = enc.resolveAndBind(
-              schema.toAttributes,
+              config.writeSchema.toAttributes,
               SparkSession.getActiveSession.get.sessionState.analyzer)
             boundEnc.fromRow
           case Right(func) =>

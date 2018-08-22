@@ -185,12 +185,10 @@ class ContinuousExecution(
           "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
     }
 
-    val writer = sink.createStreamingWriteSupport(
-      s"$runId",
-      triggerLogicalPlan.schema,
-      outputMode,
-      new DataSourceOptions(extraOptions.asJava))
-    val withSink = WriteToContinuousDataSource(writer, triggerLogicalPlan)
+    val options = new DataSourceOptions(extraOptions.asJava)
+    val writer = sink.createStreamingWriteSupport(s"$runId", options)
+    val writeConfig = writer.createWriteConfig(triggerLogicalPlan.schema, outputMode, options)
+    val withSink = WriteToContinuousDataSource(writer, writeConfig, triggerLogicalPlan)
 
     reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
@@ -224,7 +222,8 @@ class ContinuousExecution(
     // Use the parent Spark session for the endpoint since it's where this query ID is registered.
     val epochEndpoint =
       EpochCoordinatorRef.create(
-        writer, readSupport, this, epochCoordinatorId, currentBatchId, sparkSession, SparkEnv.get)
+        writer, writeConfig, readSupport, this, epochCoordinatorId, currentBatchId, sparkSession,
+        SparkEnv.get)
     val epochUpdateThread = new Thread(new Runnable {
       override def run: Unit = {
         try {

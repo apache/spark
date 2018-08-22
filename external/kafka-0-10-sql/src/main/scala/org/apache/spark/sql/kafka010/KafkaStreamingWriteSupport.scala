@@ -21,9 +21,12 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.execution.streaming.sources.StreamWriteConfig
 import org.apache.spark.sql.kafka010.KafkaWriter.validateQuery
+import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteSupport}
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteConfig, StreamingWriteSupport}
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -38,19 +41,31 @@ case object KafkaWriterCommitMessage extends WriterCommitMessage
  * @param topic The topic this writer is responsible for. If None, topic will be inferred from
  *              a `topic` field in the incoming data.
  * @param producerParams Parameters for Kafka producers in each task.
- * @param schema The schema of the input data.
  */
-class KafkaStreamingWriteSupport(
-    topic: Option[String], producerParams: Map[String, String], schema: StructType)
+class KafkaStreamingWriteSupport(topic: Option[String], producerParams: Map[String, String])
   extends StreamingWriteSupport {
 
-  validateQuery(schema.toAttributes, producerParams.toMap[String, Object].asJava, topic)
+  override def createWriteConfig(
+      schema: StructType,
+      mode: OutputMode,
+      options: DataSourceOptions): StreamingWriteConfig = {
+    validateQuery(schema.toAttributes, producerParams.toMap[String, Object].asJava, topic)
+    StreamWriteConfig(schema, mode, options)
+  }
 
-  override def createStreamingWriterFactory(): KafkaStreamWriterFactory =
-    KafkaStreamWriterFactory(topic, producerParams, schema)
+  override def createStreamingWriterFactory(
+      config: StreamingWriteConfig): KafkaStreamWriterFactory =
+    KafkaStreamWriterFactory(topic, producerParams, config.writeSchema)
 
-  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
-  override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+  override def commit(
+      config: StreamingWriteConfig,
+      epochId: Long,
+      messages: Array[WriterCommitMessage]): Unit = {}
+
+  override def abort(
+      config: StreamingWriteConfig,
+      epochId: Long,
+      messages: Array[WriterCommitMessage]): Unit = {}
 }
 
 /**

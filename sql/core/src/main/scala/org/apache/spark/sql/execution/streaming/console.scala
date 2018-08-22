@@ -22,7 +22,6 @@ import org.apache.spark.sql.execution.streaming.sources.ConsoleWriteSupport
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, StreamingWriteSupportProvider}
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
-import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
 case class ConsoleRelation(override val sqlContext: SQLContext, data: DataFrame)
@@ -37,10 +36,8 @@ class ConsoleSinkProvider extends DataSourceV2
 
   override def createStreamingWriteSupport(
       queryId: String,
-      schema: StructType,
-      mode: OutputMode,
       options: DataSourceOptions): StreamingWriteSupport = {
-    new ConsoleWriteSupport(schema, options)
+    new ConsoleWriteSupport(options)
   }
 
   def createRelation(

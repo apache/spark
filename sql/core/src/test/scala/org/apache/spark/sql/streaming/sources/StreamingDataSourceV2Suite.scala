@@ -68,8 +68,6 @@ trait FakeContinuousReadSupportProvider extends ContinuousReadSupportProvider {
 trait FakeStreamingWriteSupportProvider extends StreamingWriteSupportProvider {
   override def createStreamingWriteSupport(
       queryId: String,
-      schema: StructType,
-      mode: OutputMode,
       options: DataSourceOptions): StreamingWriteSupport = {
     throw new IllegalStateException("fake sink - cannot actually write")
   }

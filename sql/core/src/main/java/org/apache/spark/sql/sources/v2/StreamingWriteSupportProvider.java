@@ -20,8 +20,6 @@ package org.apache.spark.sql.sources.v2;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.streaming.BaseStreamingSink;
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport;
-import org.apache.spark.sql.streaming.OutputMode;
-import org.apache.spark.sql.types.StructType;
 
 /**
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
@@ -40,15 +38,10 @@ public interface StreamingWriteSupportProvider extends DataSourceV2, BaseStreami
    * @param queryId A unique string for the writing query. It's possible that there are many
    *                writing queries running at the same time, and the returned
    *                {@link StreamingWriteSupport} can use this id to distinguish itself from others.
-   * @param schema the schema of the data to be written.
-   * @param mode the output mode which determines what successive epoch output means to this
-   *             sink, please refer to {@link OutputMode} for more details.
    * @param options the options for the returned data source writer, which is an immutable
    *                case-insensitive string-to-string map.
    */
   StreamingWriteSupport createStreamingWriteSupport(
       String queryId,
-      StructType schema,
-      OutputMode mode,
       DataSourceOptions options);
 }

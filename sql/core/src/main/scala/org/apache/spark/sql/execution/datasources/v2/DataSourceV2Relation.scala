@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.UUID
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
@@ -58,7 +56,7 @@ case class DataSourceV2Relation(
 
   override def simpleString: String = "RelationV2 " + metadataString
 
-  def newWriteSupport(): BatchWriteSupport = source.createWriteSupport(options, schema)
+  def newWriteSupport(): BatchWriteSupport = source.createWriteSupport(options)
 
   override def computeStats(): Statistics = readSupport match {
     case r: SupportsReportStatistics =>
@@ -158,12 +156,8 @@ object DataSourceV2Relation {
       }
     }
 
-    def createWriteSupport(
-        options: Map[String, String],
-        schema: StructType): BatchWriteSupport = {
+    def createWriteSupport(options: Map[String, String]): BatchWriteSupport = {
       asWriteSupportProvider.createBatchWriteSupport(
-        UUID.randomUUID().toString,
-        schema,
         SaveMode.Append,
         new DataSourceOptions(options.asJava)).get
     }
