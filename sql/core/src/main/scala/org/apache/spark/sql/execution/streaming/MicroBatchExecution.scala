@@ -200,6 +200,10 @@ class MicroBatchExecution(
 
         finishTrigger(currentBatchHasNewData)  // Must be outside reportTimeTaken so it is recorded
 
+        // Signal waiting threads. Note this must be after finishTrigger() to ensure all
+        // activities (progress generation, etc.) have completed before signaling.
+        withProgressLocked { awaitProgressLockCondition.signalAll() }
+
         // If the current batch has been executed, then increment the batch id and reset flag.
         // Otherwise, there was no data to execute the batch and sleep for some time
         if (isCurrentBatchConstructed) {
@@ -538,7 +542,6 @@ class MicroBatchExecution(
       watermarkTracker.updateWatermark(lastExecution.executedPlan)
       commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark))
       committedOffsets ++= availableOffsets
-      awaitProgressLockCondition.signalAll()
     }
     logDebug(s"Completed batch ${currentBatchId}")
   }
