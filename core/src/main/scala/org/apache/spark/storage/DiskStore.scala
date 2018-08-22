@@ -30,6 +30,7 @@ import io.netty.channel.DefaultFileRegion
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.util.Utils
@@ -261,7 +262,22 @@ private class EncryptedBlockData(
         throw e
     }
   }
+}
 
+private class EncryptedManagedBuffer(val blockData: EncryptedBlockData) extends ManagedBuffer {
+
+  // This is the size of the decrypted data
+  override def size(): Long = blockData.size
+
+  override def nioByteBuffer(): ByteBuffer = blockData.toByteBuffer()
+
+  override def convertToNetty(): AnyRef = blockData.toNetty()
+
+  override def createInputStream(): InputStream = blockData.toInputStream()
+
+  override def retain(): ManagedBuffer = this
+
+  override def release(): ManagedBuffer = this
 }
 
 private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: Long)
