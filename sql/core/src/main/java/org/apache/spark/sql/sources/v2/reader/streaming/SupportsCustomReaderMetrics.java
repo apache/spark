@@ -19,7 +19,6 @@ package org.apache.spark.sql.sources.v2.reader.streaming;
 
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.sources.v2.CustomMetrics;
-import org.apache.spark.sql.sources.v2.reader.ScanConfig;
 
 /**
  * A mix in interface for {@link StreamingReadSupport}. Data sources can implement this interface
