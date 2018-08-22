@@ -678,9 +678,8 @@ class SparkSession(object):
             from pyspark.sql.utils import require_minimum_pandas_version
             require_minimum_pandas_version()
 
-            if self.conf.get("spark.sql.execution.pandas.respectSessionTimeZone").lower() \
-               == "true":
-                timezone = self.conf.get("spark.sql.session.timeZone")
+            if self._wrapped._conf.pandasRespectSessionTimeZone():
+                timezone = self._wrapped._conf.sessionLocalTimeZone()
             else:
                 timezone = None
 
@@ -690,15 +689,13 @@ class SparkSession(object):
                           (x.encode('utf-8') if not isinstance(x, str) else x)
                           for x in data.columns]
 
-            if self.conf.get("spark.sql.execution.arrow.enabled", "false").lower() == "true" \
-                    and len(data) > 0:
+            if self._wrapped._conf.arrowEnabled() and len(data) > 0:
                 try:
                     return self._create_from_pandas_with_arrow(data, schema, timezone)
                 except Exception as e:
                     from pyspark.util import _exception_message
 
-                    if self.conf.get("spark.sql.execution.arrow.fallback.enabled", "true") \
-                            .lower() == "true":
+                    if self._wrapped._conf.arrowFallbackEnabled():
                         msg = (
                             "createDataFrame attempted Arrow optimization because "
                             "'spark.sql.execution.arrow.enabled' is set to true; however, "

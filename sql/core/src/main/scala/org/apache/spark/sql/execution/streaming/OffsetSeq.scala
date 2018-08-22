@@ -22,7 +22,7 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.RuntimeConfig
-import org.apache.spark.sql.execution.streaming.state.FlatMapGroupsWithStateExecHelper
+import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, StreamingAggregationStateManager}
 import org.apache.spark.sql.internal.SQLConf.{FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION, _}
 
 /**
@@ -89,7 +89,7 @@ object OffsetSeqMetadata extends Logging {
   private implicit val format = Serialization.formats(NoTypeHints)
   private val relevantSQLConfs = Seq(
     SHUFFLE_PARTITIONS, STATE_STORE_PROVIDER_CLASS, STREAMING_MULTIPLE_WATERMARK_POLICY,
-    FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
+    FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION, STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
 
   /**
    * Default values of relevant configurations that are used for backward compatibility.
@@ -104,7 +104,9 @@ object OffsetSeqMetadata extends Logging {
   private val relevantSQLConfDefaultValues = Map[String, String](
     STREAMING_MULTIPLE_WATERMARK_POLICY.key -> MultipleWatermarkPolicy.DEFAULT_POLICY_NAME,
     FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key ->
-      FlatMapGroupsWithStateExecHelper.legacyVersion.toString
+      FlatMapGroupsWithStateExecHelper.legacyVersion.toString,
+    STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key ->
+      StreamingAggregationStateManager.legacyVersion.toString
   )
 
   def apply(json: String): OffsetSeqMetadata = Serialization.read[OffsetSeqMetadata](json)

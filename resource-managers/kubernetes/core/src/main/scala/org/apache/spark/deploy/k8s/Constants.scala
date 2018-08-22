@@ -71,6 +71,8 @@ private[spark] object Constants {
   val ENV_PYSPARK_FILES = "PYSPARK_FILES"
   val ENV_PYSPARK_ARGS = "PYSPARK_APP_ARGS"
   val ENV_PYSPARK_MAJOR_PYTHON_VERSION = "PYSPARK_MAJOR_PYTHON_VERSION"
+  val ENV_R_PRIMARY = "R_PRIMARY"
+  val ENV_R_ARGS = "R_APP_ARGS"
 
   // Pod spec templates
   val EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME = "podSpecTemplate.yml"

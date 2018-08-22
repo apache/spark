@@ -273,11 +273,12 @@ class BisectingKMeans @Since("2.0.0") (
       .setMinDivisibleClusterSize($(minDivisibleClusterSize))
       .setSeed($(seed))
       .setDistanceMeasure($(distanceMeasure))
-    val parentModel = bkm.run(rdd)
+    val parentModel = bkm.run(rdd, Some(instr))
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
     val summary = new BisectingKMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k), $(maxIter))
     instr.logNamedValue("clusterSizes", summary.clusterSizes)
+    instr.logNumFeatures(model.clusterCenters.head.size)
     model.setSummary(Some(summary))
   }
 
