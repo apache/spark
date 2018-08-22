@@ -282,32 +282,50 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-22779: correctly compute default value for fallback configs") {
-    val fallback = SQLConf.buildConf("spark.sql.__test__.spark_22779")
-      .fallbackConf(SQLConf.PARQUET_COMPRESSION)
+    val parent = SQLConf.buildConf("spark.example.parent")
+      .booleanConf
+      .createWithDefault(false)
+    val child = SQLConf.buildConf("spark.example.child")
+      .fallbackConf(parent)
 
-    assert(spark.sessionState.conf.getConfString(fallback.key) ===
-      SQLConf.PARQUET_COMPRESSION.defaultValue.get)
-    assert(spark.sessionState.conf.getConfString(fallback.key, "lzo") === "lzo")
+    // explicitParentVal is Some(v) if we have called spark.conf.set(parent.key, v) or None if we
+    // have not called explicitly set a conf value for parent.key
+    def testCorrectValues(explicitParentVal: Option[Boolean]): Unit = {
+      val explicitParentString = explicitParentVal.map(_.toString)
 
-    val displayValue = spark.sessionState.conf.getAllDefinedConfs
-      .find { case (key, _, _) => key == fallback.key }
-      .map { case (_, v, _) => v }
-      .get
-    assert(displayValue === fallback.defaultValueString)
+      // The order of precedence should be:
+      // 1. Explicit value if one was set
+      // 2. Otherwise, client default if one was provided
+      // 3. Otherwise, builder default (either scalar default or a fallback conf default)
 
-    spark.sessionState.conf.setConf(SQLConf.PARQUET_COMPRESSION, "gzip")
-    assert(spark.sessionState.conf.getConfString(fallback.key) === "gzip")
+      // Using the ConfigBuilder directly should use the builder default
+      assert(spark.conf.get(parent) == explicitParentVal.getOrElse(false))
+      assert(spark.conf.get(child) == explicitParentVal.getOrElse(false))
 
-    spark.sessionState.conf.setConf(fallback, "lzo")
-    assert(spark.sessionState.conf.getConfString(fallback.key) === "lzo")
+      // Using the ConfigBuilder's key with no client default should use the builder default
+      assert(spark.conf.get(parent.key) == explicitParentString.getOrElse("false"))
+      assert(spark.conf.get(child.key) == explicitParentString.getOrElse("false"))
 
-    val newDisplayValue = spark.sessionState.conf.getAllDefinedConfs
-      .find { case (key, _, _) => key == fallback.key }
-      .map { case (_, v, _) => v }
-      .get
-    assert(newDisplayValue === "lzo")
+      // Using the ConfigBuilder's key with a client default should use the client default
+      assert(spark.conf.get(parent.key, "false") == explicitParentString.getOrElse("false"))
+      assert(spark.conf.get(parent.key, "true") == explicitParentString.getOrElse("true"))
+      assert(spark.conf.get(child.key, "false") == "false")
+      assert(spark.conf.get(child.key, "true") == "true")
+    }
 
-    SQLConf.unregister(fallback)
+    // When the parent is not explicitly set
+    testCorrectValues(None)
+
+    try {
+      // When the parent is explicitly set to false
+      spark.conf.set(parent.key, false)
+      testCorrectValues(Some(false))
+
+      // When the parent is explicitly set to true
+      spark.conf.set(parent.key, true)
+      testCorrectValues(Some(true))
+    } finally {
+      spark.conf.unset(parent.key)
+    }
   }
-
 }
