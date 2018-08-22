@@ -52,18 +52,10 @@ class VectorizedHashMapGenerator(
     groupingKeySchema, bufferSchema) {
 
   override protected def initializeAggregateHashMap(): String = {
-    val generatedColTypes = (groupingKeySchema ++ bufferSchema)
-      .zipWithIndex.map { case (t, i) => (s"_col$i", t.dataType) }
-    val generatedSchemaTypes = generatedColTypes
-      .foldLeft(new StructType())((schema, colType) => schema.add(colType._1, colType._2))
-    val generatedSchema = ctx.addReferenceObj("generatedSchemaTerm", generatedSchemaTypes)
-
-    val generatedAggBufferColTypes = bufferSchema
-      .zipWithIndex.map { case (t, i) => (s"_col$i", t.dataType) }
-    val generatedAggBufferTypes = generatedAggBufferColTypes
-      .foldLeft(new StructType())((schema, colType) => schema.add(colType._1, colType._2))
-    val generatedAggBufferSchema =
-      ctx.addReferenceObj("generatedAggBufferSchemaTerm", generatedAggBufferTypes)
+    val generatedSchemaStructType = new StructType((groupingKeySchema ++ bufferSchema).toArray)
+    val generatedSchema =
+      ctx.addReferenceObj("generatedSchemaTerm", generatedSchemaStructType)
+    val generatedAggBufferSchemaFieldsLength = bufferSchema.fields.length
 
     s"""
        |  private ${classOf[OnHeapColumnVector].getName}[] vectors;
@@ -76,8 +68,6 @@ class VectorizedHashMapGenerator(
        |  private int maxSteps = 2;
        |  private int numRows = 0;
        |  private org.apache.spark.sql.types.StructType schema = $generatedSchema;
-       |  private org.apache.spark.sql.types.StructType aggregateBufferSchema =
-       |    $generatedAggBufferSchema;
        |
        |  public $generatedClassName() {
        |    vectors = ${classOf[OnHeapColumnVector].getName}.allocateColumns(capacity, schema);
@@ -85,8 +75,8 @@ class VectorizedHashMapGenerator(
        |
        |    // Generates a projection to return the aggregate buffer only.
        |    ${classOf[OnHeapColumnVector].getName}[] aggBufferVectors =
-       |      new ${classOf[OnHeapColumnVector].getName}[aggregateBufferSchema.fields().length];
-       |    for (int i = 0; i < aggregateBufferSchema.fields().length; i++) {
+       |      new ${classOf[OnHeapColumnVector].getName}[$generatedAggBufferSchemaFieldsLength];
+       |    for (int i = 0; i < $generatedAggBufferSchemaFieldsLength; i++) {
        |      aggBufferVectors[i] = vectors[i + ${groupingKeys.length}];
        |    }
        |    aggBufferRow = new ${classOf[MutableColumnarRow].getName}(aggBufferVectors);

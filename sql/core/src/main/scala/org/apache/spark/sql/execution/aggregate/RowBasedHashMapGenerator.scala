@@ -44,19 +44,8 @@ class RowBasedHashMapGenerator(
     groupingKeySchema, bufferSchema) {
 
   override protected def initializeAggregateHashMap(): String = {
-    val generatedKeyColTypes = groupingKeySchema
-      .zipWithIndex.map { case (t, i) => (s"_col$i", t.dataType) }
-    val generatedKeySchemaTypes = generatedKeyColTypes
-      .foldLeft(new StructType())((schema, colType) => schema.add(colType._1, colType._2))
-    val generatedKeySchema =
-      ctx.addReferenceObj("generatedKeySchemaTerm", generatedKeySchemaTypes)
-
-    val generatedValueColTypes = bufferSchema
-      .zipWithIndex.map { case (t, i) => (s"_col$i", t.dataType) }
-    val generatedValueTypes = generatedValueColTypes
-      .foldLeft(new StructType())((schema, colType) => schema.add(colType._1, colType._2))
-    val generatedValueSchema =
-      ctx.addReferenceObj("generatedValueSchemaTerm", generatedValueTypes)
+    val generatedKeySchema = ctx.addReferenceObj("generatedKeySchemaTerm", groupingKeySchema)
+    val generatedValueSchema = ctx.addReferenceObj("generatedValueSchemaTerm", bufferSchema)
 
     s"""
        |  private org.apache.spark.sql.catalyst.expressions.RowBasedKeyValueBatch batch;
