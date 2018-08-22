@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
@@ -109,12 +110,12 @@ class RateSourceSuite extends StreamTest {
 
     testStream(input)(
       StartStream(),
-      Execute(_.awaitOffset(0, LongOffset(2))),
+      Execute(_.awaitOffset(0, LongOffset(2), streamingTimeout.toMillis)),
       StopStream,
       Execute(updateStreamDurationFromOffset(_, 2)),
       CheckAnswer(expectedResultsFromDuration _),
       StartStream(),
-      Execute(_.awaitOffset(0, LongOffset(4))),
+      Execute(_.awaitOffset(0, LongOffset(4), streamingTimeout.toMillis)),
       StopStream,
       Execute(updateStreamDurationFromOffset(_, 4)),
       CheckAnswer(expectedResultsFromDuration _)
