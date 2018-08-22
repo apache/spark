@@ -39,6 +39,11 @@ CREATE TEMPORARY VIEW ADDRESS AS SELECT * FROM VALUES
   (800, "emp 8", "addr8")
 AS ADDRESS(id, emp_name, address);
 
+CREATE TEMPORARY VIEW S1 AS SELECT * FROM VALUES
+  (null, null), (5, 5), (8, 8), (11, 11) AS s1(a, b);
+CREATE TEMPORARY VIEW S2 AS SELECT * FROM VALUES
+  (7, 7), (8, 8), (11, 11), (null, null) AS s2(c, d);
+
 -- null produced from both sides.
 -- TC.01.01
 SELECT id, 
@@ -157,3 +162,37 @@ WHERE  id NOT IN (SELECT id
                                   AND emp_name IS NOT NULL
                                   AND emp.id = address.id
                                   AND id < 400);
+
+-- NOT (NOT IN (SUBQ))
+SELECT * 
+FROM   s1 
+WHERE  NOT (a NOT IN (SELECT c 
+                      FROM   s2));
+
+-- NOT (OR (expression, IN-SUBQ)) 
+SELECT * 
+FROM   s1 
+WHERE  NOT (a > 5 
+            OR a IN (SELECT c 
+                     FROM   s2));
+
+-- NOT (OR (expression, NOT-IN-SUB)
+SELECT * 
+FROM   s1 
+WHERE  NOT (a > 5 
+            OR a NOT IN (SELECT c 
+                         FROM   s2));
+
+-- NOT (AND (expression, IN-SUB))
+SELECT * 
+FROM   s1 
+WHERE  NOT (a > 5 
+            AND a IN (SELECT c 
+                      FROM   s2));
+ 
+-- NOT (AND (expression, NOT-IN-SUBQ))
+SELECT * 
+FROM   s1 
+WHERE  NOT (a > 5 
+            AND a NOT IN (SELECT c 
+                          FROM   s2));
