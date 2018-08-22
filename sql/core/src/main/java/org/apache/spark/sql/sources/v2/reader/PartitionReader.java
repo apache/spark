@@ -17,19 +17,33 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
+import java.io.Closeable;
+import java.io.IOException;
+
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset;
 
 /**
- * A mix-in interface for {@link InputPartition}. Continuous input partitions can
- * implement this interface to provide creating {@link InputPartitionReader} with particular offset.
+ * A partition reader returned by {@link PartitionReaderFactory#createReader(InputPartition)} or
+ * {@link PartitionReaderFactory#createColumnarReader(InputPartition)}. It's responsible for
+ * outputting data for a RDD partition.
+ *
+ * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.catalyst.InternalRow}
+ * for normal data sources, or {@link org.apache.spark.sql.vectorized.ColumnarBatch} for columnar
+ * data sources(whose {@link PartitionReaderFactory#supportColumnarReads(InputPartition)}
+ * returns true).
  */
 @InterfaceStability.Evolving
-public interface ContinuousInputPartition<T> extends InputPartition<T> {
+public interface PartitionReader<T> extends Closeable {
+
   /**
-   * Create an input partition reader with particular offset as its startOffset.
+   * Proceed to next record, returns false if there is no more records.
    *
-   * @param offset offset want to set as the input partition reader's startOffset.
+   * @throws IOException if failure happens during disk/network IO like reading files.
    */
-  InputPartitionReader<T> createContinuousReader(PartitionOffset offset);
+  boolean next() throws IOException;
+
+  /**
+   * Return the current record. This method should return same value until `next` is called.
+   */
+  T get();
 }

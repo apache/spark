@@ -18,48 +18,44 @@
 package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.DataSourceRegister;
-import org.apache.spark.sql.sources.v2.reader.DataSourceReader;
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils;
+import org.apache.spark.sql.sources.v2.reader.BatchReadSupport;
 import org.apache.spark.sql.types.StructType;
 
 /**
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
- * provide data reading ability and scan the data from the data source.
+ * provide data reading ability for batch processing.
+ *
+ * This interface is used to create {@link BatchReadSupport} instances when end users run
+ * {@code SparkSession.read.format(...).option(...).load()}.
  */
 @InterfaceStability.Evolving
-public interface ReadSupport extends DataSourceV2 {
+public interface BatchReadSupportProvider extends DataSourceV2 {
 
   /**
-   * Creates a {@link DataSourceReader} to scan the data from this data source.
+   * Creates a {@link BatchReadSupport} instance to load the data from this data source with a user
+   * specified schema, which is called by Spark at the beginning of each batch query.
    *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
-   * submitted.
+   * Spark will call this method at the beginning of each batch query to create a
+   * {@link BatchReadSupport} instance.
+   *
+   * By default this method throws {@link UnsupportedOperationException}, implementations should
+   * override this method to handle user specified schema.
    *
    * @param schema the user specified schema.
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.
-   *
-   * By default this method throws {@link UnsupportedOperationException}, implementations should
-   * override this method to handle user specified schema.
    */
-  default DataSourceReader createReader(StructType schema, DataSourceOptions options) {
-    String name;
-    if (this instanceof DataSourceRegister) {
-      name = ((DataSourceRegister) this).shortName();
-    } else {
-      name = this.getClass().getName();
-    }
-    throw new UnsupportedOperationException(name + " does not support user specified schema");
+  default BatchReadSupport createBatchReadSupport(StructType schema, DataSourceOptions options) {
+    return DataSourceV2Utils.failForUserSpecifiedSchema(this);
   }
 
   /**
-   * Creates a {@link DataSourceReader} to scan the data from this data source.
-   *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
-   * submitted.
+   * Creates a {@link BatchReadSupport} instance to scan the data from this data source, which is
+   * called by Spark at the beginning of each batch query.
    *
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.
    */
-  DataSourceReader createReader(DataSourceOptions options);
+  BatchReadSupport createBatchReadSupport(DataSourceOptions options);
 }
