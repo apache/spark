@@ -1895,6 +1895,10 @@ working with timestamps in `pandas_udf`s to get the best performance, see
   - Since Spark 2.4, File listing for compute statistics is done in parallel by default. This can be disabled by setting `spark.sql.parallelFileListingInStatsComputation.enabled` to `False`.
   - Since Spark 2.4, Metadata files (e.g. Parquet summary files) and temporary files are not counted as data files when calculating table size during Statistics computation.
 
+## Upgrading From Spark SQL 2.3.1 to 2.3.2 and above
+
+  - In version 2.3.1 and earlier, when reading from a Parquet table, Spark always returns null for any column whose column names in Hive metastore schema and Parquet schema are in different letter cases, no matter whether `spark.sql.caseSensitive` is set to true or false. Since 2.3.2, when `spark.sql.caseSensitive` is set to false, Spark does case insensitive column name resolution between Hive metastore schema and Parquet schema, so even column names are in different letter cases, Spark returns corresponding column values. An exception is thrown if there is ambiguity, i.e. more than one Parquet column is matched.
+
 ## Upgrading From Spark SQL 2.3.0 to 2.3.1 and above
 
   - As of version 2.3.1 Arrow functionality, including `pandas_udf` and `toPandas()`/`createDataFrame()` with `spark.sql.execution.arrow.enabled` set to `True`, has been marked as experimental. These are still evolving and not currently recommended for use in production.
