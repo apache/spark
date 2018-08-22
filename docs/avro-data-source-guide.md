@@ -147,7 +147,8 @@ Data source options of Avro can be set using the `.option` method on `DataFrameR
   <tr>
     <td><code>avroSchema</code></td>
     <td>None</td>
-    <td>Optional Avro schema provided by an user in JSON format.</td>
+    <td>Optional Avro schema provided by an user in JSON format. The date type and naming of record fields
+    should match the input Avro data or Catalyst data, otherwise the read/write action will fail.</td>
     <td>read and write</td>
   </tr>
   <tr>
