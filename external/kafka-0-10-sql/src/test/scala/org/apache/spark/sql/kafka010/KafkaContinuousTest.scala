@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd, SparkListenerTaskStart}
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExec
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.streaming.Trigger
@@ -46,10 +46,10 @@ trait KafkaContinuousTest extends KafkaSourceTest {
     testUtils.addPartitions(topic, newCount)
     eventually(timeout(streamingTimeout)) {
       assert(
-        query.lastExecution.logical.collectFirst {
-          case r: StreamingDataSourceV2Relation
-              if r.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
-            r.scanConfigBuilder.build().asInstanceOf[KafkaContinuousScanConfig]
+        query.lastExecution.executedPlan.collectFirst {
+          case scan: DataSourceV2ScanExec
+              if scan.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
+            scan.scanConfig.asInstanceOf[KafkaContinuousScanConfig]
         }.exists(_.knownPartitions.size == newCount),
         s"query never reconfigured to $newCount partitions")
     }
