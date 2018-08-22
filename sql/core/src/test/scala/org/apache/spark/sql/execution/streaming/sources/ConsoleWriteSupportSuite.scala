@@ -19,12 +19,10 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.io.ByteArrayOutputStream
 
-import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 
-class ConsoleWriterSuite extends StreamTest {
+class ConsoleWriteSupportSuite extends StreamTest {
   import testImplicits._
 
   test("microbatch - default") {
