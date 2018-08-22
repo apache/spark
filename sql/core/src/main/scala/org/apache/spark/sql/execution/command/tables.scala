@@ -373,11 +373,9 @@ case class LoadDataCommand(
    * @return qualified path object
    */
   private def makeQualified(defaultUri: URI, workingDir: Path, path: Path): Path = {
-    val pathUri = {
-      if (!path.isAbsolute()) new Path(workingDir, path).toUri() else path.toUri()
-    }
+    val pathUri = if (path.isAbsolute()) path.toUri() else new Path(workingDir, path).toUri()
     if (pathUri.getScheme == null || pathUri.getAuthority == null &&
-      defaultUri.getAuthority != null) {
+        defaultUri.getAuthority != null) {
       val scheme = if (pathUri.getScheme == null) defaultUri.getScheme else pathUri.getScheme
       val authority = if (pathUri.getAuthority == null) {
         if (defaultUri.getAuthority == null) "" else defaultUri.getAuthority
