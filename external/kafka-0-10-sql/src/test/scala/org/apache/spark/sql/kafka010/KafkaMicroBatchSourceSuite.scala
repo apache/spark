@@ -644,7 +644,9 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     val clock = new StreamManualClock
 
-    val waitUntilBatchProcessed = AssertOnQuery { q =>
+    // Wait until the manual clock is waiting on further instructions to move forward. Then we can
+    // ensure all batches we are waiting for have been processed.
+    val waitUntilBatchProcessed = Execute { q =>
       eventually(Timeout(streamingTimeout)) {
         if (!q.exception.isDefined) {
           assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
@@ -653,7 +655,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       if (q.exception.isDefined) {
         throw q.exception.get
       }
-      true
     }
 
     // The message values are the same as their offsets to make the test easy to follow
@@ -765,6 +766,8 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     val clock = new StreamManualClock
 
+    // Wait until the manual clock is waiting on further instructions to move forward. Then we can
+    // ensure all batches we are waiting for have been processed.
     val waitUntilBatchProcessed = Execute { q =>
       eventually(Timeout(streamingTimeout)) {
         if (!q.exception.isDefined) {
