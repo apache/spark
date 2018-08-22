@@ -44,7 +44,7 @@ import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
 import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, TransportServerBootstrap}
-import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient, TempFileManager}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterExecutor}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
@@ -1403,7 +1403,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {
     var numCalls = 0
-    var tempFileManager: TempFileManager = null
+    var tempFileManager: DownloadFileManager = null
 
     override def init(blockDataManager: BlockDataManager): Unit = {}
 
@@ -1413,7 +1413,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         execId: String,
         blockIds: Array[String],
         listener: BlockFetchingListener,
-        tempFileManager: TempFileManager): Unit = {
+        tempFileManager: DownloadFileManager): Unit = {
       listener.onBlockFetchSuccess("mockBlockId", new NioManagedBuffer(ByteBuffer.allocate(1)))
     }
 
@@ -1440,7 +1440,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         port: Int,
         execId: String,
         blockId: String,
-        tempFileManager: TempFileManager): ManagedBuffer = {
+        tempFileManager: DownloadFileManager): ManagedBuffer = {
       numCalls += 1
       this.tempFileManager = tempFileManager
       if (numCalls <= maxFailures) {
