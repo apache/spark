@@ -17,15 +17,12 @@
 
 package org.apache.spark.sql.avro
 
-import org.apache.avro.Schema
-
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{AvroDataToCatalyst, CatalystDataToAvro, RandomDataGenerator}
+import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 class AvroCatalystDataConversionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
