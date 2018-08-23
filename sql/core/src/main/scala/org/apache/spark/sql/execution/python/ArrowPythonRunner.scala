@@ -43,10 +43,9 @@ class ArrowPythonRunner(
     argOffsets: Array[Array[Int]],
     schema: StructType,
     timeZoneId: String,
-    conf: Map[String, String],
-    sparkConf: SparkConf)
+    conf: Map[String, String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
-    funcs, evalType, argOffsets, sparkConf) {
+    funcs, evalType, argOffsets) {
 
   protected override def newWriterThread(
       env: SparkEnv,

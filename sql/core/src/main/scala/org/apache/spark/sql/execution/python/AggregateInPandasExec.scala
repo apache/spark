@@ -139,8 +139,7 @@ case class AggregateInPandasExec(
         argOffsets,
         aggInputSchema,
         sessionLocalTimeZone,
-        pythonRunnerConf,
-        SparkEnv.get.conf).compute(projectedRowIter, context.partitionId(), context)
+        pythonRunnerConf).compute(projectedRowIter, context.partitionId(), context)
 
       val joinedAttributes =
         groupingExpressions.map(_.toAttribute) ++ udfExpressions.map(_.resultAttribute)

@@ -45,7 +45,7 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
   }
 
   private lazy val pythonRunner = {
-    PythonRunner(func, SparkEnv.get.conf)
+    PythonRunner(func)
   }
 
   private lazy val outputIterator =

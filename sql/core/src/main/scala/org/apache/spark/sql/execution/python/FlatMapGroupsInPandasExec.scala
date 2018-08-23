@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.python
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -143,8 +143,7 @@ case class FlatMapGroupsInPandasExec(
         argOffsets,
         dedupSchema,
         sessionLocalTimeZone,
-        pythonRunnerConf,
-        SparkEnv.get.conf).compute(grouped, context.partitionId(), context)
+        pythonRunnerConf).compute(grouped, context.partitionId(), context)
 
       columnarBatchIter.flatMap(_.rowIterator.asScala).map(UnsafeProjection.create(output, output))
     }
