@@ -21,8 +21,8 @@ import java.io.File
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.deploy.k8s._
-import org.apache.spark.deploy.k8s.features._
+import org.apache.spark.deploy.k8s.{Config, Constants, KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, KubernetesUtils}
+import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, LocalDirsFeatureStep, MountSecretsFeatureStep, MountVolumesFeatureStep, TemplateVolumeStep}
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
 import org.apache.spark.internal.Logging
 

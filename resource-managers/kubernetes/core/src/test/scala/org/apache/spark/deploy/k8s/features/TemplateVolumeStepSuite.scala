@@ -16,6 +16,9 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.io.{File, PrintWriter}
+
+import io.fabric8.kubernetes.api.model.ConfigMap
 import org.mockito.Mockito
 import org.scalatest.BeforeAndAfter
 
@@ -23,7 +26,6 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 
 class TemplateVolumeStepSuite extends SparkFunSuite with BeforeAndAfter {
-  private val podTemplateLocalFile = "/path/to/file"
   private var sparkConf: SparkConf = _
   private var kubernetesConf : KubernetesConf[_ <: KubernetesRoleSpecificConf] = _
 
@@ -48,17 +50,47 @@ class TemplateVolumeStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Mounts executor template volume if config specified") {
+    val templateFile = new File("pod-template.yaml")
+    val writer = new PrintWriter(templateFile)
+    writer.write("pod-template-contents")
+    writer.close()
+    val podTemplateLocalFile = templateFile.getAbsolutePath
     Mockito.doReturn(Option(podTemplateLocalFile)).when(sparkConf)
       .get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
+
     val step = new TemplateVolumeStep(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())
 
     assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
-    assert(configuredPod.pod.getSpec.getVolumes.get(0).getName === Constants.POD_TEMPLATE_VOLUME)
-    assert(configuredPod.pod.getSpec.getVolumes.get(0).getHostPath.getPath === "/path/to/file")
+    val volume = configuredPod.pod.getSpec.getVolumes.get(0)
+    assert(volume.getName === Constants.POD_TEMPLATE_VOLUME)
+    assert(volume.getConfigMap.getName === Constants.POD_TEMPLATE_CONFIGMAP)
+    assert(volume.getConfigMap.getItems.size() === 1)
+    assert(volume.getConfigMap.getItems.get(0).getKey === Constants.POD_TEMPLATE_KEY)
+    assert(volume.getConfigMap.getItems.get(0).getPath ===
+      Constants.EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME)
+
     assert(configuredPod.container.getVolumeMounts.size() === 1)
-    assert(configuredPod.container.getVolumeMounts.get(0).getName === Constants.POD_TEMPLATE_VOLUME)
-    assert(configuredPod.container.getVolumeMounts.get(0).getMountPath ===
-      Constants.EXECUTOR_POD_SPEC_TEMPLATE_FILE)
+    val volumeMount = configuredPod.container.getVolumeMounts.get(0)
+    assert(volumeMount.getMountPath === Constants.EXECUTOR_POD_SPEC_TEMPLATE_MOUNTHPATH)
+    assert(volumeMount.getName === Constants.POD_TEMPLATE_VOLUME)
+
+    val resources = step.getAdditionalKubernetesResources()
+    assert(resources.size === 1)
+    assert(resources.head.getMetadata.getName === Constants.POD_TEMPLATE_CONFIGMAP)
+    assert(resources.head.isInstanceOf[ConfigMap])
+    val configMap = resources.head.asInstanceOf[ConfigMap]
+    assert(configMap.getData.size() === 1)
+    assert(configMap.getData.containsKey(Constants.POD_TEMPLATE_KEY))
+    assert(configMap.getData.containsValue("pod-template-contents"))
+
+    val systemProperties = step.getAdditionalPodSystemProperties()
+    assert(systemProperties.size === 1)
+    assert(systemProperties.contains(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE.key))
+    assert(systemProperties.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE.key).get ===
+      (Constants.EXECUTOR_POD_SPEC_TEMPLATE_MOUNTHPATH + "/" +
+        Constants.EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME))
+
+    templateFile.delete()
   }
 }

@@ -70,11 +70,9 @@ private[spark] object KubernetesUtils extends Logging {
                           containerName: String): SparkPod = {
     try {
       val pod = kubernetesClient.pods().load(templateFile).get()
-      val container = pod.getSpec.getContainers.asScala
-        .filter(_.getName == containerName)
-        .headOption
-      require(container.isDefined)
-      SparkPod(pod, container.get)
+      val containers = pod.getSpec.getContainers.asScala
+      require(containers.map(_.getName).contains(containerName))
+      SparkPod(pod, containers.filter(_.getName == containerName).head)
     } catch {
       case e: Exception =>
         logError(

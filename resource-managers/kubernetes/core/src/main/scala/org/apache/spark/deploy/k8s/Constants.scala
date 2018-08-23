@@ -75,10 +75,11 @@ private[spark] object Constants {
   val ENV_R_ARGS = "R_APP_ARGS"
 
   // Pod spec templates
-  val EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME = "podSpecTemplate.yml"
-  val EXECUTOR_POD_SPEC_TEMPLATE_FILE =
-    s"$SPARK_CONF_DIR_INTERNAL/$EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME"
+  val EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME = "pod-spec-template.yml"
+  val EXECUTOR_POD_SPEC_TEMPLATE_MOUNTHPATH = "/opt/spark/pod-template"
   val POD_TEMPLATE_VOLUME = "podspec-volume"
+  val POD_TEMPLATE_CONFIGMAP = "podspec-configmap"
+  val POD_TEMPLATE_KEY = "podspec-configmap-key"
 
   // Miscellaneous
   val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
