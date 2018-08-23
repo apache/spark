@@ -185,6 +185,18 @@ To use a secret through an environment variable use the following options to the
 --conf spark.kubernetes.executor.secretKeyRef.ENV_NAME=name:key
 ```
 
+## Pod Template
+Kubernetes allows defining pods from [template files](https://kubernetes.io/docs/concepts/workloads/pods/pod-overview/#pod-templates).
+Spark users can similarly use template files to define the driver or executor pod configurations that Spark configurations do not support.
+To do so, specify the spark properties `spark.kubernetes.driver.podTemplateFile` and `spark.kubernetes.executor.podTemplateFile`
+to point to local files accessible to the `spark-submit` process. To allow the driver pod access the executor pod template
+file, the file will be automatically mounted onto a volume in the driver pod when it's created.
+
+It is important to note that Spark is opinionated about certain pod configurations so there are values in the
+pod template that will always be overwritten by Spark. Therefore, users of this feature should note that specifying
+the pod template file only lets Spark start with a template pod instead of an empty pod during the pod-building process.
+For details, see the [full list](#pod-template-properties) of pod template values that will be overwritten by spark.
+
 ## Introspection and Debugging
 
 These are the different ways in which you can investigate a running/completed Spark application, monitor progress, and
@@ -773,6 +785,185 @@ specific to Spark on Kubernetes.
   <td><code>"2"</code></td>
   <td>
    This sets the major Python version of the docker image used to run the driver and executor containers. Can either be 2 or 3. 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.containerName</code></td>
+  <td><code>"spark-kubernetes-driver"</code></td>
+  <td>
+   This sets the driver container name. If you are specifying a driver [pod template](#pod-template), you can match this name to the
+   driver container name set in the template.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.containerName</code></td>
+  <td><code>"spark-kubernetes-executor"</code></td>
+  <td>
+   This sets the executor container name. If you are specifying a an executor [pod template](#pod-template), you can match this name to the
+   driver container name set in the template.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.podTemplateFile</code></td>
+  <td>(none)</td>
+  <td>
+   Specify the local file that contains the driver [pod template](#pod-template). For example
+   <code>spark.kubernetes.driver.podTemplateFile=/path/to/driver-pod-template.yaml`</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.podTemplateFile</code></td>
+  <td>(none)</td>
+  <td>
+   Specify the local file that contains the executor [pod template](#pod-template). For example
+   <code>spark.kubernetes.executor.podTemplateFile=/path/to/executor-pod-template.yaml`</code>
+  </td>
+</tr>
+</table>
+
+#### Pod template properties
+
+See the below table for the full list of pod specifications that will be overwritten by spark.
+
+### Pod Metadata
+
+<table class="table">
+<tr><th>Pod metadata key</th><th>Modified value</th><th>Description</th></tr>
+<tr>
+  <td>name</td>
+  <td>Value of <code>spark.kubernetes.driver.pod.name</code></td>
+  <td>
+    The driver pod name will be overwritten with either the configured or default value of
+    <code>spark.kubernetes.driver.pod.name</code>. The executor pod names will be unaffected.
+  </td>
+</tr>
+<tr>
+  <td>namespace</td>
+  <td>Value of <code>spark.kubernetes.namespace</code></td>
+  <td>
+    Spark makes strong assumptions about the driver and executor namespaces. Both driver and executor namespaces will
+    be replaced by this spark conf value.
+  </td>
+</tr>
+<tr>
+  <td>labels</td>
+  <td>Adds the labels from <code>spark.kubernetes.{driver,executor}.label.*</code></td>
+  <td>
+    Spark will add additional labels specified by the spark configuration.
+  </td>
+</tr>
+<tr>
+  <td>annotations</td>
+  <td>Adds the annotations from <code>spark.kubernetes.{driver,executor}.annotation.*</code></td>
+  <td>
+    Spark will add additional labels specified by the spark configuration.
+  </td>
+</tr>
+</table>
+
+### Pod Spec
+
+<table class="table">
+<tr><th>Pod spec key</th><th>Modified value</th><th>Description</th></tr>
+<tr>
+  <td>imagePullSecrets</td>
+  <td>Adds image pull secrets from <code>spark.kubernetes.container.image.pullSecrets</code></td>
+  <td>
+    Additional pull secrets will be added from the spark configuration to both executor pods.
+  </td>
+</tr>
+<tr>
+  <td>nodeSelector</td>
+  <td>Adds node selectors from <code>spark.kubernetes.node.selector.*</code></td>
+  <td>
+    Additional node selectors will be added from the spark configuration to both executor pods.
+  </td>
+</tr>
+<tr>
+  <td>restartPolicy</td>
+  <td></code>"never"</code></td>
+  <td>
+    Spark assumes that both drivers and executors never restart.
+  </td>
+</tr>
+<tr>
+  <td>serviceAccount</td>
+  <td>Value of </code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
+  <td>
+    Spark will override <code>serviceAccount</code> with the value of the spark configuration for only
+    driver pods. Executor pods will remain unaffected.
+  </td>
+</tr>
+<tr>
+  <td>serviceAccountName</td>
+  <td>Value of </code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
+  <td>
+    Spark will override <code>serviceAccountName</code> with the value of the spark configuration for only
+    driver pods. Executor pods will remain unaffected.
+  </td>
+</tr>
+<tr>
+  <td>volumes</td>
+  <td>Adds volumes from <code>spark.kubernetes.{driver,executor}.volumes.[VolumeType].[VolumeName].mount.path</code></td>
+  <td>
+    Spark will add volumes as specified by the spark conf, as well as additional volumes necessary for passing
+    spark conf and pod template files.
+  </td>
+</tr>
+</table>
+
+### Container spec
+
+The following affect the driver and executor containers. All other containers in the pod spec will be unaffected.
+
+<table class="table">
+<tr><th>Container spec key</th><th>Modified value</th><th>Description</th></tr>
+<tr>
+  <td>env</td>
+  <td>Adds env variables from <code>spark.kubernetes.driverEnv.[EnvironmentVariableName]</code></td>
+  <td>
+    Spark will add driver env variables from <code>spark.kubernetes.driverEnv.[EnvironmentVariableName]</code>, and
+    executor env variables from <code>spark.executorEnv.[EnvironmentVariableName]</code>.
+  </td>
+</tr>
+<tr>
+  <td>image</td>
+  <td>Value of <code>spark.kubernetes.{driver,executor}.container.image</code></td>
+  <td>
+    The image will be defined by the spark configurations.
+  </td>
+</tr>
+<tr>
+  <td>imagePullPolicy</td>
+  <td>Value of <code>spark.kubernetes.container.image.pullPolicy</code></td>
+  <td>
+    Spark will override the pull policy for both driver and executors.
+  </td>
+</tr>
+<tr>
+  <td>name</td>
+  <td>See description.</td>
+  <td>
+    The driver and executor container names are defined by <code>spark.kubernetes.{driver,executor}.containerName</code>.
+    If they don't exist in the pod template file, then an error will be thrown.
+  </td>
+</tr>
+<tr>
+  <td>resources</td>
+  <td>See description</code></td>
+  <td>
+    The cpu limits are set by <code>spark.kubernetes.{driver,executor}.limit.cores</code>. The cpu is set by
+    <code>spark.{driver,executor}.cores</code>. The memory request and limit are set by summing the values of
+    <code>spark.{driver,executor}.memory</code> and <code>spark.{driver,executor}.memoryOverhead</code>.
+
+  </td>
+</tr>
+<tr>
+  <td>volumeMounts</td>
+  <td>Add volumes from <code>spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.{path,readOnly}</code></td>
+  <td>
+    Spark will add volumes as specified by the spark conf, as well as additional volumes necessary for passing
+    spark conf and pod template files.
   </td>
 </tr>
 </table>
