@@ -1508,20 +1508,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }
     assert(output.toString.contains("Scan testRdd"))
   }
-
-  test("benchmark") {
-    import testImplicits._
-    val manyCols = (0 until 1000).map { i => s"value as col$i"}
-    val local = Seq(1, 2, 3).toDS().selectExpr(manyCols: _*).where($"col3" > 4)
-    val plan = local.queryExecution.analyzed
-    val numIter = 1000
-    val start = System.nanoTime()
-    for (i <- 0 until numIter) {
-      spark.sessionState.optimizer.execute(plan)
-    }
-    val durationMs = (System.nanoTime() - start) / numIter / 1000000
-    println(s"duration $durationMs")
-  }
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)
