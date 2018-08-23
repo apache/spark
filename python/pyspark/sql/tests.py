@@ -3379,18 +3379,15 @@ class SQLTests(ReusedSQLTestCase):
             datasource_df = self.spark.read \
                 .format("org.apache.spark.sql.sources.SimpleScanSource") \
                 .option('from', 0).option('to', 1).load()
-            datasource_v2_df = self.spark.read \
-                .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
-                .load()
-
-            datasource_df.show()
-            datasource_v2_df.show()
-
+            # TODO: Enable data source v2 after SPARK-25213 is fixed
+            # datasource_v2_df = self.spark.read \
+            #    .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+            #    .load()
 
             filter1 = udf(lambda: False, 'boolean')()
             filter2 = udf(lambda x: False, 'boolean')(lit(1))
 
-            for df in [filesource_df, datasource_df, datasource_v2_df]:
+            for df in [filesource_df, datasource_df]:
                 for f in [filter1, filter2]:
                     result = df.filter(f)
                     self.assertEquals(0, result.count())
@@ -5315,13 +5312,14 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             datasource_df = self.spark.read \
                 .format("org.apache.spark.sql.sources.SimpleScanSource") \
                 .option('from', 0).option('to', 1).load()
-            datasource_v2_df = self.spark.read \
-                .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
-                .load()
+            # TODO: Enable data source v2 after SPARK-25213 is fixed
+            # datasource_v2_df = self.spark.read \
+            #    .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+            #    .load()
 
             f = pandas_udf(lambda x: pd.Series(np.repeat(False, len(x))), 'boolean')(lit(1))
 
-            for df in [filesource_df, datasource_df, datasource_v2_df]:
+            for df in [filesource_df, datasource_df]:
                 result = df.filter(f)
                 self.assertEquals(0, result.count())
 
