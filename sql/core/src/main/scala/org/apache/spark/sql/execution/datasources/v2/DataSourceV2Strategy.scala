@@ -143,7 +143,12 @@ object DataSourceV2Strategy extends Strategy {
       }
 
       // always add the projection, which will produce unsafe rows required by some operators
-      ProjectExec(project, withFilter) :: Nil
+      if (project.exists(hasScalarPythonUDF)) {
+        val references = project.map(_.references).reduce(_ ++ _).toSeq
+        ProjectExec(project, ProjectExec(references, withFilter)) :: Nil
+      } else {
+        ProjectExec(project, withFilter) :: Nil
+      }
 
     case r: StreamingDataSourceV2Relation =>
       // TODO: support operator pushdown for streaming data sources.
