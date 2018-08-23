@@ -210,14 +210,11 @@ private[sql] object ArrowConverters {
   private[sql] def readArrowStreamFromFile(
       sqlContext: SQLContext,
       filename: String): JavaRDD[Array[Byte]] = {
-    val fileStream = new FileInputStream(filename)
-    try {
-      // Create array so that we can safely close the file
+    Utils.tryWithResource(new FileInputStream(filename)) { fileStream =>
+      // Create array to consume iterator so that we can safely close the file
       val batches = getBatchesFromStream(fileStream.getChannel).toArray
       // Parallelize the record batches to create an RDD
       JavaRDD.fromRDD(sqlContext.sparkContext.parallelize(batches, batches.length))
-    } finally {
-      fileStream.close()
     }
   }
 
@@ -226,7 +223,7 @@ private[sql] object ArrowConverters {
    */
   private[sql] def getBatchesFromStream(in: SeekableByteChannel): Iterator[Array[Byte]] = {
 
-    // Create an iterator to get each serialized ArrowRecordBatch from a stream
+    // Iterate over the serialized Arrow RecordBatch messages from a stream
     new Iterator[Array[Byte]] {
       var batch: Array[Byte] = readNextBatch()
 
@@ -238,28 +235,31 @@ private[sql] object ArrowConverters {
         prevBatch
       }
 
+      // This gets the next serialized ArrowRecordBatch by reading message metadata to check if it
+      // is a RecordBatch message and then returning the complete serialized message which consists
+      // of a int32 length, serialized message metadata and a serialized RecordBatch message body
       def readNextBatch(): Array[Byte] = {
         val msgMetadata = MessageSerializer.readMessage(new ReadChannel(in))
         if (msgMetadata == null) {
           return null
         }
 
-        // Get the length of the body, which has not be read at this point
+        // Get the length of the body, which has not been read at this point
         val bodyLength = msgMetadata.getMessageBodyLength.toInt
 
-        // Only care about RecordBatch data, skip Schema and unsupported Dictionary messages
+        // Only care about RecordBatch messages, skip Schema and unsupported Dictionary messages
         if (msgMetadata.getMessage.headerType() == MessageHeader.RecordBatch) {
 
-          // Create output backed by buffer to hold msg length (int32), msg metadata, msg body
+          // Buffer backed output large enough to hold the complete serialized message
           val bbout = new ByteBufferOutputStream(4 + msgMetadata.getMessageLength + bodyLength)
 
-          // Write message metadata to buffer output stream
+          // Write message metadata to ByteBuffer output stream
           MessageSerializer.writeMessageBuffer(
             new WriteChannel(Channels.newChannel(bbout)),
             msgMetadata.getMessageLength,
             msgMetadata.getMessageBuffer)
 
-          // Get a zero-copy ByteBuffer with metadata already written
+          // Get a zero-copy ByteBuffer with already contains message metadata, must close first
           bbout.close()
           val bb = bbout.toByteBuffer
           bb.position(bbout.getCount())
@@ -270,7 +270,7 @@ private[sql] object ArrowConverters {
           bb.array()
         } else {
           if (bodyLength > 0) {
-            // Skip message body if not a record batch
+            // Skip message body if not a RecordBatch
             in.position(in.position() + bodyLength)
           }
 
