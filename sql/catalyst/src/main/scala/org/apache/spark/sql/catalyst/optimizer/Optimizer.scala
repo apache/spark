@@ -130,6 +130,10 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
       CombineUnions) ::
+    // run this once earlier. this might simplify the plan and reduce cost of optimizer
+    Batch("LocalRelation early", fixedPoint,
+      ConvertToLocalRelation,
+      PropagateEmptyRelation) ::
     Batch("Pullup Correlated Expressions", Once,
       PullupCorrelatedPredicates) ::
     Batch("Subquery", Once,
