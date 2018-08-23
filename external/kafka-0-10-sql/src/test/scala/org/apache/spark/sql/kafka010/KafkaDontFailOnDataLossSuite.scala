@@ -93,7 +93,7 @@ class KafkaDontFailOnDataLossSuite extends KafkaMissingOffsetsTest {
    * @param writeToTable the function to write the specified [[DataFrame]] to the given table.
    */
   private def verifyMissingOffsetsDontCauseDuplicatedRecords(
-    testStreamingQuery: Boolean)(writeToTable: (DataFrame, String) => Unit): Unit = {
+      testStreamingQuery: Boolean)(writeToTable: (DataFrame, String) => Unit): Unit = {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 1)
     testUtils.sendMessages(topic, (0 until 50).map(_.toString).toArray)
