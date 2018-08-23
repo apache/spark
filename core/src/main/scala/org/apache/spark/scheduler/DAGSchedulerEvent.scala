@@ -41,8 +41,7 @@ private[scheduler] case class JobSubmitted(
     partitions: Array[Int],
     callSite: CallSite,
     listener: JobListener,
-    properties: Properties = null,
-    taskOverwritable: Boolean = false)
+    properties: Properties = null)
   extends DAGSchedulerEvent
 
 /** A map stage as submitted to run as a separate job */
