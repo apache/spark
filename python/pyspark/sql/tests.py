@@ -6399,7 +6399,7 @@ class DataSourceV2Tests(ReusedSQLTestCase):
         from pyspark.sql.functions import udf
 
         df = self.spark.read.format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2").load()
-        result = datasource_v2_df.withColumn('x', udf(lambda x: x, 'int')(datasource_v2_df['i']))
+        result = df.withColumn('x', udf(lambda x: x, 'int')(df['i']))
         rows = list(map(lambda r: r.asDict(), result.collect()))
         expected = [{'i': i, 'j': -i, 'x': i} for i in range(10)]
         self.assertEqual(rows, expected)
