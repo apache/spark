@@ -1487,14 +1487,14 @@ private[spark] class DAGScheduler(
             failedStages += failedStage
             failedStages += mapStage
             if (noResubmitEnqueued) {
-              // If the map stage is COMPLETE_RANDOM, which means the map tasks will return
+              // If the map stage is INDETERMINATE, which means the map tasks may return
               // different result when re-try, we need to re-try all the tasks of the failed
               // stage and its succeeding stages, because the input data will be changed after the
               // map tasks are re-tried.
-              // Note that, if map stage is RANDOM_ORDER, we are fine. The shuffle partitioner is
+              // Note that, if map stage is UNORDERED, we are fine. The shuffle partitioner is
               // guaranteed to be idempotent, so the input data of the reducers will not change even
               // if the map tasks are not re-tried.
-              if (mapStage.rdd.computingRandomLevel == RDD.RandomLevel.COMPLETE_RANDOM) {
+              if (mapStage.rdd.computingRandomLevel == RDD.RandomLevel.INDETERMINATE) {
                 def rollBackStage(stage: Stage): Unit = stage match {
                   case mapStage: ShuffleMapStage =>
                     val numMissingPartitions = mapStage.findMissingPartitions().length

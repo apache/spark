@@ -1890,13 +1890,13 @@ abstract class RDD[T: ClassTag](
   private[spark] def computingRandomLevel: RDD.RandomLevel.Value = {
     val parentRandomLevels = dependencies.map {
       case dep: ShuffleDependency[_, _, _] =>
-        if (dep.rdd.computingRandomLevel == RDD.RandomLevel.COMPLETE_RANDOM) {
-          RDD.RandomLevel.COMPLETE_RANDOM
+        if (dep.rdd.computingRandomLevel == RDD.RandomLevel.INDETERMINATE) {
+          RDD.RandomLevel.INDETERMINATE
         } else {
           // In Spark, the reducer fetches multiple remote shuffle blocks at the same time, and
           // the arrival order of these shuffle blocks are totally random. Which means, the
           // computing function of a shuffled RDD will never be "NO_RANDOM"
-          RDD.RandomLevel.RANDOM_ORDER
+          RDD.RandomLevel.UNORDERED
         }
 
       case dep => dep.rdd.computingRandomLevel
@@ -1923,16 +1923,17 @@ object RDD {
   /**
    * The random level of RDD's computing function, which indicates the behavior when rerun the
    * computing function. There are 3 random levels, ordered by the randomness from low to high:
-   * 1. IDEMPOTENT. The computing function always return the same result with same order when rerun.
-   * 2. RANDOM_ORDER. The computing function returns same data set in random order when rerun.
-   * 3. COMPLETE_RANDOM. The computing function returns different result when rerun.
+   * 1. IDEMPOTENT: The computing function always return the same result with same order when rerun.
+   * 2. UNORDERED: The computing function returns same data set in potentially a different order
+   *               when rerun.
+   * 3. INDETERMINATE. The computing function may return totally different result when rerun.
    *
    * Note that, the output of the computing function usually relies on parent RDDs. When a
    * parent RDD's computing function is random, it's very likely this computing function is also
    * random.
    */
   object RandomLevel extends Enumeration {
-    val IDEMPOTENT, RANDOM_ORDER, COMPLETE_RANDOM = Value
+    val IDEMPOTENT, UNORDERED, INDETERMINATE = Value
   }
 
   private[spark] val CHECKPOINT_ALL_MARKED_ANCESTORS =

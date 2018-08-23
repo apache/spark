@@ -60,8 +60,8 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     isFromBarrier || dependencies.exists(_.rdd.isBarrier())
 
   override private[spark] def computingRandomLevel = {
-    if (orderSensitiveFunc && prev.computingRandomLevel == RDD.RandomLevel.RANDOM_ORDER) {
-      RDD.RandomLevel.COMPLETE_RANDOM
+    if (orderSensitiveFunc && prev.computingRandomLevel == RDD.RandomLevel.UNORDERED) {
+      RDD.RandomLevel.INDETERMINATE
     } else {
       super.computingRandomLevel
     }

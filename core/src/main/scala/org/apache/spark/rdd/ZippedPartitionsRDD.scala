@@ -101,12 +101,12 @@ private[spark] class ZippedPartitionsRDD2[A: ClassTag, B: ClassTag, V: ClassTag]
   }
 
   private def isRandomOrder(rdd: RDD[_]): Boolean = {
-    rdd.computingRandomLevel == RDD.RandomLevel.RANDOM_ORDER
+    rdd.computingRandomLevel == RDD.RandomLevel.UNORDERED
   }
 
   override private[spark] def computingRandomLevel = {
     if (orderSensitiveFunc && (isRandomOrder(rdd1) || isRandomOrder(rdd2))) {
-      RDD.RandomLevel.COMPLETE_RANDOM
+      RDD.RandomLevel.INDETERMINATE
     } else {
       super.computingRandomLevel
     }

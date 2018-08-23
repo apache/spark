@@ -82,7 +82,7 @@ class MyRDD(
   }).toArray
 
   override private[spark] def computingRandomLevel = {
-    if (isRandom) RDD.RandomLevel.COMPLETE_RANDOM else super.computingRandomLevel
+    if (isRandom) RDD.RandomLevel.INDETERMINATE else super.computingRandomLevel
   }
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {
