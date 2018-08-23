@@ -64,8 +64,9 @@ write.df(select(df, "name", "favorite_color"), "namesAndFavColors.avro", "avro")
 </div>
 
 ## to_avro() and from_avro()
-The Avro package provides function `to_avro` to encode a struct as binary and `from_avro()` to retrieve the 
-struct as a complex type.
+The Avro package provides function `to_avro` to encode a column as binary in Avro 
+format, and `from_avro()` to decode Avro binary data into a column. Both functions transform one column to 
+another column, and the input/output SQL data type can be complex type or primitive type.
 
 Using Avro record as columns are useful when reading from or writing to a streaming source like Kafka. Each 
 Kafka key-value record will be augmented with some metadata, such as the ingestion timestamp into Kafka, the offset in Kafka, etc.
@@ -97,7 +98,7 @@ val output = df
   .where("user.favorite_color == \"red\"")
   .select(to_avro($"user.name") as 'value)
 
-val ds = output
+val query = output
   .writeStream
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -123,12 +124,12 @@ Dataset<Row> df = spark
 // 1. Decode the Avro data into a struct;
 // 2. Filter by column `favorite_color`;
 // 3. Encode the column `name` in Avro format.
-DataFrame output = df
+Dataset<Row> output = df
   .select(from_avro(col("value"), jsonFormatSchema).as("user"))
   .where("user.favorite_color == \"red\"")
   .select(to_avro(col("user.name")).as("value"));
 
-StreamingQuery ds = output
+StreamingQuery query = output
   .writeStream()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
