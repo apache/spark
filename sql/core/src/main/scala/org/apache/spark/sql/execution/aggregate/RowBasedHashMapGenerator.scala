@@ -44,8 +44,8 @@ class RowBasedHashMapGenerator(
     groupingKeySchema, bufferSchema) {
 
   override protected def initializeAggregateHashMap(): String = {
-    val generatedKeySchema = ctx.addReferenceObj("generatedKeySchemaTerm", groupingKeySchema)
-    val generatedValueSchema = ctx.addReferenceObj("generatedValueSchemaTerm", bufferSchema)
+    val keySchema = ctx.addReferenceObj("keySchemaTerm", groupingKeySchema)
+    val valueSchema = ctx.addReferenceObj("valueSchemaTerm", bufferSchema)
 
     s"""
        |  private org.apache.spark.sql.catalyst.expressions.RowBasedKeyValueBatch batch;
@@ -55,8 +55,6 @@ class RowBasedHashMapGenerator(
        |  private int numBuckets = (int) (capacity / loadFactor);
        |  private int maxSteps = 2;
        |  private int numRows = 0;
-       |  private org.apache.spark.sql.types.StructType keySchema = $generatedKeySchema;
-       |  private org.apache.spark.sql.types.StructType valueSchema = $generatedValueSchema;
        |  private Object emptyVBase;
        |  private long emptyVOff;
        |  private int emptyVLen;
@@ -67,9 +65,9 @@ class RowBasedHashMapGenerator(
        |    org.apache.spark.memory.TaskMemoryManager taskMemoryManager,
        |    InternalRow emptyAggregationBuffer) {
        |    batch = org.apache.spark.sql.catalyst.expressions.RowBasedKeyValueBatch
-       |      .allocate(keySchema, valueSchema, taskMemoryManager, capacity);
+       |      .allocate($keySchema, $valueSchema, taskMemoryManager, capacity);
        |
-       |    final UnsafeProjection valueProjection = UnsafeProjection.create(valueSchema);
+       |    final UnsafeProjection valueProjection = UnsafeProjection.create($valueSchema);
        |    final byte[] emptyBuffer = valueProjection.apply(emptyAggregationBuffer).getBytes();
        |
        |    emptyVBase = emptyBuffer;
