@@ -82,7 +82,7 @@ case class SessionWindowExec(
 
         // Manage the time window.
         // Considering about windowGap = 3min, the windowResultWithBoundary for partition a in
-        // below scenario is [(1, (start: 00:00, end: 00:03)), (3, (start: 00:05, end: 00:10))].
+        // below scenario is [(1, (start: 00:00, end: 00:04)), (3, (start: 00:05, end: 00:10))].
         // The partition b will use a new windowResultWithBoundary to keep tracking
         // IndexWithinPartition and corresponding session window start and end.
         // -------------------------------------------------------------------------------------
@@ -143,6 +143,7 @@ case class SessionWindowExec(
           // Before we start to fetch new input rows, make a copy of nextGroup and initialize
           // value of windowStartTime.
           val currentGroup = nextGroup.copy()
+          lastTime = getTimeFromRow(nextRow)
           windowStartTime = getTimeFromRow(nextRow)
 
           // clear last partition
@@ -186,11 +187,10 @@ case class SessionWindowExec(
           if (bufferIterator.hasNext) {
             val current = bufferIterator.next()
 
-            rowIndexWithinPartition += 1
-
-            if (rowIndexWithinPartition > windowResultWithBoundary(windowResultIndex)._1) {
+            if (rowIndexWithinPartition >= windowResultWithBoundary(windowResultIndex)._1) {
               windowResultIndex += 1
             }
+            rowIndexWithinPartition += 1
 
             // 'Merge' the input row with the session window struct
             join(current,
