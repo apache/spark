@@ -19,13 +19,14 @@ package org.apache.spark.sql.sources.v2.writer;
 
 import java.io.Serializable;
 
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteConfig;
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
  * A commit message returned by {@link DataWriter#commit()} and will be sent back to the driver side
  * as the input parameter of {@link BatchWriteSupport#commit(WriteConfig,WriterCommitMessage[])} or
- * {@link StreamingWriteSupport#commit(WriteConfig, long, WriterCommitMessage[])}.
+ * {@link StreamingWriteSupport#commit(StreamingWriteConfig, long, WriterCommitMessage[])}.
  *
  * This is an empty interface, data sources should define their own message class and use it when
  * generating messages at executor side and handling the messages at driver side.
