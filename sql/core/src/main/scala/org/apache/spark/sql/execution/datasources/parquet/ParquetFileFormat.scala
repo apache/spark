@@ -377,7 +377,7 @@ class ParquetFileFormat
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
           // is used here.
-          .flatMap(parquetFilters.createFilter(parquetSchema, _))
+          .flatMap(parquetFilters.createFilter(parquetSchema, _, sqlConf.caseSensitiveAnalysis))
           .reduceOption(FilterApi.and)
       } else {
         None
