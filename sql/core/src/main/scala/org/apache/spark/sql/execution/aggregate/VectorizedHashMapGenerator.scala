@@ -52,10 +52,9 @@ class VectorizedHashMapGenerator(
     groupingKeySchema, bufferSchema) {
 
   override protected def initializeAggregateHashMap(): String = {
-    val generatedSchemaStructType = new StructType((groupingKeySchema ++ bufferSchema).toArray)
-    val generatedSchema =
-      ctx.addReferenceObj("generatedSchemaTerm", generatedSchemaStructType)
-    val generatedAggBufferSchemaFieldsLength = bufferSchema.fields.length
+    val schemaStructType = new StructType((groupingKeySchema ++ bufferSchema).toArray)
+    val schema = ctx.addReferenceObj("schemaTerm", schemaStructType)
+    val aggBufferSchemaFieldsLength = bufferSchema.fields.length
 
     s"""
        |  private ${classOf[OnHeapColumnVector].getName}[] vectors;
@@ -67,16 +66,15 @@ class VectorizedHashMapGenerator(
        |  private int numBuckets = (int) (capacity / loadFactor);
        |  private int maxSteps = 2;
        |  private int numRows = 0;
-       |  private org.apache.spark.sql.types.StructType schema = $generatedSchema;
        |
        |  public $generatedClassName() {
-       |    vectors = ${classOf[OnHeapColumnVector].getName}.allocateColumns(capacity, schema);
+       |    vectors = ${classOf[OnHeapColumnVector].getName}.allocateColumns(capacity, $schema);
        |    batch = new ${classOf[ColumnarBatch].getName}(vectors);
        |
        |    // Generates a projection to return the aggregate buffer only.
        |    ${classOf[OnHeapColumnVector].getName}[] aggBufferVectors =
-       |      new ${classOf[OnHeapColumnVector].getName}[$generatedAggBufferSchemaFieldsLength];
-       |    for (int i = 0; i < $generatedAggBufferSchemaFieldsLength; i++) {
+       |      new ${classOf[OnHeapColumnVector].getName}[$aggBufferSchemaFieldsLength];
+       |    for (int i = 0; i < $aggBufferSchemaFieldsLength; i++) {
        |      aggBufferVectors[i] = vectors[i + ${groupingKeys.length}];
        |    }
        |    aggBufferRow = new ${classOf[MutableColumnarRow].getName}(aggBufferVectors);
