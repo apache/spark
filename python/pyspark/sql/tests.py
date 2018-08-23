@@ -68,8 +68,16 @@ except ImportError as e:
     # If Arrow version requirement is not satisfied, skip related tests.
     _pyarrow_requirement_message = _exception_message(e)
 
+_test_not_compiled_message = None
+try:
+    from pyspark.sql.utils import require_test_compiled
+    require_test_compiled()
+except Exception as e:
+    _test_not_compiled_message = _exception_message(e)
+
 _have_pandas = _pandas_requirement_message is None
 _have_pyarrow = _pyarrow_requirement_message is None
+_test_compiled = _test_not_compiled_message is None
 
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
@@ -3368,6 +3376,7 @@ class SQLTests(ReusedSQLTestCase):
             shutil.rmtree(path)
 
     # SPARK-24721
+    @unittest.skipIf(not _test_compiled, _test_not_compiled_message)
     def test_datasource_with_udf_filter_lit_input(self):
         from pyspark.sql.functions import udf, lit, col
 
@@ -5297,6 +5306,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         self.assertEquals(expected.collect(), df1.collect())
 
+    # SPARK-24721
+    @unittest.skipIf(not _test_compiled, _test_not_compiled_message)
     def test_datasource_with_udf_filter_lit_input(self):
         # Same as SQLTests.test_datasource_with_udf_filter_lit_input, but with Pandas UDF
         # This needs to a separate test because Arrow dependency is optional
