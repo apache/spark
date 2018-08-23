@@ -216,8 +216,16 @@ class Dataset[T] private[sql](
   private[sql] def resolve(colName: String): NamedExpression = {
     queryExecution.analyzed.resolveQuoted(colName, sparkSession.sessionState.analyzer.resolver)
       .getOrElse {
-        throw new AnalysisException(
-          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
+        if (schema.fieldNames.contains(colName)) {
+          throw new AnalysisException(
+            s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")}).
+               | Try adding backticks to the column name, i.e., `$colName`"""
+              .stripMargin.replaceAll("\n", ""))
+        } else {
+          throw new AnalysisException(
+            s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")}"""
+              .stripMargin)
+        }
       }
   }
 
