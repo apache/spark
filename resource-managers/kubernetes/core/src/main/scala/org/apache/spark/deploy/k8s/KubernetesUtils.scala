@@ -65,9 +65,10 @@ private[spark] object KubernetesUtils extends Logging {
     }
   }
 
-  def loadPodFromTemplate(kubernetesClient: KubernetesClient,
-                          templateFile: File,
-                          containerName: String): SparkPod = {
+  def loadPodFromTemplate(
+      kubernetesClient: KubernetesClient,
+      templateFile: File,
+      containerName: String): SparkPod = {
     try {
       val pod = kubernetesClient.pods().load(templateFile).get()
       val containers = pod.getSpec.getContainers.asScala

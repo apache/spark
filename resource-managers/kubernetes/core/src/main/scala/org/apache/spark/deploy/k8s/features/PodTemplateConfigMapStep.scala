@@ -20,9 +20,11 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 
 import com.google.common.io.Files
-import io.fabric8.kubernetes.api.model.{Config => _, _}
+import io.fabric8.kubernetes.api.model.{ConfigMapBuilder, ContainerBuilder, HasMetadata, PodBuilder}
 
-import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesRoleSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.Constants._
 
 private[spark] class PodTemplateConfigMapStep(
    conf: KubernetesConf[_ <: KubernetesRoleSpecificConf])
@@ -31,12 +33,12 @@ private[spark] class PodTemplateConfigMapStep(
     val podWithVolume = new PodBuilder(pod.pod)
         .editSpec()
           .addNewVolume()
-            .withName(Constants.POD_TEMPLATE_VOLUME)
+            .withName(POD_TEMPLATE_VOLUME)
             .withNewConfigMap()
-              .withName(Constants.POD_TEMPLATE_CONFIGMAP)
+              .withName(POD_TEMPLATE_CONFIGMAP)
               .addNewItem()
-                .withKey(Constants.POD_TEMPLATE_KEY)
-                .withPath(Constants.EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME)
+                .withKey(POD_TEMPLATE_KEY)
+                .withPath(EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME)
               .endItem()
             .endConfigMap()
           .endVolume()
@@ -45,27 +47,26 @@ private[spark] class PodTemplateConfigMapStep(
 
     val containerWithVolume = new ContainerBuilder(pod.container)
         .addNewVolumeMount()
-          .withName(Constants.POD_TEMPLATE_VOLUME)
-          .withMountPath(Constants.EXECUTOR_POD_SPEC_TEMPLATE_MOUNTHPATH)
+          .withName(POD_TEMPLATE_VOLUME)
+          .withMountPath(EXECUTOR_POD_SPEC_TEMPLATE_MOUNTHPATH)
         .endVolumeMount()
       .build()
     SparkPod(podWithVolume, containerWithVolume)
   }
 
   def getAdditionalPodSystemProperties(): Map[String, String] = Map[String, String](
-    Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE.key ->
-      (Constants.EXECUTOR_POD_SPEC_TEMPLATE_MOUNTHPATH + "/" +
-        Constants.EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME))
+    KUBERNETES_EXECUTOR_PODTEMPLATE_FILE.key ->
+      (EXECUTOR_POD_SPEC_TEMPLATE_MOUNTHPATH + "/" + EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME))
 
   def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    require(conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined)
-    val podTemplateFile = conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get
+    require(conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined)
+    val podTemplateFile = conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get
     val podTemplateString = Files.toString(new File(podTemplateFile), StandardCharsets.UTF_8)
     Seq(new ConfigMapBuilder()
         .withNewMetadata()
-          .withName(Constants.POD_TEMPLATE_CONFIGMAP)
+          .withName(POD_TEMPLATE_CONFIGMAP)
         .endMetadata()
-        .addToData(Constants.POD_TEMPLATE_KEY, podTemplateString)
+        .addToData(POD_TEMPLATE_KEY, podTemplateString)
       .build())
   }
 }

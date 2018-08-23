@@ -88,7 +88,6 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       .build[java.lang.Long, java.lang.Long]()
     val executorPodsLifecycleEventHandler = new ExecutorPodsLifecycleManager(
       sc.conf,
-      KubernetesExecutorBuilder(kubernetesClient, sc.conf),
       kubernetesClient,
       snapshotsStore,
       removedExecutorsCache)
