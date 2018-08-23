@@ -17,6 +17,7 @@
 package org.apache.spark.deploy.k8s.features
 
 import java.io.{File, PrintWriter}
+import java.nio.file.Files
 
 import io.fabric8.kubernetes.api.model.ConfigMap
 import org.mockito.Mockito
@@ -28,6 +29,7 @@ import org.apache.spark.deploy.k8s._
 class PodTemplateConfigMapStepSuite extends SparkFunSuite with BeforeAndAfter {
   private var sparkConf: SparkConf = _
   private var kubernetesConf : KubernetesConf[_ <: KubernetesRoleSpecificConf] = _
+  private var templateFile: File = _
 
   before {
     sparkConf = Mockito.mock(classOf[SparkConf])
@@ -47,16 +49,16 @@ class PodTemplateConfigMapStepSuite extends SparkFunSuite with BeforeAndAfter {
       Map.empty,
       Nil,
       Seq.empty[String])
+    templateFile = Files.createTempFile("pod-template", "yml").toFile
+    templateFile.deleteOnExit()
+    Mockito.doReturn(Option(templateFile.getAbsolutePath)).when(sparkConf)
+      .get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
   }
 
   test("Mounts executor template volume if config specified") {
-    val templateFile = new File("pod-template.yaml")
     val writer = new PrintWriter(templateFile)
     writer.write("pod-template-contents")
     writer.close()
-    val podTemplateLocalFile = templateFile.getAbsolutePath
-    Mockito.doReturn(Option(podTemplateLocalFile)).when(sparkConf)
-      .get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
 
     val step = new PodTemplateConfigMapStep(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())
@@ -90,7 +92,5 @@ class PodTemplateConfigMapStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(systemProperties.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE.key).get ===
       (Constants.EXECUTOR_POD_SPEC_TEMPLATE_MOUNTHPATH + "/" +
         Constants.EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME))
-
-    templateFile.delete()
   }
 }
