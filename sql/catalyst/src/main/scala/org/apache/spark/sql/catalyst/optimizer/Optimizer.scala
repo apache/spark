@@ -1349,6 +1349,12 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
 
     case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming)) =>
       LocalRelation(output, data.take(limit), isStreaming)
+
+    case Filter(condition, LocalRelation(output, data, isStreaming))
+        if !hasUnevaluableExpr(condition) =>
+      val predicate = InterpretedPredicate.create(condition, output)
+      predicate.initialize(0)
+      LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming)
   }
 
   private def hasUnevaluableExpr(expr: Expression): Boolean = {
