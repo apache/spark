@@ -18,7 +18,6 @@
 package org.apache.spark;
 
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.SparkConf;
 
 import org.junit.Assert;
 import org.junit.Test;
