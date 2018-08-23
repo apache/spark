@@ -23,10 +23,6 @@ import org.apache.spark.sql.sources.Filter;
 /**
  * A mix-in interface for {@link ScanConfigBuilder}. Data sources can implement this interface to
  * push down filters to the data source and reduce the size of the data to be read.
- *
- * Note that, if data source readers implement both this interface and
- * {@link SupportsPushDownCatalystFilters}, Spark will ignore this interface and only process
- * {@link SupportsPushDownCatalystFilters}.
  */
 @InterfaceStability.Evolving
 public interface SupportsPushDownFilters extends ScanConfigBuilder {

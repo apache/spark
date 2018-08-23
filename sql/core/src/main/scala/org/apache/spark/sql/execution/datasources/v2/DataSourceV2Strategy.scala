@@ -40,11 +40,6 @@ object DataSourceV2Strategy extends Strategy {
       configBuilder: ScanConfigBuilder,
       filters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
     configBuilder match {
-      case r: SupportsPushDownCatalystFilters =>
-        val postScanFilters = r.pushCatalystFilters(filters.toArray)
-        val pushedFilters = r.pushedCatalystFilters()
-        (pushedFilters, postScanFilters)
-
       case r: SupportsPushDownFilters =>
         // A map from translated data source filters to original catalyst filter expressions.
         val translatedFilterToExpr = mutable.HashMap.empty[sources.Filter, Expression]
