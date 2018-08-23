@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution;
 
 import java.io.IOException;
-import java.util.function.Supplier;
 
 import scala.collection.Iterator;
 import scala.math.Ordering;
@@ -52,6 +51,10 @@ public final class UnsafeExternalRowSorter {
   private final PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
 
+  public static interface RecordComparatorSupplier {
+    public RecordComparator get();
+  }
+
   public abstract static class PrefixComputer {
 
     public static class Prefix {
@@ -71,7 +74,7 @@ public final class UnsafeExternalRowSorter {
 
   public static UnsafeExternalRowSorter createWithRecordComparator(
       StructType schema,
-      Supplier<RecordComparator> recordComparatorSupplier,
+      RecordComparatorSupplier recordComparatorSupplier,
       PrefixComparator prefixComparator,
       PrefixComputer prefixComputer,
       long pageSizeBytes,
@@ -87,7 +90,7 @@ public final class UnsafeExternalRowSorter {
       PrefixComputer prefixComputer,
       long pageSizeBytes,
       boolean canUseRadixSort) throws IOException {
-    Supplier<RecordComparator> recordComparatorSupplier = new Supplier<RecordComparator>() {
+    RecordComparatorSupplier recordComparatorSupplier = new RecordComparatorSupplier() {
         public RecordComparator get() { return new RowComparator(ordering, schema.length()); }
       };
     return new UnsafeExternalRowSorter(schema, recordComparatorSupplier, prefixComparator,
@@ -96,7 +99,7 @@ public final class UnsafeExternalRowSorter {
 
   private UnsafeExternalRowSorter(
       StructType schema,
-      Supplier<RecordComparator> recordComparatorSupplier,
+      RecordComparatorSupplier recordComparatorSupplier,
       PrefixComparator prefixComparator,
       PrefixComputer prefixComputer,
       long pageSizeBytes,

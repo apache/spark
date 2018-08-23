@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.exchange
 
 import java.util.Random
-import java.util.function.Supplier
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
@@ -257,7 +256,7 @@ object ShuffleExchange {
           newPartitioning.numPartitions > 1 &&
           newPartitioning.isInstanceOf[RoundRobinPartitioning]) {
         rdd.mapPartitionsInternal { iter =>
-          val recordComparatorSupplier = new Supplier[RecordComparator] {
+          val recordComparatorSupplier = new UnsafeExternalRowSorter.RecordComparatorSupplier {
             override def get: RecordComparator = new RecordBinaryComparator()
           }
           // The comparator for comparing row hashcode, which should always be Integer.
