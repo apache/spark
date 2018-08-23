@@ -1221,7 +1221,6 @@ private[spark] class DAGScheduler(
               s"(available: ${stage.isAvailable}," +
               s"available outputs: ${stage.numAvailableOutputs}," +
               s"partitions: ${stage.numPartitions})")
-          markMapStageJobsAsFinished(stage)
         case stage : ResultStage =>
           logDebug(s"Stage ${stage} is actually done; (partitions: ${stage.numPartitions})")
       }
