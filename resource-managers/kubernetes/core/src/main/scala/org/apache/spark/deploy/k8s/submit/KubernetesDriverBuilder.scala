@@ -21,8 +21,8 @@ import java.io.File
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.deploy.k8s.{Config, Constants, KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, KubernetesUtils}
-import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, LocalDirsFeatureStep, MountSecretsFeatureStep, MountVolumesFeatureStep, PodTemplateConfigMapStep, TemplateVolumeStep}
+import org.apache.spark.deploy.k8s.{Config, Constants, KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, LocalDirsFeatureStep, MountSecretsFeatureStep, MountVolumesFeatureStep, PodTemplateConfigMapStep}
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
 import org.apache.spark.internal.Logging
 
@@ -60,10 +60,8 @@ private[spark] class KubernetesDriverBuilder(
     new JavaDriverFeatureStep(_),
     podTemplateConfigMapStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => PodTemplateConfigMapStep) =
-    new PodTemplateConfigMapStep()(_),
-    provideInitialSpec: KubernetesConf[KubernetesDriverSpecificConf]
-      => KubernetesDriverSpec =
-      KubernetesDriverSpec.initialSpec) {
+    new PodTemplateConfigMapStep(_),
+    provideInitialPod: () => SparkPod = SparkPod.initialPod) {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesDriverSpec = {
@@ -99,7 +97,10 @@ private[spark] class KubernetesDriverBuilder(
     val allFeatures = (baseFeatures :+ bindingsStep) ++
       secretFeature ++ envSecretFeature ++ volumesFeature ++ templateVolumeFeature
 
-    var spec = provideInitialSpec(kubernetesConf)
+    var spec = KubernetesDriverSpec(
+      provideInitialPod(),
+      Seq.empty,
+      kubernetesConf.sparkConf.getAll.toMap)
     for (feature <- allFeatures) {
       val configuredPod = feature.configurePod(spec.pod)
       val addedSystemProperties = feature.getAdditionalPodSystemProperties()
@@ -117,13 +118,12 @@ private[spark] object KubernetesDriverBuilder extends Logging {
   def apply(kubernetesClient: KubernetesClient, conf: SparkConf): KubernetesDriverBuilder = {
     conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE)
       .map(new File(_))
-      .map(file => new KubernetesDriverBuilder(provideInitialSpec = conf => {
+      .map(file => new KubernetesDriverBuilder(provideInitialPod = () => {
         try {
-          val sparkPod = KubernetesUtils.loadPodFromTemplate(
+          KubernetesUtils.loadPodFromTemplate(
             kubernetesClient,
             file,
             Constants.DRIVER_CONTAINER_NAME)
-          KubernetesDriverSpec.initialSpec(conf).copy(pod = sparkPod)
         } catch {
           case e: Exception =>
             logError(
