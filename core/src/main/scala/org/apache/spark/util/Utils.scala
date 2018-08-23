@@ -2062,8 +2062,10 @@ private[spark] object Utils extends Logging {
     try {
       val properties = new Properties()
       properties.load(inReader)
-      properties.stringPropertyNames().asScala.map(
-        k => (k, properties.getProperty(k).trim)).toMap
+      properties.stringPropertyNames().asScala
+        .map(k => (k, properties.getProperty(k)))
+        .toMap
+
     } catch {
       case e: IOException =>
         throw new SparkException(s"Failed when loading Spark properties from $filename", e)

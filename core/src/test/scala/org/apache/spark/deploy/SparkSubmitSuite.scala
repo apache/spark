@@ -1144,6 +1144,33 @@ class SparkSubmitSuite
     conf1.get(PY_FILES.key) should be (s"s3a://${pyFile.getAbsolutePath}")
     conf1.get("spark.submit.pyFiles") should (startWith("/"))
   }
+
+  test("handles white space in --properties-file and --conf uniformly") {
+    val delimKey = "spark.my.delimiter"
+    val delimKeyFromFile = s"${delimKey}FromFile"
+    val newLine = "\n"
+    val props = new java.util.Properties()
+    val propsFile = File.createTempFile("test-spark-conf", ".properties", Utils.createTempDir())
+    val propsOutputStream = new FileOutputStream(propsFile)
+    try {
+      props.put(delimKeyFromFile, newLine)
+      props.store(propsOutputStream, "test whitespace")
+    } finally {
+      propsOutputStream.close()
+    }
+
+    val clArgs = Seq(
+      "--class", "org.SomeClass",
+      "--conf", s"${delimKey}=$newLine",
+      "--conf", "spark.master=yarn",
+      "--properties-file", propsFile.getPath,
+      "thejar.jar")
+
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
+    conf.get(delimKey) should be (newLine)
+    conf.get(delimKeyFromFile) should be (newLine)
+  }
 }
 
 object SparkSubmitSuite extends SparkFunSuite with TimeLimits {
