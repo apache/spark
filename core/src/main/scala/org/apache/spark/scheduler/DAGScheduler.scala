@@ -1493,7 +1493,7 @@ private[spark] class DAGScheduler(
               // map tasks are re-tried.
               // Note that, if map stage is UNORDERED, we are fine. The shuffle partitioner is
               // guaranteed to be idempotent, so the input data of the reducers will not change even
-              // if the map tasks are not re-tried.
+              // if the map tasks are re-tried.
               if (mapStage.rdd.computingRandomLevel == RDD.RandomLevel.INDETERMINATE) {
                 def rollBackStage(stage: Stage): Unit = stage match {
                   case mapStage: ShuffleMapStage =>
@@ -1502,7 +1502,7 @@ private[spark] class DAGScheduler(
                       markStageAsFinished(
                         mapStage,
                         Some("preceding shuffle map stage with random output gets retried."),
-                        willRetry = !shouldAbortStage)
+                        willRetry = true)
                       mapOutputTracker.unregisterAllMapOutput(mapStage.shuffleDep.shuffleId)
                       failedStages += mapStage
                     }
