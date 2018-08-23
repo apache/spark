@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.annotation.meta.param
@@ -2625,6 +2626,39 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     runEvent(ResubmitFailedStages)
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(countSubmittedMapStageAttempts() === 2)
+  }
+
+  test("SPARK-25211 speculation and fetch failed result in hang of job") {
+    val shuffleMapRDD1 = new MyRDD(sc, 1, Nil)
+    val dep1 = new ShuffleDependency(shuffleMapRDD1, new HashPartitioner(2))
+    val shuffleMapRDD2 = new MyRDD(sc, 2, List(dep1))
+    val dep2 = new ShuffleDependency(shuffleMapRDD2, new HashPartitioner(2))
+
+    val jobId = scheduler.nextJobId.get()
+    val waiter = new JobWaiter(scheduler, jobId, 1, (_: Int, _: MapOutputStatistics) => {})
+    val realJobId = submitMapStage(dep2, waiter)
+    assert(waiter.jobId === realJobId)
+    assert(taskSets(0).stageId === 0 && taskSets(0).stageAttemptId === 0)
+    complete(taskSets(0),
+      (Success, makeMapStatus("hostA", dep1.partitioner.numPartitions)) :: Nil
+    )
+    assert(taskSets(1).stageId === 1 && taskSets(1).stageAttemptId === 0)
+    complete(taskSets(1), Seq(
+          (Success, makeMapStatus("hostB", dep2.partitioner.numPartitions)),
+          (FetchFailed(makeBlockManagerId("hostA"), dep1.shuffleId, 0, 0, "ignored"), null)))
+
+    // waiting for resubmitting of failed stages
+    TimeUnit.MILLISECONDS.sleep(DAGScheduler.RESUBMIT_TIMEOUT * 2)
+    assert(taskSets(2).stageId === 0 && taskSets(2).stageAttemptId === 1)
+
+    // A speculated task finished
+    runEvent(makeCompletionEvent(taskSets(1).tasks(1),
+      Success, makeMapStatus("hostC", dep2.partitioner.numPartitions)))
+    assert(waiter.jobFinished)
+
+    runEvent(makeCompletionEvent(taskSets(2).tasks(0),
+            Success, makeMapStatus("hostD", dep2.partitioner.numPartitions)))
+    assert(taskSets.size === 3)
   }
 
   /**
