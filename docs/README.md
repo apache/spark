@@ -2,7 +2,7 @@ Welcome to the Spark documentation!
 
 This readme will walk you through navigating and building the Spark documentation, which is included
 here with the Spark source code. You can also find documentation specific to release versions of
-Spark at http://spark.apache.org/documentation.html.
+Spark at https://spark.apache.org/documentation.html.
 
 Read on to learn more about viewing documentation in plain text (i.e., markdown) or building the
 documentation yourself. Why build it yourself? So that you have the docs that correspond to
@@ -79,7 +79,7 @@ jekyll plugin to run `build/sbt unidoc` before building the site so if you haven
 may take some time as it generates all of the scaladoc and javadoc using [Unidoc](https://github.com/sbt/sbt-unidoc).
 The jekyll plugin also generates the PySpark docs using [Sphinx](http://sphinx-doc.org/), SparkR docs
 using [roxygen2](https://cran.r-project.org/web/packages/roxygen2/index.html) and SQL docs
-using [MkDocs](http://www.mkdocs.org/).
+using [MkDocs](https://www.mkdocs.org/).
 
 NOTE: To skip the step of building and copying over the Scala, Java, Python, R and SQL API docs, run `SKIP_API=1
 jekyll build`. In addition, `SKIP_SCALADOC=1`, `SKIP_PYTHONDOC=1`, `SKIP_RDOC=1` and `SKIP_SQLDOC=1` can be used

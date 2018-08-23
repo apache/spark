@@ -253,4 +253,70 @@ public class RecordBinaryComparatorSuite {
     assert(compare(0, 0) == 0);
     assert(compare(0, 1) > 0);
   }
+
+  @Test
+  public void testBinaryComparatorWhenSubtractionIsDivisibleByMaxIntValue() throws Exception {
+    int numFields = 1;
+
+    UnsafeRow row1 = new UnsafeRow(numFields);
+    byte[] data1 = new byte[100];
+    row1.pointTo(data1, computeSizeInBytes(numFields * 8));
+    row1.setLong(0, 11);
+
+    UnsafeRow row2 = new UnsafeRow(numFields);
+    byte[] data2 = new byte[100];
+    row2.pointTo(data2, computeSizeInBytes(numFields * 8));
+    row2.setLong(0, 11L + Integer.MAX_VALUE);
+
+    insertRow(row1);
+    insertRow(row2);
+
+    assert(compare(0, 1) < 0);
+  }
+
+  @Test
+  public void testBinaryComparatorWhenSubtractionCanOverflowLongValue() throws Exception {
+    int numFields = 1;
+
+    UnsafeRow row1 = new UnsafeRow(numFields);
+    byte[] data1 = new byte[100];
+    row1.pointTo(data1, computeSizeInBytes(numFields * 8));
+    row1.setLong(0, Long.MIN_VALUE);
+
+    UnsafeRow row2 = new UnsafeRow(numFields);
+    byte[] data2 = new byte[100];
+    row2.pointTo(data2, computeSizeInBytes(numFields * 8));
+    row2.setLong(0, 1);
+
+    insertRow(row1);
+    insertRow(row2);
+
+    assert(compare(0, 1) < 0);
+  }
+
+  @Test
+  public void testBinaryComparatorWhenOnlyTheLastColumnDiffers() throws Exception {
+    int numFields = 4;
+
+    UnsafeRow row1 = new UnsafeRow(numFields);
+    byte[] data1 = new byte[100];
+    row1.pointTo(data1, computeSizeInBytes(numFields * 8));
+    row1.setInt(0, 11);
+    row1.setDouble(1, 3.14);
+    row1.setInt(2, -1);
+    row1.setLong(3, 0);
+
+    UnsafeRow row2 = new UnsafeRow(numFields);
+    byte[] data2 = new byte[100];
+    row2.pointTo(data2, computeSizeInBytes(numFields * 8));
+    row2.setInt(0, 11);
+    row2.setDouble(1, 3.14);
+    row2.setInt(2, -1);
+    row2.setLong(3, 1);
+
+    insertRow(row1);
+    insertRow(row2);
+
+    assert(compare(0, 1) < 0);
+  }
 }

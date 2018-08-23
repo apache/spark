@@ -20,7 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Paths}
-import java.util.{Locale, Optional, Properties}
+import java.util.{Locale, Properties}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -31,25 +31,24 @@ import scala.util.Random
 
 import org.apache.kafka.clients.producer.RecordMetadata
 import org.apache.kafka.common.TopicPartition
+import org.json4s.DefaultFormats
+import org.json4s.jackson.JsonMethods._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Dataset, ForeachWriter, SparkSession}
-import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Update
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
-import org.apache.spark.sql.types.StructType
 
-abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
+abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with KafkaTest {
 
   protected var testUtils: KafkaTestUtils = _
 
@@ -117,14 +116,16 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
         query.nonEmpty,
         "Cannot add data when there is no query for finding the active kafka source")
 
-      val sources = {
+      val sources: Seq[BaseStreamingSource] = {
         query.get.logicalPlan.collect {
           case StreamingExecutionRelation(source: KafkaSource, _) => source
-          case StreamingExecutionRelation(source: KafkaMicroBatchReader, _) => source
+          case StreamingExecutionRelation(source: KafkaMicroBatchReadSupport, _) => source
         } ++ (query.get.lastExecution match {
           case null => Seq()
           case e => e.logical.collect {
-            case StreamingDataSourceV2Relation(_, _, _, reader: KafkaContinuousReader) => reader
+            case r: StreamingDataSourceV2Relation
+                if r.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
+              r.readSupport.asInstanceOf[KafkaContinuousReadSupport]
           }
         })
       }.distinct
@@ -649,7 +650,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
       makeSureGetOffsetCalled,
       AssertOnQuery { query =>
         query.logicalPlan.collect {
-          case StreamingExecutionRelation(_: KafkaMicroBatchReader, _) => true
+          case StreamingExecutionRelation(_: KafkaMicroBatchReadSupport, _) => true
         }.nonEmpty
       }
     )
@@ -674,17 +675,16 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           "kafka.bootstrap.servers" -> testUtils.brokerAddress,
           "subscribe" -> topic
         ) ++ Option(minPartitions).map { p => "minPartitions" -> p}
-        val reader = provider.createMicroBatchReader(
-          Optional.empty[StructType], dir.getAbsolutePath, new DataSourceOptions(options.asJava))
-        reader.setOffsetRange(
-          Optional.of[OffsetV2](KafkaSourceOffset(Map(tp -> 0L))),
-          Optional.of[OffsetV2](KafkaSourceOffset(Map(tp -> 100L)))
-        )
-        val factories = reader.planInputPartitions().asScala
+        val readSupport = provider.createMicroBatchReadSupport(
+          dir.getAbsolutePath, new DataSourceOptions(options.asJava))
+        val config = readSupport.newScanConfigBuilder(
+          KafkaSourceOffset(Map(tp -> 0L)),
+          KafkaSourceOffset(Map(tp -> 100L))).build()
+        val inputPartitions = readSupport.planInputPartitions(config)
           .map(_.asInstanceOf[KafkaMicroBatchInputPartition])
-        withClue(s"minPartitions = $minPartitions generated factories $factories\n\t") {
-          assert(factories.size == numPartitionsGenerated)
-          factories.foreach { f => assert(f.reuseKafkaConsumer == reusesConsumers) }
+        withClue(s"minPartitions = $minPartitions generated factories $inputPartitions\n\t") {
+          assert(inputPartitions.size == numPartitionsGenerated)
+          inputPartitions.foreach { f => assert(f.reuseKafkaConsumer == reusesConsumers) }
         }
       }
     }
@@ -699,6 +699,41 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
     intercept[IllegalArgumentException] { test(minPartitions = "1.0", 1, true) }
     intercept[IllegalArgumentException] { test(minPartitions = "0", 1, true) }
     intercept[IllegalArgumentException] { test(minPartitions = "-1", 1, true) }
+  }
+
+  test("custom lag metrics") {
+    import testImplicits._
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 2)
+    testUtils.sendMessages(topic, (1 to 100).map(_.toString).toArray)
+    require(testUtils.getLatestOffsets(Set(topic)).size === 2)
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("subscribe", topic)
+      .option("startingOffsets", s"earliest")
+      .option("maxOffsetsPerTrigger", 10)
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+
+    implicit val formats = DefaultFormats
+
+    val mapped = kafka.map(kv => kv._2.toInt + 1)
+    testStream(mapped)(
+      StartStream(trigger = OneTimeTrigger),
+      AssertOnQuery { query =>
+        query.awaitTermination()
+        val source = query.lastProgress.sources(0)
+        // masOffsetsPerTrigger is 10, and there are two partitions containing 50 events each
+        // so 5 events should be processed from each partition and a lag of 45 events
+        val custom = parse(source.customMetrics)
+          .extract[Map[String, Map[String, Map[String, Long]]]]
+        custom("lag")(topic)("0") == 45 && custom("lag")(topic)("1") == 45
+      }
+    )
   }
 
 }
@@ -935,7 +970,8 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       makeSureGetOffsetCalled,
       Execute { q =>
         // wait to reach the last offset in every partition
-        q.awaitOffset(0, KafkaSourceOffset(partitionOffsets.mapValues(_ => 3L)))
+        q.awaitOffset(
+          0, KafkaSourceOffset(partitionOffsets.mapValues(_ => 3L)), streamingTimeout.toMillis)
       },
       CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22),
       StopStream,
