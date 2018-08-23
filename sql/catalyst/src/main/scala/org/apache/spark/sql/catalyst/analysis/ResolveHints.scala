@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.IdentifierWithDatabase
 import org.apache.spark.sql.catalyst.expressions.IntegerLiteral
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -52,15 +53,25 @@ object ResolveHints {
 
     def resolver: Resolver = conf.resolver
 
-    private def applyBroadcastHint(plan: LogicalPlan, toBroadcast: Set[String]): LogicalPlan = {
+    private def matchedTableIdentifier(
+        nameParts: Seq[String],
+        tableIdent: IdentifierWithDatabase): Boolean = {
+      val identifierList = tableIdent.database.map(_ :: Nil).getOrElse(Nil) :+ tableIdent.identifier
+      nameParts.corresponds(identifierList)(resolver)
+    }
+
+    private def applyBroadcastHint(
+        plan: LogicalPlan,
+        toBroadcast: Set[Seq[String]]): LogicalPlan = {
       // Whether to continue recursing down the tree
       var recurse = true
 
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
-          case u: UnresolvedRelation if toBroadcast.exists(resolver(_, u.tableIdentifier.table)) =>
+          case u: UnresolvedRelation
+              if toBroadcast.exists(matchedTableIdentifier(_, u.tableIdentifier)) =>
             ResolvedHint(plan, HintInfo(broadcast = true))
-          case r: SubqueryAlias if toBroadcast.exists(resolver(_, r.alias)) =>
+          case r: SubqueryAlias if toBroadcast.exists(matchedTableIdentifier(_, r.name)) =>
             ResolvedHint(plan, HintInfo(broadcast = true))
 
           case _: ResolvedHint | _: View | _: With | _: SubqueryAlias =>
@@ -94,8 +105,8 @@ object ResolveHints {
         } else {
           // Otherwise, find within the subtree query plans that should be broadcasted.
           applyBroadcastHint(h.child, h.parameters.map {
-            case tableName: String => tableName
-            case tableId: UnresolvedAttribute => tableId.name
+            case tableName: String => UnresolvedAttribute.parseAttributeName(tableName)
+            case tableId: UnresolvedAttribute => tableId.nameParts
             case unsupported => throw new AnalysisException("Broadcast hint parameter should be " +
               s"an identifier or string but was $unsupported (${unsupported.getClass}")
           }.toSet)

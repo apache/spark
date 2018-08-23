@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.Join
+import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -189,6 +193,39 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
         .join(spark.range(10e10.toLong).hint("broadcast"), "id")
         .queryExecution.executedPlan
     assert(plan2.collect { case p: BroadcastHashJoinExec => p }.size == 1)
+  }
+
+  test("SPARK-25121 Supports multi-part names for broadcast hint resolution") {
+    val tableName = "t"
+    withTempDatabase { dbName =>
+      withTable(tableName) {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+          spark.range(100).write.saveAsTable(s"$dbName.$tableName")
+          // First, makes sure a join is not broadcastable
+          val plan1 = spark.range(3)
+            .join(spark.table(s"$dbName.$tableName"), "id")
+            .queryExecution.executedPlan
+          assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size == 0)
+
+          // Uses multi-part table names for broadcast hints
+          val plan2 = spark.range(3)
+            .join(spark.table(s"$dbName.$tableName"), "id")
+            .hint("broadcast", s"$dbName.$tableName")
+            .queryExecution.executedPlan
+          val broadcastHashJoin = plan2.collect { case p: BroadcastHashJoinExec => p }
+          assert(broadcastHashJoin.size == 1)
+          val broadcastExchange = broadcastHashJoin.head.collect {
+            case p: BroadcastExchangeExec => p
+          }
+          assert(broadcastExchange.size == 1)
+          val table = broadcastExchange.head.collect {
+            case FileSourceScanExec(_, _, _, _, _, _, Some(tableIdent)) => tableIdent
+          }
+          assert(table.size == 1)
+          assert(table.head === TableIdentifier(tableName, Some(dbName)))
+        }
+      }
+    }
   }
 
   test("join - outer join conversion") {
