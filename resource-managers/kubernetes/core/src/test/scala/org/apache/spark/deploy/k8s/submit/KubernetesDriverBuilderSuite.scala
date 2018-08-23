@@ -76,7 +76,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     MOUNT_VOLUMES_STEP_TYPE, classOf[MountVolumesFeatureStep])
 
   private val templateVolumeStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    TEMPLATE_VOLUME_STEP_TYPE, classOf[TemplateVolumeStep]
+    TEMPLATE_VOLUME_STEP_TYPE, classOf[PodTemplateConfigMapStep]
   )
 
   private val builderUnderTest: KubernetesDriverBuilder =
@@ -322,7 +322,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     assert(spec.pod.container.getName === Constants.DRIVER_CONTAINER_NAME)
   }
 
-  test("Starts with empty pod if bad template") {
+  test("Throws on misconfigured pod template") {
     val exception = intercept[SparkException] {
       getSpecWithPodTemplate(
         new PodBuilder()

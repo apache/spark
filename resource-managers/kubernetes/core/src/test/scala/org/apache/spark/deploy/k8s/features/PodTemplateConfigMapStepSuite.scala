@@ -25,7 +25,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 
-class TemplateVolumeStepSuite extends SparkFunSuite with BeforeAndAfter {
+class PodTemplateConfigMapStepSuite extends SparkFunSuite with BeforeAndAfter {
   private var sparkConf: SparkConf = _
   private var kubernetesConf : KubernetesConf[_ <: KubernetesRoleSpecificConf] = _
 
@@ -58,7 +58,7 @@ class TemplateVolumeStepSuite extends SparkFunSuite with BeforeAndAfter {
     Mockito.doReturn(Option(podTemplateLocalFile)).when(sparkConf)
       .get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
 
-    val step = new TemplateVolumeStep(kubernetesConf)
+    val step = new PodTemplateConfigMapStep(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())
 
     assert(configuredPod.pod.getSpec.getVolumes.size() === 1)

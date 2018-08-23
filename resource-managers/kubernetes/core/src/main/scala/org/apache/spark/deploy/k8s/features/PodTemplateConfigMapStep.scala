@@ -24,7 +24,7 @@ import io.fabric8.kubernetes.api.model.{Config => _, _}
 
 import org.apache.spark.deploy.k8s._
 
-private[spark] class TemplateVolumeStep(
+private[spark] class PodTemplateConfigMapStep(
    conf: KubernetesConf[_ <: KubernetesRoleSpecificConf])
   extends KubernetesFeatureConfigStep {
   def configurePod(pod: SparkPod): SparkPod = {

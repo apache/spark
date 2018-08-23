@@ -22,11 +22,11 @@ import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.{Config, Constants, KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, KubernetesUtils}
-import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, LocalDirsFeatureStep, MountSecretsFeatureStep, MountVolumesFeatureStep, TemplateVolumeStep}
+import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, LocalDirsFeatureStep, MountSecretsFeatureStep, MountVolumesFeatureStep, PodTemplateConfigMapStep, TemplateVolumeStep}
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
 import org.apache.spark.internal.Logging
 
-private[spark] class KubernetesDriverBuilder (
+private[spark] class KubernetesDriverBuilder(
     provideBasicStep: (KubernetesConf[KubernetesDriverSpecificConf]) => BasicDriverFeatureStep =
       new BasicDriverFeatureStep(_),
     provideCredentialsStep: (KubernetesConf[KubernetesDriverSpecificConf])
@@ -58,9 +58,9 @@ private[spark] class KubernetesDriverBuilder (
       KubernetesConf[KubernetesDriverSpecificConf]
         => JavaDriverFeatureStep) =
     new JavaDriverFeatureStep(_),
-    provideTemplateVolumeStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
-      => TemplateVolumeStep) =
-    new TemplateVolumeStep(_),
+    podTemplateConfigMapStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+      => PodTemplateConfigMapStep) =
+    new PodTemplateConfigMapStep()(_),
     provideInitialSpec: KubernetesConf[KubernetesDriverSpecificConf]
       => KubernetesDriverSpec =
       KubernetesDriverSpec.initialSpec) {
@@ -84,7 +84,7 @@ private[spark] class KubernetesDriverBuilder (
     } else Nil
     val templateVolumeFeature = if (
       kubernetesConf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined) {
-      Seq(provideTemplateVolumeStep(kubernetesConf))
+      Seq(podTemplateConfigMapStep(kubernetesConf))
     } else Nil
 
     val bindingsStep = kubernetesConf.roleSpecificConf.mainAppResource.map {
