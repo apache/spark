@@ -76,7 +76,7 @@ private[spark] object KubernetesExecutorBuilder {
         KubernetesUtils.loadPodFromTemplate(
           kubernetesClient,
           file,
-          Constants.EXECUTOR_CONTAINER_NAME)
+          conf.get(Config.KUBERNETES_EXECUTOR_CONTAINER_NAME))
       }))
       .getOrElse(new KubernetesExecutorBuilder())
   }

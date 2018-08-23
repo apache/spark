@@ -123,7 +123,7 @@ private[spark] object KubernetesDriverBuilder extends Logging {
           KubernetesUtils.loadPodFromTemplate(
             kubernetesClient,
             file,
-            Constants.DRIVER_CONTAINER_NAME)
+            conf.get(Config.KUBERNETES_DRIVER_CONTAINER_NAME))
         } catch {
           case e: Exception =>
             logError(

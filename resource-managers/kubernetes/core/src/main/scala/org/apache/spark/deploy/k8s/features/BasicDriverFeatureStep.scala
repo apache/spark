@@ -80,7 +80,7 @@ private[spark] class BasicDriverFeatureStep(
     )
     val driverUIPort = SparkUI.getUIPort(conf.sparkConf)
     val driverContainer = new ContainerBuilder(pod.container)
-      .withName(DRIVER_CONTAINER_NAME)
+      .withName(conf.get(KUBERNETES_DRIVER_CONTAINER_NAME))
       .withImage(driverContainerImage)
       .withImagePullPolicy(conf.imagePullPolicy())
       .addNewPort()

@@ -312,14 +312,15 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
         .endMetadata()
         .withNewSpec()
         .addNewContainer()
-        .withName(Constants.DRIVER_CONTAINER_NAME)
+        .withName(Config.KUBERNETES_DRIVER_CONTAINER_NAME.defaultValueString)
         .endContainer()
         .endSpec()
         .build())
 
     assert(spec.pod.pod.getMetadata.getLabels.containsKey("test-label-key"))
     assert(spec.pod.pod.getMetadata.getLabels.get("test-label-key") === "test-label-value")
-    assert(spec.pod.container.getName === Constants.DRIVER_CONTAINER_NAME)
+    assert(spec.pod.container.getName ===
+      Config.KUBERNETES_DRIVER_CONTAINER_NAME.defaultValueString)
   }
 
   test("Throws on misconfigured pod template") {

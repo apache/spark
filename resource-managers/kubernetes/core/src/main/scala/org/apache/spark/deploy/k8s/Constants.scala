@@ -83,7 +83,5 @@ private[spark] object Constants {
 
   // Miscellaneous
   val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
-  val DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
-  val EXECUTOR_CONTAINER_NAME = "executor"
   val MEMORY_OVERHEAD_MIN_MIB = 384L
 }
