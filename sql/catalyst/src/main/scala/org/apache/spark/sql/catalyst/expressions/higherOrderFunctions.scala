@@ -789,7 +789,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array('a', 'b', 'c'), (x, y) -> (y, x));
-       array(('a', 1), ('b', 3), ('c', 5))
+       array(('a', 1), ('b', 2), ('c', 3))
       > SELECT _FUNC_(array(1, 2), array(3, 4), (x, y) -> x + y));
        array(4, 6)
       > SELECT _FUNC_(array('a', 'b', 'c'), array('d', 'e', 'f'), (x, y) -> concat(x, y));
