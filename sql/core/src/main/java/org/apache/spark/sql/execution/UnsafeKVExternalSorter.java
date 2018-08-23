@@ -252,8 +252,14 @@ public final class UnsafeKVExternalSorter {
     }
 
     @Override
-    public int compare(Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
-      // Note that since ordering doesn't need the total length of the record, we just pass -1
+    public int compare(
+        Object baseObj1,
+        long baseOff1,
+        int baseLen1,
+        Object baseObj2,
+        long baseOff2,
+        int baseLen2) {
+      // Note that since ordering doesn't need the total length of the record, we just pass -1	
       // into the row.
       row1.pointTo(baseObj1, baseOff1 + 4, -1);
       row2.pointTo(baseObj2, baseOff2 + 4, -1);

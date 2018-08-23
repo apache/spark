@@ -222,7 +222,8 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val oldModel = new OldWord2VecModel(word2VecMap)
     val instance = new Word2VecModel("myWord2VecModel", oldModel)
     val newInstance = testDefaultReadWrite(instance)
-    assert(newInstance.getVectors.collect() === instance.getVectors.collect())
+    assert(newInstance.getVectors.collect().sortBy(_.getString(0)) ===
+      instance.getVectors.collect().sortBy(_.getString(0)))
   }
 
   test("Word2Vec works with input that is non-nullable (NGram)") {

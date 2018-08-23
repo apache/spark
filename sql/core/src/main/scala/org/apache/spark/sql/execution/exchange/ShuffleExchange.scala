@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.exchange
 
 import java.util.Random
+import java.util.function.Supplier
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
@@ -30,7 +31,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.MutablePair
+import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordComparator}
 
 /**
  * Performs a shuffle that will result in the desired `newPartitioning`.
@@ -242,14 +246,61 @@ object ShuffleExchange {
       case RangePartitioning(_, _) | SinglePartition => identity
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
     }
+
     val rddWithPartitionIds: RDD[Product2[Int, InternalRow]] = {
-      if (needToCopyObjectsBeforeShuffle(part, serializer)) {
+      // [SPARK-23207] Have to make sure the generated RoundRobinPartitioning is deterministic,
+      // otherwise a retry task may output different rows and thus lead to data loss.
+      //
+      // Currently we following the most straight-forward way that perform a local sort before
+      // partitioning.
+      //
+      // Note that we don't perform local sort if the new partitioning has only 1 partition, under
+      // that case all output rows go to the same partition.
+      val newRdd = if (SparkEnv.get.conf.get(SQLConf.SORT_BEFORE_REPARTITION) &&
+          newPartitioning.numPartitions > 1 &&
+          newPartitioning.isInstanceOf[RoundRobinPartitioning]) {
         rdd.mapPartitionsInternal { iter =>
+          val recordComparatorSupplier = new Supplier[RecordComparator] {
+            override def get: RecordComparator = new RecordBinaryComparator()
+          }
+          // The comparator for comparing row hashcode, which should always be Integer.
+          val prefixComparator = PrefixComparators.LONG
+          val canUseRadixSort = SparkEnv.get.conf.get(SQLConf.RADIX_SORT_ENABLED)
+          // The prefix computer generates row hashcode as the prefix, so we may decrease the
+          // probability that the prefixes are equal when input rows choose column values from a
+          // limited range.
+          val prefixComputer = new UnsafeExternalRowSorter.PrefixComputer {
+            private val result = new UnsafeExternalRowSorter.PrefixComputer.Prefix
+            override def computePrefix(row: InternalRow):
+            UnsafeExternalRowSorter.PrefixComputer.Prefix = {
+              // The hashcode generated from the binary form of a [[UnsafeRow]] should not be null.
+              result.isNull = false
+              result.value = row.hashCode()
+              result
+            }
+          }
+          val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
+
+          val sorter = UnsafeExternalRowSorter.createWithRecordComparator(
+            StructType.fromAttributes(outputAttributes),
+            recordComparatorSupplier,
+            prefixComparator,
+            prefixComputer,
+            pageSize,
+            canUseRadixSort)
+          sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
+        }
+      } else {
+        rdd
+      }
+
+      if (needToCopyObjectsBeforeShuffle(part, serializer)) {
+        newRdd.mapPartitionsInternal { iter =>
           val getPartitionKey = getPartitionKeyExtractor()
           iter.map { row => (part.getPartition(getPartitionKey(row)), row.copy()) }
         }
       } else {
-        rdd.mapPartitionsInternal { iter =>
+        newRdd.mapPartitionsInternal { iter =>
           val getPartitionKey = getPartitionKeyExtractor()
           val mutablePair = new MutablePair[Int, InternalRow]()
           iter.map { row => mutablePair.update(part.getPartition(getPartitionKey(row)), row) }
