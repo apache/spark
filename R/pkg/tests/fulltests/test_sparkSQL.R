@@ -734,8 +734,8 @@ test_that("test cache, uncache and clearCache", {
   clearCache()
   expect_true(dropTempView("table1"))
 
-  expect_error(uncacheTable("foo"),
-      "Error in uncacheTable : analysis error - Table or view not found: foo")
+  expect_error(uncacheTable("zxwtyswklpf"),
+      "Error in uncacheTable : analysis error - Table or view not found: zxwtyswklpf")
 })
 
 test_that("insertInto() on a registered table", {
@@ -3632,11 +3632,11 @@ test_that("Collect on DataFrame when NAs exists at the top of a timestamp column
 test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
   expect_equal(currentDatabase(), "default")
   expect_error(setCurrentDatabase("default"), NA)
-  expect_error(setCurrentDatabase("foo"),
-               "Error in setCurrentDatabase : analysis error - Database 'foo' does not exist")
+  expect_error(setCurrentDatabase("zxwtyswklpf"),
+        "Error in setCurrentDatabase : analysis error - Database 'zxwtyswklpf' does not exist")
   dbs <- collect(listDatabases())
   expect_equal(names(dbs), c("name", "description", "locationUri"))
-  expect_equal(dbs[[1]], "default")
+  expect_equal(which(dbs[, 1] == "default"), 1)
 })
 
 test_that("catalog APIs, listTables, listColumns, listFunctions", {
@@ -3659,8 +3659,9 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   expect_equal(colnames(c),
                c("name", "description", "dataType", "nullable", "isPartition", "isBucket"))
   expect_equal(collect(c)[[1]][[1]], "speed")
-  expect_error(listColumns("foo", "default"),
-       "Error in listColumns : analysis error - Table 'foo' does not exist in database 'default'")
+  expect_error(listColumns("zxwtyswklpf", "default"),
+               paste("Error in listColumns : analysis error - Table",
+                     "'zxwtyswklpf' does not exist in database 'default'"))
 
   f <- listFunctions()
   expect_true(nrow(f) >= 200) # 250
@@ -3668,8 +3669,9 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
                c("name", "database", "description", "className", "isTemporary"))
   expect_equal(take(orderBy(f, "className"), 1)$className,
                "org.apache.spark.sql.catalyst.expressions.Abs")
-  expect_error(listFunctions("foo_db"),
-               "Error in listFunctions : analysis error - Database 'foo_db' does not exist")
+  expect_error(listFunctions("zxwtyswklpf_db"),
+               paste("Error in listFunctions : analysis error - Database",
+                     "'zxwtyswklpf_db' does not exist"))
 
   # recoverPartitions does not work with tempory view
   expect_error(recoverPartitions("cars"),
