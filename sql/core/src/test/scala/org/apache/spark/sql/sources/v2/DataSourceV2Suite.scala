@@ -55,6 +55,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     Seq(classOf[SimpleDataSourceV2], classOf[JavaSimpleDataSourceV2]).foreach { cls =>
       withClue(cls.getName) {
         val df = spark.read.format(cls.getName).load()
+        df.explain()
         checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
         checkAnswer(df.select('j), (0 until 10).map(i => Row(-i)))
         checkAnswer(df.filter('i > 5), (6 until 10).map(i => Row(i, -i)))

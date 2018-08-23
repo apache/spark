@@ -3383,6 +3383,10 @@ class SQLTests(ReusedSQLTestCase):
                 .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
                 .load()
 
+            datasource_df.show()
+            datasource_v2_df.show()
+
+
             filter1 = udf(lambda: False, 'boolean')()
             filter2 = udf(lambda x: False, 'boolean')(lit(1))
 
