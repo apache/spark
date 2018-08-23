@@ -6394,6 +6394,17 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
                 df.withColumn('mean_v', mean_udf(df['v']).over(ow))
 
 
+class DataSourceV2Tests(ReusedSQLTestCase):
+    def test_pyspark_udf_SPARK_25213(self):
+        from pyspark.sql.functions import udf
+
+        df = self.spark.read.format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2").load()
+        result = datasource_v2_df.withColumn('x', udf(lambda x: x, 'int')(datasource_v2_df['i']))
+        rows = list(map(lambda r: r.asDict(), result.collect()))
+        expected = [ {'i': i, 'j': -i, 'x': i} for i in range(10) ]
+        self.assertEqual(rows, expected)
+
+
 if __name__ == "__main__":
     from pyspark.sql.tests import *
     if xmlrunner:
