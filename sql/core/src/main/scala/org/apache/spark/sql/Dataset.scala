@@ -3163,6 +3163,20 @@ class Dataset[T] private[sql](
     files.toSet.toArray
   }
 
+  def collectCountAndIterator(): (Long, Iterator[T]) =
+    withAction("collectCountAndIterator", queryExecution) { plan =>
+      // This projection writes output to a `InternalRow`, which means applying this projection is
+      // not thread-safe. Here we create the projection inside this method to make `Dataset`
+      // thread-safe.
+    val objProj = GenerateSafeProjection.generate(deserializer :: Nil)
+      val (totalRowCount, iterInternalRows) = plan.executeCollectIterator()
+      (totalRowCount, iterInternalRows.map { row =>
+        // The row returned by SafeProjection is `SpecificInternalRow`, which ignore the data type
+        // parameter of its `get` method, so it's safe to use null here.
+      objProj(row).get(0, null).asInstanceOf[T]
+      })
+    }
+
   ////////////////////////////////////////////////////////////////////////////
   // For Python API
   ////////////////////////////////////////////////////////////////////////////
