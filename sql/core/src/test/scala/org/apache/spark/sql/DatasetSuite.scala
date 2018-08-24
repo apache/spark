@@ -1580,6 +1580,24 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(ds1.select("_2._2"), ds2.select("_2._2").collect(): _*)
   }
 
+  test("SPARK-25224: collectCountAndSeqView does not deserialize result in it") {
+    implicit val nonDeserializableEncoder = Encoders.javaSerialization[NonDeserializableJavaData]
+    val dsWithDeserializeError = spark.createDataset(Seq(new NonDeserializableJavaData(1),
+      new NonDeserializableJavaData(2), new NonDeserializableJavaData(3)))
+    val (rowCount1, resultView) = dsWithDeserializeError.collectCountAndSeqView()
+    assert(rowCount1 == 3)
+    intercept[UnsupportedOperationException] {
+      resultView.force
+    }
+
+    implicit val deserializableEncoder = Encoders.javaSerialization[JavaData]
+    val normalDS = spark.createDataset(Seq(JavaData(1), JavaData(2), JavaData(3)))
+    val (rowCount2, resultView2) = normalDS.collectCountAndSeqView()
+    val collected = resultView2.force
+    assert(rowCount2 == collected.length)
+    assert(normalDS.collect() sameElements collected)
+  }
+
   test("SPARK-24571: filtering of string values by char literal") {
     val df = Seq("Amsterdam", "San Francisco", "X").toDF("city")
     checkAnswer(df.where('city === 'X'), Seq(Row("X")))
@@ -1830,3 +1848,9 @@ case class CircularReferenceClassD(map: Map[String, CircularReferenceClassE])
 case class CircularReferenceClassE(id: String, list: List[CircularReferenceClassD])
 
 case class SpecialCharClass(`field.1`: String, `field 2`: String)
+
+class NonDeserializableJavaData(a: Int) extends JavaData(a) {
+  private def readObject(in: java.io.ObjectInputStream): Unit = {
+    throw new UnsupportedOperationException
+  }
+}

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import scala.collection.SeqView
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.catalyst.InternalRow
@@ -37,6 +39,8 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode 
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
+  override private[spark] def executeCollectSeqView(): (Long,
+    SeqView[InternalRow, Array[InternalRow]]) = child.executeTakeSeqView(limit)
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
   private lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)

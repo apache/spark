@@ -55,7 +55,7 @@ private[hive] class SparkExecuteStatementOperation(
   // We cache the returned rows to get iterators again in case the user wants to use FETCH_FIRST.
   // This is only used when `spark.sql.thriftServer.incrementalCollect` is set to `false`.
   // In case of `true`, this will be `None` and FETCH_FIRST will trigger re-execution.
-  private var resultList: Option[Array[SparkRow]] = _
+  private var resultList: Option[Seq[SparkRow]] = _
 
   private var iter: Iterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
@@ -121,10 +121,11 @@ private[hive] class SparkExecuteStatementOperation(
         resultList = None
         result.toLocalIterator.asScala
       } else {
-        if (resultList.isEmpty) {
-          resultList = Some(result.collect())
+        if (resultList.isDefined) {
+          resultList.get.iterator
+        } else {
+          getResultIterator()
         }
-        resultList.get.iterator
       }
     }
 
@@ -245,8 +246,7 @@ private[hive] class SparkExecuteStatementOperation(
           resultList = None
           result.toLocalIterator.asScala
         } else {
-          resultList = Some(result.collect())
-          resultList.get.iterator
+          getResultIterator()
         }
       }
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
@@ -290,6 +290,14 @@ private[hive] class SparkExecuteStatementOperation(
     if (statementId != null) {
       sqlContext.sparkContext.cancelJobGroup(statementId)
     }
+  }
+
+  private def getResultIterator(): Iterator[SparkRow] = {
+    val (totalRowCount, resultView) = result.collectCountAndSeqView()
+    val batchCollectLimit =
+      sqlContext.getConf(SQLConf.THRIFTSERVER_BATCH_DESERIALIZE_LIMIT.key).toLong
+    resultList = Some(if (totalRowCount < batchCollectLimit) resultView.force else resultView)
+    resultList.get.iterator
   }
 }
 

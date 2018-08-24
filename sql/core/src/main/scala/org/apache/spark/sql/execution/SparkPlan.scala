@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
+import scala.collection.SeqView
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext
 
@@ -309,6 +310,13 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     (total, rows)
   }
 
+  private[spark] def executeCollectSeqView(): (Long, SeqView[InternalRow, Array[InternalRow]]) = {
+    val countsAndBytes = getByteArrayRdd().collect()
+    val total = countsAndBytes.map(_._1).sum
+    val rows = countsAndBytes.view.flatMap(countAndBytes => decodeUnsafeRows(countAndBytes._2))
+    (total, rows)
+  }
+
   /**
    * Runs this query returning the result as an iterator of InternalRow.
    *
@@ -331,11 +339,18 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    *
    * This is modeled after `RDD.take` but never runs any job locally on the driver.
    */
-  def executeTake(n: Int): Array[InternalRow] = executeTakeIterator(n)._2.toArray
+  def executeTake(n: Int): Array[InternalRow] = executeTakeSeqView(n)._2.force
 
-  private[spark] def executeTakeIterator(n: Int): (Long, Iterator[InternalRow]) = {
+  /**
+   * Runs this query returning the tuple of the row count and the SeqView of first `n` rows.
+   *
+   * This is modeled to execute decodeUnsafeRows lazily to reduce peak memory usage of
+   * decoding rows. Only compressed byte arrays consume memory after return.
+   */
+  private[spark] def executeTakeSeqView(
+    n: Int): (Long, SeqView[InternalRow, Array[InternalRow]]) = {
     if (n == 0) {
-      return (0, Iterator.empty)
+      return (0, Array.empty[InternalRow].view)
     }
 
     val childRDD = getByteArrayRdd(n)
@@ -373,9 +388,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
 
     if (scannedRowCount > n) {
-      (n, encodedBuf.toIterator.flatMap(decodeUnsafeRows).take(n))
+      (n, encodedBuf.toArray.view.flatMap(decodeUnsafeRows).take(n))
     } else {
-      (scannedRowCount, encodedBuf.toIterator.flatMap(decodeUnsafeRows))
+      (scannedRowCount, encodedBuf.toArray.view.flatMap(decodeUnsafeRows))
     }
   }
 

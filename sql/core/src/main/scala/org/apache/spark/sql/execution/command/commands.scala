@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.command
 
 import java.util.UUID
 
+import scala.collection.SeqView
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -78,6 +80,12 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
 
   override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 
+  override private[spark] def executeCollectSeqView(): (Long,
+    SeqView[InternalRow, Array[InternalRow]]) = {
+    val result = executeCollect()
+    (result.length, result.view)
+  }
+
   override def executeToIterator: Iterator[InternalRow] = sideEffectResult.toIterator
 
   override def executeTake(limit: Int): Array[InternalRow] = sideEffectResult.take(limit).toArray
@@ -114,6 +122,12 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
   override def argString(maxFields: Int): String = cmd.argString(maxFields)
 
   override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
+
+  override private[spark] def executeCollectSeqView(): (Long,
+    SeqView[InternalRow, Array[InternalRow]]) = {
+    val result = executeCollect()
+    (result.length, result.view)
+  }
 
   override def executeToIterator: Iterator[InternalRow] = sideEffectResult.toIterator
 

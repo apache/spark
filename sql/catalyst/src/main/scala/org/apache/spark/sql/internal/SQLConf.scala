@@ -640,6 +640,16 @@ object SQLConf {
     .intConf
     .createWithDefault(200)
 
+  val THRIFTSERVER_BATCH_DESERIALIZE_LIMIT =
+    buildConf("spark.sql.thriftServer.batchDeserializeLimit")
+      .doc("The maximum number of result rows that can be deserialized at one time. " +
+        "If the number of result rows exceeds this value, the Thrift Server will only use " +
+        "'memory of serialized rows' + 'memory of the deserialized rows being fetched to the " +
+        "client'. Only valid if spark.sql.thriftServer.incrementalCollect is false. " +
+        "Default is no limit.")
+      .longConf
+      .createWithDefault(Long.MaxValue)
+
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
     .doc("The default data source to use in input/output.")
