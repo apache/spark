@@ -43,7 +43,7 @@ object TypedAggregateExpression {
    * Flattens serializers and deserializer of given encoder. We only flatten encoder
    * of `Option[Product]` class.
    */
-  def flattenOptProductEncoder(encoder: ExpressionEncoder[_]): ExpressionEncoder[_] = {
+  def flattenOptProductEncoder[T](encoder: ExpressionEncoder[T]): ExpressionEncoder[T] = {
     val serializer = encoder.serializer
     val deserializer = encoder.deserializer
 
