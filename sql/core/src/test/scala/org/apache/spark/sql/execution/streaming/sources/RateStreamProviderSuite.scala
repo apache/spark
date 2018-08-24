@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
@@ -81,12 +82,43 @@ class RateSourceSuite extends StreamTest {
       .load()
     testStream(input)(
       AdvanceRateManualClock(seconds = 1),
-      CheckLastBatch((0 until 10).map(v => new java.sql.Timestamp(v * 100L) -> v): _*),
-      StopStream,
+      CheckLastBatch((0 until 10).map(v => new java.sql.Timestamp(v * 100L) -> v): _*)
+    )
+  }
+
+  test("microbatch - restart") {
+    val input = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", "10")
+      .load()
+      .select('value)
+
+    var streamDuration = 0
+
+    // Microbatch rate stream offsets contain the number of seconds since the beginning of
+    // the stream.
+    def updateStreamDurationFromOffset(s: StreamExecution, expectedMin: Int): Unit = {
+      streamDuration = s.lastProgress.sources(0).endOffset.toInt
+      assert(streamDuration >= expectedMin)
+    }
+
+    // We have to use the lambda version of CheckAnswer because we don't know the right range
+    // until we see the last offset.
+    def expectedResultsFromDuration(rows: Seq[Row]): Unit = {
+      assert(rows.map(_.getLong(0)).sorted == (0 until (streamDuration * 10)))
+    }
+
+    testStream(input)(
       StartStream(),
-      // Advance 2 seconds because creating a new RateSource will also create a new ManualClock
-      AdvanceRateManualClock(seconds = 2),
-      CheckLastBatch((10 until 20).map(v => new java.sql.Timestamp(v * 100L) -> v): _*)
+      Execute(_.awaitOffset(0, LongOffset(2), streamingTimeout.toMillis)),
+      StopStream,
+      Execute(updateStreamDurationFromOffset(_, 2)),
+      CheckAnswer(expectedResultsFromDuration _),
+      StartStream(),
+      Execute(_.awaitOffset(0, LongOffset(4), streamingTimeout.toMillis)),
+      StopStream,
+      Execute(updateStreamDurationFromOffset(_, 4)),
+      CheckAnswer(expectedResultsFromDuration _)
     )
   }
 

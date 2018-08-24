@@ -154,6 +154,15 @@ object Cast {
     fromPrecedence >= 0 && fromPrecedence < toPrecedence
   }
 
+  def canNullSafeCastToDecimal(from: DataType, to: DecimalType): Boolean = from match {
+    case from: BooleanType if to.isWiderThan(DecimalType.BooleanDecimal) => true
+    case from: NumericType if to.isWiderThan(from) => true
+    case from: DecimalType =>
+      // truncating or precision lose
+      (to.precision - to.scale) > (from.precision - from.scale)
+    case _ => false  // overflow
+  }
+
   def forceNullable(from: DataType, to: DataType): Boolean = (from, to) match {
     case (NullType, _) => true
     case (_, _) if from == to => false
@@ -169,7 +178,7 @@ object Cast {
     case (DateType, _) => true
     case (_, CalendarIntervalType) => true
 
-    case (_, _: DecimalType) => true  // overflow
+    case (_, to: DecimalType) if !canNullSafeCastToDecimal(from, to) => true
     case (_: FractionalType, _: IntegralType) => true  // NaN, infinity
     case _ => false
   }
