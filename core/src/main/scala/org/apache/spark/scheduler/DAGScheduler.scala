@@ -1520,18 +1520,19 @@ private[spark] class DAGScheduler(
                     }
                 }
 
+                // Rollback stages who is a descendant of the `failedStage`.
                 def rollbackSucceedingStages(stageChain: List[Stage]): Unit = {
                   if (stageChain.head.id == failedStage.id) {
                     stageChain.foreach { stage =>
+                      // This stage may already be rollbacked with another stage chain, skip it if
+                      // it's in `failedStages`.
                       if (!failedStages.contains(stage)) rollBackStage(stage)
                     }
                   } else {
                     stageChain.head.parents.foreach { s =>
-                      // The stage may already be processed in another DAG, skip it if it's in
-                      // `failedStages`.
-                      if (!failedStages.contains(s)) {
-                        rollbackSucceedingStages(s :: stageChain)
-                      }
+                      // This stage may already be rollbacked with another stage chain, skip it if
+                      // it's in `failedStages`.
+                      if (!failedStages.contains(s)) rollbackSucceedingStages(s :: stageChain)
                     }
                   }
                 }
