@@ -613,8 +613,7 @@ case class JsonToStructs(
 }
 
 /**
- * Converts a [[StructType]], [[ArrayType]] of [[StructType]]s, [[MapType]]
- * or [[ArrayType]] of [[MapType]]s to a json output string.
+ * Converts a [[StructType]], [[ArrayType]] or [[MapType]] to a json output string.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -663,12 +662,7 @@ case class StructsToJson(
     rowSchema, writer, new JSONOptions(options, timeZoneId.get))
 
   @transient
-  lazy val rowSchema = child.dataType match {
-    case st: StructType => st
-    case ArrayType(st: StructType, _) => st
-    case mt: MapType => mt
-    case ArrayType(mt: MapType, _) => mt
-  }
+  lazy val rowSchema = child.dataType
 
   // This converts rows to the JSON output according to the given schema.
   @transient
@@ -685,7 +679,7 @@ case class StructsToJson(
         (row: Any) =>
           gen.write(row.asInstanceOf[InternalRow])
           getAndReset()
-      case ArrayType(_: StructType, _) =>
+      case _: ArrayType =>
         (arr: Any) =>
           gen.write(arr.asInstanceOf[ArrayData])
           getAndReset()
@@ -693,17 +687,13 @@ case class StructsToJson(
         (map: Any) =>
           gen.write(map.asInstanceOf[MapData])
           getAndReset()
-      case ArrayType(_: MapType, _) =>
-        (arr: Any) =>
-          gen.write(arr.asInstanceOf[ArrayData])
-          getAndReset()
     }
   }
 
   override def dataType: DataType = StringType
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case _: StructType | ArrayType(_: StructType, _) =>
+    case _: StructType =>
       try {
         JacksonUtils.verifySchema(rowSchema.asInstanceOf[StructType])
         TypeCheckResult.TypeCheckSuccess
@@ -711,11 +701,19 @@ case class StructsToJson(
         case e: UnsupportedOperationException =>
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
-    case _: MapType | ArrayType(_: MapType, _) =>
+    case _: MapType =>
       // TODO: let `JacksonUtils.verifySchema` verify a `MapType`
       try {
         val st = StructType(StructField("a", rowSchema.asInstanceOf[MapType]) :: Nil)
         JacksonUtils.verifySchema(st)
+        TypeCheckResult.TypeCheckSuccess
+      } catch {
+        case e: UnsupportedOperationException =>
+          TypeCheckResult.TypeCheckFailure(e.getMessage)
+      }
+    case _: ArrayType =>
+      try {
+        JacksonUtils.verifyType(prettyName, rowSchema)
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: UnsupportedOperationException =>
