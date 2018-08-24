@@ -1876,20 +1876,26 @@ abstract class RDD[T: ClassTag](
    * Returns the random level of this RDD's output. Please refer to [[RandomLevel]] for the
    * definition.
    *
-   * By default, an RDD without parents(root RDD) is IDEMPOTENT. For RDDs with parents, we will
-   * generate a random level candidate per parent according to the dependency. The random level
-   * of the current RDD is the random level candidate that is random most.
+   * By default, an reliably checkpointed RDD, or RDD without parents(root RDD) is IDEMPOTENT. For
+   * RDDs with parents, we will generate a random level candidate per parent according to the
+   * dependency. The random level of the current RDD is the random level candidate that is random
+   * most. Please override [[getOutputRandomLevel]] to provide custom logic of calculating output
+   * random level.
    */
   // TODO: make it public so users can set random level to their custom RDDs.
   // TODO: this can be per-partition. e.g. UnionRDD can have different random level for different
   // partitions.
-  private[spark] def outputRandomLevel: RandomLevel.Value = {
-    val randomLevelCandidates = dependencies.map {
-      // If checkpointed to reliable store, then it's idempotent, as `ReliableCheckpointRDD` has
-      // same output (including data order) when rerun.
-      case dep: Dependency[_] if dep.rdd.getCheckpointFile.isDefined =>
-        RandomLevel.IDEMPOTENT
+  private[spark] final lazy val outputRandomLevel: RandomLevel.Value = {
+    if (checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[_]])) {
+      RandomLevel.IDEMPOTENT
+    } else {
+      getOutputRandomLevel
+    }
+  }
 
+  @DeveloperApi
+  protected def getOutputRandomLevel: RandomLevel.Value = {
+    val randomLevelCandidates = dependencies.map {
       case dep: ShuffleDependency[_, _, _] =>
         if (dep.rdd.outputRandomLevel == RandomLevel.INDETERMINATE) {
           // If map output was indeterminate, shuffle output will be indeterminate as well

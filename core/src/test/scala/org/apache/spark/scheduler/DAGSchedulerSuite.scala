@@ -81,8 +81,8 @@ class MyRDD(
     override def index: Int = i
   }).toArray
 
-  override private[spark] def outputRandomLevel = {
-    if (indeterminate) RandomLevel.INDETERMINATE else super.outputRandomLevel
+  override protected def getOutputRandomLevel = {
+    if (indeterminate) RandomLevel.INDETERMINATE else super.getOutputRandomLevel
   }
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {
@@ -2640,14 +2640,15 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
   test("SPARK-23207: retry all the succeeding stages when the map stage is random") {
     val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, indeterminate = true)
+
     val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
     val shuffleId1 = shuffleDep1.shuffleId
-
     val shuffleMapRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+
     val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(2))
     val shuffleId2 = shuffleDep2.shuffleId
-
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
+
     submit(finalRdd, Array(0, 1))
 
     // Finish the first shuffle map stage.
@@ -2675,10 +2676,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
     }.head.findMissingPartitions() == Seq(0))
     // The result stage is still waiting for its 2 tasks to complete
-    val resultStage = failedStages.collect {
+    assert(failedStages.collect {
       case stage: ResultStage => stage
-    }.head
-    assert(resultStage.findMissingPartitions() == Seq(0, 1))
+    }.head.findMissingPartitions() == Seq(0, 1))
 
     scheduler.resubmitFailedStages()
 
@@ -2714,33 +2714,102 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assertDataStructuresEmpty()
   }
 
-  test("SPARK-23207: cannot rollback a result stage") {
-    val shuffleMapRdd = new MyRDD(sc, 2, Nil, indeterminate = true)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+  private def assertResultStageFailToRollback(mapRdd: MyRDD): Unit = {
+    val shuffleDep = new ShuffleDependency(mapRdd, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
-
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+
     submit(finalRdd, Array(0, 1))
 
-    // Finish the shuffle map stage.
-    complete(taskSets(0), Seq(
-      (Success, makeMapStatus("hostA", 2)),
-      (Success, makeMapStatus("hostB", 2))))
+    completeShuffleMapStageSuccessfully(taskSets.length - 1, 0, numShufflePartitions = 2)
     assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq.empty))
 
     // Finish the first task of the result stage
     runEvent(makeCompletionEvent(
-      taskSets(1).tasks(0), Success, 42,
+      taskSets.last.tasks(0), Success, 42,
       Seq.empty, createFakeTaskInfoWithId(0)))
 
     // Fail the second task with FetchFailed.
     runEvent(makeCompletionEvent(
-      taskSets(1).tasks(1),
+      taskSets.last.tasks(1),
       FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"),
       null))
 
     // The job should fail because Spark can't rollback the result stage.
     assert(failure != null && failure.getMessage.contains("Spark cannot rollback"))
+  }
+
+  test("SPARK-23207: cannot rollback a result stage") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil, indeterminate = true)
+    assertResultStageFailToRollback(shuffleMapRdd)
+  }
+
+  test("SPARK-23207: local checkpoint fail to rollback (checkpointed before)") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil, indeterminate = true)
+    shuffleMapRdd.localCheckpoint()
+    submit(shuffleMapRdd, Array(1, 1))
+    completeNextResultStageWithSuccess(0, 0)
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assertDataStructuresEmpty()
+    assertResultStageFailToRollback(shuffleMapRdd)
+  }
+
+  test("SPARK-23207: local checkpoint fail to rollback (checkpointing now)") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil, indeterminate = true)
+    shuffleMapRdd.localCheckpoint()
+    assertResultStageFailToRollback(shuffleMapRdd)
+  }
+
+  private def assertResultStageNotRollbacked(mapRdd: MyRDD): Unit = {
+    val shuffleDep = new ShuffleDependency(mapRdd, new HashPartitioner(2))
+    val shuffleId = shuffleDep.shuffleId
+    val finalRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+
+    submit(finalRdd, Array(0, 1))
+
+    completeShuffleMapStageSuccessfully(taskSets.length - 1, 0, numShufflePartitions = 2)
+    assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq.empty))
+
+    // Finish the first task of the result stage
+    runEvent(makeCompletionEvent(
+      taskSets.last.tasks(0), Success, 42,
+      Seq.empty, createFakeTaskInfoWithId(0)))
+
+    // Fail the second task with FetchFailed.
+    runEvent(makeCompletionEvent(
+      taskSets.last.tasks(1),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"),
+      null))
+
+    assert(failure == null, "job should not fail")
+    val failedStages = scheduler.failedStages.toSeq
+    assert(failedStages.length == 2)
+    // Shuffle blocks of "hostA" is lost, so first task of the `shuffleMapRdd2` needs to retry.
+    assert(failedStages.collect {
+      case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId => stage
+    }.head.findMissingPartitions() == Seq(0))
+    // The first task of result stage remains completed.
+    assert(failedStages.collect {
+      case stage: ResultStage => stage
+    }.head.findMissingPartitions() == Seq(1))
+  }
+
+  test("SPARK-23207: reliable checkpoint can avoid rollback (checkpointed before)") {
+    sc.setCheckpointDir(Utils.createTempDir().getCanonicalPath)
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil, indeterminate = true)
+    shuffleMapRdd.checkpoint()
+    submit(shuffleMapRdd, Array(1, 1))
+    completeNextResultStageWithSuccess(0, 0)
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assertDataStructuresEmpty()
+    assertResultStageNotRollbacked(shuffleMapRdd)
+  }
+
+  test("SPARK-23207: reliable checkpoint can avoid rollback (checkpointing now)") {
+    sc.setCheckpointDir(Utils.createTempDir().getCanonicalPath)
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil, indeterminate = true)
+    shuffleMapRdd.checkpoint()
+    assertResultStageNotRollbacked(shuffleMapRdd)
   }
 
   /**

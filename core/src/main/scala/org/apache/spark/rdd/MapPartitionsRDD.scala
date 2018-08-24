@@ -59,11 +59,11 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
   @transient protected lazy override val isBarrier_ : Boolean =
     isFromBarrier || dependencies.exists(_.rdd.isBarrier())
 
-  override private[spark] def outputRandomLevel = {
+  override protected def getOutputRandomLevel = {
     if (orderSensitiveFunc && prev.outputRandomLevel == RandomLevel.UNORDERED) {
       RandomLevel.INDETERMINATE
     } else {
-      super.outputRandomLevel
+      super.getOutputRandomLevel
     }
   }
 }

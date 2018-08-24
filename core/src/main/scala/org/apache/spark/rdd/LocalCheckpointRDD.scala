@@ -67,7 +67,7 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](
 
   // Local checkpoint is not reliable, we may still get output from original RDD, so the output
   // random level should also inherent from the original RDD.
-  override private[spark] def outputRandomLevel = {
+  override protected def getOutputRandomLevel = {
     randomLevel
   }
 }
