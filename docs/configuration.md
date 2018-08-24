@@ -1926,14 +1926,6 @@ showDF(properties, numRows = 200, truncate = FALSE)
   </td>
 </tr>
 <tr>
-  <td><code>spark.streaming.backpressure.fixedMinMessagePerPartition</code></td>
-  <td>1</td>
-  <td>
-    This sets a fixed minimum message per partition per batch when the backpressure mechanism is enabled. The
-    default value is 1.
-  </td>
-</tr>
-<tr>
   <td><code>spark.streaming.blockInterval</code></td>
   <td>200ms</td>
   <td>
@@ -1992,6 +1984,14 @@ showDF(properties, numRows = 200, truncate = FALSE)
     <a href="streaming-kafka-integration.html">Kafka Integration guide</a>
     for more details.
   </td>
+</tr>
+<tr>
+    <td><code>spark.streaming.kafka.minRatePerPartition</code></td>
+    <td>1</td>
+    <td>
+      Minimum rate (number of records per second) at which data will be read from each Kafka
+      partition when using the new Kafka direct stream API.
+    </td>
 </tr>
 <tr>
   <td><code>spark.streaming.kafka.maxRetries</code></td>

@@ -58,8 +58,6 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
   private val initialRate = context.sparkContext.getConf.getLong(
     "spark.streaming.backpressure.initialRate", 0)
-  private val fixedMinMessagePerPartition = context.sparkContext.getConf.getLong(
-    "spark.streaming.backpressure.fixedMinMessagePerPartition", 1)
 
   val executorKafkaParams = {
     val ekp = new ju.HashMap[String, Object](consumerStrategy.executorKafkaParams)
@@ -145,7 +143,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
         val totalLag = lagPerPartition.values.sum
         lagPerPartition.map { case (tp, lag) =>
           val maxRateLimitPerPartition = ppc.maxRatePerPartition(tp)
-          var backpressureRate = lag / totalLag.toDouble * rate
+          val backpressureRate = lag / totalLag.toDouble * rate
           tp -> (if (maxRateLimitPerPartition > 0) {
             Math.min(backpressureRate, maxRateLimitPerPartition)} else backpressureRate)
         }
@@ -156,7 +154,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
       val secsPerBatch = context.graph.batchDuration.milliseconds.toDouble / 1000
       Some(effectiveRateLimitPerPartition.map {
         case (tp, limit) => tp -> Math.max((secsPerBatch * limit).toLong,
-          Math.max(fixedMinMessagePerPartition, 1L))
+          Math.max(ppc.minRatePerPartition(tp), 1L))
       })
     } else {
       None

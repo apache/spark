@@ -543,6 +543,7 @@ class DirectKafkaStreamSuite
         } else {
           100
         }
+      def minRatePerPartition(tp: TopicPartition) = 1
     })
     val kafkaStream = getDirectKafkaStream(topic, rateController, ppc)
 
@@ -675,7 +676,7 @@ class DirectKafkaStreamSuite
       .setMaster("local[1]")
       .setAppName(this.getClass.getSimpleName)
       .set("spark.streaming.kafka.maxRatePerPartition", "100")
-      .set("spark.streaming.backpressure.fixedMinMessagePerPartition", "5")
+      .set("spark.streaming.kafka.minRatePerPartition", "5")
 
 
     // Setup the streaming context
