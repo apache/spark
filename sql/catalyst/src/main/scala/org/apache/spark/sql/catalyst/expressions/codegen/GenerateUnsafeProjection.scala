@@ -66,8 +66,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val structRowWriter = ctx.addMutableState(rowWriterClass, "rowWriter",
       v => s"$v = new $rowWriterClass($rowWriter, ${fieldEvals.length});")
     val previousCursor = ctx.freshName("previousCursor")
-    val structExpressions = writeExpressionsToBuffer(
-      ctx, tmpInput, fieldEvals, schemas, structRowWriter)
     s"""
        |final InternalRow $tmpInput = $input;
        |if ($tmpInput instanceof UnsafeRow) {
@@ -76,7 +74,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
        |  // Remember the current cursor so that we can calculate how many bytes are
        |  // written later.
        |  final int $previousCursor = $rowWriter.cursor();
-       |  $structExpressions
+       |  ${writeExpressionsToBuffer(ctx, tmpInput, fieldEvals, schemas, structRowWriter)}
        |  $rowWriter.setOffsetAndSizeFromPreviousCursor($index, $previousCursor);
        |}
      """.stripMargin
