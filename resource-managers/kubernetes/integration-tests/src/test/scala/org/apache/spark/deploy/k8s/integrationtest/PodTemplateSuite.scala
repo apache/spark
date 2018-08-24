@@ -27,6 +27,7 @@ private[spark] trait PodTemplateSuite { k8sSuite: KubernetesSuite =>
   import PodTemplateSuite._
 
   test("Start pod creation from template") {
+    createPodTemplateFiles()
     sparkAppConf
       .set("spark.kubernetes.driver.podTemplateFile", DRIVER_TEMPLATE_FILE.getAbsolutePath)
       .set("spark.kubernetes.executor.podTemplateFile", EXECUTOR_TEMPLATE_FILE.getAbsolutePath)
