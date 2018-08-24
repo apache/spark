@@ -842,7 +842,7 @@ See the below table for the full list of pod specifications that will be overwri
   <td>Value of <code>spark.kubernetes.namespace</code></td>
   <td>
     Spark makes strong assumptions about the driver and executor namespaces. Both driver and executor namespaces will
-    be replaced by this spark conf value.
+    be replaced by either the configured or default spark conf value.
   </td>
 </tr>
 <tr>
@@ -881,25 +881,25 @@ See the below table for the full list of pod specifications that will be overwri
 </tr>
 <tr>
   <td>restartPolicy</td>
-  <td></code>"never"</code></td>
+  <td><code>"never"</code></td>
   <td>
     Spark assumes that both drivers and executors never restart.
   </td>
 </tr>
 <tr>
   <td>serviceAccount</td>
-  <td>Value of </code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
+  <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
   <td>
     Spark will override <code>serviceAccount</code> with the value of the spark configuration for only
-    driver pods. Executor pods will remain unaffected.
+    driver pods, and only if the spark configuration is specified. Executor pods will remain unaffected.
   </td>
 </tr>
 <tr>
   <td>serviceAccountName</td>
-  <td>Value of </code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
+  <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
   <td>
     Spark will override <code>serviceAccountName</code> with the value of the spark configuration for only
-    driver pods. Executor pods will remain unaffected.
+    driver pods, and only if the spark configuration is specified. Executor pods will remain unaffected.
   </td>
 </tr>
 <tr>
@@ -950,7 +950,7 @@ The following affect the driver and executor containers. All other containers in
 </tr>
 <tr>
   <td>resources</td>
-  <td>See description</code></td>
+  <td>See description</td>
   <td>
     The cpu limits are set by <code>spark.kubernetes.{driver,executor}.limit.cores</code>. The cpu is set by
     <code>spark.{driver,executor}.cores</code>. The memory request and limit are set by summing the values of
