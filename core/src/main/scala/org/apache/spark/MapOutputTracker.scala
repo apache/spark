@@ -434,6 +434,18 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
+  /** Unregister all map output information of the given shuffle. */
+  def unregisterAllMapOutput(shuffleId: Int) {
+    shuffleStatuses.get(shuffleId) match {
+      case Some(shuffleStatus) =>
+        shuffleStatus.removeOutputsByFilter(x => true)
+        incrementEpoch()
+      case None =>
+        throw new SparkException(
+          s"unregisterAllMapOutput called for nonexistent shuffle ID $shuffleId.")
+    }
+  }
+
   /** Unregister shuffle data */
   def unregisterShuffle(shuffleId: Int) {
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
@@ -510,16 +522,19 @@ private[spark] class MapOutputTrackerMaster(
   def getStatistics(dep: ShuffleDependency[_, _, _]): MapOutputStatistics = {
     shuffleStatuses(dep.shuffleId).withMapStatuses { statuses =>
       val totalSizes = new Array[Long](dep.partitioner.numPartitions)
+      val recordsByMapTask = new Array[Long](statuses.length)
+
       val parallelAggThreshold = conf.get(
         SHUFFLE_MAP_OUTPUT_PARALLEL_AGGREGATION_THRESHOLD)
       val parallelism = math.min(
         Runtime.getRuntime.availableProcessors(),
         statuses.length.toLong * totalSizes.length / parallelAggThreshold + 1).toInt
       if (parallelism <= 1) {
-        for (s <- statuses) {
+        statuses.zipWithIndex.foreach { case (s, index) =>
           for (i <- 0 until totalSizes.length) {
             totalSizes(i) += s.getSizeForBlock(i)
           }
+          recordsByMapTask(index) = s.numberOfOutput
         }
       } else {
         val threadPool = ThreadUtils.newDaemonFixedThreadPool(parallelism, "map-output-aggregate")
@@ -536,8 +551,11 @@ private[spark] class MapOutputTrackerMaster(
         } finally {
           threadPool.shutdown()
         }
+        statuses.zipWithIndex.foreach { case (s, index) =>
+          recordsByMapTask(index) = s.numberOfOutput
+        }
       }
-      new MapOutputStatistics(dep.shuffleId, totalSizes)
+      new MapOutputStatistics(dep.shuffleId, totalSizes, recordsByMapTask)
     }
   }
 

@@ -575,14 +575,14 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   // Except: *-stream not supported
   testBinaryOperationInStreamingPlan(
     "except",
-    _.except(_),
+    _.except(_, isAll = false),
     streamStreamSupported = false,
     batchStreamSupported = false)
 
   // Intersect: stream-stream not supported
   testBinaryOperationInStreamingPlan(
     "intersect",
-    _.intersect(_),
+    _.intersect(_, isAll = false),
     streamStreamSupported = false)
 
   // Sort: supported only on batch subplans and after aggregation on streaming plan + complete mode
@@ -766,7 +766,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
    *
    * To test this correctly, the given logical plan is wrapped in a fake operator that makes the
    * whole plan look like a streaming plan. Otherwise, a batch plan may throw not supported
-   * exception simply for not being a streaming plan, even though that plan could exists as batch
+   * exception simply for not being a streaming plan, even though that plan could exist as batch
    * subplan inside some streaming plan.
    */
   def assertSupportedInStreamingPlan(
@@ -793,7 +793,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
    *
    * To test this correctly, the given logical plan is wrapped in a fake operator that makes the
    * whole plan look like a streaming plan. Otherwise, a batch plan may throw not supported
-   * exception simply for not being a streaming plan, even though that plan could exists as batch
+   * exception simply for not being a streaming plan, even though that plan could exist as batch
    * subplan inside some streaming plan.
    */
   def assertNotSupportedInStreamingPlan(

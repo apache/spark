@@ -267,7 +267,7 @@ class DataFrameReader(OptionUtils):
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep,
-            samplingRatio=samplingRatio, encoding=encoding)
+            samplingRatio=samplingRatio, dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -825,10 +825,10 @@ class DataFrameWriter(OptionUtils):
                 exists.
         :param partitionBy: names of partitioning columns
         :param compression: compression codec to use when saving to file. This can be one of the
-                            known case-insensitive shorten names (none, snappy, gzip, and lzo).
-                            This will override ``spark.sql.parquet.compression.codec``. If None
-                            is set, it uses the value specified in
-                            ``spark.sql.parquet.compression.codec``.
+                            known case-insensitive shorten names (none, uncompressed, snappy, gzip,
+                            lzo, brotli, lz4, and zstd). This will override
+                            ``spark.sql.parquet.compression.codec``. If None is set, it uses the
+                            value specified in ``spark.sql.parquet.compression.codec``.
 
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -859,7 +859,7 @@ class DataFrameWriter(OptionUtils):
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
             header=None, nullValue=None, escapeQuotes=None, quoteAll=None, dateFormat=None,
             timestampFormat=None, ignoreLeadingWhiteSpace=None, ignoreTrailingWhiteSpace=None,
-            charToEscapeQuoteEscaping=None):
+            charToEscapeQuoteEscaping=None, encoding=None):
         """Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -909,6 +909,8 @@ class DataFrameWriter(OptionUtils):
                                           the quote character. If None is set, the default value is
                                           escape character when escape and quote characters are
                                           different, ``\0`` otherwise..
+        :param encoding: sets the encoding (charset) of saved csv files. If None is set,
+                         the default UTF-8 charset will be used.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -918,7 +920,8 @@ class DataFrameWriter(OptionUtils):
                        dateFormat=dateFormat, timestampFormat=timestampFormat,
                        ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
                        ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace,
-                       charToEscapeQuoteEscaping=charToEscapeQuoteEscaping)
+                       charToEscapeQuoteEscaping=charToEscapeQuoteEscaping,
+                       encoding=encoding)
         self._jwrite.csv(path)
 
     @since(1.5)

@@ -580,13 +580,15 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.maxRemoteBlockSizeFetchToMem</code></td>
-  <td>Long.MaxValue</td>
+  <td>Int.MaxValue - 512</td>
   <td>
     The remote block will be fetched to disk when size of the block is above this threshold in bytes.
-    This is to avoid a giant request takes too much memory. We can enable this config by setting
-    a specific value(e.g. 200m). Note this configuration will affect both shuffle fetch
+    This is to avoid a giant request that takes too much memory.  By default, this is only enabled
+    for blocks > 2GB, as those cannot be fetched directly into memory, no matter what resources are
+    available.  But it can be turned down to a much lower value (eg. 200m) to avoid using too much
+    memory on smaller blocks as well. Note this configuration will affect both shuffle fetch
     and block manager remote block fetch. For users who enabled external shuffle service,
-    this feature can only be worked when external shuffle service is newer than Spark 2.2.
+    this feature can only be used when external shuffle service is newer than Spark 2.2.
   </td>
 </tr>
 <tr>
@@ -1216,6 +1218,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.broadcast.checksum</code></td>
+  <td>true</td>
+  <td>
+    Whether to enable checksum for broadcast. If enabled, broadcasts will include a checksum, which can
+    help detect corrupted blocks, at the cost of computing and sending a little more data. It's possible
+    to disable it if the network has other mechanisms to guarantee data won't be corrupted during broadcast.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.cores</code></td>
   <td>
     1 in YARN mode, all the available cores on the worker in
@@ -1816,7 +1827,7 @@ Apart from these, the following properties are also available, and may be useful
     executors w.r.t. full parallelism.
     Defaults to 1.0 to give maximum parallelism.
     0.5 will divide the target number of executors by 2
-    The target number of executors computed by the dynamicAllocation can still be overriden
+    The target number of executors computed by the dynamicAllocation can still be overridden
     by the <code>spark.dynamicAllocation.minExecutors</code> and
     <code>spark.dynamicAllocation.maxExecutors</code> settings
   </td>
@@ -2202,7 +2213,7 @@ Spark's classpath for each application. In a Spark cluster running on YARN, thes
 files are set cluster-wide, and cannot safely be changed by the application.
 
 The better choice is to use spark hadoop properties in the form of `spark.hadoop.*`. 
-They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-default.conf`
+They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-defaults.conf`
 
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
 instance, Spark allows you to simply create an empty conf and set spark/spark hadoop properties.

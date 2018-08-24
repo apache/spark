@@ -62,6 +62,8 @@ case class HiveTableScanExec(
 
   override def conf: SQLConf = sparkSession.sessionState.conf
 
+  override def nodeName: String = s"Scan hive ${relation.tableMeta.qualifiedName}"
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
@@ -78,9 +80,9 @@ case class HiveTableScanExec(
   // Bind all partition key attribute references in the partition pruning predicate for later
   // evaluation.
   private lazy val boundPruningPred = partitionPruningPred.reduceLeftOption(And).map { pred =>
-    require(
-      pred.dataType == BooleanType,
-      s"Data type of predicate $pred must be BooleanType rather than ${pred.dataType}.")
+    require(pred.dataType == BooleanType,
+      s"Data type of predicate $pred must be ${BooleanType.catalogString} rather than " +
+        s"${pred.dataType.catalogString}.")
 
     BindReferences.bindReference(pred, relation.partitionCols)
   }

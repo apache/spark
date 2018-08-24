@@ -48,7 +48,8 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   }
 
   if (precision > DecimalType.MAX_PRECISION) {
-    throw new AnalysisException(s"DecimalType can only support precision up to 38")
+    throw new AnalysisException(
+      s"${DecimalType.simpleString} can only support precision up to ${DecimalType.MAX_PRECISION}")
   }
 
   // default constructor for Java
@@ -120,6 +121,7 @@ object DecimalType extends AbstractDataType {
   val MINIMUM_ADJUSTED_SCALE = 6
 
   // The decimal types compatible with other numeric types
+  private[sql] val BooleanDecimal = DecimalType(1, 0)
   private[sql] val ByteDecimal = DecimalType(3, 0)
   private[sql] val ShortDecimal = DecimalType(5, 0)
   private[sql] val IntDecimal = DecimalType(10, 0)

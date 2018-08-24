@@ -235,7 +235,7 @@ class KMeans private (
 
   private[spark] def run(
       data: RDD[Vector],
-      instr: Option[Instrumentation[NewKMeans]]): KMeansModel = {
+      instr: Option[Instrumentation]): KMeansModel = {
 
     if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data is not directly cached, which may hurt performance if its"
@@ -264,7 +264,7 @@ class KMeans private (
    */
   private def runAlgorithm(
       data: RDD[VectorWithNorm],
-      instr: Option[Instrumentation[NewKMeans]]): KMeansModel = {
+      instr: Option[Instrumentation]): KMeansModel = {
 
     val sc = data.sparkContext
 
@@ -299,7 +299,7 @@ class KMeans private (
       val bcCenters = sc.broadcast(centers)
 
       // Find the new centers
-      val newCenters = data.mapPartitions { points =>
+      val collected = data.mapPartitions { points =>
         val thisCenters = bcCenters.value
         val dims = thisCenters.head.vector.size
 
@@ -317,7 +317,13 @@ class KMeans private (
       }.reduceByKey { case ((sum1, count1), (sum2, count2)) =>
         axpy(1.0, sum2, sum1)
         (sum1, count1 + count2)
-      }.collectAsMap().mapValues { case (sum, count) =>
+      }.collectAsMap()
+
+      if (iteration == 0) {
+        instr.foreach(_.logNumExamples(collected.values.map(_._2).sum))
+      }
+
+      val newCenters = collected.mapValues { case (sum, count) =>
         distanceMeasureInstance.centroid(sum, count)
       }
 
@@ -348,7 +354,7 @@ class KMeans private (
 
     logInfo(s"The cost is $cost.")
 
-    new KMeansModel(centers.map(_.vector), distanceMeasure)
+    new KMeansModel(centers.map(_.vector), distanceMeasure, cost, iteration)
   }
 
   /**
