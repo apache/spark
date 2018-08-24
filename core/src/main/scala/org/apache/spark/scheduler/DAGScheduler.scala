@@ -1495,7 +1495,27 @@ private[spark] class DAGScheduler(
               // guaranteed to be idempotent, so the input data of the reducers will not change even
               // if the map tasks are re-tried.
               if (mapStage.rdd.outputRandomLevel == RandomLevel.INDETERMINATE) {
-                def rollBackStage(stage: Stage): Unit = stage match {
+                // It's a little tricky to find all the succeeding stages of `failedStage`, because
+                // each stage only know its parents not children. Here we traverse the stages from
+                // the leaf nodes (the result stages of active jobs), and rollback all the stages
+                // in the stage chains that connect to the `failedStage`. To speed up the stage
+                // traversing, we collect the stages to rollback first. If a stage needs to
+                // rollback, all its succeeding stages need to rollback to.
+                val stagesToRollback = scala.collection.mutable.HashSet(failedStage)
+
+                def collectStagesToRollback(stageChain: List[Stage]): Unit = {
+                  if (stagesToRollback.contains(stageChain.head)) {
+                    stageChain.drop(1).foreach(s => stagesToRollback += s)
+                  } else {
+                    stageChain.head.parents.foreach { s =>
+                      collectStagesToRollback(s :: stageChain)
+                    }
+                  }
+                }
+
+                activeJobs.foreach(job => collectStagesToRollback(job.finalStage :: Nil))
+
+                stagesToRollback.foreach {
                   case mapStage: ShuffleMapStage =>
                     val numMissingPartitions = mapStage.findMissingPartitions().length
                     if (numMissingPartitions < mapStage.numTasks) {
@@ -1511,35 +1531,14 @@ private[spark] class DAGScheduler(
                     val numMissingPartitions = resultStage.findMissingPartitions().length
                     if (numMissingPartitions < resultStage.numTasks) {
                       // TODO: support to rollback result tasks.
-                      val errorMessage = "A shuffle map stage with random output was failed and " +
-                        s"retried. However, Spark cannot rollback the $resultStage to re-process " +
-                        "the input data, and has to fail this job. Please eliminate the " +
-                        "randomness by checkpointing the RDD before repartition/zip and try again."
+                      val errorMessage = "A shuffle map stage with random output was failed " +
+                        s"and retried. However, Spark cannot rollback the $resultStage to " +
+                        "re-process the input data, and has to fail this job. Please " +
+                        "eliminate the randomness by checkpointing the RDD before " +
+                        "repartition/zip and try again."
                       abortStage(failedStage, errorMessage, None)
                     }
                 }
-
-                // Rollback stages who is a descendant of the `failedStage`.
-                def rollbackSucceedingStages(stageChain: List[Stage]): Unit = {
-                  if (stageChain.head.id == failedStage.id) {
-                    stageChain.foreach { stage =>
-                      // This stage may already be rollbacked with another stage chain, skip it if
-                      // it's in `failedStages`.
-                      if (!failedStages.contains(stage)) rollBackStage(stage)
-                    }
-                  } else {
-                    stageChain.head.parents.foreach { s =>
-                      // This stage may already be rollbacked with another stage chain, skip it if
-                      // it's in `failedStages`.
-                      if (!failedStages.contains(s)) rollbackSucceedingStages(s :: stageChain)
-                    }
-                  }
-                }
-
-                // `failedStage` is already added to `failedStages`, call `rollBackStage` here to
-                // rollback it, otherwise we will skip it in `rollbackSucceedingStages`.
-                rollBackStage(failedStage)
-                activeJobs.foreach(job => rollbackSucceedingStages(job.finalStage :: Nil))
               }
 
               // We expect one executor failure to trigger many FetchFailures in rapid succession,

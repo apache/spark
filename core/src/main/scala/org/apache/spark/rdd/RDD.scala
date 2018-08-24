@@ -1876,38 +1876,39 @@ abstract class RDD[T: ClassTag](
    * Returns the random level of this RDD's output. Please refer to [[RandomLevel]] for the
    * definition.
    *
-   * By default, an RDD without parents(root RDD) is IDEMPOTENT. For RDDs with parents, the random
-   * level of current RDD is the random level of the parent which is random most.
+   * By default, an RDD without parents(root RDD) is IDEMPOTENT. For RDDs with parents, we will
+   * generate a random level candidate per parent according to the dependency. The random level
+   * of the current RDD is the random level candidate that is random most.
    */
   // TODO: make it public so users can set random level to their custom RDDs.
   // TODO: this can be per-partition. e.g. UnionRDD can have different random level for different
   // partitions.
   private[spark] def outputRandomLevel: RandomLevel.Value = {
-    val parentRandomLevels = dependencies.map {
+    val randomLevelCandidates = dependencies.map {
       case dep: ShuffleDependency[_, _, _] =>
-        if (dep.rdd.outputRandomLevel == RandomLevel.IDEMPOTENT &&
-          dep.keyOrdering.isDefined && dep.aggregator.isDefined) {
+        if (dep.rdd.outputRandomLevel == RandomLevel.INDETERMINATE) {
+          // If map output was indeterminate, shuffle output will be indeterminate as well
+          RandomLevel.INDETERMINATE
+        } else if (dep.keyOrdering.isDefined && dep.aggregator.isDefined) {
           // if aggregator specified (and so unique keys) and key ordering specified - then
           // consistent ordering.
           RandomLevel.IDEMPOTENT
-        } else if (dep.rdd.outputRandomLevel == RandomLevel.INDETERMINATE) {
-          // If map output was indeterminate, shuffle output will be indeterminate as well
-          RandomLevel.INDETERMINATE
         } else {
           // In Spark, the reducer fetches multiple remote shuffle blocks at the same time, and
-          // the arrival order of these shuffle blocks are totally random. Which means, the
-          // computing function of a shuffled RDD will never be "NO_RANDOM"
+          // the arrival order of these shuffle blocks are totally random. Even if the parent map
+          // RDD is IDEMPOTENT, the reduce RDD is always UNORDERED.
           RandomLevel.UNORDERED
         }
 
+      // For narrow dependency, assume the output random level of current RDD is same as parent.
       case dep => dep.rdd.outputRandomLevel
     }
 
-    if (parentRandomLevels.isEmpty) {
+    if (randomLevelCandidates.isEmpty) {
       // By default we assume the root RDD is idempotent
       RandomLevel.IDEMPOTENT
     } else {
-      parentRandomLevels.maxBy(_.id)
+      randomLevelCandidates.maxBy(_.id)
     }
   }
 }
