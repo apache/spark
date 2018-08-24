@@ -456,7 +456,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
     val setKey =
       CodeGenerator.setArrayElement(unsafeRow, childDataType.keyType, "0", getKey(keys, z))
     val valueAssignment = CodeGenerator.createArrayAssignment(
-      unsafeRow, childDataType.valueType, values, childDataType.valueContainsNull)(z, "1")
+      unsafeRow, childDataType.valueType, values, z, "1", childDataType.valueContainsNull)
 
     s"""
        |UnsafeArrayData $unsafeArrayData = (UnsafeArrayData)$arrayData;
@@ -683,7 +683,7 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     val allocation = CodeGenerator.createArrayData(
       arrayData, elementType, numElemName, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(
-      arrayData, elementType, s"$argsName[$y]", checkForNull)
+      arrayData, elementType, s"$argsName[$y]", counter, z, checkForNull)
 
     val concat = ctx.freshName("concat")
     val concatDef =
@@ -693,7 +693,7 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
          |  int $counter = 0;
          |  for (int $y = 0; $y < ${children.length}; $y++) {
          |    for (int $z = 0; $z < $argsName[$y].numElements(); $z++) {
-         |      ${assignment(counter, z)}
+         |      $assignment
          |      $counter++;
          |    }
          |  }
@@ -841,7 +841,7 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
       CodeGenerator.setArrayElement(keyArrayData, dataType.keyType, idx, key)
     val valueAssignment = (entry: String, idx: String) =>
       CodeGenerator.createArrayAssignment(
-        valueArrayData, dataType.valueType, entry, dataType.valueContainsNull)(idx, "1")
+        valueArrayData, dataType.valueType, entry, idx, "1", dataType.valueContainsNull)
     val assignmentLoop = genCodeForAssignmentLoop(
       ctx,
       childVariable,
@@ -1226,14 +1226,14 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
     val initialization = CodeGenerator.createArrayData(
       arrayData, elementType, numElements, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(arrayData, elementType, childName,
-      dataType.asInstanceOf[ArrayType].containsNull)
+      i, s"$indices[$i]", dataType.asInstanceOf[ArrayType].containsNull)
 
     s"""
        |int $numElements = $childName.numElements();
        |int[] $indices = $rand.getNextIndices($numElements);
        |$initialization
        |for (int $i = 0; $i < $numElements; $i++) {
-       |  ${assignment(i, s"$indices[$i]")}
+       |  $assignment
        |}
        |${ev.value} = $arrayData;
      """.stripMargin
@@ -1293,14 +1293,14 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
     val initialization = CodeGenerator.createArrayData(
       arrayData, elementType, numElements, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(
-      arrayData, elementType, childName, dataType.asInstanceOf[ArrayType].containsNull)
+      arrayData, elementType, childName, i, j, dataType.asInstanceOf[ArrayType].containsNull)
 
     s"""
        |final int $numElements = $childName.numElements();
        |$initialization
        |for (int $i = 0; $i < $numElements; $i++) {
        |  int $j = $numElements - $i - 1;
-       |  ${assignment(i, j)}
+       |  $assignment
        |}
        |${ev.value} = $arrayData;
      """.stripMargin
@@ -1700,7 +1700,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     val allocation = CodeGenerator.createArrayData(
       values, elementType, resLength, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(values, elementType, inputArray,
-      dataType.asInstanceOf[ArrayType].containsNull)
+      i, s"$i + $startIdx", dataType.asInstanceOf[ArrayType].containsNull)
 
     s"""
        |if ($startIdx < 0 || $startIdx >= $inputArray.numElements()) {
@@ -1708,7 +1708,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
        |} else {
        |  $allocation
        |  for (int $i = 0; $i < $resLength; $i ++) {
-       |    ${assignment(i, s"$i + $startIdx")}
+       |    $assignment
        |  }
        |  ${ev.value} = $values;
        |}
@@ -2374,7 +2374,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     val initialization = CodeGenerator.createArrayData(
       arrayData, elementType, numElemName, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(
-      arrayData, elementType, s"args[$y]", dataType.asInstanceOf[ArrayType].containsNull)
+      arrayData, elementType, s"args[$y]", counter, z, dataType.asInstanceOf[ArrayType].containsNull)
 
     val concat = ctx.freshName("concat")
     val concatDef =
@@ -2385,7 +2385,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
          |  int $counter = 0;
          |  for (int $y = 0; $y < ${children.length}; $y++) {
          |    for (int $z = 0; $z < args[$y].numElements(); $z++) {
-         |      ${assignment(counter, z)}
+         |      $assignment
          |      $counter++;
          |    }
          |  }
@@ -2491,7 +2491,7 @@ case class Flatten(child: Expression) extends UnaryExpression {
     val allocation = CodeGenerator.createArrayData(
       tempArrayDataName, elementType, numElemName, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(
-      tempArrayDataName, elementType, arr, dataType.asInstanceOf[ArrayType].containsNull)
+      tempArrayDataName, elementType, arr, counter, l, dataType.asInstanceOf[ArrayType].containsNull)
 
     s"""
     |$numElemCode
@@ -2500,7 +2500,7 @@ case class Flatten(child: Expression) extends UnaryExpression {
     |for (int $k = 0; $k < $childVariableName.numElements(); $k++) {
     |  ArrayData $arr = $childVariableName.getArray($k);
     |  for (int $l = 0; $l < $arr.numElements(); $l++) {
-    |   ${assignment(counter, l)}
+    |   $assignment
     |   $counter++;
     | }
     |}
@@ -3110,7 +3110,7 @@ case class ArrayRemove(left: Expression, right: Expression)
     val allocation = CodeGenerator.createArrayData(
       values, elementType, newArraySize, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(
-      values, elementType, inputArray, false)
+      values, elementType, inputArray, pos, i, false)
 
     s"""
        |$allocation
@@ -3122,7 +3122,7 @@ case class ArrayRemove(left: Expression, right: Expression)
        |  }
        |  else {
        |    if (!($isEqual)) {
-       |      ${assignment(pos, i)}
+       |      $assignment
        |      $pos = $pos + 1;
        |    }
        |  }

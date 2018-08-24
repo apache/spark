@@ -1462,6 +1462,8 @@ object CodeGenerator extends Logging {
    * @param srcArray code representing the number of elements the array should contain
    * @param needNullCheck value which shows whether a nullcheck is required for the returning
    *                      assignment
+   * @param dstArrayIndex an index variable to access each element of destination array
+   * @param srcArrayIndex an index variable to access each element of source array
    *
    * @return code representing an assignment to each element of the [[ArrayData]], which requires
    *         a pair of destination and source loop index variables
@@ -1470,11 +1472,12 @@ object CodeGenerator extends Logging {
       arrayName: String,
       elementType: DataType,
       srcArray: String,
-      needNullCheck: Boolean): (String, String) => String = {
-    (dstLoopIndex: String, srcLoopIndex: String) =>
-      CodeGenerator.setArrayElement(arrayName, elementType, dstLoopIndex,
-        CodeGenerator.getValue(srcArray, elementType, srcLoopIndex),
-        if (needNullCheck) Some(s"$srcArray.isNullAt($srcLoopIndex)") else None)
+      dstArrayIndex: String,
+      srcArrayIndex: String,
+      needNullCheck: Boolean): String = {
+    CodeGenerator.setArrayElement(arrayName, elementType, dstArrayIndex,
+      CodeGenerator.getValue(srcArray, elementType, srcArrayIndex),
+      if (needNullCheck) Some(s"$srcArray.isNullAt($srcArrayIndex)") else None)
   }
 
   /**
