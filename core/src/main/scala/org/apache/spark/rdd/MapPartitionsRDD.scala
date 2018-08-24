@@ -32,7 +32,7 @@ import org.apache.spark.{Partition, TaskContext}
  *                              doesn't modify the keys.
  * @param isFromBarrier Indicates whether this RDD is transformed from an RDDBarrier, a stage
  *                      containing at least one RDDBarrier shall be turned into a barrier stage.
- * @param orderSensitiveFunc whether or not the zip function is order-sensitive. If it's order
+ * @param orderSensitiveFunc whether or not the function is order-sensitive. If it's order
  *                           sensitive, it may return totally different result if the input order
  *                           changed. Mostly stateful functions are order-sensitive.
  */
@@ -59,11 +59,11 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
   @transient protected lazy override val isBarrier_ : Boolean =
     isFromBarrier || dependencies.exists(_.rdd.isBarrier())
 
-  override private[spark] def computingRandomLevel = {
-    if (orderSensitiveFunc && prev.computingRandomLevel == RDD.RandomLevel.UNORDERED) {
-      RDD.RandomLevel.INDETERMINATE
+  override private[spark] def outputRandomLevel = {
+    if (orderSensitiveFunc && prev.outputRandomLevel == RandomLevel.UNORDERED) {
+      RandomLevel.INDETERMINATE
     } else {
-      super.computingRandomLevel
+      super.outputRandomLevel
     }
   }
 }

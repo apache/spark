@@ -808,8 +808,11 @@ abstract class RDD[T: ClassTag](
    * serializable and don't require closure cleaning.
    *
    * @param preservesPartitioning indicates whether the input function preserves the partitioner,
-   * which should be `false` unless this is a pair RDD and the input function doesn't modify
-   * the keys.
+   *                              which should be `false` unless this is a pair RDD and the input
+   *                              function doesn't modify the keys.
+   * @param orderSensitiveFunc whether or not the function is order-sensitive. If it's order
+   *                           sensitive, it may return totally different result if the input order
+   *                           changed. Mostly stateful functions are order-sensitive.
    */
   private[spark] def mapPartitionsWithIndexInternal[U: ClassTag](
       f: (Int, Iterator[T]) => Iterator[U],
@@ -858,17 +861,16 @@ abstract class RDD[T: ClassTag](
    * a map on the other).
    */
   def zip[U: ClassTag](other: RDD[U]): RDD[(T, U)] = withScope {
-    zipPartitionsInternal(other, preservesPartitioning = false, orderSensitiveFunc = true) {
-      (thisIter, otherIter) =>
-        new Iterator[(T, U)] {
-          def hasNext: Boolean = (thisIter.hasNext, otherIter.hasNext) match {
-            case (true, true) => true
-            case (false, false) => false
-            case _ => throw new SparkException("Can only zip RDDs with " +
-              "same number of elements in each partition")
-          }
-          def next(): (T, U) = (thisIter.next(), otherIter.next())
+    zipPartitions(other, preservesPartitioning = false) { (thisIter, otherIter) =>
+      new Iterator[(T, U)] {
+        def hasNext: Boolean = (thisIter.hasNext, otherIter.hasNext) match {
+          case (true, true) => true
+          case (false, false) => false
+          case _ => throw new SparkException("Can only zip RDDs with " +
+            "same number of elements in each partition")
         }
+        def next(): (T, U) = (thisIter.next(), otherIter.next())
+      }
     }
   }
 
@@ -883,13 +885,6 @@ abstract class RDD[T: ClassTag](
       (f: (Iterator[T], Iterator[B]) => Iterator[V]): RDD[V] = withScope {
     new ZippedPartitionsRDD2(sc, sc.clean(f), this, rdd2, preservesPartitioning)
   }
-
-  private[spark] def zipPartitionsInternal[B: ClassTag, V: ClassTag]
-      (rdd2: RDD[B], preservesPartitioning: Boolean, orderSensitiveFunc: Boolean)
-      (f: (Iterator[T], Iterator[B]) => Iterator[V]): RDD[V] = withScope {
-    new ZippedPartitionsRDD2(sc, sc.clean(f), this, rdd2, preservesPartitioning, orderSensitiveFunc)
-  }
-
 
   def zipPartitions[B: ClassTag, V: ClassTag]
       (rdd2: RDD[B])
@@ -1878,8 +1873,8 @@ abstract class RDD[T: ClassTag](
     dependencies.filter(!_.isInstanceOf[ShuffleDependency[_, _, _]]).exists(_.rdd.isBarrier())
 
   /**
-   * Returns the random level of this RDD's computing function. Please refer to [[RDD.RandomLevel]]
-   * for the definition of random level.
+   * Returns the random level of this RDD's output. Please refer to [[RandomLevel]] for the
+   * definition.
    *
    * By default, an RDD without parents(root RDD) is IDEMPOTENT. For RDDs with parents, the random
    * level of current RDD is the random level of the parent which is random most.
@@ -1887,24 +1882,30 @@ abstract class RDD[T: ClassTag](
   // TODO: make it public so users can set random level to their custom RDDs.
   // TODO: this can be per-partition. e.g. UnionRDD can have different random level for different
   // partitions.
-  private[spark] def computingRandomLevel: RDD.RandomLevel.Value = {
+  private[spark] def outputRandomLevel: RandomLevel.Value = {
     val parentRandomLevels = dependencies.map {
       case dep: ShuffleDependency[_, _, _] =>
-        if (dep.rdd.computingRandomLevel == RDD.RandomLevel.INDETERMINATE) {
-          RDD.RandomLevel.INDETERMINATE
+        if (dep.rdd.outputRandomLevel == RandomLevel.IDEMPOTENT &&
+          dep.keyOrdering.isDefined && dep.aggregator.isDefined) {
+          // if aggregator specified (and so unique keys) and key ordering specified - then
+          // consistent ordering.
+          RandomLevel.IDEMPOTENT
+        } else if (dep.rdd.outputRandomLevel == RandomLevel.INDETERMINATE) {
+          // If map output was indeterminate, shuffle output will be indeterminate as well
+          RandomLevel.INDETERMINATE
         } else {
           // In Spark, the reducer fetches multiple remote shuffle blocks at the same time, and
           // the arrival order of these shuffle blocks are totally random. Which means, the
           // computing function of a shuffled RDD will never be "NO_RANDOM"
-          RDD.RandomLevel.UNORDERED
+          RandomLevel.UNORDERED
         }
 
-      case dep => dep.rdd.computingRandomLevel
+      case dep => dep.rdd.outputRandomLevel
     }
 
     if (parentRandomLevels.isEmpty) {
       // By default we assume the root RDD is idempotent
-      RDD.RandomLevel.IDEMPOTENT
+      RandomLevel.IDEMPOTENT
     } else {
       parentRandomLevels.maxBy(_.id)
     }
@@ -1919,22 +1920,6 @@ abstract class RDD[T: ClassTag](
  * key-value-pair RDDs, and enabling extra functionalities such as `PairRDDFunctions.reduceByKey`.
  */
 object RDD {
-
-  /**
-   * The random level of RDD's computing function, which indicates the behavior when rerun the
-   * computing function. There are 3 random levels, ordered by the randomness from low to high:
-   * 1. IDEMPOTENT: The computing function always return the same result with same order when rerun.
-   * 2. UNORDERED: The computing function returns same data set in potentially a different order
-   *               when rerun.
-   * 3. INDETERMINATE. The computing function may return totally different result when rerun.
-   *
-   * Note that, the output of the computing function usually relies on parent RDDs. When a
-   * parent RDD's computing function is random, it's very likely this computing function is also
-   * random.
-   */
-  object RandomLevel extends Enumeration {
-    val IDEMPOTENT, UNORDERED, INDETERMINATE = Value
-  }
 
   private[spark] val CHECKPOINT_ALL_MARKED_ANCESTORS =
     "spark.checkpoint.checkpointAllMarkedAncestors"
@@ -1977,4 +1962,20 @@ object RDD {
     : DoubleRDDFunctions = {
     new DoubleRDDFunctions(rdd.map(x => num.toDouble(x)))
   }
+}
+
+/**
+ * The random level of RDD's output (i.e. what `RDD#compute` returns), which indicates how the
+ * output will diff when Spark reruns the tasks for the RDD. There are 3 random levels, ordered
+ * by the randomness from low to high:
+ * 1. IDEMPOTENT: The RDD output is always same (including order) when rerun.
+ * 2. UNORDERED: The RDD output is always the same data set but in potentially a different order
+ *               when rerun.
+ * 3. INDETERMINATE. The RDD output can be different (not only order) when rerun.
+ *
+ * Note that, the output of an RDD usually relies on parent RDDs. When a parent RDD's output is
+ * INDETERMINATE, it's very likely this RDD's output is also INDETERMINATE.
+ */
+private[spark] object RandomLevel extends Enumeration {
+  val IDEMPOTENT, UNORDERED, INDETERMINATE = Value
 }

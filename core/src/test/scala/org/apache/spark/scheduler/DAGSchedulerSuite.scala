@@ -30,7 +30,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{RandomLevel, RDD}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
@@ -71,7 +71,7 @@ class MyRDD(
     dependencies: List[Dependency[_]],
     locations: Seq[Seq[String]] = Nil,
     @(transient @param) tracker: MapOutputTrackerMaster = null,
-    isRandom: Boolean = false)
+    indeterminate: Boolean = false)
   extends RDD[(Int, Int)](sc, dependencies) with Serializable {
 
   override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
@@ -81,8 +81,8 @@ class MyRDD(
     override def index: Int = i
   }).toArray
 
-  override private[spark] def computingRandomLevel = {
-    if (isRandom) RDD.RandomLevel.INDETERMINATE else super.computingRandomLevel
+  override private[spark] def outputRandomLevel = {
+    if (indeterminate) RandomLevel.INDETERMINATE else super.outputRandomLevel
   }
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {
@@ -2639,7 +2639,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   test("SPARK-23207: retry all the succeeding stages when the map stage is random") {
-    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, isRandom = true)
+    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, indeterminate = true)
     val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
     val shuffleId1 = shuffleDep1.shuffleId
 

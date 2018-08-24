@@ -40,7 +40,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.rdd.{RDD, RDDCheckpointData}
+import org.apache.spark.rdd.{RandomLevel, RDD, RDDCheckpointData}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -1494,7 +1494,7 @@ private[spark] class DAGScheduler(
               // Note that, if map stage is UNORDERED, we are fine. The shuffle partitioner is
               // guaranteed to be idempotent, so the input data of the reducers will not change even
               // if the map tasks are re-tried.
-              if (mapStage.rdd.computingRandomLevel == RDD.RandomLevel.INDETERMINATE) {
+              if (mapStage.rdd.outputRandomLevel == RandomLevel.INDETERMINATE) {
                 def rollBackStage(stage: Stage): Unit = stage match {
                   case mapStage: ShuffleMapStage =>
                     val numMissingPartitions = mapStage.findMissingPartitions().length
@@ -1526,10 +1526,18 @@ private[spark] class DAGScheduler(
                       if (!failedStages.contains(stage)) rollBackStage(stage)
                     }
                   } else {
-                    stageChain.head.parents.foreach(s => rollbackSucceedingStages(s :: stageChain))
+                    stageChain.head.parents.foreach { s =>
+                      // The stage may already be processed in another DAG, skip it if it's in
+                      // `failedStages`.
+                      if (!failedStages.contains(s)) {
+                        rollbackSucceedingStages(s :: stageChain)
+                      }
+                    }
                   }
                 }
 
+                // `failedStage` is already added to `failedStages`, call `rollBackStage` here to
+                // rollback it, otherwise we will skip it in `rollbackSucceedingStages`.
                 rollBackStage(failedStage)
                 activeJobs.foreach(job => rollbackSucceedingStages(job.finalStage :: Nil))
               }
