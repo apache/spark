@@ -1519,10 +1519,15 @@ private[spark] class DAGScheduler(
                   case mapStage: ShuffleMapStage =>
                     val numMissingPartitions = mapStage.findMissingPartitions().length
                     if (numMissingPartitions < mapStage.numTasks) {
-                      markStageAsFinished(
-                        mapStage,
-                        Some("preceding shuffle map stage with random output gets retried."),
-                        willRetry = true)
+                      val reason = "preceding shuffle map stage with random output gets retried."
+                      try {
+                        taskScheduler.killAllTaskAttempts(
+                          mapStage.id, interruptThread = false, reason)
+                      } catch {
+                        case e: UnsupportedOperationException =>
+                          logWarning(s"Could not kill all tasks for $mapStage", e)
+                      }
+                      markStageAsFinished(mapStage, Some(reason), willRetry = true)
                       mapOutputTracker.unregisterAllMapOutput(mapStage.shuffleDep.shuffleId)
                       failedStages += mapStage
                     }
