@@ -331,17 +331,19 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    *
    * This is modeled after `RDD.take` but never runs any job locally on the driver.
    */
-  def executeTake(n: Int): Array[InternalRow] = {
+  def executeTake(n: Int): Array[InternalRow] = executeTakeIterator(n)._2.toArray
+
+  private[spark] def executeTakeIterator(n: Int): (Long, Iterator[InternalRow]) = {
     if (n == 0) {
-      return new Array[InternalRow](0)
+      return (0, Iterator.empty)
     }
 
-    val childRDD = getByteArrayRdd(n).map(_._2)
-
-    val buf = new ArrayBuffer[InternalRow]
+    val childRDD = getByteArrayRdd(n)
+    val encodedBuf = new ArrayBuffer[Array[Byte]]
     val totalParts = childRDD.partitions.length
+    var scannedRowCount = 0L
     var partsScanned = 0
-    while (buf.size < n && partsScanned < totalParts) {
+    while (scannedRowCount < n && partsScanned < totalParts) {
       // The number of partitions to try in this iteration. It is ok for this number to be
       // greater than totalParts because we actually cap it at totalParts in runJob.
       var numPartsToTry = 1L
@@ -350,30 +352,30 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         // Otherwise, interpolate the number of partitions we need to try, but overestimate
         // it by 50%. We also cap the estimation in the end.
         val limitScaleUpFactor = Math.max(sqlContext.conf.limitScaleUpFactor, 2)
-        if (buf.isEmpty) {
+        if (scannedRowCount == 0) {
           numPartsToTry = partsScanned * limitScaleUpFactor
         } else {
-          val left = n - buf.size
+          val left = n - scannedRowCount
           // As left > 0, numPartsToTry is always >= 1
-          numPartsToTry = Math.ceil(1.5 * left * partsScanned / buf.size).toInt
+          numPartsToTry = Math.ceil(1.5 * left * partsScanned / scannedRowCount).toInt
           numPartsToTry = Math.min(numPartsToTry, partsScanned * limitScaleUpFactor)
         }
       }
 
       val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
       val sc = sqlContext.sparkContext
-      val res = sc.runJob(childRDD,
-        (it: Iterator[Array[Byte]]) => if (it.hasNext) it.next() else Array.empty[Byte], p)
+      val res = sc.runJob(childRDD, (it: Iterator[(Long, Array[Byte])]) =>
+        if (it.hasNext) it.next() else (0L, Array.empty[Byte]), p)
 
-      buf ++= res.flatMap(decodeUnsafeRows)
-
+      encodedBuf ++= res.map(_._2)
+      scannedRowCount += res.map(_._1).sum
       partsScanned += p.size
     }
 
-    if (buf.size > n) {
-      buf.take(n).toArray
+    if (scannedRowCount > n) {
+      (n, encodedBuf.toIterator.flatMap(decodeUnsafeRows).take(n))
     } else {
-      buf.toArray
+      (scannedRowCount, encodedBuf.toIterator.flatMap(decodeUnsafeRows))
     }
   }
 
