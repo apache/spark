@@ -80,7 +80,7 @@ private[spark] class KubernetesDriverBuilder(
     val volumesFeature = if (kubernetesConf.roleVolumes.nonEmpty) {
       Seq(provideVolumesStep(kubernetesConf))
     } else Nil
-    val templateVolumeFeature = if (
+    val podTemplateFeature = if (
       kubernetesConf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined) {
       Seq(podTemplateConfigMapStep(kubernetesConf))
     } else Nil
@@ -95,7 +95,7 @@ private[spark] class KubernetesDriverBuilder(
       .getOrElse(provideJavaStep(kubernetesConf))
 
     val allFeatures = (baseFeatures :+ bindingsStep) ++
-      secretFeature ++ envSecretFeature ++ volumesFeature ++ templateVolumeFeature
+      secretFeature ++ envSecretFeature ++ volumesFeature ++ podTemplateFeature
 
     var spec = KubernetesDriverSpec(
       provideInitialPod(),
