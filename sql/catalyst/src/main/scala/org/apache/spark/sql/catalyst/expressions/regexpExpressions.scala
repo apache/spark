@@ -232,30 +232,41 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
  * Splits str around pat (pattern is a regular expression).
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str, regex) - Splits `str` around occurrences that match `regex`.",
+  usage = "_FUNC_(str, regex, limit) - Splits `str` around occurrences that match `regex`." +
+    "The `limit` parameter controls the number of times the pattern is applied and " +
+    "therefore affects the length of the resulting array. If the limit n is " +
+    "greater than zero then the pattern will be applied at most n - 1 times, " +
+    "the array's length will be no greater than n, and the array's last entry " +
+    "will contain all input beyond the last matched delimiter. If n is " +
+    "non-positive then the pattern will be applied as many times as " +
+    "possible and the array can have any length. If n is zero then the " +
+    "pattern will be applied as many times as possible, the array can " +
+    "have any length, and trailing empty strings will be discarded.",
   examples = """
     Examples:
-      > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]');
+      > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]', -1);
        ["one","two","three",""]
+|      > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]', 2);
+ |       ["one","twoBthreeC"]
   """)
-case class StringSplit(str: Expression, pattern: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+case class StringSplit(str: Expression, pattern: Expression, limit: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes {
 
-  override def left: Expression = str
-  override def right: Expression = pattern
   override def dataType: DataType = ArrayType(StringType)
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+  override def children: Seq[Expression] = str :: pattern :: limit :: Nil
 
-  override def nullSafeEval(string: Any, regex: Any): Any = {
-    val strings = string.asInstanceOf[UTF8String].split(regex.asInstanceOf[UTF8String], -1)
+  override def nullSafeEval(string: Any, regex: Any, limit: Any): Any = {
+    val strings = string.asInstanceOf[UTF8String].split(
+      regex.asInstanceOf[UTF8String], limit.asInstanceOf[Int])
     new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
-    nullSafeCodeGen(ctx, ev, (str, pattern) =>
+    nullSafeCodeGen(ctx, ev, (str, pattern, limit) =>
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
-      s"""${ev.value} = new $arrayClass($str.split($pattern, -1));""")
+      s"""${ev.value} = new $arrayClass($str.split($pattern, $limit));""")
   }
 
   override def prettyName: String = "split"

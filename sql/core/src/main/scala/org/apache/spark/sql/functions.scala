@@ -2554,7 +2554,27 @@ object functions {
    * @since 1.5.0
    */
   def split(str: Column, pattern: String): Column = withExpr {
-    StringSplit(str.expr, lit(pattern).expr)
+    StringSplit(str.expr, lit(pattern).expr, lit(-1).expr)
+  }
+
+  /**
+    * Splits str around pattern (pattern is a regular expression) up to `limit-1` times.
+    *
+    * The limit parameter controls the number of times the pattern is applied and therefore
+    * affects the length of the resulting array. If the limit n is greater than zero then the
+    * pattern will be applied at most n - 1 times, the array's length will be no greater than
+    * n, and the array's last entry will contain all input beyond the last matched delimiter.
+    * If n is non-positive then the pattern will be applied as many times as possible and the
+    * array can have any length. If n is zero then the pattern will be applied as many times as
+    * possible, the array can have any length, and trailing empty strings will be discarded.
+    *
+    * @note Pattern is a string representation of the regular expression.
+    *
+    * @group string_funcs
+    * @since 1.5.0
+    */
+  def split(str: Column, pattern: String, limit: Int): Column = withExpr {
+    StringSplit(str.expr, lit(pattern).expr, lit(limit).expr)
   }
 
   /**
