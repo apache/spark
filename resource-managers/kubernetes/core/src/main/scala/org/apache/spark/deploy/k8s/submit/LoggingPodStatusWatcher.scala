@@ -121,16 +121,22 @@ private[k8s] class LoggingPodStatusWatcherImpl(
           .map(_.getImage)
           .mkString(", ")),
       ("phase", pod.getStatus.getPhase),
-      ("status", pod.getStatus.getContainerStatuses.toString)
+      ("status", pod.getStatus.getContainerStatuses.asScala.map { status =>
+        Seq(
+          ("Container name", status.getName),
+          ("Container image", status.getImage)) ++
+          containerStatusDescription(status)
+      }.map(p => formatPairsBundle(p, 2)).mkString("\n\n"))
     )
 
     formatPairsBundle(details)
   }
 
-  private def formatPairsBundle(pairs: Seq[(String, String)]) = {
+  private def formatPairsBundle(pairs: Seq[(String, String)], indent: Int = 1) = {
     // Use more loggable format if value is null or empty
+    val indentStr = "\t" * indent
     pairs.map {
-      case (k, v) => s"\n\t $k: ${Option(v).filter(_.nonEmpty).getOrElse("N/A")}"
+      case (k, v) => s"\n$indentStr $k: ${Option(v).filter(_.nonEmpty).getOrElse("N/A")}"
     }.mkString("")
   }
 
@@ -147,7 +153,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(
         ("Container name", status.getName),
         ("Container image", status.getImage)) ++
         containerStatusDescription(status)
-    }.map(formatPairsBundle).mkString("\n\n")
+    }.map(p => formatPairsBundle(p, 1)).mkString("\n\n")
   }
 
   private def containerStatusDescription(
@@ -168,7 +174,10 @@ private[k8s] class LoggingPodStatusWatcherImpl(
         case terminated: ContainerStateTerminated =>
           Seq(
             ("Container state", "Terminated"),
-            ("Exit code", terminated.getExitCode.toString))
+            ("Container started at", formatTime(terminated.getStartedAt)),
+            ("Container finished at", formatTime(terminated.getFinishedAt)),
+            ("Exit code", terminated.getExitCode.toString),
+            ("Termination reason", terminated.getReason))
         case unknown =>
           throw new SparkException(s"Unexpected container status type ${unknown.getClass}.")
         }.getOrElse(Seq(("Container state", "N/A")))
