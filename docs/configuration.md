@@ -1926,6 +1926,14 @@ showDF(properties, numRows = 200, truncate = FALSE)
   </td>
 </tr>
 <tr>
+  <td><code>spark.streaming.backpressure.fixedMinMessagePerPartition</code></td>
+  <td>1</td>
+  <td>
+    This sets a fixed minimum message per partition per batch when the backpressure mechanism is enabled. The
+    default value is 1.
+  </td>
+</tr>
+<tr>
   <td><code>spark.streaming.blockInterval</code></td>
   <td>200ms</td>
   <td>
