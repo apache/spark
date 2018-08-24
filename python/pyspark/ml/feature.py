@@ -3673,12 +3673,12 @@ class VectorSizeHint(JavaTransformer, HasInputCol, HasHandleInvalid, JavaMLReada
     @since("2.3.0")
     def getSize(self):
         """ Gets size param, the size of vectors in `inputCol`."""
-        self.getOrDefault(self.size)
+        return self.getOrDefault(self.size)
 
     @since("2.3.0")
     def setSize(self, value):
         """ Sets size param, the size of vectors in `inputCol`."""
-        self._set(size=value)
+        return self._set(size=value)
 
 
 if __name__ == "__main__":
