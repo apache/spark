@@ -159,13 +159,10 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with Kaf
       s"AddKafkaData(topics = $topics, data = $data, message = $message)"
   }
 
-  object WithKafkaProducer {
-    def apply(
-        topic: String,
-        producer: KafkaProducer[String, String])(
-        func: KafkaProducer[String, String] => Unit): AssertOnQuery = {
+  object WithOffsetSync {
+    def apply(topic: String)(func: () => Unit): StreamAction = {
       Execute("Run Kafka Producer")(_ => {
-        func(producer)
+        func()
         // This is a hack for the race condition that the committed message may be not visible to
         // consumer for a short time.
         // Looks like after the following call returns, the consumer can always read the committed
@@ -661,7 +658,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         StartStream(ProcessingTime(100), clock),
         waitUntilBatchProcessed,
         CheckAnswer(),
-        WithKafkaProducer(topic, producer) { producer =>
+        WithOffsetSync(topic) { () =>
           // Send 5 messages. They should be visible only after being committed.
           producer.beginTransaction()
           (0 to 4).foreach { i =>
@@ -672,7 +669,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         waitUntilBatchProcessed,
         // Should not see any uncommitted messages
         CheckNewAnswer(),
-        WithKafkaProducer(topic, producer) { producer =>
+        WithOffsetSync(topic) { () =>
           producer.commitTransaction()
         },
         AdvanceManualClock(100),
@@ -681,7 +678,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
         CheckNewAnswer(3, 4), // offset: 3, 4, 5* [* means it's not a committed data message]
-        WithKafkaProducer(topic, producer) { producer =>
+        WithOffsetSync(topic) { () =>
           // Send 5 messages and abort the transaction. They should not be read.
           producer.beginTransaction()
           (6 to 10).foreach { i =>
@@ -695,7 +692,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
         CheckNewAnswer(), // offset: 9*, 10*, 11*
-        WithKafkaProducer(topic, producer) { producer =>
+        WithOffsetSync(topic) { () =>
           // Send 5 messages again. The consumer should skip the above aborted messages and read
           // them.
           producer.beginTransaction()
@@ -710,7 +707,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
         CheckNewAnswer(15, 16),  // offset: 15, 16, 17*
-        WithKafkaProducer(topic, producer) { producer =>
+        WithOffsetSync(topic) { () =>
           producer.beginTransaction()
           producer.send(new ProducerRecord[String, String](topic, "18")).get()
           producer.commitTransaction()
@@ -783,7 +780,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         StartStream(ProcessingTime(100), clock),
         waitUntilBatchProcessed,
         CheckNewAnswer(),
-        WithKafkaProducer(topic, producer) { producer =>
+        WithOffsetSync(topic) { () =>
           // Send 5 messages. They should be visible only after being committed.
           producer.beginTransaction()
           (0 to 4).foreach { i =>
@@ -793,13 +790,13 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
         CheckNewAnswer(0, 1, 2), // offset 0, 1, 2
-        WithKafkaProducer(topic, producer) { producer =>
+        WithOffsetSync(topic) { () =>
           producer.commitTransaction()
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
         CheckNewAnswer(3, 4), // offset: 3, 4, 5* [* means it's not a committed data message]
-        WithKafkaProducer(topic, producer) { producer =>
+        WithOffsetSync(topic) { () =>
           // Send 5 messages and abort the transaction. They should not be read.
           producer.beginTransaction()
           (6 to 10).foreach { i =>
@@ -813,7 +810,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
         CheckNewAnswer(9, 10), // offset: 9, 10, 11*
-        WithKafkaProducer(topic, producer) { producer =>
+        WithOffsetSync(topic) { () =>
           // Send 5 messages again. The consumer should skip the above aborted messages and read
           // them.
           producer.beginTransaction()
@@ -828,7 +825,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
         CheckNewAnswer(15, 16),  // offset: 15, 16, 17*
-        WithKafkaProducer(topic, producer) { producer =>
+        WithOffsetSync(topic) { () =>
           producer.beginTransaction()
           producer.send(new ProducerRecord[String, String](topic, "18")).get()
           producer.commitTransaction()

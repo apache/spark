@@ -395,15 +395,13 @@ private[kafka010] case class InternalKafkaConsumer(
           // Never happen as "reportDataLoss" will throw an exception
           throw new IllegalStateException(
             "reportDataLoss didn't throw an exception when 'failOnDataLoss' is true")
+        } else if (record.offset >= untilOffset) {
+          reportDataLoss(false, s"Skip missing records in [$offset, $untilOffset)")
+          // Set `nextOffsetToFetch` to `untilOffset` to finish the current batch.
+          fetchedRecord.withRecord(null, untilOffset)
         } else {
-          if (record.offset >= untilOffset) {
-            reportDataLoss(false, s"Skip missing records in [$offset, $untilOffset)")
-            // Set `nextOffsetToFetch` to `untilOffset` to finish the current batch.
-            fetchedRecord.withRecord(null, untilOffset)
-          } else {
-            reportDataLoss(false, s"Skip missing records in [$offset, ${record.offset})")
-            fetchedRecord.withRecord(record, fetchedData.nextOffsetInFetchedData)
-          }
+          reportDataLoss(false, s"Skip missing records in [$offset, ${record.offset})")
+          fetchedRecord.withRecord(record, fetchedData.nextOffsetInFetchedData)
         }
       } else if (record.offset < offset) {
         // This should not happen. If it does happen, then we probably misunderstand Kafka internal

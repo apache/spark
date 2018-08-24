@@ -331,7 +331,6 @@ private[kafka010] case class KafkaMicroBatchPartitionReader(
     offsetRange.topicPartition, executorKafkaParams, reuseKafkaConsumer)
 
   private val rangeToRead = resolveRange(offsetRange)
-
   private val converter = new KafkaRecordToUnsafeRowConverter
 
   private var nextOffset = rangeToRead.fromOffset
