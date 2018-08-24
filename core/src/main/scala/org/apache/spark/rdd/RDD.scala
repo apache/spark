@@ -1885,6 +1885,11 @@ abstract class RDD[T: ClassTag](
   // partitions.
   private[spark] def outputRandomLevel: RandomLevel.Value = {
     val randomLevelCandidates = dependencies.map {
+      // If checkpointed to reliable store, then it's idempotent, as `ReliableCheckpointRDD` has
+      // same output (including data order) when rerun.
+      case dep: Dependency[_] if dep.rdd.getCheckpointFile.isDefined =>
+        RandomLevel.IDEMPOTENT
+
       case dep: ShuffleDependency[_, _, _] =>
         if (dep.rdd.outputRandomLevel == RandomLevel.INDETERMINATE) {
           // If map output was indeterminate, shuffle output will be indeterminate as well

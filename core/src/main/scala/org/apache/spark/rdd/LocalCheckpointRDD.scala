@@ -37,11 +37,12 @@ import org.apache.spark.storage.RDDBlockId
 private[spark] class LocalCheckpointRDD[T: ClassTag](
     sc: SparkContext,
     rddId: Int,
-    numPartitions: Int)
+    numPartitions: Int,
+    randomLevel: RandomLevel.Value)
   extends CheckpointRDD[T](sc) {
 
   def this(rdd: RDD[T]) {
-    this(rdd.context, rdd.id, rdd.partitions.length)
+    this(rdd.context, rdd.id, rdd.partitions.length, rdd.outputRandomLevel)
   }
 
   protected override def getPartitions: Array[Partition] = {
@@ -64,4 +65,9 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](
       s"instead, which is slower than local checkpointing but more fault-tolerant.")
   }
 
+  // Local checkpoint is not reliable, we may still get output from original RDD, so the output
+  // random level should also inherent from the original RDD.
+  override private[spark] def outputRandomLevel = {
+    randomLevel
+  }
 }
