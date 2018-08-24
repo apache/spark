@@ -341,6 +341,7 @@ private[kafka010] case class KafkaMicroBatchPartitionReader(
       val record = consumer.get(nextOffset, rangeToRead.untilOffset, pollTimeoutMs, failOnDataLoss)
       if (record != null) {
         nextRow = converter.toUnsafeRow(record)
+        nextOffset = record.offset + 1
         true
       } else {
         false
@@ -352,7 +353,6 @@ private[kafka010] case class KafkaMicroBatchPartitionReader(
 
   override def get(): UnsafeRow = {
     assert(nextRow != null)
-    nextOffset += 1
     nextRow
   }
 
