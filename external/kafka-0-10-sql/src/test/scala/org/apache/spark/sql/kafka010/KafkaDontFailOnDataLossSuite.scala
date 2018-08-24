@@ -106,27 +106,23 @@ class KafkaDontFailOnDataLossSuite extends KafkaMissingOffsetsTest {
 
     val table = "DontFailOnDataLoss"
     withTable(table) {
-      val df = if (testStreamingQuery) {
-        spark.readStream
-          .format("kafka")
-          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-          .option("kafka.metadata.max.age.ms", "1")
-          .option("subscribe", topic)
-          .option("startingOffsets", s"""{"$topic":{"0":0}}""")
-          .option("failOnDataLoss", "false")
-          .option("kafkaConsumer.pollTimeoutMs", "1000")
-          .load()
-      } else {
-        spark.read
-          .format("kafka")
-          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-          .option("kafka.metadata.max.age.ms", "1")
-          .option("subscribe", topic)
-          .option("startingOffsets", s"""{"$topic":{"0":0}}""")
-          .option("failOnDataLoss", "false")
-          .option("kafkaConsumer.pollTimeoutMs", "1000")
-          .load()
-      }
+      val kafkaOptions = Map(
+        "kafka.bootstrap.servers" -> testUtils.brokerAddress,
+        "kafka.metadata.max.age.ms" -> "1",
+        "subscribe" -> topic,
+        "startingOffsets" -> s"""{"$topic":{"0":0}}""",
+        "failOnDataLoss" -> "false",
+        "kafkaConsumer.pollTimeoutMs" -> "1000")
+      val df =
+        if (testStreamingQuery) {
+          val reader = spark.readStream.format("kafka")
+          kafkaOptions.foreach(kv => reader.option(kv._1, kv._2))
+          reader.load()
+        } else {
+          val reader = spark.read.format("kafka")
+          kafkaOptions.foreach(kv => reader.option(kv._1, kv._2))
+          reader.load()
+        }
       writeToTable(df.selectExpr("CAST(value AS STRING)"), table)
       val result = spark.table(table).as[String].collect().toList
       assert(result.distinct.size === result.size, s"$result contains duplicated records")
@@ -169,9 +165,7 @@ class KafkaDontFailOnDataLossSuite extends KafkaMissingOffsetsTest {
         .trigger(Trigger.Continuous(100))
         .start()
       try {
-        eventually(timeout(60.seconds)) {
-          assert(spark.table(table).as[String].collect().contains("49"))
-        }
+        query.processAllAvailable()
       } finally {
         query.stop()
       }
@@ -196,17 +190,14 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with KafkaM
   protected def startStream(ds: Dataset[Int]) = {
     ds.writeStream.foreach(new ForeachWriter[Int] {
 
-      override def open(partitionId: Long, version: Long): Boolean = {
-        true
-      }
+      override def open(partitionId: Long, version: Long): Boolean = true
 
       override def process(value: Int): Unit = {
         // Slow down the processing speed so that messages may be aged out.
         Thread.sleep(Random.nextInt(500))
       }
 
-      override def close(errorOrNull: Throwable): Unit = {
-      }
+      override def close(errorOrNull: Throwable): Unit = {}
     }).start()
   }
 
