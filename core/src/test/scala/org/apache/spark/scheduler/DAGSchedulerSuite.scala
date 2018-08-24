@@ -2650,11 +2650,13 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
     submit(finalRdd, Array(0, 1))
 
+    // Finish the first shuffle map stage.
     complete(taskSets(0), Seq(
       (Success, makeMapStatus("hostA", 2)),
       (Success, makeMapStatus("hostB", 2))))
     assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
 
+    // Finish the second shuffle map stage.
     complete(taskSets(1), Seq(
       (Success, makeMapStatus("hostC", 2)),
       (Success, makeMapStatus("hostD", 2))))
@@ -2710,6 +2712,35 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assertDataStructuresEmpty()
+  }
+
+  test("SPARK-23207: cannot rollback a result stage") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil, indeterminate = true)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleId = shuffleDep.shuffleId
+
+    val finalRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+    submit(finalRdd, Array(0, 1))
+
+    // Finish the shuffle map stage.
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq.empty))
+
+    // Finish the first task of the result stage
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0), Success, 42,
+      Seq.empty, createFakeTaskInfoWithId(0)))
+
+    // Fail the second task with FetchFailed.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"),
+      null))
+
+    // The job should fail because Spark can't rollback the result stage.
+    assert(failure != null && failure.getMessage.contains("Spark cannot rollback"))
   }
 
   /**

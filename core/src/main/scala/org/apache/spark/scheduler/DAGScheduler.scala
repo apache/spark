@@ -1512,10 +1512,9 @@ private[spark] class DAGScheduler(
                     if (numMissingPartitions < resultStage.numTasks) {
                       // TODO: support to rollback result tasks.
                       val errorMessage = "A shuffle map stage with random output was failed and " +
-                        s"retried. However, Spark cannot rollback the result stage $resultStage " +
-                        "to re-process the input data, and has to fail this job. Please " +
-                        "eliminate the randomness by checkpointing the RDD before " +
-                        "repartition/zip and try again."
+                        s"retried. However, Spark cannot rollback the $resultStage to re-process " +
+                        "the input data, and has to fail this job. Please eliminate the " +
+                        "randomness by checkpointing the RDD before repartition/zip and try again."
                       abortStage(failedStage, errorMessage, None)
                     }
                 }
