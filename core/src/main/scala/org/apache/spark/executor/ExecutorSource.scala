@@ -17,11 +17,13 @@
 
 package org.apache.spark.executor
 
+import java.lang.management.ManagementFactory
 import java.util.concurrent.ThreadPoolExecutor
 
 import scala.collection.JavaConverters._
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
+import com.sun.management.OperatingSystemMXBean
 import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.metrics.source.Source
@@ -72,6 +74,13 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
     registerFileSystemStat(scheme, "largeRead_ops", _.getLargeReadOps(), 0)
     registerFileSystemStat(scheme, "write_ops", _.getWriteOps(), 0)
   }
+
+  // Dropwizard metrics gauge measuring the executor's process (JVM) CPU time.
+  // The value is returned in nanoseconds, the method return -1 if this operation is not supported.
+  val osMXBean = ManagementFactory.getOperatingSystemMXBean.asInstanceOf[OperatingSystemMXBean]
+  metricRegistry.register(MetricRegistry.name("executorCPUTime" ), new Gauge[Long] {
+    override def getValue: Long = osMXBean.getProcessCpuTime()
+  })
 
   // Expose executor task metrics using the Dropwizard metrics system.
   // The list is taken from TaskMetrics.scala
