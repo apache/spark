@@ -17,22 +17,21 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.reflect.ClassTag
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class DataSourceRDDPartition(val index: Int, val inputPartition: InputPartition)
   extends Partition with Serializable
 
-// TODO: we should have 2 RDDs: an RDD[InternalRow] for row-based scan, an `RDD[ColumnarBatch]` for
-// columnar scan.
-class DataSourceRDD(
+abstract class DataSourceRDD[T: ClassTag](
     sc: SparkContext,
-    @transient private val inputPartitions: Seq[InputPartition],
-    partitionReaderFactory: PartitionReaderFactory,
-    columnarReads: Boolean)
-  extends RDD[InternalRow](sc, Nil) {
+    @transient private val inputPartitions: Seq[InputPartition])
+  extends RDD[T](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
     inputPartitions.zipWithIndex.map {
@@ -40,18 +39,16 @@ class DataSourceRDD(
     }.toArray
   }
 
-  private def castPartition(split: Partition): DataSourceRDDPartition = split match {
+  protected def castPartition(split: Partition): DataSourceRDDPartition = split match {
     case p: DataSourceRDDPartition => p
     case _ => throw new SparkException(s"[BUG] Not a DataSourceRDDPartition: $split")
   }
 
-  override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
+  def createReader(split: Partition, inputPartition: InputPartition): PartitionReader[_]
+
+  override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     val inputPartition = castPartition(split).inputPartition
-    val reader: PartitionReader[_] = if (columnarReads) {
-      partitionReaderFactory.createColumnarReader(inputPartition)
-    } else {
-      partitionReaderFactory.createReader(inputPartition)
-    }
+    val reader: PartitionReader[_] = createReader(split, inputPartition)
 
     context.addTaskCompletionListener[Unit](_ => reader.close())
     val iter = new Iterator[Any] {
@@ -72,11 +69,32 @@ class DataSourceRDD(
         reader.get()
       }
     }
-    // TODO: SPARK-25083 remove the type erasure hack in data source scan
-    new InterruptibleIterator(context, iter.asInstanceOf[Iterator[InternalRow]])
+    new InterruptibleIterator(context, iter.asInstanceOf[Iterator[T]])
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
     castPartition(split).inputPartition.preferredLocations()
+  }
+}
+
+class DataSourceRowRDD(
+  sc: SparkContext,
+  @transient private val inputPartitions: Seq[InputPartition],
+  partitionReaderFactory: PartitionReaderFactory)
+  extends DataSourceRDD[InternalRow](sc, inputPartitions) {
+
+  def createReader(split: Partition, inputPartition: InputPartition): PartitionReader[_] = {
+      partitionReaderFactory.createReader(inputPartition)
+  }
+}
+
+class DataSourceColumnarBatchRDD(
+    sc: SparkContext,
+    @transient private val inputPartitions: Seq[InputPartition],
+    partitionReaderFactory: PartitionReaderFactory)
+  extends DataSourceRDD[ColumnarBatch](sc, inputPartitions) {
+
+  def createReader(split: Partition, inputPartition: InputPartition): PartitionReader[_] = {
+    partitionReaderFactory.createColumnarReader(inputPartition)
   }
 }

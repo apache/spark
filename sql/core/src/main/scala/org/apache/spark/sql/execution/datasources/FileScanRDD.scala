@@ -66,12 +66,12 @@ class FileScanRDD(
     @transient private val sparkSession: SparkSession,
     readFunction: (PartitionedFile) => Iterator[InternalRow],
     @transient val filePartitions: Seq[FilePartition])
-  extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
+  extends RDD[Object](sparkSession.sparkContext, Nil) {
 
   private val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
   private val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
 
-  override def compute(split: RDDPartition, context: TaskContext): Iterator[InternalRow] = {
+  override def compute(split: RDDPartition, context: TaskContext): Iterator[Object] = {
     val iterator = new Iterator[Object] with AutoCloseable {
       private val inputMetrics = context.taskMetrics().inputMetrics
       private val existingBytesRead = inputMetrics.bytesRead
@@ -216,7 +216,7 @@ class FileScanRDD(
     // Register an on-task-completion callback to close the input stream.
     context.addTaskCompletionListener[Unit](_ => iterator.close())
 
-    iterator.asInstanceOf[Iterator[InternalRow]] // This is an erasure hack.
+    iterator
   }
 
   override protected def getPartitions: Array[RDDPartition] = filePartitions.toArray

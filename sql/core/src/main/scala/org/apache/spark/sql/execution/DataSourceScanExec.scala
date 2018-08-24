@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => 
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
@@ -164,7 +165,7 @@ case class FileSourceScanExec(
     optionalBucketSet: Option[BitSet],
     dataFilters: Seq[Expression],
     override val tableIdentifier: Option[TableIdentifier])
-  extends DataSourceScanExec with ColumnarBatchScan  {
+  extends DataSourceScanExec with ColumnarBatchScan {
 
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
@@ -307,7 +308,7 @@ case class FileSourceScanExec(
     withSelectedBucketsCount
   }
 
-  private lazy val inputRDD: RDD[InternalRow] = {
+  private lazy val inputRDD: RDD[Object] = {
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
       relation.fileFormat.buildReaderWithPartitionValues(
         sparkSession = relation.sparkSession,
@@ -326,8 +327,12 @@ case class FileSourceScanExec(
     }
   }
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    inputRDD :: Nil
+  override def inputRowRDDs(): Seq[RDD[InternalRow]] = {
+    inputRDD.asInstanceOf[RDD[InternalRow]] :: Nil
+  }
+
+  override def inputBatchRDDs(): Seq[RDD[ColumnarBatch]] = {
+    inputRDD.asInstanceOf[RDD[ColumnarBatch]] :: Nil
   }
 
   override lazy val metrics =
@@ -345,8 +350,9 @@ case class FileSourceScanExec(
     } else {
       val numOutputRows = longMetric("numOutputRows")
 
+      val rdd = inputRDD.asInstanceOf[RDD[InternalRow]]
       if (needsUnsafeRowConversion) {
-        inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+        rdd.mapPartitionsWithIndexInternal { (index, iter) =>
           val proj = UnsafeProjection.create(schema)
           proj.initialize(index)
           iter.map( r => {
@@ -355,7 +361,7 @@ case class FileSourceScanExec(
           })
         }
       } else {
-        inputRDD.map { r =>
+        rdd.map { r =>
           numOutputRows += 1
           r
         }
@@ -381,7 +387,7 @@ case class FileSourceScanExec(
       bucketSpec: BucketSpec,
       readFile: (PartitionedFile) => Iterator[InternalRow],
       selectedPartitions: Seq[PartitionDirectory],
-      fsRelation: HadoopFsRelation): RDD[InternalRow] = {
+      fsRelation: HadoopFsRelation): RDD[Object] = {
     logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
     val filesGroupedToBuckets =
       selectedPartitions.flatMap { p =>
@@ -422,7 +428,7 @@ case class FileSourceScanExec(
   private def createNonBucketedReadRDD(
       readFile: (PartitionedFile) => Iterator[InternalRow],
       selectedPartitions: Seq[PartitionDirectory],
-      fsRelation: HadoopFsRelation): RDD[InternalRow] = {
+      fsRelation: HadoopFsRelation): RDD[Object] = {
     val defaultMaxSplitBytes =
       fsRelation.sparkSession.sessionState.conf.filesMaxPartitionBytes
     val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes

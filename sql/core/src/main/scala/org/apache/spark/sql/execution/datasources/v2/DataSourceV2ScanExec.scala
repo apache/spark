@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousPartitionReaderFactory, ContinuousReadSupport, MicroBatchReadSupport}
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
  * Physical plan node for scanning data from a data source.
@@ -100,11 +101,17 @@ case class DataSourceV2ScanExec(
         readerFactory.asInstanceOf[ContinuousPartitionReaderFactory])
 
     case _ =>
-      new DataSourceRDD(
-        sparkContext, partitions, readerFactory.asInstanceOf[PartitionReaderFactory], supportsBatch)
+      new DataSourceRowRDD(
+        sparkContext, partitions, readerFactory.asInstanceOf[PartitionReaderFactory])
   }
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
+  private lazy val inputColumnarBatchRDD: RDD[ColumnarBatch] =
+    new DataSourceColumnarBatchRDD(
+      sparkContext, partitions, readerFactory.asInstanceOf[PartitionReaderFactory])
+
+  override def inputRowRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
+
+  override def inputBatchRDDs(): Seq[RDD[ColumnarBatch]] = Seq(inputColumnarBatchRDD)
 
   override protected def needsUnsafeRowConversion: Boolean = false
 

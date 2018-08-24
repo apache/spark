@@ -102,57 +102,55 @@ case class InMemoryTableScanExec(
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {
-    val buffers = filteredCachedBatches()
-    val offHeapColumnVectorEnabled = conf.offHeapColumnVectorEnabled
-    if (supportsBatch) {
-      // HACK ALERT: This is actually an RDD[ColumnarBatch].
-      // We're taking advantage of Scala's type erasure here to pass these batches along.
-      buffers
-        .map(createAndDecompressColumn(_, offHeapColumnVectorEnabled))
-        .asInstanceOf[RDD[InternalRow]]
-    } else {
-      val numOutputRows = longMetric("numOutputRows")
+    val numOutputRows = longMetric("numOutputRows")
 
-      if (enableAccumulatorsForTest) {
-        readPartitions.setValue(0)
-        readBatches.setValue(0)
+    if (enableAccumulatorsForTest) {
+      readPartitions.setValue(0)
+      readBatches.setValue(0)
+    }
+
+    // Using these variables here to avoid serialization of entire objects (if referenced
+    // directly) within the map Partitions closure.
+    val relOutput: AttributeSeq = relation.output
+
+    filteredCachedBatches().mapPartitionsInternal { cachedBatchIterator =>
+      // Find the ordinals and data types of the requested columns.
+      val (requestedColumnIndices, requestedColumnDataTypes) =
+        attributes.map { a =>
+          relOutput.indexOf(a.exprId) -> a.dataType
+        }.unzip
+
+      // update SQL metrics
+      val withMetrics = cachedBatchIterator.map { batch =>
+        if (enableAccumulatorsForTest) {
+          readBatches.add(1)
+        }
+        numOutputRows += batch.numRows
+        batch
       }
 
-      // Using these variables here to avoid serialization of entire objects (if referenced
-      // directly) within the map Partitions closure.
-      val relOutput: AttributeSeq = relation.output
-
-      filteredCachedBatches().mapPartitionsInternal { cachedBatchIterator =>
-        // Find the ordinals and data types of the requested columns.
-        val (requestedColumnIndices, requestedColumnDataTypes) =
-          attributes.map { a =>
-            relOutput.indexOf(a.exprId) -> a.dataType
-          }.unzip
-
-        // update SQL metrics
-        val withMetrics = cachedBatchIterator.map { batch =>
-          if (enableAccumulatorsForTest) {
-            readBatches.add(1)
-          }
-          numOutputRows += batch.numRows
-          batch
-        }
-
-        val columnTypes = requestedColumnDataTypes.map {
-          case udt: UserDefinedType[_] => udt.sqlType
-          case other => other
-        }.toArray
-        val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
-        columnarIterator.initialize(withMetrics, columnTypes, requestedColumnIndices.toArray)
-        if (enableAccumulatorsForTest && columnarIterator.hasNext) {
-          readPartitions.add(1)
-        }
-        columnarIterator
+      val columnTypes = requestedColumnDataTypes.map {
+        case udt: UserDefinedType[_] => udt.sqlType
+        case other => other
+      }.toArray
+      val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
+      columnarIterator.initialize(withMetrics, columnTypes, requestedColumnIndices.toArray)
+      if (enableAccumulatorsForTest && columnarIterator.hasNext) {
+        readPartitions.add(1)
       }
+      columnarIterator
     }
   }
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
+  private lazy val inputBatchRDD: RDD[ColumnarBatch] = {
+    val buffers = filteredCachedBatches()
+    val offHeapColumnVectorEnabled = conf.offHeapColumnVectorEnabled
+    buffers.map(createAndDecompressColumn(_, offHeapColumnVectorEnabled))
+  }
+
+  override def inputRowRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
+
+  override def inputBatchRDDs(): Seq[RDD[ColumnarBatch]] = Seq(inputBatchRDD)
 
   override def output: Seq[Attribute] = attributes
 

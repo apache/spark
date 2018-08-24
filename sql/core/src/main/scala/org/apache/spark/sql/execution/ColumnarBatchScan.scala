@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -39,6 +41,29 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
+
+  /**
+   * Returns all the RDDs of ColumnarBatch which generates the input rows.
+   */
+  def inputBatchRDDs(): Seq[RDD[ColumnarBatch]]
+
+  /**
+   * Returns all the RDDs of InternalRow which generates the input rows.
+   */
+  def inputRowRDDs(): Seq[RDD[InternalRow]]
+
+  /**
+   * Get input RDD depends on supportsBatch.
+   */
+  final def getInputRDDs(): Seq[RDD[InternalRow]] = {
+    if (supportsBatch) {
+      inputBatchRDDs().asInstanceOf[Seq[RDD[InternalRow]]]
+    } else {
+      inputRowRDDs()
+    }
+  }
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = getInputRDDs()
 
   /**
    * Generate [[ColumnVector]] expressions for our parent to consume as rows.
