@@ -24,7 +24,6 @@ import scala.Predef.{println => _, _}
 // scalastyle:on println
 import scala.concurrent.Future
 import scala.reflect.classTag
-import scala.reflect.internal.util.ScalaClassLoader.savingContextLoader
 import scala.reflect.io.File
 import scala.tools.nsc.{GenericRunnerSettings, Properties}
 import scala.tools.nsc.Settings
@@ -33,7 +32,9 @@ import scala.tools.nsc.interpreter.{AbstractOrMissingHandler, ILoop, IMain, JPri
 import scala.tools.nsc.interpreter.{NamedParam, SimpleReader, SplashLoop, SplashReader}
 import scala.tools.nsc.interpreter.StdReplTags.tagOfIMain
 import scala.tools.nsc.util.stringFromStream
-import scala.util.Properties.{javaVersion, javaVmName, versionString}
+import scala.util.Properties.{javaVersion, javaVmName, versionNumberString, versionString}
+
+import org.apache.spark.util.Utils
 
 /**
  *  A Spark-specific interactive shell.
@@ -43,9 +44,25 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   def this(in0: BufferedReader, out: JPrintWriter) = this(Some(in0), out)
   def this() = this(None, new JPrintWriter(Console.out, true))
 
+  // TODO: Remove the entire override when the support of Scala 2.11 is ended
+  // Scala 2.11 has a bug of finding imported types in class constructors, extends clause
+  // which is fixed in Scala 2.12 but never be back-ported into Scala 2.11.x
+  // As a result, we copied the fixes into `SparkILoopInterpreter`. See SPARK-22393 for detail.
   override def createInterpreter(): Unit = {
-    intp = new SparkILoopInterpreter(settings, out)
+    if (isScala2_11) {
+      if (addedClasspath != "") {
+        settings.classpath append addedClasspath
+      }
+      intp = Utils.classForName("org.apache.spark.repl.SparkILoopInterpreter")
+        .getDeclaredConstructor(Seq(classOf[Settings], classOf[JPrintWriter]): _*)
+        .newInstance(Seq(settings, out): _*)
+        .asInstanceOf[IMain]
+    } else {
+      super.createInterpreter()
+    }
   }
+
+  private val isScala2_11 = versionNumberString.startsWith("2.11")
 
   val initializationCommands: Seq[String] = Seq(
     """
@@ -125,6 +142,22 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   }
 
   /**
+   * TODO: Remove `runClosure` when the support of Scala 2.11 is ended
+   * In Scala 2.12, we don't need to use `savingContextLoader` to execute the `body`.
+   * See `SI-8521 No blind save of context class loader` for detail.
+   */
+  private def runClosure(body: () => Boolean): Boolean = {
+    if (isScala2_11) {
+      Utils.classForName("scala.reflect.internal.util.ScalaClassLoader$")
+        .getDeclaredMethod("savingContextLoader", classOf[() => Boolean])
+        .invoke(null, body)
+        .asInstanceOf[Boolean]
+    } else {
+      body.apply()
+    }
+  }
+
+  /**
    * The following code is mostly a copy of `process` implementation in `ILoop.scala` in Scala
    *
    * In newer version of Scala, `printWelcome` is the first thing to be called. As a result,
@@ -138,7 +171,7 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
    * We should remove this duplication once Scala provides a way to load our custom initialization
    * code, and also customize the ordering of printing welcome message.
    */
-  override def process(settings: Settings): Boolean = savingContextLoader {
+  override def process(settings: Settings): Boolean = runClosure { () =>
 
     def newReader = in0.fold(chooseReader(settings))(r => SimpleReader(r, out, interactive = true))
 
