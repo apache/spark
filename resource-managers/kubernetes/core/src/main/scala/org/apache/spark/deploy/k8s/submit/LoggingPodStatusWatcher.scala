@@ -106,6 +106,4 @@ private[k8s] class LoggingPodStatusWatcherImpl(
       s"Container final statuses:\n\n${containersDescription(p)}"
     }.getOrElse("No containers were found in the driver pod."))
   }
-
-
 }
