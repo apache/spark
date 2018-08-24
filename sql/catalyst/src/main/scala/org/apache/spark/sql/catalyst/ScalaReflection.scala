@@ -135,7 +135,7 @@ object ScalaReflection extends ScalaReflection {
    * from ordinal 0 (since there are no names to map to).  The actual location can be moved by
    * calling resolve/bind with a new schema.
    */
-  def deserializerFor[T : TypeTag](): Expression = cleanUpReflectionObjects {
+  def deserializerFor[T : TypeTag]: Expression = cleanUpReflectionObjects {
     val tpe = localTypeOf[T]
     val clsName = getClassNameFromType(tpe)
     val walkedTypePath = s"""- root class: "$clsName"""" :: Nil

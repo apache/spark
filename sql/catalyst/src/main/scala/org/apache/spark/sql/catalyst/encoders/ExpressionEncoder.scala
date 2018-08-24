@@ -60,7 +60,7 @@ object ExpressionEncoder {
       AssertNotNull(inputObject, Seq("top level Product input object"))
     }
     val serializer = ScalaReflection.serializerFor[T](nullSafeInput)
-    val deserializer = ScalaReflection.deserializerFor[T]()
+    val deserializer = ScalaReflection.deserializerFor[T]
 
     val schema = serializer.dataType
 
