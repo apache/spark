@@ -211,6 +211,6 @@ private[sql] object ArrowConverters {
       ArrowConverters.fromPayloadIterator(iter.map(new ArrowPayload(_)), context)
     }
     val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
-    sqlContext.internalCreateDataFrame(rdd, schema)
+    sqlContext.internalCreateDataFrame(rdd.setName("arrow"), schema)
   }
 }

@@ -2552,4 +2552,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(numJobs == 1)
     }
   }
+
+  test("SPARK-23034 show rdd names in RDD scan nodes") {
+    val rddWithName = spark.sparkContext.parallelize(Row(1, "abc") :: Nil).setName("testRdd")
+    val df2 = spark.createDataFrame(rddWithName, StructType.fromDDL("c0 int, c1 string"))
+    val output2 = new java.io.ByteArrayOutputStream()
+    Console.withOut(output2) {
+      df2.explain(extended = false)
+    }
+    assert(output2.toString.contains("Scan ExistingRDD testRdd"))
+  }
 }
