@@ -170,7 +170,7 @@ private[spark] class BasicExecutorFeatureStep(
       .editOrNewSpec()
         .withHostname(hostname)
         .withRestartPolicy("Never")
-        .withNodeSelector(kubernetesConf.nodeSelector().asJava)
+        .withNodeSelector(kubernetesConf.executorSelector().asJava)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets(): _*)
         .endSpec()
       .build()

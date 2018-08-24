@@ -663,11 +663,21 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.node.selector.[labelKey]</code></td>
+  <td><code>spark.kubernetes.driver.selector.[labelKey]</code></td>
   <td>(none)</td>
   <td>
-    Adds to the node selector of the driver pod and executor pods, with key <code>labelKey</code> and the value as the
-    configuration's value. For example, setting <code>spark.kubernetes.node.selector.identifier</code> to <code>myIdentifier</code>
+    Adds to the node selector of the driver pod, with key <code>labelKey</code> and the value as the
+    configuration's value. For example, setting <code>spark.kubernetes.driver.selector.identifier</code> to <code>myIdentifier</code>
+    will result in the driver pod and executors having a node selector with key <code>identifier</code> and value
+     <code>myIdentifier</code>. Multiple node selector keys can be added by setting multiple configurations with this prefix.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.selector.[labelKey]</code></td>
+  <td>(none)</td>
+  <td>
+    Adds to the node selector of the executor pods, with key <code>labelKey</code> and the value as the
+    configuration's value. For example, setting <code>spark.kubernetes.executor.selector.identifier</code> to <code>myIdentifier</code>
     will result in the driver pod and executors having a node selector with key <code>identifier</code> and value
      <code>myIdentifier</code>. Multiple node selector keys can be added by setting multiple configurations with this prefix.
   </td>
