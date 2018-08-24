@@ -281,7 +281,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
   test("SPARK-15062: Get correct serializer for List[_]") {
     val list = List(1, 2, 3)
     val serializer = serializerFor[List[Int]](BoundReference(
-      0, ObjectType(list.getClass), nullable = false), topLevel = true)
+      0, ObjectType(list.getClass), nullable = false))
     assert(serializer.children.size == 2)
     assert(serializer.children.head.isInstanceOf[Literal])
     assert(serializer.children.head.asInstanceOf[Literal].value === UTF8String.fromString("value"))
@@ -291,57 +291,57 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("SPARK 16792: Get correct deserializer for List[_]") {
-    val listDeserializer = deserializerFor[List[Int]](topLevel = true)
+    val listDeserializer = deserializerFor[List[Int]]()
     assert(listDeserializer.dataType == ObjectType(classOf[List[_]]))
   }
 
   test("serialize and deserialize arbitrary sequence types") {
     import scala.collection.immutable.Queue
     val queueSerializer = serializerFor[Queue[Int]](BoundReference(
-      0, ObjectType(classOf[Queue[Int]]), nullable = false), topLevel = true)
+      0, ObjectType(classOf[Queue[Int]]), nullable = false))
     assert(queueSerializer.dataType.head.dataType ==
       ArrayType(IntegerType, containsNull = false))
-    val queueDeserializer = deserializerFor[Queue[Int]](topLevel = true)
+    val queueDeserializer = deserializerFor[Queue[Int]]()
     assert(queueDeserializer.dataType == ObjectType(classOf[Queue[_]]))
 
     import scala.collection.mutable.ArrayBuffer
     val arrayBufferSerializer = serializerFor[ArrayBuffer[Int]](BoundReference(
-      0, ObjectType(classOf[ArrayBuffer[Int]]), nullable = false), topLevel = true)
+      0, ObjectType(classOf[ArrayBuffer[Int]]), nullable = false))
     assert(arrayBufferSerializer.dataType.head.dataType ==
       ArrayType(IntegerType, containsNull = false))
-    val arrayBufferDeserializer = deserializerFor[ArrayBuffer[Int]](topLevel = true)
+    val arrayBufferDeserializer = deserializerFor[ArrayBuffer[Int]]()
     assert(arrayBufferDeserializer.dataType == ObjectType(classOf[ArrayBuffer[_]]))
   }
 
   test("serialize and deserialize arbitrary map types") {
     val mapSerializer = serializerFor[Map[Int, Int]](BoundReference(
-      0, ObjectType(classOf[Map[Int, Int]]), nullable = false), topLevel = true)
+      0, ObjectType(classOf[Map[Int, Int]]), nullable = false))
     assert(mapSerializer.dataType.head.dataType ==
       MapType(IntegerType, IntegerType, valueContainsNull = false))
-    val mapDeserializer = deserializerFor[Map[Int, Int]](topLevel = true)
+    val mapDeserializer = deserializerFor[Map[Int, Int]]()
     assert(mapDeserializer.dataType == ObjectType(classOf[Map[_, _]]))
 
     import scala.collection.immutable.HashMap
     val hashMapSerializer = serializerFor[HashMap[Int, Int]](BoundReference(
-      0, ObjectType(classOf[HashMap[Int, Int]]), nullable = false), topLevel = true)
+      0, ObjectType(classOf[HashMap[Int, Int]]), nullable = false))
     assert(hashMapSerializer.dataType.head.dataType ==
       MapType(IntegerType, IntegerType, valueContainsNull = false))
-    val hashMapDeserializer = deserializerFor[HashMap[Int, Int]](topLevel = true)
+    val hashMapDeserializer = deserializerFor[HashMap[Int, Int]]()
     assert(hashMapDeserializer.dataType == ObjectType(classOf[HashMap[_, _]]))
 
     import scala.collection.mutable.{LinkedHashMap => LHMap}
     val linkedHashMapSerializer = serializerFor[LHMap[Long, String]](BoundReference(
-      0, ObjectType(classOf[LHMap[Long, String]]), nullable = false), topLevel = true)
+      0, ObjectType(classOf[LHMap[Long, String]]), nullable = false))
     assert(linkedHashMapSerializer.dataType.head.dataType ==
       MapType(LongType, StringType, valueContainsNull = true))
-    val linkedHashMapDeserializer = deserializerFor[LHMap[Long, String]](topLevel = true)
+    val linkedHashMapDeserializer = deserializerFor[LHMap[Long, String]]()
     assert(linkedHashMapDeserializer.dataType == ObjectType(classOf[LHMap[_, _]]))
   }
 
   test("SPARK-22442: Generate correct field names for special characters") {
     val serializer = serializerFor[SpecialCharAsFieldData](BoundReference(
-      0, ObjectType(classOf[SpecialCharAsFieldData]), nullable = false), topLevel = true)
-    val deserializer = deserializerFor[SpecialCharAsFieldData](topLevel = true)
+      0, ObjectType(classOf[SpecialCharAsFieldData]), nullable = false))
+    val deserializer = deserializerFor[SpecialCharAsFieldData]()
     assert(serializer.dataType(0).name == "field.1")
     assert(serializer.dataType(1).name == "field 2")
 
@@ -353,8 +353,8 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("SPARK-22472: add null check for top-level primitive values") {
-    assert(deserializerFor[Int](topLevel = true).isInstanceOf[AssertNotNull])
-    assert(!deserializerFor[String](topLevel = true).isInstanceOf[AssertNotNull])
+    assert(deserializerFor[Int]().isInstanceOf[AssertNotNull])
+    assert(!deserializerFor[String]().isInstanceOf[AssertNotNull])
   }
 
   test("SPARK-23025: schemaFor should support Null type") {
@@ -371,36 +371,34 @@ class ScalaReflectionSuite extends SparkFunSuite {
       assert(deserializer.isInstanceOf[NewInstance])
       deserializer.asInstanceOf[NewInstance].arguments.count(_.isInstanceOf[AssertNotNull])
     }
-    assert(numberOfCheckedArguments(deserializerFor[(Double, Double)](topLevel = true)) == 2)
-    assert(numberOfCheckedArguments(deserializerFor[(java.lang.Double, Int)](topLevel = true)) == 1)
+    assert(numberOfCheckedArguments(deserializerFor[(Double, Double)]()) == 2)
+    assert(numberOfCheckedArguments(deserializerFor[(java.lang.Double, Int)]()) == 1)
     assert(numberOfCheckedArguments(
-      deserializerFor[(java.lang.Integer, java.lang.Integer)](topLevel = true)) == 0)
+      deserializerFor[(java.lang.Integer, java.lang.Integer)]()) == 0)
   }
 
   test("SPARK-24762: serializer for Option of Product") {
     val optionOfProduct = Some((1, "a"))
-    val topLevelSerializer = serializerFor[Option[(Int, String)]](BoundReference(
-      0, ObjectType(optionOfProduct.getClass), nullable = true), topLevel = true)
-    val nonTopLevelSerializer = serializerFor[Option[(Int, String)]](BoundReference(
-      0, ObjectType(optionOfProduct.getClass), nullable = true), topLevel = false)
+    val serializer = serializerFor[Option[(Int, String)]](BoundReference(
+      0, ObjectType(optionOfProduct.getClass), nullable = true))
 
-    topLevelSerializer match {
-      case CreateNamedStruct(Seq(Literal(_, _), If(_, _, optEncoder))) =>
-        assert(optEncoder.semanticEquals(nonTopLevelSerializer))
+    serializer match {
+      case CreateNamedStruct(Seq(_: Literal, If(_, _, encoder: CreateNamedStruct))) =>
+        val fields = encoder.flatten
+        assert(fields.length == 2)
+        assert(fields(0).dataType == IntegerType)
+        assert(fields(1).dataType == StringType)
       case _ =>
         fail("top-level Option of Product should be encoded as single struct column.")
     }
   }
 
   test("SPARK-24762: deserializer for Option of Product") {
-    val topLevelDeserializer = deserializerFor[Option[(Int, String)]](topLevel = true)
-    val nonTopLevelDeserializer = deserializerFor[Option[(Int, String)]](topLevel = false)
-      .asInstanceOf[WrapOption]
+    val deserializer = deserializerFor[Option[(Int, String)]]()
 
-    topLevelDeserializer match {
-      case WrapOption(If(IsNull(GetColumnByOrdinal(0, _)), _, n: NewInstance), optType) =>
-        assert(n.cls == nonTopLevelDeserializer.child.asInstanceOf[NewInstance].cls)
-        assert(optType == nonTopLevelDeserializer.optType)
+    deserializer match {
+      case WrapOption(If(IsNull(GetColumnByOrdinal(0, _)), _, n: NewInstance), _) =>
+        assert(n.cls == classOf[Tuple2[Int, String]])
       case _ =>
         fail("top-level Option of Product should be decoded from a single struct column.")
     }

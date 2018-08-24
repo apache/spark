@@ -43,13 +43,7 @@ import org.apache.spark.util.Utils
  *    to the name `value`.
  */
 object ExpressionEncoder {
-  // Constructs an encoder for top-level row.
-  def apply[T : TypeTag](): ExpressionEncoder[T] = apply(topLevel = true)
-
-  /**
-   * @param topLevel whether the encoders to construct are for top-level row.
-   */
-  def apply[T : TypeTag](topLevel: Boolean): ExpressionEncoder[T] = {
+  def apply[T : TypeTag](): ExpressionEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
     val mirror = ScalaReflection.mirror
     val tpe = typeTag[T].in(mirror).tpe
@@ -65,8 +59,8 @@ object ExpressionEncoder {
       // doesn't allow top-level row to be null, only its columns can be null.
       AssertNotNull(inputObject, Seq("top level Product input object"))
     }
-    val serializer = ScalaReflection.serializerFor[T](nullSafeInput, topLevel)
-    val deserializer = ScalaReflection.deserializerFor[T](topLevel)
+    val serializer = ScalaReflection.serializerFor[T](nullSafeInput)
+    val deserializer = ScalaReflection.deserializerFor[T]()
 
     val schema = serializer.dataType
 

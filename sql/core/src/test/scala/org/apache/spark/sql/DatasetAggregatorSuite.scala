@@ -218,7 +218,7 @@ case class OptionBooleanIntAggregator(colName: String)
   override def bufferEncoder: Encoder[Option[(Boolean, Int)]] = OptionalBoolIntEncoder
   override def outputEncoder: Encoder[Option[(Boolean, Int)]] = OptionalBoolIntEncoder
 
-  def OptionalBoolIntEncoder: Encoder[Option[(Boolean, Int)]] = ExpressionEncoder(topLevel = false)
+  def OptionalBoolIntEncoder: Encoder[Option[(Boolean, Int)]] = ExpressionEncoder()
 }
 
 class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {

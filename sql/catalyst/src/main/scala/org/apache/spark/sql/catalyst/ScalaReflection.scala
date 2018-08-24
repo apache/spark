@@ -135,14 +135,14 @@ object ScalaReflection extends ScalaReflection {
    * from ordinal 0 (since there are no names to map to).  The actual location can be moved by
    * calling resolve/bind with a new schema.
    */
-  def deserializerFor[T : TypeTag](topLevel: Boolean): Expression = cleanUpReflectionObjects {
+  def deserializerFor[T : TypeTag](): Expression = cleanUpReflectionObjects {
     val tpe = localTypeOf[T]
     val clsName = getClassNameFromType(tpe)
     val walkedTypePath = s"""- root class: "$clsName"""" :: Nil
     val Schema(dataType, tpeNullable) = schemaFor(tpe)
     val isOptionOfProduct = tpe.dealias <:< localTypeOf[Option[_]] &&
       definedByConstructorParams(tpe)
-    val (optTypePath, nullable) = if (isOptionOfProduct && topLevel) {
+    val (optTypePath, nullable) = if (isOptionOfProduct) {
       // Top-level Option of Product is encoded as single struct column at top-level row.
       (Some(addToPathOrdinal(None, 0, dataType, walkedTypePath)), true)
     } else {
@@ -441,15 +441,13 @@ object ScalaReflection extends ScalaReflection {
    *  * the field of [[Product]]: `field (class: "abc.xyz.MyClass", name: "myField")`
    */
   def serializerFor[T : TypeTag](
-      inputObject: Expression,
-      topLevel: Boolean): CreateNamedStruct = cleanUpReflectionObjects {
+      inputObject: Expression): CreateNamedStruct = cleanUpReflectionObjects {
     val tpe = localTypeOf[T]
     val clsName = getClassNameFromType(tpe)
     val walkedTypePath = s"""- root class: "$clsName"""" :: Nil
     serializerFor(inputObject, tpe, walkedTypePath) match {
       case i @ expressions.If(_, _, _: CreateNamedStruct)
-          if tpe.dealias <:< localTypeOf[Option[_]] &&
-            definedByConstructorParams(tpe) && topLevel =>
+          if tpe.dealias <:< localTypeOf[Option[_]] && definedByConstructorParams(tpe) =>
         // We encode top-level Option of Product as a single struct column.
         CreateNamedStruct(expressions.Literal("value") :: i :: Nil)
       case expressions.If(_, _, s: CreateNamedStruct) if definedByConstructorParams(tpe) => s
