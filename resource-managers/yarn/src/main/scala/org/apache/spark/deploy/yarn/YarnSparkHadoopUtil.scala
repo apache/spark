@@ -27,11 +27,8 @@ import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
 import org.apache.hadoop.yarn.util.ConverterUtils
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
-import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
 
@@ -193,7 +190,7 @@ object YarnSparkHadoopUtil {
       sparkConf: SparkConf,
       hadoopConf: Configuration): Set[FileSystem] = {
     val filesystemsToAccess = sparkConf.get(FILESYSTEMS_TO_ACCESS)
-    val isRequestAllDelegationTokens = filesystemsToAccess.isEmpty
+    val requestAllDelegationTokens = filesystemsToAccess.isEmpty
 
     val stagingFS = sparkConf.get(STAGING_DIR)
       .map(new Path(_).getFileSystem(hadoopConf))
@@ -202,7 +199,7 @@ object YarnSparkHadoopUtil {
     // Add the list of available namenodes for all namespaces in HDFS federation.
     // If ViewFS is enabled, this is skipped as ViewFS already handles delegation tokens for its
     // namespaces.
-    val hadoopFilesystems = if (!isRequestAllDelegationTokens || stagingFS.getScheme == "viewfs") {
+    val hadoopFilesystems = if (!requestAllDelegationTokens || stagingFS.getScheme == "viewfs") {
       filesystemsToAccess.map(new Path(_).getFileSystem(hadoopConf)).toSet
     } else {
       val nameservices = hadoopConf.getTrimmedStrings("dfs.nameservices")
