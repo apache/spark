@@ -21,6 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.IdentifierWithDatabase
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions.IntegerLiteral
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -48,16 +49,25 @@ object ResolveHints {
    *
    * This rule must happen before common table expressions.
    */
-  class ResolveBroadcastHints(conf: SQLConf) extends Rule[LogicalPlan] {
+  class ResolveBroadcastHints(conf: SQLConf, catalog: SessionCatalog) extends Rule[LogicalPlan] {
     private val BROADCAST_HINT_NAMES = Set("BROADCAST", "BROADCASTJOIN", "MAPJOIN")
 
     def resolver: Resolver = conf.resolver
 
+    private def namePartsWithDatabase(nameParts: Seq[String]): Seq[String] = {
+      if (nameParts.size == 1) {
+        catalog.getCurrentDatabase +: nameParts
+      } else {
+        nameParts
+      }
+    }
+
     private def matchedTableIdentifier(
         nameParts: Seq[String],
         tableIdent: IdentifierWithDatabase): Boolean = {
-      val identifierList = tableIdent.database.map(_ :: Nil).getOrElse(Nil) :+ tableIdent.identifier
-      nameParts.corresponds(identifierList)(resolver)
+      val identifierList =
+        tableIdent.database.getOrElse(catalog.getCurrentDatabase) :: tableIdent.identifier :: Nil
+      namePartsWithDatabase(nameParts).corresponds(identifierList)(resolver)
     }
 
     private def applyBroadcastHint(

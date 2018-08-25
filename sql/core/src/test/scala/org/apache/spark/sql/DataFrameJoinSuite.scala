@@ -196,33 +196,42 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-25121 Supports multi-part names for broadcast hint resolution") {
-    val tableName = "t"
+    val (table1Name, table2Name) = ("t1", "t2")
     withTempDatabase { dbName =>
-      withTable(tableName) {
+      withTable(table1Name, table2Name) {
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
-          spark.range(100).write.saveAsTable(s"$dbName.$tableName")
+          spark.range(50).write.saveAsTable(s"$dbName.$table1Name")
+          spark.range(100).write.saveAsTable(s"$dbName.$table2Name")
           // First, makes sure a join is not broadcastable
-          val plan1 = spark.range(3)
-            .join(spark.table(s"$dbName.$tableName"), "id")
+          val plan = sql(s"SELECT * FROM $dbName.$table1Name, $dbName.$table2Name " +
+              s"WHERE $table1Name.id = $table2Name.id")
             .queryExecution.executedPlan
-          assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size == 0)
+          assert(plan.collect { case p: BroadcastHashJoinExec => p }.size == 0)
 
           // Uses multi-part table names for broadcast hints
-          val plan2 = spark.range(3)
-            .join(spark.table(s"$dbName.$tableName"), "id")
-            .hint("broadcast", s"$dbName.$tableName")
-            .queryExecution.executedPlan
-          val broadcastHashJoin = plan2.collect { case p: BroadcastHashJoinExec => p }
-          assert(broadcastHashJoin.size == 1)
-          val broadcastExchange = broadcastHashJoin.head.collect {
-            case p: BroadcastExchangeExec => p
+          def checkIfHintApplied(tableName: String, hintTableName: String): Unit = {
+            val p = sql(s"SELECT /*+ BROADCASTJOIN($tableName) */ * " +
+                s"FROM $tableName, $dbName.$table2Name " +
+                s"WHERE $tableName.id = $table2Name.id")
+              .queryExecution.executedPlan
+            val broadcastHashJoin = p.collect { case p: BroadcastHashJoinExec => p }
+            assert(broadcastHashJoin.size == 1)
+            val broadcastExchange = broadcastHashJoin.head.collect {
+              case p: BroadcastExchangeExec => p
+            }
+            assert(broadcastExchange.size == 1)
+            val table = broadcastExchange.head.collect {
+              case FileSourceScanExec(_, _, _, _, _, _, Some(tableIdent)) => tableIdent
+            }
+            assert(table.size == 1)
+            assert(table.head === TableIdentifier(table1Name, Some(dbName)))
           }
-          assert(broadcastExchange.size == 1)
-          val table = broadcastExchange.head.collect {
-            case FileSourceScanExec(_, _, _, _, _, _, Some(tableIdent)) => tableIdent
-          }
-          assert(table.size == 1)
-          assert(table.head === TableIdentifier(tableName, Some(dbName)))
+
+          sql(s"USE $dbName")
+          checkIfHintApplied(table1Name, table1Name)
+          checkIfHintApplied(s"$dbName.$table1Name", s"$dbName.$table1Name")
+          checkIfHintApplied(table1Name, s"$dbName.$table1Name")
+          checkIfHintApplied(s"$dbName.$table1Name", table1Name)
         }
       }
     }
