@@ -35,26 +35,36 @@ case class NamedLambdaVariable(
     name: String,
     dataType: DataType,
     nullable: Boolean,
-    exprId: ExprId = NamedExpression.newExprId,
-    value: AtomicReference[Any] = new AtomicReference())
+    exprId: ExprId = NamedExpression.newExprId)
   extends LeafExpression
   with NamedExpression
   with CodegenFallback {
 
   override def qualifier: Seq[String] = Seq.empty
 
-  override def newInstance(): NamedExpression =
-    copy(exprId = NamedExpression.newExprId, value = new AtomicReference())
+  override def newInstance(): NamedExpression = copy(exprId = NamedExpression.newExprId)
 
   override def toAttribute: Attribute = {
     AttributeReference(name, dataType, nullable, Metadata.empty)(exprId, Seq.empty)
   }
 
-  override def eval(input: InternalRow): Any = value.get
+  override def eval(input: InternalRow): Any = NamedLambdaVariable.values(this)
 
   override def toString: String = s"lambda $name#${exprId.id}$typeSuffix"
 
   override def simpleString: String = s"lambda $name#${exprId.id}: ${dataType.simpleString}"
+}
+
+object NamedLambdaVariable {
+
+  private[this] val _values =
+    new ThreadLocal[mutable.Map[NamedLambdaVariable, Any]] {
+      override protected def initialValue: mutable.Map[NamedLambdaVariable, Any] = {
+        mutable.WeakHashMap.empty[NamedLambdaVariable, Any]
+      }
+    }
+
+  def values: mutable.Map[NamedLambdaVariable, Any] = _values.get()
 }
 
 /**
@@ -137,17 +147,6 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
    * a bound lambda function.
    */
   def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): HigherOrderFunction
-
-  // Make sure the lambda variables refer the same instances as of arguments for case that the
-  // variables in instantiated separately during serialization or for some reason.
-  @transient lazy val functionsForEval: Seq[Expression] = functions.map {
-    case LambdaFunction(function, arguments, hidden) =>
-      val argumentMap = arguments.map { arg => arg.exprId -> arg }.toMap
-      function.transformUp {
-        case variable: NamedLambdaVariable if argumentMap.contains(variable.exprId) =>
-          argumentMap(variable.exprId)
-      }
-  }
 }
 
 /**
@@ -171,7 +170,7 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction  {
 
   override def functionTypes: Seq[AbstractDataType] = functionType :: Nil
 
-  def functionForEval: Expression = functionsForEval.head
+  override def nullable: Boolean = argument.nullable
 
   /**
    * Called by [[eval]]. If a subclass keeps the default nullability, it can override this method
@@ -217,8 +216,6 @@ case class ArrayTransform(
     function: Expression)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  override def nullable: Boolean = argument.nullable
-
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayTransform = {
@@ -243,15 +240,14 @@ case class ArrayTransform(
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
-    val f = functionForEval
     val result = new GenericArrayData(new Array[Any](arr.numElements))
     var i = 0
     while (i < arr.numElements) {
-      elementVar.value.set(arr.get(i, elementVar.dataType))
+      NamedLambdaVariable.values(elementVar) = arr.get(i, elementVar.dataType)
       if (indexVar.isDefined) {
-        indexVar.get.value.set(i)
+        NamedLambdaVariable.values(indexVar.get) = i
       }
-      result.update(i, f.eval(inputRow))
+      result.update(i, function.eval(inputRow))
       i += 1
     }
     result
@@ -287,17 +283,14 @@ case class MapFilter(
     copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
   }
 
-  override def nullable: Boolean = argument.nullable
-
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val m = argumentValue.asInstanceOf[MapData]
-    val f = functionForEval
     val retKeys = new mutable.ListBuffer[Any]
     val retValues = new mutable.ListBuffer[Any]
     m.foreach(keyType, valueType, (k, v) => {
-      keyVar.value.set(k)
-      valueVar.value.set(v)
-      if (f.eval(inputRow).asInstanceOf[Boolean]) {
+      NamedLambdaVariable.values(keyVar) = k
+      NamedLambdaVariable.values(valueVar) = v
+      if (function.eval(inputRow).asInstanceOf[Boolean]) {
         retKeys += k
         retValues += v
       }
@@ -328,8 +321,6 @@ case class ArrayFilter(
     function: Expression)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  override def nullable: Boolean = argument.nullable
-
   override def dataType: DataType = argument.dataType
 
   override def functionType: AbstractDataType = BooleanType
@@ -343,13 +334,12 @@ case class ArrayFilter(
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
-    val f = functionForEval
     val buffer = new mutable.ArrayBuffer[Any](arr.numElements)
     var i = 0
     while (i < arr.numElements) {
-      elementVar.value.set(arr.get(i, elementVar.dataType))
-      if (f.eval(inputRow).asInstanceOf[Boolean]) {
-        buffer += elementVar.value.get
+      NamedLambdaVariable.values(elementVar) = arr.get(i, elementVar.dataType)
+      if (function.eval(inputRow).asInstanceOf[Boolean]) {
+        buffer += NamedLambdaVariable.values(elementVar)
       }
       i += 1
     }
@@ -375,8 +365,6 @@ case class ArrayExists(
     function: Expression)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  override def nullable: Boolean = argument.nullable
-
   override def dataType: DataType = BooleanType
 
   override def functionType: AbstractDataType = BooleanType
@@ -390,12 +378,11 @@ case class ArrayExists(
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
-    val f = functionForEval
     var exists = false
     var i = 0
     while (i < arr.numElements && !exists) {
-      elementVar.value.set(arr.get(i, elementVar.dataType))
-      if (f.eval(inputRow).asInstanceOf[Boolean]) {
+      NamedLambdaVariable.values(elementVar) = arr.get(i, elementVar.dataType)
+      if (function.eval(inputRow).asInstanceOf[Boolean]) {
         exists = true
       }
       i += 1
@@ -481,16 +468,15 @@ case class ArrayAggregate(
     if (arr == null) {
       null
     } else {
-      val Seq(mergeForEval, finishForEval) = functionsForEval
-      accForMergeVar.value.set(zero.eval(input))
+      NamedLambdaVariable.values(accForMergeVar) = zero.eval(input)
       var i = 0
       while (i < arr.numElements()) {
-        elementVar.value.set(arr.get(i, elementVar.dataType))
-        accForMergeVar.value.set(mergeForEval.eval(input))
+        NamedLambdaVariable.values(elementVar) = arr.get(i, elementVar.dataType)
+        NamedLambdaVariable.values(accForMergeVar) = merge.eval(input)
         i += 1
       }
-      accForFinishVar.value.set(accForMergeVar.value.get)
-      finishForEval.eval(input)
+      NamedLambdaVariable.values(accForFinishVar) = NamedLambdaVariable.values(accForMergeVar)
+      finish.eval(input)
     }
   }
 
@@ -516,8 +502,6 @@ case class TransformKeys(
     function: Expression)
   extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  override def nullable: Boolean = argument.nullable
-
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
   override def dataType: DataType = MapType(function.dataType, valueType, valueContainsNull)
@@ -535,9 +519,9 @@ case class TransformKeys(
     val resultKeys = new GenericArrayData(new Array[Any](map.numElements))
     var i = 0
     while (i < map.numElements) {
-      keyVar.value.set(map.keyArray().get(i, keyVar.dataType))
-      valueVar.value.set(map.valueArray().get(i, valueVar.dataType))
-      val result = functionForEval.eval(inputRow)
+      NamedLambdaVariable.values(keyVar) = map.keyArray().get(i, keyVar.dataType)
+      NamedLambdaVariable.values(valueVar) = map.valueArray().get(i, valueVar.dataType)
+      val result = function.eval(inputRow)
       if (result == null) {
         throw new RuntimeException("Cannot use null as map key!")
       }
@@ -568,8 +552,6 @@ case class TransformValues(
     function: Expression)
   extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  override def nullable: Boolean = argument.nullable
-
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
   override def dataType: DataType = MapType(keyType, function.dataType, function.nullable)
@@ -587,9 +569,9 @@ case class TransformValues(
     val resultValues = new GenericArrayData(new Array[Any](map.numElements))
     var i = 0
     while (i < map.numElements) {
-      keyVar.value.set(map.keyArray().get(i, keyVar.dataType))
-      valueVar.value.set(map.valueArray().get(i, valueVar.dataType))
-      resultValues.update(i, functionForEval.eval(inputRow))
+      NamedLambdaVariable.values(keyVar) = map.keyArray().get(i, keyVar.dataType)
+      NamedLambdaVariable.values(valueVar) = map.valueArray().get(i, valueVar.dataType)
+      resultValues.update(i, function.eval(inputRow))
       i += 1
     }
     new ArrayBasedMapData(map.keyArray(), resultValues)
@@ -618,8 +600,6 @@ case class TransformValues(
   since = "2.4.0")
 case class MapZipWith(left: Expression, right: Expression, function: Expression)
   extends HigherOrderFunction with CodegenFallback {
-
-  def functionForEval: Expression = functionsForEval.head
 
   @transient lazy val MapType(leftKeyType, leftValueType, leftValueContainsNull) = left.dataType
 
@@ -770,11 +750,11 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     for ((key, Array(index1, index2)) <- keysWithIndexes) {
       val v1 = index1.map(valueData1.get(_, leftValueType)).getOrElse(null)
       val v2 = index2.map(valueData2.get(_, rightValueType)).getOrElse(null)
-      keyVar.value.set(key)
-      value1Var.value.set(v1)
-      value2Var.value.set(v2)
+      NamedLambdaVariable.values(keyVar) = key
+      NamedLambdaVariable.values(value1Var) = v1
+      NamedLambdaVariable.values(value2Var) = v2
       keys.update(i, key)
-      values.update(i, functionForEval.eval(inputRow))
+      values.update(i, function.eval(inputRow))
       i += 1
     }
     new ArrayBasedMapData(keys, values)
@@ -799,8 +779,6 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 // scalastyle:on line.size.limit
 case class ZipWith(left: Expression, right: Expression, function: Expression)
   extends HigherOrderFunction with CodegenFallback {
-
-  def functionForEval: Expression = functionsForEval.head
 
   override def arguments: Seq[Expression] = left :: right :: Nil
 
@@ -834,21 +812,14 @@ case class ZipWith(left: Expression, right: Expression, function: Expression)
         null
       } else {
         val resultLength = math.max(leftArr.numElements(), rightArr.numElements())
-        val f = functionForEval
         val result = new GenericArrayData(new Array[Any](resultLength))
         var i = 0
         while (i < resultLength) {
-          if (i < leftArr.numElements()) {
-            leftElemVar.value.set(leftArr.get(i, leftElemVar.dataType))
-          } else {
-            leftElemVar.value.set(null)
-          }
-          if (i < rightArr.numElements()) {
-            rightElemVar.value.set(rightArr.get(i, rightElemVar.dataType))
-          } else {
-            rightElemVar.value.set(null)
-          }
-          result.update(i, f.eval(input))
+          NamedLambdaVariable.values(leftElemVar) =
+            if (i < leftArr.numElements()) leftArr.get(i, leftElemVar.dataType) else null
+          NamedLambdaVariable.values(rightElemVar) =
+            if (i < rightArr.numElements()) rightArr.get(i, rightElemVar.dataType) else null
+          result.update(i, function.eval(input))
           i += 1
         }
         result
