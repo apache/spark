@@ -45,7 +45,8 @@ private[parquet] class ParquetFilters(
     pushDownTimestamp: Boolean,
     pushDownDecimal: Boolean,
     pushDownStartWith: Boolean,
-    pushDownInFilterThreshold: Int) {
+    pushDownInFilterThreshold: Int,
+    caseSensitive: Boolean) {
 
   private case class ParquetSchemaType(
       originalType: OriginalType,
@@ -354,7 +355,7 @@ private[parquet] class ParquetFilters(
    * Returns nameMap and typeMap based on different case sensitive mode, if predicate push
    * down applies.
    */
-  private def getFieldMaps(dataType: MessageType, caseSensitive: Boolean)
+  private def getFieldMaps(dataType: MessageType)
       : (Map[String, String], Map[String, ParquetSchemaType]) = {
     // Here we don't flatten the fields in the nested schema but just look up through
     // root fields. Currently, accessing to nested fields does not push down filters
@@ -386,11 +387,8 @@ private[parquet] class ParquetFilters(
   /**
    * Converts data sources filters to Parquet filter predicates.
    */
-  def createFilter(
-      schema: MessageType,
-      predicate: sources.Filter,
-      caseSensitive: Boolean = true): Option[FilterPredicate] = {
-    val (nameMap, typeMap) = getFieldMaps(schema, caseSensitive)
+  def createFilter(schema: MessageType, predicate: sources.Filter): Option[FilterPredicate] = {
+    val (nameMap, typeMap) = getFieldMaps(schema)
 
     // Decimal type must make sure that filter value's scale matched the file.
     // If doesn't matched, which would cause data corruption.

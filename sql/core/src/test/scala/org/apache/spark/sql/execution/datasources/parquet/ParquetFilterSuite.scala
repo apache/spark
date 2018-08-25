@@ -60,7 +60,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   private lazy val parquetFilters =
     new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
       conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
-      conf.parquetFilterPushDownInFilterThreshold)
+      conf.parquetFilterPushDownInFilterThreshold, conf.caseSensitiveAnalysis)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -1022,7 +1022,15 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("Case-insensitive field resolution for pushdown when reading parquet") {
+  test("SPARK-25132: Case-insensitive field resolution for pushdown when reading parquet") {
+    val caseSensitiveParquetFilters =
+      new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
+        conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
+        conf.parquetFilterPushDownInFilterThreshold, caseSensitive = true)
+    val caseInsensitiveParquetFilters =
+      new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
+        conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
+        conf.parquetFilterPushDownInFilterThreshold, caseSensitive = false)
     def testCaseInsensitiveResolution(
         schema: StructType,
         expected: FilterPredicate,
@@ -1030,10 +1038,10 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
 
       assertResult(Some(expected)) {
-        parquetFilters.createFilter(parquetSchema, filter, caseSensitive = false)
+        caseInsensitiveParquetFilters.createFilter(parquetSchema, filter)
       }
       assertResult(None) {
-        parquetFilters.createFilter(parquetSchema, filter, caseSensitive = true)
+        caseSensitiveParquetFilters.createFilter(parquetSchema, filter)
       }
     }
 
@@ -1091,8 +1099,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       Seq(StructField("cint", IntegerType), StructField("cINT", IntegerType)))
     val dupParquetSchema = new SparkToParquetSchemaConverter(conf).convert(dupFieldSchema)
     assertResult(None) {
-      parquetFilters.createFilter(
-        dupParquetSchema, sources.EqualTo("CINT", 1000), caseSensitive = false)
+      caseInsensitiveParquetFilters.createFilter(
+        dupParquetSchema, sources.EqualTo("CINT", 1000))
     }
   }
 }
