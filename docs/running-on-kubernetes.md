@@ -197,6 +197,9 @@ pod template that will always be overwritten by Spark. Therefore, users of this 
 the pod template file only lets Spark start with a template pod instead of an empty pod during the pod-building process.
 For details, see the [full list](#pod-template-properties) of pod template values that will be overwritten by spark.
 
+Pod template files can also define multiple containers. In such cases, Spark will always assume that the first container in
+the list will be the driver or executor container.
+
 ## Introspection and Debugging
 
 These are the different ways in which you can investigate a running/completed Spark application, monitor progress, and
@@ -788,22 +791,6 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.driver.containerName</code></td>
-  <td><code>"spark-kubernetes-driver"</code></td>
-  <td>
-   This sets the driver container name. If you are specifying a driver [pod template](#pod-template), you can match this name to the
-   driver container name set in the template.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.executor.containerName</code></td>
-  <td><code>"spark-kubernetes-executor"</code></td>
-  <td>
-   This sets the executor container name. If you are specifying a an executor [pod template](#pod-template), you can match this name to the
-   driver container name set in the template.
-  </td>
-</tr>
-<tr>
   <td><code>spark.kubernetes.driver.podTemplateFile</code></td>
   <td>(none)</td>
   <td>
@@ -942,10 +929,11 @@ The following affect the driver and executor containers. All other containers in
 </tr>
 <tr>
   <td>name</td>
-  <td>See description.</td>
+  <td>See description.</code></td>
   <td>
-    The driver and executor container names are defined by <code>spark.kubernetes.{driver,executor}.containerName</code>.
-    If they don't exist in the pod template file, then an error will be thrown.
+    The container name will be assigned by spark ("spark-kubernetes-driver" for the driver container, and
+    "executor" for each executor container) if not defined by the pod template. If the container is defined by the
+    template, the template's name will be used.
   </td>
 </tr>
 <tr>
