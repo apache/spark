@@ -28,6 +28,7 @@ if sys.version_info < (2, 7):
           file=sys.stderr)
     sys.exit(-1)
 
+__version__ = "Unknown"  # Prevent linters from raising 'undefined name'
 try:
     exec(open('pyspark/version.py').read())
 except IOError:
