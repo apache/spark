@@ -130,15 +130,13 @@ private[spark] class Executor(
   private val urlClassLoader = createClassLoader()
   private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
 
-  // One thread will handle loading all of the plugins on this executor
-  val executorPluginThread = new Thread {
-    override def run: Unit = {
-      conf.get(EXECUTOR_PLUGINS).foreach { classes =>
-        Utils.loadExtensions(classOf[ExecutorPlugin], classes, conf)
-      }
-    }
+  // Load plugins in the current thread, they are expected to not block.
+  // Heavy computation in plugin initialization should be done async.
+  Thread.currentThread().setContextClassLoader(replClassLoader)
+  conf.get(EXECUTOR_PLUGINS).foreach { classes =>
+    Utils.loadExtensions(classOf[ExecutorPlugin], classes, conf)
+      .foreach { _.init() }
   }
-  executorPluginThread.start
 
   // Set the classloader for serializer
   env.serializer.setDefaultClassLoader(replClassLoader)

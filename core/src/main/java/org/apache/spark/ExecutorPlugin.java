@@ -26,8 +26,8 @@ import org.apache.spark.annotation.DeveloperApi;
  * before the executor starts running any tasks.
  *
  * The specific api exposed to the end users still considered to be very unstable.  We will
- * *hopefully* be able to keep compatability by providing default implementations for any methods
- * added, but make no guarantees this will always be possible across all spark releases.
+ * hopefully be able to keep compatability by providing default implementations for any methods
+ * added, but make no guarantees this will always be possible across all Spark releases.
  *
  * Spark does nothing to verify the plugin is doing legitimate things, or to manage the resources
  * it uses.  A plugin acquires the same privileges as the user running the task.  A bad plugin
@@ -35,4 +35,5 @@ import org.apache.spark.annotation.DeveloperApi;
  */
 @DeveloperApi
 public interface ExecutorPlugin {
+  default void init() {}
 }
