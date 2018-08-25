@@ -132,7 +132,8 @@ object ExternalCatalogUtils {
       catalogTable: CatalogTable,
       inputPartitions: Seq[CatalogTablePartition],
       predicates: Seq[Expression],
-      defaultTimeZoneId: String): Seq[CatalogTablePartition] = {
+      defaultTimeZoneId: String,
+      caseSensitive: Boolean = false): Seq[CatalogTablePartition] = {
     if (predicates.isEmpty) {
       inputPartitions
     } else {
@@ -140,7 +141,8 @@ object ExternalCatalogUtils {
       val partitionColumnNames = catalogTable.partitionColumnNames.toSet
 
       val nonPartitionPruningPredicates = predicates.filterNot {
-        _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+        _.references.map(r => if (caseSensitive) r.name else r.name.toLowerCase(Locale.ROOT))
+          .toSet.subsetOf(partitionColumnNames)
       }
       if (nonPartitionPruningPredicates.nonEmpty) {
         throw new AnalysisException("Expected only partition pruning predicates: " +
@@ -150,7 +152,8 @@ object ExternalCatalogUtils {
       val boundPredicate =
         InterpretedPredicate.create(predicates.reduce(And).transform {
           case att: AttributeReference =>
-            val index = partitionSchema.indexWhere(_.name == att.name)
+            val attributeName = if (caseSensitive) att.name else att.name.toLowerCase(Locale.ROOT)
+            val index = partitionSchema.indexWhere(_.name == attributeName)
             BoundReference(index, partitionSchema(index).dataType, nullable = true)
         })
 

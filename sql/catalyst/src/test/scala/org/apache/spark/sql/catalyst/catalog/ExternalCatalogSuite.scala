@@ -494,6 +494,11 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
           throw new AnalysisException(ex.getMessage)
       }
     }
+
+    val m = intercept[AnalysisException] {
+      checkAnswer(tbl2, Seq('A.int === 1 && 'b.string === "2"), Set(part1))
+    }.getMessage
+    assert(m.contains("Expected only partition pruning predicates"))
   }
 
   test("drop partitions") {
