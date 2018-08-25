@@ -19,14 +19,15 @@ package org.apache.spark.deploy.k8s.features
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, PodBuilder, QuantityBuilder}
+import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.SparkException
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
+import org.apache.spark.ui.SparkUI
 
 private[spark] class BasicDriverFeatureStep(
     conf: KubernetesConf[KubernetesDriverSpecificConf])
@@ -72,10 +73,31 @@ private[spark] class BasicDriverFeatureStep(
       ("cpu", new QuantityBuilder(false).withAmount(limitCores).build())
     }
 
+    val driverPort = conf.sparkConf.getInt("spark.driver.port", DEFAULT_DRIVER_PORT)
+    val driverBlockManagerPort = conf.sparkConf.getInt(
+      DRIVER_BLOCK_MANAGER_PORT.key,
+      DEFAULT_BLOCKMANAGER_PORT
+    )
+    val driverUIPort = SparkUI.getUIPort(conf.sparkConf)
     val driverContainer = new ContainerBuilder(pod.container)
       .withName(DRIVER_CONTAINER_NAME)
       .withImage(driverContainerImage)
       .withImagePullPolicy(conf.imagePullPolicy())
+      .addNewPort()
+        .withName(DRIVER_PORT_NAME)
+        .withContainerPort(driverPort)
+        .withProtocol("TCP")
+        .endPort()
+      .addNewPort()
+        .withName(BLOCK_MANAGER_PORT_NAME)
+        .withContainerPort(driverBlockManagerPort)
+        .withProtocol("TCP")
+        .endPort()
+      .addNewPort()
+        .withName(UI_PORT_NAME)
+        .withContainerPort(driverUIPort)
+        .withProtocol("TCP")
+        .endPort()
       .addAllToEnv(driverCustomEnvs.asJava)
       .addNewEnv()
         .withName(ENV_DRIVER_BIND_ADDRESS)
@@ -103,6 +125,7 @@ private[spark] class BasicDriverFeatureStep(
         .addToImagePullSecrets(conf.imagePullSecrets(): _*)
         .endSpec()
       .build()
+
     SparkPod(driverPod, driverContainer)
   }
 

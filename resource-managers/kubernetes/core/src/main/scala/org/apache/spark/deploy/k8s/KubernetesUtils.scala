@@ -16,8 +16,6 @@
  */
 package org.apache.spark.deploy.k8s
 
-import io.fabric8.kubernetes.api.model.LocalObjectReference
-
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 
@@ -60,4 +58,6 @@ private[spark] object KubernetesUtils {
       case _ => uri
     }
   }
+
+  def parseMasterUrl(url: String): String = url.substring("k8s://".length)
 }

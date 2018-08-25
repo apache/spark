@@ -734,8 +734,8 @@ test_that("test cache, uncache and clearCache", {
   clearCache()
   expect_true(dropTempView("table1"))
 
-  expect_error(uncacheTable("foo"),
-      "Error in uncacheTable : analysis error - Table or view not found: foo")
+  expect_error(uncacheTable("zxwtyswklpf"),
+      "Error in uncacheTable : analysis error - Table or view not found: zxwtyswklpf")
 })
 
 test_that("insertInto() on a registered table", {
@@ -1502,6 +1502,27 @@ test_that("column functions", {
   df2 <- createDataFrame(list(list("abc")))
   result <- collect(select(df2, reverse(df2[[1]])))[[1]]
   expect_equal(result, "cba")
+
+  # Test array_distinct() and array_remove()
+  df <- createDataFrame(list(list(list(1L, 2L, 3L, 1L, 2L)), list(list(6L, 5L, 5L, 4L, 6L))))
+  result <- collect(select(df, array_distinct(df[[1]])))[[1]]
+  expect_equal(result, list(list(1L, 2L, 3L), list(6L, 5L, 4L)))
+
+  result <- collect(select(df, array_remove(df[[1]], 2L)))[[1]]
+  expect_equal(result, list(list(1L, 3L, 1L), list(6L, 5L, 5L, 4L, 6L)))
+
+  # Test arrays_zip()
+  df <- createDataFrame(list(list(list(1L, 2L), list(3L, 4L))), schema = c("c1", "c2"))
+  result <- collect(select(df, arrays_zip(df[[1]], df[[2]])))[[1]]
+  expected_entries <-  list(listToStruct(list(c1 = 1L, c2 = 3L)),
+                            listToStruct(list(c1 = 2L, c2 = 4L)))
+  expect_equal(result, list(expected_entries))
+
+  # Test map_from_arrays()
+  df <- createDataFrame(list(list(list("x", "y"), list(1, 2))), schema = c("k", "v"))
+  result <- collect(select(df, map_from_arrays(df$k, df$v)))[[1]]
+  expected_entries <- list(as.environment(list(x = 1, y = 2)))
+  expect_equal(result, expected_entries)
 
   # Test array_repeat()
   df <- createDataFrame(list(list("a", 3L), list("b", 2L)))
@@ -2459,6 +2480,25 @@ test_that("union(), unionByName(), rbind(), except(), and intersect() on a DataF
   expect_equal(length(intersect(1:20, 3:23)), 18)
 
   unlink(jsonPath2)
+})
+
+test_that("intersectAll() and exceptAll()", {
+  df1 <- createDataFrame(list(list("a", 1), list("a", 1), list("a", 1),
+                              list("a", 1), list("b", 3), list("c", 4)),
+                         schema = c("a", "b"))
+  df2 <- createDataFrame(list(list("a", 1), list("a", 1), list("b", 3)), schema = c("a", "b"))
+  intersectAllExpected <- data.frame("a" = c("a", "a", "b"), "b" = c(1, 1, 3),
+                                       stringsAsFactors = FALSE)
+  exceptAllExpected <- data.frame("a" = c("a", "a", "c"), "b" = c(1, 1, 4),
+                                    stringsAsFactors = FALSE)
+  intersectAllDf <- arrange(intersectAll(df1, df2), df1$a)
+  expect_is(intersectAllDf, "SparkDataFrame")
+  exceptAllDf <- arrange(exceptAll(df1, df2), df1$a)
+  expect_is(exceptAllDf, "SparkDataFrame")
+  intersectAllActual <- collect(intersectAllDf)
+  expect_identical(intersectAllActual, intersectAllExpected)
+  exceptAllActual <- collect(exceptAllDf)
+  expect_identical(exceptAllActual, exceptAllExpected)
 })
 
 test_that("withColumn() and withColumnRenamed()", {
@@ -3592,11 +3632,11 @@ test_that("Collect on DataFrame when NAs exists at the top of a timestamp column
 test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
   expect_equal(currentDatabase(), "default")
   expect_error(setCurrentDatabase("default"), NA)
-  expect_error(setCurrentDatabase("foo"),
-               "Error in setCurrentDatabase : analysis error - Database 'foo' does not exist")
+  expect_error(setCurrentDatabase("zxwtyswklpf"),
+        "Error in setCurrentDatabase : analysis error - Database 'zxwtyswklpf' does not exist")
   dbs <- collect(listDatabases())
   expect_equal(names(dbs), c("name", "description", "locationUri"))
-  expect_equal(dbs[[1]], "default")
+  expect_equal(which(dbs[, 1] == "default"), 1)
 })
 
 test_that("catalog APIs, listTables, listColumns, listFunctions", {
@@ -3619,8 +3659,9 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   expect_equal(colnames(c),
                c("name", "description", "dataType", "nullable", "isPartition", "isBucket"))
   expect_equal(collect(c)[[1]][[1]], "speed")
-  expect_error(listColumns("foo", "default"),
-       "Error in listColumns : analysis error - Table 'foo' does not exist in database 'default'")
+  expect_error(listColumns("zxwtyswklpf", "default"),
+               paste("Error in listColumns : analysis error - Table",
+                     "'zxwtyswklpf' does not exist in database 'default'"))
 
   f <- listFunctions()
   expect_true(nrow(f) >= 200) # 250
@@ -3628,8 +3669,9 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
                c("name", "database", "description", "className", "isTemporary"))
   expect_equal(take(orderBy(f, "className"), 1)$className,
                "org.apache.spark.sql.catalyst.expressions.Abs")
-  expect_error(listFunctions("foo_db"),
-               "Error in listFunctions : analysis error - Database 'foo_db' does not exist")
+  expect_error(listFunctions("zxwtyswklpf_db"),
+               paste("Error in listFunctions : analysis error - Database",
+                     "'zxwtyswklpf_db' does not exist"))
 
   # recoverPartitions does not work with tempory view
   expect_error(recoverPartitions("cars"),

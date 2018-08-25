@@ -666,7 +666,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             assert(expectedResult.isRight, s"Was not expecting error with $path: " + e)
             assert(
               e.getMessage.contains(expectedResult.right.get),
-              s"Did not find expected error message wiht $path")
+              s"Did not find expected error message with $path")
         }
       }
 

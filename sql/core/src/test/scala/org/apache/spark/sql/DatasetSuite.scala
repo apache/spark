@@ -1296,7 +1296,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       new java.sql.Timestamp(100000))
   }
 
-  test("SPARK-19896: cannot have circular references in in case class") {
+  test("SPARK-19896: cannot have circular references in case class") {
     val errMsg1 = intercept[UnsupportedOperationException] {
       Seq(CircularReferenceClassA(null)).toDS
     }
@@ -1497,6 +1497,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.where($"city".contains(new java.lang.Character('A'))),
       Seq(Row("Amsterdam")))
+  }
+
+  test("SPARK-23034 show rdd names in RDD scan nodes") {
+    val rddWithName = spark.sparkContext.parallelize(SingleData(1) :: Nil).setName("testRdd")
+    val df = spark.createDataFrame(rddWithName)
+    val output = new java.io.ByteArrayOutputStream()
+    Console.withOut(output) {
+      df.explain(extended = false)
+    }
+    assert(output.toString.contains("Scan testRdd"))
   }
 }
 

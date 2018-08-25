@@ -92,7 +92,8 @@ class SparkSession private(
 
   // If there is no active SparkSession, uses the default SQL conf. Otherwise, use the session's.
   SQLConf.setSQLConfGetter(() => {
-    SparkSession.getActiveSession.map(_.sessionState.conf).getOrElse(SQLConf.getFallbackConf)
+    SparkSession.getActiveSession.filterNot(_.sparkContext.isStopped).map(_.sessionState.conf)
+      .getOrElse(SQLConf.getFallbackConf)
   })
 
   /**
@@ -269,7 +270,7 @@ class SparkSession private(
    */
   @transient
   lazy val emptyDataFrame: DataFrame = {
-    createDataFrame(sparkContext.emptyRDD[Row], StructType(Nil))
+    createDataFrame(sparkContext.emptyRDD[Row].setName("empty"), StructType(Nil))
   }
 
   /**
@@ -394,7 +395,7 @@ class SparkSession private(
     // BeanInfo is not serializable so we must rediscover it remotely for each partition.
       SQLContext.beansToRows(iter, Utils.classForName(className), attributeSeq)
     }
-    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd)(self))
+    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd.setName(rdd.name))(self))
   }
 
   /**
@@ -593,7 +594,7 @@ class SparkSession private(
     } else {
       rowRDD.map { r: Row => InternalRow.fromSeq(r.toSeq) }
     }
-    internalCreateDataFrame(catalystRows, schema)
+    internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
   }
 
 

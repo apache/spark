@@ -396,6 +396,7 @@ case class DataSource(
           hs.partitionSchema.map(_.name),
           "in the partition schema",
           equality)
+        DataSourceUtils.verifyReadSchema(hs.fileFormat, hs.dataSchema)
       case _ =>
         SchemaUtils.checkColumnNameDuplication(
           relation.schema.map(_.name),
@@ -613,6 +614,8 @@ object DataSource extends Logging {
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "hive" =>
         "org.apache.spark.sql.hive.orc.OrcFileFormat"
+      case "com.databricks.spark.avro" if conf.replaceDatabricksSparkAvroEnabled =>
+        "org.apache.spark.sql.avro.AvroFileFormat"
       case name => name
     }
     val provider2 = s"$provider1.DefaultSource"
@@ -635,11 +638,17 @@ object DataSource extends Logging {
                     "Please use the native ORC data source by setting 'spark.sql.orc.impl' to " +
                     "'native'")
                 } else if (provider1.toLowerCase(Locale.ROOT) == "avro" ||
-                  provider1 == "com.databricks.spark.avro") {
+                  provider1 == "com.databricks.spark.avro" ||
+                  provider1 == "org.apache.spark.sql.avro") {
                   throw new AnalysisException(
-                    s"Failed to find data source: ${provider1.toLowerCase(Locale.ROOT)}. " +
-                    "Please find an Avro package at " +
-                    "http://spark.apache.org/third-party-projects.html")
+                    s"Failed to find data source: $provider1. Avro is built-in but external data " +
+                    "source module since Spark 2.4. Please deploy the application as per " +
+                    "the deployment section of \"Apache Avro Data Source Guide\".")
+                } else if (provider1.toLowerCase(Locale.ROOT) == "kafka") {
+                  throw new AnalysisException(
+                    s"Failed to find data source: $provider1. Please deploy the application as " +
+                    "per the deployment section of " +
+                    "\"Structured Streaming + Kafka Integration Guide\".")
                 } else {
                   throw new ClassNotFoundException(
                     s"Failed to find data source: $provider1. Please find packages at " +

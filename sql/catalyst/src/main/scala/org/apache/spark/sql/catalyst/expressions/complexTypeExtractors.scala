@@ -68,7 +68,7 @@ object ExtractValue {
           case StructType(_) =>
             s"Field name should be String Literal, but it's $extraction"
           case other =>
-            s"Can't extract value from $child: need struct type but got ${other.simpleString}"
+            s"Can't extract value from $child: need struct type but got ${other.catalogString}"
         }
         throw new AnalysisException(errorMsg)
     }
