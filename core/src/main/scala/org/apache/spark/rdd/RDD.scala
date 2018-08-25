@@ -1896,6 +1896,11 @@ abstract class RDD[T: ClassTag](
   @DeveloperApi
   protected def getOutputRandomLevel: RandomLevel.Value = {
     val randomLevelCandidates = dependencies.map {
+      // The shuffle is not really happening, treat it like narrow dependency and assume the output
+      // random level of current RDD is same as parent.
+      case dep: ShuffleDependency[_, _, _] if dep.rdd.partitioner.exists(_ == dep.partitioner) =>
+        dep.rdd.outputRandomLevel
+
       case dep: ShuffleDependency[_, _, _] =>
         if (dep.rdd.outputRandomLevel == RandomLevel.INDETERMINATE) {
           // If map output was indeterminate, shuffle output will be indeterminate as well
