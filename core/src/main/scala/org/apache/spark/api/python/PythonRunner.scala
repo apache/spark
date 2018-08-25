@@ -239,7 +239,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         }
         // Close ServerSocket on task completion.
         serverSocket.foreach { server =>
-          context.addTaskCompletionListener(_ => server.close())
+          context.addTaskCompletionListener[Unit](_ => server.close())
         }
         val boundPort: Int = serverSocket.map(_.getLocalPort).getOrElse(0)
         if (boundPort == -1) {
