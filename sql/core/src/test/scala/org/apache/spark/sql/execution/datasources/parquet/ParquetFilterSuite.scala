@@ -25,6 +25,7 @@ import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Operato
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -1022,15 +1023,17 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("SPARK-25132: Case-insensitive field resolution for pushdown when reading parquet") {
+  test("SPARK-25207: Case-insensitive field resolution for pushdown when reading parquet") {
     val caseSensitiveParquetFilters =
       new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
         conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
         conf.parquetFilterPushDownInFilterThreshold, caseSensitive = true)
+
     val caseInsensitiveParquetFilters =
       new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
         conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
         conf.parquetFilterPushDownInFilterThreshold, caseSensitive = false)
+
     def testCaseInsensitiveResolution(
         schema: StructType,
         expected: FilterPredicate,
@@ -1101,6 +1104,32 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     assertResult(None) {
       caseInsensitiveParquetFilters.createFilter(
         dupParquetSchema, sources.EqualTo("CINT", 1000))
+    }
+  }
+
+  test("SPARK-25207: Case-insensitive field resolution for pushdown when reading parquet" +
+    " - exception when duplicate fields in case-insensitive mode") {
+    withTempDir { dir =>
+      val tableName = "spark_25207"
+      val tableDir = dir.getAbsoluteFile + "/table"
+      withTable(tableName) {
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          spark.range(10).selectExpr("id as A", "id as B", "id as b")
+            .write.mode("overwrite").parquet(tableDir)
+        }
+        sql(
+          s"""
+             |CREATE TABLE $tableName (A LONG, B LONG) USING PARQUET LOCATION '$tableDir'
+           """.stripMargin)
+
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+          val e = intercept[SparkException] {
+            sql(s"select a from $tableName where b > 0").collect()
+          }
+          assert(e.getCause.isInstanceOf[RuntimeException] && e.getCause.getMessage.contains(
+            """Found duplicate field(s) "B": [B, b] in case-insensitive mode"""))
+        }
+      }
     }
   }
 }
