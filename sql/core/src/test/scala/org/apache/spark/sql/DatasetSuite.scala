@@ -1506,6 +1506,23 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     ))
 
     assert(ds.schema == schema)
+
+    val nestedOptData = Seq(Some((Some((1, "a")), 2.0)), Some((Some((2, "b")), 3.0)))
+    val nestedDs = nestedOptData.toDS()
+
+    checkDataset(
+      nestedDs,
+      nestedOptData: _*)
+
+    val nestedSchema = StructType(Seq(
+      StructField("value", StructType(Seq(
+        StructField("_1", StructType(Seq(
+          StructField("_1", IntegerType, nullable = false),
+          StructField("_2", StringType, nullable = true)))),
+        StructField("_2", DoubleType, nullable = false)
+      )), nullable = true)
+    ))
+    assert(nestedDs.schema == nestedSchema)
   }
 
   test("SPARK-23034 show rdd names in RDD scan nodes") {
