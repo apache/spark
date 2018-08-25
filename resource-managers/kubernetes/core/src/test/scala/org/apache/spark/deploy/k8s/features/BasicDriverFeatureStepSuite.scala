@@ -67,7 +67,6 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(org.apache.spark.internal.config.DRIVER_MEMORY_OVERHEAD, 200L)
       .set(CONTAINER_IMAGE, "spark-driver:latest")
       .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS.mkString(","))
-      .set(KUBERNETES_DRIVER_CONTAINER_NAME, "driver-container")
     val kubernetesConf = KubernetesConf(
       sparkConf,
       emptyDriverSpecificConf,
@@ -85,7 +84,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val basePod = SparkPod.initialPod()
     val configuredPod = featureStep.configurePod(basePod)
 
-    assert(configuredPod.container.getName === "driver-container")
+    assert(configuredPod.container.getName === DEFAULT_DRIVER_CONTAINER_NAME)
     assert(configuredPod.container.getImage === "spark-driver:latest")
     assert(configuredPod.container.getImagePullPolicy === CONTAINER_IMAGE_PULL_POLICY)
 

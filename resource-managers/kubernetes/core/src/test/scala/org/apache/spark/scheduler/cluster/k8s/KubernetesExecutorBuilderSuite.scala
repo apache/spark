@@ -140,15 +140,14 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
         .endMetadata()
         .withNewSpec()
         .addNewContainer()
-        .withName(Config.KUBERNETES_EXECUTOR_CONTAINER_NAME.defaultValueString)
+        .withName("driver-container")
         .endContainer()
         .endSpec()
         .build())
 
     assert(pod.pod.getMetadata.getLabels.containsKey("test-label-key"))
     assert(pod.pod.getMetadata.getLabels.get("test-label-key") === "test-label-value")
-    assert(pod.container.getName ===
-      Config.KUBERNETES_EXECUTOR_CONTAINER_NAME.defaultValueString)
+    assert(pod.container.getName === "driver-container")
   }
 
   private def constructPodWithPodTemplate(pod: Pod) : SparkPod = {

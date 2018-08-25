@@ -73,10 +73,7 @@ private[spark] object KubernetesExecutorBuilder {
     conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
       .map(new File(_))
       .map(file => new KubernetesExecutorBuilder(provideInitialPod = () => {
-        KubernetesUtils.loadPodFromTemplate(
-          kubernetesClient,
-          file,
-          conf.get(Config.KUBERNETES_EXECUTOR_CONTAINER_NAME))
+        KubernetesUtils.loadPodFromTemplate(kubernetesClient, file)
       }))
       .getOrElse(new KubernetesExecutorBuilder())
   }

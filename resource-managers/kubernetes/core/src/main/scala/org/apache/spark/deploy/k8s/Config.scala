@@ -225,18 +225,6 @@ private[spark] object Config extends Logging {
         "Ensure that major Python version is either Python2 or Python3")
       .createWithDefault("2")
 
-  val KUBERNETES_DRIVER_CONTAINER_NAME =
-    ConfigBuilder("spark.kubernetes.driver.containerName")
-      .doc("The name of the driver container within the driver pod template file")
-      .stringConf
-      .createWithDefault("spark-kubernetes-driver")
-
-  val KUBERNETES_EXECUTOR_CONTAINER_NAME =
-    ConfigBuilder("spark.kubernetes.executor.containerName")
-      .doc("The name of the executor container within the executor pod template file")
-      .stringConf
-      .createWithDefault("spark-kubernetes-executor")
-
   val KUBERNETES_DRIVER_PODTEMPLATE_FILE =
     ConfigBuilder("spark.kubernetes.driver.podTemplateFile")
       .doc("File containing a template pod spec for the driver")

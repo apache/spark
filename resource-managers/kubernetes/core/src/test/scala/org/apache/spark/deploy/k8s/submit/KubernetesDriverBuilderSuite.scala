@@ -26,7 +26,7 @@ import org.mockito.Mockito._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
-import org.apache.spark.deploy.k8s.Config.{CONTAINER_IMAGE, KUBERNETES_DRIVER_CONTAINER_NAME, KUBERNETES_DRIVER_PODTEMPLATE_FILE, KUBERNETES_EXECUTOR_PODTEMPLATE_FILE}
+import org.apache.spark.deploy.k8s.Config.{CONTAINER_IMAGE, KUBERNETES_DRIVER_PODTEMPLATE_FILE, KUBERNETES_EXECUTOR_PODTEMPLATE_FILE}
 import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep, _}
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
 
@@ -311,15 +311,14 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
         .endMetadata()
         .withNewSpec()
         .addNewContainer()
-        .withName(KUBERNETES_DRIVER_CONTAINER_NAME.defaultValueString)
+        .withName("test-driver-container")
         .endContainer()
         .endSpec()
         .build())
 
     assert(spec.pod.pod.getMetadata.getLabels.containsKey("test-label-key"))
     assert(spec.pod.pod.getMetadata.getLabels.get("test-label-key") === "test-label-value")
-    assert(spec.pod.container.getName ===
-      KUBERNETES_DRIVER_CONTAINER_NAME.defaultValueString)
+    assert(spec.pod.container.getName === "test-driver-container")
   }
 
   test("Throws on misconfigured pod template") {

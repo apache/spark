@@ -31,8 +31,6 @@ private[spark] trait PodTemplateSuite { k8sSuite: KubernetesSuite =>
     sparkAppConf
       .set("spark.kubernetes.driver.podTemplateFile", DRIVER_TEMPLATE_FILE.getAbsolutePath)
       .set("spark.kubernetes.executor.podTemplateFile", EXECUTOR_TEMPLATE_FILE.getAbsolutePath)
-      .set("spark.kubernetes.driver.containerName", DRIVER_CONTAINER_NAME)
-      .set("spark.kubernetes.executor.containerName", EXECUTOR_LABEL_VALUE)
     runSparkPiAndVerifyCompletion(
       driverPodChecker = (driverPod: Pod) => {
         checkDriverPod(driverPod)

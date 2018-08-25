@@ -120,10 +120,7 @@ private[spark] object KubernetesDriverBuilder extends Logging {
       .map(new File(_))
       .map(file => new KubernetesDriverBuilder(provideInitialPod = () => {
         try {
-          KubernetesUtils.loadPodFromTemplate(
-            kubernetesClient,
-            file,
-            conf.get(Config.KUBERNETES_DRIVER_CONTAINER_NAME))
+          KubernetesUtils.loadPodFromTemplate(kubernetesClient, file)
         } catch {
           case e: Exception =>
             logError(

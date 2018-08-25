@@ -31,4 +31,15 @@ private[spark] object SparkPod {
         .build(),
       new ContainerBuilder().build())
   }
+
+  def initialPodWithContainerName(name: String): SparkPod = {
+    SparkPod(
+      new PodBuilder()
+        .withNewMetadata()
+        .endMetadata()
+        .withNewSpec()
+        .endSpec()
+        .build(),
+      new ContainerBuilder().withName(name).build())
+  }
 }
