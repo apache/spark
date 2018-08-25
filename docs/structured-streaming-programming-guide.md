@@ -1005,7 +1005,7 @@ Here is an illustration.
 
 As shown in the illustration, the maximum event time tracked by the engine is the 
 *blue dashed line*, and the watermark set as `(max event time - '10 mins')`
-at the beginning of every trigger is the red line  For example, when the engine observes the data 
+at the beginning of every trigger is the red line. For example, when the engine observes the data 
 `(12:14, dog)`, it sets the watermark for the next trigger as `12:04`.
 This watermark lets the engine maintain intermediate state for additional 10 minutes to allow late
 data to be counted. For example, the data `(12:09, cat)` is out of order and late, and it falls in
