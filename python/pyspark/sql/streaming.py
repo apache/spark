@@ -560,9 +560,9 @@ class DataStreamReader(OptionUtils):
     @since(2.0)
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
             comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
-            ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
-            negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
-            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
+            ignoreTrailingWhiteSpace=None, nullValue=None, emptyValue=None, nanValue=None,
+            positiveInf=None, negativeInf=None, dateFormat=None, timestampFormat=None,
+            maxColumns=None, maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
             enforceSchema=None):
         """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
@@ -611,6 +611,8 @@ class DataStreamReader(OptionUtils):
         :param nullValue: sets the string representation of a null value. If None is set, it uses
                           the default value, empty string. Since 2.0.1, this ``nullValue`` param
                           applies to all supported types including the string type.
+        :param emptyValue: sets the string representation of an empty value. If None is set, it uses
+                           the default value, empty string.
         :param nanValue: sets the string representation of a non-number value. If None is set, it
                          uses the default value, ``NaN``.
         :param positiveInf: sets the string representation of a positive infinity value. If None
@@ -669,9 +671,9 @@ class DataStreamReader(OptionUtils):
             schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape, comment=comment,
             header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
             ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace, nullValue=nullValue,
-            nanValue=nanValue, positiveInf=positiveInf, negativeInf=negativeInf,
-            dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
-            maxCharsPerColumn=maxCharsPerColumn,
+            emptyValue=emptyValue, nanValue=nanValue, positiveInf=positiveInf,
+            negativeInf=negativeInf, dateFormat=dateFormat, timestampFormat=timestampFormat,
+            maxColumns=maxColumns, maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema)

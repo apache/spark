@@ -345,11 +345,11 @@ class DataFrameReader(OptionUtils):
     @since(2.0)
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
             comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
-            ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
-            negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
-            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
-            columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
-            samplingRatio=None, enforceSchema=None):
+            ignoreTrailingWhiteSpace=None, nullValue=None, emptyValue=None, nanValue=None,
+            positiveInf=None, negativeInf=None, dateFormat=None, timestampFormat=None,
+            maxColumns=None, maxCharsPerColumn=None, maxMalformedLogPerPartition=None,
+            mode=None, columnNameOfCorruptRecord=None, multiLine=None,
+            charToEscapeQuoteEscaping=None, samplingRatio=None, enforceSchema=None):
         """Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -395,6 +395,8 @@ class DataFrameReader(OptionUtils):
         :param nullValue: sets the string representation of a null value. If None is set, it uses
                           the default value, empty string. Since 2.0.1, this ``nullValue`` param
                           applies to all supported types including the string type.
+        :param emptyValue: sets the string representation of an empty value. If None is set, it uses
+                           the default value, empty string.
         :param nanValue: sets the string representation of a non-number value. If None is set, it
                          uses the default value, ``NaN``.
         :param positiveInf: sets the string representation of a positive infinity value. If None
@@ -457,9 +459,9 @@ class DataFrameReader(OptionUtils):
             schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape, comment=comment,
             header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
             ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace, nullValue=nullValue,
-            nanValue=nanValue, positiveInf=positiveInf, negativeInf=negativeInf,
-            dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
-            maxCharsPerColumn=maxCharsPerColumn,
+            emptyValue=emptyValue, nanValue=nanValue, positiveInf=positiveInf,
+            negativeInf=negativeInf, dateFormat=dateFormat, timestampFormat=timestampFormat,
+            maxColumns=maxColumns, maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, samplingRatio=samplingRatio,
@@ -857,9 +859,9 @@ class DataFrameWriter(OptionUtils):
 
     @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
-            header=None, nullValue=None, escapeQuotes=None, quoteAll=None, dateFormat=None,
-            timestampFormat=None, ignoreLeadingWhiteSpace=None, ignoreTrailingWhiteSpace=None,
-            charToEscapeQuoteEscaping=None, encoding=None):
+            header=None, nullValue=None, emptyValue=None, escapeQuotes=None, quoteAll=None,
+            dateFormat=None, timestampFormat=None, ignoreLeadingWhiteSpace=None,
+            ignoreTrailingWhiteSpace=None, charToEscapeQuoteEscaping=None, encoding=None):
         """Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -891,6 +893,8 @@ class DataFrameWriter(OptionUtils):
                        the default value, ``false``.
         :param nullValue: sets the string representation of a null value. If None is set, it uses
                           the default value, empty string.
+        :param emptyValue: sets the string representation of an empty value. If None is set, it uses
+                           the default value, ``""``.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.text.SimpleDateFormat``. This
                            applies to date type. If None is set, it uses the
@@ -916,8 +920,8 @@ class DataFrameWriter(OptionUtils):
         """
         self.mode(mode)
         self._set_opts(compression=compression, sep=sep, quote=quote, escape=escape, header=header,
-                       nullValue=nullValue, escapeQuotes=escapeQuotes, quoteAll=quoteAll,
-                       dateFormat=dateFormat, timestampFormat=timestampFormat,
+                       nullValue=nullValue, emptyValue=emptyValue, escapeQuotes=escapeQuotes,
+                       quoteAll=quoteAll, dateFormat=dateFormat, timestampFormat=timestampFormat,
                        ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
                        ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace,
                        charToEscapeQuoteEscaping=charToEscapeQuoteEscaping,
