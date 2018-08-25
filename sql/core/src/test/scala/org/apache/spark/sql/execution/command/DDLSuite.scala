@@ -1128,13 +1128,13 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     assertUnsupported("ALTER TABLE dbx.tab1 NOT STORED AS DIRECTORIES")
   }
 
-  ignore("alter table: recover partitions (sequential)") {
+  test("alter table: recover partitions (sequential)") {
     withSQLConf("spark.rdd.parallelListingThreshold" -> "10") {
       testRecoverPartitions()
     }
   }
 
-  ignore("alter table: recover partition (parallel)") {
+  test("alter table: recover partition (parallel)") {
     withSQLConf("spark.rdd.parallelListingThreshold" -> "0") {
       testRecoverPartitions()
     }
