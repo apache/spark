@@ -80,7 +80,7 @@ trait KafkaMissingOffsetsTest extends SharedSQLContext {
   }
 }
 
-class KafkaDontFailOnDataLossSuite extends KafkaMissingOffsetsTest {
+class KafkaDontFailOnDataLossSuite extends StreamTest with KafkaMissingOffsetsTest {
 
   import testImplicits._
 
@@ -165,7 +165,11 @@ class KafkaDontFailOnDataLossSuite extends KafkaMissingOffsetsTest {
         .trigger(Trigger.Continuous(100))
         .start()
       try {
-        query.processAllAvailable()
+        // `processAllAvailable` doesn't work for continuous processing, so just wait until the last
+        // record appears in the table.
+        eventually(timeout(streamingTimeout)) {
+          assert(spark.table(table).as[String].collect().contains("49"))
+        }
       } finally {
         query.stop()
       }
