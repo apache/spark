@@ -1024,15 +1024,13 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   }
 
   test("SPARK-25207: Case-insensitive field resolution for pushdown when reading parquet") {
-    val caseSensitiveParquetFilters =
+    def createParquetFilter(caseSensitive: Boolean): ParquetFilters = {
       new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
         conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
-        conf.parquetFilterPushDownInFilterThreshold, caseSensitive = true)
-
-    val caseInsensitiveParquetFilters =
-      new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
-        conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
-        conf.parquetFilterPushDownInFilterThreshold, caseSensitive = false)
+        conf.parquetFilterPushDownInFilterThreshold, caseSensitive)
+    }
+    val caseSensitiveParquetFilters = createParquetFilter(caseSensitive = true)
+    val caseInsensitiveParquetFilters = createParquetFilter(caseSensitive = false)
 
     def testCaseInsensitiveResolution(
         schema: StructType,
@@ -1107,8 +1105,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("SPARK-25207: Case-insensitive field resolution for pushdown when reading parquet" +
-    " - exception when duplicate fields in case-insensitive mode") {
+  test("SPARK-25207: exception when duplicate fields in case-insensitive mode") {
     withTempDir { dir =>
       val tableName = "spark_25207"
       val tableDir = dir.getAbsoluteFile + "/table"
