@@ -26,12 +26,15 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
-import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, KafkaConsumer}
+import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, ConsumerRecord, KafkaConsumer}
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{ThreadUtils, UninterruptibleThread}
 
 /**
@@ -423,8 +426,13 @@ private[kafka010] class KafkaOffsetReader(
 }
 
 private[kafka010] object KafkaOffsetReader {
+  type Record = ConsumerRecord[Array[Byte], Array[Byte]]
 
-  def kafkaSchema: StructType = StructType(Seq(
+  val headersType = ArrayType(StructType(Array(
+    StructField("key", StringType),
+    StructField("value", BinaryType))))
+
+  val schemaWithoutHeaders = new StructType(Array(
     StructField("key", BinaryType),
     StructField("value", BinaryType),
     StructField("topic", StringType),
@@ -433,4 +441,42 @@ private[kafka010] object KafkaOffsetReader {
     StructField("timestamp", TimestampType),
     StructField("timestampType", IntegerType)
   ))
+
+  val schemaWithHeaders = {
+    new StructType(schemaWithoutHeaders.fields :+ StructField("headers", headersType))
+  }
+
+  def kafkaSchema(includeHeaders: Boolean): StructType = {
+    if (includeHeaders) schemaWithHeaders else schemaWithoutHeaders
+  }
+
+  def toInternalRowWithoutHeaders: Record => InternalRow =
+    (cr: Record) => InternalRow(
+      cr.key, cr.value, UTF8String.fromString(cr.topic), cr.partition, cr.offset,
+      DateTimeUtils.fromJavaTimestamp(new java.sql.Timestamp(cr.timestamp)), cr.timestampType.id
+    )
+
+  def toInternalRowWithHeaders: Record => InternalRow =
+    (cr: Record) => InternalRow(
+      cr.key, cr.value, UTF8String.fromString(cr.topic), cr.partition, cr.offset,
+      DateTimeUtils.fromJavaTimestamp(new java.sql.Timestamp(cr.timestamp)), cr.timestampType.id,
+      if (cr.headers.iterator().hasNext) {
+        new GenericArrayData(cr.headers.iterator().asScala
+          .map(header =>
+            InternalRow(UTF8String.fromString(header.key()), header.value())
+          ).toArray)
+      } else {
+        null
+      }
+    )
+
+  def toUnsafeRowWithoutHeadersProjector: Record => UnsafeRow =
+    (cr: Record) => UnsafeProjection.create(schemaWithoutHeaders)(toInternalRowWithoutHeaders(cr))
+
+  def toUnsafeRowWithHeadersProjector: Record => UnsafeRow =
+    (cr: Record) => UnsafeProjection.create(schemaWithHeaders)(toInternalRowWithHeaders(cr))
+
+  def toUnsafeRowProjector(includeHeaders: Boolean): Record => UnsafeRow = {
+    if (includeHeaders) toUnsafeRowWithHeadersProjector else toUnsafeRowWithoutHeadersProjector
+  }
 }

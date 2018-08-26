@@ -27,6 +27,8 @@ For Scala/Java applications using SBT/Maven project definitions, link your appli
     artifactId = spark-sql-kafka-0-10_{{site.SCALA_BINARY_VERSION}}
     version = {{site.SPARK_VERSION_SHORT}}
 
+Please note that to use the headers functionality, your Kafka client version should be version 0.11.0.0 or up.
+
 For Python applications, you need to add this above library and its dependencies when deploying your
 application. See the [Deploying](#deploying) subsection below.
 
@@ -49,6 +51,17 @@ val df = spark
   .load()
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .as[(String, String)]
+
+// Subscribe to 1 topic, with headers
+val df = spark
+  .readStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1")
+  .option("includeHeaders", "true")
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "headers")
+  .as[(String, String, Map)]
 
 // Subscribe to multiple topics
 val df = spark
@@ -84,6 +97,16 @@ Dataset<Row> df = spark
   .load();
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 
+// Subscribe to 1 topic, with headers
+Dataset<Row> df = spark
+  .readStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1")
+  .option("includeHeaders", "true")
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "headers");
+
 // Subscribe to multiple topics
 Dataset<Row> df = spark
   .readStream()
@@ -115,6 +138,16 @@ df = spark \
   .option("subscribe", "topic1") \
   .load()
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+# Subscribe to 1 topic, with headers
+val df = spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "topic1") \
+  .option("includeHeaders", "true") \
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "headers")
 
 # Subscribe to multiple topics
 df = spark \
@@ -286,6 +319,10 @@ Each row in the source has the following schema:
   <td>timestampType</td>
   <td>int</td>
 </tr>
+<tr>
+  <td>headers (optional)</td>
+  <td>array</td>
+</tr>
 </table>
 
 The following options must be set for the Kafka source
@@ -425,6 +462,13 @@ The following configurations are optional:
   issues, set the Kafka consumer session timeout (by setting option "kafka.session.timeout.ms") to
   be very small. When this is set, option "groupIdPrefix" will be ignored.</td>
 </tr>
+<tr>
+  <td>includeHeaders</td>
+  <td>boolean</td>
+  <td>false</td>
+  <td>streaming and batch</td>
+  <td>Whether to include the Kafka headers in the row.</td>
+</tr>
 </table>
 
 ### Consumer Caching
@@ -523,6 +567,10 @@ The Dataframe being written to Kafka should have the following columns in schema
   <td>string or binary</td>
 </tr>
 <tr>
+  <td>headers (optional)</td>
+  <td>array</td>
+</tr>
+<tr>
   <td>topic (*optional)</td>
   <td>string</td>
 </tr>
@@ -558,6 +606,13 @@ The following configurations are optional:
   <td>streaming and batch</td>
   <td>Sets the topic that all rows will be written to in Kafka. This option overrides any
   topic column that may exist in the data.</td>
+</tr>
+<tr>
+  <td>includeHeaders</td>
+  <td>boolean</td>
+  <td>false</td>
+  <td>streaming and batch</td>
+  <td>Whether to include the Kafka headers in the row.</td>
 </tr>
 </table>
 

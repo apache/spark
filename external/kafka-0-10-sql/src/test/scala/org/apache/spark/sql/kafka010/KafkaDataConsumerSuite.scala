@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.collection.JavaConverters._
@@ -157,10 +158,12 @@ class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester
       try {
         val range = consumer.getAvailableOffsetRange()
         val rcvd = range.earliest until range.latest map { offset =>
-          val bytes = consumer.get(offset, Long.MaxValue, 10000, failOnDataLoss = false).value()
-          new String(bytes)
+          val record = consumer.get(offset, Long.MaxValue, 10000, failOnDataLoss = false)
+          val value = new String(record.value(), StandardCharsets.UTF_8)
+          val headers = record.headers().toArray.map(header => (header.key(), header.value())).toSeq
+          (value, headers)
         }
-        assert(rcvd == data)
+        data === rcvd
       } catch {
         case e: Throwable =>
           error = e
