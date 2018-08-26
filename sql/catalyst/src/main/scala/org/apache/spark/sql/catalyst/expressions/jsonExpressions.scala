@@ -553,19 +553,23 @@ case class JsonToStructs(
   // This converts parsed rows to the desired output by the given schema.
   @transient
   lazy val converter = nullableSchema match {
-    case _: StructType =>
-      (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
+    case st: StructType =>
+      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
     case _: ArrayType =>
-      (rows: Seq[InternalRow]) => rows.head.getArray(0)
+      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getArray(0) else null
     case _: MapType =>
-      (rows: Seq[InternalRow]) => rows.head.getMap(0)
+      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
   }
 
-  @transient
-  lazy val parser =
-    new JacksonParser(
-      nullableSchema,
-      new JSONOptions(options + ("mode" -> FailFastMode.name), timeZoneId.get))
+  @transient lazy val parsedOptions = new JSONOptions(options, timeZoneId.get)
+  @transient lazy val rawParser = new JacksonParser(nullableSchema, parsedOptions)
+  @transient lazy val createParser = CreateJacksonParser.utf8String _
+  @transient lazy val parser = new FailureSafeParser[UTF8String](
+    input => rawParser.parse(input, createParser, identity[UTF8String]),
+    parsedOptions.parseMode,
+    schema,
+    parsedOptions.columnNameOfCorruptRecord,
+    parsedOptions.multiLine)
 
   override def dataType: DataType = nullableSchema
 
@@ -595,10 +599,7 @@ case class JsonToStructs(
     if (json.toString.trim.isEmpty) return null
 
     try {
-      converter(parser.parse(
-        json.asInstanceOf[UTF8String],
-        CreateJacksonParser.utf8String,
-        identity[UTF8String]))
+      converter(parser.parse(json.asInstanceOf[UTF8String]))
     } catch {
       case _: BadRecordException => null
     }
