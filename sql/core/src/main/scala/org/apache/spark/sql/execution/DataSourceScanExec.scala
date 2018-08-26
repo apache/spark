@@ -308,7 +308,7 @@ case class FileSourceScanExec(
     withSelectedBucketsCount
   }
 
-  private lazy val inputRDD: RDD[Object] = {
+  private lazy val inputRDD: RDD[_] = {
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
       relation.fileFormat.buildReaderWithPartitionValues(
         sparkSession = relation.sparkSession,
@@ -387,7 +387,7 @@ case class FileSourceScanExec(
       bucketSpec: BucketSpec,
       readFile: (PartitionedFile) => Iterator[InternalRow],
       selectedPartitions: Seq[PartitionDirectory],
-      fsRelation: HadoopFsRelation): RDD[Object] = {
+      fsRelation: HadoopFsRelation): RDD[_] = {
     logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
     val filesGroupedToBuckets =
       selectedPartitions.flatMap { p =>
@@ -428,7 +428,7 @@ case class FileSourceScanExec(
   private def createNonBucketedReadRDD(
       readFile: (PartitionedFile) => Iterator[InternalRow],
       selectedPartitions: Seq[PartitionDirectory],
-      fsRelation: HadoopFsRelation): RDD[Object] = {
+      fsRelation: HadoopFsRelation): RDD[_] = {
     val defaultMaxSplitBytes =
       fsRelation.sparkSession.sessionState.conf.filesMaxPartitionBytes
     val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes

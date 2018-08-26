@@ -66,13 +66,13 @@ class FileScanRDD(
     @transient private val sparkSession: SparkSession,
     readFunction: (PartitionedFile) => Iterator[InternalRow],
     @transient val filePartitions: Seq[FilePartition])
-  extends RDD[Object](sparkSession.sparkContext, Nil) {
+  extends RDD[AnyRef](sparkSession.sparkContext, Nil) {
 
   private val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
   private val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
 
-  override def compute(split: RDDPartition, context: TaskContext): Iterator[Object] = {
-    val iterator = new Iterator[Object] with AutoCloseable {
+  override def compute(split: RDDPartition, context: TaskContext): Iterator[AnyRef] = {
+    val iterator = new Iterator[AnyRef] with AutoCloseable {
       private val inputMetrics = context.taskMetrics().inputMetrics
       private val existingBytesRead = inputMetrics.bytesRead
 
@@ -99,7 +99,7 @@ class FileScanRDD(
 
       private[this] val files = split.asInstanceOf[FilePartition].files.toIterator
       private[this] var currentFile: PartitionedFile = null
-      private[this] var currentIterator: Iterator[Object] = null
+      private[this] var currentIterator: Iterator[AnyRef] = null
 
       def hasNext: Boolean = {
         // Kill the task in case it has been marked as killed. This logic is from
@@ -108,7 +108,7 @@ class FileScanRDD(
         context.killTaskIfInterrupted()
         (currentIterator != null && currentIterator.hasNext) || nextIterator()
       }
-      def next(): Object = {
+      def next(): AnyRef = {
         val nextElement = currentIterator.next()
         // TODO: we should have a better separation of row based and batch based scan, so that we
         // don't need to run this `if` for every record.
@@ -147,7 +147,7 @@ class FileScanRDD(
           InputFileBlockHolder.set(currentFile.filePath, currentFile.start, currentFile.length)
 
           if (ignoreMissingFiles || ignoreCorruptFiles) {
-            currentIterator = new NextIterator[Object] {
+            currentIterator = new NextIterator[AnyRef] {
               // The readFunction may read some bytes before consuming the iterator, e.g.,
               // vectorized Parquet reader. Here we use lazy val to delay the creation of
               // iterator so that we will throw exception in `getNext`.
