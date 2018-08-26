@@ -345,11 +345,11 @@ class DataFrameReader(OptionUtils):
     @since(2.0)
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
             comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
-            ignoreTrailingWhiteSpace=None, nullValue=None, emptyValue=None, nanValue=None,
-            positiveInf=None, negativeInf=None, dateFormat=None, timestampFormat=None,
-            maxColumns=None, maxCharsPerColumn=None, maxMalformedLogPerPartition=None,
-            mode=None, columnNameOfCorruptRecord=None, multiLine=None,
-            charToEscapeQuoteEscaping=None, samplingRatio=None, enforceSchema=None):
+            ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
+            negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
+            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
+            columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
+            samplingRatio=None, enforceSchema=None, emptyValue=None):
         """Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -395,8 +395,6 @@ class DataFrameReader(OptionUtils):
         :param nullValue: sets the string representation of a null value. If None is set, it uses
                           the default value, empty string. Since 2.0.1, this ``nullValue`` param
                           applies to all supported types including the string type.
-        :param emptyValue: sets the string representation of an empty value. If None is set, it uses
-                           the default value, empty string.
         :param nanValue: sets the string representation of a non-number value. If None is set, it
                          uses the default value, ``NaN``.
         :param positiveInf: sets the string representation of a positive infinity value. If None
@@ -446,6 +444,8 @@ class DataFrameReader(OptionUtils):
                                           different, ``\0`` otherwise.
         :param samplingRatio: defines fraction of rows used for schema inferring.
                               If None is set, it uses the default value, ``1.0``.
+        :param emptyValue: sets the string representation of an empty value. If None is set, it uses
+                           the default value, empty string.
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
@@ -859,9 +859,9 @@ class DataFrameWriter(OptionUtils):
 
     @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
-            header=None, nullValue=None, emptyValue=None, escapeQuotes=None, quoteAll=None,
-            dateFormat=None, timestampFormat=None, ignoreLeadingWhiteSpace=None,
-            ignoreTrailingWhiteSpace=None, charToEscapeQuoteEscaping=None, encoding=None):
+            header=None, nullValue=None, escapeQuotes=None, quoteAll=None, dateFormat=None,
+            timestampFormat=None, ignoreLeadingWhiteSpace=None, ignoreTrailingWhiteSpace=None,
+            charToEscapeQuoteEscaping=None, encoding=None, emptyValue=None):
         """Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -893,8 +893,6 @@ class DataFrameWriter(OptionUtils):
                        the default value, ``false``.
         :param nullValue: sets the string representation of a null value. If None is set, it uses
                           the default value, empty string.
-        :param emptyValue: sets the string representation of an empty value. If None is set, it uses
-                           the default value, ``""``.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.text.SimpleDateFormat``. This
                            applies to date type. If None is set, it uses the
@@ -915,6 +913,8 @@ class DataFrameWriter(OptionUtils):
                                           different, ``\0`` otherwise..
         :param encoding: sets the encoding (charset) of saved csv files. If None is set,
                          the default UTF-8 charset will be used.
+        :param emptyValue: sets the string representation of an empty value. If None is set, it uses
+                           the default value, ``""``.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
