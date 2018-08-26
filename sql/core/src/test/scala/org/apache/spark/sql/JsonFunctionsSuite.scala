@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import collection.JavaConverters._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -546,5 +547,26 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
           from_json($"root", schema_of_json(lit(json))),
           Map("pretty" -> "true"))),
       Seq(Row(expected)))
+  }
+
+  test("from_json invalid json - check modes") {
+    val df = Seq("""{"a" 1}""", """{"a": 2}""").toDS()
+    val schema = new StructType().add("a", IntegerType)
+
+    checkAnswer(
+      df.select(from_json($"value", schema, Map("mode" -> "PERMISSIVE"))),
+      Row(Row(null)) :: Row(Row(2)) :: Nil)
+
+    val exceptionOne = intercept[SparkException] {
+      checkAnswer(
+        df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))),
+        Row(Row(2)) :: Nil)
+    }.getMessage
+    assert(exceptionOne.contains(
+      "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+
+    checkAnswer(
+      df.select(from_json($"value", schema, Map("mode" -> "DROPMALFORMED"))),
+      Row(null) :: Row(Row(2)) :: Nil)
   }
 }
