@@ -105,6 +105,20 @@ class CSVInferSchemaSuite extends SparkFunSuite {
     assert(CSVInferSchema.inferField(DecimalType(1, 1), "\\N", options) == DecimalType(1, 1))
   }
 
+  test("Empty fields are handled properly when an emptyValue is specified") {
+    var options = new CSVOptions(Map("emptyValue" -> "empty"), false, "GMT")
+    assert(CSVInferSchema.inferField(NullType, "empty", options) == NullType)
+    assert(CSVInferSchema.inferField(StringType, "empty", options) == StringType)
+    assert(CSVInferSchema.inferField(LongType, "empty", options) == LongType)
+
+    options = new CSVOptions(Map("emptyValue" -> "\\N"), false, "GMT")
+    assert(CSVInferSchema.inferField(IntegerType, "\\N", options) == IntegerType)
+    assert(CSVInferSchema.inferField(DoubleType, "\\N", options) == DoubleType)
+    assert(CSVInferSchema.inferField(TimestampType, "\\N", options) == TimestampType)
+    assert(CSVInferSchema.inferField(BooleanType, "\\N", options) == BooleanType)
+    assert(CSVInferSchema.inferField(DecimalType(1, 1), "\\N", options) == DecimalType(1, 1))
+  }
+
   test("Merging Nulltypes should yield Nulltype.") {
     val mergedNullTypes = CSVInferSchema.mergeRowTypes(Array(NullType), Array(NullType))
     assert(mergedNullTypes.deep == Array(NullType).deep)
