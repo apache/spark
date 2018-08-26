@@ -49,8 +49,10 @@ private[parquet] class ParquetFilters(
     caseSensitive: Boolean) {
 
   private case class ParquetField(
-      resolvedName: String,
-      schema: ParquetSchemaType)
+      // field name in parquet file
+      fieldName: String,
+      // field schema type in parquet file
+      fieldSchema: ParquetSchemaType)
 
   private case class ParquetSchemaType(
       originalType: OriginalType,
@@ -387,7 +389,7 @@ private[parquet] class ParquetFilters(
    * Converts data sources filters to Parquet filter predicates.
    */
   def createFilter(schema: MessageType, predicate: sources.Filter): Option[FilterPredicate] = {
-    val nameToParquet = getFieldMap(schema)
+    val nameToParquetField = getFieldMap(schema)
 
     // Decimal type must make sure that filter value's scale matched the file.
     // If doesn't matched, which would cause data corruption.
@@ -400,7 +402,7 @@ private[parquet] class ParquetFilters(
     // Parquet's type in the given file should be matched to the value's type
     // in the pushed filter in order to push down the filter to Parquet.
     def valueCanMakeFilterOn(name: String, value: Any): Boolean = {
-      value == null || (nameToParquet(name).schema match {
+      value == null || (nameToParquetField(name).fieldSchema match {
         case ParquetBooleanType => value.isInstanceOf[JBoolean]
         case ParquetByteType | ParquetShortType | ParquetIntegerType => value.isInstanceOf[Number]
         case ParquetLongType => value.isInstanceOf[JLong]
@@ -427,7 +429,7 @@ private[parquet] class ParquetFilters(
     // filters for the column having dots in the names. Thus, we do not push down such filters.
     // See SPARK-20364.
     def canMakeFilterOn(name: String, value: Any): Boolean = {
-      nameToParquet.contains(name) && !name.contains(".") && valueCanMakeFilterOn(name, value)
+      nameToParquetField.contains(name) && !name.contains(".") && valueCanMakeFilterOn(name, value)
     }
 
     // NOTE:
@@ -447,29 +449,39 @@ private[parquet] class ParquetFilters(
 
     predicate match {
       case sources.IsNull(name) if canMakeFilterOn(name, null) =>
-        makeEq.lift(nameToParquet(name).schema).map(_(nameToParquet(name).resolvedName, null))
+        makeEq.lift(nameToParquetField(name).fieldSchema)
+          .map(_(nameToParquetField(name).fieldName, null))
       case sources.IsNotNull(name) if canMakeFilterOn(name, null) =>
-        makeNotEq.lift(nameToParquet(name).schema).map(_(nameToParquet(name).resolvedName, null))
+        makeNotEq.lift(nameToParquetField(name).fieldSchema)
+          .map(_(nameToParquetField(name).fieldName, null))
 
       case sources.EqualTo(name, value) if canMakeFilterOn(name, value) =>
-        makeEq.lift(nameToParquet(name).schema).map(_(nameToParquet(name).resolvedName, value))
+        makeEq.lift(nameToParquetField(name).fieldSchema)
+          .map(_(nameToParquetField(name).fieldName, value))
       case sources.Not(sources.EqualTo(name, value)) if canMakeFilterOn(name, value) =>
-        makeNotEq.lift(nameToParquet(name).schema).map(_(nameToParquet(name).resolvedName, value))
+        makeNotEq.lift(nameToParquetField(name).fieldSchema)
+          .map(_(nameToParquetField(name).fieldName, value))
 
       case sources.EqualNullSafe(name, value) if canMakeFilterOn(name, value) =>
-        makeEq.lift(nameToParquet(name).schema).map(_(nameToParquet(name).resolvedName, value))
+        makeEq.lift(nameToParquetField(name).fieldSchema)
+          .map(_(nameToParquetField(name).fieldName, value))
       case sources.Not(sources.EqualNullSafe(name, value)) if canMakeFilterOn(name, value) =>
-        makeNotEq.lift(nameToParquet(name).schema).map(_(nameToParquet(name).resolvedName, value))
+        makeNotEq.lift(nameToParquetField(name).fieldSchema)
+          .map(_(nameToParquetField(name).fieldName, value))
 
       case sources.LessThan(name, value) if canMakeFilterOn(name, value) =>
-        makeLt.lift(nameToParquet(name).schema).map(_(nameToParquet(name).resolvedName, value))
+        makeLt.lift(nameToParquetField(name).fieldSchema)
+          .map(_(nameToParquetField(name).fieldName, value))
       case sources.LessThanOrEqual(name, value) if canMakeFilterOn(name, value) =>
-        makeLtEq.lift(nameToParquet(name).schema).map(_(nameToParquet(name).resolvedName, value))
+        makeLtEq.lift(nameToParquetField(name).fieldSchema)
+          .map(_(nameToParquetField(name).fieldName, value))
 
       case sources.GreaterThan(name, value) if canMakeFilterOn(name, value) =>
-        makeGt.lift(nameToParquet(name).schema).map(_(nameToParquet(name).resolvedName, value))
+        makeGt.lift(nameToParquetField(name).fieldSchema)
+          .map(_(nameToParquetField(name).fieldName, value))
       case sources.GreaterThanOrEqual(name, value) if canMakeFilterOn(name, value) =>
-        makeGtEq.lift(nameToParquet(name).schema).map(_(nameToParquet(name).resolvedName, value))
+        makeGtEq.lift(nameToParquetField(name).fieldSchema)
+          .map(_(nameToParquetField(name).fieldName, value))
 
       case sources.And(lhs, rhs) =>
         // At here, it is not safe to just convert one side if we do not understand the
@@ -496,7 +508,8 @@ private[parquet] class ParquetFilters(
       case sources.In(name, values) if canMakeFilterOn(name, values.head)
         && values.distinct.length <= pushDownInFilterThreshold =>
         values.distinct.flatMap { v =>
-          makeEq.lift(nameToParquet(name).schema).map(_(nameToParquet(name).resolvedName, v))
+          makeEq.lift(nameToParquetField(name).fieldSchema)
+            .map(_(nameToParquetField(name).fieldName, v))
         }.reduceLeftOption(FilterApi.or)
 
       case sources.StringStartsWith(name, prefix)
