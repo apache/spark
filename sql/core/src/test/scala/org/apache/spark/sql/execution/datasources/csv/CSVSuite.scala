@@ -1440,6 +1440,52 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     }
   }
 
+  test("SPARK-25241: An empty string should not be coerced to null when emptyValue is passed.") {
+    val litNull: String = null
+    val df = Seq(
+      (1, "John Doe"),
+      (2, ""),
+      (3, "-"),
+      (4, litNull)
+    ).toDF("id", "name")
+
+    // Checks for new behavior where a null is not coerced to an empty string when `emptyValue` is
+    // set to anything but an empty string literal.
+    withTempPath { path =>
+      df.write
+        .option("emptyValue", "-")
+        .csv(path.getAbsolutePath)
+      val computed = spark.read
+        .option("emptyValue", "-")
+        .schema(df.schema)
+        .csv(path.getAbsolutePath)
+      val expected = Seq(
+        (1, "John Doe"),
+        (2, "-"),
+        (3, "-"),
+        (4, "-")
+      ).toDF("id", "name")
+
+      checkAnswer(computed, expected)
+    }
+    // Keeps the old behavior where empty string us coerced to emptyValue is not passed.
+    withTempPath { path =>
+      df.write
+        .csv(path.getAbsolutePath)
+      val computed = spark.read
+        .schema(df.schema)
+        .csv(path.getAbsolutePath)
+      val expected = Seq(
+        (1, "John Doe"),
+        (2, litNull),
+        (3, "-"),
+        (4, litNull)
+      ).toDF("id", "name")
+
+      checkAnswer(computed, expected)
+    }
+  }
+
   test("SPARK-24329: skip lines with comments, and one or multiple whitespaces") {
     val schema = new StructType().add("colA", StringType)
     val ds = spark
