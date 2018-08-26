@@ -51,8 +51,8 @@ private[parquet] class ParquetFilters(
   private case class ParquetField(
       // field name in parquet file
       fieldName: String,
-      // field schema type in parquet file
-      fieldSchema: ParquetSchemaType)
+      // field type related info in parquet file
+      fieldType: ParquetSchemaType)
 
   private case class ParquetSchemaType(
       originalType: OriginalType,
@@ -402,7 +402,7 @@ private[parquet] class ParquetFilters(
     // Parquet's type in the given file should be matched to the value's type
     // in the pushed filter in order to push down the filter to Parquet.
     def valueCanMakeFilterOn(name: String, value: Any): Boolean = {
-      value == null || (nameToParquetField(name).fieldSchema match {
+      value == null || (nameToParquetField(name).fieldType match {
         case ParquetBooleanType => value.isInstanceOf[JBoolean]
         case ParquetByteType | ParquetShortType | ParquetIntegerType => value.isInstanceOf[Number]
         case ParquetLongType => value.isInstanceOf[JLong]
@@ -449,38 +449,38 @@ private[parquet] class ParquetFilters(
 
     predicate match {
       case sources.IsNull(name) if canMakeFilterOn(name, null) =>
-        makeEq.lift(nameToParquetField(name).fieldSchema)
+        makeEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldName, null))
       case sources.IsNotNull(name) if canMakeFilterOn(name, null) =>
-        makeNotEq.lift(nameToParquetField(name).fieldSchema)
+        makeNotEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldName, null))
 
       case sources.EqualTo(name, value) if canMakeFilterOn(name, value) =>
-        makeEq.lift(nameToParquetField(name).fieldSchema)
+        makeEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldName, value))
       case sources.Not(sources.EqualTo(name, value)) if canMakeFilterOn(name, value) =>
-        makeNotEq.lift(nameToParquetField(name).fieldSchema)
+        makeNotEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldName, value))
 
       case sources.EqualNullSafe(name, value) if canMakeFilterOn(name, value) =>
-        makeEq.lift(nameToParquetField(name).fieldSchema)
+        makeEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldName, value))
       case sources.Not(sources.EqualNullSafe(name, value)) if canMakeFilterOn(name, value) =>
-        makeNotEq.lift(nameToParquetField(name).fieldSchema)
+        makeNotEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldName, value))
 
       case sources.LessThan(name, value) if canMakeFilterOn(name, value) =>
-        makeLt.lift(nameToParquetField(name).fieldSchema)
+        makeLt.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldName, value))
       case sources.LessThanOrEqual(name, value) if canMakeFilterOn(name, value) =>
-        makeLtEq.lift(nameToParquetField(name).fieldSchema)
+        makeLtEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldName, value))
 
       case sources.GreaterThan(name, value) if canMakeFilterOn(name, value) =>
-        makeGt.lift(nameToParquetField(name).fieldSchema)
+        makeGt.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldName, value))
       case sources.GreaterThanOrEqual(name, value) if canMakeFilterOn(name, value) =>
-        makeGtEq.lift(nameToParquetField(name).fieldSchema)
+        makeGtEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldName, value))
 
       case sources.And(lhs, rhs) =>
@@ -508,7 +508,7 @@ private[parquet] class ParquetFilters(
       case sources.In(name, values) if canMakeFilterOn(name, values.head)
         && values.distinct.length <= pushDownInFilterThreshold =>
         values.distinct.flatMap { v =>
-          makeEq.lift(nameToParquetField(name).fieldSchema)
+          makeEq.lift(nameToParquetField(name).fieldType)
             .map(_(nameToParquetField(name).fieldName, v))
         }.reduceLeftOption(FilterApi.or)
 
