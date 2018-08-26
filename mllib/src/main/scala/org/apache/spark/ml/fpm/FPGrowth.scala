@@ -19,7 +19,7 @@ package org.apache.spark.ml.fpm
 
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
@@ -187,7 +187,7 @@ class FPGrowth @Since("2.2.0") (
       items.unpersist()
     }
 
-    copyValues(new FPGrowthModel(uid, frequentItems)).setParent(this)
+    copyValues(new FPGrowthModel(uid, frequentItems, parentModel.itemSupport)).setParent(this)
   }
 
   @Since("2.2.0")
@@ -217,8 +217,12 @@ object FPGrowth extends DefaultParamsReadable[FPGrowth] {
 @Experimental
 class FPGrowthModel private[ml] (
     @Since("2.2.0") override val uid: String,
-    @Since("2.2.0") @transient val freqItemsets: DataFrame)
+    @Since("2.2.0") @transient val freqItemsets: DataFrame,
+    private val itemSupport: Map[Any, Long])
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
+
+  private[ml] def this(uid: String, freqItemsets: DataFrame) =
+    this(uid, freqItemsets, Map.empty)
 
   /** @group setParam */
   @Since("2.2.0")
@@ -251,7 +255,7 @@ class FPGrowthModel private[ml] (
       _cachedRules
     } else {
       _cachedRules = AssociationRules
-        .getAssociationRulesFromFP(freqItemsets, "items", "freq", $(minConfidence))
+        .getAssociationRulesFromFP(freqItemsets, "items", "freq", $(minConfidence), itemSupport)
       _cachedMinConf = $(minConfidence)
       _cachedRules
     }
@@ -301,7 +305,7 @@ class FPGrowthModel private[ml] (
 
   @Since("2.2.0")
   override def copy(extra: ParamMap): FPGrowthModel = {
-    val copied = new FPGrowthModel(uid, freqItemsets)
+    val copied = new FPGrowthModel(uid, freqItemsets, itemSupport)
     copyValues(copied, extra).setParent(this.parent)
   }
 
@@ -326,6 +330,19 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val dataPath = new Path(path, "data").toString
       instance.freqItemsets.write.parquet(dataPath)
+      val itemDataType = instance.freqItemsets.schema(instance.getItemsCol).dataType match {
+        case ArrayType(et, _) => et
+        case other => other // we should never get here
+      }
+      val itemSupportPath = new Path(path, "itemSupport").toString
+      val itemSupportRows = instance.itemSupport.map {
+        case (item, support) => Row(item, support)
+      }.toSeq
+      val schema = StructType(Seq(
+        StructField("item", itemDataType, nullable = false),
+        StructField("support", LongType, nullable = false)))
+      sparkSession.createDataFrame(sc.parallelize(itemSupportRows), schema)
+        .repartition(1).write.parquet(itemSupportPath)
     }
   }
 
@@ -338,7 +355,16 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val frequentItems = sparkSession.read.parquet(dataPath)
-      val model = new FPGrowthModel(metadata.uid, frequentItems)
+      val itemSupportPath = new Path(path, "itemSupport")
+      val fs = FileSystem.get(sc.hadoopConfiguration)
+      val itemSupport = if (fs.exists(itemSupportPath)) {
+        sparkSession.read.parquet(itemSupportPath.toString).rdd.collect().map {
+          case Row(item: Any, support: Long) => item -> support
+        }.toMap
+      } else {
+        Map.empty[Any, Long]
+      }
+      val model = new FPGrowthModel(metadata.uid, frequentItems, itemSupport)
       metadata.getAndSetParams(model)
       model
     }
@@ -361,20 +387,22 @@ private[fpm] object AssociationRules {
         dataset: Dataset[_],
         itemsCol: String,
         freqCol: String,
-        minConfidence: Double): DataFrame = {
+        minConfidence: Double,
+        itemSupport: Map[Any, Long]): DataFrame = {
 
     val freqItemSetRdd = dataset.select(itemsCol, freqCol).rdd
       .map(row => new FreqItemset(row.getSeq[T](0).toArray, row.getLong(1)))
     val rows = new MLlibAssociationRules()
       .setMinConfidence(minConfidence)
-      .run(freqItemSetRdd)
-      .map(r => Row(r.antecedent, r.consequent, r.confidence))
+      .run(freqItemSetRdd, itemSupport.asInstanceOf[Map[T, Long]])
+      .map(r => Row(r.antecedent, r.consequent, r.confidence, r.lift.orNull))
 
     val dt = dataset.schema(itemsCol).dataType
     val schema = StructType(Seq(
       StructField("antecedent", dt, nullable = false),
       StructField("consequent", dt, nullable = false),
-      StructField("confidence", DoubleType, nullable = false)))
+      StructField("confidence", DoubleType, nullable = false),
+      StructField("lift", DoubleType)))
     val rules = dataset.sparkSession.createDataFrame(rows, schema)
     rules
   }

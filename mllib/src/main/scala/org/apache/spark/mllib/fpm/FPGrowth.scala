@@ -48,9 +48,14 @@ import org.apache.spark.storage.StorageLevel
  * @tparam Item item type
  */
 @Since("1.3.0")
-class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
-    @Since("1.3.0") val freqItemsets: RDD[FreqItemset[Item]])
+class FPGrowthModel[Item: ClassTag] @Since("2.4.0") (
+    @Since("1.3.0") val freqItemsets: RDD[FreqItemset[Item]],
+    @Since("2.4.0") val itemSupport: Map[Item, Long])
   extends Saveable with Serializable {
+
+  @Since("1.3.0")
+  def this(freqItemsets: RDD[FreqItemset[Item]]) = this(freqItemsets, Map.empty)
+
   /**
    * Generates association rules for the `Item`s in [[freqItemsets]].
    * @param confidence minimal confidence of the rules produced
@@ -58,7 +63,7 @@ class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
   @Since("1.5.0")
   def generateAssociationRules(confidence: Double): RDD[AssociationRules.Rule[Item]] = {
     val associationRules = new AssociationRules(confidence)
-    associationRules.run(freqItemsets)
+    associationRules.run(freqItemsets, itemSupport)
   }
 
   /**
@@ -213,9 +218,9 @@ class FPGrowth private[spark] (
     val minCount = math.ceil(minSupport * count).toLong
     val numParts = if (numPartitions > 0) numPartitions else data.partitions.length
     val partitioner = new HashPartitioner(numParts)
-    val freqItems = genFreqItems(data, minCount, partitioner)
-    val freqItemsets = genFreqItemsets(data, minCount, freqItems, partitioner)
-    new FPGrowthModel(freqItemsets)
+    val freqItemsCount = genFreqItems(data, minCount, partitioner)
+    val freqItemsets = genFreqItemsets(data, minCount, freqItemsCount.map(_._1), partitioner)
+    new FPGrowthModel(freqItemsets, freqItemsCount.toMap)
   }
 
   /**
@@ -236,7 +241,7 @@ class FPGrowth private[spark] (
   private def genFreqItems[Item: ClassTag](
       data: RDD[Array[Item]],
       minCount: Long,
-      partitioner: Partitioner): Array[Item] = {
+      partitioner: Partitioner): Array[(Item, Long)] = {
     data.flatMap { t =>
       val uniq = t.toSet
       if (t.length != uniq.size) {
@@ -248,7 +253,6 @@ class FPGrowth private[spark] (
       .filter(_._2 >= minCount)
       .collect()
       .sortBy(-_._2)
-      .map(_._1)
   }
 
   /**
