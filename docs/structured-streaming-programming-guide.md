@@ -2812,6 +2812,12 @@ See [Input Sources](#input-sources) and [Output Sinks](#output-sinks) sections f
 
 # Additional Information
 
+**Gotchas**
+
+- For structured streaming, modifying "spark.sql.shuffle.partitions" is restricted once you run the query.
+  - This is because state is partitioned via key, hence number of partitions for state should be unchanged.
+  - If you want to run less tasks for stateful operations, `coalesce` would help with avoiding unnecessary repartitioning. Please note that it will also affect downstream operators.
+
 **Further Reading**
 
 - See and run the
