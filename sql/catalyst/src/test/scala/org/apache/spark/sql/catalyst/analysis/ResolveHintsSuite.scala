@@ -155,4 +155,13 @@ class ResolveHintsSuite extends AnalysisTest {
       UnresolvedHint("REPARTITION", Seq(Literal(true)), table("TaBlE")),
       Seq(errMsgRepa))
   }
+
+  test("Supports multi-part table names for broadcast hint resolution") {
+    checkAnalysis(
+      UnresolvedHint("MAPJOIN", Seq("default.table", "default.table2"),
+        table("table").join(table("table2"))),
+      Join(ResolvedHint(testRelation, HintInfo(broadcast = true)),
+        ResolvedHint(testRelation2, HintInfo(broadcast = true)), Inner, None),
+      caseSensitive = false)
+  }
 }

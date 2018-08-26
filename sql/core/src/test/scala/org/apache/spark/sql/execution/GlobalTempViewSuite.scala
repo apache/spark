@@ -157,6 +157,26 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("broadcast hint on global temp view") {
+    import org.apache.spark.sql.catalyst.plans.logical.{ResolvedHint, Join}
+
+    withGlobalTempView("v1") {
+      spark.range(10).createGlobalTempView("v1")
+      withTempView("v2") {
+        spark.range(10).createTempView("v2")
+
+        Seq(
+          "SELECT /*+ MAPJOIN(v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id",
+          "SELECT /*+ MAPJOIN(global_temp.v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id"
+        ).foreach { statement =>
+          val plan = sql(statement).queryExecution.optimizedPlan
+          assert(plan.asInstanceOf[Join].left.isInstanceOf[ResolvedHint])
+          assert(!plan.asInstanceOf[Join].right.isInstanceOf[ResolvedHint])
+        }
+      }
+    }
+  }
+
   test("public Catalog should recognize global temp view") {
     withGlobalTempView("src")  {
       sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1, 2")
