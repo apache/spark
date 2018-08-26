@@ -409,13 +409,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
       JsonToStructs(schema, Map.empty, Literal(jsonData), gmtId),
-      null
+      InternalRow(null)
     )
 
     // Other modes should still return `null`.
     checkEvaluation(
       JsonToStructs(schema, Map("mode" -> PermissiveMode.name), Literal(jsonData), gmtId),
-      null
+      InternalRow(null)
     )
   }
 
@@ -457,7 +457,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   test("from_json - input=array, schema=struct, output=null") {
     val input = """[{"a": 1}, {"a": 2}]"""
     val schema = StructType(StructField("a", IntegerType) :: Nil)
-    val output = null
+    val output = InternalRow(1)
     checkEvaluation(JsonToStructs(schema, Map.empty, Literal(input), gmtId), output)
   }
 
@@ -487,7 +487,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
       JsonToStructs(schema, Map.empty, Literal(badJson), gmtId),
-      null)
+      InternalRow(null))
   }
 
   test("from_json with timestamp") {

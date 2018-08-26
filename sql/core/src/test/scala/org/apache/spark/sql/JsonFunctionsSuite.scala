@@ -132,7 +132,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(from_json($"value", schema)),
-      Row(null) :: Nil)
+      Row(Row(null)) :: Nil)
   }
 
   test("from_json - json doesn't conform to the array type") {
