@@ -553,7 +553,7 @@ case class JsonToStructs(
   // This converts parsed rows to the desired output by the given schema.
   @transient
   lazy val converter = nullableSchema match {
-    case st: StructType =>
+    case _: StructType =>
       (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
     case _: ArrayType =>
       (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getArray(0) else null
