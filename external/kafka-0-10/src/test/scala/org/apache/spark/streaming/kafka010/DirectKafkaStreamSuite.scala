@@ -543,7 +543,6 @@ class DirectKafkaStreamSuite
         } else {
           100
         }
-      def minRatePerPartition(tp: TopicPartition) = 1
     })
     val kafkaStream = getDirectKafkaStream(topic, rateController, ppc)
 
