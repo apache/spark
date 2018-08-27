@@ -210,7 +210,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
 
           // Uses multi-part table names for broadcast hints
           def checkIfHintApplied(tableName: String, hintTableName: String): Unit = {
-            val p = sql(s"SELECT /*+ BROADCASTJOIN($tableName) */ * " +
+            val p = sql(s"SELECT /*+ BROADCASTJOIN($hintTableName) */ * " +
                 s"FROM $tableName, $dbName.$table2Name " +
                 s"WHERE $tableName.id = $table2Name.id")
               .queryExecution.executedPlan
