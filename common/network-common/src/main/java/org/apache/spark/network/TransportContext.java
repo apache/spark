@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
@@ -98,7 +99,7 @@ public class TransportContext {
     this.closeIdleConnections = closeIdleConnections;
 
     synchronized(this.getClass()) {
-      if (chunkFetchWorkers == null) {
+      if (chunkFetchWorkers == null && conf.getModuleName().equalsIgnoreCase("shuffle")) {
         chunkFetchWorkers = NettyUtils.createEventLoop(
             IOMode.valueOf(conf.ioMode()),
             conf.chunkFetchHandlerThreads(),
@@ -162,16 +163,18 @@ public class TransportContext {
     try {
       TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
       ChunkFetchRequestHandler chunkFetchHandler = createChunkFetchHandler(channelHandler, channelRpcHandler);
-      channel.pipeline()
+      ChannelPipeline pipeline = channel.pipeline()
         .addLast("encoder", ENCODER)
         .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder())
         .addLast("decoder", DECODER)
         .addLast("idleStateHandler", new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000))
         // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this
         // would require more logic to guarantee if this were not part of the same event loop.
-        .addLast("handler", channelHandler)
-        // Use a separate EventLoopGroup to handle ChunkFetchRequest messages.
-        .addLast(chunkFetchWorkers, "chunkFetchHandler", chunkFetchHandler);
+        .addLast("handler", channelHandler);
+      // Use a separate EventLoopGroup to handle ChunkFetchRequest messages for shuffle rpcs.
+      if (conf.getModuleName().equalsIgnoreCase("shuffle")) {
+        pipeline.addLast(chunkFetchWorkers, "chunkFetchHandler", chunkFetchHandler);
+      }
       return channelHandler;
     } catch (RuntimeException e) {
       logger.error("Error while initializing Netty pipeline", e);
