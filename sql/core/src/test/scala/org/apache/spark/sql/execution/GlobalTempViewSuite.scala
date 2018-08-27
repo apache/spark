@@ -165,14 +165,15 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
       withTempView("v2") {
         spark.range(10).createTempView("v2")
 
-        Seq(
-          "SELECT /*+ MAPJOIN(v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id",
-          "SELECT /*+ MAPJOIN(global_temp.v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id"
-        ).foreach { statement =>
-          val plan = sql(statement).queryExecution.optimizedPlan
-          assert(plan.asInstanceOf[Join].left.isInstanceOf[ResolvedHint])
-          assert(!plan.asInstanceOf[Join].right.isInstanceOf[ResolvedHint])
-        }
+        val plan1 = sql("SELECT /*+ MAPJOIN(v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id")
+          .queryExecution.optimizedPlan
+        assert(plan1.collectFirst { case h: ResolvedHint => h }.size == 0)
+
+        val plan2 = sql("SELECT /*+ MAPJOIN(global_temp.v1) */ * " +
+            "FROM global_temp.v1, v2 WHERE v1.id = v2.id")
+          .queryExecution.optimizedPlan
+        assert(plan2.asInstanceOf[Join].left.isInstanceOf[ResolvedHint])
+        assert(!plan2.asInstanceOf[Join].right.isInstanceOf[ResolvedHint])
       }
     }
   }
