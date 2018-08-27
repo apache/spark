@@ -165,10 +165,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         executorDataMap.get(executorId).foreach(_.executorEndpoint.send(StopExecutor))
         removeExecutor(executorId, reason)
 
-      case DecomissionExecutor(executorId) =>
-        decommissionExecutor(executorId)
-        context.reply(true)
-
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -231,6 +227,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case RemoveWorker(workerId, host, message) =>
         removeWorker(workerId, host, message)
+        context.reply(true)
+
+      case DecomissionExecutor(executorId) =>
+        decommissionExecutor(executorId)
         context.reply(true)
 
       case RetrieveSparkAppConfig =>

@@ -151,6 +151,18 @@ private[spark] class BasicExecutorFeatureStep(
           .endResources()
         .build()
     }.getOrElse(executorContainer)
+    val containerWithLifecycle = kubernetesConf.workerDecomissioning() match {
+      case true =>
+        new ContainerBuilder(executorContainer).editOrNewLifecycle()
+          .withNewPreStop()
+            .withNewExec()
+              .withCommand(
+                List("/opt/spark/sbin/decommission-slave.sh", "--block-until-exit").asJava)
+               .endExec()
+          .endPreStop()
+          .build()
+      case false => containerWithLimitCores
+    }
     val driverPod = kubernetesConf.roleSpecificConf.driverPod
     val ownerReference = driverPod.map(pod =>
       new OwnerReferenceBuilder()

@@ -24,7 +24,7 @@
 #   SPARK_WORKER_INSTANCES The number of worker instances that should be
 #                          running on this slave.  Default is 1.
 
-# Usage: decommission-slave.sh
+# Usage: decommission-slave.sh [--block-until-exit]
 #   Decommissions all slaves on this worker machine
 
 if [ -z "${SPARK_HOME}" ]; then
@@ -41,4 +41,15 @@ else
   for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
     "${SPARK_HOME}/sbin"/spark-daemon.sh decommission org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
   done
+fi
+
+# Check if --block-until-exit is set.
+# This is done for systems which block on the decomissioning script and on exit
+# shut down the entire system (e.g. K8s).
+if [ "$1" == "--block-until-exit" ]; then
+  shift
+  # For now we only block on the 0th instance if there multiple instances.
+  instance=$1
+  pid="$SPARK_PID_DIR/spark-$SPARK_IDENT_STRING-$command-$instance.pid"
+  wait $pid
 fi

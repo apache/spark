@@ -666,8 +666,7 @@ private[deploy] class Worker(
    */
   private def sendToMaster(message: Any): Unit = {
     master match {
-      case Some(masterRef) =>
-        masterRef.send(message)
+      case Some(masterRef) => masterRef.send(message)
       case None =>
         logWarning(
           s"Dropping $message because the connection to master has not yet been established")
