@@ -122,11 +122,11 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
       Nil
     }
 
-    // During global limit, try to evenly distribute limited rows across data
-    // partitions. If disabled, scanning data partitions sequentially until reaching limit number.
-    // Besides, if child output has certain ordering, we can't evenly pick up rows from
-    // each parititon.
-    val flatGlobalLimit = sqlContext.conf.limitFlatGlobalLimit && child.outputOrdering == Nil
+    // This is an optimization to evenly distribute limited rows across all partitions.
+    // When enabled, Spark goes to take rows at each partition repeatedly until reaching
+    // limit number. When disabled, Spark takes all rows at first partition, then rows
+    // at second partition ..., until reaching limit number.
+    val flatGlobalLimit = sqlContext.conf.limitFlatGlobalLimit
 
     val shuffled = new ShuffledRowRDD(shuffleDependency)
 
