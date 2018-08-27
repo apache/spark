@@ -214,16 +214,18 @@ class Dataset[T] private[sql](
   @transient lazy val sqlContext: SQLContext = sparkSession.sqlContext
 
   private[sql] def resolve(colName: String): NamedExpression = {
-    queryExecution.analyzed.resolveQuoted(colName, sparkSession.sessionState.analyzer.resolver)
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    queryExecution.analyzed.resolveQuoted(colName, resolver)
       .getOrElse {
-        if (schema.fieldNames.contains(colName)) {
+        if (queryExecution.analyzed.resolveQuoted(s"`$colName`", resolver).isDefined) {
           throw new AnalysisException(
             s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")}).
-               | Try adding backticks to the column name, i.e., `$colName`"""
+               | Try adding backticks to the column name, i.e., `$colName`,
+               | if "$colName" is the name of the whole column"""
               .stripMargin.replaceAll("\n", ""))
         } else {
           throw new AnalysisException(
-            s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")}"""
+            s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})"""
               .stripMargin)
         }
       }

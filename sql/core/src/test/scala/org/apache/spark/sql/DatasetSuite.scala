@@ -1508,6 +1508,34 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }
     assert(output.toString.contains("Scan testRdd"))
   }
+
+  test("SPARK-25216 better error message when resolving column names containing dot") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val df = spark.range(0, 1).toDF("a.B")
+      val thrown1 = intercept[AnalysisException] {
+        df("a.B")
+      }
+      assert(thrown1.getMessage.matches(".*backticks.*`a.B`.*"))
+
+      val thrown2 = intercept[AnalysisException] {
+        df("A.b")
+      }
+      assert(!thrown2.getMessage.matches(".*backticks.*`A.b`.*"))
+    }
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val df = spark.range(0, 1).toDF("a.B")
+      val thrown1 = intercept[AnalysisException] {
+        df("a.B")
+      }
+      assert(thrown1.getMessage.matches(".*backticks.*`a.B`.*"))
+
+      val thrown2 = intercept[AnalysisException] {
+        df("A.b")
+      }
+      assert(thrown2.getMessage.matches(".*backticks.*`A.b`.*"))
+    }
+  }
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)
