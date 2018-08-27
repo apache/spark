@@ -37,6 +37,7 @@ object MimaExcludes {
   // Exclude rules for 2.4.x
   lazy val v24excludes = v23excludes ++ Seq(
     // [SPARK-10697][ML] Add lift to Association rules
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.fpm.FPGrowthModel.this"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.fpm.AssociationRules#Rule.this"),
     // [SPARK-24296][CORE] Replicate large blocks as a stream.
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.network.netty.NettyBlockRpcServer.this"),

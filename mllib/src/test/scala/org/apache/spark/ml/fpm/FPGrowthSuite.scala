@@ -39,8 +39,8 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       val model = new FPGrowth().setMinSupport(0.5).fit(data)
       val generatedRules = model.setMinConfidence(0.5).associationRules
       val expectedRules = spark.createDataFrame(Seq(
-        (Array("2"), Array("1"), 1.0, 0.25),
-        (Array("1"), Array("2"), 0.75, 0.25)
+        (Array("2"), Array("1"), 1.0, 1.0),
+        (Array("1"), Array("2"), 0.75, 1.0)
       )).toDF("antecedent", "consequent", "confidence", "lift")
         .withColumn("antecedent", col("antecedent").cast(ArrayType(dt)))
         .withColumn("consequent", col("consequent").cast(ArrayType(dt)))

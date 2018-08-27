@@ -56,23 +56,24 @@ class AssociationRules private[fpm] (
   /**
    * Computes the association rules with confidence above `minConfidence`.
    * @param freqItemsets frequent itemset model obtained from [[FPGrowth]]
-   * @return a `Set[Rule[Item]]` containing the association rules.
+   * @return a `RDD[Rule[Item]]` containing the association rules.
    *
    */
   @Since("1.5.0")
   def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]]): RDD[Rule[Item]] = {
-    run(freqItemsets, Map.empty[Item, Long])
+    run(freqItemsets, Map.empty[Item, Double])
   }
 
   /**
    * Computes the association rules with confidence above `minConfidence`.
    * @param freqItemsets frequent itemset model obtained from [[FPGrowth]]
-   * @return a `Set[Rule[Item]]` containing the association rules. The rules will be able to
+   * @param itemSupport map containing an item and its support
+   * @return a `RDD[Rule[Item]]` containing the association rules. The rules will be able to
    *         compute also the lift metric.
    */
   @Since("2.4.0")
   def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]],
-      itemSupport: Map[Item, Long]): RDD[Rule[Item]] = {
+      itemSupport: scala.collection.Map[Item, Double]): RDD[Rule[Item]] = {
     // For candidate rule X => Y, generate (X, (Y, freq(X union Y)))
     val candidates = freqItemsets.flatMap { itemset =>
       val items = itemset.items
@@ -125,7 +126,7 @@ object AssociationRules {
       @Since("1.5.0") val consequent: Array[Item],
       freqUnion: Double,
       freqAntecedent: Double,
-      freqConsequent: Option[Long]) extends Serializable {
+      freqConsequent: Option[Double]) extends Serializable {
 
     /**
      * Returns the confidence of the rule.

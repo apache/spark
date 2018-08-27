@@ -218,11 +218,8 @@ object FPGrowth extends DefaultParamsReadable[FPGrowth] {
 class FPGrowthModel private[ml] (
     @Since("2.2.0") override val uid: String,
     @Since("2.2.0") @transient val freqItemsets: DataFrame,
-    private val itemSupport: Map[Any, Long])
+    private val itemSupport: scala.collection.Map[Any, Double])
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
-
-  private[ml] def this(uid: String, freqItemsets: DataFrame) =
-    this(uid, freqItemsets, Map.empty)
 
   /** @group setParam */
   @Since("2.2.0")
@@ -332,7 +329,8 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
       instance.freqItemsets.write.parquet(dataPath)
       val itemDataType = instance.freqItemsets.schema(instance.getItemsCol).dataType match {
         case ArrayType(et, _) => et
-        case other => other // we should never get here
+        case other => throw new RuntimeException(s"Expected ${ArrayType.simpleString}, but got " +
+          other.catalogString + ".")
       }
       val itemSupportPath = new Path(path, "itemSupport").toString
       val itemSupportRows = instance.itemSupport.map {
@@ -340,7 +338,7 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
       }.toSeq
       val schema = StructType(Seq(
         StructField("item", itemDataType, nullable = false),
-        StructField("support", LongType, nullable = false)))
+        StructField("support", DoubleType, nullable = false)))
       sparkSession.createDataFrame(sc.parallelize(itemSupportRows), schema)
         .repartition(1).write.parquet(itemSupportPath)
     }
@@ -358,11 +356,11 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
       val itemSupportPath = new Path(path, "itemSupport")
       val fs = FileSystem.get(sc.hadoopConfiguration)
       val itemSupport = if (fs.exists(itemSupportPath)) {
-        sparkSession.read.parquet(itemSupportPath.toString).rdd.collect().map {
-          case Row(item: Any, support: Long) => item -> support
-        }.toMap
+        sparkSession.read.parquet(itemSupportPath.toString).rdd.map {
+          case Row(item: Any, support: Double) => item -> support
+        }.collectAsMap()
       } else {
-        Map.empty[Any, Long]
+        Map.empty[Any, Double]
       }
       val model = new FPGrowthModel(metadata.uid, frequentItems, itemSupport)
       metadata.getAndSetParams(model)
@@ -380,6 +378,7 @@ private[fpm] object AssociationRules {
    * @param itemsCol column name for frequent itemsets
    * @param freqCol column name for appearance count of the frequent itemsets
    * @param minConfidence minimum confidence for generating the association rules
+   * @param itemSupport map containing an item and its support
    * @return a DataFrame("antecedent"[Array], "consequent"[Array], "confidence"[Double])
    *         containing the association rules.
    */
@@ -388,13 +387,13 @@ private[fpm] object AssociationRules {
         itemsCol: String,
         freqCol: String,
         minConfidence: Double,
-        itemSupport: Map[Any, Long]): DataFrame = {
+        itemSupport: scala.collection.Map[T, Double]): DataFrame = {
 
     val freqItemSetRdd = dataset.select(itemsCol, freqCol).rdd
       .map(row => new FreqItemset(row.getSeq[T](0).toArray, row.getLong(1)))
     val rows = new MLlibAssociationRules()
       .setMinConfidence(minConfidence)
-      .run(freqItemSetRdd, itemSupport.asInstanceOf[Map[T, Long]])
+      .run(freqItemSetRdd, itemSupport)
       .map(r => Row(r.antecedent, r.consequent, r.confidence, r.lift.orNull))
 
     val dt = dataset.schema(itemsCol).dataType

@@ -50,7 +50,7 @@ import org.apache.spark.storage.StorageLevel
 @Since("1.3.0")
 class FPGrowthModel[Item: ClassTag] @Since("2.4.0") (
     @Since("1.3.0") val freqItemsets: RDD[FreqItemset[Item]],
-    @Since("2.4.0") val itemSupport: Map[Item, Long])
+    @Since("2.4.0") val itemSupport: Map[Item, Double])
   extends Saveable with Serializable {
 
   @Since("1.3.0")
@@ -220,7 +220,10 @@ class FPGrowth private[spark] (
     val partitioner = new HashPartitioner(numParts)
     val freqItemsCount = genFreqItems(data, minCount, partitioner)
     val freqItemsets = genFreqItemsets(data, minCount, freqItemsCount.map(_._1), partitioner)
-    new FPGrowthModel(freqItemsets, freqItemsCount.toMap)
+    val itemSupport = freqItemsCount.map {
+      case (item, cnt) => item -> cnt.toDouble / count
+    }.toMap
+    new FPGrowthModel(freqItemsets, itemSupport)
   }
 
   /**
@@ -236,7 +239,7 @@ class FPGrowth private[spark] (
    * Generates frequent items by filtering the input data using minimal support level.
    * @param minCount minimum count for frequent itemsets
    * @param partitioner partitioner used to distribute items
-   * @return array of frequent pattern ordered by their frequencies
+   * @return array of frequent patterns and their frequencies ordered by their frequencies
    */
   private def genFreqItems[Item: ClassTag](
       data: RDD[Array[Item]],
