@@ -31,6 +31,7 @@ class FileSourceSuite extends QueryTest with SharedSQLContext with PredicateHelp
     withTempPath { p =>
       val path = p.getAbsolutePath
       spark.range(1000).selectExpr("id AS c0", "rand() AS c1").repartition(10).write.csv(path)
+      val df = spark.read.csv(path).limit(1)
 
       val bytesReads = new ArrayBuffer[Long]()
       val bytesReadListener = new SparkListener() {
@@ -43,12 +44,12 @@ class FileSourceSuite extends QueryTest with SharedSQLContext with PredicateHelp
 
       spark.sparkContext.addSparkListener(bytesReadListener)
 
-      spark.read.csv(path).limit(1).collect()
+      df.collect()
 
       spark.sparkContext.listenerBus.waitUntilEmpty(500)
       spark.sparkContext.removeSparkListener(bytesReadListener)
 
-      assert(bytesReads.sum < 5000)
+      assert(bytesReads.sum < 3000)
     }
   }
 }
