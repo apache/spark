@@ -2460,6 +2460,26 @@ object functions {
   }
 
   /**
+    * Extracts a part from a URL.
+    *
+    * @group string_funcs
+    * @since 2.4.0
+    */
+  def parse_url(url: Column, partToExtract: String): Column = withExpr {
+    ParseUrl(url, Literal(partToExtract))
+  }
+
+  /**
+    * Extracts a part from a URL.
+    *
+    * @group string_funcs
+    * @since 2.4.0
+    */
+  def parse_url(url: Column, partToExtract: String, key: String): Column = withExpr {
+    ParseUrl(url, Literal(partToExtract), Literal(key))
+  }
+
+  /**
    * Extract a specific group matched by a Java regex, from the specified string column.
    * If the regex did not match, or the specified group did not match, an empty string is returned.
    *

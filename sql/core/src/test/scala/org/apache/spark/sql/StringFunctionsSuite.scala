@@ -261,6 +261,13 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
         "parse_url(url, 'PROTOCOL')", "parse_url(url, 'FILE')",
         "parse_url(url, 'AUTHORITY')", "parse_url(url, 'USERINFO')",
         "parse_url(url, 'QUERY', 'query')"), expected)
+
+      checkAnswer(Seq[String]((url)).toDF("url").select(
+        parse_url('url, "HOST"), parse_url('url, "PATH"),
+        parse_url('url, "QUERY"), parse_url('url, "REF"),
+        parse_url('url, "PROTOCOL"), parse_url('url, "FILE"),
+        parse_url('url, "AUTHORITY"), parse_url('url, "USERINFO"),
+        parse_url('url, "QUERY", "query"), expected)
     }
 
     testUrl(
