@@ -19,7 +19,9 @@ package org.apache.spark.ml.fpm
 
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
+import org.json4s.{DefaultFormats, JObject}
+import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
@@ -175,7 +177,8 @@ class FPGrowth @Since("2.2.0") (
     if (handlePersistence) {
       items.persist(StorageLevel.MEMORY_AND_DISK)
     }
-
+    val inputRowCount = items.count()
+    instr.logNumExamples(inputRowCount)
     val parentModel = mllibFP.run(items)
     val rows = parentModel.freqItemsets.map(f => Row(f.items, f.freq))
     val schema = StructType(Seq(
@@ -187,7 +190,8 @@ class FPGrowth @Since("2.2.0") (
       items.unpersist()
     }
 
-    copyValues(new FPGrowthModel(uid, frequentItems, parentModel.itemSupport)).setParent(this)
+    copyValues(new FPGrowthModel(uid, frequentItems, parentModel.itemSupport, inputRowCount))
+      .setParent(this)
   }
 
   @Since("2.2.0")
@@ -218,7 +222,8 @@ object FPGrowth extends DefaultParamsReadable[FPGrowth] {
 class FPGrowthModel private[ml] (
     @Since("2.2.0") override val uid: String,
     @Since("2.2.0") @transient val freqItemsets: DataFrame,
-    private val itemSupport: scala.collection.Map[Any, Double])
+    private val itemSupport: scala.collection.Map[Any, Double],
+    private val inputSize: Long)
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
 
   /** @group setParam */
@@ -302,7 +307,7 @@ class FPGrowthModel private[ml] (
 
   @Since("2.2.0")
   override def copy(extra: ParamMap): FPGrowthModel = {
-    val copied = new FPGrowthModel(uid, freqItemsets, itemSupport)
+    val copied = new FPGrowthModel(uid, freqItemsets, itemSupport, inputSize)
     copyValues(copied, extra).setParent(this.parent)
   }
 
@@ -324,23 +329,10 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
   class FPGrowthModelWriter(instance: FPGrowthModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      val extraMetadata: JObject = Map("count" -> instance.inputSize)
+      DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata = Some(extraMetadata))
       val dataPath = new Path(path, "data").toString
       instance.freqItemsets.write.parquet(dataPath)
-      val itemDataType = instance.freqItemsets.schema(instance.getItemsCol).dataType match {
-        case ArrayType(et, _) => et
-        case other => throw new IllegalArgumentException(
-          s"Expected ${ArrayType.simpleString}, but got ${other.catalogString}.")
-      }
-      val itemSupportPath = new Path(path, "itemSupport").toString
-      val itemSupportRows = instance.itemSupport.map {
-        case (item, support) => Row(item, support)
-      }.toSeq
-      val schema = StructType(Seq(
-        StructField("item", itemDataType, nullable = false),
-        StructField("support", DoubleType, nullable = false)))
-      sparkSession.createDataFrame(sc.parallelize(itemSupportRows), schema)
-        .repartition(1).write.parquet(itemSupportPath)
     }
   }
 
@@ -350,19 +342,17 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
     private val className = classOf[FPGrowthModel].getName
 
     override def load(path: String): FPGrowthModel = {
+      implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val inputCount = (metadata.metadata \ "count").extract[Long]
       val dataPath = new Path(path, "data").toString
       val frequentItems = sparkSession.read.parquet(dataPath)
-      val itemSupportPath = new Path(path, "itemSupport")
-      val fs = FileSystem.get(sc.hadoopConfiguration)
-      val itemSupport = if (fs.exists(itemSupportPath)) {
-        sparkSession.read.parquet(itemSupportPath.toString).rdd.map {
-          case Row(item: Any, support: Double) => item -> support
+      val itemSupport = frequentItems.rdd.flatMap {
+          case Row(items: Seq[_], count: Long) if items.length == 1 =>
+            Some(items.head -> count.toDouble / inputCount)
+          case _ => None
         }.collectAsMap()
-      } else {
-        Map.empty[Any, Double]
-      }
-      val model = new FPGrowthModel(metadata.uid, frequentItems, itemSupport)
+      val model = new FPGrowthModel(metadata.uid, frequentItems, itemSupport, inputCount)
       metadata.getAndSetParams(model)
       model
     }
