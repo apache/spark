@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalog.Table
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.plans.logical.{Join, ResolvedHint}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
@@ -157,23 +157,20 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("broadcast hint on global temp view") {
-    import org.apache.spark.sql.catalyst.plans.logical.{ResolvedHint, Join}
-
+  test("SPARK-25121 broadcast hint on global temp view") {
     withGlobalTempView("v1") {
       spark.range(10).createGlobalTempView("v1")
       withTempView("v2") {
         spark.range(10).createTempView("v2")
 
-        val plan1 = sql("SELECT /*+ MAPJOIN(v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id")
-          .queryExecution.optimizedPlan
-        assert(plan1.collectFirst { case h: ResolvedHint => h }.size == 0)
-
-        val plan2 = sql("SELECT /*+ MAPJOIN(global_temp.v1) */ * " +
-            "FROM global_temp.v1, v2 WHERE v1.id = v2.id")
-          .queryExecution.optimizedPlan
-        assert(plan2.asInstanceOf[Join].left.isInstanceOf[ResolvedHint])
-        assert(!plan2.asInstanceOf[Join].right.isInstanceOf[ResolvedHint])
+        Seq(
+          "SELECT /*+ MAPJOIN(v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id",
+          "SELECT /*+ MAPJOIN(global_temp.v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id"
+        ).foreach { statement =>
+          val plan = sql(statement).queryExecution.optimizedPlan
+          assert(plan.asInstanceOf[Join].left.isInstanceOf[ResolvedHint])
+          assert(!plan.asInstanceOf[Join].right.isInstanceOf[ResolvedHint])
+        }
       }
     }
   }

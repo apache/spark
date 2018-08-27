@@ -54,20 +54,32 @@ object ResolveHints {
 
     def resolver: Resolver = conf.resolver
 
-    private def namePartsWithDatabase(nameParts: Seq[String]): Seq[String] = {
+    private def namePartsWithDatabase(nameParts: Seq[String], database: String): Seq[String] = {
       if (nameParts.size == 1) {
-        catalog.getCurrentDatabase +: nameParts
+        database +: nameParts
       } else {
         nameParts
       }
     }
 
+    private def formatDatabaseName(name: String): String = {
+      if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
+    }
+
     private def matchedTableIdentifier(
         nameParts: Seq[String],
         tableIdent: IdentifierWithDatabase): Boolean = {
-      val identifierList =
-        tableIdent.database.getOrElse(catalog.getCurrentDatabase) :: tableIdent.identifier :: Nil
-      namePartsWithDatabase(nameParts).corresponds(identifierList)(resolver)
+      tableIdent.database match {
+        case Some(db) if catalog.globalTempViewManager.database == formatDatabaseName(db) =>
+          val identifierList = db :: tableIdent.identifier :: Nil
+          namePartsWithDatabase(nameParts, catalog.globalTempViewManager.database)
+            .corresponds(identifierList)(resolver)
+        case _ =>
+          val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
+          val identifierList = db :: tableIdent.identifier :: Nil
+          namePartsWithDatabase(nameParts, catalog.getCurrentDatabase)
+            .corresponds(identifierList)(resolver)
+      }
     }
 
     private def applyBroadcastHint(
