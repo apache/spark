@@ -459,13 +459,13 @@ class DataFrameReader(OptionUtils):
             schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape, comment=comment,
             header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
             ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace, nullValue=nullValue,
-            emptyValue=emptyValue, nanValue=nanValue, positiveInf=positiveInf,
-            negativeInf=negativeInf, dateFormat=dateFormat, timestampFormat=timestampFormat,
-            maxColumns=maxColumns, maxCharsPerColumn=maxCharsPerColumn,
+            nanValue=nanValue, positiveInf=positiveInf, negativeInf=negativeInf,
+            dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
+            maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, samplingRatio=samplingRatio,
-            enforceSchema=enforceSchema)
+            enforceSchema=enforceSchema, emptyValue=emptyValue)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -920,12 +920,12 @@ class DataFrameWriter(OptionUtils):
         """
         self.mode(mode)
         self._set_opts(compression=compression, sep=sep, quote=quote, escape=escape, header=header,
-                       nullValue=nullValue, emptyValue=emptyValue, escapeQuotes=escapeQuotes,
-                       quoteAll=quoteAll, dateFormat=dateFormat, timestampFormat=timestampFormat,
+                       nullValue=nullValue, escapeQuotes=escapeQuotes, quoteAll=quoteAll,
+                       dateFormat=dateFormat, timestampFormat=timestampFormat,
                        ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
                        ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace,
                        charToEscapeQuoteEscaping=charToEscapeQuoteEscaping,
-                       encoding=encoding)
+                       encoding=encoding, emptyValue=emptyValue)
         self._jwrite.csv(path)
 
     @since(1.5)
