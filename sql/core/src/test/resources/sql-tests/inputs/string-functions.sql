@@ -5,6 +5,10 @@ select format_string();
 -- A pipe operator for string concatenation
 select 'a' || 'b' || 'c';
 
+-- split function
+select split('aa1cc2ee', '[1-9]+', 2);
+select split('aa1cc2ee', '[1-9]+');
+
 -- Check if catalyst combine nested `Concat`s
 EXPLAIN EXTENDED SELECT (col1 || col2 || col3 || col4) col
 FROM (SELECT id col1, id col2, id col3, id col4 FROM range(10));
