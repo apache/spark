@@ -21,25 +21,31 @@ import java.util.{Properties, Timer, TimerTask}
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
-
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc.{RpcEndpointRef, RpcTimeout}
 import org.apache.spark.util.{RpcUtils, Utils}
 
-/** A [[TaskContext]] with extra info and tooling for a barrier stage. */
-class BarrierTaskContext(
+/**
+ * :: Experimental ::
+ * A [[TaskContext]] with extra contextual info and tooling for tasks in a barrier stage.
+ * Use [[BarrierTaskContext#get]] to obtain the barrier context for a running barrier task.
+ */
+@Experimental
+@Since("2.4.0")
+class BarrierTaskContext private[spark] (
     override val stageId: Int,
     override val stageAttemptNumber: Int,
     override val partitionId: Int,
     override val taskAttemptId: Long,
     override val attemptNumber: Int,
-    override val taskMemoryManager: TaskMemoryManager,
+    private[spark] override val taskMemoryManager: TaskMemoryManager,
     localProperties: Properties,
     @transient private val metricsSystem: MetricsSystem,
     // The default value is only used in tests.
+    @DeveloperApi
     override val taskMetrics: TaskMetrics = TaskMetrics.empty)
   extends TaskContextImpl(stageId, stageAttemptNumber, partitionId, taskAttemptId, attemptNumber,
       taskMemoryManager, localProperties, metricsSystem, taskMetrics) {
@@ -68,7 +74,7 @@ class BarrierTaskContext(
    *
    * CAUTION! In a barrier stage, each task must have the same number of barrier() calls, in all
    * possible code branches. Otherwise, you may get the job hanging or a SparkException after
-   * timeout. Some examples of misuses listed below:
+   * timeout. Some examples of '''misuses''' listed below:
    * 1. Only call barrier() function on a subset of all the tasks in the same barrier stage, it
    * shall lead to timeout of the function call.
    * {{{
@@ -145,7 +151,7 @@ class BarrierTaskContext(
 
   /**
    * :: Experimental ::
-   * Returns the all task infos in this barrier stage, the task infos are ordered by partitionId.
+   * Returns [[BarrierTaskInfo]] for all tasks in this barrier stage, ordered by partition ID.
    */
   @Experimental
   @Since("2.4.0")
@@ -155,10 +161,15 @@ class BarrierTaskContext(
   }
 }
 
+@Experimental
+@Since("2.4.0")
 object BarrierTaskContext {
   /**
+   * :: Experimental ::
    * Return the currently active BarrierTaskContext. This can be called inside of user functions to
    * access contextual information about running barrier tasks.
    */
+  @Experimental
+  @Since("2.4.0")
   def get(): BarrierTaskContext = TaskContext.get().asInstanceOf[BarrierTaskContext]
 }
