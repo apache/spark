@@ -52,7 +52,7 @@ private[sql] class JacksonGenerator(
   private lazy val rootFieldWriters: Array[ValueWriter] = dataType match {
     case st: StructType => st.map(_.dataType).map(makeWriter).toArray
     case _ => throw new UnsupportedOperationException(
-      s"Initial type ${dataType.catalogString} must be a struct")
+      s"Initial type ${dataType.catalogString} must be a ${StructType.simpleString}")
   }
 
   // `ValueWriter` for array data storing rows of the schema.
@@ -67,13 +67,14 @@ private[sql] class JacksonGenerator(
         writeObject(writeMapData(arr.getMap(i), mt, mapElementWriter))
       }
     case _ => throw new UnsupportedOperationException(
-      s"Initial type ${dataType.catalogString} must be an array, a struct or a map")
+      s"Initial type ${dataType.catalogString} must be " +
+      s"an ${ArrayType.simpleString}, a ${StructType.simpleString} or a ${MapType.simpleString}")
   }
 
   private lazy val mapElementWriter: ValueWriter = dataType match {
     case mt: MapType => makeWriter(mt.valueType)
     case _ => throw new UnsupportedOperationException(
-      s"Initial type ${dataType.catalogString} must be a map")
+      s"Initial type ${dataType.catalogString} must be a ${MapType.simpleString}")
   }
 
   private val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
