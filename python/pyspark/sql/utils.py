@@ -156,14 +156,17 @@ def require_test_compiled():
     """ Raise Exception if test classes are not compiled
     """
     import os
+    import glob
     try:
         spark_home = os.environ['SPARK_HOME']
     except KeyError:
         raise RuntimeError('SPARK_HOME is not defined in environment')
 
     test_class_path = os.path.join(
-        spark_home, 'sql', 'core', 'target', 'scala-2.11', 'test-classes')
-    if not os.path.isdir(test_class_path):
+        spark_home, 'sql', 'core', 'target', '*', 'test-classes')
+    paths = glob.glob(test_class_path)
+
+    if len(paths) == 0:
         raise RuntimeError(
             "%s doesn't exist. Spark sql test classes are not compiled." % test_class_path)
 

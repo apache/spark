@@ -3377,29 +3377,42 @@ class SQLTests(ReusedSQLTestCase):
 
     # SPARK-24721
     @unittest.skipIf(not _test_compiled, _test_not_compiled_message)
-    def test_datasource_with_udf_filter_lit_input(self):
+    def test_datasource_with_udf(self):
         from pyspark.sql.functions import udf, lit, col
 
         path = tempfile.mkdtemp()
         shutil.rmtree(path)
+
         try:
             self.spark.range(1).write.mode("overwrite").format('csv').save(path)
-            filesource_df = self.spark.read.csv(path)
+            filesource_df = self.spark.read.option('inferSchema', True).csv(path).toDF('i')
             datasource_df = self.spark.read \
                 .format("org.apache.spark.sql.sources.SimpleScanSource") \
-                .option('from', 0).option('to', 1).load()
+                .option('from', 0).option('to', 1).load().toDF('i')
             datasource_v2_df = self.spark.read \
-               .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
-               .load()
+                .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+                .load().toDF('i', 'j')
 
-            filter1 = udf(lambda: False, 'boolean')()
-            filter2 = udf(lambda x: False, 'boolean')(lit(1))
+            c1 = udf(lambda x: x + 1, 'int')(lit(1))
+            c2 = udf(lambda x: x + 1, 'int')(col('i'))
+
+            f1 = udf(lambda x: False, 'boolean')(lit(1))
+            f2 = udf(lambda x: False, 'boolean')(col('i'))
 
             for df in [filesource_df, datasource_df, datasource_v2_df]:
-                for f in [filter1, filter2]:
+                result = df.withColumn('c', c1)
+                expected = df.withColumn('c', lit(2))
+                self.assertEquals(expected.collect(), result.collect())
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                result = df.withColumn('c', c2)
+                expected = df.withColumn('c', col('i') + 1)
+                self.assertEquals(expected.collect(), result.collect())
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                for f in [f1, f2]:
                     result = df.filter(f)
                     self.assertEquals(0, result.count())
-
         finally:
             shutil.rmtree(path)
 
@@ -5307,8 +5320,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     # SPARK-24721
     @unittest.skipIf(not _test_compiled, _test_not_compiled_message)
-    def test_datasource_with_udf_filter_lit_input(self):
-        # Same as SQLTests.test_datasource_with_udf_filter_lit_input, but with Pantestdas UDF
+    def test_datasource_with_udf(self):
+        # Same as SQLTests.test_datasource_with_udf, but with Pandas UDF
         # This needs to a separate test because Arrow dependency is optional
         import pandas as pd
         import numpy as np
@@ -5316,22 +5329,37 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         path = tempfile.mkdtemp()
         shutil.rmtree(path)
+
         try:
             self.spark.range(1).write.mode("overwrite").format('csv').save(path)
-            filesource_df = self.spark.read.csv(path)
+            filesource_df = self.spark.read.option('inferSchema', True).csv(path).toDF('i')
             datasource_df = self.spark.read \
                 .format("org.apache.spark.sql.sources.SimpleScanSource") \
-                .option('from', 0).option('to', 1).load()
+                .option('from', 0).option('to', 1).load().toDF('i')
             datasource_v2_df = self.spark.read \
-               .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
-               .load()
+                .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+                .load().toDF('i', 'j')
 
-            f = pandas_udf(lambda x: pd.Series(np.repeat(False, len(x))), 'boolean')(lit(1))
+            c1 = pandas_udf(lambda x: x + 1, 'int')(lit(1))
+            c2 = pandas_udf(lambda x: x + 1, 'int')(col('i'))
+
+            f1 = pandas_udf(lambda x: pd.Series(np.repeat(False, len(x))), 'boolean')(lit(1))
+            f2 = pandas_udf(lambda x: pd.Series(np.repeat(False, len(x))), 'boolean')(col('i'))
 
             for df in [filesource_df, datasource_df, datasource_v2_df]:
-                result = df.filter(f)
-                self.assertEquals(0, result.count())
+                result = df.withColumn('c', c1)
+                expected = df.withColumn('c', lit(2))
+                self.assertEquals(expected.collect(), result.collect())
 
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                result = df.withColumn('c', c2)
+                expected = df.withColumn('c', col('i') + 1)
+                self.assertEquals(expected.collect(), result.collect())
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                for f in [f1, f2]:
+                    result = df.filter(f)
+                    self.assertEquals(0, result.count())
         finally:
             shutil.rmtree(path)
 
