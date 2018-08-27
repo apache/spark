@@ -266,7 +266,10 @@ object SQLConf {
     .createWithDefault(Long.MaxValue)
 
   val SHUFFLE_PARTITIONS = buildConf("spark.sql.shuffle.partitions")
-    .doc("The default number of partitions to use when shuffling data for joins or aggregations.")
+    .doc("The default number of partitions to use when shuffling data for joins or aggregations. " +
+      "In structured streaming, the value is not modifiable once you run the query. This is due " +
+      "to the physical partitioning of state: state is partitioned via applying hash function " +
+      "to key, hence the number of partitions for state should be unchanged.")
     .intConf
     .createWithDefault(200)
 

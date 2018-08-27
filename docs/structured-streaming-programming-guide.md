@@ -2812,13 +2812,18 @@ See [Input Sources](#input-sources) and [Output Sinks](#output-sinks) sections f
 
 # Additional Information
 
-**Gotchas**
+## Configuration Options For Structured Streaming
 
-- For structured streaming, modifying "spark.sql.shuffle.partitions" is restricted once you run the query.
-  - This is because state is partitioned via key, hence number of partitions for state should be unchanged.
-  - If you want to run less tasks for stateful operations, `coalesce` would help with avoiding unnecessary repartitioning. Please note that it will also affect downstream operators.
+This section is for configurations which are only available for structured streaming, or they behave differently with batch query.
 
-**Further Reading**
+- spark.sql.shuffle.partitions
+  - This configuration is not modifiable once you run the structured streaming query.
+  - This is due to the physical partitioning of state: state is partitioned via applying hash function to key, hence the number of partitions for state should be unchanged.
+  - If you want to run less tasks for stateful operations, `coalesce` would help with avoiding unnecessary repartitioning.
+    - e.g. `df.groupBy("time").count().coalesce(10)` reduces the number of tasks by 10, whereas `spark.sql.shuffle.partitions` may be bigger.
+    - After `coalesce`, the number of (reduced) tasks will be kept unless another shuffle happens.
+
+## Further Reading
 
 - See and run the
   [Scala]({{site.SPARK_GITHUB_URL}}/tree/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming)/[Java]({{site.SPARK_GITHUB_URL}}/tree/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming)/[Python]({{site.SPARK_GITHUB_URL}}/tree/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/sql/streaming)/[R]({{site.SPARK_GITHUB_URL}}/tree/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/r/streaming)
