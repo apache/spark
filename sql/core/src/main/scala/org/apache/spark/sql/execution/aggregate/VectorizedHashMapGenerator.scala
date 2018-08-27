@@ -47,7 +47,8 @@ class VectorizedHashMapGenerator(
     aggregateExpressions: Seq[AggregateExpression],
     generatedClassName: String,
     groupingKeySchema: StructType,
-    bufferSchema: StructType)
+    bufferSchema: StructType,
+    bitMaxCapacity: Int)
   extends HashMapGenerator (ctx, aggregateExpressions, generatedClassName,
     groupingKeySchema, bufferSchema) {
 
@@ -61,7 +62,7 @@ class VectorizedHashMapGenerator(
        |  private ${classOf[ColumnarBatch].getName} batch;
        |  private ${classOf[MutableColumnarRow].getName} aggBufferRow;
        |  private int[] buckets;
-       |  private int capacity = 1 << 16;
+       |  private int capacity = 1 << $bitMaxCapacity;
        |  private double loadFactor = 0.5;
        |  private int numBuckets = (int) (capacity / loadFactor);
        |  private int maxSteps = 2;
