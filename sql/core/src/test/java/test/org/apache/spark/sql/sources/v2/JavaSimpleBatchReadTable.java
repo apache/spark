@@ -21,43 +21,26 @@ import java.io.IOException;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.sources.v2.SupportsBatchRead;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.StructType;
 
-abstract class JavaSimpleReadSupport implements BatchReadSupport {
+abstract class JavaSimpleBatchReadTable implements SupportsBatchRead, BatchScan {
 
   @Override
-  public StructType fullSchema() {
-    return new StructType().add("i", "int").add("j", "int");
-  }
-
-  @Override
-  public ScanConfigBuilder newScanConfigBuilder() {
-    return new JavaNoopScanConfigBuilder(fullSchema());
-  }
-
-  @Override
-  public PartitionReaderFactory createReaderFactory(ScanConfig config) {
-    return new JavaSimpleReaderFactory();
-  }
-}
-
-class JavaNoopScanConfigBuilder implements ScanConfigBuilder, ScanConfig {
-
-  private StructType schema;
-
-  JavaNoopScanConfigBuilder(StructType schema) {
-    this.schema = schema;
-  }
-
-  @Override
-  public ScanConfig build() {
+  public BatchScan createBatchScan(ScanConfig config, DataSourceOptions options) {
     return this;
   }
 
   @Override
-  public StructType readSchema() {
-    return schema;
+  public StructType schema() {
+    return new StructType().add("i", "int").add("j", "int");
+  }
+
+  @Override
+  public PartitionReaderFactory createReaderFactory() {
+    return new JavaSimpleReaderFactory();
   }
 }
 

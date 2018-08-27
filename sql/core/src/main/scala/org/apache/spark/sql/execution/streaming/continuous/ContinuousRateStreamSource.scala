@@ -22,17 +22,16 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.streaming.{RateStreamOffset, SimpleStreamingScanConfig, SimpleStreamingScanConfigBuilder, ValueRunTimeMsPair}
+import org.apache.spark.sql.execution.streaming.{RateStreamOffset, ValueRunTimeMsPair}
 import org.apache.spark.sql.execution.streaming.sources.RateStreamProvider
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming._
-import org.apache.spark.sql.types.StructType
 
 case class RateStreamPartitionOffset(
    partition: Int, currentValue: Long, currentTimeMs: Long) extends PartitionOffset
 
-class RateStreamContinuousReadSupport(options: DataSourceOptions) extends ContinuousReadSupport {
+class RateStreamContinuousInputStream(options: DataSourceOptions) extends ContinuousInputStream {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
   val creationTime = System.currentTimeMillis()
@@ -54,18 +53,36 @@ class RateStreamContinuousReadSupport(options: DataSourceOptions) extends Contin
     RateStreamOffset(Serialization.read[Map[Int, ValueRunTimeMsPair]](json))
   }
 
-  override def fullSchema(): StructType = RateStreamProvider.SCHEMA
-
-  override def newScanConfigBuilder(start: Offset): ScanConfigBuilder = {
-    new SimpleStreamingScanConfigBuilder(fullSchema(), start)
-  }
-
   override def initialOffset: Offset = createInitialOffset(numPartitions, creationTime)
 
-  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
-    val startOffset = config.asInstanceOf[SimpleStreamingScanConfig].start
+  override def createContinuousScan(start: Offset): ContinuousScan = {
+    new RateStreamContinuousScan(numPartitions, perPartitionRate, start)
+  }
 
-    val partitionStartMap = startOffset match {
+  override def commit(end: Offset): Unit = {}
+  override def stop(): Unit = {}
+
+  private def createInitialOffset(numPartitions: Int, creationTimeMs: Long) = {
+    RateStreamOffset(Range(0, numPartitions).map { i =>
+      // Note that the starting offset is exclusive, so we have to decrement the starting value by
+      // the increment that will later be applied. The first row output in each partition will have
+      // a value equal to the partition index.
+      (i, ValueRunTimeMsPair((i - numPartitions).toLong, creationTimeMs))
+    }.toMap)
+  }
+}
+
+class RateStreamContinuousScan(
+    numPartitions: Int,
+    perPartitionRate: Double,
+    start: Offset) extends ContinuousScan {
+
+  override def createContinuousReaderFactory(): ContinuousPartitionReaderFactory = {
+    RateStreamContinuousReaderFactory
+  }
+
+  override def planInputPartitions(): Array[InputPartition] = {
+    val partitionStartMap = start match {
       case off: RateStreamOffset => off.partitionToValueAndRunTimeMs
       case off =>
         throw new IllegalArgumentException(
@@ -74,8 +91,8 @@ class RateStreamContinuousReadSupport(options: DataSourceOptions) extends Contin
     if (partitionStartMap.keySet.size != numPartitions) {
       throw new IllegalArgumentException(
         s"The previous run contained ${partitionStartMap.keySet.size} partitions, but" +
-        s" $numPartitions partitions are currently configured. The numPartitions option" +
-        " cannot be changed.")
+          s" $numPartitions partitions are currently configured. The numPartitions option" +
+          " cannot be changed.")
     }
 
     Range(0, numPartitions).map { i =>
@@ -90,28 +107,6 @@ class RateStreamContinuousReadSupport(options: DataSourceOptions) extends Contin
         perPartitionRate)
     }.toArray
   }
-
-  override def createContinuousReaderFactory(
-      config: ScanConfig): ContinuousPartitionReaderFactory = {
-    RateStreamContinuousReaderFactory
-  }
-
-  override def commit(end: Offset): Unit = {}
-  override def stop(): Unit = {}
-
-  private def createInitialOffset(numPartitions: Int, creationTimeMs: Long) = {
-    RateStreamOffset(
-      Range(0, numPartitions).map { i =>
-        // Note that the starting offset is exclusive, so we have to decrement the starting value
-        // by the increment that will later be applied. The first row output in each
-        // partition will have a value equal to the partition index.
-        (i,
-          ValueRunTimeMsPair(
-            (i - numPartitions).toLong,
-            creationTimeMs))
-      }.toMap)
-  }
-
 }
 
 case class RateStreamContinuousInputPartition(

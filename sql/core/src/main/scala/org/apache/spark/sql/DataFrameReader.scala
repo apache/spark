@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.sources.v2.{BatchReadSupportProvider, DataSourceOptions, DataSourceV2}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, Format}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -193,21 +193,18 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
 
     val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
-    if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      val ds = cls.newInstance().asInstanceOf[DataSourceV2]
-      if (ds.isInstanceOf[BatchReadSupportProvider]) {
-        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-          ds = ds, conf = sparkSession.sessionState.conf)
-        val pathsOption = {
-          val objectMapper = new ObjectMapper()
-          DataSourceOptions.PATHS_KEY -> objectMapper.writeValueAsString(paths.toArray)
-        }
-        Dataset.ofRows(sparkSession, DataSourceV2Relation.create(
-          ds, sessionOptions ++ extraOptions.toMap + pathsOption,
-          userSpecifiedSchema = userSpecifiedSchema))
-      } else {
-        loadV1Source(paths: _*)
+    if (classOf[Format].isAssignableFrom(cls)) {
+      val format = cls.newInstance().asInstanceOf[Format]
+      val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+        ds = format, conf = sparkSession.sessionState.conf)
+      val pathsOption = {
+        val objectMapper = new ObjectMapper()
+        DataSourceOptions.PATHS_KEY -> objectMapper.writeValueAsString(paths.toArray)
       }
+      DataSourceV2Relation.create(
+        format, sessionOptions ++ extraOptions.toMap + pathsOption,
+        userSpecifiedSchema = userSpecifiedSchema
+      ).map(Dataset.ofRows(sparkSession, _)).getOrElse(loadV1Source(paths: _*))
     } else {
       loadV1Source(paths: _*)
     }

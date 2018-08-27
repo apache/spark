@@ -30,10 +30,9 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming._
-import org.apache.spark.sql.types.StructType
 
 /**
- * A [[ContinuousReadSupport]] for data from kafka.
+ * A [[ContinuousInputStream]] that reads data from Kafka.
  *
  * @param offsetReader  a reader used to get kafka offsets. Note that the actual data will be
  *                      read by per-task consumers generated later.
@@ -46,16 +45,21 @@ import org.apache.spark.sql.types.StructType
  *                       scenarios, where some offsets after the specified initial ones can't be
  *                       properly read.
  */
-class KafkaContinuousReadSupport(
+class KafkaContinuousInputStream(
     offsetReader: KafkaOffsetReader,
     kafkaParams: ju.Map[String, Object],
     sourceOptions: Map[String, String],
     metadataPath: String,
     initialOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
-  extends ContinuousReadSupport with Logging {
+  extends ContinuousInputStream with Logging {
 
   private val pollTimeoutMs = sourceOptions.getOrElse("kafkaConsumer.pollTimeoutMs", "512").toLong
+
+  // Initialized when creating read support. If this diverges from the partitions at the latest
+  // offsets, we need to reconfigure.
+  // Exposed outside this object only for unit tests.
+  @volatile private[sql] var knownPartitions: Set[TopicPartition] = _
 
   override def initialOffset(): Offset = {
     val offsets = initialOffsets match {
@@ -67,28 +71,29 @@ class KafkaContinuousReadSupport(
     offsets
   }
 
-  override def fullSchema(): StructType = KafkaOffsetReader.kafkaSchema
-
-  override def newScanConfigBuilder(start: Offset): ScanConfigBuilder = {
-    new KafkaContinuousScanConfigBuilder(fullSchema(), start, offsetReader, reportDataLoss)
-  }
-
   override def deserializeOffset(json: String): Offset = {
     KafkaSourceOffset(JsonUtils.partitionOffsets(json))
   }
 
-  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
-    val startOffsets = config.asInstanceOf[KafkaContinuousScanConfig].startOffsets
-    startOffsets.toSeq.map {
-      case (topicPartition, start) =>
-        KafkaContinuousInputPartition(
-          topicPartition, start, kafkaParams, pollTimeoutMs, failOnDataLoss)
-    }.toArray
-  }
+  override def createContinuousScan(start: Offset): ContinuousScan = {
+    val oldStartPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(start)
 
-  override def createContinuousReaderFactory(
-      config: ScanConfig): ContinuousPartitionReaderFactory = {
-    KafkaContinuousReaderFactory
+    val currentPartitionSet = offsetReader.fetchEarliestOffsets().keySet
+    val newPartitions = currentPartitionSet.diff(oldStartPartitionOffsets.keySet)
+    val newPartitionOffsets = offsetReader.fetchEarliestOffsets(newPartitions.toSeq)
+
+    val deletedPartitions = oldStartPartitionOffsets.keySet.diff(currentPartitionSet)
+    if (deletedPartitions.nonEmpty) {
+      reportDataLoss(s"Some partitions were deleted: $deletedPartitions")
+    }
+
+    val startOffsets = newPartitionOffsets ++
+      oldStartPartitionOffsets.filterKeys(!deletedPartitions.contains(_))
+
+    knownPartitions = startOffsets.keySet
+
+    new KafkaContinuousScan(
+      offsetReader, kafkaParams, pollTimeoutMs, failOnDataLoss, startOffsets)
   }
 
   /** Stop this source and free any resources it has allocated. */
@@ -105,9 +110,8 @@ class KafkaContinuousReadSupport(
     KafkaSourceOffset(mergedMap)
   }
 
-  override def needsReconfiguration(config: ScanConfig): Boolean = {
-    val knownPartitions = config.asInstanceOf[KafkaContinuousScanConfig].knownPartitions
-    offsetReader.fetchLatestOffsets().keySet != knownPartitions
+  override def needsReconfiguration(): Boolean = {
+    knownPartitions != null && offsetReader.fetchLatestOffsets().keySet != knownPartitions
   }
 
   override def toString(): String = s"KafkaSource[$offsetReader]"
@@ -122,6 +126,25 @@ class KafkaContinuousReadSupport(
     } else {
       logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
     }
+  }
+}
+
+class KafkaContinuousScan(
+    offsetReader: KafkaOffsetReader,
+    kafkaParams: ju.Map[String, Object],
+    pollTimeoutMs: Long,
+    failOnDataLoss: Boolean,
+    startOffsets: Map[TopicPartition, Long]) extends ContinuousScan {
+
+  override def createContinuousReaderFactory(): ContinuousPartitionReaderFactory = {
+    KafkaContinuousReaderFactory
+  }
+
+  override def planInputPartitions(): Array[InputPartition] = {
+    startOffsets.toSeq.map { case (topicPartition, start) =>
+      KafkaContinuousInputPartition(
+        topicPartition, start, kafkaParams, pollTimeoutMs, failOnDataLoss)
+    }.toArray
   }
 }
 
@@ -149,41 +172,6 @@ object KafkaContinuousReaderFactory extends ContinuousPartitionReaderFactory {
     new KafkaContinuousPartitionReader(
       p.topicPartition, p.startOffset, p.kafkaParams, p.pollTimeoutMs, p.failOnDataLoss)
   }
-}
-
-class KafkaContinuousScanConfigBuilder(
-    schema: StructType,
-    startOffset: Offset,
-    offsetReader: KafkaOffsetReader,
-    reportDataLoss: String => Unit)
-  extends ScanConfigBuilder {
-
-  override def build(): ScanConfig = {
-    val oldStartPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(startOffset)
-
-    val currentPartitionSet = offsetReader.fetchEarliestOffsets().keySet
-    val newPartitions = currentPartitionSet.diff(oldStartPartitionOffsets.keySet)
-    val newPartitionOffsets = offsetReader.fetchEarliestOffsets(newPartitions.toSeq)
-
-    val deletedPartitions = oldStartPartitionOffsets.keySet.diff(currentPartitionSet)
-    if (deletedPartitions.nonEmpty) {
-      reportDataLoss(s"Some partitions were deleted: $deletedPartitions")
-    }
-
-    val startOffsets = newPartitionOffsets ++
-      oldStartPartitionOffsets.filterKeys(!deletedPartitions.contains(_))
-    KafkaContinuousScanConfig(schema, startOffsets)
-  }
-}
-
-case class KafkaContinuousScanConfig(
-    readSchema: StructType,
-    startOffsets: Map[TopicPartition, Long])
-  extends ScanConfig {
-
-  // Created when building the scan config builder. If this diverges from the partitions at the
-  // latest offsets, we need to reconfigure the kafka read support.
-  def knownPartitions: Set[TopicPartition] = startOffsets.keySet
 }
 
 /**

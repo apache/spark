@@ -23,7 +23,7 @@ import org.apache.spark.annotation.InterfaceStability;
  * The base interface for data source v2. Implementations must have a public, 0-arg constructor.
  *
  * Note that this is an empty interface. Data source implementations must mix in interfaces such as
- * {@link BatchReadSupportProvider} or {@link BatchWriteSupportProvider}, which can provide
+ * {@link SupportsBatchRead} or {@link BatchWriteSupportProvider}, which can provide
  * batch or streaming read/write support instances. Otherwise it's just a dummy data source which
  * is un-readable/writable.
  *

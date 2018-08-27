@@ -26,18 +26,20 @@ import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeSta
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousPartitionReaderFactory, ContinuousReadSupport, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.reader.streaming._
 
 /**
  * Physical plan node for scanning data from a data source.
  */
 case class DataSourceV2ScanExec(
-    output: Seq[AttributeReference],
+    output: Seq[Attribute],
     @transient source: DataSourceV2,
     @transient options: Map[String, String],
     @transient pushedFilters: Seq[Expression],
-    @transient readSupport: ReadSupport,
-    @transient scanConfig: ScanConfig)
+    @transient scan: Scan,
+    // `ProgressReporter` needs to know which stream a physical scan node associates to, so that
+    // it can collect metrics for a stream correctly.
+    @transient stream: Option[InputStream] = None)
   extends LeafExecNode with DataSourceV2StringFormat with ColumnarBatchScan {
 
   override def simpleString: String = "ScanV2 " + metadataString
@@ -45,33 +47,31 @@ case class DataSourceV2ScanExec(
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
     case other: DataSourceV2ScanExec =>
-      output == other.output && readSupport.getClass == other.readSupport.getClass &&
-        options == other.options
+      output == other.output && source.getClass == other.source.getClass && options == other.options
     case _ => false
   }
 
   override def hashCode(): Int = {
-    Seq(output, source, options).hashCode()
+    Seq(output, source.getClass, options).hashCode()
   }
 
-  override def outputPartitioning: physical.Partitioning = readSupport match {
+  override def outputPartitioning: physical.Partitioning = scan match {
     case _ if partitions.length == 1 =>
       SinglePartition
 
     case s: SupportsReportPartitioning =>
-      new DataSourcePartitioning(
-        s.outputPartitioning(scanConfig), AttributeMap(output.map(a => a -> a.name)))
+      new DataSourcePartitioning(s.outputPartitioning(), AttributeMap(output.map(a => a -> a.name)))
 
     case _ => super.outputPartitioning
   }
 
-  private lazy val partitions: Seq[InputPartition] = readSupport.planInputPartitions(scanConfig)
+  private lazy val partitions: Seq[InputPartition] = scan.planInputPartitions()
 
-  private lazy val readerFactory = readSupport match {
-    case r: BatchReadSupport => r.createReaderFactory(scanConfig)
-    case r: MicroBatchReadSupport => r.createReaderFactory(scanConfig)
-    case r: ContinuousReadSupport => r.createContinuousReaderFactory(scanConfig)
-    case _ => throw new IllegalStateException("unknown read support: " + readSupport)
+  private lazy val readerFactory = scan match {
+    case scan: BatchScan => scan.createReaderFactory()
+    case scan: MicroBatchScan => scan.createReaderFactory()
+    case scan: ContinuousScan => scan.createContinuousReaderFactory()
+    case _ => throw new IllegalStateException("unknown read support: " + scan)
   }
 
   // TODO: clean this up when we have dedicated scan plan for continuous streaming.
@@ -83,8 +83,8 @@ case class DataSourceV2ScanExec(
     partitions.exists(readerFactory.supportColumnarReads)
   }
 
-  private lazy val inputRDD: RDD[InternalRow] = readSupport match {
-    case _: ContinuousReadSupport =>
+  private lazy val inputRDD: RDD[InternalRow] = scan match {
+    case _: ContinuousScan =>
       assert(!supportsBatch,
         "continuous stream reader does not support columnar read yet.")
       EpochCoordinatorRef.get(

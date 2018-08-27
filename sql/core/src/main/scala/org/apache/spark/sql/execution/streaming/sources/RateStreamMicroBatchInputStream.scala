@@ -31,12 +31,11 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchInputStream, MicroBatchScan, Offset}
 import org.apache.spark.util.{ManualClock, SystemClock}
 
-class RateStreamMicroBatchReadSupport(options: DataSourceOptions, checkpointLocation: String)
-  extends MicroBatchReadSupport with Logging {
+class RateStreamMicroBatchInputStream(options: DataSourceOptions, checkpointLocation: String)
+  extends MicroBatchInputStream with Logging {
   import RateStreamProvider._
 
   private[sources] val clock = {
@@ -60,6 +59,14 @@ class RateStreamMicroBatchReadSupport(options: DataSourceOptions, checkpointLoca
         s" is $maxSeconds, but 'rampUpTimeSeconds' is $rampUpTimeSeconds.")
   }
 
+  private val numPartitions = {
+    val activeSession = SparkSession.getActiveSession
+    require(activeSession.isDefined)
+    Option(options.get(NUM_PARTITIONS).orElse(null.asInstanceOf[String]))
+      .map(_.toInt)
+      .getOrElse(activeSession.get.sparkContext.defaultParallelism)
+  }
+
   private[sources] val creationTimeMs = {
     val session = SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession)
     require(session.isDefined)
@@ -70,7 +77,7 @@ class RateStreamMicroBatchReadSupport(options: DataSourceOptions, checkpointLoca
           val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
           writer.write("v" + VERSION + "\n")
           writer.write(metadata.json)
-          writer.flush
+          writer.flush()
         }
 
         override def deserialize(in: InputStream): LongOffset = {
@@ -117,16 +124,44 @@ class RateStreamMicroBatchReadSupport(options: DataSourceOptions, checkpointLoca
     LongOffset(json.toLong)
   }
 
-  override def fullSchema(): StructType = SCHEMA
-
-  override def newScanConfigBuilder(start: Offset, end: Offset): ScanConfigBuilder = {
-    new SimpleStreamingScanConfigBuilder(fullSchema(), start, Some(end))
+  override def createMicroBatchScan(start: Offset, end: Offset): MicroBatchScan = {
+    new RateSteamMicroBatchScan(
+      maxSeconds,
+      rowsPerSecond,
+      creationTimeMs,
+      rampUpTimeSeconds,
+      numPartitions,
+      start.asInstanceOf[LongOffset], end.asInstanceOf[LongOffset])
   }
 
-  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
-    val sc = config.asInstanceOf[SimpleStreamingScanConfig]
-    val startSeconds = sc.start.asInstanceOf[LongOffset].offset
-    val endSeconds = sc.end.get.asInstanceOf[LongOffset].offset
+  override def commit(end: Offset): Unit = {}
+
+  override def stop(): Unit = {}
+
+  override def toString: String = s"RateStreamV2[rowsPerSecond=$rowsPerSecond, " +
+    s"rampUpTimeSeconds=$rampUpTimeSeconds, " +
+    s"numPartitions=${options.get(NUM_PARTITIONS).orElse("default")}"
+}
+
+class RateSteamMicroBatchScan(
+    maxSeconds: Long,
+    rowsPerSecond: Long,
+    creationTimeMs: Long,
+    rampUpTimeSeconds: Long,
+    numPartitions: Int,
+    start: LongOffset,
+    end: LongOffset) extends MicroBatchScan with Logging {
+  import RateStreamProvider._
+
+  @volatile private var lastTimeMs: Long = creationTimeMs
+
+  override def createReaderFactory(): PartitionReaderFactory = {
+    RateStreamMicroBatchReaderFactory
+  }
+
+  override def planInputPartitions(): Array[InputPartition] = {
+    val startSeconds = start.offset
+    val endSeconds = end.offset
     assert(startSeconds <= endSeconds, s"startSeconds($startSeconds) > endSeconds($endSeconds)")
     if (endSeconds > maxSeconds) {
       throw new ArithmeticException("Integer overflow. Max offset with " +
@@ -148,31 +183,12 @@ class RateStreamMicroBatchReadSupport(options: DataSourceOptions, checkpointLoca
     val localStartTimeMs = creationTimeMs + TimeUnit.SECONDS.toMillis(startSeconds)
     val relativeMsPerValue =
       TimeUnit.SECONDS.toMillis(endSeconds - startSeconds).toDouble / (rangeEnd - rangeStart)
-    val numPartitions = {
-      val activeSession = SparkSession.getActiveSession
-      require(activeSession.isDefined)
-      Option(options.get(NUM_PARTITIONS).orElse(null.asInstanceOf[String]))
-        .map(_.toInt)
-        .getOrElse(activeSession.get.sparkContext.defaultParallelism)
-    }
 
     (0 until numPartitions).map { p =>
-      new RateStreamMicroBatchInputPartition(
+      RateStreamMicroBatchInputPartition(
         p, numPartitions, rangeStart, rangeEnd, localStartTimeMs, relativeMsPerValue)
     }.toArray
   }
-
-  override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
-    RateStreamMicroBatchReaderFactory
-  }
-
-  override def commit(end: Offset): Unit = {}
-
-  override def stop(): Unit = {}
-
-  override def toString: String = s"RateStreamV2[rowsPerSecond=$rowsPerSecond, " +
-    s"rampUpTimeSeconds=$rampUpTimeSeconds, " +
-    s"numPartitions=${options.get(NUM_PARTITIONS).orElse("default")}"
 }
 
 case class RateStreamMicroBatchInputPartition(

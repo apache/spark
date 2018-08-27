@@ -18,25 +18,26 @@
 package org.apache.spark.sql.sources.v2.reader;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
+import org.apache.spark.sql.sources.v2.SupportsBatchRead;
+import org.apache.spark.sql.sources.v2.Table;
 
 /**
- * An interface that carries query specific information for the data scanning job, like operator
- * pushdown information. This is defined as an empty interface, and data sources should define
- * their own {@link ScanConfig} classes.
+ * A {@link Scan} for batch queries.
  *
- * {@link Scan} implementations usually need to cast the input {@link ScanConfig} to the concrete
- * {@link ScanConfig} class of the data source.
+ * The execution engine will get an instance of {@link Table} first, then call
+ * {@link Table#newScanConfigBuilder(DataSourceOptions)} and create an instance of
+ * {@link ScanConfig}. The {@link ScanConfigBuilder} can apply operator pushdown and keep the
+ * pushdown result in {@link ScanConfig}. Then
+ * {@link SupportsBatchRead#createBatchScan(ScanConfig, DataSourceOptions)} will be called to create
+ * a {@link BatchScan} instance, which will be used to create input partitions and reader factory to
+ * scan data from the data source with a Spark job.
  */
 @InterfaceStability.Evolving
-public interface ScanConfig {
+public interface BatchScan extends Scan {
 
   /**
-   * Returns the actual schema of this scan, which may be different from the table schema, as
-   * column pruning or other optimizations may happen.
-   *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
-   * submitted.
+   * Returns a factory, which produces one {@link PartitionReader} for one {@link InputPartition}.
    */
-  StructType readSchema();
+  PartitionReaderFactory createReaderFactory();
 }

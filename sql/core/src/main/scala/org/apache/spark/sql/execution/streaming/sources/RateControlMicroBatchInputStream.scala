@@ -15,18 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader;
+package org.apache.spark.sql.execution.streaming.sources
 
-import java.util.OptionalLong;
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchInputStream, Offset}
 
-import org.apache.spark.annotation.InterfaceStability;
+// A special `MicroBatchInputStream` that can get latestOffset with a start offset.
+trait RateControlMicroBatchInputStream extends MicroBatchInputStream {
 
-/**
- * An interface to represent statistics for a data source, which is returned by
- * {@link SupportsReportStatistics#estimateStatistics()}.
- */
-@InterfaceStability.Evolving
-public interface Statistics {
-  OptionalLong sizeInBytes();
-  OptionalLong numRows();
+  override def latestOffset(): Offset = {
+    throw new IllegalAccessException(
+      "latestOffset should not be called for RateControlMicroBatchReadSupport")
+  }
+
+  def latestOffset(start: Offset): Offset
 }

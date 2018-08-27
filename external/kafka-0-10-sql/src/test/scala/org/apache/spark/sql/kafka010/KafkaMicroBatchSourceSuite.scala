@@ -117,13 +117,15 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with Kaf
       val sources: Seq[BaseStreamingSource] = {
         query.get.logicalPlan.collect {
           case StreamingExecutionRelation(source: KafkaSource, _) => source
-          case StreamingExecutionRelation(source: KafkaMicroBatchReadSupport, _) => source
+          case r: StreamingDataSourceV2Relation
+              if r.stream.isInstanceOf[KafkaMicroBatchInputStream] =>
+            r.stream.asInstanceOf[KafkaMicroBatchInputStream]
         } ++ (query.get.lastExecution match {
           case null => Seq()
           case e => e.logical.collect {
             case r: StreamingDataSourceV2Relation
-                if r.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
-              r.readSupport.asInstanceOf[KafkaContinuousReadSupport]
+                if r.stream.isInstanceOf[KafkaContinuousInputStream] =>
+              r.stream.asInstanceOf[KafkaContinuousInputStream]
           }
         })
       }.distinct
@@ -978,7 +980,8 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
       makeSureGetOffsetCalled,
       AssertOnQuery { query =>
         query.logicalPlan.collect {
-          case StreamingExecutionRelation(_: KafkaMicroBatchReadSupport, _) => true
+          case r: StreamingDataSourceV2Relation
+              if r.stream.isInstanceOf[KafkaMicroBatchInputStream] => true
         }.nonEmpty
       }
     )
@@ -1003,12 +1006,14 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           "kafka.bootstrap.servers" -> testUtils.brokerAddress,
           "subscribe" -> topic
         ) ++ Option(minPartitions).map { p => "minPartitions" -> p}
-        val readSupport = provider.createMicroBatchReadSupport(
-          dir.getAbsolutePath, new DataSourceOptions(options.asJava))
-        val config = readSupport.newScanConfigBuilder(
+        val dsOptions = new DataSourceOptions(options.asJava)
+        val table = provider.getTable(dsOptions)
+        val config = table.newScanConfigBuilder(dsOptions).build()
+        val stream = table.createMicroBatchInputStream(dir.getAbsolutePath, config, dsOptions)
+        val scan = stream.createMicroBatchScan(
           KafkaSourceOffset(Map(tp -> 0L)),
-          KafkaSourceOffset(Map(tp -> 100L))).build()
-        val inputPartitions = readSupport.planInputPartitions(config)
+          KafkaSourceOffset(Map(tp -> 100L)))
+        val inputPartitions = scan.planInputPartitions()
           .map(_.asInstanceOf[KafkaMicroBatchInputPartition])
         withClue(s"minPartitions = $minPartitions generated factories $inputPartitions\n\t") {
           assert(inputPartitions.size == numPartitionsGenerated)
@@ -1326,7 +1331,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     val reader = spark
       .readStream
       .format("kafka")
-      .option("startingOffsets", s"latest")
+      .option("startingOffsets", "latest")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
       .option("failOnDataLoss", failOnDataLoss.toString)

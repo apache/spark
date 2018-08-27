@@ -18,24 +18,19 @@
 package org.apache.spark.sql.sources.v2.reader;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.types.StructType;
 
 /**
- * The base interface for all the batch and streaming read supports. Data sources should implement
- * concrete read support interfaces like {@link BatchReadSupport}.
+ * The base interface for all the batch and streaming scans. Data sources should implement
+ * concrete scan interfaces like {@link BatchScan}.
+ *
+ * A scan is used to create input partitions and reader factory to scan data from the data source
+ * with a Spark job.
  *
  * If Spark fails to execute any methods in the implementations of this interface (by throwing an
  * exception), the read action will fail and no Spark job will be submitted.
  */
 @InterfaceStability.Evolving
-public interface ReadSupport {
-
-  /**
-   * Returns the full schema of this data source, which is usually the physical schema of the
-   * underlying storage. This full schema should not be affected by column pruning or other
-   * optimizations.
-   */
-  StructType fullSchema();
+public interface Scan {
 
   /**
    * Returns a list of {@link InputPartition input partitions}. Each {@link InputPartition}
@@ -43,8 +38,8 @@ public interface ReadSupport {
    * partitions returned here is the same as the number of RDD partitions this scan outputs.
    *
    * Note that, this may not be a full scan if the data source supports optimization like filter
-   * push-down. Implementations should check the input {@link ScanConfig} and adjust the resulting
-   * {@link InputPartition input partitions}.
+   * push-down. Implementations should check the {@link ScanConfig} that created this scan and
+   * adjust the resulting {@link InputPartition input partitions}.
    */
-  InputPartition[] planInputPartitions(ScanConfig config);
+  InputPartition[] planInputPartitions();
 }

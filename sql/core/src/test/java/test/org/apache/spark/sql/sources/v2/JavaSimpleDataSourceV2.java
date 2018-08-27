@@ -17,17 +17,14 @@
 
 package test.org.apache.spark.sql.sources.v2;
 
-import org.apache.spark.sql.sources.v2.BatchReadSupportProvider;
-import org.apache.spark.sql.sources.v2.DataSourceV2;
-import org.apache.spark.sql.sources.v2.DataSourceOptions;
+import org.apache.spark.sql.sources.v2.*;
 import org.apache.spark.sql.sources.v2.reader.*;
 
-public class JavaSimpleDataSourceV2 implements DataSourceV2, BatchReadSupportProvider {
+public class JavaSimpleDataSourceV2 implements Format {
 
-  class ReadSupport extends JavaSimpleReadSupport {
-
+  class MyTable extends JavaSimpleBatchReadTable {
     @Override
-    public InputPartition[] planInputPartitions(ScanConfig config) {
+    public InputPartition[] planInputPartitions() {
       InputPartition[] partitions = new InputPartition[2];
       partitions[0] = new JavaRangeInputPartition(0, 5);
       partitions[1] = new JavaRangeInputPartition(5, 10);
@@ -36,7 +33,7 @@ public class JavaSimpleDataSourceV2 implements DataSourceV2, BatchReadSupportPro
   }
 
   @Override
-  public BatchReadSupport createBatchReadSupport(DataSourceOptions options) {
-    return new ReadSupport();
+  public Table getTable(DataSourceOptions options) {
+    return new MyTable();
   }
 }

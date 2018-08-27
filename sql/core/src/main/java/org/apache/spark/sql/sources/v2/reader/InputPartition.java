@@ -23,7 +23,7 @@ import org.apache.spark.annotation.InterfaceStability;
 
 /**
  * A serializable representation of an input partition returned by
- * {@link ReadSupport#planInputPartitions(ScanConfig)}.
+ * {@link Scan#planInputPartitions()}.
  *
  * Note that {@link InputPartition} will be serialized and sent to executors, then
  * {@link PartitionReader} will be created by

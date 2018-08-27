@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql.sources.v2.reader.streaming;
 
-import org.apache.spark.sql.sources.v2.reader.ReadSupport;
+import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
 
 /**
- * A base interface for streaming read support. This is package private and is invisible to data
- * sources. Data sources should implement concrete streaming read support interfaces:
- * {@link MicroBatchReadSupport} or {@link ContinuousReadSupport}.
+ * An interface representing a readable data stream in a streaming query. It's responsible to manage
+ * the offsets of the streaming source in this streaming query.
+ *
+ * Data sources should implement concrete input stream interfaces: {@link MicroBatchInputStream} and
+ * {@link ContinuousInputStream}.
  */
-interface StreamingReadSupport extends ReadSupport {
+@InterfaceStability.Evolving
+public interface InputStream extends BaseStreamingSource {
 
   /**
    * Returns the initial offset for a streaming query to start reading from. Note that the

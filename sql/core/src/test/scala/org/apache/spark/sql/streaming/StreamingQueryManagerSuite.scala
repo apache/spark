@@ -24,15 +24,14 @@ import scala.util.Random
 import scala.util.control.NonFatal
 
 import org.scalatest.BeforeAndAfter
-import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Dataset}
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.BlockingSource
 import org.apache.spark.util.Utils
 
@@ -304,8 +303,8 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
       if (withError) {
         logDebug(s"Terminating query ${queryToStop.name} with error")
         queryToStop.asInstanceOf[StreamingQueryWrapper].streamingQuery.logicalPlan.collect {
-          case StreamingExecutionRelation(source, _) =>
-            source.asInstanceOf[MemoryStream[Int]].addData(0)
+          case r: StreamingDataSourceV2Relation =>
+            r.stream.asInstanceOf[MemoryStream[Int]].addData(0)
         }
       } else {
         logDebug(s"Stopping query ${queryToStop.name}")

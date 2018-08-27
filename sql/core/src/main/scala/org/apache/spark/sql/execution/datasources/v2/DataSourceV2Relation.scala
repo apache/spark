@@ -24,11 +24,12 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2.{BatchReadSupportProvider, BatchWriteSupportProvider, DataSourceOptions, DataSourceV2}
-import org.apache.spark.sql.sources.v2.reader.{BatchReadSupport, ReadSupport, ScanConfigBuilder, SupportsReportStatistics}
+import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.reader.{Scan, SupportsReportStatistics}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousInputStream, InputStream, MicroBatchInputStream, Offset}
 import org.apache.spark.sql.sources.v2.writer.BatchWriteSupport
 import org.apache.spark.sql.types.StructType
 
@@ -41,7 +42,7 @@ import org.apache.spark.sql.types.StructType
  */
 case class DataSourceV2Relation(
     source: DataSourceV2,
-    readSupport: BatchReadSupport,
+    table: SupportsBatchRead,
     output: Seq[AttributeReference],
     options: Map[String, String],
     tableIdent: Option[TableIdentifier] = None,
@@ -60,12 +61,16 @@ case class DataSourceV2Relation(
 
   def newWriteSupport(): BatchWriteSupport = source.createWriteSupport(options, schema)
 
-  override def computeStats(): Statistics = readSupport match {
-    case r: SupportsReportStatistics =>
-      val statistics = r.estimateStatistics(readSupport.newScanConfigBuilder().build())
-      Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
-    case _ =>
-      Statistics(sizeInBytes = conf.defaultSizeInBytes)
+  override def computeStats(): Statistics = {
+    val dsOptions = new DataSourceOptions(options.asJava)
+    val config = table.newScanConfigBuilder(dsOptions).build()
+    table.createBatchScan(config, dsOptions) match {
+      case r: SupportsReportStatistics =>
+        val statistics = r.estimateStatistics()
+        Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
+      case _ =>
+        Statistics(sizeInBytes = conf.defaultSizeInBytes)
+    }
   }
 
   override def newInstance(): DataSourceV2Relation = {
@@ -81,11 +86,12 @@ case class DataSourceV2Relation(
  * after we figure out how to apply operator push-down for streaming data sources.
  */
 case class StreamingDataSourceV2Relation(
-    output: Seq[AttributeReference],
+    output: Seq[Attribute],
     source: DataSourceV2,
     options: Map[String, String],
-    readSupport: ReadSupport,
-    scanConfigBuilder: ScanConfigBuilder)
+    stream: InputStream,
+    startOffset: Option[Offset] = None,
+    endOffset: Option[Offset] = None)
   extends LeafNode with MultiInstanceRelation with DataSourceV2StringFormat {
 
   override def isStreaming: Boolean = true
@@ -99,8 +105,8 @@ case class StreamingDataSourceV2Relation(
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
     case other: StreamingDataSourceV2Relation =>
-      output == other.output && readSupport.getClass == other.readSupport.getClass &&
-        options == other.options
+      output == other.output && source.getClass == other.source.getClass &&
+        options == other.options && startOffset == other.startOffset && endOffset == other.endOffset
     case _ => false
   }
 
@@ -108,24 +114,30 @@ case class StreamingDataSourceV2Relation(
     Seq(output, source, options).hashCode()
   }
 
-  override def computeStats(): Statistics = readSupport match {
-    case r: SupportsReportStatistics =>
-      val statistics = r.estimateStatistics(scanConfigBuilder.build())
-      Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
+  def createScan(): Scan = (startOffset, endOffset) match {
+    case (Some(start), Some(end)) =>
+      stream.asInstanceOf[MicroBatchInputStream].createMicroBatchScan(start, end)
+    case (Some(start), None) =>
+      stream.asInstanceOf[ContinuousInputStream].createContinuousScan(start)
     case _ =>
-      Statistics(sizeInBytes = conf.defaultSizeInBytes)
+      throw new IllegalStateException("[BUG] wrong offsets in StreamingDataSourceV2Relation.")
+  }
+
+  override def computeStats(): Statistics = createScan() match {
+    case r: SupportsReportStatistics =>
+      val statistics = r.estimateStatistics()
+      Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
+    case _ => Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
 }
 
 object DataSourceV2Relation {
   private implicit class SourceHelpers(source: DataSourceV2) {
-    def asReadSupportProvider: BatchReadSupportProvider = {
-      source match {
-        case provider: BatchReadSupportProvider =>
-          provider
-        case _ =>
-          throw new AnalysisException(s"Data source is not readable: $name")
-      }
+
+    def asFormat: Format = source match {
+      case f: Format => f
+      case _ =>
+        throw new AnalysisException(s"Data source is not readable: $name")
     }
 
     def asWriteSupportProvider: BatchWriteSupportProvider = {
@@ -146,15 +158,15 @@ object DataSourceV2Relation {
       }
     }
 
-    def createReadSupport(
+    def getTable(
         options: Map[String, String],
-        userSpecifiedSchema: Option[StructType]): BatchReadSupport = {
+        userSpecifiedSchema: Option[StructType]): Table = {
       val v2Options = new DataSourceOptions(options.asJava)
       userSpecifiedSchema match {
         case Some(s) =>
-          asReadSupportProvider.createBatchReadSupport(s, v2Options)
+          asFormat.getTable(v2Options, s)
         case _ =>
-          asReadSupportProvider.createBatchReadSupport(v2Options)
+          asFormat.getTable(v2Options)
       }
     }
 
@@ -173,12 +185,17 @@ object DataSourceV2Relation {
       source: DataSourceV2,
       options: Map[String, String],
       tableIdent: Option[TableIdentifier] = None,
-      userSpecifiedSchema: Option[StructType] = None): DataSourceV2Relation = {
-    val readSupport = source.createReadSupport(options, userSpecifiedSchema)
-    val output = readSupport.fullSchema().toAttributes
+      userSpecifiedSchema: Option[StructType] = None): Option[DataSourceV2Relation] = {
+    val table = source.getTable(options, userSpecifiedSchema)
+    val output = table.schema().toAttributes
     val ident = tableIdent.orElse(tableFromOptions(options))
-    DataSourceV2Relation(
-      source, readSupport, output, options, ident, userSpecifiedSchema)
+    table match {
+      case batch: SupportsBatchRead =>
+        Some(DataSourceV2Relation(
+          source, batch, output, options, ident, userSpecifiedSchema))
+      case _ =>
+        None
+    }
   }
 
   private def tableFromOptions(options: Map[String, String]): Option[TableIdentifier] = {

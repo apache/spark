@@ -24,27 +24,42 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.sources.GreaterThan;
-import org.apache.spark.sql.sources.v2.BatchReadSupportProvider;
-import org.apache.spark.sql.sources.v2.DataSourceOptions;
-import org.apache.spark.sql.sources.v2.DataSourceV2;
+import org.apache.spark.sql.sources.v2.*;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.StructType;
 
-public class JavaAdvancedDataSourceV2 implements DataSourceV2, BatchReadSupportProvider {
+public class JavaAdvancedDataSourceV2 implements Format {
 
-  public class ReadSupport extends JavaSimpleReadSupport {
+  class MyTable implements Table, SupportsBatchRead {
+
     @Override
-    public ScanConfigBuilder newScanConfigBuilder() {
+    public ScanConfigBuilder newScanConfigBuilder(DataSourceOptions options) {
       return new AdvancedScanConfigBuilder();
     }
 
     @Override
-    public InputPartition[] planInputPartitions(ScanConfig config) {
-      Filter[] filters = ((AdvancedScanConfigBuilder) config).filters;
-      List<InputPartition> res = new ArrayList<>();
+    public BatchScan createBatchScan(ScanConfig config, DataSourceOptions options) {
+      return new AdvancedBatchScan((AdvancedScanConfigBuilder) config);
+    }
 
+    @Override
+    public StructType schema() {
+      return new StructType().add("i", "int").add("j", "int");
+    }
+  }
+
+  public static class AdvancedBatchScan implements BatchScan {
+    public AdvancedScanConfigBuilder config;
+
+    AdvancedBatchScan(AdvancedScanConfigBuilder config) {
+      this.config = config;
+    }
+
+    @Override
+    public InputPartition[] planInputPartitions() {
+      List<InputPartition> res = new ArrayList<>();
       Integer lowerBound = null;
-      for (Filter filter : filters) {
+      for (Filter filter : config.filters) {
         if (filter instanceof GreaterThan) {
           GreaterThan f = (GreaterThan) filter;
           if ("i".equals(f.attribute()) && f.value() instanceof Integer) {
@@ -68,11 +83,11 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, BatchReadSupportP
     }
 
     @Override
-    public PartitionReaderFactory createReaderFactory(ScanConfig config) {
-      StructType requiredSchema = ((AdvancedScanConfigBuilder) config).requiredSchema;
-      return new AdvancedReaderFactory(requiredSchema);
+    public PartitionReaderFactory createReaderFactory() {
+      return new AdvancedReaderFactory(config.requiredSchema);
     }
   }
+
 
   public static class AdvancedScanConfigBuilder implements ScanConfigBuilder, ScanConfig,
     SupportsPushDownFilters, SupportsPushDownRequiredColumns {
@@ -166,9 +181,8 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, BatchReadSupportP
     }
   }
 
-
   @Override
-  public BatchReadSupport createBatchReadSupport(DataSourceOptions options) {
-    return new ReadSupport();
+  public Table getTable(DataSourceOptions options) {
+    return new MyTable();
   }
 }

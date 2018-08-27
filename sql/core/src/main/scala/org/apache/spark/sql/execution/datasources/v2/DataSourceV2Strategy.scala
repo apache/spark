@@ -17,17 +17,22 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{sources, Strategy}
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, Repartition}
-import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
+import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.execution.streaming.{ContinuousExecutionRelation, MicroBatchExecutionRelation, StreamingExecutionRelation}
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
+import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReadSupport
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousInputStream, MicroBatchInputStream}
 
 object DataSourceV2Strategy extends Strategy {
 
@@ -102,7 +107,8 @@ object DataSourceV2Strategy extends Strategy {
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters, relation: DataSourceV2Relation) =>
-      val configBuilder = relation.readSupport.newScanConfigBuilder()
+      val dsOptions = new DataSourceOptions(relation.options.asJava)
+      val configBuilder = relation.table.newScanConfigBuilder(dsOptions)
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
       // `postScanFilters` need to be evaluated after the scan.
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
@@ -121,8 +127,7 @@ object DataSourceV2Strategy extends Strategy {
         relation.source,
         relation.options,
         pushedFilters,
-        relation.readSupport,
-        config)
+        relation.table.createBatchScan(config, dsOptions))
 
       val filterCondition = postScanFilters.reduceLeftOption(And)
       val withFilter = filterCondition.map(FilterExec(_, scan)).getOrElse(scan)
@@ -130,13 +135,41 @@ object DataSourceV2Strategy extends Strategy {
       // always add the projection, which will produce unsafe rows required by some operators
       ProjectExec(project, withFilter) :: Nil
 
+    // Ideally `StreamingExecutionRelation`, `MicroBatchExecutionRelation` and
+    // `ContinuousExecutionRelation` are temporary and we don't need to handle them in strategy
+    // rules. However, the current streaming framework keeps a base logical plan instead of physical
+    // plan, so we need to do a temp query planning at the beginning to get operator pushdown
+    // result. Here we catch these temp logical plans, return fake physical plans to report the
+    // operator pushdown result.
+    case r: StreamingExecutionRelation =>
+      FakeStreamingScanExec(r.output) :: Nil
+
+    case r: MicroBatchExecutionRelation =>
+      val options = new DataSourceOptions(r.options.asJava)
+      val configBuilder = r.table.newScanConfigBuilder(options)
+      // TODO: operator pushdown
+      val config = configBuilder.build()
+      val stream = r.table.createMicroBatchInputStream(r.metadataPath, config, options)
+      FakeMicroBatchExec(r, stream, config.readSchema().toAttributes) :: Nil
+
+    case r: ContinuousExecutionRelation =>
+      val options = new DataSourceOptions(r.options.asJava)
+      val configBuilder = r.table.newScanConfigBuilder(options)
+      // TODO: operator pushdown
+      val config = configBuilder.build()
+      val stream = r.table.createContinuousInputStream(r.metadataPath, config, options)
+      FakeContinuousExec(r, stream, config.readSchema().toAttributes) :: Nil
+
     case r: StreamingDataSourceV2Relation =>
-      // TODO: support operator pushdown for streaming data sources.
-      val scanConfig = r.scanConfigBuilder.build()
       // ensure there is a projection, which will produce unsafe rows required by some operators
       ProjectExec(r.output,
         DataSourceV2ScanExec(
-          r.output, r.source, r.options, r.pushedFilters, r.readSupport, scanConfig)) :: Nil
+          r.output,
+          r.source,
+          r.options,
+          r.pushedFilters,
+          r.createScan(),
+          Some(r.stream))) :: Nil
 
     case WriteToDataSourceV2(writer, query) =>
       WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
@@ -149,7 +182,7 @@ object DataSourceV2Strategy extends Strategy {
 
     case Repartition(1, false, child) =>
       val isContinuous = child.find {
-        case s: StreamingDataSourceV2Relation => s.readSupport.isInstanceOf[ContinuousReadSupport]
+        case s: StreamingDataSourceV2Relation => s.stream.isInstanceOf[ContinuousInputStream]
         case _ => false
       }.isDefined
 
@@ -160,5 +193,29 @@ object DataSourceV2Strategy extends Strategy {
       }
 
     case _ => Nil
+  }
+}
+
+case class FakeStreamingScanExec(output: Seq[Attribute]) extends LeafExecNode {
+  override protected def doExecute(): RDD[InternalRow] = {
+    throw new IllegalStateException("cannot execute FakeStreamingScanExec")
+  }
+}
+
+case class FakeMicroBatchExec(
+    relation: MicroBatchExecutionRelation,
+    stream: MicroBatchInputStream,
+    output: Seq[Attribute]) extends LeafExecNode {
+  override protected def doExecute(): RDD[InternalRow] = {
+    throw new IllegalStateException("cannot execute FakeMicroBatchExec")
+  }
+}
+
+case class FakeContinuousExec(
+    relation: ContinuousExecutionRelation,
+    stream: ContinuousInputStream,
+    output: Seq[Attribute]) extends LeafExecNode {
+  override protected def doExecute(): RDD[InternalRow] = {
+    throw new IllegalStateException("cannot execute FakeContinuousExec")
   }
 }

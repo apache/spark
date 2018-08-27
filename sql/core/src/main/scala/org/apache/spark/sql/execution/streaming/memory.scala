@@ -28,11 +28,12 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset => OffsetV2}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousInputStream, InputStream, MicroBatchInputStream, MicroBatchScan, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -45,11 +46,17 @@ object MemoryStream {
     new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
 }
 
+// This class is used to indicate the memory stream data source. We don't actually use it, as
+// memory stream is for test only and we never look it up by name.
+object MemoryStreamSource extends DataSourceV2
+
 /**
  * A base class for memory stream implementations. Supports adding data and resetting.
  */
-abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends BaseStreamingSource {
-  protected val encoder = encoderFor[A]
+abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext)
+  extends BaseStreamingSource with InputStream {
+
+  val encoder = encoderFor[A]
   protected val attributes = encoder.schema.toAttributes
 
   def toDS(): Dataset[A] = {
@@ -64,11 +71,35 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Bas
     addData(data.toTraversable)
   }
 
-  def fullSchema(): StructType = encoder.schema
-
-  protected def logicalPlan: LogicalPlan
+  protected val logicalPlan = StreamingRelationV2(
+    "memory",
+    MemoryStreamSource,
+    new MemoryStreamTable(this),
+    Map.empty,
+    attributes,
+    None)(sqlContext.sparkSession)
 
   def addData(data: TraversableOnce[A]): Offset
+}
+
+class MemoryStreamTable(val stream: MemoryStreamBase[_]) extends Table
+  with SupportsMicroBatchRead with SupportsContinuousRead {
+
+  override def schema(): StructType = stream.encoder.schema
+
+  override def createMicroBatchInputStream(
+      checkpointLocation: String,
+      config: ScanConfig,
+      options: DataSourceOptions): MicroBatchInputStream = {
+    stream.asInstanceOf[MicroBatchInputStream]
+  }
+
+  override def createContinuousInputStream(
+     checkpointLocation: String,
+     config: ScanConfig,
+     options: DataSourceOptions): ContinuousInputStream = {
+    stream.asInstanceOf[ContinuousInputStream]
+  }
 }
 
 /**
@@ -77,11 +108,7 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Bas
  * available.
  */
 case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
-    extends MemoryStreamBase[A](sqlContext) with MicroBatchReadSupport with Logging {
-
-  protected val logicalPlan: LogicalPlan =
-    StreamingExecutionRelation(this, attributes)(sqlContext.sparkSession)
-  protected val output = logicalPlan.output
+    extends MemoryStreamBase[A](sqlContext) with MicroBatchInputStream with Logging {
 
   /**
    * All batches from `lastCommittedOffset + 1` to `currentOffset`, inclusive.
@@ -117,7 +144,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     }
   }
 
-  override def toString: String = s"MemoryStream[${Utils.truncatedString(output, ",")}]"
+  override def toString: String = s"MemoryStream[${Utils.truncatedString(logicalPlan.output, ",")}]"
 
   override def deserializeOffset(json: String): OffsetV2 = LongOffset(json.toLong)
 
@@ -127,15 +154,10 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     if (currentOffset.offset == -1) null else currentOffset
   }
 
-  override def newScanConfigBuilder(start: OffsetV2, end: OffsetV2): ScanConfigBuilder = {
-    new SimpleStreamingScanConfigBuilder(fullSchema(), start, Some(end))
-  }
-
-  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
-    val sc = config.asInstanceOf[SimpleStreamingScanConfig]
-    val startOffset = sc.start.asInstanceOf[LongOffset]
-    val endOffset = sc.end.get.asInstanceOf[LongOffset]
-    synchronized {
+  override def createMicroBatchScan(start: OffsetV2, end: OffsetV2): MicroBatchScan = {
+    val startOffset = start.asInstanceOf[LongOffset]
+    val endOffset = end.asInstanceOf[LongOffset]
+    val partitions: Array[InputPartition] = synchronized {
       // Compute the internal batch numbers to fetch: [startOrdinal, endOrdinal)
       val startOrdinal = startOffset.offset.toInt + 1
       val endOrdinal = endOffset.offset.toInt + 1
@@ -154,10 +176,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
         new MemoryStreamInputPartition(block)
       }.toArray
     }
-  }
-
-  override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
-    MemoryStreamReaderFactory
+    new MemoryStreamMicroBatchScan(partitions)
   }
 
   private def generateDebugString(
@@ -199,6 +218,16 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 }
 
+class MemoryStreamMicroBatchScan(partitions: Array[InputPartition]) extends MicroBatchScan {
+
+  override def createReaderFactory(): PartitionReaderFactory = {
+    MemoryStreamReaderFactory
+  }
+
+  override def planInputPartitions(): Array[InputPartition] = {
+    partitions
+  }
+}
 
 class MemoryStreamInputPartition(val records: Array[UnsafeRow]) extends InputPartition
 

@@ -30,20 +30,27 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkContext, TaskContext}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.plans.logical.Range
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericInternalRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Range}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
+import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchInputStream, MicroBatchScan, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class StreamSuite extends StreamTest {
@@ -102,12 +109,10 @@ class StreamSuite extends StreamTest {
   }
 
   test("StreamingExecutionRelation.computeStats") {
-    val streamingExecutionRelation = MemoryStream[Int].toDF.logicalPlan collect {
-      case s: StreamingExecutionRelation => s
-    }
-    assert(streamingExecutionRelation.nonEmpty, "cannot find StreamingExecutionRelation")
-    assert(streamingExecutionRelation.head.computeStats.sizeInBytes
-      == spark.sessionState.conf.defaultSizeInBytes)
+    val memoryStream = MemoryStream[Int]
+    val executionRelation = StreamingExecutionRelation(
+      memoryStream, memoryStream.encoder.schema.toAttributes)(memoryStream.sqlContext.sparkSession)
+    assert(executionRelation.computeStats.sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
   }
 
   test("explain join with a normal source") {
@@ -154,21 +159,25 @@ class StreamSuite extends StreamTest {
   }
 
   test("SPARK-20432: union one stream with itself") {
-    val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load().select("a")
-    val unioned = df.union(df)
-    withTempDir { outputDir =>
-      withTempDir { checkpointDir =>
-        val query =
-          unioned
-            .writeStream.format("parquet")
-            .option("checkpointLocation", checkpointDir.getAbsolutePath)
-            .start(outputDir.getAbsolutePath)
-        try {
-          query.processAllAvailable()
-          val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]
-          checkDatasetUnorderly[Long](outputDf, (0L to 10L).union((0L to 10L)).toArray: _*)
-        } finally {
-          query.stop()
+    val v1Source = spark.readStream.format(classOf[FakeDefaultSource].getName).load().select("a")
+    val v2Source = spark.readStream.format(classOf[FakeFormat].getName).load().select("a")
+
+    Seq(v1Source, v2Source).foreach { df =>
+      val unioned = df.union(df)
+      withTempDir { outputDir =>
+        withTempDir { checkpointDir =>
+          val query =
+            unioned
+              .writeStream.format("parquet")
+              .option("checkpointLocation", checkpointDir.getAbsolutePath)
+              .start(outputDir.getAbsolutePath)
+          try {
+            query.processAllAvailable()
+            val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]
+            checkDatasetUnorderly[Long](outputDf, (0L to 10L).union((0L to 10L)).toArray: _*)
+          } finally {
+            query.stop()
+          }
         }
       }
     }
@@ -381,7 +390,7 @@ class StreamSuite extends StreamTest {
 
   test("insert an extraStrategy") {
     try {
-      spark.experimental.extraStrategies = TestStrategy :: Nil
+      spark.experimental.extraStrategies = CustomStrategy :: Nil
 
       val inputData = MemoryStream[(String, Int)]
       val df = inputData.toDS().map(_._1).toDF("a")
@@ -495,9 +504,9 @@ class StreamSuite extends StreamTest {
 
       val explainWithoutExtended = q.explainInternal(false)
       // `extended = false` only displays the physical plan.
-      assert("Streaming RelationV2 MemoryStreamDataSource".r
+      assert("Streaming RelationV2 MemoryStreamSource".r
         .findAllMatchIn(explainWithoutExtended).size === 0)
-      assert("ScanV2 MemoryStreamDataSource".r
+      assert("ScanV2 MemoryStreamSource".r
         .findAllMatchIn(explainWithoutExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithoutExtended.contains("StateStoreRestore"))
@@ -505,9 +514,9 @@ class StreamSuite extends StreamTest {
       val explainWithExtended = q.explainInternal(true)
       // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
       // plan.
-      assert("Streaming RelationV2 MemoryStreamDataSource".r
+      assert("Streaming RelationV2 MemoryStreamSource".r
         .findAllMatchIn(explainWithExtended).size === 3)
-      assert("ScanV2 MemoryStreamDataSource".r
+      assert("ScanV2 MemoryStreamSource".r
         .findAllMatchIn(explainWithExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithExtended.contains("StateStoreRestore"))
@@ -550,17 +559,17 @@ class StreamSuite extends StreamTest {
       val explainWithoutExtended = q.explainInternal(false)
 
       // `extended = false` only displays the physical plan.
-      assert("Streaming RelationV2 ContinuousMemoryStream".r
+      assert("Streaming RelationV2 MemoryStreamSource".r
         .findAllMatchIn(explainWithoutExtended).size === 0)
-      assert("ScanV2 ContinuousMemoryStream".r
+      assert("ScanV2 MemoryStreamSource".r
         .findAllMatchIn(explainWithoutExtended).size === 1)
 
       val explainWithExtended = q.explainInternal(true)
       // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
       // plan.
-      assert("Streaming RelationV2 ContinuousMemoryStream".r
+      assert("Streaming RelationV2 MemoryStreamSource".r
         .findAllMatchIn(explainWithExtended).size === 3)
-      assert("ScanV2 ContinuousMemoryStream".r
+      assert("ScanV2 MemoryStreamSource".r
         .findAllMatchIn(explainWithExtended).size === 1)
     } finally {
       q.stop()
@@ -1137,6 +1146,67 @@ class FakeDefaultSource extends FakeSource {
   }
 }
 
+// Similar to `FakeDefaultSource`, but with v2 source API.
+class FakeFormat extends Format {
+  override def getTable(options: DataSourceOptions): Table = {
+    new SupportsMicroBatchRead {
+      override def createMicroBatchInputStream(
+          checkpointLocation: String,
+          config: ScanConfig,
+          options: DataSourceOptions): MicroBatchInputStream = {
+        FakeMicroBatchInputStream
+      }
+
+      override def schema(): StructType = StructType(StructField("a", IntegerType) :: Nil)
+    }
+  }
+
+  object FakeMicroBatchInputStream extends MicroBatchInputStream {
+    override def createMicroBatchScan(start: OffsetV2, end: OffsetV2): MicroBatchScan = {
+      val s = start.asInstanceOf[LongOffset].offset.toInt
+      val e = end.asInstanceOf[LongOffset].offset.toInt
+      new FakeMicroBatchReadSupport(s, e)
+    }
+
+    override def latestOffset(): OffsetV2 = LongOffset(10)
+
+    override def initialOffset(): OffsetV2 = LongOffset(0)
+
+    override def deserializeOffset(json: String): OffsetV2 = {
+      LongOffset(json.toLong)
+    }
+
+    override def commit(end: OffsetV2): Unit = {}
+
+    override def stop(): Unit = {}
+  }
+
+  class FakeMicroBatchReadSupport(start: Int, end: Int) extends MicroBatchScan {
+    override def createReaderFactory(): PartitionReaderFactory = {
+      new PartitionReaderFactory {
+        override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+          val RangeInputPartition(start, end) = partition
+          new PartitionReader[InternalRow] {
+            var current = start - 1
+            override def next(): Boolean = {
+              current += 1
+              current <= end
+            }
+
+            override def get(): InternalRow = InternalRow(current)
+
+            override def close(): Unit = {}
+          }
+        }
+      }
+    }
+
+    override def planInputPartitions(): Array[InputPartition] = {
+      Array(RangeInputPartition(start, end))
+    }
+  }
+}
+
 /** A fake source that throws the same IOException like pre Hadoop 2.8 when it's interrupted. */
 class ThrowingIOExceptionLikeHadoop12074 extends FakeSource {
   import ThrowingIOExceptionLikeHadoop12074._
@@ -1243,4 +1313,24 @@ object ThrowingExceptionInCreateSource {
    */
   @volatile var createSourceLatch: CountDownLatch = null
   @volatile var exception: Exception = null
+}
+
+object CustomStrategy extends Strategy {
+  def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    case Project(Seq(attr), child) if attr.name == "a" =>
+      CustomProjectExec(Seq(attr.toAttribute), planLater(child)) :: Nil
+    case _ => Nil
+  }
+}
+
+case class CustomProjectExec(output: Seq[Attribute], child: SparkPlan) extends UnaryExecNode {
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitions { it =>
+      val str = UTF8String.fromString("so fast")
+      val row = new GenericInternalRow(Array[Any](str))
+      val unsafeProj = UnsafeProjection.create(schema)
+      val unsafeRow = unsafeProj(row)
+      it.map(_ => unsafeRow)
+    }
+  }
 }

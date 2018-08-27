@@ -15,26 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.sources.v2.reader.streaming;
 
-import org.apache.spark.sql.sources.v2.reader.{ScanConfig, ScanConfigBuilder}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A very simple [[ScanConfigBuilder]] implementation that creates a simple [[ScanConfig]] to
- * carry schema and offsets for streaming data sources.
+ * A {@link InputStream} for a streaming query with micro-batch mode.
  */
-class SimpleStreamingScanConfigBuilder(
-    schema: StructType,
-    start: Offset,
-    end: Option[Offset] = None)
-  extends ScanConfigBuilder {
+@InterfaceStability.Evolving
+public interface MicroBatchInputStream extends InputStream {
 
-  override def build(): ScanConfig = SimpleStreamingScanConfig(schema, start, end)
+  /**
+   * Creates a {@link MicroBatchScan} instance with a start and end offset, to scan the data within
+   * this offset range with a Spark job.
+   */
+  MicroBatchScan createMicroBatchScan(Offset start, Offset end);
+
+  /**
+   * Returns the most recent offset available.
+   */
+  Offset latestOffset();
 }
-
-case class SimpleStreamingScanConfig(
-    readSchema: StructType,
-    start: Offset,
-    end: Option[Offset])
-  extends ScanConfig

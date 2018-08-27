@@ -30,9 +30,10 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.{Encoder, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.streaming.{Offset => _, _}
-import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceOptions}
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, ScanConfig, ScanConfigBuilder}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, Format, SupportsContinuousRead, Table}
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, ScanConfig}
 import org.apache.spark.sql.sources.v2.reader.streaming._
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.RpcUtils
 
 /**
@@ -44,15 +45,9 @@ import org.apache.spark.util.RpcUtils
  *    the specified offset within the list, or null if that offset doesn't yet have a record.
  */
 class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPartitions: Int = 2)
-  extends MemoryStreamBase[A](sqlContext)
-    with ContinuousReadSupportProvider with ContinuousReadSupport {
+  extends MemoryStreamBase[A](sqlContext) with ContinuousInputStream with Format {
 
   private implicit val formats = Serialization.formats(NoTypeHints)
-
-  protected val logicalPlan =
-    StreamingRelationV2(this, "memory", Map(), attributes, None)(sqlContext.sparkSession)
-
-  // ContinuousReader implementation
 
   @GuardedBy("this")
   private val records = Seq.fill(numPartitions)(new ListBuffer[A])
@@ -86,14 +81,9 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPa
     )
   }
 
-  override def newScanConfigBuilder(start: Offset): ScanConfigBuilder = {
-    new SimpleStreamingScanConfigBuilder(fullSchema(), start)
-  }
-
-  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
-    val startOffset = config.asInstanceOf[SimpleStreamingScanConfig]
-      .start.asInstanceOf[ContinuousMemoryStreamOffset]
-    synchronized {
+  override def createContinuousScan(start: Offset): ContinuousScan = {
+    val startOffset = start.asInstanceOf[ContinuousMemoryStreamOffset]
+    val partitions: Array[InputPartition] = synchronized {
       val endpointName = s"ContinuousMemoryStreamRecordEndpoint-${java.util.UUID.randomUUID()}-$id"
       endpointRef =
         recordEndpoint.rpcEnv.setupEndpoint(endpointName, recordEndpoint)
@@ -102,11 +92,7 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPa
         case (part, index) => ContinuousMemoryStreamInputPartition(endpointName, part, index)
       }.toArray
     }
-  }
-
-  override def createContinuousReaderFactory(
-      config: ScanConfig): ContinuousPartitionReaderFactory = {
-    ContinuousMemoryStreamReaderFactory
+    new MemoryStreamContinuousScan(partitions)
   }
 
   override def stop(): Unit = {
@@ -115,11 +101,33 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPa
 
   override def commit(end: Offset): Unit = {}
 
-  // ContinuousReadSupportProvider implementation
+  // Format implementation
   // This is necessary because of how StreamTest finds the source for AddDataMemory steps.
-  override def createContinuousReadSupport(
-      checkpointLocation: String,
-      options: DataSourceOptions): ContinuousReadSupport = this
+  override def getTable(options: DataSourceOptions): Table = {
+    new Table with SupportsContinuousRead {
+      override def schema(): StructType = {
+        ContinuousMemoryStream.this.encoder.schema
+      }
+
+      def createContinuousInputStream(
+          checkpointLocation: String,
+          config: ScanConfig,
+          options: DataSourceOptions): ContinuousInputStream = {
+        ContinuousMemoryStream.this
+      }
+    }
+  }
+}
+
+class MemoryStreamContinuousScan(partitions: Array[InputPartition]) extends ContinuousScan {
+
+  override def createContinuousReaderFactory(): ContinuousPartitionReaderFactory = {
+    ContinuousMemoryStreamReaderFactory
+  }
+
+  override def planInputPartitions(): Array[InputPartition] = {
+    partitions
+  }
 }
 
 object ContinuousMemoryStream {

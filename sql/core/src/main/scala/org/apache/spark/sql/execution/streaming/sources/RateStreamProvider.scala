@@ -18,10 +18,11 @@
 package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousReadSupport
+import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousInputStream
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.reader.ScanConfig
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousInputStream, MicroBatchInputStream, MicroBatchScan}
 import org.apache.spark.sql.types._
 
 /**
@@ -38,14 +39,16 @@ import org.apache.spark.sql.types._
  *    generated rows. The source will try its best to reach `rowsPerSecond`, but the query may
  *    be resource constrained, and `numPartitions` can be tweaked to help reach the desired speed.
  */
-class RateStreamProvider extends DataSourceV2
-  with MicroBatchReadSupportProvider with ContinuousReadSupportProvider with DataSourceRegister {
+class RateStreamProvider extends Format with DataSourceRegister {
   import RateStreamProvider._
 
-  override def createMicroBatchReadSupport(
-      checkpointLocation: String,
-      options: DataSourceOptions): MicroBatchReadSupport = {
-      if (options.get(ROWS_PER_SECOND).isPresent) {
+  override def getTable(options: DataSourceOptions): Table = {
+    validateOptions(options)
+    RateStreamTable
+  }
+
+  private def validateOptions(options: DataSourceOptions): Unit = {
+    if (options.get(ROWS_PER_SECOND).isPresent) {
       val rowsPerSecond = options.get(ROWS_PER_SECOND).get().toLong
       if (rowsPerSecond <= 0) {
         throw new IllegalArgumentException(
@@ -69,17 +72,29 @@ class RateStreamProvider extends DataSourceV2
           s"Invalid value '$numPartitions'. The option 'numPartitions' must be positive")
       }
     }
-
-    new RateStreamMicroBatchReadSupport(options, checkpointLocation)
-  }
-
-  override def createContinuousReadSupport(
-     checkpointLocation: String,
-     options: DataSourceOptions): ContinuousReadSupport = {
-    new RateStreamContinuousReadSupport(options)
   }
 
   override def shortName(): String = "rate"
+}
+
+object RateStreamTable extends Table
+  with SupportsMicroBatchRead with SupportsContinuousRead {
+
+  override def schema(): StructType = RateStreamProvider.SCHEMA
+
+  override def createMicroBatchInputStream(
+      checkpointLocation: String,
+      config: ScanConfig,
+      options: DataSourceOptions): MicroBatchInputStream = {
+    new RateStreamMicroBatchInputStream(options, checkpointLocation)
+  }
+
+  override def createContinuousInputStream(
+      checkpointLocation: String,
+      config: ScanConfig,
+      options: DataSourceOptions): ContinuousInputStream = {
+    new RateStreamContinuousInputStream(options)
+  }
 }
 
 object RateStreamProvider {

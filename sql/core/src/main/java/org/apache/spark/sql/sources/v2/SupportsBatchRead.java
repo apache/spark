@@ -15,18 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader;
-
-import java.util.OptionalLong;
+package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.sources.v2.reader.BatchScan;
+import org.apache.spark.sql.sources.v2.reader.ScanConfig;
+import org.apache.spark.sql.sources.v2.reader.ScanConfigBuilder;
 
 /**
- * An interface to represent statistics for a data source, which is returned by
- * {@link SupportsReportStatistics#estimateStatistics()}.
+ * A mix-in interface for {@link Table}. Table implementations can mixin this interface to
+ * provide data reading ability for batch processing.
  */
 @InterfaceStability.Evolving
-public interface Statistics {
-  OptionalLong sizeInBytes();
-  OptionalLong numRows();
+public interface SupportsBatchRead extends Table {
+
+  /**
+   * Creates a {@link BatchScan} instance with a {@link ScanConfig} and user-specified options.
+   *
+   * @param config a {@link ScanConfig} which may contains operator pushdown information.
+   * @param options the user-specified options, which is same as the one used to create the
+   *                {@link ScanConfigBuilder} that built the given {@link ScanConfig}.
+   */
+  BatchScan createBatchScan(ScanConfig config, DataSourceOptions options);
 }

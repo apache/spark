@@ -15,22 +15,34 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader;
+package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.execution.datasources.v2.NoopScanConfigBuilder;
+import org.apache.spark.sql.sources.v2.reader.ScanConfig;
+import org.apache.spark.sql.sources.v2.reader.ScanConfigBuilder;
+import org.apache.spark.sql.types.StructType;
 
 /**
- * An interface that defines how to load the data from data source for batch processing.
+ * An interface representing a logical structured data set of a data source. For example, the
+ * implementation can be a directory on the file system, or a table in the catalog, etc.
  *
- * The execution engine will get an instance of this interface from a data source provider
- * (e.g. {@link org.apache.spark.sql.sources.v2.BatchReadSupportProvider}) at the start of a batch
- * query, then call {@link #newScanConfigBuilder()} and create an instance of {@link ScanConfig}.
- * The {@link ScanConfigBuilder} can apply operator pushdown and keep the pushdown result in
- * {@link ScanConfig}. The {@link ScanConfig} will be used to create input partitions and reader
- * factory to scan data from the data source with a Spark job.
+ * This interface can mixin the following interfaces to support different operations:
+ * <ul>
+ *   <li>{@link SupportsBatchRead}: this table can be read in batch queries.</li>
+ *   <li>{@link SupportsMicroBatchRead}: this table can be read in streaming queries with
+ *   micro-batch trigger.</li>
+ *   <li>{@link SupportsContinuousRead}: this table can be read in streaming queries with
+ *   continuous trigger.</li>
+ * </ul>
  */
 @InterfaceStability.Evolving
-public interface BatchReadSupport extends ReadSupport {
+public interface Table {
+
+  /**
+   * Returns the schema of this table.
+   */
+  StructType schema();
 
   /**
    * Returns a builder of {@link ScanConfig}. Spark will call this method and create a
@@ -38,14 +50,8 @@ public interface BatchReadSupport extends ReadSupport {
    *
    * The builder can take some query specific information to do operators pushdown, and keep these
    * information in the created {@link ScanConfig}.
-   *
-   * This is the first step of the data scan. All other methods in {@link BatchReadSupport} needs
-   * to take {@link ScanConfig} as an input.
    */
-  ScanConfigBuilder newScanConfigBuilder();
-
-  /**
-   * Returns a factory, which produces one {@link PartitionReader} for one {@link InputPartition}.
-   */
-  PartitionReaderFactory createReaderFactory(ScanConfig config);
+  default ScanConfigBuilder newScanConfigBuilder(DataSourceOptions options) {
+    return new NoopScanConfigBuilder(schema());
+  }
 }

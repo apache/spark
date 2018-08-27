@@ -21,21 +21,18 @@ import java.io.IOException;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
-import org.apache.spark.sql.sources.v2.BatchReadSupportProvider;
-import org.apache.spark.sql.sources.v2.DataSourceOptions;
-import org.apache.spark.sql.sources.v2.DataSourceV2;
+import org.apache.spark.sql.sources.v2.*;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 
+public class JavaColumnarDataSourceV2 implements Format {
 
-public class JavaColumnarDataSourceV2 implements DataSourceV2, BatchReadSupportProvider {
-
-  class ReadSupport extends JavaSimpleReadSupport {
+  class MyTable extends SimpleBatchReadTable {
 
     @Override
-    public InputPartition[] planInputPartitions(ScanConfig config) {
+    public InputPartition[] planInputPartitions() {
       InputPartition[] partitions = new InputPartition[2];
       partitions[0] = new JavaRangeInputPartition(0, 50);
       partitions[1] = new JavaRangeInputPartition(50, 90);
@@ -43,7 +40,7 @@ public class JavaColumnarDataSourceV2 implements DataSourceV2, BatchReadSupportP
     }
 
     @Override
-    public PartitionReaderFactory createReaderFactory(ScanConfig config) {
+    public PartitionReaderFactory createReaderFactory() {
       return new ColumnarReaderFactory();
     }
   }
@@ -108,7 +105,7 @@ public class JavaColumnarDataSourceV2 implements DataSourceV2, BatchReadSupportP
   }
 
   @Override
-  public BatchReadSupport createBatchReadSupport(DataSourceOptions options) {
-    return new ReadSupport();
+  public Table getTable(DataSourceOptions options) {
+    return new MyTable();
   }
 }

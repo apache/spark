@@ -15,17 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.sources
+package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset}
+import org.apache.spark.sql.sources.v2.reader.{ScanConfig, ScanConfigBuilder}
+import org.apache.spark.sql.types.StructType
 
-// A special `MicroBatchReadSupport` that can get latestOffset with a start offset.
-trait RateControlMicroBatchReadSupport extends MicroBatchReadSupport {
+class NoopScanConfigBuilder(schema: StructType) extends ScanConfigBuilder {
+  override def build(): ScanConfig = new NoopScanConfig(schema)
+}
 
-  override def latestOffset(): Offset = {
-    throw new IllegalAccessException(
-      "latestOffset should not be called for RateControlMicroBatchReadSupport")
-  }
-
-  def latestOffset(start: Offset): Offset
+class NoopScanConfig(schema: StructType) extends ScanConfig {
+  override def readSchema(): StructType = schema
 }

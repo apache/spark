@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming.continuous
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExec
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
@@ -40,13 +40,15 @@ class ContinuousSuiteBase extends StreamTest {
     query match {
       case s: ContinuousExecution =>
         assert(numTriggers >= 2, "must wait for at least 2 triggers to ensure query is initialized")
-        val reader = s.lastExecution.executedPlan.collectFirst {
-          case DataSourceV2ScanExec(_, _, _, _, r: RateStreamContinuousReadSupport, _) => r
+        val stream = s.lastExecution.logical.collectFirst {
+          case r: StreamingDataSourceV2Relation
+              if r.stream.isInstanceOf[RateStreamContinuousInputStream] =>
+            r.stream.asInstanceOf[RateStreamContinuousInputStream]
         }.get
 
         val deltaMs = numTriggers * 1000 + 300
-        while (System.currentTimeMillis < reader.creationTime + deltaMs) {
-          Thread.sleep(reader.creationTime + deltaMs - System.currentTimeMillis)
+        while (System.currentTimeMillis < stream.creationTime + deltaMs) {
+          Thread.sleep(stream.creationTime + deltaMs - System.currentTimeMillis)
         }
     }
   }
