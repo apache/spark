@@ -2554,11 +2554,11 @@ object functions {
    * @since 1.5.0
    */
   def split(str: Column, pattern: String): Column = withExpr {
-    StringSplit(str.expr, lit(pattern).expr, lit(-1).expr)
+    StringSplit(str.expr, Literal(pattern), Literal(-1))
   }
 
   /**
-   * Splits str around pattern (pattern is a regular expression) up to `limit-1` times.
+   * Splits str around pattern (pattern is a regular expression).
    *
    * The limit parameter controls the number of times the pattern is applied and therefore
    * affects the length of the resulting array. If the limit n is greater than zero then the
@@ -2571,10 +2571,10 @@ object functions {
    * @note Pattern is a string representation of the regular expression.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 2.4.0
    */
   def split(str: Column, pattern: String, limit: Int): Column = withExpr {
-    StringSplit(str.expr, lit(pattern).expr, lit(limit).expr)
+    StringSplit(str.expr, Literal(pattern), Literal(limit))
   }
 
   /**
