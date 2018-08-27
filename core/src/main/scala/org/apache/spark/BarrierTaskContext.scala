@@ -21,6 +21,7 @@ import java.util.{Properties, Timer, TimerTask}
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
+
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
