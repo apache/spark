@@ -329,8 +329,8 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
       instance.freqItemsets.write.parquet(dataPath)
       val itemDataType = instance.freqItemsets.schema(instance.getItemsCol).dataType match {
         case ArrayType(et, _) => et
-        case other => throw new RuntimeException(s"Expected ${ArrayType.simpleString}, but got " +
-          other.catalogString + ".")
+        case other => throw new IllegalArgumentException(
+          s"Expected ${ArrayType.simpleString}, but got ${other.catalogString}.")
       }
       val itemSupportPath = new Path(path, "itemSupport").toString
       val itemSupportRows = instance.itemSupport.map {
