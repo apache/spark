@@ -131,8 +131,8 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
-    require(inputType.sameType(ArrayType(StringType)),
-      s"Input type must be ArrayType(StringType) but got $inputType.")
+    require(inputType.sameType(ArrayType(StringType)), "Input type must be " +
+      s"${ArrayType(StringType).catalogString} but got ${inputType.catalogString}.")
     SchemaUtils.appendColumn(schema, $(outputCol), inputType, schema($(inputCol)).nullable)
   }
 

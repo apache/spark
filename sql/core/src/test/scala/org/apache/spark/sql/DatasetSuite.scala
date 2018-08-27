@@ -1296,7 +1296,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       new java.sql.Timestamp(100000))
   }
 
-  test("SPARK-19896: cannot have circular references in in case class") {
+  test("SPARK-19896: cannot have circular references in case class") {
     val errMsg1 = intercept[UnsupportedOperationException] {
       Seq(CircularReferenceClassA(null)).toDS
     }
@@ -1467,6 +1467,17 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     intercept[NullPointerException](ds.as[(Int, Int)].collect())
   }
 
+  test("SPARK-24569: Option of primitive types are mistakenly mapped to struct type") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      val a = Seq(Some(1)).toDS
+      val b = Seq(Some(1.2)).toDS
+      val expected = Seq((Some(1), Some(1.2))).toDS
+      val joined = a.joinWith(b, lit(true))
+      assert(joined.schema == expected.schema)
+      checkDataset(joined, expected.collect: _*)
+    }
+  }
+
   test("SPARK-24548: Dataset with tuple encoders should have correct schema") {
     val encoder = Encoders.tuple(newStringEncoder,
       Encoders.tuple(newStringEncoder, newStringEncoder))
@@ -1486,6 +1497,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.where($"city".contains(new java.lang.Character('A'))),
       Seq(Row("Amsterdam")))
+  }
+
+  test("SPARK-23034 show rdd names in RDD scan nodes") {
+    val rddWithName = spark.sparkContext.parallelize(SingleData(1) :: Nil).setName("testRdd")
+    val df = spark.createDataFrame(rddWithName)
+    val output = new java.io.ByteArrayOutputStream()
+    Console.withOut(output) {
+      df.explain(extended = false)
+    }
+    assert(output.toString.contains("Scan testRdd"))
   }
 }
 

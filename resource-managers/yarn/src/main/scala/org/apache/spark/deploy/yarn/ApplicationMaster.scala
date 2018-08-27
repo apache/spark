@@ -19,7 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.io.{File, IOException}
 import java.lang.reflect.{InvocationTargetException, Modifier}
-import java.net.{Socket, URI, URL}
+import java.net.{URI, URL}
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{TimeoutException, TimeUnit}
 
@@ -28,6 +28,7 @@ import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.{StringUtils => ComStrUtils}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
@@ -43,6 +44,7 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.AMCredentialRenewer
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -66,6 +68,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
   }
 
   private val securityMgr = new SecurityManager(sparkConf)
+
+  private var metricsSystem: Option[MetricsSystem] = None
 
   // Set system properties for each config entry. This covers two use cases:
   // - The default configuration stored by the SparkHadoopUtil class
@@ -309,6 +313,16 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
           "Uncaught exception: " + StringUtils.stringifyException(e))
+    } finally {
+      try {
+        metricsSystem.foreach { ms =>
+          ms.report()
+          ms.stop()
+        }
+      } catch {
+        case e: Exception =>
+          logWarning("Exception during stopping of the metric system: ", e)
+      }
     }
   }
 
@@ -355,7 +369,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         }
         logInfo(s"Final app status: $finalStatus, exitCode: $exitCode" +
           Option(msg).map(msg => s", (reason: $msg)").getOrElse(""))
-        finalMsg = msg
+        finalMsg = ComStrUtils.abbreviate(msg, sparkConf.get(AM_FINAL_MSG_LIMIT).toInt)
         finished = true
         if (!inShutdown && Thread.currentThread() != reporterThread && reporterThread != null) {
           logDebug("shutting down reporter thread")
@@ -434,6 +448,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
     rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverRef))
 
     allocator.allocateResources()
+    val ms = MetricsSystem.createMetricsSystem("applicationMaster", sparkConf, securityMgr)
+    val prefix = _sparkConf.get(YARN_METRICS_NAMESPACE).getOrElse(appId)
+    ms.registerSource(new ApplicationMasterSource(prefix, allocator))
+    ms.start()
+    metricsSystem = Some(ms)
     reporterThread = launchReporterThread()
   }
 

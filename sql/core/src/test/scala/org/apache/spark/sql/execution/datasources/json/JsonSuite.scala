@@ -31,11 +31,11 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
-import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JsonInferSchema, JSONOptions}
+import org.apache.spark.sql.catalyst.json.JsonInferSchema.compatibleType
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.json.JsonInferSchema.compatibleType
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -47,10 +47,6 @@ class TestFileFilter extends PathFilter {
 
 class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   import testImplicits._
-
-  def testFile(fileName: String): String = {
-    Thread.currentThread().getContextClassLoader.getResource(fileName).toString
-  }
 
   test("Type promotion") {
     def checkTypePromotion(expected: Any, actual: Any) {
@@ -2227,7 +2223,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
   }
 
-
   test("SPARK-23723: specified encoding is not matched to actual encoding") {
     val fileName = "test-data/utf16LE.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
@@ -2493,5 +2488,31 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       }
       assert(exception.getMessage.contains("encoding must not be included in the blacklist"))
     }
+  }
+
+  test("count() for malformed input") {
+    def countForMalformedJSON(expected: Long, input: Seq[String]): Unit = {
+      val schema = new StructType().add("a", StringType)
+      val strings = spark.createDataset(input)
+      val df = spark.read.schema(schema).json(strings)
+
+      assert(df.count() == expected)
+    }
+    def checkCount(expected: Long): Unit = {
+      val validRec = """{"a":"b"}"""
+      val inputs = Seq(
+        Seq("{-}", validRec),
+        Seq(validRec, "?"),
+        Seq("}", validRec),
+        Seq(validRec, """{"a": [1, 2, 3]}"""),
+        Seq("""{"a": {"a": "b"}}""", validRec)
+      )
+      inputs.foreach { input =>
+        countForMalformedJSON(expected, input)
+      }
+    }
+
+    checkCount(2)
+    countForMalformedJSON(0, Seq(""))
   }
 }

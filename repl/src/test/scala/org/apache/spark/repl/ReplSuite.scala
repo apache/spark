@@ -21,6 +21,7 @@ import java.io._
 import java.net.URLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
+import scala.tools.nsc.interpreter.SimpleReader
 
 import org.apache.log4j.{Level, LogManager}
 
@@ -84,6 +85,7 @@ class ReplSuite extends SparkFunSuite {
       settings = new scala.tools.nsc.Settings
       settings.usejavacp.value = true
       org.apache.spark.repl.Main.interp = this
+      in = SimpleReader()
     }
 
     val out = new StringWriter()

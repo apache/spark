@@ -181,6 +181,7 @@ private[spark] class SparkSubmit extends Logging {
     if (args.isStandaloneCluster && args.useRest) {
       try {
         logInfo("Running Spark using the REST application submission protocol.")
+        doRunMain()
       } catch {
         // Fail over to use the legacy submission gateway
         case e: SubmitRestConnectionException =>
@@ -285,8 +286,6 @@ private[spark] class SparkSubmit extends Logging {
       case (STANDALONE, CLUSTER) if args.isR =>
         error("Cluster deploy mode is currently not supported for R " +
           "applications on standalone clusters.")
-      case (KUBERNETES, _) if args.isR =>
-        error("R applications are currently not supported for Kubernetes.")
       case (LOCAL, CLUSTER) =>
         error("Cluster deploy mode is not compatible with master \"local\"")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
@@ -385,7 +384,7 @@ private[spark] class SparkSubmit extends Logging {
       val forceDownloadSchemes = sparkConf.get(FORCE_DOWNLOAD_SCHEMES)
 
       def shouldDownload(scheme: String): Boolean = {
-        forceDownloadSchemes.contains(scheme) ||
+        forceDownloadSchemes.contains("*") || forceDownloadSchemes.contains(scheme) ||
           Try { FileSystem.getFileSystemClass(scheme, hadoopConf) }.isFailure
       }
 
@@ -578,7 +577,8 @@ private[spark] class SparkSubmit extends Logging {
     }
     // Add the main application jar and any added jars to classpath in case YARN client
     // requires these jars.
-    // This assumes both primaryResource and user jars are local jars, otherwise it will not be
+    // This assumes both primaryResource and user jars are local jars, or already downloaded
+    // to local by configuring "spark.yarn.dist.forceDownloadSchemes", otherwise it will not be
     // added to the classpath of YARN client.
     if (isYarnCluster) {
       if (isUserJar(args.primaryResource)) {
@@ -698,10 +698,16 @@ private[spark] class SparkSubmit extends Logging {
           if (args.pyFiles != null) {
             childArgs ++= Array("--other-py-files", args.pyFiles)
           }
-        } else {
+        } else if (args.isR) {
+          childArgs ++= Array("--primary-r-file", args.primaryResource)
+          childArgs ++= Array("--main-class", "org.apache.spark.deploy.RRunner")
+        }
+        else {
           childArgs ++= Array("--primary-java-resource", args.primaryResource)
           childArgs ++= Array("--main-class", args.mainClass)
         }
+      } else {
+        childArgs ++= Array("--main-class", args.mainClass)
       }
       if (args.childArgs != null) {
         args.childArgs.foreach { arg =>

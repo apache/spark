@@ -45,7 +45,8 @@ import org.apache.spark.util._
 private[spark] class PythonRDD(
     parent: RDD[_],
     func: PythonFunction,
-    preservePartitoning: Boolean)
+    preservePartitoning: Boolean,
+    isFromBarrier: Boolean = false)
   extends RDD[Array[Byte]](parent) {
 
   val bufferSize = conf.getInt("spark.buffer.size", 65536)
@@ -63,6 +64,9 @@ private[spark] class PythonRDD(
     val runner = PythonRunner(func, bufferSize, reuseWorker)
     runner.compute(firstParent.iterator(split, context), split.index, context)
   }
+
+  @transient protected lazy override val isBarrier_ : Boolean =
+    isFromBarrier || dependencies.exists(_.rdd.isBarrier())
 }
 
 /**
@@ -586,8 +590,9 @@ class BytesToString extends org.apache.spark.api.java.function.Function[Array[By
  */
 private[spark] class PythonAccumulatorV2(
     @transient private val serverHost: String,
-    private val serverPort: Int)
-  extends CollectionAccumulator[Array[Byte]] {
+    private val serverPort: Int,
+    private val secretToken: String)
+  extends CollectionAccumulator[Array[Byte]] with Logging{
 
   Utils.checkHost(serverHost)
 
@@ -602,17 +607,22 @@ private[spark] class PythonAccumulatorV2(
   private def openSocket(): Socket = synchronized {
     if (socket == null || socket.isClosed) {
       socket = new Socket(serverHost, serverPort)
+      logInfo(s"Connected to AccumulatorServer at host: $serverHost port: $serverPort")
+      // send the secret just for the initial authentication when opening a new connection
+      socket.getOutputStream.write(secretToken.getBytes(StandardCharsets.UTF_8))
     }
     socket
   }
 
   // Need to override so the types match with PythonFunction
-  override def copyAndReset(): PythonAccumulatorV2 = new PythonAccumulatorV2(serverHost, serverPort)
+  override def copyAndReset(): PythonAccumulatorV2 = {
+    new PythonAccumulatorV2(serverHost, serverPort, secretToken)
+  }
 
   override def merge(other: AccumulatorV2[Array[Byte], JList[Array[Byte]]]): Unit = synchronized {
     val otherPythonAccumulator = other.asInstanceOf[PythonAccumulatorV2]
     // This conditional isn't strictly speaking needed - merging only currently happens on the
-    // driver program - but that isn't gauranteed so incase this changes.
+    // driver program - but that isn't guaranteed so incase this changes.
     if (serverHost == null) {
       // We are on the worker
       super.merge(otherPythonAccumulator)
