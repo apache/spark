@@ -641,6 +641,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val SORT_BEFORE_REPARTITION =
+    SQLConfigBuilder("spark.sql.execution.sortBeforeRepartition")
+      .internal()
+      .doc("When perform a repartition following a shuffle, the output row ordering would be " +
+        "nondeterministic. If some downstream stages fail and some tasks of the repartition " +
+        "stage retry, these tasks may generate different data, and that can lead to correctness " +
+        "issues. Turn on this config to insert a local sort before actually doing repartition " +
+        "to generate consistent repartition results. The performance of repartition() may go " +
+        "down since we insert extra local sort before it.")
+      .booleanConf
+      .createWithDefault(true)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -757,6 +769,8 @@ class SQLConf extends Serializable with Logging {
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
+
+  def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

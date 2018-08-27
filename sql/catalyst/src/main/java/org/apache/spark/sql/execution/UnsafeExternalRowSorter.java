@@ -51,26 +51,55 @@ public final class UnsafeExternalRowSorter {
   private final PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
 
+  public static interface RecordComparatorSupplier {
+    public RecordComparator get();
+  }
+
   public abstract static class PrefixComputer {
 
     public static class Prefix {
       /** Key prefix value, or the null prefix value if isNull = true. **/
-      long value;
+      public long value;
 
       /** Whether the key is null. */
-      boolean isNull;
+      public boolean isNull;
     }
 
     /**
      * Computes prefix for the given row. For efficiency, the returned object may be reused in
      * further calls to a given PrefixComputer.
      */
-    abstract Prefix computePrefix(InternalRow row);
+    public abstract Prefix computePrefix(InternalRow row);
   }
 
-  public UnsafeExternalRowSorter(
+  public static UnsafeExternalRowSorter createWithRecordComparator(
       StructType schema,
-      Ordering<InternalRow> ordering,
+      RecordComparatorSupplier recordComparatorSupplier,
+      PrefixComparator prefixComparator,
+      PrefixComputer prefixComputer,
+      long pageSizeBytes,
+      boolean canUseRadixSort) throws IOException {
+    return new UnsafeExternalRowSorter(schema, recordComparatorSupplier, prefixComparator,
+      prefixComputer, pageSizeBytes, canUseRadixSort);
+  }
+
+  public static UnsafeExternalRowSorter create(
+      final StructType schema,
+      final Ordering<InternalRow> ordering,
+      PrefixComparator prefixComparator,
+      PrefixComputer prefixComputer,
+      long pageSizeBytes,
+      boolean canUseRadixSort) throws IOException {
+    RecordComparatorSupplier recordComparatorSupplier = new RecordComparatorSupplier() {
+        public RecordComparator get() { return new RowComparator(ordering, schema.length()); }
+      };
+    return new UnsafeExternalRowSorter(schema, recordComparatorSupplier, prefixComparator,
+      prefixComputer, pageSizeBytes, canUseRadixSort);
+  }
+
+  private UnsafeExternalRowSorter(
+      StructType schema,
+      RecordComparatorSupplier recordComparatorSupplier,
       PrefixComparator prefixComparator,
       PrefixComputer prefixComputer,
       long pageSizeBytes,
@@ -84,7 +113,7 @@ public final class UnsafeExternalRowSorter {
       sparkEnv.blockManager(),
       sparkEnv.serializerManager(),
       taskContext,
-      new RowComparator(ordering, schema.length()),
+      recordComparatorSupplier.get(),
       prefixComparator,
       sparkEnv.conf().getInt("spark.shuffle.sort.initialBufferSize",
                              DEFAULT_INITIAL_SORT_BUFFER_SIZE),
@@ -207,8 +236,15 @@ public final class UnsafeExternalRowSorter {
     }
 
     @Override
-    public int compare(Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
-      // TODO: Why are the sizes -1?
+    public int compare(
+        Object baseObj1,
+        long baseOff1,
+        int baseLen1,
+        Object baseObj2,
+        long baseOff2,
+        int baseLen2) {
+      // Note that since ordering doesn't need the total length of the record, we just pass -1
+      // into the row.
       row1.pointTo(baseObj1, baseOff1, -1);
       row2.pointTo(baseObj2, baseOff2, -1);
       return ordering.compare(row1, row2);
