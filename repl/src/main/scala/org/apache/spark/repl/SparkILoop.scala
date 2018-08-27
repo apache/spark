@@ -148,9 +148,13 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
    */
   private def runClosure(body: () => Boolean): Boolean = {
     if (isScala2_11) {
+      val loader = Utils.classForName("scala.reflect.internal.util.ScalaClassLoader$")
+        .getDeclaredField("MODULE$")
+        .get(null)
+
       Utils.classForName("scala.reflect.internal.util.ScalaClassLoader$")
         .getDeclaredMethod("savingContextLoader", classOf[() => Boolean])
-        .invoke(null, body)
+        .invoke(loader, body)
         .asInstanceOf[Boolean]
     } else {
       body.apply()
