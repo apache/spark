@@ -357,7 +357,7 @@ NULL
 
 
 -- !query 38
-select to_json(array('1','2','3'))
+select to_json(array('1', '2', '3'))
 -- !query 38 schema
 struct<structstojson(array(1, 2, 3)):string>
 -- !query 38 output
@@ -365,7 +365,7 @@ struct<structstojson(array(1, 2, 3)):string>
 
 
 -- !query 39
-select to_json(array(array(1,2,3),array(4)))
+select to_json(array(array(1, 2, 3), array(4)))
 -- !query 39 schema
 struct<structstojson(array(array(1, 2, 3), array(4))):string>
 -- !query 39 output
