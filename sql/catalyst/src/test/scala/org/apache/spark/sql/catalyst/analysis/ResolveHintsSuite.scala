@@ -163,5 +163,11 @@ class ResolveHintsSuite extends AnalysisTest {
       Join(ResolvedHint(testRelation, HintInfo(broadcast = true)),
         ResolvedHint(testRelation2, HintInfo(broadcast = true)), Inner, None),
       caseSensitive = false)
+
+    checkAnalysis(
+      UnresolvedHint("MAPJOIN", Seq("default.TaBlE", "default.table2", "DEfault.TaBlE2"),
+        table("TaBlE").join(table("TaBlE2"))),
+      Join(ResolvedHint(testRelation, HintInfo(broadcast = true)), testRelation2, Inner, None),
+      caseSensitive = true)
   }
 }

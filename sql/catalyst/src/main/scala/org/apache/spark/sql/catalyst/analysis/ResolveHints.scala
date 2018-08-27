@@ -62,15 +62,11 @@ object ResolveHints {
       }
     }
 
-    private def formatDatabaseName(name: String): String = {
-      if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
-    }
-
     private def matchedTableIdentifier(
         nameParts: Seq[String],
         tableIdent: IdentifierWithDatabase): Boolean = {
       tableIdent.database match {
-        case Some(db) if catalog.globalTempViewManager.database == formatDatabaseName(db) =>
+        case Some(db) if resolver(catalog.globalTempViewManager.database, db) =>
           val identifierList = db :: tableIdent.identifier :: Nil
           namePartsWithDatabase(nameParts, catalog.globalTempViewManager.database)
             .corresponds(identifierList)(resolver)
