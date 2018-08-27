@@ -3388,15 +3388,14 @@ class SQLTests(ReusedSQLTestCase):
             datasource_df = self.spark.read \
                 .format("org.apache.spark.sql.sources.SimpleScanSource") \
                 .option('from', 0).option('to', 1).load()
-            # TODO: Enable data source v2 after SPARK-25213 is fixed
-            # datasource_v2_df = self.spark.read \
-            #    .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
-            #    .load()
+            datasource_v2_df = self.spark.read \
+               .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+               .load()
 
             filter1 = udf(lambda: False, 'boolean')()
             filter2 = udf(lambda x: False, 'boolean')(lit(1))
 
-            for df in [filesource_df, datasource_df]:
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
                 for f in [filter1, filter2]:
                     result = df.filter(f)
                     self.assertEquals(0, result.count())
@@ -5309,7 +5308,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
     # SPARK-24721
     @unittest.skipIf(not _test_compiled, _test_not_compiled_message)
     def test_datasource_with_udf_filter_lit_input(self):
-        # Same as SQLTests.test_datasource_with_udf_filter_lit_input, but with Pandas UDF
+        # Same as SQLTests.test_datasource_with_udf_filter_lit_input, but with Pantestdas UDF
         # This needs to a separate test because Arrow dependency is optional
         import pandas as pd
         import numpy as np
@@ -5323,14 +5322,13 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             datasource_df = self.spark.read \
                 .format("org.apache.spark.sql.sources.SimpleScanSource") \
                 .option('from', 0).option('to', 1).load()
-            # TODO: Enable data source v2 after SPARK-25213 is fixed
-            # datasource_v2_df = self.spark.read \
-            #    .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
-            #    .load()
+            datasource_v2_df = self.spark.read \
+               .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+               .load()
 
             f = pandas_udf(lambda x: pd.Series(np.repeat(False, len(x))), 'boolean')(lit(1))
 
-            for df in [filesource_df, datasource_df]:
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
                 result = df.filter(f)
                 self.assertEquals(0, result.count())
 
