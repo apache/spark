@@ -21,33 +21,39 @@ import java.util.Optional;
 
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.SaveMode;
-import org.apache.spark.sql.sources.v2.writer.DataSourceWriter;
+import org.apache.spark.sql.sources.v2.writer.BatchWriteSupport;
 import org.apache.spark.sql.types.StructType;
 
 /**
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
- * provide data writing ability and save the data to the data source.
+ * provide data writing ability for batch processing.
+ *
+ * This interface is used to create {@link BatchWriteSupport} instances when end users run
+ * {@code Dataset.write.format(...).option(...).save()}.
  */
 @InterfaceStability.Evolving
-public interface WriteSupport extends DataSourceV2 {
+public interface BatchWriteSupportProvider extends DataSourceV2 {
 
   /**
-   * Creates an optional {@link DataSourceWriter} to save the data to this data source. Data
-   * sources can return None if there is no writing needed to be done according to the save mode.
+   * Creates an optional {@link BatchWriteSupport} instance to save the data to this data source,
+   * which is called by Spark at the beginning of each batch query.
    *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
-   * submitted.
+   * Data sources can return None if there is no writing needed to be done according to the save
+   * mode.
    *
-   * @param writeUUID A unique string for the writing job. It's possible that there are many writing
-   *                  jobs running at the same time, and the returned {@link DataSourceWriter} can
-   *                  use this job id to distinguish itself from other jobs.
+   * @param queryId A unique string for the writing query. It's possible that there are many
+   *                writing queries running at the same time, and the returned
+   *                {@link BatchWriteSupport} can use this id to distinguish itself from others.
    * @param schema the schema of the data to be written.
    * @param mode the save mode which determines what to do when the data are already in this data
    *             source, please refer to {@link SaveMode} for more details.
    * @param options the options for the returned data source writer, which is an immutable
    *                case-insensitive string-to-string map.
-   * @return a writer to append data to this data source
+   * @return a write support to write data to this data source.
    */
-  Optional<DataSourceWriter> createWriter(
-      String writeUUID, StructType schema, SaveMode mode, DataSourceOptions options);
+  Optional<BatchWriteSupport> createBatchWriteSupport(
+      String queryId,
+      StructType schema,
+      SaveMode mode,
+      DataSourceOptions options);
 }

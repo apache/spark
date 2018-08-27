@@ -18,27 +18,36 @@
 package org.apache.spark.sql.sources.v2.writer.streaming;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.writer.DataSourceWriter;
 import org.apache.spark.sql.sources.v2.writer.DataWriter;
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage;
 
 /**
- * A {@link DataSourceWriter} for use with structured streaming.
+ * An interface that defines how to write the data to data source for streaming processing.
  *
  * Streaming queries are divided into intervals of data called epochs, with a monotonically
  * increasing numeric ID. This writer handles commits and aborts for each successive epoch.
  */
 @InterfaceStability.Evolving
-public interface StreamWriter extends DataSourceWriter {
+public interface StreamingWriteSupport {
+
+  /**
+   * Creates a writer factory which will be serialized and sent to executors.
+   *
+   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
+   * submitted.
+   */
+  StreamingDataWriterFactory createStreamingWriterFactory();
+
   /**
    * Commits this writing job for the specified epoch with a list of commit messages. The commit
    * messages are collected from successful data writers and are produced by
    * {@link DataWriter#commit()}.
    *
    * If this method fails (by throwing an exception), this writing job is considered to have been
-   * failed, and the execution engine will attempt to call {@link #abort(WriterCommitMessage[])}.
+   * failed, and the execution engine will attempt to call
+   * {@link #abort(long, WriterCommitMessage[])}.
    *
-   * The execution engine may call commit() multiple times for the same epoch in some circumstances.
+   * The execution engine may call `commit` multiple times for the same epoch in some circumstances.
    * To support exactly-once data semantics, implementations must ensure that multiple commits for
    * the same epoch are idempotent.
    */
@@ -46,7 +55,8 @@ public interface StreamWriter extends DataSourceWriter {
 
   /**
    * Aborts this writing job because some data writers are failed and keep failing when retried, or
-   * the Spark job fails with some unknown reasons, or {@link #commit(WriterCommitMessage[])} fails.
+   * the Spark job fails with some unknown reasons, or {@link #commit(long, WriterCommitMessage[])}
+   * fails.
    *
    * If this method fails (by throwing an exception), the underlying data source may require manual
    * cleanup.
@@ -58,14 +68,4 @@ public interface StreamWriter extends DataSourceWriter {
    * clean up the data left by data writers.
    */
   void abort(long epochId, WriterCommitMessage[] messages);
-
-  default void commit(WriterCommitMessage[] messages) {
-    throw new UnsupportedOperationException(
-        "Commit without epoch should not be called with StreamWriter");
-  }
-
-  default void abort(WriterCommitMessage[] messages) {
-    throw new UnsupportedOperationException(
-        "Abort without epoch should not be called with StreamWriter");
-  }
 }

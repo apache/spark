@@ -40,7 +40,7 @@ except ImportError:
     JIRA_IMPORTED = False
 
 if sys.version < '3':
-    input = raw_input
+    input = raw_input  # noqa
 
 # Location of your Spark git development area
 SPARK_HOME = os.environ.get("SPARK_HOME", os.getcwd())

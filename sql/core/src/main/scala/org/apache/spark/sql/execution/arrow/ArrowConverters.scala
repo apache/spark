@@ -201,7 +201,7 @@ private[sql] object ArrowConverters {
       val context = TaskContext.get()
       ArrowConverters.fromBatchIterator(iter, schema, timeZoneId, context)
     }
-    sqlContext.internalCreateDataFrame(rdd, schema)
+    sqlContext.internalCreateDataFrame(rdd.setName("arrow"), schema)
   }
 
   /**

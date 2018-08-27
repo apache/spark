@@ -61,10 +61,12 @@ class KafkaContinuousSourceTopicDeletionSuite extends KafkaContinuousTest {
         eventually(timeout(streamingTimeout)) {
           assert(
             query.lastExecution.logical.collectFirst {
-              case StreamingDataSourceV2Relation(_, _, _, r: KafkaContinuousReader) => r
-            }.exists { r =>
+              case r: StreamingDataSourceV2Relation
+                  if r.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
+                r.scanConfigBuilder.build().asInstanceOf[KafkaContinuousScanConfig]
+            }.exists { config =>
               // Ensure the new topic is present and the old topic is gone.
-              r.knownPartitions.exists(_.topic == topic2)
+              config.knownPartitions.exists(_.topic == topic2)
             },
             s"query never reconfigured to new topic $topic2")
         }
