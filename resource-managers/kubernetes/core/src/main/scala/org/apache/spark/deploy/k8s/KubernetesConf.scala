@@ -91,6 +91,9 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
       }
   }
 
+  def workerDecomissioning(): Boolean =
+    sparkConf.get(org.apache.spark.internal.config.WORKER_DECOMMISSION_ENABLED)
+
   def nodeSelector(): Map[String, String] =
     KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_NODE_SELECTOR_PREFIX)
 
