@@ -185,6 +185,36 @@ To use a secret through an environment variable use the following options to the
 --conf spark.kubernetes.executor.secretKeyRef.ENV_NAME=name:key
 ```
 
+## Using Kubernetes Volumes
+
+Starting with Spark 2.4.0, users can mount the following types of Kubernetes [volumes](https://kubernetes.io/docs/concepts/storage/volumes/) into the driver and executor pods:
+* [hostPath](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath): mounts a file or directory from the host node’s filesystem into a pod.
+* [emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir): an initially empty volume created when a pod is assigned to a node.
+* [persistentVolumeClaim](https://kubernetes.io/docs/concepts/storage/volumes/#persistentvolumeclaim): used to mount a `PersistentVolume` into a pod.
+
+To mount a volume of any of the types above into the driver pod, use the following configuration property:
+
+```
+--conf spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.path=<mount path>
+--conf spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.readOnly=<true|false>
+``` 
+
+Specifically, `VolumeType` can be one of the following values: `hostPath`, `emptyDir`, and `persistentVolumeClaim`. `VolumeName` is the name you want to use for the volume under the `volumes` field in the pod specification.
+
+Each supported type of volumes may have some specific configuration options, which can be specified using configuration properties of the following form:
+
+```
+spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].options.[OptionName]=<value>
+``` 
+
+For example, the claim name of a `persistentVolumeClaim` with volume name `checkpointpvc` can be specified using the following property:
+
+```
+spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.options.claimName=check-point-pvc-claim
+```
+
+The configuration properties for mounting volumes into the executor pods use prefix `spark.kubernetes.executor.` instead of `spark.kubernetes.driver.`. For a complete list of available options for each supported type of volumes, please refer to the [Spark Properties](#spark-properties) section below. 
+
 ## Introspection and Debugging
 
 These are the different ways in which you can investigate a running/completed Spark application, monitor progress, and
@@ -299,20 +329,14 @@ RBAC authorization and how to configure Kubernetes service accounts for pods, pl
 
 ## Future Work
 
-There are several Spark on Kubernetes features that are currently being incubated in a fork -
-[apache-spark-on-k8s/spark](https://github.com/apache-spark-on-k8s/spark), which are expected to eventually make it into
-future versions of the spark-kubernetes integration.
+There are several Spark on Kubernetes features that are currently being worked on or planned to be worked on. Those features are expected to eventually make it into future versions of the spark-kubernetes integration.
 
 Some of these include:
 
-* R
-* Dynamic Executor Scaling
+* Dynamic Resource Allocation and External Shuffle Service
 * Local File Dependency Management
 * Spark Application Management
 * Job Queues and Resource Management
-
-You can refer to the [documentation](https://apache-spark-on-k8s.github.io/userdocs/) if you want to try these features
-and provide feedback to the development team.
 
 # Configuration
 
