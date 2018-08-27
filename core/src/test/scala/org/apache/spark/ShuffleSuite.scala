@@ -208,7 +208,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val pairs2: RDD[MutablePair[Int, String]] = sc.parallelize(data2, 2)
     val results = new SubtractedRDD(pairs1, pairs2, new HashPartitioner(2)).collect()
     results should have length (1)
-    // substracted rdd return results as Tuple2
+    // subtracted rdd return results as Tuple2
     results(0) should be ((3, 33))
   }
 
@@ -391,6 +391,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     assert(mapOutput2.isDefined)
     assert(mapOutput1.get.location === mapOutput2.get.location)
     assert(mapOutput1.get.getSizeForBlock(0) === mapOutput1.get.getSizeForBlock(0))
+    assert(mapOutput1.get.numberOfOutput === mapOutput2.get.numberOfOutput)
 
     // register one of the map outputs -- doesn't matter which one
     mapOutput1.foreach { case mapStatus =>

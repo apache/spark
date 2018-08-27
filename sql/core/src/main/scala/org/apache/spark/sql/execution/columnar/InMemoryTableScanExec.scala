@@ -97,7 +97,7 @@ case class InMemoryTableScanExec(
         columnarBatch.column(i).asInstanceOf[WritableColumnVector],
         columnarBatchSchema.fields(i).dataType, rowCount)
     }
-    taskContext.foreach(_.addTaskCompletionListener(_ => columnarBatch.close()))
+    taskContext.foreach(_.addTaskCompletionListener[Unit](_ => columnarBatch.close()))
     columnarBatch
   }
 

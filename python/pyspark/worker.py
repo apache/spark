@@ -28,10 +28,10 @@ import traceback
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.java_gateway import do_server_auth
-from pyspark.taskcontext import TaskContext
+from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.files import SparkFiles
 from pyspark.rdd import PythonEvalType
-from pyspark.serializers import write_with_length, write_int, read_long, \
+from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
     BatchedSerializer, ArrowStreamPandasSerializer
 from pyspark.sql.types import to_arrow_type
@@ -259,8 +259,18 @@ def main(infile, outfile):
                              "PYSPARK_DRIVER_PYTHON are correctly set.") %
                             ("%d.%d" % sys.version_info[:2], version))
 
+        # read inputs only for a barrier task
+        isBarrier = read_bool(infile)
+        boundPort = read_int(infile)
+        secret = UTF8Deserializer().loads(infile)
         # initialize global state
-        taskContext = TaskContext._getOrCreate()
+        taskContext = None
+        if isBarrier:
+            taskContext = BarrierTaskContext._getOrCreate()
+            BarrierTaskContext._initialize(boundPort, secret)
+        else:
+            taskContext = TaskContext._getOrCreate()
+        # read inputs for TaskContext info
         taskContext._stageId = read_int(infile)
         taskContext._partitionId = read_int(infile)
         taskContext._attemptNumber = read_int(infile)

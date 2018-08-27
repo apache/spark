@@ -113,8 +113,10 @@ private[avro] class AvroFileFormat extends FileFormat
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
     val parsedOptions = new AvroOptions(options, spark.sessionState.newHadoopConf())
-    val outputAvroSchema = SchemaConverters.toAvroType(
-      dataSchema, nullable = false, parsedOptions.recordName, parsedOptions.recordNamespace)
+    val outputAvroSchema: Schema = parsedOptions.schema
+      .map(new Schema.Parser().parse)
+      .getOrElse(SchemaConverters.toAvroType(dataSchema, nullable = false,
+        parsedOptions.recordName, parsedOptions.recordNamespace))
 
     AvroJob.setOutputKeySchema(job, outputAvroSchema)
 
@@ -179,7 +181,7 @@ private[avro] class AvroFileFormat extends FileFormat
         // Ensure that the reader is closed even if the task fails or doesn't consume the entire
         // iterator of records.
         Option(TaskContext.get()).foreach { taskContext =>
-          taskContext.addTaskCompletionListener { _ =>
+          taskContext.addTaskCompletionListener[Unit] { _ =>
             reader.close()
           }
         }

@@ -2035,6 +2035,25 @@ def array_distinct(col):
 
 @ignore_unicode_prefix
 @since(2.4)
+def array_intersect(col1, col2):
+    """
+    Collection function: returns an array of the elements in the intersection of col1 and col2,
+    without duplicates.
+
+    :param col1: name of column containing array
+    :param col2: name of column containing array
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
+    >>> df.select(array_intersect(df.c1, df.c2)).collect()
+    [Row(array_intersect(c1, c2)=[u'a', u'c'])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_intersect(_to_java_column(col1), _to_java_column(col2)))
+
+
+@ignore_unicode_prefix
+@since(2.4)
 def array_union(col1, col2):
     """
     Collection function: returns an array of the elements in the union of col1 and col2,
@@ -2050,6 +2069,25 @@ def array_union(col1, col2):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_union(_to_java_column(col1), _to_java_column(col2)))
+
+
+@ignore_unicode_prefix
+@since(2.4)
+def array_except(col1, col2):
+    """
+    Collection function: returns an array of the elements in col1 but not in col2,
+    without duplicates.
+
+    :param col1: name of column containing array
+    :param col2: name of column containing array
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
+    >>> df.select(array_except(df.c1, df.c2)).collect()
+    [Row(array_except(c1, c2)=[u'b'])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_except(_to_java_column(col1), _to_java_column(col2)))
 
 
 @since(1.4)
@@ -2203,7 +2241,7 @@ def json_tuple(col, *fields):
 def from_json(col, schema, options={}):
     """
     Parses a column containing a JSON string into a :class:`MapType` with :class:`StringType`
-    as keys type, :class:`StructType` or :class:`ArrayType` of :class:`StructType`\\s with
+    as keys type, :class:`StructType` or :class:`ArrayType` with
     the specified schema. Returns `null`, in the case of an unparseable string.
 
     :param col: string column in json format
@@ -2231,6 +2269,11 @@ def from_json(col, schema, options={}):
     >>> schema = schema_of_json(lit('''{"a": 0}'''))
     >>> df.select(from_json(df.value, schema).alias("json")).collect()
     [Row(json=Row(a=1))]
+    >>> data = [(1, '''[1, 2, 3]''')]
+    >>> schema = ArrayType(IntegerType())
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=[1, 2, 3])]
     """
 
     sc = SparkContext._active_spark_context
@@ -2888,6 +2931,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
 __all__ = [k for k, v in globals().items()
            if not k.startswith('_') and k[0].islower() and callable(v) and k not in blacklist]
+__all__ += ["PandasUDFType"]
 __all__.sort()
 
 

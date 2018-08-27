@@ -328,10 +328,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             "Streaming aggregation doesn't support group aggregate pandas UDF")
         }
 
+        val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
+
         aggregate.AggUtils.planStreamingAggregation(
           namedGroupingExpressions,
           aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
           rewrittenResultExpressions,
+          stateVersion,
           planLater(child))
 
       case _ => Nil
@@ -535,14 +538,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Intersect(left, right, true) =>
         throw new IllegalStateException(
           "logical intersect operator should have been replaced by union, aggregate" +
-            "and generate operators in the optimizer")
+            " and generate operators in the optimizer")
       case logical.Except(left, right, false) =>
         throw new IllegalStateException(
           "logical except operator should have been replaced by anti-join in the optimizer")
       case logical.Except(left, right, true) =>
         throw new IllegalStateException(
           "logical except (all) operator should have been replaced by union, aggregate" +
-            "and generate operators in the optimizer")
+            " and generate operators in the optimizer")
 
       case logical.DeserializeToObject(deserializer, objAttr, child) =>
         execution.DeserializeToObjectExec(deserializer, objAttr, planLater(child)) :: Nil

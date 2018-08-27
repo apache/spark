@@ -82,6 +82,19 @@ object SQLConf {
   /** See [[get]] for more information. */
   def getFallbackConf: SQLConf = fallbackConf.get()
 
+  private lazy val existingConf = new ThreadLocal[SQLConf] {
+    override def initialValue: SQLConf = null
+  }
+
+  def withExistingConf[T](conf: SQLConf)(f: => T): T = {
+    existingConf.set(conf)
+    try {
+      f
+    } finally {
+      existingConf.remove()
+    }
+  }
+
   /**
    * Defines a getter that returns the SQLConf within scope.
    * See [[get]] for more information.
@@ -116,16 +129,24 @@ object SQLConf {
     if (TaskContext.get != null) {
       new ReadOnlySQLConf(TaskContext.get())
     } else {
-      if (Utils.isTesting && SparkContext.getActive.isDefined) {
+      val isSchedulerEventLoopThread = SparkContext.getActive
+        .map(_.dagScheduler.eventProcessLoop.eventThread)
+        .exists(_.getId == Thread.currentThread().getId)
+      if (isSchedulerEventLoopThread) {
         // DAGScheduler event loop thread does not have an active SparkSession, the `confGetter`
-        // will return `fallbackConf` which is unexpected. Here we prevent it from happening.
-        val schedulerEventLoopThread =
-          SparkContext.getActive.get.dagScheduler.eventProcessLoop.eventThread
-        if (schedulerEventLoopThread.getId == Thread.currentThread().getId) {
+        // will return `fallbackConf` which is unexpected. Here we require the caller to get the
+        // conf within `withExistingConf`, otherwise fail the query.
+        val conf = existingConf.get()
+        if (conf != null) {
+          conf
+        } else if (Utils.isTesting) {
           throw new RuntimeException("Cannot get SQLConf inside scheduler event loop thread.")
+        } else {
+          confGetter.get()()
         }
+      } else {
+        confGetter.get()()
       }
-      confGetter.get()()
     }
   }
 
@@ -213,6 +234,13 @@ object SQLConf {
       "longer execution times as more jobs will be run")
     .intConf
     .createWithDefault(4)
+
+  val LIMIT_FLAT_GLOBAL_LIMIT = buildConf("spark.sql.limit.flatGlobalLimit")
+    .internal()
+    .doc("During global limit, try to evenly distribute limited rows across data " +
+      "partitions. If disabled, scanning data partitions sequentially until reaching limit number.")
+    .booleanConf
+    .createWithDefault(true)
 
   val ADVANCED_PARTITION_PREDICATE_PUSHDOWN =
     buildConf("spark.sql.hive.advancedPartitionPredicatePushdown.enabled")
@@ -370,7 +398,7 @@ object SQLConf {
       "`parquet.compression` is specified in the table-specific options/properties, the " +
       "precedence would be `compression`, `parquet.compression`, " +
       "`spark.sql.parquet.compression.codec`. Acceptable values include: none, uncompressed, " +
-      "snappy, gzip, lzo.")
+      "snappy, gzip, lzo, brotli, lz4, zstd.")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("none", "uncompressed", "snappy", "gzip", "lzo", "lz4", "brotli", "zstd"))
@@ -881,6 +909,16 @@ object SQLConf {
     .intConf
     .createWithDefault(2)
 
+  val STREAMING_AGGREGATION_STATE_FORMAT_VERSION =
+    buildConf("spark.sql.streaming.aggregation.stateFormatVersion")
+      .internal()
+      .doc("State format version used by streaming aggregation operations in a streaming query. " +
+        "State between versions are tend to be incompatible, so state format version shouldn't " +
+        "be modified after running.")
+      .intConf
+      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
+      .createWithDefault(2)
+
   val UNSUPPORTED_OPERATION_CHECK_ENABLED =
     buildConf("spark.sql.streaming.unsupportedOperationCheck")
       .internal()
@@ -1364,7 +1402,7 @@ object SQLConf {
         "mode to keep the same behavior of Spark prior to 2.3. Note that this config doesn't " +
         "affect Hive serde tables, as they are always overwritten with dynamic mode. This can " +
         "also be set as an output option for a data source using key partitionOverwriteMode " +
-        "(which takes precendence over this setting), e.g. " +
+        "(which takes precedence over this setting), e.g. " +
         "dataframe.write.option(\"partitionOverwriteMode\", \"dynamic\").save(path)."
       )
       .stringConf
@@ -1381,8 +1419,18 @@ object SQLConf {
         "issues. Turn on this config to insert a local sort before actually doing repartition " +
         "to generate consistent repartition results. The performance of repartition() may go " +
         "down since we insert extra local sort before it.")
+        .booleanConf
+        .createWithDefault(true)
+
+  val NESTED_SCHEMA_PRUNING_ENABLED =
+    buildConf("spark.sql.nestedSchemaPruning.enabled")
+      .internal()
+      .doc("Prune nested fields from a logical relation's output which are unnecessary in " +
+        "satisfying a query. This optimization allows columnar file format readers to avoid " +
+        "reading unnecessary nested column data. Currently Parquet is the only data source that " +
+        "implements this optimization.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
@@ -1437,6 +1485,17 @@ object SQLConf {
     .intConf
     .createWithDefault(20)
 
+  val FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT =
+    buildConf("spark.sql.codegen.aggregate.fastHashMap.capacityBit")
+      .internal()
+      .doc("Capacity for the max number of rows to be held in memory " +
+        "by the fast hash aggregate product operator. The bit is not for actual value, " +
+        "but the actual numBuckets is determined by loadFactor " +
+        "(e.g: default bit value 16 , the actual numBuckets is ((1 << 16) / 0.5).")
+      .intConf
+      .checkValue(bit => bit >= 10 && bit <= 30, "The bit value must be in [10, 30].")
+      .createWithDefault(16)
+
   val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
     .doc("Compression codec used in writing of AVRO files. Supported codecs: " +
       "uncompressed, deflate, snappy, bzip2 and xz. Default codec is snappy.")
@@ -1451,6 +1510,32 @@ object SQLConf {
     .intConf
     .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
     .createWithDefault(Deflater.DEFAULT_COMPRESSION)
+
+  val LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED =
+    buildConf("spark.sql.legacy.replaceDatabricksSparkAvro.enabled")
+      .doc("If it is set to true, the data source provider com.databricks.spark.avro is mapped " +
+        "to the built-in but external Avro data source module for backward compatibility.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val LEGACY_SETOPS_PRECEDENCE_ENABLED =
+    buildConf("spark.sql.legacy.setopsPrecedence.enabled")
+      .internal()
+      .doc("When set to true and the order of evaluation is not specified by parentheses, the " +
+        "set operations are performed from left to right as they appear in the query. When set " +
+        "to false and order of evaluation is not specified by parentheses, INTERSECT operations " +
+        "are performed before any UNION, EXCEPT and MINUS operations.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
+    buildConf("spark.sql.parallelFileListingInStatsComputation.enabled")
+      .internal()
+      .doc("When true, SQL commands use parallel file listing, " +
+        "as opposed to single thread listing." +
+        "This usually speeds up commands that need to list many directories.")
+      .booleanConf
+      .createWithDefault(true)
 }
 
 /**
@@ -1599,6 +1684,8 @@ class SQLConf extends Serializable with Logging {
 
   def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
 
+  def codegenComments: Boolean = getConf(StaticSQLConf.CODEGEN_COMMENTS)
+
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
   def hugeMethodLimit: Int = getConf(WHOLESTAGE_HUGE_METHOD_LIMIT)
@@ -1627,6 +1714,8 @@ class SQLConf extends Serializable with Logging {
 
   def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
 
+  def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
+
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
    * identifiers are equal.
@@ -1645,6 +1734,8 @@ class SQLConf extends Serializable with Logging {
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
   def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
+
+  def limitFlatGlobalLimit: Boolean = getConf(LIMIT_FLAT_GLOBAL_LIMIT)
 
   def advancedPartitionPredicatePushdownEnabled: Boolean =
     getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
@@ -1827,6 +1918,8 @@ class SQLConf extends Serializable with Logging {
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
 
+  def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
+
   def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 
   def legacySizeOfNull: Boolean = getConf(SQLConf.LEGACY_SIZE_OF_NULL)
@@ -1840,6 +1933,14 @@ class SQLConf extends Serializable with Logging {
   def avroCompressionCodec: String = getConf(SQLConf.AVRO_COMPRESSION_CODEC)
 
   def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
+
+  def replaceDatabricksSparkAvroEnabled: Boolean =
+    getConf(SQLConf.LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED)
+
+  def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
+
+  def parallelFileListingInStatsComputation: Boolean =
+    getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)
 
   /** ********************** SQLConf functionality methods ************ */
 

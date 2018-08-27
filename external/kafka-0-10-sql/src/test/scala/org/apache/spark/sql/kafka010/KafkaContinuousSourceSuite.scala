@@ -18,7 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExec
 import org.apache.spark.sql.streaming.Trigger
 
 // Run tests in KafkaSourceSuiteBase in continuous execution mode.
@@ -42,6 +42,7 @@ class KafkaContinuousSourceTopicDeletionSuite extends KafkaContinuousTest {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribePattern", s"$topicPrefix-.*")
       .option("failOnDataLoss", "false")
 
@@ -59,11 +60,13 @@ class KafkaContinuousSourceTopicDeletionSuite extends KafkaContinuousTest {
         testUtils.createTopic(topic2, partitions = 5)
         eventually(timeout(streamingTimeout)) {
           assert(
-            query.lastExecution.logical.collectFirst {
-              case StreamingDataSourceV2Relation(_, _, _, r: KafkaContinuousReader) => r
-            }.exists { r =>
+            query.lastExecution.executedPlan.collectFirst {
+              case scan: DataSourceV2ScanExec
+                if scan.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
+                scan.scanConfig.asInstanceOf[KafkaContinuousScanConfig]
+            }.exists { config =>
               // Ensure the new topic is present and the old topic is gone.
-              r.knownPartitions.exists(_.topic == topic2)
+              config.knownPartitions.exists(_.topic == topic2)
             },
             s"query never reconfigured to new topic $topic2")
         }
