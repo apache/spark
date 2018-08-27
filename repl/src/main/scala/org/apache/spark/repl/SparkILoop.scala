@@ -44,9 +44,9 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   def this(in0: BufferedReader, out: JPrintWriter) = this(Some(in0), out)
   def this() = this(None, new JPrintWriter(Console.out, true))
 
-  // TODO: Remove the entire override when the support of Scala 2.11 is ended
+  // TODO: Remove the following `override` when the support of Scala 2.11 is ended
   // Scala 2.11 has a bug of finding imported types in class constructors, extends clause
-  // which is fixed in Scala 2.12 but never be back-ported into Scala 2.11.x
+  // which is fixed in Scala 2.12 but never be back-ported into Scala 2.11.x.
   // As a result, we copied the fixes into `SparkILoopInterpreter`. See SPARK-22393 for detail.
   override def createInterpreter(): Unit = {
     if (isScala2_11) {
