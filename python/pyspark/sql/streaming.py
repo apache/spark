@@ -671,12 +671,13 @@ class DataStreamReader(OptionUtils):
             schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape, comment=comment,
             header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
             ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace, nullValue=nullValue,
-            emptyValue=emptyValue, nanValue=nanValue, positiveInf=positiveInf,
-            negativeInf=negativeInf, dateFormat=dateFormat, timestampFormat=timestampFormat,
-            maxColumns=maxColumns, maxCharsPerColumn=maxCharsPerColumn,
+            nanValue=nanValue, positiveInf=positiveInf, negativeInf=negativeInf,
+            dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
+            maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
-            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema)
+            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema,
+            emptyValue=emptyValue)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:
