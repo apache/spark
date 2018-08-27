@@ -22,11 +22,13 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 
+import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.k8sTestTag
+
 private[spark] trait PodTemplateSuite { k8sSuite: KubernetesSuite =>
 
   import PodTemplateSuite._
 
-  test("Start pod creation from template") {
+  test("Start pod creation from template", k8sTestTag) {
     createPodTemplateFiles()
     sparkAppConf
       .set("spark.kubernetes.driver.podTemplateFile", DRIVER_TEMPLATE_FILE.getAbsolutePath)
@@ -63,29 +65,29 @@ private[spark] trait PodTemplateSuite { k8sSuite: KubernetesSuite =>
       .withApiVersion("1")
       .withKind("Pod")
       .withNewMetadata()
-      .addToLabels(LABEL_KEY, DRIVER_LABEL_VALUE)
-      .endMetadata()
+        .addToLabels(LABEL_KEY, DRIVER_LABEL_VALUE)
+        .endMetadata()
       .withNewSpec()
-      .addNewContainer()
-      .withName(DRIVER_CONTAINER_NAME)
-      .withImage("will-be-overwritten")
-      .endContainer()
-      .endSpec()
+        .addNewContainer()
+          .withName(DRIVER_CONTAINER_NAME)
+          .withImage("will-be-overwritten")
+          .endContainer()
+        .endSpec()
       .build()
 
     val executorTemplatePod = new PodBuilder()
       .withApiVersion("1")
       .withKind("Pod")
       .withNewMetadata()
-      .withName("template-pod")
-      .addToLabels(LABEL_KEY, EXECUTOR_LABEL_VALUE)
-      .endMetadata()
+        .withName("template-pod")
+        .addToLabels(LABEL_KEY, EXECUTOR_LABEL_VALUE)
+        .endMetadata()
       .withNewSpec()
-      .addNewContainer()
-      .withName(EXECUTOR_CONTAINER_NAME)
-      .withImage("will-be-overwritten")
-      .endContainer()
-      .endSpec()
+        .addNewContainer()
+          .withName(EXECUTOR_CONTAINER_NAME)
+          .withImage("will-be-overwritten")
+          .endContainer()
+        .endSpec()
       .build()
 
     objectMapper.writeValue(DRIVER_TEMPLATE_FILE, driverTemplatePod)
