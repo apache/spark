@@ -155,6 +155,8 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
  */
 trait SimpleHigherOrderFunction extends HigherOrderFunction  {
 
+  override def nullable: Boolean = argument.nullable
+
   def argument: Expression
 
   override def arguments: Seq[Expression] = argument :: Nil
@@ -216,8 +218,6 @@ case class ArrayTransform(
     argument: Expression,
     function: Expression)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
-
-  override def nullable: Boolean = argument.nullable
 
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
@@ -287,8 +287,6 @@ case class MapFilter(
     copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
   }
 
-  override def nullable: Boolean = argument.nullable
-
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val m = argumentValue.asInstanceOf[MapData]
     val f = functionForEval
@@ -327,8 +325,6 @@ case class ArrayFilter(
     argument: Expression,
     function: Expression)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
-
-  override def nullable: Boolean = argument.nullable
 
   override def dataType: DataType = argument.dataType
 
@@ -374,8 +370,6 @@ case class ArrayExists(
     argument: Expression,
     function: Expression)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
-
-  override def nullable: Boolean = argument.nullable
 
   override def dataType: DataType = BooleanType
 
@@ -516,8 +510,6 @@ case class TransformKeys(
     function: Expression)
   extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  override def nullable: Boolean = argument.nullable
-
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
   override def dataType: DataType = MapType(function.dataType, valueType, valueContainsNull)
@@ -567,8 +559,6 @@ case class TransformValues(
     argument: Expression,
     function: Expression)
   extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
-
-  override def nullable: Boolean = argument.nullable
 
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
