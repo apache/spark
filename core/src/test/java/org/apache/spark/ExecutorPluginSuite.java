@@ -22,8 +22,6 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.junit.Before;
 import org.junit.Test;
 
-import scala.collection.Seq;
-
 import static org.junit.Assert.*;
 
 // Tests loading plugins into executors
