@@ -1122,7 +1122,8 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
  *
  * Check https://cwiki.apache.org/confluence/display/Hive/OuterJoinBehavior for more details
  */
-object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
+object PushPredicateThroughJoin extends Rule[LogicalPlan]
+    with PredicateHelper with ConstraintHelper {
   /**
    * Splits join condition expressions or filter predicates (on a given join's output) into three
    * categories based on the attributes required to evaluate them. Note that we explicitly exclude
@@ -1190,11 +1191,13 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
     // push down the join filter into sub query scanning if applicable
     case j @ Join(left, right, joinType, joinCondition) =>
-      val (leftJoinConditions, rightJoinConditions, commonJoinCondition) =
-        split(joinCondition.map(splitConjunctivePredicates).getOrElse(Nil), left, right)
+      val condition = joinCondition.map(splitConjunctivePredicates).getOrElse(Nil)
+      val additionalCondition = inferAdditionalConstraints(condition.toSet)
 
       joinType match {
         case _: InnerLike | LeftSemi =>
+          val (leftJoinConditions, rightJoinConditions, commonJoinCondition) =
+            split(condition, left, right)
           // push down the single side only join filter for both sides sub queries
           val newLeft = leftJoinConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
@@ -1204,6 +1207,8 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
           Join(newLeft, newRight, joinType, newJoinCond)
         case RightOuter =>
+          val (leftJoinConditions, rightJoinConditions, commonJoinCondition) =
+            split(condition ++ additionalCondition, left, right)
           // push down the left side only join filter for left side sub query
           val newLeft = leftJoinConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
@@ -1212,6 +1217,8 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
           Join(newLeft, newRight, RightOuter, newJoinCond)
         case LeftOuter | LeftAnti | ExistenceJoin(_) =>
+          val (leftJoinConditions, rightJoinConditions, commonJoinCondition) =
+            split(condition ++ additionalCondition, left, right)
           // push down the right side only join filter for right sub query
           val newLeft = left
           val newRight = rightJoinConditions.
