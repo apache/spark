@@ -9,7 +9,7 @@ struct<function_desc:string>
 -- !query 0 output
 Class: org.apache.spark.sql.catalyst.expressions.StructsToJson
 Function: to_json
-Usage: to_json(expr[, options]) - Returns a json string with a given struct value
+Usage: to_json(expr[, options]) - Returns a JSON string with a given struct value
 
 
 -- !query 1
@@ -38,7 +38,7 @@ Extended Usage:
     Since: 2.2.0
 
 Function: to_json
-Usage: to_json(expr[, options]) - Returns a json string with a given struct value
+Usage: to_json(expr[, options]) - Returns a JSON string with a given struct value
 
 
 -- !query 2
