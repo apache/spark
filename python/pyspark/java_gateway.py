@@ -161,23 +161,20 @@ def local_connect_and_auth(port, auth_secret):
     # On most of IPv6-ready systems, IPv6 will take precedence.
     for res in socket.getaddrinfo("127.0.0.1", port, socket.AF_UNSPEC, socket.SOCK_STREAM):
         af, socktype, proto, _, sa = res
-        sock = socket.socket(af, socktype, proto)
         try:
+            sock = socket.socket(af, socktype, proto)
             sock.settimeout(15)
             sock.connect(sa)
+            sockfile = sock.makefile("rwb", 65536)
+            _do_server_auth(sockfile, auth_secret)
+            return (sockfile, sock)
         except socket.error as e:
             emsg = _exception_message(e)
             errors.append("tried to connect to %s, but an error occured: %s" % (sa, emsg))
             sock.close()
             sock = None
-            continue
-        break
-    if not sock:
+    else:
         raise Exception("could not open socket: %s" % errors)
-
-    sockfile = sock.makefile("rwb", 65536)
-    _do_server_auth(sockfile, auth_secret)
-    return (sockfile, sock)
 
 
 def ensure_callback_server_started(gw):
