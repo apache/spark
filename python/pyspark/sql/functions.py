@@ -2293,7 +2293,7 @@ def to_json(col, options={}):
     into a JSON string. Throws an exception, in the case of an unsupported type.
 
     :param col: name of column containing a struct, an array or a map.
-    :param options: options to control converting. accepts the same options as the json datasource
+    :param options: options to control converting. accepts the same options as the JSON datasource
 
     >>> from pyspark.sql import Row
     >>> from pyspark.sql.types import *

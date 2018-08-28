@@ -613,11 +613,11 @@ case class JsonToStructs(
 }
 
 /**
- * Converts a [[StructType]], [[ArrayType]] or [[MapType]] to a json output string.
+ * Converts a [[StructType]], [[ArrayType]] or [[MapType]] to a JSON output string.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr[, options]) - Returns a json string with a given struct value",
+  usage = "_FUNC_(expr[, options]) - Returns a JSON string with a given struct value",
   examples = """
     Examples:
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
