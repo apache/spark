@@ -45,21 +45,26 @@ private[spark] class LocalDirsFeatureStep(
   override def configurePod(pod: SparkPod): SparkPod = {
     val localDirVolumes = resolvedLocalDirs
       .zipWithIndex
-      // To allow customisation of local dirs backing volumes we should avoid creating
-      // emptyDir volumes if the volume is already defined in the pod spec
-      .filter {
-        case (localDir, index) => !hasVolume(pod, s"spark-local-dir-${index + 1}")
-      }
       .map { case (localDir, index) =>
-        new VolumeBuilder()
-          .withName(s"spark-local-dir-${index + 1}")
-          .withNewEmptyDir()
-            .withMedium(useLocalDirTmpFs match {
-              case true  => "Memory" // Use tmpfs
-              case false => null // Default - use nodes backing storage
-            })
-          .endEmptyDir()
-          .build()
+        val name = s"spark-local-dir-${index + 1}"
+        // To allow customisation of local dirs backing volumes we should avoid creating
+        // emptyDir volumes if the volume is already defined in the pod spec
+        hasVolume(pod, name) match {
+          case true =>
+            // For pre-existing volume definitions just re-use the volume
+            pod.pod.getSpec().getVolumes().asScala.find(v => v.getName.equals(name)).get
+          case false =>
+            // Create new emptyDir volume
+            new VolumeBuilder()
+              .withName(name)
+              .withNewEmptyDir()
+                .withMedium(useLocalDirTmpFs match {
+                  case true => "Memory" // Use tmpfs
+                  case false => null    // Default - use nodes backing storage
+                })
+              .endEmptyDir()
+              .build()
+        }
       }
 
     val localDirVolumeMounts = localDirVolumes
@@ -72,7 +77,9 @@ private[spark] class LocalDirsFeatureStep(
       }
     val podWithLocalDirVolumes = new PodBuilder(pod.pod)
       .editSpec()
-        .addToVolumes(localDirVolumes: _*)
+         // Don't want to re-add volume mounts that already existed in the incoming spec
+         // as duplicate definitions will lead to K8S API errors
+        .addToVolumes(localDirVolumes.filter(v => !hasVolume(pod, v.getName)): _*)
         .endSpec()
       .build()
     val containerWithLocalDirVolumeMounts = new ContainerBuilder(pod.container)
