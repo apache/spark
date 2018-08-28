@@ -1,0 +1,10 @@
+apiVersion: v1
+Kind: Pod
+metadata:
+  name: template-pod
+  labels:
+    template-label-key: executor-template-label-value
+spec:
+  containers:
+  - name: test-executor-container
+    image: will-be-overwritten

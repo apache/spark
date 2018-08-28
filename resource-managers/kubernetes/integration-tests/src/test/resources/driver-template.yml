@@ -1,0 +1,10 @@
+apiVersion: v1
+Kind: Pod
+metadata:
+  labels:
+    template-label-key: driver-template-label-value
+spec:
+  containers:
+  - name: test-driver-container
+    image: will-be-overwritten
+

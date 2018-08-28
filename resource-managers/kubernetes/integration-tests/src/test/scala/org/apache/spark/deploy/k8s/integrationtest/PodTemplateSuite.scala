@@ -16,11 +16,9 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
-import java.nio.file.Files
+import java.io.File
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
-import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
+import io.fabric8.kubernetes.api.model.Pod
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.k8sTestTag
 
@@ -29,7 +27,6 @@ private[spark] trait PodTemplateSuite { k8sSuite: KubernetesSuite =>
   import PodTemplateSuite._
 
   test("Start pod creation from template", k8sTestTag) {
-    createPodTemplateFiles()
     sparkAppConf
       .set("spark.kubernetes.driver.podTemplateFile", DRIVER_TEMPLATE_FILE.getAbsolutePath)
       .set("spark.kubernetes.executor.podTemplateFile", EXECUTOR_TEMPLATE_FILE.getAbsolutePath)
@@ -46,65 +43,22 @@ private[spark] trait PodTemplateSuite { k8sSuite: KubernetesSuite =>
   private def checkDriverPod(pod: Pod): Unit = {
     assert(pod.getMetadata.getName === driverPodName)
     assert(pod.getSpec.getContainers.get(0).getImage === image)
-    assert(pod.getSpec.getContainers.get(0).getName === DRIVER_CONTAINER_NAME)
+    assert(pod.getSpec.getContainers.get(0).getName === "test-driver-container")
     assert(pod.getMetadata.getLabels.containsKey(LABEL_KEY))
-    assert(pod.getMetadata.getLabels.get(LABEL_KEY) === DRIVER_LABEL_VALUE)
+    assert(pod.getMetadata.getLabels.get(LABEL_KEY) === "driver-template-label-value")
   }
 
   private def checkExecutorPod(pod: Pod): Unit = {
     assert(pod.getMetadata.getName === "template-pod")
     assert(pod.getSpec.getContainers.get(0).getImage === image)
-    assert(pod.getSpec.getContainers.get(0).getName === EXECUTOR_CONTAINER_NAME)
+    assert(pod.getSpec.getContainers.get(0).getName === "test-executor-container")
     assert(pod.getMetadata.getLabels.containsKey(LABEL_KEY))
-    assert(pod.getMetadata.getLabels.get(LABEL_KEY) === EXECUTOR_LABEL_VALUE)
-  }
-
-  private def createPodTemplateFiles(): Unit = {
-    val objectMapper = new ObjectMapper(new YAMLFactory())
-    val driverTemplatePod = new PodBuilder()
-      .withApiVersion("1")
-      .withKind("Pod")
-      .withNewMetadata()
-        .addToLabels(LABEL_KEY, DRIVER_LABEL_VALUE)
-        .endMetadata()
-      .withNewSpec()
-        .addNewContainer()
-          .withName(DRIVER_CONTAINER_NAME)
-          .withImage("will-be-overwritten")
-          .endContainer()
-        .endSpec()
-      .build()
-
-    val executorTemplatePod = new PodBuilder()
-      .withApiVersion("1")
-      .withKind("Pod")
-      .withNewMetadata()
-        .withName("template-pod")
-        .addToLabels(LABEL_KEY, EXECUTOR_LABEL_VALUE)
-        .endMetadata()
-      .withNewSpec()
-        .addNewContainer()
-          .withName(EXECUTOR_CONTAINER_NAME)
-          .withImage("will-be-overwritten")
-          .endContainer()
-        .endSpec()
-      .build()
-
-    objectMapper.writeValue(DRIVER_TEMPLATE_FILE, driverTemplatePod)
-    objectMapper.writeValue(EXECUTOR_TEMPLATE_FILE, executorTemplatePod)
+    assert(pod.getMetadata.getLabels.get(LABEL_KEY) === "executor-template-label-value")
   }
 }
 
 private[spark] object PodTemplateSuite {
-  val DRIVER_CONTAINER_NAME = "test-driver-container"
-  val EXECUTOR_CONTAINER_NAME = "test-executor-container"
   val LABEL_KEY = "template-label-key"
-  val DRIVER_LABEL_VALUE = "driver-template-label-value"
-  val EXECUTOR_LABEL_VALUE = "executor-template-label-value"
-
-  val DRIVER_TEMPLATE_FILE = Files.createTempFile("driver-pod-template", ".yml").toFile
-  DRIVER_TEMPLATE_FILE.deleteOnExit()
-
-  val EXECUTOR_TEMPLATE_FILE = Files.createTempFile("executor-pod-template", ".yml").toFile
-  EXECUTOR_TEMPLATE_FILE.deleteOnExit()
+  val DRIVER_TEMPLATE_FILE = new File(getClass.getResource("driver-template.yml").getFile)
+  val EXECUTOR_TEMPLATE_FILE = new File(getClass.getResource("executor-template.yml").getFile)
 }
