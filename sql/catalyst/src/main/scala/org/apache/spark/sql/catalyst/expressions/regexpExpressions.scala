@@ -229,24 +229,29 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
 
 
 /**
- * Splits str around pat (pattern is a regular expression).
+ * Splits str around pattern (pattern is a regular expression).
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str, regex, limit) - Splits `str` around occurrences that match `regex`." +
-    "The `limit` parameter controls the number of times the pattern is applied. If the limit " +
-    "n is greater than zero then the pattern will be applied at most n - 1 times, " +
-    "the array's length will be no greater than n, and the array's last entry " +
-    "will contain all input beyond the last matched delimiter. If n is " +
-    "less than 0, then the pattern will be applied as many times as " +
-    "possible and the array can have any length. If n is zero then the " +
-    "pattern will be applied as many times as possible, the array can " +
-    "have any length, and trailing empty strings will be discarded.",
+  usage = "_FUNC_(str, regex, limit) - Splits `str` around occurrences that match `regex`" +
+    " and returns an array of at most `limit`",
   arguments = """
     Arguments:
       * str - a string expression to split.
       * pattern - a string representing a regular expression. The pattern string should be a
         Java regular expression.
-      * limit - an integer expression.
+      * limit - an integer expression which controls the number of times the pattern is applied.
+
+        limit > 0:
+          The resulting array's length will not be more than n, and the resulting array's
+          last entry will contain all input beyond the last matched pattern
+
+        limit < 0:
+          `pattern` will be applied as many times as possible, and the resulting
+          array can be of any size
+
+        limit = 0:
+          `pattern` will be applied as many times as possible, the resulting array can
+          be of any size, and trailing empty strings will be discarded
   """,
   examples = """
     Examples:
