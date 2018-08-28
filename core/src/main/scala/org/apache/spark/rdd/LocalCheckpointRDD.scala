@@ -33,6 +33,7 @@ import org.apache.spark.storage.RDDBlockId
  * @param sc the active SparkContext
  * @param rddId the ID of the checkpointed RDD
  * @param numPartitions the number of partitions in the checkpointed RDD
+ * @param deterministicLevel the DeterministicLevel of the local checkpointed RDD
  */
 private[spark] class LocalCheckpointRDD[T: ClassTag](
     sc: SparkContext,

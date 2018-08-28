@@ -1993,16 +1993,15 @@ object RDD {
 }
 
 /**
- * The deterministic level of RDD's output (i.e. what `RDD#compute` returns), which indicates how
- * the output will diff when Spark reruns the tasks for the RDD. There are 3 deterministic levels,
- * ordered by the determinism from high to low:
- * 1. DETERMINATE: The RDD output is always same (including order) when rerun.
- * 2. UNORDERED: The RDD output is always the same data set but in potentially a different order
- *               when rerun.
- * 3. INDETERMINATE. The RDD output can be different (not only order) when rerun.
+ * The deterministic level of RDD's output (i.e. what `RDD#compute` returns). This explains how
+ * the output will diff when Spark reruns the tasks for the RDD. There are 3 deterministic levels:
+ * 1. DETERMINATE: The RDD output is always the same data set in the same order after a rerun.
+ * 2. UNORDERED: The RDD output is always the same data set but the order can be different
+ *               after a rerun.
+ * 3. INDETERMINATE. The RDD output can be different after a rerun.
  *
- * Note that, the output of an RDD usually relies on parent RDDs. When a parent RDD's output is
- * INDETERMINATE, it's very likely this RDD's output is also INDETERMINATE.
+ * Note that, the output of an RDD usually relies on the parent RDDs. When the parent RDD's output
+ * is INDETERMINATE, it's very likely the RDD's output is also INDETERMINATE.
  */
 private[spark] object DeterministicLevel extends Enumeration {
   val DETERMINATE, UNORDERED, INDETERMINATE = Value
