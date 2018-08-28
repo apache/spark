@@ -102,9 +102,9 @@ private[spark] object PodTemplateSuite {
   val DRIVER_LABEL_VALUE = "driver-template-label-value"
   val EXECUTOR_LABEL_VALUE = "executor-template-label-value"
 
-  val DRIVER_TEMPLATE_FILE = Files.createTempFile("driver-pod-template", "yml").toFile
+  val DRIVER_TEMPLATE_FILE = Files.createTempFile("driver-pod-template", ".yml").toFile
   DRIVER_TEMPLATE_FILE.deleteOnExit()
 
-  val EXECUTOR_TEMPLATE_FILE = Files.createTempFile("executor-pod-template", "yml").toFile
+  val EXECUTOR_TEMPLATE_FILE = Files.createTempFile("executor-pod-template", ".yml").toFile
   EXECUTOR_TEMPLATE_FILE.deleteOnExit()
 }
