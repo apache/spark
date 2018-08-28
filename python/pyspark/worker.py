@@ -22,6 +22,7 @@ from __future__ import print_function
 import os
 import sys
 import time
+import resource
 import socket
 import traceback
 
@@ -263,6 +264,28 @@ def main(infile, outfile):
         isBarrier = read_bool(infile)
         boundPort = read_int(infile)
         secret = UTF8Deserializer().loads(infile)
+
+        # set up memory limits
+        memory_limit_mb = int(os.environ.get('PYSPARK_EXECUTOR_MEMORY_MB', "-1"))
+        total_memory = resource.RLIMIT_AS
+        try:
+            if memory_limit_mb > 0:
+                (soft_limit, hard_limit) = resource.getrlimit(total_memory)
+                msg = "Current mem limits: {0} of max {1}\n".format(soft_limit, hard_limit)
+                print(msg, file=sys.stderr)
+
+                # convert to bytes
+                new_limit = memory_limit_mb * 1024 * 1024
+
+                if soft_limit == resource.RLIM_INFINITY or new_limit < soft_limit:
+                    msg = "Setting mem limits to {0} of max {1}\n".format(new_limit, new_limit)
+                    print(msg, file=sys.stderr)
+                    resource.setrlimit(total_memory, (new_limit, new_limit))
+
+        except (resource.error, OSError, ValueError) as e:
+            # not all systems support resource limits, so warn instead of failing
+            print("WARN: Failed to set memory limit: {0}\n".format(e), file=sys.stderr)
+
         # initialize global state
         taskContext = None
         if isBarrier:

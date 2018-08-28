@@ -28,7 +28,7 @@ import scala.collection.JavaConverters._
 import scala.io.Source
 import scala.util.Random
 
-import org.apache.kafka.clients.producer.RecordMetadata
+import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord, RecordMetadata}
 import org.apache.kafka.common.TopicPartition
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods._
@@ -157,6 +157,19 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with Kaf
 
     override def toString: String =
       s"AddKafkaData(topics = $topics, data = $data, message = $message)"
+  }
+
+  object WithOffsetSync {
+    def apply(topic: String)(func: () => Unit): StreamAction = {
+      Execute("Run Kafka Producer")(_ => {
+        func()
+        // This is a hack for the race condition that the committed message may be not visible to
+        // consumer for a short time.
+        // Looks like after the following call returns, the consumer can always read the committed
+        // messages.
+        testUtils.getLatestOffsets(Set(topic))
+      })
+    }
   }
 
   private val topicId = new AtomicInteger(0)
@@ -595,6 +608,246 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         true
       }
     )
+  }
+
+  test("read Kafka transactional messages: read_committed") {
+    // This test will cover the following cases:
+    // 1. the whole batch contains no data messages
+    // 2. the first offset in a batch is not a committed data message
+    // 3. the last offset in a batch is not a committed data message
+    // 4. there is a gap in the middle of a batch
+
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 1)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.isolation.level", "read_committed")
+      .option("maxOffsetsPerTrigger", 3)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      // Set a short timeout to make the test fast. When a batch doesn't contain any visible data
+      // messages, "poll" will wait until timeout.
+      .option("kafkaConsumer.pollTimeoutMs", 5000)
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
+
+    val clock = new StreamManualClock
+
+    // Wait until the manual clock is waiting on further instructions to move forward. Then we can
+    // ensure all batches we are waiting for have been processed.
+    val waitUntilBatchProcessed = Execute { q =>
+      eventually(Timeout(streamingTimeout)) {
+        if (!q.exception.isDefined) {
+          assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
+        }
+      }
+      if (q.exception.isDefined) {
+        throw q.exception.get
+      }
+    }
+
+    // The message values are the same as their offsets to make the test easy to follow
+    testUtils.withTranscationalProducer { producer =>
+      testStream(mapped)(
+        StartStream(ProcessingTime(100), clock),
+        waitUntilBatchProcessed,
+        CheckAnswer(),
+        WithOffsetSync(topic) { () =>
+          // Send 5 messages. They should be visible only after being committed.
+          producer.beginTransaction()
+          (0 to 4).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        // Should not see any uncommitted messages
+        CheckNewAnswer(),
+        WithOffsetSync(topic) { () =>
+          producer.commitTransaction()
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(0, 1, 2), // offset 0, 1, 2
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(3, 4), // offset: 3, 4, 5* [* means it's not a committed data message]
+        WithOffsetSync(topic) { () =>
+          // Send 5 messages and abort the transaction. They should not be read.
+          producer.beginTransaction()
+          (6 to 10).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+          producer.abortTransaction()
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(), // offset: 6*, 7*, 8*
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(), // offset: 9*, 10*, 11*
+        WithOffsetSync(topic) { () =>
+          // Send 5 messages again. The consumer should skip the above aborted messages and read
+          // them.
+          producer.beginTransaction()
+          (12 to 16).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+          producer.commitTransaction()
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(12, 13, 14), // offset: 12, 13, 14
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(15, 16),  // offset: 15, 16, 17*
+        WithOffsetSync(topic) { () =>
+          producer.beginTransaction()
+          producer.send(new ProducerRecord[String, String](topic, "18")).get()
+          producer.commitTransaction()
+          producer.beginTransaction()
+          producer.send(new ProducerRecord[String, String](topic, "20")).get()
+          producer.commitTransaction()
+          producer.beginTransaction()
+          producer.send(new ProducerRecord[String, String](topic, "22")).get()
+          producer.send(new ProducerRecord[String, String](topic, "23")).get()
+          producer.commitTransaction()
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(18, 20), // offset: 18, 19*, 20
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(22, 23), // offset: 21*, 22, 23
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer() // offset: 24*
+      )
+    }
+  }
+
+  test("read Kafka transactional messages: read_uncommitted") {
+    // This test will cover the following cases:
+    // 1. the whole batch contains no data messages
+    // 2. the first offset in a batch is not a committed data message
+    // 3. the last offset in a batch is not a committed data message
+    // 4. there is a gap in the middle of a batch
+
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 1)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.isolation.level", "read_uncommitted")
+      .option("maxOffsetsPerTrigger", 3)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      // Set a short timeout to make the test fast. When a batch doesn't contain any visible data
+      // messages, "poll" will wait until timeout.
+      .option("kafkaConsumer.pollTimeoutMs", 5000)
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
+
+    val clock = new StreamManualClock
+
+    // Wait until the manual clock is waiting on further instructions to move forward. Then we can
+    // ensure all batches we are waiting for have been processed.
+    val waitUntilBatchProcessed = Execute { q =>
+      eventually(Timeout(streamingTimeout)) {
+        if (!q.exception.isDefined) {
+          assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
+        }
+      }
+      if (q.exception.isDefined) {
+        throw q.exception.get
+      }
+    }
+
+    // The message values are the same as their offsets to make the test easy to follow
+    testUtils.withTranscationalProducer { producer =>
+      testStream(mapped)(
+        StartStream(ProcessingTime(100), clock),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(),
+        WithOffsetSync(topic) { () =>
+          // Send 5 messages. They should be visible only after being committed.
+          producer.beginTransaction()
+          (0 to 4).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(0, 1, 2), // offset 0, 1, 2
+        WithOffsetSync(topic) { () =>
+          producer.commitTransaction()
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(3, 4), // offset: 3, 4, 5* [* means it's not a committed data message]
+        WithOffsetSync(topic) { () =>
+          // Send 5 messages and abort the transaction. They should not be read.
+          producer.beginTransaction()
+          (6 to 10).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+          producer.abortTransaction()
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(6, 7, 8), // offset: 6, 7, 8
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(9, 10), // offset: 9, 10, 11*
+        WithOffsetSync(topic) { () =>
+          // Send 5 messages again. The consumer should skip the above aborted messages and read
+          // them.
+          producer.beginTransaction()
+          (12 to 16).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+          producer.commitTransaction()
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(12, 13, 14), // offset: 12, 13, 14
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(15, 16),  // offset: 15, 16, 17*
+        WithOffsetSync(topic) { () =>
+          producer.beginTransaction()
+          producer.send(new ProducerRecord[String, String](topic, "18")).get()
+          producer.commitTransaction()
+          producer.beginTransaction()
+          producer.send(new ProducerRecord[String, String](topic, "20")).get()
+          producer.commitTransaction()
+          producer.beginTransaction()
+          producer.send(new ProducerRecord[String, String](topic, "22")).get()
+          producer.send(new ProducerRecord[String, String](topic, "23")).get()
+          producer.commitTransaction()
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(18, 20), // offset: 18, 19*, 20
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(22, 23), // offset: 21*, 22, 23
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer() // offset: 24*
+      )
+    }
   }
 }
 
