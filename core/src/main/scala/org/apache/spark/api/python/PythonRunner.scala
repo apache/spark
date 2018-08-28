@@ -27,6 +27,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.PYSPARK_EXECUTOR_MEMORY
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
 
@@ -62,13 +63,19 @@ private[spark] object PythonEvalType {
  */
 private[spark] abstract class BasePythonRunner[IN, OUT](
     funcs: Seq[ChainedPythonFunctions],
-    bufferSize: Int,
-    reuseWorker: Boolean,
     evalType: Int,
     argOffsets: Array[Array[Int]])
   extends Logging {
 
   require(funcs.length == argOffsets.length, "argOffsets should have the same length as funcs")
+
+  private val conf = SparkEnv.get.conf
+  private val bufferSize = conf.getInt("spark.buffer.size", 65536)
+  private val reuseWorker = conf.getBoolean("spark.python.worker.reuse", true)
+  // each python worker gets an equal part of the allocation. the worker pool will grow to the
+  // number of concurrent tasks, which is determined by the number of cores in this executor.
+  private val memoryMb = conf.get(PYSPARK_EXECUTOR_MEMORY)
+      .map(_ / conf.getInt("spark.executor.cores", 1))
 
   // All the Python functions should have the same exec, version and envvars.
   protected val envVars = funcs.head.funcs.head.envVars
@@ -82,7 +89,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   private[spark] var serverSocket: Option[ServerSocket] = None
 
   // Authentication helper used when serving method calls via socket from Python side.
-  private lazy val authHelper = new SocketAuthHelper(SparkEnv.get.conf)
+  private lazy val authHelper = new SocketAuthHelper(conf)
 
   def compute(
       inputIterator: Iterator[IN],
@@ -94,6 +101,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
+    }
+    if (memoryMb.isDefined) {
+      envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", memoryMb.get.toString)
     }
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap)
     // Whether is the worker released into idle pool
@@ -485,20 +495,17 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
 private[spark] object PythonRunner {
 
-  def apply(func: PythonFunction, bufferSize: Int, reuseWorker: Boolean): PythonRunner = {
-    new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))), bufferSize, reuseWorker)
+  def apply(func: PythonFunction): PythonRunner = {
+    new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))))
   }
 }
 
 /**
  * A helper class to run Python mapPartition in Spark.
  */
-private[spark] class PythonRunner(
-    funcs: Seq[ChainedPythonFunctions],
-    bufferSize: Int,
-    reuseWorker: Boolean)
+private[spark] class PythonRunner(funcs: Seq[ChainedPythonFunctions])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
-    funcs, bufferSize, reuseWorker, PythonEvalType.NON_UDF, Array(Array(0))) {
+    funcs, PythonEvalType.NON_UDF, Array(Array(0))) {
 
   protected override def newWriterThread(
       env: SparkEnv,
