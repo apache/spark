@@ -624,7 +624,7 @@ case class AlterTableRecoverPartitionsCommand(
       try {
         implicit val ec = ExecutionContext.fromExecutor(evalPool)
         scanPartitions(spark, fs, pathFilter, root, Map(), table.partitionColumnNames, threshold,
-          spark.sessionState.conf.resolver, listFilesInParallel = true)
+          spark.sessionState.conf.resolver)
       } finally {
         evalPool.shutdown()
       }
@@ -656,10 +656,7 @@ case class AlterTableRecoverPartitionsCommand(
       spec: TablePartitionSpec,
       partitionNames: Seq[String],
       threshold: Int,
-      resolver: Resolver,
-      listFilesInParallel: Boolean)(implicit ec: ExecutionContext)
-    : Seq[(TablePartitionSpec, Path)] = {
-
+      resolver: Resolver)(implicit ec: ExecutionContext): Seq[(TablePartitionSpec, Path)] = {
     if (partitionNames.isEmpty) {
       return Seq(spec -> path)
     }
@@ -674,7 +671,7 @@ case class AlterTableRecoverPartitionsCommand(
         val value = ExternalCatalogUtils.unescapePathName(ps(1))
         if (resolver(columnName, partitionNames.head)) {
           scanPartitions(spark, fs, filter, st.getPath, spec ++ Map(partitionNames.head -> value),
-            partitionNames.drop(1), threshold, resolver, listFilesInParallel = false)
+            partitionNames.drop(1), threshold, resolver)
         } else {
           logWarning(
             s"expected partition column ${partitionNames.head}, but got ${ps(0)}, ignoring it")
@@ -685,7 +682,7 @@ case class AlterTableRecoverPartitionsCommand(
         Seq.empty
       }
     }
-    val result = if (listFilesInParallel && partitionNames.length > 1 &&
+    val result = if (partitionNames.length > 1 &&
         statuses.length > threshold || partitionNames.length > 2) {
       parmap(statuses)(handleStatus _)
     } else {
