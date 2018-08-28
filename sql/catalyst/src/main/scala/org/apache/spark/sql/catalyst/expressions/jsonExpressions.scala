@@ -561,15 +561,18 @@ case class JsonToStructs(
       (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
   }
 
-  @transient lazy val parsedOptions = new JSONOptions(options, timeZoneId.get)
-  @transient lazy val rawParser = new JacksonParser(nullableSchema, parsedOptions)
-  @transient lazy val createParser = CreateJacksonParser.utf8String _
-  @transient lazy val parser = new FailureSafeParser[UTF8String](
-    input => rawParser.parse(input, createParser, identity[UTF8String]),
-    parsedOptions.parseMode,
-    schema,
-    parsedOptions.columnNameOfCorruptRecord,
-    parsedOptions.multiLine)
+  @transient lazy val parser = {
+    val parsedOptions = new JSONOptions(options, timeZoneId.get)
+    val rawParser = new JacksonParser(nullableSchema, parsedOptions)
+    val createParser = CreateJacksonParser.utf8String _
+
+    new FailureSafeParser[UTF8String](
+      input => rawParser.parse(input, createParser, identity[UTF8String]),
+      parsedOptions.parseMode,
+      schema,
+      parsedOptions.columnNameOfCorruptRecord,
+      parsedOptions.multiLine)
+  }
 
   override def dataType: DataType = nullableSchema
 

@@ -36,10 +36,9 @@ class FailureSafeParser[IN](
   private val toResultRow: (Option[InternalRow], () => UTF8String) => InternalRow = schema match {
     case struct: StructType =>
       val corruptFieldIndex = struct.getFieldIndex(columnNameOfCorruptRecord)
-      val actualSchema = StructType(struct.filterNot(_.name == columnNameOfCorruptRecord))
-      val resultRow = new GenericInternalRow(struct.length)
-      val nullResult = new GenericInternalRow(struct.length)
       if (corruptFieldIndex.isDefined) {
+        val actualSchema = StructType(struct.filterNot(_.name == columnNameOfCorruptRecord))
+        val resultRow = new GenericInternalRow(struct.length)
         (row, badRecord) => {
           var i = 0
           while (i < actualSchema.length) {
@@ -51,6 +50,7 @@ class FailureSafeParser[IN](
           resultRow
         }
       } else {
+        val nullResult = new GenericInternalRow(struct.length)
         (row, _) => row.getOrElse(nullResult)
       }
     case _ => (row, _) => row.getOrElse(new GenericInternalRow(1))
