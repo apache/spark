@@ -33,17 +33,15 @@ import org.apache.spark.storage.RDDBlockId
  * @param sc the active SparkContext
  * @param rddId the ID of the checkpointed RDD
  * @param numPartitions the number of partitions in the checkpointed RDD
- * @param deterministicLevel the DeterministicLevel of the local checkpointed RDD
  */
 private[spark] class LocalCheckpointRDD[T: ClassTag](
     sc: SparkContext,
     rddId: Int,
-    numPartitions: Int,
-    deterministicLevel: DeterministicLevel.Value)
+    numPartitions: Int)
   extends CheckpointRDD[T](sc) {
 
   def this(rdd: RDD[T]) {
-    this(rdd.context, rdd.id, rdd.partitions.length, rdd.outputDeterministicLevel)
+    this(rdd.context, rdd.id, rdd.partitions.length)
   }
 
   protected override def getPartitions: Array[Partition] = {
@@ -66,9 +64,4 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](
       s"instead, which is slower than local checkpointing but more fault-tolerant.")
   }
 
-  // Local checkpoint is not reliable, we may still get output from original RDD, so the output
-  // deterministic level should also inherent from the original RDD.
-  override protected def getOutputDeterministicLevel = {
-    deterministicLevel
-  }
 }
