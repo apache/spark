@@ -265,14 +265,13 @@ object TextInputCSVDataSource extends CSVDataSource {
       options: CSVOptions): Dataset[String] = {
     val paths = inputPaths.map(_.getPath.toString)
     if (Charset.forName(options.charset) == StandardCharsets.UTF_8) {
-      sparkSession.baseRelationToDataFrame(
-        DataSource.apply(
-          sparkSession,
-          paths = paths,
-          className = classOf[TextFileFormat].getName,
-          options = options.parameters
-        ).resolveRelation(checkFilesExist = false))
-        .select("value").as[String](Encoders.STRING)
+      DataSource.apply(
+        sparkSession,
+        paths = paths,
+        className = classOf[TextFileFormat].getName,
+        options = options.parameters
+      ).resolveRelation(checkFilesExist = false).toDataFrame(sparkSession)
+      .select("value").as[String](Encoders.STRING)
     } else {
       val charset = options.charset
       val rdd = sparkSession.sparkContext

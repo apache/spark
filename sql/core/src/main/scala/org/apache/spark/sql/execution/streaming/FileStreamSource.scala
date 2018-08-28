@@ -171,8 +171,9 @@ class FileStreamSource(
         partitionColumns = partitionColumns,
         className = fileFormatClassName,
         options = optionsWithPartitionBasePath)
-    Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation(
-      checkFilesExist = false), isStreaming = true))
+    val logicalPlan =
+      newDataSource.resolveRelation(checkFilesExist = false).toLogicalPlan(isStreaming = true)
+    Dataset.ofRows(sparkSession, logicalPlan)
   }
 
   /**

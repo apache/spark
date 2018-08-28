@@ -26,6 +26,7 @@ import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 
@@ -110,5 +111,10 @@ public class JavaColumnarDataSourceV2 implements DataSourceV2, BatchReadSupportP
   @Override
   public BatchReadSupport createBatchReadSupport(DataSourceOptions options) {
     return new ReadSupport();
+  }
+
+  @Override
+  public BatchReadSupport createBatchReadSupport(StructType schema, DataSourceOptions options) {
+    return createBatchReadSupport(options);
   }
 }

@@ -114,14 +114,13 @@ object TextInputJsonDataSource extends JsonDataSource {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): Dataset[String] = {
-    sparkSession.baseRelationToDataFrame(
-      DataSource.apply(
-        sparkSession,
-        paths = inputPaths.map(_.getPath.toString),
-        className = classOf[TextFileFormat].getName,
-        options = parsedOptions.parameters
-      ).resolveRelation(checkFilesExist = false))
-      .select("value").as(Encoders.STRING)
+    DataSource.apply(
+      sparkSession,
+      paths = inputPaths.map(_.getPath.toString),
+      className = classOf[TextFileFormat].getName,
+      options = parsedOptions.parameters
+    ).resolveRelation(checkFilesExist = false).toDataFrame(sparkSession)
+    .select("value").as[String](Encoders.STRING)
   }
 
   override def readFile(

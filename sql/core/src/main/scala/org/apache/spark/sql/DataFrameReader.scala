@@ -191,36 +191,13 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
-    val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
-    if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      val ds = cls.newInstance().asInstanceOf[DataSourceV2]
-      if (ds.isInstanceOf[BatchReadSupportProvider]) {
-        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-          ds = ds, conf = sparkSession.sessionState.conf)
-        val pathsOption = {
-          val objectMapper = new ObjectMapper()
-          DataSourceOptions.PATHS_KEY -> objectMapper.writeValueAsString(paths.toArray)
-        }
-        Dataset.ofRows(sparkSession, DataSourceV2Relation.create(
-          ds, extraOptions.toMap ++ sessionOptions + pathsOption,
-          userSpecifiedSchema = userSpecifiedSchema))
-      } else {
-        loadV1Source(paths: _*)
-      }
-    } else {
-      loadV1Source(paths: _*)
-    }
-  }
-
-  private def loadV1Source(paths: String*) = {
-    // Code path for data source v1.
-    sparkSession.baseRelationToDataFrame(
-      DataSource.apply(
-        sparkSession,
-        paths = paths,
-        userSpecifiedSchema = userSpecifiedSchema,
-        className = source,
-        options = extraOptions.toMap).resolveRelation())
+    DataSource.apply(
+      sparkSession,
+      paths = paths,
+      userSpecifiedSchema = userSpecifiedSchema,
+      className = source,
+      options = extraOptions.toMap
+    ).resolveRelation().toDataFrame(sparkSession)
   }
 
   /**

@@ -66,7 +66,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
         database = Some(
           table.identifier.database.getOrElse(sessionState.catalog.getCurrentDatabase))),
       tracksPartitionsInCatalog = sessionState.conf.manageFilesourcePartitions)
-    val dataSource: BaseRelation =
+    val dataSource: DataSourceRelation =
       DataSource(
         sparkSession = sparkSession,
         userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
@@ -104,7 +104,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
       case _ =>
         table.copy(
-          schema = dataSource.schema,
+          schema = dataSource.sourceSchema,
           partitionColumnNames = partitionColumnNames,
           // If metastore partition management for file source tables is enabled, we start off with
           // partition provider hive, but no partitions in the metastore. The user has to call
@@ -180,7 +180,7 @@ case class CreateDataSourceTableAsSelectCommand(
         // We will use the schema of resolved.relation as the schema of the table (instead of
         // the schema of df). It is important since the nullability may be changed by the relation
         // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
-        schema = result.schema)
+        schema = result.sourceSchema)
       // Table location is already validated. No need to check it again during table creation.
       sessionState.catalog.createTable(newTable, ignoreIfExists = false, validateLocation = false)
 
@@ -202,7 +202,7 @@ case class CreateDataSourceTableAsSelectCommand(
       tableLocation: Option[URI],
       physicalPlan: SparkPlan,
       mode: SaveMode,
-      tableExists: Boolean): BaseRelation = {
+      tableExists: Boolean): DataSourceRelation = {
     // Create the relation based on the input logical plan: `query`.
     val pathOption = tableLocation.map("path" -> CatalogUtils.URIToString(_))
     val dataSource = DataSource(

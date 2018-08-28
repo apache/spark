@@ -171,4 +171,9 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, BatchReadSupportP
   public BatchReadSupport createBatchReadSupport(DataSourceOptions options) {
     return new ReadSupport();
   }
+
+  @Override
+  public BatchReadSupport createBatchReadSupport(StructType schema, DataSourceOptions options) {
+    return createBatchReadSupport(options);
+  }
 }

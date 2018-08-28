@@ -27,6 +27,7 @@ import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.sources.v2.reader.partitioning.ClusteredDistribution;
 import org.apache.spark.sql.sources.v2.reader.partitioning.Distribution;
 import org.apache.spark.sql.sources.v2.reader.partitioning.Partitioning;
+import org.apache.spark.sql.types.StructType;
 
 public class JavaPartitionAwareDataSource implements DataSourceV2, BatchReadSupportProvider {
 
@@ -110,5 +111,10 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, BatchReadSupp
   @Override
   public BatchReadSupport createBatchReadSupport(DataSourceOptions options) {
     return new ReadSupport();
+  }
+
+  @Override
+  public BatchReadSupport createBatchReadSupport(StructType schema, DataSourceOptions options) {
+    return createBatchReadSupport(options);
   }
 }

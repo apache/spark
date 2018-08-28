@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -239,7 +240,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
             options = table.storage.properties ++ pathOption,
             catalogTable = Some(table))
 
-        LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
+        dataSource.resolveRelation(checkFilesExist = false).toLogicalPlan(Some(table))
       }
     })
   }

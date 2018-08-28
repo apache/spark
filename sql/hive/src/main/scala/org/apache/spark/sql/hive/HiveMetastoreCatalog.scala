@@ -115,7 +115,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       relation: HiveTableRelation,
       options: Map[String, String],
       fileFormatClass: Class[_ <: FileFormat],
-      fileType: String): LogicalRelation = {
+      fileType: String): LogicalPlan = {
     val metastoreSchema = relation.tableMeta.schema
     val tableIdentifier =
       QualifiedTableName(relation.tableMeta.database, relation.tableMeta.identifier.table)
@@ -192,15 +192,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         val logicalRelation = cached.getOrElse {
           val updatedTable = inferIfNeeded(relation, options, fileFormat)
           val created =
-            LogicalRelation(
-              DataSource(
-                sparkSession = sparkSession,
-                paths = rootPath.toString :: Nil,
-                userSpecifiedSchema = Option(updatedTable.dataSchema),
-                bucketSpec = None,
-                options = options,
-                className = fileType).resolveRelation(),
-              table = updatedTable)
+            DataSource(
+              sparkSession = sparkSession,
+              paths = rootPath.toString :: Nil,
+              userSpecifiedSchema = Option(updatedTable.dataSchema),
+              bucketSpec = None,
+              options = options,
+              className = fileType).resolveRelation().toLogicalPlan(Some(updatedTable))
 
           catalogProxy.cacheTable(tableIdentifier, created)
           created
@@ -213,10 +211,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     // it, but also respect the exprId in table relation output.
     assert(result.output.length == relation.output.length &&
       result.output.zip(relation.output).forall { case (a1, a2) => a1.dataType == a2.dataType })
-    val newOutput = result.output.zip(relation.output).map {
+    val newOutput = result.schema.toAttributes.zip(relation.output).map {
       case (a1, a2) => a1.withExprId(a2.exprId)
     }
-    result.copy(output = newOutput)
+    DataSourceRelation.newOutputCopy(result, newOutput)
   }
 
   private def inferIfNeeded(

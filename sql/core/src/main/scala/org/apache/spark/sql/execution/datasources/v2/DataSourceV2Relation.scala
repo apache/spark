@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.execution.datasources.DataSourceRelation
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2.{BatchReadSupportProvider, BatchWriteSupportProvider, DataSourceOptions, DataSourceV2}
 import org.apache.spark.sql.sources.v2.reader.{BatchReadSupport, ReadSupport, ScanConfigBuilder, SupportsReportStatistics}
@@ -46,7 +47,11 @@ case class DataSourceV2Relation(
     options: Map[String, String],
     tableIdent: Option[TableIdentifier] = None,
     userSpecifiedSchema: Option[StructType] = None)
-  extends LeafNode with MultiInstanceRelation with NamedRelation with DataSourceV2StringFormat {
+  extends LeafNode
+  with MultiInstanceRelation
+  with NamedRelation
+  with DataSourceV2StringFormat
+  with DataSourceRelation {
 
   import DataSourceV2Relation._
 

@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -39,10 +40,12 @@ import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.sources.v2.{BatchReadSupportProvider, DataSourceOptions, DataSourceV2}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
@@ -308,7 +311,7 @@ case class DataSource(
    *                        is considered as a non-streaming file based data source. Since we know
    *                        that files already exist, we don't need to check them again.
    */
-  def resolveRelation(checkFilesExist: Boolean = true): BaseRelation = {
+  def resolveRelation(checkFilesExist: Boolean = true): DataSourceRelation = {
     val relation = (providingClass.newInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
@@ -381,6 +384,17 @@ case class DataSource(
           format,
           caseInsensitiveOptions)(sparkSession)
 
+      case (datasourceV2: DataSourceV2, _) if datasourceV2.isInstanceOf[BatchReadSupportProvider] =>
+        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+          ds = datasourceV2, conf = sparkSession.sessionState.conf)
+        val pathsOption = {
+          val objectMapper = new ObjectMapper()
+          DataSourceOptions.PATHS_KEY -> objectMapper.writeValueAsString(paths.toArray)
+        }
+        DataSourceV2Relation.create(
+          datasourceV2, caseInsensitiveOptions ++ sessionOptions + pathsOption,
+          userSpecifiedSchema = userSpecifiedSchema)
+
       case _ =>
         throw new AnalysisException(
           s"$className is not a valid Spark SQL Data Source.")
@@ -399,7 +413,7 @@ case class DataSource(
         DataSourceUtils.verifyReadSchema(hs.fileFormat, hs.dataSchema)
       case _ =>
         SchemaUtils.checkColumnNameDuplication(
-          relation.schema.map(_.name),
+          relation.sourceSchema.map(_.name),
           "in the data schema",
           equality)
     }
@@ -472,7 +486,7 @@ case class DataSource(
       mode: SaveMode,
       data: LogicalPlan,
       outputColumns: Seq[Attribute],
-      physicalPlan: SparkPlan): BaseRelation = {
+      physicalPlan: SparkPlan): DataSourceRelation = {
     if (outputColumns.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }

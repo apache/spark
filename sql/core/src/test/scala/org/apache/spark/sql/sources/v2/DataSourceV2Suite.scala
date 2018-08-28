@@ -51,84 +51,109 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     }.head
   }
 
-  test("simplest implementation") {
-    Seq(classOf[SimpleDataSourceV2], classOf[JavaSimpleDataSourceV2]).foreach { cls =>
-      withClue(cls.getName) {
-        val df = spark.read.format(cls.getName).load()
-        checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
-        checkAnswer(df.select('j), (0 until 10).map(i => Row(-i)))
-        checkAnswer(df.filter('i > 5), (6 until 10).map(i => Row(i, -i)))
+  def testScalaAndSQL(name: String, source: String)(func: (DataFrame => Unit)): Unit = {
+    test(s"$name: $source") {
+      func(spark.read.format(source).load())
+    }
+
+    test(s"$name: $source - USING syntax") {
+      withTable("t") {
+        sql(s"CREATE TABLE t USING $source")
+        func(sql("SELECT * FROM t"))
       }
     }
-  }
 
-  test("advanced implementation") {
-    Seq(classOf[AdvancedDataSourceV2], classOf[JavaAdvancedDataSourceV2]).foreach { cls =>
-      withClue(cls.getName) {
-        val df = spark.read.format(cls.getName).load()
-        checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
-
-        val q1 = df.select('j)
-        checkAnswer(q1, (0 until 10).map(i => Row(-i)))
-        if (cls == classOf[AdvancedDataSourceV2]) {
-          val config = getScanConfig(q1)
-          assert(config.filters.isEmpty)
-          assert(config.requiredSchema.fieldNames === Seq("j"))
-        } else {
-          val config = getJavaScanConfig(q1)
-          assert(config.filters.isEmpty)
-          assert(config.requiredSchema.fieldNames === Seq("j"))
+    test(s"$name: $source - global view") {
+      withTable("t") {
+        val globalTempDB = spark.sharedState.globalTempViewManager.database
+        withGlobalTempView("src") {
+          sql(s"CREATE TABLE t USING $source")
+          sql("CREATE GLOBAL TEMP VIEW src AS SELECT * FROM t")
+          func(spark.table(s"$globalTempDB.src"))
         }
+      }
+    }
 
-        val q2 = df.filter('i > 3)
-        checkAnswer(q2, (4 until 10).map(i => Row(i, -i)))
-        if (cls == classOf[AdvancedDataSourceV2]) {
-          val config = getScanConfig(q2)
-          assert(config.filters.flatMap(_.references).toSet == Set("i"))
-          assert(config.requiredSchema.fieldNames === Seq("i", "j"))
-        } else {
-          val config = getJavaScanConfig(q2)
-          assert(config.filters.flatMap(_.references).toSet == Set("i"))
-          assert(config.requiredSchema.fieldNames === Seq("i", "j"))
-        }
-
-        val q3 = df.select('i).filter('i > 6)
-        checkAnswer(q3, (7 until 10).map(i => Row(i)))
-        if (cls == classOf[AdvancedDataSourceV2]) {
-          val config = getScanConfig(q3)
-          assert(config.filters.flatMap(_.references).toSet == Set("i"))
-          assert(config.requiredSchema.fieldNames === Seq("i"))
-        } else {
-          val config = getJavaScanConfig(q3)
-          assert(config.filters.flatMap(_.references).toSet == Set("i"))
-          assert(config.requiredSchema.fieldNames === Seq("i"))
-        }
-
-        val q4 = df.select('j).filter('j < -10)
-        checkAnswer(q4, Nil)
-        if (cls == classOf[AdvancedDataSourceV2]) {
-          val config = getScanConfig(q4)
-          // 'j < 10 is not supported by the testing data source.
-          assert(config.filters.isEmpty)
-          assert(config.requiredSchema.fieldNames === Seq("j"))
-        } else {
-          val config = getJavaScanConfig(q4)
-          // 'j < 10 is not supported by the testing data source.
-          assert(config.filters.isEmpty)
-          assert(config.requiredSchema.fieldNames === Seq("j"))
+    test(s"$name: $source - view") {
+      withTable("t") {
+        withTempView("src") {
+          sql(s"CREATE TABLE t USING $source")
+          sql("CREATE TEMP VIEW src AS SELECT * FROM t")
+          func(spark.table("src"))
         }
       }
     }
   }
 
-  test("columnar batch scan implementation") {
-    Seq(classOf[ColumnarDataSourceV2], classOf[JavaColumnarDataSourceV2]).foreach { cls =>
-      withClue(cls.getName) {
-        val df = spark.read.format(cls.getName).load()
-        checkAnswer(df, (0 until 90).map(i => Row(i, -i)))
-        checkAnswer(df.select('j), (0 until 90).map(i => Row(-i)))
-        checkAnswer(df.filter('i > 50), (51 until 90).map(i => Row(i, -i)))
+  Seq(classOf[SimpleDataSourceV2], classOf[JavaSimpleDataSourceV2]).foreach { cls =>
+    testScalaAndSQL("simplest implementation", cls.getName) { df =>
+      checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
+      checkAnswer(df.select('j), (0 until 10).map(i => Row(-i)))
+      checkAnswer(df.filter('i > 5), (6 until 10).map(i => Row(i, -i)))
+    }
+  }
+
+  Seq(classOf[AdvancedDataSourceV2], classOf[JavaAdvancedDataSourceV2]).foreach { cls =>
+    testScalaAndSQL("advanced implementation", cls.getName) { df =>
+      checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
+
+      val q1 = df.select('j)
+      checkAnswer(q1, (0 until 10).map(i => Row(-i)))
+      if (cls == classOf[AdvancedDataSourceV2]) {
+        val config = getScanConfig(q1)
+        assert(config.filters.isEmpty)
+        assert(config.requiredSchema.fieldNames === Seq("j"))
+      } else {
+        val config = getJavaScanConfig(q1)
+        assert(config.filters.isEmpty)
+        assert(config.requiredSchema.fieldNames === Seq("j"))
       }
+
+      val q2 = df.filter('i > 3)
+      checkAnswer(q2, (4 until 10).map(i => Row(i, -i)))
+      if (cls == classOf[AdvancedDataSourceV2]) {
+        val config = getScanConfig(q2)
+        assert(config.filters.flatMap(_.references).toSet == Set("i"))
+        assert(config.requiredSchema.fieldNames === Seq("i", "j"))
+      } else {
+        val config = getJavaScanConfig(q2)
+        assert(config.filters.flatMap(_.references).toSet == Set("i"))
+        assert(config.requiredSchema.fieldNames === Seq("i", "j"))
+      }
+
+      val q3 = df.select('i).filter('i > 6)
+      checkAnswer(q3, (7 until 10).map(i => Row(i)))
+      if (cls == classOf[AdvancedDataSourceV2]) {
+        val config = getScanConfig(q3)
+        assert(config.filters.flatMap(_.references).toSet == Set("i"))
+        assert(config.requiredSchema.fieldNames === Seq("i"))
+      } else {
+        val config = getJavaScanConfig(q3)
+        assert(config.filters.flatMap(_.references).toSet == Set("i"))
+        assert(config.requiredSchema.fieldNames === Seq("i"))
+      }
+
+      val q4 = df.select('j).filter('j < -10)
+      checkAnswer(q4, Nil)
+      if (cls == classOf[AdvancedDataSourceV2]) {
+        val config = getScanConfig(q4)
+        // 'j < 10 is not supported by the testing data source.
+        assert(config.filters.isEmpty)
+        assert(config.requiredSchema.fieldNames === Seq("j"))
+      } else {
+        val config = getJavaScanConfig(q4)
+        // 'j < 10 is not supported by the testing data source.
+        assert(config.filters.isEmpty)
+        assert(config.requiredSchema.fieldNames === Seq("j"))
+      }
+    }
+  }
+
+  Seq(classOf[ColumnarDataSourceV2], classOf[JavaColumnarDataSourceV2]).foreach { cls =>
+    testScalaAndSQL("columnar batch scan implementation", cls.getName) { df =>
+      checkAnswer(df, (0 until 90).map(i => Row(i, -i)))
+      checkAnswer(df.select('j), (0 until 90).map(i => Row(-i)))
+      checkAnswer(df.filter('i > 50), (51 until 90).map(i => Row(i, -i)))
     }
   }
 
@@ -147,37 +172,34 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("partitioning reporting") {
+  Seq(classOf[PartitionAwareDataSource], classOf[JavaPartitionAwareDataSource]).foreach { cls =>
     import org.apache.spark.sql.functions.{count, sum}
-    Seq(classOf[PartitionAwareDataSource], classOf[JavaPartitionAwareDataSource]).foreach { cls =>
-      withClue(cls.getName) {
-        val df = spark.read.format(cls.getName).load()
-        checkAnswer(df, Seq(Row(1, 4), Row(1, 4), Row(3, 6), Row(2, 6), Row(4, 2), Row(4, 2)))
+    testScalaAndSQL("partitioning reporting", cls.getName) { df =>
+      checkAnswer(df, Seq(Row(1, 4), Row(1, 4), Row(3, 6), Row(2, 6), Row(4, 2), Row(4, 2)))
 
-        val groupByColA = df.groupBy('i).agg(sum('j))
-        checkAnswer(groupByColA, Seq(Row(1, 8), Row(2, 6), Row(3, 6), Row(4, 4)))
-        assert(groupByColA.queryExecution.executedPlan.collectFirst {
-          case e: ShuffleExchangeExec => e
-        }.isEmpty)
+      val groupByColA = df.groupBy('i).agg(sum('j))
+      checkAnswer(groupByColA, Seq(Row(1, 8), Row(2, 6), Row(3, 6), Row(4, 4)))
+      assert(groupByColA.queryExecution.executedPlan.collectFirst {
+        case e: ShuffleExchangeExec => e
+      }.isEmpty)
 
-        val groupByColAB = df.groupBy('i, 'j).agg(count("*"))
-        checkAnswer(groupByColAB, Seq(Row(1, 4, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 2, 2)))
-        assert(groupByColAB.queryExecution.executedPlan.collectFirst {
-          case e: ShuffleExchangeExec => e
-        }.isEmpty)
+      val groupByColAB = df.groupBy('i, 'j).agg(count("*"))
+      checkAnswer(groupByColAB, Seq(Row(1, 4, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 2, 2)))
+      assert(groupByColAB.queryExecution.executedPlan.collectFirst {
+        case e: ShuffleExchangeExec => e
+      }.isEmpty)
 
-        val groupByColB = df.groupBy('j).agg(sum('i))
-        checkAnswer(groupByColB, Seq(Row(2, 8), Row(4, 2), Row(6, 5)))
-        assert(groupByColB.queryExecution.executedPlan.collectFirst {
-          case e: ShuffleExchangeExec => e
-        }.isDefined)
+      val groupByColB = df.groupBy('j).agg(sum('i))
+      checkAnswer(groupByColB, Seq(Row(2, 8), Row(4, 2), Row(6, 5)))
+      assert(groupByColB.queryExecution.executedPlan.collectFirst {
+        case e: ShuffleExchangeExec => e
+      }.isDefined)
 
-        val groupByAPlusB = df.groupBy('i + 'j).agg(count("*"))
-        checkAnswer(groupByAPlusB, Seq(Row(5, 2), Row(6, 2), Row(8, 1), Row(9, 1)))
-        assert(groupByAPlusB.queryExecution.executedPlan.collectFirst {
-          case e: ShuffleExchangeExec => e
-        }.isDefined)
-      }
+      val groupByAPlusB = df.groupBy('i + 'j).agg(count("*"))
+      checkAnswer(groupByAPlusB, Seq(Row(5, 2), Row(6, 2), Row(8, 1), Row(9, 1)))
+      assert(groupByAPlusB.queryExecution.executedPlan.collectFirst {
+        case e: ShuffleExchangeExec => e
+      }.isDefined)
     }
   }
 
@@ -383,6 +405,11 @@ class SimpleDataSourceV2 extends DataSourceV2 with BatchReadSupportProvider {
   override def createBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
     new ReadSupport
   }
+
+  override def createBatchReadSupport(
+      schema: StructType, options: DataSourceOptions): BatchReadSupport = {
+    createBatchReadSupport(options)
+  }
 }
 
 
@@ -421,6 +448,11 @@ class AdvancedDataSourceV2 extends DataSourceV2 with BatchReadSupportProvider {
 
   override def createBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
     new ReadSupport
+  }
+
+  override def createBatchReadSupport(
+      schema: StructType, options: DataSourceOptions): BatchReadSupport = {
+    createBatchReadSupport(options)
   }
 }
 
@@ -509,6 +541,11 @@ class ColumnarDataSourceV2 extends DataSourceV2 with BatchReadSupportProvider {
   override def createBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
     new ReadSupport
   }
+
+  override def createBatchReadSupport(
+      schema: StructType, options: DataSourceOptions): BatchReadSupport = {
+    createBatchReadSupport(options)
+  }
 }
 
 object ColumnarReaderFactory extends PartitionReaderFactory {
@@ -585,6 +622,11 @@ class PartitionAwareDataSource extends DataSourceV2 with BatchReadSupportProvide
 
   override def createBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
     new ReadSupport
+  }
+
+  override def createBatchReadSupport(
+      schema: StructType, options: DataSourceOptions): BatchReadSupport = {
+    createBatchReadSupport(options)
   }
 }
 

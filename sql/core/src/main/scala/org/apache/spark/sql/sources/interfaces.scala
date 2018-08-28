@@ -22,6 +22,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.datasources.DataSourceRelation
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
@@ -193,7 +194,7 @@ trait CreatableRelationProvider {
  * @since 1.3.0
  */
 @InterfaceStability.Stable
-abstract class BaseRelation {
+abstract class BaseRelation extends DataSourceRelation {
   def sqlContext: SQLContext
   def schema: StructType
 

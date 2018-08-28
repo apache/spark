@@ -194,7 +194,7 @@ case class RelationConversions(
   private def isParquetProperty(key: String) =
     key.startsWith("parquet.") || key.contains(".parquet.")
 
-  private def convert(relation: HiveTableRelation): LogicalRelation = {
+  private def convert(relation: HiveTableRelation): LogicalPlan = {
     val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
 
     // Consider table and storage properties. For properties existing in both sides, storage

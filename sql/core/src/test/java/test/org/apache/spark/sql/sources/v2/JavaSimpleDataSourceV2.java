@@ -21,6 +21,7 @@ import org.apache.spark.sql.sources.v2.BatchReadSupportProvider;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
 import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.reader.*;
+import org.apache.spark.sql.types.StructType;
 
 public class JavaSimpleDataSourceV2 implements DataSourceV2, BatchReadSupportProvider {
 
@@ -38,5 +39,10 @@ public class JavaSimpleDataSourceV2 implements DataSourceV2, BatchReadSupportPro
   @Override
   public BatchReadSupport createBatchReadSupport(DataSourceOptions options) {
     return new ReadSupport();
+  }
+
+  @Override
+  public BatchReadSupport createBatchReadSupport(StructType schema, DataSourceOptions options) {
+    return createBatchReadSupport(options);
   }
 }
