@@ -90,6 +90,8 @@ object LambdaFunction {
  */
 trait HigherOrderFunction extends Expression with ExpectsInputTypes {
 
+  override def nullable: Boolean = arguments.exists(_.nullable)
+
   override def children: Seq[Expression] = arguments ++ functions
 
   /**
@@ -154,8 +156,6 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
  * Trait for functions having as input one argument and one function.
  */
 trait SimpleHigherOrderFunction extends HigherOrderFunction  {
-
-  override def nullable: Boolean = argument.nullable
 
   def argument: Expression
 
@@ -628,8 +628,6 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 
   override def functionTypes: Seq[AbstractDataType] = AnyDataType :: Nil
 
-  override def nullable: Boolean = left.nullable || right.nullable
-
   override def dataType: DataType = MapType(keyType, function.dataType, function.nullable)
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): MapZipWith = {
@@ -799,8 +797,6 @@ case class ZipWith(left: Expression, right: Expression, function: Expression)
   override def functions: Seq[Expression] = List(function)
 
   override def functionTypes: Seq[AbstractDataType] = AnyDataType :: Nil
-
-  override def nullable: Boolean = left.nullable || right.nullable
 
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
