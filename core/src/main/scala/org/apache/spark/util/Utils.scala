@@ -240,12 +240,6 @@ private[spark] object Utils extends Logging {
     // scalastyle:on classforname
   }
 
-  // scalastyle:off classforname
-  def classForNameFromSpark(className: String): Class[_] = {
-    Class.forName(className, true, getSparkClassLoader)
-    // scalastyle:on classforname
-  }
-
   /**
    * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.DataOutput]]
    */
