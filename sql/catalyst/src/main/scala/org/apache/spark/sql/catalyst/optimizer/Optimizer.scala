@@ -133,7 +133,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     // run this once earlier. this might simplify the plan and reduce cost of optimizer.
     // for example, a query such as Filter(LocalRelation) would go through all the heavy
     // optimizer rules that are triggered when there is a filter
-    // (e.g. InferFiltersFromConstraints).if we run this batch earlier, the query becomes just
+    // (e.g. InferFiltersFromConstraints). if we run this batch earlier, the query becomes just
     // LocalRelation and does not trigger many rules
     Batch("LocalRelation early", fixedPoint,
       ConvertToLocalRelation,
