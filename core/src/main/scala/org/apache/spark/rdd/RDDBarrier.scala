@@ -25,7 +25,8 @@ import org.apache.spark.annotation.{Experimental, Since}
 /**
  * :: Experimental ::
  * Wraps an RDD in a barrier stage, which forces Spark to launch tasks of this stage together.
- * [[RDDBarrier]] instances are created by [[RDD.barrier]].
+ * [[org.apache.spark.rdd.RDDBarrier]] instances are created by
+ * [[org.apache.spark.rdd.RDD#barrier]].
  */
 @Experimental
 @Since("2.4.0")
@@ -35,9 +36,9 @@ class RDDBarrier[T: ClassTag] private[spark] (rdd: RDD[T]) {
    * :: Experimental ::
    * Returns a new RDD by applying a function to each partition of the wrapped RDD,
    * where tasks are launched together in a barrier stage.
-   * The interface is the same as [[RDD.mapPartitions]].
+   * The interface is the same as [[org.apache.spark.rdd.RDD#mapPartitions]].
    * Please see the API doc there.
-   * @see [[org.apache.spark.BarrierTaskContext]] for specific methods for a barrier task
+   * @see [[org.apache.spark.BarrierTaskContext]]
    */
   @Experimental
   @Since("2.4.0")

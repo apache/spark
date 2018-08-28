@@ -1655,7 +1655,7 @@ abstract class RDD[T: ClassTag](
    * The barrier execution mode feature is experimental and it only handles limited scenarios.
    * Please read the linked SPIP and design docs to understand the limitations and future plans.
    * @return an [[RDDBarrier]] instance that provides actions within a barrier stage
-   * @see [[BarrierTaskContext]]
+   * @see [[org.apache.spark.BarrierTaskContext]]
    * @see <a href="https://jira.apache.org/jira/browse/SPARK-24374">SPIP: Barrier Execution Mode</a>
    * @see <a href="https://jira.apache.org/jira/browse/SPARK-24582">Design Doc</a>
    */
