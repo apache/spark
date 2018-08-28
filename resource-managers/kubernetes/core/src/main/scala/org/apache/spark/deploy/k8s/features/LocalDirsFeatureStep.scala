@@ -19,8 +19,11 @@ package org.apache.spark.deploy.k8s.features
 import java.nio.file.Paths
 import java.util.UUID
 
+import collection.JavaConverters._
+
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilder, VolumeBuilder, VolumeMountBuilder}
 
+import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, SparkPod}
 
 private[spark] class LocalDirsFeatureStep(
@@ -37,17 +40,28 @@ private[spark] class LocalDirsFeatureStep(
     .orElse(conf.getOption("spark.local.dir"))
     .getOrElse(defaultLocalDir)
     .split(",")
+  private val useLocalDirTmpFs = conf.get(KUBERNETES_LOCAL_DIRS_TMPFS)
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val localDirVolumes = resolvedLocalDirs
       .zipWithIndex
+      // To allow customisation of local dirs backing volumes we should avoid creating
+      // emptyDir volumes if the volume is already defined in the pod spec
+      .filter {
+        case (localDir, index) => !hasVolume(pod, s"spark-local-dir-${index + 1}")
+      }
       .map { case (localDir, index) =>
         new VolumeBuilder()
           .withName(s"spark-local-dir-${index + 1}")
           .withNewEmptyDir()
+            .withMedium(useLocalDirTmpFs match {
+              case true  => "Memory" // Use tmpfs
+              case false => null // Default - use nodes backing storage
+            })
           .endEmptyDir()
           .build()
       }
+
     val localDirVolumeMounts = localDirVolumes
       .zip(resolvedLocalDirs)
       .map { case (localDirVolume, localDirPath) =>
@@ -74,4 +88,8 @@ private[spark] class LocalDirsFeatureStep(
   override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
+
+  def hasVolume(pod: SparkPod, name: String): Boolean = {
+    pod.pod.getSpec().getVolumes().asScala.exists(v => v.getName.equals(name))
+  }
 }
