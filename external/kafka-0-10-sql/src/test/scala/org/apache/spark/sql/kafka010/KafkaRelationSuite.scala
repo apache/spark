@@ -20,6 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.sql.QueryTest
@@ -233,5 +234,97 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     testBadOptions("assign" -> "")("no topicpartitions to assign")
     testBadOptions("subscribe" -> "")("no topics to subscribe")
     testBadOptions("subscribePattern" -> "")("pattern to subscribe is empty")
+  }
+
+  test("read Kafka transactional messages: read_committed") {
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+    testUtils.withTranscationalProducer { producer =>
+      val df = spark
+        .read
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.isolation.level", "read_committed")
+        .option("subscribe", topic)
+        .load()
+        .selectExpr("CAST(value AS STRING)")
+
+      producer.beginTransaction()
+      (1 to 5).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+
+      // Should not read any messages before they are committed
+      assert(df.isEmpty)
+
+      producer.commitTransaction()
+
+      // Should read all committed messages
+      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+
+      producer.beginTransaction()
+      (6 to 10).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+      producer.abortTransaction()
+
+      // Should not read aborted messages
+      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+
+      producer.beginTransaction()
+      (11 to 15).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+      producer.commitTransaction()
+
+      // Should skip aborted messages and read new committed ones.
+      checkAnswer(df, ((1 to 5) ++ (11 to 15)).map(_.toString).toDF)
+    }
+  }
+
+  test("read Kafka transactional messages: read_uncommitted") {
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+    testUtils.withTranscationalProducer { producer =>
+      val df = spark
+        .read
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.isolation.level", "read_uncommitted")
+        .option("subscribe", topic)
+        .load()
+        .selectExpr("CAST(value AS STRING)")
+
+      producer.beginTransaction()
+      (1 to 5).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+
+      // "read_uncommitted" should see all messages including uncommitted ones
+      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+
+      producer.commitTransaction()
+
+      // Should read all committed messages
+      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+
+      producer.beginTransaction()
+      (6 to 10).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+      producer.abortTransaction()
+
+      // "read_uncommitted" should see all messages including uncommitted or aborted ones
+      checkAnswer(df, (1 to 10).map(_.toString).toDF)
+
+      producer.beginTransaction()
+      (11 to 15).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+      producer.commitTransaction()
+
+      // Should read all messages
+      checkAnswer(df, (1 to 15).map(_.toString).toDF)
+    }
   }
 }
