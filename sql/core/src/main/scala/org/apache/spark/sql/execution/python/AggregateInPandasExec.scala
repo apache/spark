@@ -79,8 +79,6 @@ case class AggregateInPandasExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute()
 
-    val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
-    val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
     val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
@@ -137,8 +135,6 @@ case class AggregateInPandasExec(
 
       val columnarBatchIter = new ArrowPythonRunner(
         pyFuncs,
-        bufferSize,
-        reuseWorker,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         argOffsets,
         aggInputSchema,
