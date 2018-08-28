@@ -53,7 +53,7 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
       if (addedClasspath != "") {
         settings.classpath append addedClasspath
       }
-      intp = Utils.classForName("org.apache.spark.repl.SparkILoopInterpreter")
+      intp = Utils.classForNameFromSpark("org.apache.spark.repl.SparkILoopInterpreter")
         .getDeclaredConstructor(Seq(classOf[Settings], classOf[JPrintWriter]): _*)
         .newInstance(Seq(settings, out): _*)
         .asInstanceOf[IMain]
@@ -148,11 +148,11 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
    */
   private def runClosure(body: () => Boolean): Boolean = {
     if (isScala2_11) {
-      val loader = Utils.classForName("scala.reflect.internal.util.ScalaClassLoader$")
+      val loader = Utils.classForNameFromSpark("scala.reflect.internal.util.ScalaClassLoader$")
         .getDeclaredField("MODULE$")
         .get(null)
 
-      Utils.classForName("scala.reflect.internal.util.ScalaClassLoader$")
+      Utils.classForNameFromSpark("scala.reflect.internal.util.ScalaClassLoader$")
         .getDeclaredMethod("savingContextLoader", classOf[() => Boolean])
         .invoke(loader, body)
         .asInstanceOf[Boolean]
