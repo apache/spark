@@ -1643,6 +1643,16 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Return whether this RDD is reliably checkpointed and materialized.
+   */
+  private[rdd] def isReliablyCheckpointed: Boolean = {
+    checkpointData match {
+      case Some(reliable: ReliableRDDCheckpointData[_]) if reliable.isCheckpointed => true
+      case _ => false
+    }
+  }
+
+  /**
    * Gets the name of the directory to which this RDD was checkpointed.
    * This is not defined if the RDD is checkpointed locally.
    */
@@ -1873,58 +1883,59 @@ abstract class RDD[T: ClassTag](
     dependencies.filter(!_.isInstanceOf[ShuffleDependency[_, _, _]]).exists(_.rdd.isBarrier())
 
   /**
-   * Returns the random level of this RDD's output. Please refer to [[RandomLevel]] for the
-   * definition.
+   * Returns the deterministic level of this RDD's output. Please refer to [[DeterministicLevel]]
+   * for the definition.
    *
-   * By default, an reliably checkpointed RDD, or RDD without parents(root RDD) is IDEMPOTENT. For
-   * RDDs with parents, we will generate a random level candidate per parent according to the
-   * dependency. The random level of the current RDD is the random level candidate that is random
-   * most. Please override [[getOutputRandomLevel]] to provide custom logic of calculating output
-   * random level.
+   * By default, an reliably checkpointed RDD, or RDD without parents(root RDD) is DETERMINATE. For
+   * RDDs with parents, we will generate a deterministic level candidate per parent according to
+   * the dependency. The deterministic level of the current RDD is the deterministic level
+   * candidate that is deterministic least. Please override [[getOutputDeterministicLevel]] to
+   * provide custom logic of calculating output deterministic level.
    */
-  // TODO: make it public so users can set random level to their custom RDDs.
-  // TODO: this can be per-partition. e.g. UnionRDD can have different random level for different
-  // partitions.
-  private[spark] final lazy val outputRandomLevel: RandomLevel.Value = {
-    if (checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[_]])) {
-      RandomLevel.IDEMPOTENT
+  // TODO: make it public so users can set deterministic level to their custom RDDs.
+  // TODO: this can be per-partition. e.g. UnionRDD can have different deterministic level for
+  // different partitions.
+  private[spark] final lazy val outputDeterministicLevel: DeterministicLevel.Value = {
+    if (isReliablyCheckpointed) {
+      DeterministicLevel.DETERMINATE
     } else {
-      getOutputRandomLevel
+      getOutputDeterministicLevel
     }
   }
 
   @DeveloperApi
-  protected def getOutputRandomLevel: RandomLevel.Value = {
-    val randomLevelCandidates = dependencies.map {
+  protected def getOutputDeterministicLevel: DeterministicLevel.Value = {
+    val deterministicLevelCandidates = dependencies.map {
       // The shuffle is not really happening, treat it like narrow dependency and assume the output
-      // random level of current RDD is same as parent.
+      // deterministic level of current RDD is same as parent.
       case dep: ShuffleDependency[_, _, _] if dep.rdd.partitioner.exists(_ == dep.partitioner) =>
-        dep.rdd.outputRandomLevel
+        dep.rdd.outputDeterministicLevel
 
       case dep: ShuffleDependency[_, _, _] =>
-        if (dep.rdd.outputRandomLevel == RandomLevel.INDETERMINATE) {
+        if (dep.rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE) {
           // If map output was indeterminate, shuffle output will be indeterminate as well
-          RandomLevel.INDETERMINATE
+          DeterministicLevel.INDETERMINATE
         } else if (dep.keyOrdering.isDefined && dep.aggregator.isDefined) {
           // if aggregator specified (and so unique keys) and key ordering specified - then
           // consistent ordering.
-          RandomLevel.IDEMPOTENT
+          DeterministicLevel.DETERMINATE
         } else {
           // In Spark, the reducer fetches multiple remote shuffle blocks at the same time, and
           // the arrival order of these shuffle blocks are totally random. Even if the parent map
-          // RDD is IDEMPOTENT, the reduce RDD is always UNORDERED.
-          RandomLevel.UNORDERED
+          // RDD is DETERMINATE, the reduce RDD is always UNORDERED.
+          DeterministicLevel.UNORDERED
         }
 
-      // For narrow dependency, assume the output random level of current RDD is same as parent.
-      case dep => dep.rdd.outputRandomLevel
+      // For narrow dependency, assume the output deterministic level of current RDD is same as
+      // parent.
+      case dep => dep.rdd.outputDeterministicLevel
     }
 
-    if (randomLevelCandidates.isEmpty) {
-      // By default we assume the root RDD is idempotent
-      RandomLevel.IDEMPOTENT
+    if (deterministicLevelCandidates.isEmpty) {
+      // By default we assume the root RDD is determinate.
+      DeterministicLevel.DETERMINATE
     } else {
-      randomLevelCandidates.maxBy(_.id)
+      deterministicLevelCandidates.maxBy(_.id)
     }
   }
 }
@@ -1982,10 +1993,10 @@ object RDD {
 }
 
 /**
- * The random level of RDD's output (i.e. what `RDD#compute` returns), which indicates how the
- * output will diff when Spark reruns the tasks for the RDD. There are 3 random levels, ordered
- * by the randomness from low to high:
- * 1. IDEMPOTENT: The RDD output is always same (including order) when rerun.
+ * The deterministic level of RDD's output (i.e. what `RDD#compute` returns), which indicates how
+ * the output will diff when Spark reruns the tasks for the RDD. There are 3 deterministic levels,
+ * ordered by the determinism from high to low:
+ * 1. DETERMINATE: The RDD output is always same (including order) when rerun.
  * 2. UNORDERED: The RDD output is always the same data set but in potentially a different order
  *               when rerun.
  * 3. INDETERMINATE. The RDD output can be different (not only order) when rerun.
@@ -1993,6 +2004,6 @@ object RDD {
  * Note that, the output of an RDD usually relies on parent RDDs. When a parent RDD's output is
  * INDETERMINATE, it's very likely this RDD's output is also INDETERMINATE.
  */
-private[spark] object RandomLevel extends Enumeration {
-  val IDEMPOTENT, UNORDERED, INDETERMINATE = Value
+private[spark] object DeterministicLevel extends Enumeration {
+  val DETERMINATE, UNORDERED, INDETERMINATE = Value
 }

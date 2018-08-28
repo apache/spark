@@ -30,7 +30,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
-import org.apache.spark.rdd.{RandomLevel, RDD}
+import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
@@ -81,8 +81,8 @@ class MyRDD(
     override def index: Int = i
   }).toArray
 
-  override protected def getOutputRandomLevel = {
-    if (indeterminate) RandomLevel.INDETERMINATE else super.getOutputRandomLevel
+  override protected def getOutputDeterministicLevel = {
+    if (indeterminate) DeterministicLevel.INDETERMINATE else super.getOutputDeterministicLevel
   }
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {
@@ -2638,7 +2638,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(countSubmittedMapStageAttempts() === 2)
   }
 
-  test("SPARK-23207: retry all the succeeding stages when the map stage is random") {
+  test("SPARK-23207: retry all the succeeding stages when the map stage is indeterminate") {
     val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, indeterminate = true)
 
     val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
@@ -2694,7 +2694,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(failedStages.collect {
       case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId1 => stage
     }.head.findMissingPartitions() == Seq(0))
-    // The second shuffle map stage is entirely rollbacked, because the root RDD is random.
+    // The second shuffle map stage is entirely rollbacked, because the root RDD is indeterminate.
     assert(failedStages.collect {
       case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
     }.head.findMissingPartitions() == Seq(0, 1))

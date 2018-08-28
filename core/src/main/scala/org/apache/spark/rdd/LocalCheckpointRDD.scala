@@ -38,11 +38,11 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](
     sc: SparkContext,
     rddId: Int,
     numPartitions: Int,
-    randomLevel: RandomLevel.Value)
+    deterministicLevel: DeterministicLevel.Value)
   extends CheckpointRDD[T](sc) {
 
   def this(rdd: RDD[T]) {
-    this(rdd.context, rdd.id, rdd.partitions.length, rdd.outputRandomLevel)
+    this(rdd.context, rdd.id, rdd.partitions.length, rdd.outputDeterministicLevel)
   }
 
   protected override def getPartitions: Array[Partition] = {
@@ -66,8 +66,8 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](
   }
 
   // Local checkpoint is not reliable, we may still get output from original RDD, so the output
-  // random level should also inherent from the original RDD.
-  override protected def getOutputRandomLevel = {
-    randomLevel
+  // deterministic level should also inherent from the original RDD.
+  override protected def getOutputDeterministicLevel = {
+    deterministicLevel
   }
 }

@@ -40,7 +40,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.rdd.{RandomLevel, RDD, RDDCheckpointData}
+import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -1492,9 +1492,9 @@ private[spark] class DAGScheduler(
               // stage and its succeeding stages, because the input data will be changed after the
               // map tasks are re-tried.
               // Note that, if map stage is UNORDERED, we are fine. The shuffle partitioner is
-              // guaranteed to be idempotent, so the input data of the reducers will not change even
-              // if the map tasks are re-tried.
-              if (mapStage.rdd.outputRandomLevel == RandomLevel.INDETERMINATE) {
+              // guaranteed to be determinate, so the input data of the reducers will not change
+              // even if the map tasks are re-tried.
+              if (mapStage.rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE) {
                 // It's a little tricky to find all the succeeding stages of `failedStage`, because
                 // each stage only know its parents not children. Here we traverse the stages from
                 // the leaf nodes (the result stages of active jobs), and rollback all the stages
@@ -1519,7 +1519,8 @@ private[spark] class DAGScheduler(
                   case mapStage: ShuffleMapStage =>
                     val numMissingPartitions = mapStage.findMissingPartitions().length
                     if (numMissingPartitions < mapStage.numTasks) {
-                      val reason = "preceding shuffle map stage with random output gets retried."
+                      val reason = "preceding shuffle map stage with indeterminate output gets " +
+                        "retried."
                       try {
                         taskScheduler.killAllTaskAttempts(
                           mapStage.id, interruptThread = false, reason)
@@ -1536,10 +1537,10 @@ private[spark] class DAGScheduler(
                     val numMissingPartitions = resultStage.findMissingPartitions().length
                     if (numMissingPartitions < resultStage.numTasks) {
                       // TODO: support to rollback result tasks.
-                      val errorMessage = "A shuffle map stage with random output was failed " +
-                        s"and retried. However, Spark cannot rollback the $resultStage to " +
-                        "re-process the input data, and has to fail this job. Please " +
-                        "eliminate the randomness by checkpointing the RDD before " +
+                      val errorMessage = "A shuffle map stage with indeterminate output was " +
+                        s"failed and retried. However, Spark cannot rollback the $resultStage " +
+                        "to re-process the input data, and has to fail this job. Please " +
+                        "eliminate the determinism by checkpointing the RDD before " +
                         "repartition/zip and try again."
                       abortStage(failedStage, errorMessage, None)
                     }
