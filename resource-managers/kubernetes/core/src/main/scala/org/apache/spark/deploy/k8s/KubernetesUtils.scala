@@ -74,7 +74,7 @@ private[spark] object KubernetesUtils {
   }
 
   /**
-    * Given a pod output a human readable representation of its state
+    * Given a pod, output a human readable representation of its state
     * @param pod Pod
     * @return Human readable pod state
     */
@@ -94,30 +94,20 @@ private[spark] object KubernetesUtils {
 
       // status
       ("start time", formatTime(pod.getStatus.getStartTime)),
-      ("container images",
-        pod.getStatus.getContainerStatuses
-          .asScala
-          .map(_.getImage)
-          .mkString(", ")),
       ("phase", pod.getStatus.getPhase),
-      ("status", pod.getStatus.getContainerStatuses.asScala.map { status =>
-        Seq(
-          ("Container name", status.getName),
-          ("Container image", status.getImage)) ++
-          containerStatusDescription(status)
-      }.map(p => formatPairsBundle(p, 2)).mkString("\n\n"))
+      ("container status", containersDescription(pod, 2))
     )
 
     formatPairsBundle(details)
   }
 
-  def containersDescription(p: Pod): String = {
+  def containersDescription(p: Pod, indent: Int = 1): String = {
     p.getStatus.getContainerStatuses.asScala.map { status =>
       Seq(
-        ("Container name", status.getName),
-        ("Container image", status.getImage)) ++
+        ("container name", status.getName),
+        ("container image", status.getImage)) ++
         containerStatusDescription(status)
-    }.map(p => formatPairsBundle(p, 1)).mkString("\n\n")
+    }.map(p => formatPairsBundle(p, indent)).mkString("\n\n")
   }
 
   def containerStatusDescription(containerStatus: ContainerStatus)
@@ -129,22 +119,22 @@ private[spark] object KubernetesUtils {
       .map {
         case running: ContainerStateRunning =>
           Seq(
-            ("Container state", "Running"),
-            ("Container started at", formatTime(running.getStartedAt)))
+            ("container state", "running"),
+            ("container started at", formatTime(running.getStartedAt)))
         case waiting: ContainerStateWaiting =>
           Seq(
-            ("Container state", "Waiting"),
-            ("Pending reason", waiting.getReason))
+            ("container state", "waiting"),
+            ("pending reason", waiting.getReason))
         case terminated: ContainerStateTerminated =>
           Seq(
-            ("Container state", "Terminated"),
-            ("Container started at", formatTime(terminated.getStartedAt)),
-            ("Container finished at", formatTime(terminated.getFinishedAt)),
-            ("Exit code", terminated.getExitCode.toString),
-            ("Termination reason", terminated.getReason))
+            ("container state", "terminated"),
+            ("container started at", formatTime(terminated.getStartedAt)),
+            ("container finished at", formatTime(terminated.getFinishedAt)),
+            ("exit code", terminated.getExitCode.toString),
+            ("termination reason", terminated.getReason))
         case unknown =>
           throw new SparkException(s"Unexpected container status type ${unknown.getClass}.")
-      }.getOrElse(Seq(("Container state", "N/A")))
+      }.getOrElse(Seq(("container state", "N/A")))
   }
 
   def formatTime(time: Time): String = {
