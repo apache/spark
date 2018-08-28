@@ -42,10 +42,12 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   def this(in0: BufferedReader, out: JPrintWriter) = this(Some(in0), out)
   def this() = this(None, new JPrintWriter(Console.out, true))
 
-  // TODO: Remove the following `override` when the support of Scala 2.11 is ended
-  // Scala 2.11 has a bug of finding imported types in class constructors, extends clause
-  // which is fixed in Scala 2.12 but never be back-ported into Scala 2.11.x.
-  // As a result, we copied the fixes into `SparkILoopInterpreter`. See SPARK-22393 for detail.
+  /**
+   * TODO: Remove the following `override` when the support of Scala 2.11 is ended
+   * Scala 2.11 has a bug of finding imported types in class constructors, extends clause
+   * which is fixed in Scala 2.12 but never be back-ported into Scala 2.11.x.
+   * As a result, we copied the fixes into `SparkILoopInterpreter`. See SPARK-22393 for detail.
+   */
   override def createInterpreter(): Unit = {
     if (isScala2_11) {
       if (addedClasspath != "") {
@@ -145,24 +147,21 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
 
   /**
    * TODO: Remove `runClosure` when the support of Scala 2.11 is ended
-   * In Scala 2.12, we don't need to use `savingContextLoader` to execute the `body`.
-   * See `SI-8521 No blind save of context class loader` for detail.
    */
-  private def runClosure(body: () => Boolean): Boolean = {
+  private def runClosure(body: => Boolean): Boolean = {
     if (isScala2_11) {
-      // scalastyle:off classforname
-      // Have to use the default classloader to match the one used in `classOf[() => Boolean]`.
-      val loader = Class.forName("scala.reflect.internal.util.ScalaClassLoader$")
-        .getDeclaredField("MODULE$")
-        .get(null)
-
-      Class.forName("scala.reflect.internal.util.ScalaClassLoader$")
-        .getDeclaredMethod("savingContextLoader", classOf[() => Boolean])
-        .invoke(loader, body)
-        .asInstanceOf[Boolean]
-      // scalastyle:on classforname
+      // In Scala 2.11, there is a bug that interpret could set the current thread's
+      // context classloader, but fails to reset it to its previous state when returning
+      // from that method. This is fixed in SI-8521 https://github.com/scala/scala/pull/5657
+      // which is never back-ported into Scala 2.11.x. The following is a workaround fix.
+      val original = Thread.currentThread().getContextClassLoader
+      try {
+        body
+      } finally {
+        Thread.currentThread().setContextClassLoader(original)
+      }
     } else {
-      body.apply()
+      body
     }
   }
 
@@ -180,7 +179,7 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
    * We should remove this duplication once Scala provides a way to load our custom initialization
    * code, and also customize the ordering of printing welcome message.
    */
-  override def process(settings: Settings): Boolean = runClosure { () =>
+  override def process(settings: Settings): Boolean = runClosure {
 
     def newReader = in0.fold(chooseReader(settings))(r => SimpleReader(r, out, interactive = true))
 
