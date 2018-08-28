@@ -34,8 +34,6 @@ import scala.tools.nsc.interpreter.StdReplTags.tagOfIMain
 import scala.tools.nsc.util.stringFromStream
 import scala.util.Properties.{javaVersion, javaVmName, versionNumberString, versionString}
 
-import org.apache.spark.util.Utils
-
 /**
  *  A Spark-specific interactive shell.
  */
