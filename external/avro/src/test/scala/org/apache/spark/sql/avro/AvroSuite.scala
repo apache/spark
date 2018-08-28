@@ -1109,14 +1109,34 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       recordName = "employee",
       nameSpace = "foo.bar")
 
-    assert("foo.bar.employee" == employeeType.getFullName)
-    assert("employee" == employeeType.getName)
-    assert("foo.bar" == employeeType.getNamespace)
+    assert(employeeType.getFullName == "foo.bar.employee")
+    assert(employeeType.getName == "employee")
+    assert(employeeType.getNamespace == "foo.bar")
 
     val addressType = employeeType.getField("address").schema()
-    assert("foo.bar.employee.address" == addressType.getFullName)
-    assert("address" == addressType.getName)
-    assert("foo.bar.employee" == addressType.getNamespace)
+    assert(addressType.getFullName == "foo.bar.employee.address")
+    assert(addressType.getName == "address")
+    assert(addressType.getNamespace == "foo.bar.employee")
+  }
+
+  test("check empty namespace - toAvroType") {
+    val sparkSchema = StructType(Seq(
+      StructField("name", StringType, nullable = false),
+      StructField("address", StructType(Seq(
+        StructField("city", StringType, nullable = false),
+        StructField("state", StringType, nullable = false))),
+        nullable = false)))
+    val employeeType = SchemaConverters.toAvroType(sparkSchema,
+      recordName = "employee")
+
+    assert(employeeType.getFullName == "employee")
+    assert(employeeType.getName == "employee")
+    assert(employeeType.getNamespace == null)
+
+    val addressType = employeeType.getField("address").schema()
+    assert(addressType.getFullName == "employee.address")
+    assert(addressType.getName == "address")
+    assert(addressType.getNamespace == "employee")
   }
 
   case class NestedMiddleArray(id: Int, data: Array[NestedBottom])
