@@ -32,16 +32,16 @@ import org.apache.spark.{Partition, TaskContext}
  *                              doesn't modify the keys.
  * @param isFromBarrier Indicates whether this RDD is transformed from an RDDBarrier, a stage
  *                      containing at least one RDDBarrier shall be turned into a barrier stage.
- * @param orderSensitiveFunc whether or not the function is order-sensitive. If it's order
- *                           sensitive, it may return totally different result if the input order
- *                           changed. Mostly stateful functions are order-sensitive.
+ * @param isOrderSensitive whether or not the function is order-sensitive. If it's order
+ *                         sensitive, it may return totally different result when the input order
+ *                         is changed. Mostly stateful functions are order-sensitive.
  */
 private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     var prev: RDD[T],
     f: (TaskContext, Int, Iterator[T]) => Iterator[U],  // (TaskContext, partition index, iterator)
     preservesPartitioning: Boolean = false,
     isFromBarrier: Boolean = false,
-    orderSensitiveFunc: Boolean = false)
+    isOrderSensitive: Boolean = false)
   extends RDD[U](prev) {
 
   override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
@@ -60,7 +60,7 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     isFromBarrier || dependencies.exists(_.rdd.isBarrier())
 
   override protected def getOutputDeterministicLevel = {
-    if (orderSensitiveFunc && prev.outputDeterministicLevel == DeterministicLevel.UNORDERED) {
+    if (isOrderSensitive && prev.outputDeterministicLevel == DeterministicLevel.UNORDERED) {
       DeterministicLevel.INDETERMINATE
     } else {
       super.getOutputDeterministicLevel

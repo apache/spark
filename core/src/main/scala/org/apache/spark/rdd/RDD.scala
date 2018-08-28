@@ -463,7 +463,7 @@ abstract class RDD[T: ClassTag](
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
         new ShuffledRDD[Int, T, T](
-          mapPartitionsWithIndexInternal(distributePartition, orderSensitiveFunc = true),
+          mapPartitionsWithIndexInternal(distributePartition, isOrderSensitive = true),
           new HashPartitioner(numPartitions)),
         numPartitions,
         partitionCoalescer).values
@@ -810,19 +810,19 @@ abstract class RDD[T: ClassTag](
    * @param preservesPartitioning indicates whether the input function preserves the partitioner,
    *                              which should be `false` unless this is a pair RDD and the input
    *                              function doesn't modify the keys.
-   * @param orderSensitiveFunc whether or not the function is order-sensitive. If it's order
-   *                           sensitive, it may return totally different result if the input order
-   *                           changed. Mostly stateful functions are order-sensitive.
+   * @param isOrderSensitive whether or not the function is order-sensitive. If it's order
+   *                         sensitive, it may return totally different result when the input order
+   *                         is changed. Mostly stateful functions are order-sensitive.
    */
   private[spark] def mapPartitionsWithIndexInternal[U: ClassTag](
       f: (Int, Iterator[T]) => Iterator[U],
       preservesPartitioning: Boolean = false,
-      orderSensitiveFunc: Boolean = false): RDD[U] = withScope {
+      isOrderSensitive: Boolean = false): RDD[U] = withScope {
     new MapPartitionsRDD(
       this,
       (context: TaskContext, index: Int, iter: Iterator[T]) => f(index, iter),
       preservesPartitioning = preservesPartitioning,
-      orderSensitiveFunc = orderSensitiveFunc)
+      isOrderSensitive = isOrderSensitive)
   }
 
   /**

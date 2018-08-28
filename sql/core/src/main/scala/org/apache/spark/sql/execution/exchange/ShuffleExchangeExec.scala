@@ -307,18 +307,18 @@ object ShuffleExchangeExec {
       }
 
       // round-robin function is order sensitive if we don't sort the input.
-      val orderSensitiveFunc = isRoundRobin && !SQLConf.get.sortBeforeRepartition
+      val isOrderSensitive = isRoundRobin && !SQLConf.get.sortBeforeRepartition
       if (needToCopyObjectsBeforeShuffle(part)) {
         newRdd.mapPartitionsWithIndexInternal((_, iter) => {
           val getPartitionKey = getPartitionKeyExtractor()
           iter.map { row => (part.getPartition(getPartitionKey(row)), row.copy()) }
-        }, orderSensitiveFunc = orderSensitiveFunc)
+        }, isOrderSensitive = isOrderSensitive)
       } else {
         newRdd.mapPartitionsWithIndexInternal((_, iter) => {
           val getPartitionKey = getPartitionKeyExtractor()
           val mutablePair = new MutablePair[Int, InternalRow]()
           iter.map { row => mutablePair.update(part.getPartition(getPartitionKey(row)), row) }
-        }, orderSensitiveFunc = orderSensitiveFunc)
+        }, isOrderSensitive = isOrderSensitive)
       }
     }
 
