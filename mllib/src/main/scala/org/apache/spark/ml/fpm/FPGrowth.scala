@@ -36,6 +36,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.VersionUtils
 
 /**
  * Common params for FPGrowth and FPGrowthModel
@@ -223,7 +224,7 @@ class FPGrowthModel private[ml] (
     @Since("2.2.0") override val uid: String,
     @Since("2.2.0") @transient val freqItemsets: DataFrame,
     private val itemSupport: scala.collection.Map[Any, Double],
-    private val inputSize: Long)
+    private val numTrainingRecords: Long)
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
 
   /** @group setParam */
@@ -307,7 +308,7 @@ class FPGrowthModel private[ml] (
 
   @Since("2.2.0")
   override def copy(extra: ParamMap): FPGrowthModel = {
-    val copied = new FPGrowthModel(uid, freqItemsets, itemSupport, inputSize)
+    val copied = new FPGrowthModel(uid, freqItemsets, itemSupport, numTrainingRecords)
     copyValues(copied, extra).setParent(this.parent)
   }
 
@@ -329,7 +330,7 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
   class FPGrowthModelWriter(instance: FPGrowthModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      val extraMetadata: JObject = Map("count" -> instance.inputSize)
+      val extraMetadata: JObject = Map("numTrainingRecords" -> instance.numTrainingRecords)
       DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata = Some(extraMetadata))
       val dataPath = new Path(path, "data").toString
       instance.freqItemsets.write.parquet(dataPath)
@@ -344,15 +345,26 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
     override def load(path: String): FPGrowthModel = {
       implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-      val inputCount = (metadata.metadata \ "count").extract[Long]
+      val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
+      val numTrainingRecords = if (major.toInt < 2 || (major.toInt == 2 && minor.toInt < 4)) {
+        // 2.3 and before don't store the count
+        0L
+      } else {
+        // 2.4+
+        (metadata.metadata \ "numTrainingRecords").extract[Long]
+      }
       val dataPath = new Path(path, "data").toString
       val frequentItems = sparkSession.read.parquet(dataPath)
-      val itemSupport = frequentItems.rdd.flatMap {
-          case Row(items: Seq[_], count: Long) if items.length == 1 =>
-            Some(items.head -> count.toDouble / inputCount)
-          case _ => None
-        }.collectAsMap()
-      val model = new FPGrowthModel(metadata.uid, frequentItems, itemSupport, inputCount)
+      val itemSupport = if (numTrainingRecords == 0L) {
+        Map.empty[Any, Double]
+      } else {
+        frequentItems.rdd.flatMap {
+            case Row(items: Seq[_], count: Long) if items.length == 1 =>
+              Some(items.head -> count.toDouble / numTrainingRecords)
+            case _ => None
+          }.collectAsMap()
+      }
+      val model = new FPGrowthModel(metadata.uid, frequentItems, itemSupport, numTrainingRecords)
       metadata.getAndSetParams(model)
       model
     }
