@@ -22,12 +22,14 @@ import java.util.{Properties, Timer, TimerTask}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
-import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.rpc.{RpcEndpointRef, RpcTimeout}
-import org.apache.spark.util.{RpcUtils, Utils}
+import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.util._
 
 /**
  * :: Experimental ::
@@ -37,19 +39,8 @@ import org.apache.spark.util.{RpcUtils, Utils}
 @Experimental
 @Since("2.4.0")
 class BarrierTaskContext private[spark] (
-    override val stageId: Int,
-    override val stageAttemptNumber: Int,
-    override val partitionId: Int,
-    override val taskAttemptId: Long,
-    override val attemptNumber: Int,
-    private[spark] override val taskMemoryManager: TaskMemoryManager,
-    localProperties: Properties,
-    @transient private val metricsSystem: MetricsSystem,
-    // The default value is only used in tests.
-    @DeveloperApi
-    override val taskMetrics: TaskMetrics = TaskMetrics.empty)
-  extends TaskContextImpl(stageId, stageAttemptNumber, partitionId, taskAttemptId, attemptNumber,
-      taskMemoryManager, localProperties, metricsSystem, taskMetrics) {
+    taskContext: TaskContext,
+    localProperties: Properties) extends TaskContext with Logging {
 
   // Find the driver side RPCEndpointRef of the coordinator that handles all the barrier() calls.
   private val barrierCoordinator: RpcEndpointRef = {
@@ -159,6 +150,58 @@ class BarrierTaskContext private[spark] (
   def getTaskInfos(): Array[BarrierTaskInfo] = {
     val addressesStr = localProperties.getProperty("addresses", "")
     addressesStr.split(",").map(_.trim()).map(new BarrierTaskInfo(_))
+  }
+
+  // delegate methods
+
+  override def isCompleted(): Boolean = taskContext.isCompleted()
+
+  override def isInterrupted(): Boolean = taskContext.isInterrupted()
+
+  override def isRunningLocally(): Boolean = taskContext.isRunningLocally()
+
+  override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
+    taskContext.addTaskCompletionListener(listener)
+    this
+  }
+
+  override def addTaskFailureListener(listener: TaskFailureListener): this.type = {
+    taskContext.addTaskFailureListener(listener)
+    this
+  }
+
+  override def stageId(): Int = taskContext.stageId()
+
+  override def stageAttemptNumber(): Int = taskContext.stageAttemptNumber()
+
+  override def partitionId(): Int = taskContext.partitionId()
+
+  override def attemptNumber(): Int = taskContext.attemptNumber()
+
+  override def taskAttemptId(): Long = taskContext.taskAttemptId()
+
+  override def getLocalProperty(key: String): String = taskContext.getLocalProperty(key)
+
+  override def taskMetrics(): TaskMetrics = taskContext.taskMetrics()
+
+  override def getMetricsSources(sourceName: String): Seq[Source] = {
+    taskContext.getMetricsSources(sourceName)
+  }
+
+  override private[spark] def killTaskIfInterrupted(): Unit = taskContext.killTaskIfInterrupted()
+
+  override private[spark] def getKillReason(): Option[String] = taskContext.getKillReason()
+
+  override private[spark] def taskMemoryManager(): TaskMemoryManager = {
+    taskContext.taskMemoryManager()
+  }
+
+  override private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
+    taskContext.registerAccumulator(a)
+  }
+
+  override private[spark] def setFetchFailed(fetchFailed: FetchFailedException): Unit = {
+    taskContext.setFetchFailed(fetchFailed)
   }
 }
 

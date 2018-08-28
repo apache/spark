@@ -82,31 +82,22 @@ private[spark] abstract class Task[T](
     SparkEnv.get.blockManager.registerTask(taskAttemptId)
     // TODO SPARK-24874 Allow create BarrierTaskContext based on partitions, instead of whether
     // the stage is barrier.
-    context = if (isBarrier) {
-      new BarrierTaskContext(
-        stageId,
-        stageAttemptId, // stageAttemptId and stageAttemptNumber are semantically equal
-        partitionId,
-        taskAttemptId,
-        attemptNumber,
-        taskMemoryManager,
-        localProperties,
-        metricsSystem,
-        metrics)
-    } else {
-      new TaskContextImpl(
-        stageId,
-        stageAttemptId, // stageAttemptId and stageAttemptNumber are semantically equal
-        partitionId,
-        taskAttemptId,
-        attemptNumber,
-        taskMemoryManager,
-        localProperties,
-        metricsSystem,
-        metrics)
-    }
+    context = new TaskContextImpl(
+      stageId,
+      stageAttemptId, // stageAttemptId and stageAttemptNumber are semantically equal
+      partitionId,
+      taskAttemptId,
+      attemptNumber,
+      taskMemoryManager,
+      localProperties,
+      metricsSystem,
+      metrics)
 
-    TaskContext.setTaskContext(context)
+    TaskContext.setTaskContext(if (isBarrier) {
+      new BarrierTaskContext(context, localProperties)
+    } else {
+      context
+    })
     taskThread = Thread.currentThread()
 
     if (_reasonIfKilled != null) {
