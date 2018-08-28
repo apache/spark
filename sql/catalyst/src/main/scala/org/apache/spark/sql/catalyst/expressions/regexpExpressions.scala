@@ -242,21 +242,23 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       * limit - an integer expression which controls the number of times the pattern is applied.
 
         limit > 0:
-          The resulting array's length will not be more than n, and the resulting array's
-          last entry will contain all input beyond the last matched pattern
+          The resulting array's length will not be more than `limit`, and the resulting array's
+          last entry will contain all input beyond the last matched pattern.
 
         limit < 0:
           `pattern` will be applied as many times as possible, and the resulting
-          array can be of any size
+          array can be of any size.
 
         limit = 0:
           `pattern` will be applied as many times as possible, the resulting array can
-          be of any size, and trailing empty strings will be discarded
+          be of any size, and trailing empty strings will be discarded.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]');
        ["one","two","three",""]
+|     > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]', 0);
+       ["one","two","three"]
 |     > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]', 2);
        ["one","twoBthreeC"]
   """)
