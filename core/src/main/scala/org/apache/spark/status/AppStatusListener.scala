@@ -350,16 +350,12 @@ private[spark] class AppStatusListener(
         val e = it.next()
         if (job.stageIds.contains(e.getKey()._1)) {
           val stage = e.getValue()
-          // Only update the stage if it has not finished already
-          if (v1.StageStatus.ACTIVE.equals(stage.status) ||
-              v1.StageStatus.PENDING.equals(stage.status)) {
-            // Mark the stage as skipped if in Pending status
-            if (v1.StageStatus.PENDING.equals(stage.status)) {
-              stage.status = v1.StageStatus.SKIPPED
-              job.skippedStages += stage.info.stageId
-              job.skippedTasks += stage.info.numTasks
-              job.activeStages -= 1
-            }
+          // Mark the stage as skipped if in Pending status
+          if (v1.StageStatus.PENDING.equals(stage.status)) {
+            stage.status = v1.StageStatus.SKIPPED
+            job.skippedStages += stage.info.stageId
+            job.skippedTasks += stage.info.numTasks
+            job.activeStages -= 1
 
             pools.get(stage.schedulingPool).foreach { pool =>
               pool.stageIds = pool.stageIds - stage.info.stageId
