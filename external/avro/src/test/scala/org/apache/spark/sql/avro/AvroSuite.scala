@@ -1082,7 +1082,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val schema = getAvroSchemaStringFromFiles(dir.toString)
       assert(schema.contains("\"namespace\":\"topLevelRecord\""))
       assert(schema.contains("\"namespace\":\"topLevelRecord.data\""))
-      assert(schema.contains("\"namespace\":\"topLevelRecord.data.data\""))
     }
   }
 
@@ -1097,6 +1096,27 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       // Check if the written DataFrame is equals than read DataFrame
       assert(readDf.collect().sameElements(writeDf.collect()))
     }
+  }
+
+  test("check namespace - toAvroType") {
+    val sparkSchema = StructType(Seq(
+      StructField("name", StringType, nullable = false),
+      StructField("address", StructType(Seq(
+        StructField("city", StringType, nullable = false),
+        StructField("state", StringType, nullable = false))),
+        nullable = false)))
+    val employeeType = SchemaConverters.toAvroType(sparkSchema,
+      recordName = "employee",
+      nameSpace = "foo.bar")
+
+    assert("foo.bar.employee" == employeeType.getFullName)
+    assert("employee" == employeeType.getName)
+    assert("foo.bar" == employeeType.getNamespace)
+
+    val addressType = employeeType.getField("address").schema()
+    assert("foo.bar.employee.address" == addressType.getFullName)
+    assert("address" == addressType.getName)
+    assert("foo.bar.employee" == addressType.getNamespace)
   }
 
   case class NestedMiddleArray(id: Int, data: Array[NestedBottom])
