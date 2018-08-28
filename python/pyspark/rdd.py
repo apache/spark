@@ -141,7 +141,7 @@ def _parse_memory(s):
 
 
 def _load_from_socket(sock_info, serializer):
-    (sockfile, sock) = local_connect_and_auth(sock_info)
+    (sockfile, sock) = local_connect_and_auth(*sock_info)
     # The RDD materialization time is unpredicable, if we set a timeout for socket reading
     # operation, it will very possibly fail. See SPARK-18281.
     sock.settimeout(None)

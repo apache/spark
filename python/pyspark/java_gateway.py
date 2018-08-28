@@ -147,20 +147,20 @@ def _do_server_auth(conn, auth_secret):
         raise Exception("Unexpected reply from iterator server.")
 
 
-def local_connect_and_auth(sock_info):
+def local_connect_and_auth(port, auth_secret):
     """
     Connect to local host, authenticate with it, and return a (sockfile,sock) for that connection.
     Handles IPV4 & IPV6, does some error handling.
-    :param sock_info: a tuple of (port, auth_secret) for connecting
+    :param port
+    :param auth_secret
     :return: a tuple with (sockfile, sock)
     """
-    port, auth_secret = sock_info
     sock = None
     errors = []
     # Support for both IPv4 and IPv6.
     # On most of IPv6-ready systems, IPv6 will take precedence.
     for res in socket.getaddrinfo("127.0.0.1", port, socket.AF_UNSPEC, socket.SOCK_STREAM):
-        af, socktype, proto, canonname, sa = res
+        af, socktype, proto, _, sa = res
         sock = socket.socket(af, socktype, proto)
         try:
             sock.settimeout(15)
