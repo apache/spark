@@ -99,7 +99,8 @@ public class TransportContext {
     this.closeIdleConnections = closeIdleConnections;
 
     synchronized(this.getClass()) {
-      if (chunkFetchWorkers == null && conf.getModuleName().equalsIgnoreCase("shuffle")) {
+      if (chunkFetchWorkers == null && conf.getModuleName() != null &&
+              conf.getModuleName().equalsIgnoreCase("shuffle")) {
         chunkFetchWorkers = NettyUtils.createEventLoop(
             IOMode.valueOf(conf.ioMode()),
             conf.chunkFetchHandlerThreads(),
@@ -172,7 +173,7 @@ public class TransportContext {
         // would require more logic to guarantee if this were not part of the same event loop.
         .addLast("handler", channelHandler);
       // Use a separate EventLoopGroup to handle ChunkFetchRequest messages for shuffle rpcs.
-      if (conf.getModuleName().equalsIgnoreCase("shuffle")) {
+      if (conf.getModuleName() != null && conf.getModuleName().equalsIgnoreCase("shuffle")) {
         pipeline.addLast(chunkFetchWorkers, "chunkFetchHandler", chunkFetchHandler);
       }
       return channelHandler;
