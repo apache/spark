@@ -56,6 +56,20 @@ class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
 
 }
 
+class MyCheckpointRDD(
+    sc: SparkContext,
+    numPartitions: Int,
+    dependencies: List[Dependency[_]],
+    locations: Seq[Seq[String]] = Nil,
+    @(transient @param) tracker: MapOutputTrackerMaster = null,
+    indeterminate: Boolean = false)
+  extends MyRDD(sc, numPartitions, dependencies, locations, tracker, indeterminate) {
+
+  // Allow doCheckpoint() on this RDD.
+  override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
+    Iterator.empty
+}
+
 /**
  * An RDD for passing to DAGScheduler. These RDDs will use the dependencies and
  * preferredLocations (if any) that are passed to them. They are deliberately not executable
@@ -2745,17 +2759,14 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   test("SPARK-23207: local checkpoint fail to rollback (checkpointed before)") {
-    val shuffleMapRdd = new MyRDD(sc, 2, Nil, indeterminate = true)
+    val shuffleMapRdd = new MyCheckpointRDD(sc, 2, Nil, indeterminate = true)
     shuffleMapRdd.localCheckpoint()
-    submit(shuffleMapRdd, Array(1, 1))
-    completeNextResultStageWithSuccess(0, 0)
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
-    assertDataStructuresEmpty()
+    shuffleMapRdd.doCheckpoint()
     assertResultStageFailToRollback(shuffleMapRdd)
   }
 
   test("SPARK-23207: local checkpoint fail to rollback (checkpointing now)") {
-    val shuffleMapRdd = new MyRDD(sc, 2, Nil, indeterminate = true)
+    val shuffleMapRdd = new MyCheckpointRDD(sc, 2, Nil, indeterminate = true)
     shuffleMapRdd.localCheckpoint()
     assertResultStageFailToRollback(shuffleMapRdd)
   }
@@ -2796,20 +2807,17 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
   test("SPARK-23207: reliable checkpoint can avoid rollback (checkpointed before)") {
     sc.setCheckpointDir(Utils.createTempDir().getCanonicalPath)
-    val shuffleMapRdd = new MyRDD(sc, 2, Nil, indeterminate = true)
+    val shuffleMapRdd = new MyCheckpointRDD(sc, 2, Nil, indeterminate = true)
     shuffleMapRdd.checkpoint()
-    submit(shuffleMapRdd, Array(1, 1))
-    completeNextResultStageWithSuccess(0, 0)
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
-    assertDataStructuresEmpty()
+    shuffleMapRdd.doCheckpoint()
     assertResultStageNotRollbacked(shuffleMapRdd)
   }
 
-  test("SPARK-23207: reliable checkpoint can avoid rollback (checkpointing now)") {
+  test("SPARK-23207: reliable checkpoint fail to rollback (checkpointing now)") {
     sc.setCheckpointDir(Utils.createTempDir().getCanonicalPath)
-    val shuffleMapRdd = new MyRDD(sc, 2, Nil, indeterminate = true)
+    val shuffleMapRdd = new MyCheckpointRDD(sc, 2, Nil, indeterminate = true)
     shuffleMapRdd.checkpoint()
-    assertResultStageNotRollbacked(shuffleMapRdd)
+    assertResultStageFailToRollback(shuffleMapRdd)
   }
 
   /**
