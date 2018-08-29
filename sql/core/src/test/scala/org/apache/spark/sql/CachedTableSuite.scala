@@ -22,6 +22,8 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.apache.spark.CleanerListener
+import org.apache.spark.executor.DataReadMethod
+import org.apache.spark.executor.DataReadMethod._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
@@ -62,6 +64,13 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     val maybeBlock = sparkContext.env.blockManager.get(RDDBlockId(rddId, 0))
     maybeBlock.foreach(_ => sparkContext.env.blockManager.releaseLock(RDDBlockId(rddId, 0)))
     maybeBlock.nonEmpty
+  }
+
+  def isExpectStorageLevel(rddId: Int, level: DataReadMethod.DataReadMethod): Boolean = {
+    val maybeBlock = sparkContext.env.blockManager.get(RDDBlockId(rddId, 0))
+    val isExpectLevel = maybeBlock.forall(_.readMethod === level)
+    maybeBlock.foreach(_ => sparkContext.env.blockManager.releaseLock(RDDBlockId(rddId, 0)))
+    isExpectLevel
   }
 
   private def getNumInMemoryRelations(ds: Dataset[_]): Int = {
@@ -270,6 +279,52 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
 
   test("CACHE LAZY TABLE tableName") {
     sql("CACHE LAZY TABLE testData")
+    assertCached(spark.table("testData"))
+
+    val rddId = rddIdOf("testData")
+    assert(
+      !isMaterialized(rddId),
+      "Lazily cached in-memory table shouldn't be materialized eagerly")
+
+    sql("SELECT COUNT(*) FROM testData").collect()
+    assert(
+      isMaterialized(rddId),
+      "Lazily cached in-memory table should have been materialized")
+
+    spark.catalog.uncacheTable("testData")
+    eventually(timeout(10 seconds)) {
+      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    }
+  }
+
+  test("SQL interface support storageLevel(DISK_ONLY)") {
+    sql("CACHE DISK_ONLY TABLE testData")
+    assertCached(spark.table("testData"))
+    val rddId = rddIdOf("testData")
+    assert(isMaterialized(rddId))
+    assert(isExpectStorageLevel(rddId, Disk))
+    assert(!isExpectStorageLevel(rddId, Memory))
+    spark.catalog.uncacheTable("testData")
+  }
+
+  test("SQL interface support storageLevel(MEMORY_ONLY)") {
+    sql("CACHE MEMORY_ONLY TABLE testData")
+    assertCached(spark.table("testData"))
+    val rddId = rddIdOf("testData")
+    assert(isMaterialized(rddId))
+    assert(!isExpectStorageLevel(rddId, Disk))
+    assert(isExpectStorageLevel(rddId, Memory))
+  }
+
+  test("SQL interface support storageLevel(Invalid StorageLevel)") {
+    val message = intercept[IllegalArgumentException] {
+      sql("CACHE InvalidStorageLevel TABLE testData")
+    }.getMessage
+    assert(message.contains("Invalid StorageLevel: INVALIDSTORAGELEVEL"))
+  }
+
+  test("SQL interface support storageLevel(with LAZY)") {
+    sql("CACHE LAZY disk_only TABLE testData")
     assertCached(spark.table("testData"))
 
     val rddId = rddIdOf("testData")

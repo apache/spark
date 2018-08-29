@@ -272,7 +272,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       throw new ParseException(s"It is not allowed to add database prefix `$database` to " +
         s"the table name in CACHE TABLE AS SELECT", ctx)
     }
-    CacheTableCommand(tableIdent, query, ctx.LAZY != null)
+    CacheTableCommand(tableIdent, query, ctx.LAZY != null, Option(ctx.storageLevel).map(source))
   }
 
   /**
