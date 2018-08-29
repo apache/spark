@@ -350,7 +350,6 @@ private[spark] class AppStatusListener(
         val e = it.next()
         if (job.stageIds.contains(e.getKey()._1)) {
           val stage = e.getValue()
-          // Mark the stage as skipped if in Pending status
           if (v1.StageStatus.PENDING.equals(stage.status)) {
             stage.status = v1.StageStatus.SKIPPED
             job.skippedStages += stage.info.stageId
@@ -516,7 +515,7 @@ private[spark] class AppStatusListener(
       if (killedDelta > 0) {
         stage.killedSummary = killedTasksSummary(event.reason, stage.killedSummary)
       }
-      // Remove stage if there are no active tasks left and stage is already finished
+      // [SPARK-24415] Wait for all tasks to finish before removing stage from live list
       val removeStage =
         stage.activeTasks == 0 &&
           (v1.StageStatus.COMPLETE.equals(stage.status) ||
