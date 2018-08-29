@@ -178,8 +178,8 @@ case class BucketSpec(
 
   if (numBuckets <= 0 || numBuckets > conf.bucketingMaxBuckets) {
     throw new AnalysisException(
-      s"Number of buckets should be greater than 0 but less than bucketing.maxBuckets " +
-        s"(`${conf.bucketingMaxBuckets}`). Got `$numBuckets`")
+      s"Number of buckets should be greater than 0 but less than or equal to " +
+        s"bucketing.maxBuckets (`${conf.bucketingMaxBuckets}`). Got `$numBuckets`")
   }
 
   override def toString: String = {
