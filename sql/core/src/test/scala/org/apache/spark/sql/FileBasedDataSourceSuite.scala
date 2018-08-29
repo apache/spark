@@ -435,40 +435,56 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     withTempDir { dir =>
       val format = "parquet"
       val tableDir = dir.getCanonicalPath + s"/$format"
-      val tableName = s"spark_25132_${format}"
+      val tableName = s"spark_25132_$format"
       withTable(tableName) {
-        val end = 5
-        val data = spark.range(end).selectExpr("id as A", "id * 2 as b", "id * 3 as B")
-        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-          data.write.format(format).mode("overwrite").save(tableDir)
-        }
-        sql(s"CREATE TABLE $tableName (a LONG, b LONG) USING $format LOCATION '$tableDir'")
+        val count = 5
+        val data = spark.range(count).selectExpr("id as a")
+        data.write.format(format).mode("overwrite").save(tableDir)
+        sql(s"CREATE TABLE $tableName (A LONG) USING $format LOCATION '$tableDir'")
 
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-          checkAnswer(sql(s"select a from $tableName"), data.select("A"))
-          checkAnswer(sql(s"select A from $tableName"), data.select("A"))
-
-          // RuntimeException is triggered at executor side, which is then wrapped as
-          // SparkException at driver side
-          val e1 = intercept[SparkException] {
-            sql(s"select b from $tableName").collect()
-          }
-          assert(
-            e1.getCause.isInstanceOf[RuntimeException] &&
-              e1.getCause.getMessage.contains(
-                """Found duplicate field(s) "b": [b, B] in case-insensitive mode"""))
-          val e2 = intercept[SparkException] {
-            sql(s"select B from $tableName").collect()
-          }
-          assert(
-            e2.getCause.isInstanceOf[RuntimeException] &&
-              e2.getCause.getMessage.contains(
-                """Found duplicate field(s) "b": [b, B] in case-insensitive mode"""))
+          checkAnswer(sql(s"select a from $tableName"), data.select("a"))
+          checkAnswer(sql(s"select A from $tableName"), data.select("a"))
         }
 
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-          checkAnswer(sql(s"select a from $tableName"), (0 until end).map(_ => Row(null)))
-          checkAnswer(sql(s"select b from $tableName"), data.select("b"))
+          val e = intercept[AnalysisException] {
+            sql(s"select a from $tableName").collect()
+          }
+          assert(e.getMessage.contains(
+            "cannot resolve '`a`' given input columns: [default.spark_25132_parquet.A]"))
+          checkAnswer(sql(s"select A from $tableName"), (0 until count).map(_ => Row(null)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-25207: exception when duplicate fields in case-insensitive mode") {
+    withTempPath { dir =>
+      val tableName = "spark_25207"
+      val tableDir = dir.getAbsoluteFile + "/table"
+      withTable(tableName) {
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          spark.range(10).selectExpr("id as A", "id as B", "id as b")
+            .write.mode("overwrite").parquet(tableDir)
+        }
+        sql(
+          s"""
+             |CREATE TABLE $tableName (A LONG, B LONG) USING PARQUET LOCATION '$tableDir'
+           """.stripMargin)
+
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+          val e1 = intercept[SparkException] {
+            sql(s"select a from $tableName").collect()
+          }
+          assert(e1.getCause.isInstanceOf[RuntimeException] && e1.getCause.getMessage.contains(
+            """Found duplicate field(s): [B, b] in case-insensitive mode"""))
+
+          val e2 = intercept[SparkException] {
+            sql(s"select a from $tableName where b > 0").collect()
+          }
+          assert(e2.getCause.isInstanceOf[RuntimeException] && e2.getCause.getMessage.contains(
+            """Found duplicate field(s): [B, b] in case-insensitive mode"""))
         }
       }
     }
