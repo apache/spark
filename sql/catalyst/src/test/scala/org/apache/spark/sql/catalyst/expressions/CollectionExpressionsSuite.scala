@@ -1314,9 +1314,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("Array Distinct") {
-    val a0 = Literal.create(Seq(2, 1, 2, 3, 4, 4, 5), ArrayType(IntegerType, false))
+    val a0 = Literal.create(Seq(2, 1, 2, 3, 4, 4, 5), ArrayType(IntegerType))
     val a1 = Literal.create(Seq.empty[Integer], ArrayType(IntegerType))
-    val a2 = Literal.create(Seq("b", "a", "a", "c", "b"), ArrayType(StringType, false))
+    val a2 = Literal.create(Seq("b", "a", "a", "c", "b"), ArrayType(StringType))
     val a3 = Literal.create(Seq("b", null, "a", null, "a", null), ArrayType(StringType))
     val a4 = Literal.create(Seq(null, null, null), ArrayType(NullType))
     val a5 = Literal.create(Seq(true, false, false, true), ArrayType(BooleanType))

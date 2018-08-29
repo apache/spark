@@ -452,6 +452,16 @@ public final class UnsafeArrayData extends ArrayData {
 
   public static UnsafeArrayData fromPrimitiveArray(
        Object arr, int offset, int length, int elementSize) {
+    UnsafeArrayData result = forPrimitiveArray(length, elementSize);
+    final long headerInBytes = calculateHeaderPortionInBytes(length);
+    final long valueRegionInBytes = (long)elementSize * length;
+    final Object data = result.getBaseObject();
+    Platform.copyMemory(arr, offset, data,
+      Platform.LONG_ARRAY_OFFSET + headerInBytes, valueRegionInBytes);
+    return result;
+  }
+
+  public static UnsafeArrayData forPrimitiveArray(int length, int elementSize) {
     final long headerInBytes = calculateHeaderPortionInBytes(length);
     final long valueRegionInBytes = (long)elementSize * length;
     final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
@@ -463,18 +473,10 @@ public final class UnsafeArrayData extends ArrayData {
     final long[] data = new long[(int)totalSizeInLongs];
 
     Platform.putLong(data, Platform.LONG_ARRAY_OFFSET, length);
-    if (arr != null) {
-      Platform.copyMemory(arr, offset, data,
-        Platform.LONG_ARRAY_OFFSET + headerInBytes, valueRegionInBytes);
-    }
 
     UnsafeArrayData result = new UnsafeArrayData();
     result.pointTo(data, Platform.LONG_ARRAY_OFFSET, (int)totalSizeInLongs * 8);
     return result;
-  }
-
-  public static UnsafeArrayData forPrimitiveArray(int length, int elementSize) {
-    return fromPrimitiveArray(null, 0, length, elementSize);
   }
 
   public static boolean shouldUseGenericArrayData(int elementSize, long length) {

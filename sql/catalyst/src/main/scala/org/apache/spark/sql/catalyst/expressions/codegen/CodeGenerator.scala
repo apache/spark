@@ -1431,8 +1431,6 @@ object CodeGenerator extends Logging {
    * @param elementType data type of the elements in source array
    * @param numElements code representing the number of elements the array should contain
    * @param additionalErrorMessage string to include in the error message
-   * @param elementSize optional value which shows the size of an element of the allocated
-   *                    [[UnsafeArrayData]] or [[GenericArrayData]]
    *
    * @return code representing the allocation of [[ArrayData]]
    */
@@ -1440,26 +1438,20 @@ object CodeGenerator extends Logging {
       arrayName: String,
       elementType: DataType,
       numElements: String,
-      additionalErrorMessage: String,
-      elementSize: Option[Int] = None): String = {
-    val (isPrimitiveType, elemSize) = if (elementSize.isDefined) {
-      (false, elementSize.get)
-    } else {
-      (CodeGenerator.isPrimitiveType(elementType), elementType.defaultSize)
-    }
-
+      additionalErrorMessage: String): String = {
+    val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
     s"""
        |ArrayData $arrayName = ArrayData.allocateArrayData(
-       |  $elemSize, $numElements, $isPrimitiveType, "$additionalErrorMessage");
+       |  ${elementType.defaultSize}, $numElements, $isPrimitiveType, "$additionalErrorMessage");
      """.stripMargin
   }
 
   /**
    * Generates assignment code for an [[ArrayData]]
    *
-   * @param arrayName name of the array to create
+   * @param dstArray name of the array to be assigned
    * @param elementType data type of the elements in destination and source arrays
-   * @param srcArray code representing the number of elements the array should contain
+   * @param srcArray name of the array to be read
    * @param needNullCheck value which shows whether a nullcheck is required for the returning
    *                      assignment
    * @param dstArrayIndex an index variable to access each element of destination array
@@ -1469,13 +1461,13 @@ object CodeGenerator extends Logging {
    *         a pair of destination and source loop index variables
    */
   def createArrayAssignment(
-      arrayName: String,
+      dstArray: String,
       elementType: DataType,
       srcArray: String,
       dstArrayIndex: String,
       srcArrayIndex: String,
       needNullCheck: Boolean): String = {
-    CodeGenerator.setArrayElement(arrayName, elementType, dstArrayIndex,
+    CodeGenerator.setArrayElement(dstArray, elementType, dstArrayIndex,
       CodeGenerator.getValue(srcArray, elementType, srcArrayIndex),
       if (needNullCheck) Some(s"$srcArray.isNullAt($srcArrayIndex)") else None)
   }

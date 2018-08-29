@@ -394,14 +394,17 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
 
       val wordSize = UnsafeRow.WORD_SIZE
       val structSize = UnsafeRow.calculateBitSetWidthInBytes(2) + wordSize * 2
-      val elementSize = if (isKeyPrimitive && isValuePrimitive) {
-        Some(structSize + wordSize)
+      val (isPrimitive, elementSize) = if (isKeyPrimitive && isValuePrimitive) {
+        (false, structSize + wordSize)
       } else {
-        None
+        (isKeyPrimitive, childDataType.keyType.defaultSize)
       }
 
-      val allocation = CodeGenerator.createArrayData(arrayData, childDataType.keyType, numElements,
-        s" $prettyName failed.", elementSize = elementSize)
+      val allocation =
+        s"""
+           |ArrayData $arrayData = ArrayData.allocateArrayData(
+           |  $elementSize, $numElements, $isPrimitive, " $prettyName failed.");
+         """.stripMargin
 
       val code = if (isKeyPrimitive && isValuePrimitive) {
         val genCodeForPrimitive = genCodeForPrimitiveElements(
@@ -454,7 +457,8 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
     val structSizeAsLong = s"${structSize}L"
 
     val setKey =
-      CodeGenerator.setArrayElement(unsafeRow, childDataType.keyType, "0", getKey(keys, z))
+      CodeGenerator.setColumn(unsafeRow, childDataType.keyType, 0, getKey(keys, z))
+
     val valueAssignment = CodeGenerator.createArrayAssignment(
       unsafeRow, childDataType.valueType, values, z, "1", childDataType.valueContainsNull)
 
@@ -467,7 +471,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
        |  long $offset = $structsOffset + $z * $structSizeAsLong;
        |  $unsafeArrayData.setLong($z, ($offset << 32) + $structSizeAsLong);
        |  $unsafeRow.pointTo($baseObject, $baseOffset + $offset, $structSize);
-       |  $setKey
+       |  $setKey;
        |  $valueAssignment
        |}
        |$resultArrayData = $arrayData;
