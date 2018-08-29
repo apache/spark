@@ -263,4 +263,29 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val y = testRelation.subquery('y)
     testConstraintsAfterJoin(x, y, x.where(IsNotNull('a)), y, RightOuter)
   }
+
+  test("SPARK-25259: left/right join support push down during-join predicates") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val queryAnswers = Seq(
+      (
+        x.join(y, joinType = LeftOuter,
+          condition = Some("x.b".attr === "y.b".attr && "x.b".attr === 1)),
+        x.join(y.where("b".attr.isNotNull && "b".attr === 1), joinType = LeftOuter,
+          condition = Some("x.b".attr === "y.b".attr && "x.b".attr === 1))
+      ),
+      (
+        x.join(y, joinType = RightOuter,
+          condition = Some("x.b".attr === "y.b".attr && "y.b".attr === 1)),
+        x.where("b".attr.isNotNull && "b".attr === 1).join(y, joinType = RightOuter,
+          condition = Some("x.b".attr === "y.b".attr && "y.b".attr === 1))
+      )
+    )
+
+    queryAnswers foreach { queryAnswerPair =>
+      val optimized = Optimize.execute(queryAnswerPair._1.analyze)
+      comparePlans(optimized, queryAnswerPair._2.analyze)
+    }
+  }
 }
