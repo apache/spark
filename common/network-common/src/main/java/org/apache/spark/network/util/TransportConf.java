@@ -304,7 +304,8 @@ public class TransportConf {
     if(!this.getModuleName().equalsIgnoreCase("shuffle")) {
       return 0;
     }
-    int chunkFetchHandlerThreadsPercent = conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 0);
+    int chunkFetchHandlerThreadsPercent =
+            conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 0);
     return this.serverThreads() > 0? (this.serverThreads() * chunkFetchHandlerThreadsPercent)/100:
             (2* NettyRuntime.availableProcessors() * chunkFetchHandlerThreadsPercent)/100;
   }

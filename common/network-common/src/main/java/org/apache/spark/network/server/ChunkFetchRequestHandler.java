@@ -74,7 +74,8 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
   }
 
   @Override
-  protected void channelRead0(ChannelHandlerContext ctx, final ChunkFetchRequest msg) throws Exception {
+  protected void channelRead0(ChannelHandlerContext ctx,
+                              final ChunkFetchRequest msg) throws Exception {
     Channel channel = ctx.channel();
     if (logger.isTraceEnabled()) {
       logger.trace("Received req from {} to fetch block {}", getRemoteAddress(channel),
@@ -95,7 +96,9 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
     } catch (Exception e) {
       logger.error(String.format("Error opening block %s for request from %s",
           msg.streamChunkId, getRemoteAddress(channel)), e);
-      respond(channel, new ChunkFetchFailure(msg.streamChunkId, Throwables.getStackTraceAsString(e)));
+      respond(channel,
+              new ChunkFetchFailure(msg.streamChunkId,
+              Throwables.getStackTraceAsString(e)));
       return;
     }
 
@@ -105,16 +108,17 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
   }
 
   /**
-   * The invocation to channel.writeAndFlush is async, and the actual I/O on the channel will be handled
-   * by the EventLoop the channel is registered to. So even though we are processing the ChunkFetchRequest
-   * in a separate thread pool, the actual I/O, which is the potentially blocking call that could deplete
-   * server handler threads, is still being processed by TransportServer's default EventLoopGroup. In order
-   * to throttle the max number of threads that channel I/O for sending response to ChunkFetchRequest,
-   * the thread calling channel.writeAndFlush will wait for the completion of sending response back to client
-   * by invoking sync(). This will throttle the rate at which threads from ChunkFetchRequest dedicated
-   * EventLoopGroup submit channel I/O requests to TransportServer's default EventLoopGroup, thus making sure
-   * that we can reserve some threads in TransportServer's default EventLoopGroup for handling other RPC
-   * messages.
+   * The invocation to channel.writeAndFlush is async, and the actual I/O on the
+   * channel will be handled by the EventLoop the channel is registered to. So even
+   * though we are processing the ChunkFetchRequest in a separate thread pool, the actual I/O,
+   * which is the potentially blocking call that could deplete server handler threads, is still
+   * being processed by TransportServer's default EventLoopGroup. In order to throttle the max
+   * number of threads that channel I/O for sending response to ChunkFetchRequest, the thread
+   * calling channel.writeAndFlush will wait for the completion of sending response back to
+   * client by invoking sync(). This will throttle the rate at which threads from
+   * ChunkFetchRequest dedicated EventLoopGroup submit channel I/O requests to TransportServer's
+   * default EventLoopGroup, thus making sure that we can reserve some threads in
+   * TransportServer's default EventLoopGroup for handling other RPC messages.
    */
   private ChannelFuture respond(final Channel channel, final Encodable result) throws InterruptedException {
     final SocketAddress remoteAddress = channel.remoteAddress();
