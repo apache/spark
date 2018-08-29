@@ -1145,15 +1145,23 @@ class SparkSubmitSuite
     conf1.get("spark.submit.pyFiles") should (startWith("/"))
   }
 
-  test("handles white space in --properties-file and --conf uniformly") {
-    val delimKey = "spark.my.delimiter"
-    val delimKeyFromFile = s"${delimKey}FromFile"
-    val newLine = "\n"
+  test("handles natural line delimiters in --properties-file and --conf uniformly") {
+    val delimKey = "spark.my.delimiter."
+    val LF = "\n"
+    val CR = "\r"
+
+    val leadingDelimKeyFromFile = s"${delimKey}leadingDelimKeyFromFile" -> s"${LF}blah"
+    val trailingDelimKeyFromFile = s"${delimKey}trailingDelimKeyFromFile" -> s"blah${CR}"
+    val infixDelimFromFile = s"${delimKey}infixDelimFromFile" -> s"${CR}blah${LF}"
+    val nonDelimSpaceFromFile = s"${delimKey}nonDelimSpaceFromFile" -> " blah\f"
+
+    val testProps = Seq(leadingDelimKeyFromFile, trailingDelimKeyFromFile, infixDelimFromFile, nonDelimSpaceFromFile)
+
     val props = new java.util.Properties()
     val propsFile = File.createTempFile("test-spark-conf", ".properties", Utils.createTempDir())
     val propsOutputStream = new FileOutputStream(propsFile)
     try {
-      props.put(delimKeyFromFile, newLine)
+      testProps.foreach { case (k, v) => props.put(k, v) }
       props.store(propsOutputStream, "test whitespace")
     } finally {
       propsOutputStream.close()
@@ -1161,15 +1169,20 @@ class SparkSubmitSuite
 
     val clArgs = Seq(
       "--class", "org.SomeClass",
-      "--conf", s"${delimKey}=$newLine",
+      "--conf", s"${delimKey}=$LF",
       "--conf", "spark.master=yarn",
       "--properties-file", propsFile.getPath,
       "thejar.jar")
 
     val appArgs = new SparkSubmitArguments(clArgs)
     val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
-    conf.get(delimKey) should be (newLine)
-    conf.get(delimKeyFromFile) should be (newLine)
+
+    Seq((delimKey -> LF), leadingDelimKeyFromFile, trailingDelimKeyFromFile, infixDelimFromFile)
+      .foreach {
+        case (k, v) => conf.get(k) should be (v)
+      }
+
+    conf.get(nonDelimSpaceFromFile._1) should be ("blah")
   }
 }
 
