@@ -23,6 +23,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.{MixedOperation, PodResource}
 import org.mockito.Matchers.any
 import org.mockito.Mockito.{mock, never, verify, when}
+import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
@@ -140,14 +141,15 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
         .endMetadata()
         .withNewSpec()
         .addNewContainer()
-        .withName("driver-container")
+        .withName("executor-container")
         .endContainer()
         .endSpec()
         .build())
 
     assert(pod.pod.getMetadata.getLabels.containsKey("test-label-key"))
+    assert(!pod.pod.getSpec.getContainers.asScala.exists(_.getName == "executor-container"))
     assert(pod.pod.getMetadata.getLabels.get("test-label-key") === "test-label-value")
-    assert(pod.container.getName === "driver-container")
+    assert(pod.container.getName === "executor-container")
   }
 
   private def constructPodWithPodTemplate(pod: Pod) : SparkPod = {

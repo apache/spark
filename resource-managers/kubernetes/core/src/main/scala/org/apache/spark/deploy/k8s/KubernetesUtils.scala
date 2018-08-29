@@ -71,15 +71,16 @@ private[spark] object KubernetesUtils extends Logging {
       templateFile: File): SparkPod = {
     try {
       val pod = kubernetesClient.pods().load(templateFile).get()
-      val containers = pod.getSpec.getContainers.asScala
-      containers.headOption.map(firstContainer => {
-        val podWithoutFirstContainer = new PodBuilder(pod)
-          .editSpec()
-          .removeFromContainers(firstContainer)
-          .endSpec()
-          .build()
-        SparkPod(podWithoutFirstContainer, containers.head)
-      }).getOrElse(SparkPod(pod, new ContainerBuilder().build()))
+      pod.getSpec.getContainers.asScala.toList match {
+        case first :: rest => SparkPod(
+          new PodBuilder(pod)
+            .editSpec()
+              .withContainers(rest.asJava)
+              .endSpec()
+            .build(),
+          first)
+        case Nil => SparkPod(pod, new ContainerBuilder().build())
+      }
     } catch {
       case e: Exception =>
         logError(
