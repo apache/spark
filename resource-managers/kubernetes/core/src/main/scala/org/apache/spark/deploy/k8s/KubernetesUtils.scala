@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s
 
 import java.io.File
 
-import io.fabric8.kubernetes.api.model.ContainerBuilder
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
 
@@ -72,10 +72,14 @@ private[spark] object KubernetesUtils extends Logging {
     try {
       val pod = kubernetesClient.pods().load(templateFile).get()
       val containers = pod.getSpec.getContainers.asScala
-      if (containers.nonEmpty) {
-        SparkPod(pod, new ContainerBuilder().build())
-      }
-      SparkPod(pod, containers.head)
+      containers.headOption.map(firstContainer => {
+        val podWithoutFirstContainer = new PodBuilder(pod)
+          .editSpec()
+          .removeFromContainers(firstContainer)
+          .endSpec()
+          .build()
+        SparkPod(podWithoutFirstContainer, containers.head)
+      }).getOrElse(SparkPod(pod, new ContainerBuilder().build()))
     } catch {
       case e: Exception =>
         logError(
