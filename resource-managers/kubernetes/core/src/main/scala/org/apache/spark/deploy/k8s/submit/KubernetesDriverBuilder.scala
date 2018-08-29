@@ -21,7 +21,7 @@ import java.io.File
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.deploy.k8s.{Config, Constants, KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.k8s.{Config, KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, LocalDirsFeatureStep, MountSecretsFeatureStep, MountVolumesFeatureStep, PodTemplateConfigMapStep}
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
 import org.apache.spark.internal.Logging
@@ -58,7 +58,7 @@ private[spark] class KubernetesDriverBuilder(
       KubernetesConf[KubernetesDriverSpecificConf]
         => JavaDriverFeatureStep) =
     new JavaDriverFeatureStep(_),
-    podTemplateConfigMapStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+    providePodTemplateConfigMapStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => PodTemplateConfigMapStep) =
     new PodTemplateConfigMapStep(_),
     provideInitialPod: () => SparkPod = SparkPod.initialPod) {
@@ -82,7 +82,7 @@ private[spark] class KubernetesDriverBuilder(
     } else Nil
     val podTemplateFeature = if (
       kubernetesConf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined) {
-      Seq(podTemplateConfigMapStep(kubernetesConf))
+      Seq(providePodTemplateConfigMapStep(kubernetesConf))
     } else Nil
 
     val bindingsStep = kubernetesConf.roleSpecificConf.mainAppResource.map {

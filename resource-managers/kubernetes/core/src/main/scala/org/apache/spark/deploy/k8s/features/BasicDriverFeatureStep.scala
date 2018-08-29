@@ -79,10 +79,8 @@ private[spark] class BasicDriverFeatureStep(
       DEFAULT_BLOCKMANAGER_PORT
     )
     val driverUIPort = SparkUI.getUIPort(conf.sparkConf)
-    val driverContainerName = if (pod.container.getName == null) DEFAULT_DRIVER_CONTAINER_NAME
-      else pod.container.getName
     val driverContainer = new ContainerBuilder(pod.container)
-      .withName(driverContainerName)
+      .withName(Option(pod.container.getName).getOrElse(DEFAULT_DRIVER_CONTAINER_NAME))
       .withImage(driverContainerImage)
       .withImagePullPolicy(conf.imagePullPolicy())
       .addNewPort()

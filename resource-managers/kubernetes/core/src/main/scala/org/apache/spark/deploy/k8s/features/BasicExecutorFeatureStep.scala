@@ -128,10 +128,8 @@ private[spark] class BasicExecutorFeatureStep(
           .build()
       }
 
-    val executorContainerName = if (pod.container.getName == null) DEFAULT_EXECUTOR_CONTAINER_NAME
-      else pod.container.getName
     val executorContainer = new ContainerBuilder(pod.container)
-      .withName(executorContainerName)
+      .withName(Option(pod.container.getName).getOrElse(DEFAULT_EXECUTOR_CONTAINER_NAME))
       .withImage(executorContainerImage)
       .withImagePullPolicy(kubernetesConf.imagePullPolicy())
       .withNewResources()
