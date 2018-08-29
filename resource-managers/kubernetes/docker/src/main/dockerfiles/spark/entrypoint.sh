@@ -87,6 +87,14 @@ if ! [ -z ${HADOOP_CONF_DIR+x} ]; then
   SPARK_CLASSPATH="$HADOOP_CONF_DIR:$SPARK_CLASSPATH";
 fi
 
+if [ -n "$HADOOP_TOKEN_FILE_LOCATION" ]; then \
+    touch /etc/group && \
+    touch /etc/passwd && \
+    addgroup -g 2000 sparkpod && \
+    adduser -D -u 1000 -G sparkpod $SPARK_USER && \
+    su $SPARK_USER;
+fi
+
 case "$SPARK_K8S_CMD" in
   driver)
     CMD=(

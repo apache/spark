@@ -68,11 +68,6 @@ private[spark] object HadoopBootstrapUtil {
                   .build())
                 .endConfigMap()
               .endVolume()
-        // TODO: (ifilonenko) make configurable PU(G)ID
-          .editOrNewSecurityContext()
-            .withRunAsUser(1000L)
-            .withFsGroup(2000L)
-            .endSecurityContext()
           .endSpec()
         .build()
       val kerberizedContainer = new ContainerBuilder(pod.container)
