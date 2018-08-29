@@ -2794,6 +2794,27 @@ private[spark] object Utils extends Logging {
       }
     }
   }
+
+  /**
+   * Regular expression matching full width characters
+   */
+  private lazy val fullWidthRegex = ("""[""" +
+    """\u1100-\u115F""" +
+    """\u2E80-\uA4CF""" +
+    """\uAC00-\uD7A3""" +
+    """\uF900-\uFAFF""" +
+    """\uFE10-\uFE19""" +
+    """\uFE30-\uFE6F""" +
+    """\uFF00-\uFF60""" +
+    """\uFFE0-\uFFE6""" +
+    """]""").r
+  /**
+   * Return the number of half width of a string
+   * A full width character occupies two half widths
+   */
+  def stringHalfWidth(str: String): Int = {
+    if(str == null) 0 else str.length + fullWidthRegex.findAllIn(str).size
+  }
 }
 
 private[util] object CallerContext extends Logging {
