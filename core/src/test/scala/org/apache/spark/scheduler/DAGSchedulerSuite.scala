@@ -2492,6 +2492,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     runEvent(makeCompletionEvent(
       taskSets(1).tasks(1), Success, makeMapStatus("hostA", 2)))
 
+    // task(stageId=1, stageAttemptId=1, partitionId=1) should be marked completed when
+    // task(stageId=1, stageAttemptId=0, partitionId=1) finished
+    // ideally we would verify that but no way to get into task scheduler to verify
+
     // Both tasks in rddB should be resubmitted, because none of them has succeeded truly.
     // Complete the task(stageId=1, stageAttemptId=1, partitionId=0) successfully.
     // Task(stageId=1, stageAttemptId=1, partitionId=1) of this new active stage attempt
@@ -2501,19 +2505,21 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     runEvent(makeCompletionEvent(
       taskSets(3).tasks(0), Success, makeMapStatus("hostB", 2)))
 
-    // There should be no new attempt of stage submitted,
-    // because task(stageId=1, stageAttempt=1, partitionId=1) is still running in
-    // the current attempt (and hasn't completed successfully in any earlier attempts).
-    assert(taskSets.size === 4)
+    // At this point there should be no active task set for stageId=1 and we need
+    // to resubmit because the output from (stageId=1, stageAttemptId=0, partitionId=1)
+    // was ignored due to executor failure
+    assert(taskSets.size === 5)
+    assert(taskSets(4).stageId === 1 && taskSets(4).stageAttemptId === 2
+      && taskSets(4).tasks.size === 1)
 
-    // Complete task(stageId=1, stageAttempt=1, partitionId=1) successfully.
+    // Complete task(stageId=1, stageAttempt=2, partitionId=1) successfully.
     runEvent(makeCompletionEvent(
-      taskSets(3).tasks(1), Success, makeMapStatus("hostB", 2)))
+      taskSets(4).tasks(0), Success, makeMapStatus("hostB", 2)))
 
     // Now the ResultStage should be submitted, because all of the tasks of rddB have
     // completed successfully on alive executors.
-    assert(taskSets.size === 5 && taskSets(4).tasks(0).isInstanceOf[ResultTask[_, _]])
-    complete(taskSets(4), Seq(
+    assert(taskSets.size === 6 && taskSets(5).tasks(0).isInstanceOf[ResultTask[_, _]])
+    complete(taskSets(5), Seq(
       (Success, 1),
       (Success, 1)))
   }
