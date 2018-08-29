@@ -20,11 +20,11 @@ import java.nio.file.Paths
 import java.util.UUID
 
 import collection.JavaConverters._
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilder, VolumeBuilder, VolumeMount, VolumeMountBuilder}
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilder, VolumeBuilder, VolumeMountBuilder}
-
-import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.Config._
 
 private[spark] class LocalDirsFeatureStep(
     conf: KubernetesConf[_ <: KubernetesRoleSpecificConf],
@@ -70,14 +70,34 @@ private[spark] class LocalDirsFeatureStep(
     val localDirVolumeMounts = localDirVolumes
       .zip(resolvedLocalDirs)
       .map { case (localDirVolume, localDirPath) =>
-        new VolumeMountBuilder()
-          .withName(localDirVolume.getName)
-          .withMountPath(localDirPath)
-          .build()
+        hasVolumeMount(pod, localDirVolume.getName, localDirPath) match {
+          case true =>
+            // For pre-existing volume mounts just re-use the mount
+            pod.container.getVolumeMounts().asScala
+              .find(m => m.getName.equals(localDirVolume.getName)
+                         && m.getMountPath.equals(localDirPath))
+              .get
+          case false =>
+            // Create new volume mount
+            new VolumeMountBuilder()
+              .withName (localDirVolume.getName)
+              .withMountPath (localDirPath)
+              .build()
+        }
       }
+
+    // Check for conflicting volume mounts
+    for (m: VolumeMount <- localDirVolumeMounts) {
+      if (hasConflictingVolumeMount(pod, m.getName, m.getMountPath).size > 0) {
+        throw new SparkException(s"Conflicting volume mounts defined, pod template attempted to " +
+          "mount SPARK_LOCAL_DIRS volume ${m.getName} multiple times or at an alternative path " +
+          "then the expected ${m.getPath}")
+      }
+    }
+
     val podWithLocalDirVolumes = new PodBuilder(pod.pod)
       .editSpec()
-         // Don't want to re-add volume mounts that already existed in the incoming spec
+         // Don't want to re-add volumes that already existed in the incoming spec
          // as duplicate definitions will lead to K8S API errors
         .addToVolumes(localDirVolumes.filter(v => !hasVolume(pod, v.getName)): _*)
         .endSpec()
@@ -87,7 +107,10 @@ private[spark] class LocalDirsFeatureStep(
         .withName("SPARK_LOCAL_DIRS")
         .withValue(resolvedLocalDirs.mkString(","))
         .endEnv()
-      .addToVolumeMounts(localDirVolumeMounts: _*)
+      // Don't want to re-add volume mounts that already existed in the incoming spec
+      // as duplicate definitions will lead to K8S API errors
+      .addToVolumeMounts(localDirVolumeMounts
+                         .filter(m => !hasVolumeMount(pod, m.getName, m.getMountPath)): _*)
       .build()
     SparkPod(podWithLocalDirVolumes, containerWithLocalDirVolumeMounts)
   }
@@ -98,5 +121,18 @@ private[spark] class LocalDirsFeatureStep(
 
   def hasVolume(pod: SparkPod, name: String): Boolean = {
     pod.pod.getSpec().getVolumes().asScala.exists(v => v.getName.equals(name))
+  }
+
+  def hasVolumeMount(pod: SparkPod, name: String, path: String): Boolean = {
+    pod.container.getVolumeMounts().asScala
+      .exists(m => m.getName.equals(name) && m.getMountPath.equals(path))
+  }
+
+  def hasConflictingVolumeMount(pod: SparkPod, name: String, path: String): Seq[VolumeMount] = {
+    // A volume mount is considered conflicting if it matches one, and only one of, the name/path
+    // of a volume mount we are creating
+    pod.container.getVolumeMounts().asScala
+      .filter(m => (m.getName.equals(name) && !m.getMountPath.equals(path)) ||
+                   (m.getMountPath.equals(path) && !m.getName.equals(name)))
   }
 }
