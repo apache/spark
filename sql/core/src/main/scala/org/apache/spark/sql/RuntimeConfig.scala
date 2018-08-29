@@ -37,9 +37,10 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    *
    * @since 2.0.0
    */
-  def set(key: String, value: String): Unit = {
+  def set(key: String, value: String): RuntimeConfig = {
     requireNonStaticConf(key)
     sqlConf.setConfString(key, value)
+    this
   }
 
   /**
@@ -47,9 +48,10 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    *
    * @since 2.0.0
    */
-  def set(key: String, value: Boolean): Unit = {
+  def set(key: String, value: Boolean): RuntimeConfig = {
     requireNonStaticConf(key)
     set(key, value.toString)
+    this
   }
 
   /**
@@ -57,9 +59,10 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    *
    * @since 2.0.0
    */
-  def set(key: String, value: Long): Unit = {
+  def set(key: String, value: Long): RuntimeConfig = {
     requireNonStaticConf(key)
     set(key, value.toString)
+    this
   }
 
   /**
@@ -127,9 +130,10 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    *
    * @since 2.0.0
    */
-  def unset(key: String): Unit = {
+  def unset(key: String): RuntimeConfig = {
     requireNonStaticConf(key)
     sqlConf.unsetConf(key)
+    this
   }
 
   /**
