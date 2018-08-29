@@ -133,7 +133,7 @@ object AssociationRules {
      *
      */
     @Since("1.5.0")
-    def confidence: Double = freqUnion.toDouble / freqAntecedent
+    def confidence: Double = freqUnion / freqAntecedent
 
     @Since("2.4.0")
     def lift: Option[Double] = freqConsequent.map(fCons => confidence / fCons)
