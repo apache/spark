@@ -199,7 +199,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     val (table1Name, table2Name) = ("t1", "t2")
     withTempDatabase { dbName =>
       withTable(table1Name, table2Name) {
-        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
           spark.range(50).write.saveAsTable(s"$dbName.$table1Name")
           spark.range(100).write.saveAsTable(s"$dbName.$table2Name")
           // First, makes sure a join is not broadcastable

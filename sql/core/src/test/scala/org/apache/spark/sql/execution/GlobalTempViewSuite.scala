@@ -21,6 +21,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalog.Table
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{Join, ResolvedHint}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
@@ -163,13 +164,15 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
       withTempView("v2") {
         spark.range(10).createTempView("v2")
 
-        Seq(
-          "SELECT /*+ MAPJOIN(v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id",
-          "SELECT /*+ MAPJOIN(global_temp.v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id"
-        ).foreach { statement =>
-          val plan = sql(statement).queryExecution.optimizedPlan
-          assert(plan.asInstanceOf[Join].left.isInstanceOf[ResolvedHint])
-          assert(!plan.asInstanceOf[Join].right.isInstanceOf[ResolvedHint])
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          Seq(
+            "SELECT /*+ MAPJOIN(v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id",
+            "SELECT /*+ MAPJOIN(global_temp.v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id"
+          ).foreach { statement =>
+            val plan = sql(statement).queryExecution.optimizedPlan
+            assert(plan.asInstanceOf[Join].left.isInstanceOf[ResolvedHint])
+            assert(!plan.asInstanceOf[Join].right.isInstanceOf[ResolvedHint])
+          }
         }
       }
     }

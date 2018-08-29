@@ -70,6 +70,8 @@ object ResolveHints {
           val identifierList = db :: tableIdent.identifier :: Nil
           namePartsWithDatabase(nameParts, catalog.globalTempViewManager.database)
             .corresponds(identifierList)(resolver)
+        case None if catalog.getTempView(tableIdent.identifier).isDefined =>
+          nameParts.size == 1 && resolver(nameParts.head, tableIdent.identifier)
         case _ =>
           val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
           val identifierList = db :: tableIdent.identifier :: Nil
