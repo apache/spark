@@ -39,6 +39,7 @@ import org.apache.spark.sql.types.DataType
  * @param nullable  True if the UDF can return null value.
  * @param udfDeterministic  True if the UDF is deterministic. Deterministic UDF returns same result
  *                          each time it is invoked with a particular input.
+ * @param nullableTypes which of the inputTypes are nullable (i.e. not primitive)
  */
 case class ScalaUDF(
     function: AnyRef,
@@ -47,7 +48,8 @@ case class ScalaUDF(
     inputTypes: Seq[DataType] = Nil,
     udfName: Option[String] = None,
     nullable: Boolean = true,
-    udfDeterministic: Boolean = true)
+    udfDeterministic: Boolean = true,
+    nullableTypes: Seq[Boolean] = Nil)
   extends Expression with ImplicitCastInputTypes with NonSQLExpression with UserDefinedExpression {
 
   // The constructor for SPARK 2.1 and 2.2
@@ -58,7 +60,8 @@ case class ScalaUDF(
       inputTypes: Seq[DataType],
       udfName: Option[String]) = {
     this(
-      function, dataType, children, inputTypes, udfName, nullable = true, udfDeterministic = true)
+      function, dataType, children, inputTypes, udfName, nullable = true,
+      udfDeterministic = true, nullableTypes = Nil)
   }
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)

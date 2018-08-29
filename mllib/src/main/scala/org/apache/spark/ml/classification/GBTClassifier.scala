@@ -287,8 +287,8 @@ class GBTClassificationModel private[ml](
 
   override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
-    val predictUDF = udf { (features: Any) =>
-      bcastModel.value.predict(features.asInstanceOf[Vector])
+    val predictUDF = udfInternal { features: Vector =>
+      bcastModel.value.predict(features)
     }
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }

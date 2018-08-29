@@ -165,7 +165,7 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
       }
     }
 
-    val hashFeatures = udf { row: Row =>
+    val hashFeatures = udfInternal { row: Row =>
       val map = new OpenHashMap[Int, Double]()
       localInputCols.foreach { colName =>
         val fieldIndex = row.fieldIndex(colName)

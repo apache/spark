@@ -34,7 +34,6 @@ import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 
@@ -245,8 +244,8 @@ class GBTRegressionModel private[ml](
 
   override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
-    val predictUDF = udf { (features: Any) =>
-      bcastModel.value.predict(features.asInstanceOf[Vector])
+    val predictUDF = udfInternal { features: Vector =>
+      bcastModel.value.predict(features)
     }
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }

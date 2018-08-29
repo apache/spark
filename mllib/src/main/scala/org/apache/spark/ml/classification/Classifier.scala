@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
@@ -164,8 +164,8 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
     var outputData = dataset
     var numColsOutput = 0
     if (getRawPredictionCol != "") {
-      val predictRawUDF = udf { (features: Any) =>
-        predictRaw(features.asInstanceOf[FeaturesType])
+      val predictRawUDF = udfInternal { features: FeaturesType =>
+        predictRaw(features)
       }
       outputData = outputData.withColumn(getRawPredictionCol, predictRawUDF(col(getFeaturesCol)))
       numColsOutput += 1
@@ -174,8 +174,8 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
       val predUDF = if (getRawPredictionCol != "") {
         udf(raw2prediction _).apply(col(getRawPredictionCol))
       } else {
-        val predictUDF = udf { (features: Any) =>
-          predict(features.asInstanceOf[FeaturesType])
+        val predictUDF = udfInternal { features: FeaturesType =>
+          predict(features)
         }
         predictUDF(col(getFeaturesCol))
       }

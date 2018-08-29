@@ -24,7 +24,8 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.stat._
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.expressions.UserDefinedFunction
+import org.apache.spark.sql.functions.{col, udfInternal}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 
@@ -375,7 +376,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
     import org.apache.spark.sql.functions.{rand, udf}
     val c = Column(col)
     val r = rand(seed)
-    val f = udf { (stratum: Any, x: Double) =>
+    val f = udfInternal { (stratum: Any, x: Double) =>
       x < fractions.getOrElse(stratum.asInstanceOf[T], 0.0)
     }
     df.filter(f(c, r))
