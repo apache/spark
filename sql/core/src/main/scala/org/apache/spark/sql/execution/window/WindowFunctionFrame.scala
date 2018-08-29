@@ -42,6 +42,10 @@ private[window] abstract class WindowFunctionFrame {
    * Write the current results to the target row.
    */
   def write(index: Int, current: InternalRow): Unit
+
+  def currentLowIndex(): Int = 0
+
+  def currentHighIndex(): Int = 0
 }
 
 object WindowFunctionFrame {
@@ -62,7 +66,7 @@ object WindowFunctionFrame {
  * @param newMutableProjection function used to create the projection.
  * @param offset by which rows get moved within a partition.
  */
-private[window] final class OffsetWindowFunctionFrame(
+private[sql] final class OffsetWindowFunctionFrame(
     target: InternalRow,
     ordinal: Int,
     expressions: Array[OffsetWindowFunction],
@@ -148,7 +152,7 @@ private[window] final class OffsetWindowFunctionFrame(
  * @param lbound comparator used to identify the lower bound of an output row.
  * @param ubound comparator used to identify the upper bound of an output row.
  */
-private[window] final class SlidingWindowFunctionFrame(
+private[sql] final class SlidingWindowFunctionFrame(
     target: InternalRow,
     processor: AggregateProcessor,
     lbound: BoundOrdering,
@@ -217,7 +221,7 @@ private[window] final class SlidingWindowFunctionFrame(
     }
 
     // Only recalculate and update when the buffer changes.
-    if (bufferUpdated) {
+    if (bufferUpdated && processor != null) {
       processor.initialize(input.length)
       val iter = buffer.iterator()
       while (iter.hasNext) {
@@ -226,6 +230,10 @@ private[window] final class SlidingWindowFunctionFrame(
       processor.evaluate(target)
     }
   }
+
+  override def currentLowIndex(): Int = inputLowIndex
+
+  override def currentHighIndex(): Int = inputHighIndex
 }
 
 /**
@@ -239,7 +247,7 @@ private[window] final class SlidingWindowFunctionFrame(
  * @param target to write results to.
  * @param processor to calculate the row values with.
  */
-private[window] final class UnboundedWindowFunctionFrame(
+private[sql] final class UnboundedWindowFunctionFrame(
     target: InternalRow,
     processor: AggregateProcessor)
   extends WindowFunctionFrame {
@@ -276,7 +284,7 @@ private[window] final class UnboundedWindowFunctionFrame(
  * @param processor to calculate the row values with.
  * @param ubound comparator used to identify the upper bound of an output row.
  */
-private[window] final class UnboundedPrecedingWindowFunctionFrame(
+private[sql] final class UnboundedPrecedingWindowFunctionFrame(
     target: InternalRow,
     processor: AggregateProcessor,
     ubound: BoundOrdering)
@@ -347,7 +355,7 @@ private[window] final class UnboundedPrecedingWindowFunctionFrame(
  * @param processor to calculate the row values with.
  * @param lbound comparator used to identify the lower bound of an output row.
  */
-private[window] final class UnboundedFollowingWindowFunctionFrame(
+private[sql] final class UnboundedFollowingWindowFunctionFrame(
     target: InternalRow,
     processor: AggregateProcessor,
     lbound: BoundOrdering)

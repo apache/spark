@@ -113,7 +113,7 @@ private[window] object AggregateProcessor {
  * This class manages the processing of a number of aggregate functions. See the documentation of
  * the object for more information.
  */
-private[window] final class AggregateProcessor(
+private[sql] final class AggregateProcessor(
     private[this] val bufferSchema: Array[AttributeReference],
     private[this] val initialProjection: MutableProjection,
     private[this] val updateProjection: MutableProjection,
