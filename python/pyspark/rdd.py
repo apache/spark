@@ -2390,7 +2390,18 @@ class RDD(object):
         """
         .. note:: Experimental
 
-        Indicates that Spark must launch the tasks together for the current stage.
+        Marks the current stage as a barrier stage, where Spark must launch all tasks together.
+        In case of a task failure, instead of only restarting the failed task, Spark will abort the
+        entire stage and relaunch all tasks for this stage.
+        The barrier execution mode feature is experimental and it only handles limited scenarios.
+        Please read the linked SPIP and design docs to understand the limitations and future plans.
+
+        :return: an :class:`RDDBarrier` instance that provides actions within a barrier stage.
+
+        .. seealso:: :class:`BarrierTaskContext`
+        .. seealso:: `SPIP: Barrier Execution Mode \
+            <http://jira.apache.org/jira/browse/SPARK-24374>`_
+        .. seealso:: `Design Doc <https://jira.apache.org/jira/browse/SPARK-24582>`_
 
         .. versionadded:: 2.4.0
         """
@@ -2430,8 +2441,8 @@ class RDDBarrier(object):
     """
     .. note:: Experimental
 
-    An RDDBarrier turns an RDD into a barrier RDD, which forces Spark to launch tasks of the stage
-    contains this RDD together.
+    Wraps an RDD in a barrier stage, which forces Spark to launch tasks of this stage together.
+    :class:`RDDBarrier` instances are created by :func:`RDD.barrier`.
 
     .. versionadded:: 2.4.0
     """
@@ -2443,7 +2454,10 @@ class RDDBarrier(object):
         """
         .. note:: Experimental
 
-        Return a new RDD by applying a function to each partition of this RDD.
+        Returns a new RDD by applying a function to each partition of the wrapped RDD,
+        where tasks are launched together in a barrier stage.
+        The interface is the same as :func:`RDD.mapPartitions`.
+        Please see the API doc there.
 
         .. versionadded:: 2.4.0
         """
