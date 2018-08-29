@@ -65,7 +65,7 @@ final class ShuffleInMemorySorter {
    */
   private int usableCapacity = 0;
 
-  private int initialSize;
+  private final int initialSize;
 
   ShuffleInMemorySorter(MemoryConsumer consumer, int initialSize, boolean useRadixSort) {
     this.consumer = consumer;
@@ -94,12 +94,20 @@ final class ShuffleInMemorySorter {
   }
 
   public void reset() {
+    // Reset `pos` here so that `spill` triggered by the below `allocateArray` will be no-op.
+    pos = 0;
     if (consumer != null) {
       consumer.freeArray(array);
+      // As `array` has been released, we should set it to  `null` to avoid accessing it before
+      // `allocateArray` returns. `usableCapacity` is also set to `0` to avoid any codes writing
+      // data to `ShuffleInMemorySorter` when `array` is `null` (e.g., in
+      // ShuffleExternalSorter.growPointerArrayIfNecessary, we may try to access
+      // `ShuffleInMemorySorter` when `allocateArray` throws SparkOutOfMemoryError).
+      array = null;
+      usableCapacity = 0;
       array = consumer.allocateArray(initialSize);
       usableCapacity = getUsableCapacity();
     }
-    pos = 0;
   }
 
   public void expandPointerArray(LongArray newArray) {

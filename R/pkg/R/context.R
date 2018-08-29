@@ -43,7 +43,7 @@ getMinPartitions <- function(sc, minPartitions) {
 #'  lines <- textFile(sc, "myfile.txt")
 #'}
 textFile <- function(sc, path, minPartitions = NULL) {
-  # Allow the user to have a more flexible definiton of the text file path
+  # Allow the user to have a more flexible definition of the text file path
   path <- suppressWarnings(normalizePath(path))
   # Convert a string vector of paths to a string containing comma separated paths
   path <- paste(path, collapse = ",")
@@ -71,7 +71,7 @@ textFile <- function(sc, path, minPartitions = NULL) {
 #'  rdd <- objectFile(sc, "myfile")
 #'}
 objectFile <- function(sc, path, minPartitions = NULL) {
-  # Allow the user to have a more flexible definiton of the text file path
+  # Allow the user to have a more flexible definition of the text file path
   path <- suppressWarnings(normalizePath(path))
   # Convert a string vector of paths to a string containing comma separated paths
   path <- paste(path, collapse = ",")
@@ -138,11 +138,10 @@ parallelize <- function(sc, coll, numSlices = 1) {
 
   sizeLimit <- getMaxAllocationLimit(sc)
   objectSize <- object.size(coll)
+  len <- length(coll)
 
   # For large objects we make sure the size of each slice is also smaller than sizeLimit
-  numSerializedSlices <- max(numSlices, ceiling(objectSize / sizeLimit))
-  if (numSerializedSlices > length(coll))
-    numSerializedSlices <- length(coll)
+  numSerializedSlices <- min(len, max(numSlices, ceiling(objectSize / sizeLimit)))
 
   # Generate the slice ids to put each row
   # For instance, for numSerializedSlices of 22, length of 50
@@ -153,8 +152,8 @@ parallelize <- function(sc, coll, numSlices = 1) {
   splits <- if (numSerializedSlices > 0) {
     unlist(lapply(0: (numSerializedSlices - 1), function(x) {
       # nolint start
-      start <- trunc((x * length(coll)) / numSerializedSlices)
-      end <- trunc(((x + 1) * length(coll)) / numSerializedSlices)
+      start <- trunc((as.numeric(x) * len) / numSerializedSlices)
+      end <- trunc(((as.numeric(x) + 1) * len) / numSerializedSlices)
       # nolint end
       rep(start, end - start)
     }))
@@ -304,6 +303,8 @@ setCheckpointDirSC <- function(sc, dirName) {
 #' A directory can be given if the recursive option is set to true.
 #' Currently directories are only supported for Hadoop-supported filesystems.
 #' Refer Hadoop-supported filesystems at \url{https://wiki.apache.org/hadoop/HCFS}.
+#'
+#' Note: A path can be added only once. Subsequent additions of the same path are ignored.
 #'
 #' @rdname spark.addFile
 #' @param path The path of the file to be added

@@ -279,13 +279,10 @@ class FileStreamSinkSuite extends StreamTest {
       check() // nothing emitted yet
 
       addTimestamp(104, 123) // watermark = 90 before this, watermark = 123 - 10 = 113 after this
-      check() // nothing emitted yet
+      check((100L, 105L) -> 2L)  // no-data-batch emits results on 100-105,
 
       addTimestamp(140) // wm = 113 before this, emit results on 100-105, wm = 130 after this
-      check((100L, 105L) -> 2L)
-
-      addTimestamp(150) // wm = 130s before this, emit results on 120-125, wm = 150 after this
-      check((100L, 105L) -> 2L, (120L, 125L) -> 1L)
+      check((100L, 105L) -> 2L, (120L, 125L) -> 1L)  // no-data-batch emits results on 120-125
 
     } finally {
       if (query != null) {

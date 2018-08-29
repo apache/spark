@@ -29,7 +29,7 @@ trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self
 
   override def beforeAll() {
     super.beforeAll()
-    InternalLoggerFactory.setDefaultFactory(new Slf4JLoggerFactory())
+    InternalLoggerFactory.setDefaultFactory(Slf4JLoggerFactory.INSTANCE)
   }
 
   override def afterEach() {

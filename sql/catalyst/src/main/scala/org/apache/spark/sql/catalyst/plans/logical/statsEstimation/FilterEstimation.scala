@@ -395,6 +395,10 @@ case class FilterEstimation(plan: Filter) extends Logging {
     // use [min, max] to filter the original hSet
     dataType match {
       case _: NumericType | BooleanType | DateType | TimestampType =>
+        if (ndv.toDouble == 0 || colStat.min.isEmpty || colStat.max.isEmpty)  {
+          return Some(0.0)
+        }
+
         val statsInterval =
           ValueInterval(colStat.min, colStat.max, dataType).asInstanceOf[NumericValueInterval]
         val validQuerySet = hSet.filter { v =>
@@ -418,6 +422,10 @@ case class FilterEstimation(plan: Filter) extends Logging {
 
       // We assume the whole set since there is no min/max information for String/Binary type
       case StringType | BinaryType =>
+        if (ndv.toDouble == 0)  {
+          return Some(0.0)
+        }
+
         newNdv = ndv.min(BigInt(hSet.size))
         if (update) {
           val newStats = colStat.copy(distinctCount = Some(newNdv), nullCount = Some(0))

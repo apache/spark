@@ -155,6 +155,18 @@ package object util {
 
   def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
 
+
+  def escapeSingleQuotedString(str: String): String = {
+    val builder = StringBuilder.newBuilder
+
+    str.foreach {
+      case '\'' => builder ++= s"\\\'"
+      case ch => builder += ch
+    }
+
+    builder.toString()
+  }
+
   /* FIX ME
   implicit class debugLogging(a: Any) {
     def debugLogging() {

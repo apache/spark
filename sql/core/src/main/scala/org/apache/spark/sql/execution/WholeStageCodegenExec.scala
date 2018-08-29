@@ -21,12 +21,14 @@ import java.util.Locale
 import java.util.function.Supplier
 
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
@@ -122,10 +124,10 @@ trait CodegenSupport extends SparkPlan {
         ctx.INPUT_ROW = row
         ctx.currentVars = colVars
         val ev = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
-        val code = s"""
+        val code = code"""
           |$evaluateInputs
-          |${ev.code.trim}
-         """.stripMargin.trim
+          |${ev.code}
+         """.stripMargin
         ExprCode(code, FalseLiteral, ev.value)
       } else {
         // There are no columns
@@ -259,8 +261,8 @@ trait CodegenSupport extends SparkPlan {
    * them to be evaluated twice.
    */
   protected def evaluateVariables(variables: Seq[ExprCode]): String = {
-    val evaluate = variables.filter(_.code != "").map(_.code.trim).mkString("\n")
-    variables.foreach(_.code = "")
+    val evaluate = variables.filter(_.code.nonEmpty).map(_.code.toString).mkString("\n")
+    variables.foreach(_.code = EmptyBlock)
     evaluate
   }
 
@@ -274,9 +276,9 @@ trait CodegenSupport extends SparkPlan {
       required: AttributeSet): String = {
     val evaluateVars = new StringBuilder
     variables.zipWithIndex.foreach { case (ev, i) =>
-      if (ev.code != "" && required.contains(attributes(i))) {
-        evaluateVars.append(ev.code.trim + "\n")
-        ev.code = ""
+      if (ev.code.nonEmpty && required.contains(attributes(i))) {
+        evaluateVars.append(ev.code.toString + "\n")
+        ev.code = EmptyBlock
       }
     }
     evaluateVars.toString()
@@ -581,7 +583,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     val (_, maxCodeSize) = try {
       CodeGenerator.compile(cleanedSource)
     } catch {
-      case _: Exception if !Utils.isTesting && sqlContext.conf.codegenFallback =>
+      case NonFatal(_) if !Utils.isTesting && sqlContext.conf.codegenFallback =>
         // We should already saw the error message
         logWarning(s"Whole-stage codegen disabled for plan (id=$codegenStageId):\n $treeString")
         return child.execute()

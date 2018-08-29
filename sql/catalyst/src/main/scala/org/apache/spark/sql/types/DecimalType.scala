@@ -48,7 +48,8 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   }
 
   if (precision > DecimalType.MAX_PRECISION) {
-    throw new AnalysisException(s"DecimalType can only support precision up to 38")
+    throw new AnalysisException(
+      s"${DecimalType.simpleString} can only support precision up to ${DecimalType.MAX_PRECISION}")
   }
 
   // default constructor for Java
@@ -120,6 +121,7 @@ object DecimalType extends AbstractDataType {
   val MINIMUM_ADJUSTED_SCALE = 6
 
   // The decimal types compatible with other numeric types
+  private[sql] val BooleanDecimal = DecimalType(1, 0)
   private[sql] val ByteDecimal = DecimalType(3, 0)
   private[sql] val ShortDecimal = DecimalType(5, 0)
   private[sql] val IntDecimal = DecimalType(10, 0)
@@ -161,13 +163,17 @@ object DecimalType extends AbstractDataType {
    * This method is used only when `spark.sql.decimalOperations.allowPrecisionLoss` is set to true.
    */
   private[sql] def adjustPrecisionScale(precision: Int, scale: Int): DecimalType = {
-    // Assumptions:
+    // Assumption:
     assert(precision >= scale)
-    assert(scale >= 0)
 
     if (precision <= MAX_PRECISION) {
       // Adjustment only needed when we exceed max precision
       DecimalType(precision, scale)
+    } else if (scale < 0) {
+      // Decimal can have negative scale (SPARK-24468). In this case, we cannot allow a precision
+      // loss since we would cause a loss of digits in the integer part.
+      // In this case, we are likely to meet an overflow.
+      DecimalType(MAX_PRECISION, scale)
     } else {
       // Precision/scale exceed maximum precision. Result must be adjusted to MAX_PRECISION.
       val intDigits = precision - scale

@@ -98,7 +98,7 @@ private[hive] object IsolatedClientLoader extends Logging {
     case "2.0" | "2.0.0" | "2.0.1" => hive.v2_0
     case "2.1" | "2.1.0" | "2.1.1" => hive.v2_1
     case "2.2" | "2.2.0" => hive.v2_2
-    case "2.3" | "2.3.0" | "2.3.1" | "2.3.2" => hive.v2_3
+    case "2.3" | "2.3.0" | "2.3.1" | "2.3.2" | "2.3.3" => hive.v2_3
   }
 
   private def downloadVersion(
@@ -182,6 +182,7 @@ private[hive] class IsolatedClientLoader(
     name.startsWith("org.slf4j") ||
     name.startsWith("org.apache.log4j") || // log4j1.x
     name.startsWith("org.apache.logging.log4j") || // log4j2
+    name.startsWith("org.apache.derby.") ||
     name.startsWith("org.apache.spark.") ||
     (sharesHadoopClasses && isHadoopClass) ||
     name.startsWith("scala.") ||

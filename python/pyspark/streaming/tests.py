@@ -63,7 +63,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
         class_name = cls.__name__
         conf = SparkConf().set("spark.default.parallelism", 1)
         cls.sc = SparkContext(appName=class_name, conf=conf)
-        cls.sc.setCheckpointDir("/tmp")
+        cls.sc.setCheckpointDir(tempfile.mkdtemp())
 
     @classmethod
     def tearDownClass(cls):
@@ -179,7 +179,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self._test_func(input, func, expected)
 
     def test_flatMap(self):
-        """Basic operation test for DStream.faltMap."""
+        """Basic operation test for DStream.flatMap."""
         input = [range(1, 5), range(5, 9), range(9, 13)]
 
         def func(dstream):
@@ -205,6 +205,38 @@ class BasicOperationTests(PySparkStreamingTestCase):
             return dstream.count()
         expected = [[len(x)] for x in input]
         self._test_func(input, func, expected)
+
+    def test_slice(self):
+        """Basic operation test for DStream.slice."""
+        import datetime as dt
+        self.ssc = StreamingContext(self.sc, 1.0)
+        self.ssc.remember(4.0)
+        input = [[1], [2], [3], [4]]
+        stream = self.ssc.queueStream([self.sc.parallelize(d, 1) for d in input])
+
+        time_vals = []
+
+        def get_times(t, rdd):
+            if rdd and len(time_vals) < len(input):
+                time_vals.append(t)
+
+        stream.foreachRDD(get_times)
+
+        self.ssc.start()
+        self.wait_for(time_vals, 4)
+        begin_time = time_vals[0]
+
+        def get_sliced(begin_delta, end_delta):
+            begin = begin_time + dt.timedelta(seconds=begin_delta)
+            end = begin_time + dt.timedelta(seconds=end_delta)
+            rdds = stream.slice(begin, end)
+            result_list = [rdd.collect() for rdd in rdds]
+            return [r for result in result_list for r in result]
+
+        self.assertEqual(set([1]), set(get_sliced(0, 0)))
+        self.assertEqual(set([2, 3]), set(get_sliced(1, 2)))
+        self.assertEqual(set([2, 3, 4]), set(get_sliced(1, 4)))
+        self.assertEqual(set([1, 2, 3, 4]), set(get_sliced(0, 4)))
 
     def test_reduce(self):
         """Basic operation test for DStream.reduce."""
@@ -779,6 +811,12 @@ class StreamingContextTests(PySparkStreamingTestCase):
 
         self.assertEqual([2, 3, 1], self._take(dstream, 3))
 
+    def test_transform_pairrdd(self):
+        # This regression test case is for SPARK-17756.
+        dstream = self.ssc.queueStream(
+            [[1], [2], [3]]).transform(lambda rdd: rdd.cartesian(rdd))
+        self.assertEqual([(1, 1), (2, 2), (3, 3)], self._take(dstream, 3))
+
     def test_get_active(self):
         self.assertEqual(StreamingContext.getActive(), None)
 
@@ -816,7 +854,7 @@ class StreamingContextTests(PySparkStreamingTestCase):
         self.ssc = StreamingContext.getActiveOrCreate(None, setupFunc)
         self.assertTrue(self.setupCalled)
 
-        # Verify that getActiveOrCreate() retuns active context and does not call the setupFunc
+        # Verify that getActiveOrCreate() returns active context and does not call the setupFunc
         self.ssc.start()
         self.setupCalled = False
         self.assertEqual(StreamingContext.getActiveOrCreate(None, setupFunc), self.ssc)
@@ -1549,7 +1587,9 @@ if __name__ == "__main__":
         kinesis_jar_present = True
         jars = "%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, kinesis_asl_assembly_jar)
 
-    os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
+    existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
+    jars_args = "--jars %s" % jars
+    os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, existing_args])
     testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests, CheckpointTests,
                  StreamingListenerTests]
 
@@ -1590,11 +1630,11 @@ if __name__ == "__main__":
         sys.stderr.write("[Running %s]\n" % (testcase))
         tests = unittest.TestLoader().loadTestsFromTestCase(testcase)
         if xmlrunner:
-            result = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=3).run(tests)
+            result = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2).run(tests)
             if not result.wasSuccessful():
                 failed = True
         else:
-            result = unittest.TextTestRunner(verbosity=3).run(tests)
+            result = unittest.TextTestRunner(verbosity=2).run(tests)
             if not result.wasSuccessful():
                 failed = True
     sys.exit(failed)

@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
+import java.util.Date
 
 import scala.language.existentials
 
@@ -33,11 +34,13 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
@@ -57,7 +60,8 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
   protected override def generateTable(
       catalog: SessionCatalog,
       name: TableIdentifier,
-      isDataSource: Boolean): CatalogTable = {
+      isDataSource: Boolean,
+      partitionCols: Seq[String] = Seq("a", "b")): CatalogTable = {
     val storage =
       if (isDataSource) {
         val serde = HiveSerDe.sourceToSerDe("parquet")
@@ -81,17 +85,17 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     val metadata = new MetadataBuilder()
       .putString("key", "value")
       .build()
+    val schema = new StructType()
+      .add("col1", "int", nullable = true, metadata = metadata)
+      .add("col2", "string")
     CatalogTable(
       identifier = name,
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
-      schema = new StructType()
-        .add("col1", "int", nullable = true, metadata = metadata)
-        .add("col2", "string")
-        .add("a", "int")
-        .add("b", "int"),
+      schema = schema.copy(
+        fields = schema.fields ++ partitionCols.map(StructField(_, IntegerType))),
       provider = if (isDataSource) Some("parquet") else Some("hive"),
-      partitionColumnNames = Seq("a", "b"),
+      partitionColumnNames = partitionCols,
       createTime = 0L,
       createVersion = org.apache.spark.SPARK_VERSION,
       tracksPartitionsInCatalog = true)
@@ -780,7 +784,7 @@ class HiveDDLSuite
     val part1 = Map("a" -> "1", "b" -> "5")
     val part2 = Map("a" -> "2", "b" -> "6")
     val root = new Path(catalog.getTableMetadata(tableIdent).location)
-    val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
+    val fs = root.getFileSystem(spark.sessionState.newHadoopConf())
     // valid
     fs.mkdirs(new Path(new Path(root, "a=1"), "b=5"))
     fs.createNewFile(new Path(new Path(root, "a=1/b=5"), "a.csv"))  // file
@@ -1354,7 +1358,8 @@ class HiveDDLSuite
     val indexName = tabName + "_index"
     withTable(tabName) {
       // Spark SQL does not support creating index. Thus, we have to use Hive client.
-      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      val client =
+        spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
       sql(s"CREATE TABLE $tabName(a int)")
 
       try {
@@ -1392,7 +1397,8 @@ class HiveDDLSuite
     val tabName = "tab1"
     withTable(tabName) {
       // Spark SQL does not support creating skewed table. Thus, we have to use Hive client.
-      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      val client =
+        spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
       client.runSqlHive(
         s"""
            |CREATE Table $tabName(col1 int, col2 int)
@@ -2144,6 +2150,86 @@ class HiveDDLSuite
     }
   }
 
+  private def getReader(path: String): org.apache.orc.Reader = {
+    val conf = spark.sessionState.newHadoopConf()
+    val files = org.apache.spark.sql.execution.datasources.orc.OrcUtils.listOrcFiles(path, conf)
+    assert(files.length == 1)
+    val file = files.head
+    val fs = file.getFileSystem(conf)
+    val readerOptions = org.apache.orc.OrcFile.readerOptions(conf).filesystem(fs)
+    org.apache.orc.OrcFile.createReader(file, readerOptions)
+  }
+
+  test("SPARK-23355 convertMetastoreOrc should not ignore table properties - STORED AS") {
+    Seq("native", "hive").foreach { orcImpl =>
+      withSQLConf(ORC_IMPLEMENTATION.key -> orcImpl, CONVERT_METASTORE_ORC.key -> "true") {
+        withTable("t") {
+          withTempPath { path =>
+            sql(
+              s"""
+                |CREATE TABLE t(id int) STORED AS ORC
+                |TBLPROPERTIES (
+                |  orc.compress 'ZLIB',
+                |  orc.compress.size '1001',
+                |  orc.row.index.stride '2002',
+                |  hive.exec.orc.default.block.size '3003',
+                |  hive.exec.orc.compression.strategy 'COMPRESSION')
+                |LOCATION '${path.toURI}'
+              """.stripMargin)
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            assert(DDLUtils.isHiveTable(table))
+            assert(table.storage.serde.get.contains("orc"))
+            val properties = table.properties
+            assert(properties.get("orc.compress") == Some("ZLIB"))
+            assert(properties.get("orc.compress.size") == Some("1001"))
+            assert(properties.get("orc.row.index.stride") == Some("2002"))
+            assert(properties.get("hive.exec.orc.default.block.size") == Some("3003"))
+            assert(properties.get("hive.exec.orc.compression.strategy") == Some("COMPRESSION"))
+            assert(spark.table("t").collect().isEmpty)
+
+            sql("INSERT INTO t SELECT 1")
+            checkAnswer(spark.table("t"), Row(1))
+            val maybeFile = path.listFiles().find(_.getName.startsWith("part"))
+
+            val reader = getReader(maybeFile.head.getCanonicalPath)
+            assert(reader.getCompressionKind.name === "ZLIB")
+            assert(reader.getCompressionSize == 1001)
+            assert(reader.getRowIndexStride == 2002)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-23355 convertMetastoreParquet should not ignore table properties - STORED AS") {
+    withSQLConf(CONVERT_METASTORE_PARQUET.key -> "true") {
+      withTable("t") {
+        withTempPath { path =>
+          sql(
+            s"""
+               |CREATE TABLE t(id int) STORED AS PARQUET
+               |TBLPROPERTIES (
+               |  parquet.compression 'GZIP'
+               |)
+               |LOCATION '${path.toURI}'
+            """.stripMargin)
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+          assert(DDLUtils.isHiveTable(table))
+          assert(table.storage.serde.get.contains("parquet"))
+          val properties = table.properties
+          assert(properties.get("parquet.compression") == Some("GZIP"))
+          assert(spark.table("t").collect().isEmpty)
+
+          sql("INSERT INTO t SELECT 1")
+          checkAnswer(spark.table("t"), Row(1))
+          val maybeFile = path.listFiles().find(_.getName.startsWith("part"))
+
+          assertCompression(maybeFile, "parquet", "GZIP")
+        }
+      }
+    }
+  }
+
   test("load command for non local invalid path validation") {
     withTable("tbl") {
       sql("CREATE TABLE tbl(i INT, j STRING)")
@@ -2163,6 +2249,36 @@ class HiveDDLSuite
       spark.range(1).select('id, 'id as 'col1, 'id as 'col2).write.saveAsTable("t3")
       spark.sql("select COL1, COL2 from t3").write.format("hive").saveAsTable("t4")
       checkAnswer(spark.table("t4"), Row(0, 0))
+    }
+  }
+
+  test("SPARK-24812: desc formatted table for last access verification") {
+    withTable("t1") {
+      sql(
+        "CREATE TABLE IF NOT EXISTS t1 (c1_int INT, c2_string STRING, c3_float FLOAT)")
+      val desc = sql("DESC FORMATTED t1").filter($"col_name".startsWith("Last Access"))
+        .select("data_type")
+      // check if the last access time doesnt have the default date of year
+      // 1970 as its a wrong access time
+      assert(!(desc.first.toString.contains("1970")))
+    }
+  }
+
+  test("SPARK-24681 checks if nested column names do not include ',', ':', and ';'") {
+    val expectedMsg = "Cannot create a table having a nested column whose name contains invalid " +
+      "characters (',', ':', ';') in Hive metastore."
+
+    Seq("nested,column", "nested:column", "nested;column").foreach { nestedColumnName =>
+      withTable("t") {
+        val e = intercept[AnalysisException] {
+          spark.range(1)
+            .select(struct(lit(0).as(nestedColumnName)).as("toplevel"))
+            .write
+            .format("hive")
+            .saveAsTable("t")
+        }.getMessage
+        assert(e.contains(expectedMsg))
+      }
     }
   }
 }

@@ -135,13 +135,14 @@ class SaslEncryption {
     private final boolean isByteBuf;
     private final ByteBuf buf;
     private final FileRegion region;
+    private final int maxOutboundBlockSize;
 
     /**
      * A channel used to buffer input data for encryption. The channel has an upper size bound
      * so that if the input is larger than the allowed buffer, it will be broken into multiple
-     * chunks.
+     * chunks. Made non-final to enable lazy initialization, which saves memory.
      */
-    private final ByteArrayWritableChannel byteChannel;
+    private ByteArrayWritableChannel byteChannel;
 
     private ByteBuf currentHeader;
     private ByteBuffer currentChunk;
@@ -157,7 +158,7 @@ class SaslEncryption {
       this.isByteBuf = msg instanceof ByteBuf;
       this.buf = isByteBuf ? (ByteBuf) msg : null;
       this.region = isByteBuf ? null : (FileRegion) msg;
-      this.byteChannel = new ByteArrayWritableChannel(maxOutboundBlockSize);
+      this.maxOutboundBlockSize = maxOutboundBlockSize;
     }
 
     /**
@@ -230,17 +231,17 @@ class SaslEncryption {
      * data into memory at once, and can avoid ballooning memory usage when transferring large
      * messages such as shuffle blocks.
      *
-     * The {@link #transfered()} counter also behaves a little funny, in that it won't go forward
+     * The {@link #transferred()} counter also behaves a little funny, in that it won't go forward
      * until a whole chunk has been written. This is done because the code can't use the actual
      * number of bytes written to the channel as the transferred count (see {@link #count()}).
      * Instead, once an encrypted chunk is written to the output (including its header), the
-     * size of the original block will be added to the {@link #transfered()} amount.
+     * size of the original block will be added to the {@link #transferred()} amount.
      */
     @Override
     public long transferTo(final WritableByteChannel target, final long position)
       throws IOException {
 
-      Preconditions.checkArgument(position == transfered(), "Invalid position.");
+      Preconditions.checkArgument(position == transferred(), "Invalid position.");
 
       long reportedWritten = 0L;
       long actuallyWritten = 0L;
@@ -272,7 +273,7 @@ class SaslEncryption {
           currentChunkSize = 0;
           currentReportedBytes = 0;
         }
-      } while (currentChunk == null && transfered() + reportedWritten < count());
+      } while (currentChunk == null && transferred() + reportedWritten < count());
 
       // Returning 0 triggers a backoff mechanism in netty which may harm performance. Instead,
       // we return 1 until we can (i.e. until the reported count would actually match the size
@@ -292,12 +293,15 @@ class SaslEncryption {
     }
 
     private void nextChunk() throws IOException {
+      if (byteChannel == null) {
+        byteChannel = new ByteArrayWritableChannel(maxOutboundBlockSize);
+      }
       byteChannel.reset();
       if (isByteBuf) {
         int copied = byteChannel.write(buf.nioBuffer());
         buf.skipBytes(copied);
       } else {
-        region.transferTo(byteChannel, region.transfered());
+        region.transferTo(byteChannel, region.transferred());
       }
 
       byte[] encrypted = backend.wrap(byteChannel.getData(), 0, byteChannel.length());

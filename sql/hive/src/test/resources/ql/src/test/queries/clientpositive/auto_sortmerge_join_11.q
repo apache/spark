@@ -26,7 +26,7 @@ set hive.optimize.bucketmapjoin.sortedmerge=true;
 
 -- Since size is being used to find the big table, the order of the tables in the join does not matter
 -- The tables are only bucketed and not sorted, the join should not be converted
--- Currenly, a join is only converted to a sort-merge join without a hint, automatic conversion to
+-- Currently, a join is only converted to a sort-merge join without a hint, automatic conversion to
 -- bucketized mapjoin is not done
 explain extended select count(*) FROM bucket_small a JOIN bucket_big b ON a.key = b.key;
 select count(*) FROM bucket_small a JOIN bucket_big b ON a.key = b.key;
