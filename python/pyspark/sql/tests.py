@@ -4434,6 +4434,12 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertPandasEqual(pdf, df_from_python.toPandas())
         self.assertPandasEqual(pdf, df_from_pandas.toPandas())
 
+    def test_toPandas_batch_order(self):
+        df = self.spark.range(64, numPartitions=8).toDF("a")
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 4}):
+            pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
+            self.assertPandasEqual(pdf, pdf_arrow)
+
 
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,

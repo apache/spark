@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql
 
-import java.io.CharArrayWriter
+import java.io.{CharArrayWriter, DataOutputStream}
 import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
@@ -3279,34 +3280,34 @@ class Dataset[T] private[sql](
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
 
     withAction("collectAsArrowToPython", queryExecution) { plan =>
-      PythonRDD.serveToStream("serve-Arrow") { out =>
+      PythonRDD.serveToStream("serve-Arrow") { outputStream =>
+        val out = new DataOutputStream(outputStream)
         val batchWriter = new ArrowBatchStreamWriter(schema, out, timeZoneId)
         val arrowBatchRdd = toArrowBatchRdd(plan)
         val numPartitions = arrowBatchRdd.partitions.length
 
-        // Store collection results for worst case of 1 to N-1 partitions
-        val results = new Array[Array[Array[Byte]]](numPartitions - 1)
-        var lastIndex = -1  // index of last partition written
+        // Batches ordered by (index of partition, batch # in partition) tuple
+        val batchOrder = new ArrayBuffer[(Int, Int)]()
+        var partitionCount = 0
 
-        // Handler to eagerly write partitions to Python in order
+        // Handler to eagerly write batches to Python out of order
         def handlePartitionBatches(index: Int, arrowBatches: Array[Array[Byte]]): Unit = {
-          // If result is from next partition in order
-          if (index - 1 == lastIndex) {
+          if (arrowBatches.nonEmpty) {
             batchWriter.writeBatches(arrowBatches.iterator)
-            lastIndex += 1
-            // Write stored partitions that come next in order
-            while (lastIndex < results.length && results(lastIndex) != null) {
-              batchWriter.writeBatches(results(lastIndex).iterator)
-              results(lastIndex) = null
-              lastIndex += 1
+            arrowBatches.indices.foreach { i => batchOrder.append((index, i)) }
+          }
+          partitionCount += 1
+
+          // After last batch, end the stream and write batch order
+          if (partitionCount == numPartitions) {
+            batchWriter.end()
+            out.writeInt(batchOrder.length)
+            // Batch order indices are from 0 to N-1 batches, sorted by order they arrived.
+            // Re-order batches according to these indices to build a table.
+            batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, i) =>
+              out.writeInt(i)
             }
-            // After last batch, end the stream
-            if (lastIndex == results.length) {
-              batchWriter.end()
-            }
-          } else {
-            // Store partitions received out of order
-            results(index - 1) = arrowBatches
+            out.flush()
           }
         }
 
