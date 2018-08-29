@@ -159,6 +159,7 @@ abstract class AbstractCommandBuilder {
         "repl",
         "resource-managers/mesos",
         "resource-managers/yarn",
+        "resource-managers/pbs",
         "sql/catalyst",
         "sql/core",
         "sql/hive",

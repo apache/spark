@@ -230,8 +230,9 @@ private[spark] class SparkSubmit extends Logging {
       case m if m.startsWith("mesos") => MESOS
       case m if m.startsWith("k8s") => KUBERNETES
       case m if m.startsWith("local") => LOCAL
+      case m if m.startsWith("pbs") => PBS
       case _ =>
-        error("Master must either be yarn or start with spark, mesos, k8s, or local")
+        error("Master must either be yarn or start with spark, mesos, k8s, pbs, or local")
         -1
     }
 
@@ -278,6 +279,14 @@ private[spark] class SparkSubmit extends Logging {
       }
     }
 
+    if (clusterManager == PBS) {
+      if (!Utils.classIsLoadable(PBS_CLUSTER_SUBMIT_CLASS) && !Utils.isTesting) {
+        error(
+          "Could not load PBS classes. " +
+            "This copy of Spark may not have been compiled with PBS support.")
+      }
+    }
+
     // Fail fast, the following modes are not supported or applicable
     (clusterManager, deployMode) match {
       case (STANDALONE, CLUSTER) if args.isPython =>
@@ -308,6 +317,8 @@ private[spark] class SparkSubmit extends Logging {
     val isStandAloneCluster = clusterManager == STANDALONE && deployMode == CLUSTER
     val isKubernetesCluster = clusterManager == KUBERNETES && deployMode == CLUSTER
     val isMesosClient = clusterManager == MESOS && deployMode == CLIENT
+    val isPbsClient = clusterManager == PBS && deployMode == CLIENT
+    val isPbsCluster = clusterManager == PBS && deployMode == CLUSTER
 
     if (!isMesosCluster && !isStandAloneCluster) {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
@@ -543,20 +554,20 @@ private[spark] class SparkSubmit extends Logging {
       OptionAssigner(args.archives, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.archives"),
 
       // Other options
-      OptionAssigner(args.executorCores, STANDALONE | YARN | KUBERNETES, ALL_DEPLOY_MODES,
+      OptionAssigner(args.executorCores, STANDALONE | YARN | KUBERNETES | PBS, ALL_DEPLOY_MODES,
         confKey = "spark.executor.cores"),
-      OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN | KUBERNETES, ALL_DEPLOY_MODES,
-        confKey = "spark.executor.memory"),
-      OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
-        confKey = "spark.cores.max"),
-      OptionAssigner(args.files, LOCAL | STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
+      OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN | KUBERNETES | PBS,
+        ALL_DEPLOY_MODES, confKey = "spark.executor.memory"),
+      OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS | KUBERNETES | PBS,
+        ALL_DEPLOY_MODES, confKey = "spark.cores.max"),
+      OptionAssigner(args.files, LOCAL | STANDALONE | MESOS | KUBERNETES | PBS, ALL_DEPLOY_MODES,
         confKey = "spark.files"),
       OptionAssigner(args.jars, LOCAL, CLIENT, confKey = "spark.jars"),
-      OptionAssigner(args.jars, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
+      OptionAssigner(args.jars, STANDALONE | MESOS | KUBERNETES | PBS, ALL_DEPLOY_MODES,
         confKey = "spark.jars"),
-      OptionAssigner(args.driverMemory, STANDALONE | MESOS | YARN | KUBERNETES, CLUSTER,
+      OptionAssigner(args.driverMemory, STANDALONE | MESOS | YARN | KUBERNETES | PBS, CLUSTER,
         confKey = "spark.driver.memory"),
-      OptionAssigner(args.driverCores, STANDALONE | MESOS | YARN | KUBERNETES, CLUSTER,
+      OptionAssigner(args.driverCores, STANDALONE | MESOS | YARN | KUBERNETES | PBS, CLUSTER,
         confKey = "spark.driver.cores"),
       OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
         confKey = "spark.driver.supervise"),
@@ -706,6 +717,29 @@ private[spark] class SparkSubmit extends Logging {
           childArgs ++= Array("--main-class", "org.apache.spark.deploy.RRunner")
         }
         else {
+          childArgs ++= Array("--primary-java-resource", args.primaryResource)
+          childArgs ++= Array("--main-class", args.mainClass)
+        }
+      } else {
+        childArgs ++= Array("--main-class", args.mainClass)
+      }
+      if (args.childArgs != null) {
+        args.childArgs.foreach { arg =>
+          childArgs += ("--arg", arg)
+        }
+      }
+    }
+
+    if (isPbsCluster) {
+      childMainClass = PBS_CLUSTER_SUBMIT_CLASS
+      if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
+        if (args.isPython) {
+          childArgs ++= Array("--primary-py-file", args.primaryResource)
+          childArgs ++= Array("--main-class", "org.apache.spark.deploy.PythonRunner")
+          if (args.pyFiles != null) {
+            childArgs ++= Array("--other-py-files", args.pyFiles)
+          }
+        } else {
           childArgs ++= Array("--primary-java-resource", args.primaryResource)
           childArgs ++= Array("--main-class", args.mainClass)
         }
@@ -882,7 +916,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private val MESOS = 4
   private val LOCAL = 8
   private val KUBERNETES = 16
-  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL | KUBERNETES
+  private val PBS = 32
+  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL | KUBERNETES | PBS
 
   // Deploy modes
   private val CLIENT = 1
@@ -905,6 +940,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private[deploy] val STANDALONE_CLUSTER_SUBMIT_CLASS = classOf[ClientApp].getName()
   private[deploy] val KUBERNETES_CLUSTER_SUBMIT_CLASS =
     "org.apache.spark.deploy.k8s.submit.KubernetesClientApplication"
+  private[deploy] val PBS_CLUSTER_SUBMIT_CLASS =
+    "org.apache.spark.deploy.pbs.PbsClusterApplication"
 
   override def main(args: Array[String]): Unit = {
     val submit = new SparkSubmit() {

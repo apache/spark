@@ -2723,6 +2723,13 @@
     </profile>
 
     <profile>
+      <id>pbs</id>
+      <modules>
+        <module>resource-managers/pbs</module>
+      </modules>
+    </profile>
+
+    <profile>
       <id>hive-thriftserver</id>
       <modules>
         <module>sql/hive-thriftserver</module>
