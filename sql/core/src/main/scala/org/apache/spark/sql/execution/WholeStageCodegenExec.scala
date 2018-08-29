@@ -63,6 +63,12 @@ trait CodegenSupport extends SparkPlan {
   }
 
   /**
+   * Whether this SparkPlan supports columnar scan or not, default value is false and only
+   * overrode in child class of [[ColumnarBatchScan]]
+   */
+  def supportsBatch: Boolean = false
+
+  /**
    * Whether this SparkPlan supports whole stage codegen or not.
    */
   def supportCodegen: Boolean = true
@@ -77,7 +83,7 @@ trait CodegenSupport extends SparkPlan {
    *
    * @note Right now we support up to two RDDs
    */
-  def inputRDDs(): Seq[RDD[InternalRow]]
+  def inputRDDs(): Seq[RDD[_]]
 
   /**
    * Returns Java source code to process the rows from input RDD.
@@ -370,7 +376,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
     child.doExecuteBroadcast()
   }
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[_]] = {
     child.execute() :: Nil
   }
 
@@ -607,13 +613,18 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
     val durationMs = longMetric("pipelineTime")
 
-    val rdds = child.asInstanceOf[CodegenSupport].inputRDDs()
+    val childPlan = child.asInstanceOf[CodegenSupport]
+    val rdds = if (childPlan.supportsBatch) {
+      childPlan.asInstanceOf[ColumnarBatchScan].inputBatchRDDs()
+    } else {
+      childPlan.inputRDDs()
+    }
     assert(rdds.size <= 2, "Up to two input RDDs can be supported")
     if (rdds.length == 1) {
       rdds.head.mapPartitionsWithIndex { (index, iter) =>
         val (clazz, _) = CodeGenerator.compile(cleanedSource)
         val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
-        buffer.init(index, Array(iter))
+        buffer.init(index, Array(iter.asInstanceOf[Iterator[InternalRow]]))
         new Iterator[InternalRow] {
           override def hasNext: Boolean = {
             val v = buffer.hasNext
@@ -632,7 +643,8 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
         val (leftIter, rightIter) = zippedIter.next()
         val (clazz, _) = CodeGenerator.compile(cleanedSource)
         val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
-        buffer.init(index, Array(leftIter, rightIter))
+        buffer.init(index, Array(leftIter.asInstanceOf[Iterator[InternalRow]],
+          rightIter.asInstanceOf[Iterator[InternalRow]]))
         new Iterator[InternalRow] {
           override def hasNext: Boolean = {
             val v = buffer.hasNext

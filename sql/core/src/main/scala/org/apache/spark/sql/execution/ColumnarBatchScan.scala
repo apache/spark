@@ -34,7 +34,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
 
   def vectorTypes: Option[Seq[String]] = None
 
-  protected def supportsBatch: Boolean = true
+  override def supportsBatch: Boolean = true
 
   protected def needsUnsafeRowConversion: Boolean = true
 
@@ -55,15 +55,13 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
   /**
    * Get input RDD depends on supportsBatch.
    */
-  final def getInputRDDs(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[_]] = {
     if (supportsBatch) {
-      inputBatchRDDs().asInstanceOf[Seq[RDD[InternalRow]]]
+      inputBatchRDDs()
     } else {
       inputRowRDDs()
     }
   }
-
-  override def inputRDDs(): Seq[RDD[InternalRow]] = getInputRDDs()
 
   /**
    * Generate [[ColumnVector]] expressions for our parent to consume as rows.

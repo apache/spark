@@ -126,7 +126,7 @@ case class GenerateExec(
 
   override def supportCodegen: Boolean = false
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[_]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 

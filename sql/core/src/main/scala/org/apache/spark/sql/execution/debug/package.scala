@@ -238,7 +238,7 @@ package object debug {
 
     override def outputPartitioning: Partitioning = child.outputPartitioning
 
-    override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    override def inputRDDs(): Seq[RDD[_]] = {
       child.asInstanceOf[CodegenSupport].inputRDDs()
     }
 

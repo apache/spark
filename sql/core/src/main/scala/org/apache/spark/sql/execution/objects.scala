@@ -72,7 +72,7 @@ case class DeserializeToObjectExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[_]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
@@ -106,7 +106,7 @@ case class SerializeFromObjectExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[_]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
@@ -203,7 +203,7 @@ case class MapElementsExec(
     child: SparkPlan)
   extends ObjectConsumerExec with ObjectProducerExec with CodegenSupport {
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[_]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 

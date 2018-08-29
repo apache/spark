@@ -37,7 +37,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[_]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
@@ -117,7 +117,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[_]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
@@ -267,7 +267,7 @@ case class SampleExec(
   // to the parent operator.
   override def usedInputs: AttributeSet = AttributeSet.empty
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[_]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 

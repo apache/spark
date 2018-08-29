@@ -61,7 +61,7 @@ case class LocalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode wi
     iter.take(limit)
   }
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[_]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 

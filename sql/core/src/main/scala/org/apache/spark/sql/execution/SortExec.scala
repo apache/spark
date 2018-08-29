@@ -117,7 +117,7 @@ case class SortExec(
 
   override def usedInputs: AttributeSet = AttributeSet(Seq.empty)
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[_]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
