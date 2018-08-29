@@ -59,6 +59,6 @@ private[spark] trait PodTemplateSuite { k8sSuite: KubernetesSuite =>
 
 private[spark] object PodTemplateSuite {
   val LABEL_KEY = "template-label-key"
-  val DRIVER_TEMPLATE_FILE = new File(getClass.getResource("driver-template.yml").getFile)
-  val EXECUTOR_TEMPLATE_FILE = new File(getClass.getResource("executor-template.yml").getFile)
+  val DRIVER_TEMPLATE_FILE = new File(getClass.getResource("/driver-template.yml").getFile)
+  val EXECUTOR_TEMPLATE_FILE = new File(getClass.getResource("/executor-template.yml").getFile)
 }
