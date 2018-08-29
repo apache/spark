@@ -18,7 +18,7 @@
 from __future__ import print_function
 import socket
 
-from pyspark.java_gateway import do_server_auth
+from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import write_int, UTF8Deserializer
 
 
@@ -108,37 +108,13 @@ def _load_from_socket(port, auth_secret):
     """
     Load data from a given socket, this is a blocking method thus only return when the socket
     connection has been closed.
-
-    This is copied from context.py, while modified the message protocol.
     """
-    sock = None
-    # Support for both IPv4 and IPv6.
-    # On most of IPv6-ready systems, IPv6 will take precedence.
-    for res in socket.getaddrinfo("localhost", port, socket.AF_UNSPEC, socket.SOCK_STREAM):
-        af, socktype, proto, canonname, sa = res
-        sock = socket.socket(af, socktype, proto)
-        try:
-            # Do not allow timeout for socket reading operation.
-            sock.settimeout(None)
-            sock.connect(sa)
-        except socket.error:
-            sock.close()
-            sock = None
-            continue
-        break
-    if not sock:
-        raise Exception("could not open socket")
-
-    # We don't really need a socket file here, it's just for convenience that we can reuse the
-    # do_server_auth() function and data serialization methods.
-    sockfile = sock.makefile("rwb", 65536)
-
+    (sockfile, sock) = local_connect_and_auth(port, auth_secret)
+    # The barrier() call may block forever, so no timeout
+    sock.settimeout(None)
     # Make a barrier() function call.
     write_int(BARRIER_FUNCTION, sockfile)
     sockfile.flush()
-
-    # Do server auth.
-    do_server_auth(sockfile, auth_secret)
 
     # Collect result.
     res = UTF8Deserializer().loads(sockfile)
