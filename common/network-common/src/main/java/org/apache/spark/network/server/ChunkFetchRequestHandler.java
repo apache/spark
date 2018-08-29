@@ -120,7 +120,8 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
    * default EventLoopGroup, thus making sure that we can reserve some threads in
    * TransportServer's default EventLoopGroup for handling other RPC messages.
    */
-  private ChannelFuture respond(final Channel channel, final Encodable result) throws InterruptedException {
+  private ChannelFuture respond(final Channel channel,
+                                final Encodable result) throws InterruptedException {
     final SocketAddress remoteAddress = channel.remoteAddress();
     return channel.writeAndFlush(result).sync().addListener((ChannelFutureListener) future -> {
       if (future.isSuccess()) {
