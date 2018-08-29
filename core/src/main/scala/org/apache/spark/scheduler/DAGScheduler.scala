@@ -1373,18 +1373,10 @@ private[spark] class DAGScheduler(
 
           case smt: ShuffleMapTask =>
             val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
+            shuffleStage.pendingPartitions -= task.partitionId
             val status = event.result.asInstanceOf[MapStatus]
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)
-            if (stageIdToStage(task.stageId).latestInfo.attemptNumber == task.stageAttemptId) {
-              // This task was for the currently running attempt of the stage. Since the task
-              // completed successfully from the perspective of the TaskSetManager, mark it as
-              // no longer pending (the TaskSetManager may consider the task complete even
-              // when the output needs to be ignored because the task's epoch is too small below.
-              // In this case, when pending partitions is empty, there will still be missing
-              // output locations, which will cause the DAGScheduler to resubmit the stage below.)
-              shuffleStage.pendingPartitions -= task.partitionId
-            }
             if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
               logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
             } else {
@@ -1393,13 +1385,6 @@ private[spark] class DAGScheduler(
               // available.
               mapOutputTracker.registerMapOutput(
                 shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
-              // Remove the task's partition from pending partitions. This may have already been
-              // done above, but will not have been done yet in cases where the task attempt was
-              // from an earlier attempt of the stage (i.e., not the attempt that's currently
-              // running).  This allows the DAGScheduler to mark the stage as complete when one
-              // copy of each task has finished successfully, even if the currently active stage
-              // still has tasks running.
-              shuffleStage.pendingPartitions -= task.partitionId
             }
 
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
