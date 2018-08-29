@@ -69,11 +69,11 @@ private[spark] class HadoopKerberosKeytabResolverStep(
         }
       // In the case that keytab is not specified we will read from Local Ticket Cache
       val jobUserUGI = maybeJobUserUGI.getOrElse(tokenManager.getCurrentUser)
+      val originalCredentials = jobUserUGI.getCredentials
       // It is necessary to run as jobUserUGI because logged in user != Current User
       val (tokenData, renewalInterval) = jobUserUGI.doAs(
         new PrivilegedExceptionAction[(Array[Byte], Long)] {
         override def run(): (Array[Byte], Long) = {
-          val originalCredentials = jobUserUGI.getCredentials
           val hadoopTokenManager: HadoopDelegationTokenManager =
             new HadoopDelegationTokenManager(submissionSparkConf, hadoopConf)
           tokenManager.getDelegationTokens(
