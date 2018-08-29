@@ -23,7 +23,6 @@ import java.sql.{Date, Timestamp}
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
-import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
@@ -218,25 +217,18 @@ class Dataset[T] private[sql](
     val resolver = sparkSession.sessionState.analyzer.resolver
     queryExecution.analyzed.resolveQuoted(colName, resolver)
       .getOrElse {
-        val defaultMessage =
-          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})"""
-            .stripMargin
-
-        val improvedMessage =
-          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")}).
-             | Try adding backticks to the column name, i.e., `$colName`,
-             | if "$colName" is the name of the whole column"""
-            .stripMargin.replaceAll("\n", "")
-
-        // Try to resolve colName with backticks and give a better exception message if the
-        // colName can be resolved with backticks. If this fails, return the default
-        // error message
-        val message = Try(queryExecution.analyzed.resolveQuoted(s"`$colName`", resolver)) match {
-          case Success(result) => if (result.isDefined) improvedMessage else defaultMessage
-          case Failure(_) => defaultMessage
+        if (schema.fieldNames.exists(resolver(_, colName))) {
+          throw new AnalysisException(
+            s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")}).
+               | Try adding backticks to the column name, i.e., `$colName`,
+               | if "$colName" is the name of the whole column"""
+            .stripMargin.replaceAll("\n", ""))
+        } else {
+          throw new AnalysisException(
+            s"""Cannot resolve column name "$colName" among
+               | (${schema.fieldNames.mkString(", ")})"""
+            .stripMargin.replaceAll("\n", ""))
         }
-
-        throw new AnalysisException(message)
       }
   }
 
