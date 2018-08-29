@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.{HiveTableRelation, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
@@ -49,9 +50,13 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
     }
 
     plan.transform {
-      case a @ Aggregate(_, aggExprs, child @ PartitionedRelation(_, attrs, filters, rel)) =>
+      case a @ Aggregate(_, aggExprs, child @ PhysicalOperation(
+          projectList, filters, PartitionedRelation(partAttrs, rel))) =>
         // We only apply this optimization when only partitioned attributes are scanned.
-        if (a.references.subsetOf(attrs)) {
+        if (AttributeSet((projectList ++ filters).flatMap(_.references)).subsetOf(partAttrs)) {
+          // The project list and filters all only refer to partition attributes, which means the
+          // the Aggregator operator can also only refer to partition attributes, and filters are
+          // all partition filters. This is a metadata only query we can optimize.
           val aggFunctions = aggExprs.flatMap(_.collect {
             case agg: AggregateExpression => agg
           })
@@ -102,7 +107,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
       partFilters: Seq[Expression]): LogicalPlan = {
     // this logic comes from PruneFileSourcePartitions. it ensures that the filter names match the
     // relation's schema. PartitionedRelation ensures that the filters only reference partition cols
-    val relFilters = partFilters.map { e =>
+    val normalizedFilters = partFilters.map { e =>
       e transform {
         case a: AttributeReference =>
           a.withName(relation.output.find(_.semanticEquals(a)).get.name)
@@ -114,11 +119,8 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
         relation match {
           case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, isStreaming) =>
             val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
-            val partitionData = fsRelation.location.listFiles(relFilters, Nil)
-            // partition data may be a stream, which can cause serialization to hit stack level too
-            // deep exceptions because it is a recursive structure in memory. converting to array
-            // avoids the problem.
-            LocalRelation(partAttrs, partitionData.map(_.values).toArray, isStreaming)
+            val partitionData = fsRelation.location.listFiles(normalizedFilters, Nil)
+            LocalRelation(partAttrs, partitionData.map(_.values), isStreaming)
 
           case relation: HiveTableRelation =>
             val partAttrs = getPartitionAttrs(relation.tableMeta.partitionColumnNames, relation)
@@ -127,7 +129,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
             val timeZoneId = caseInsensitiveProperties.get(DateTimeUtils.TIMEZONE_OPTION)
               .getOrElse(SQLConf.get.sessionLocalTimeZone)
             val partitions = if (partFilters.nonEmpty) {
-              catalog.listPartitionsByFilter(relation.tableMeta.identifier, relFilters)
+              catalog.listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters)
             } else {
               catalog.listPartitions(relation.tableMeta.identifier)
             }
@@ -137,10 +139,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
                 Cast(Literal(p.spec(attr.name)), attr.dataType, Option(timeZoneId)).eval()
               })
             }
-            // partition data may be a stream, which can cause serialization to hit stack level too
-            // deep exceptions because it is a recursive structure in memory. converting to array
-            // avoids the problem.
-            LocalRelation(partAttrs, partitionData.toArray)
+            LocalRelation(partAttrs, partitionData)
 
           case _ =>
             throw new IllegalStateException(s"unrecognized table scan node: $relation, " +
@@ -151,44 +150,21 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
 
   /**
    * A pattern that finds the partitioned table relation node inside the given plan, and returns a
-   * pair of the partition attributes, partition filters, and the table relation node.
-   *
-   * It keeps traversing down the given plan tree if there is a [[Project]] or [[Filter]] with
-   * deterministic expressions, and returns result after reaching the partitioned table relation
-   * node.
+   * pair of the partition attributes and the table relation node.
    */
   object PartitionedRelation extends PredicateHelper {
 
-    def unapply(
-        plan: LogicalPlan): Option[(AttributeSet, AttributeSet, Seq[Expression], LogicalPlan)] = {
+    def unapply(plan: LogicalPlan): Option[(AttributeSet, LogicalPlan)] = {
       plan match {
         case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _)
-          if fsRelation.partitionSchema.nonEmpty =>
+            if fsRelation.partitionSchema.nonEmpty =>
           val partAttrs = AttributeSet(getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l))
-          Some((partAttrs, partAttrs, Nil, l))
+          Some((partAttrs, l))
 
         case relation: HiveTableRelation if relation.tableMeta.partitionColumnNames.nonEmpty =>
           val partAttrs = AttributeSet(
             getPartitionAttrs(relation.tableMeta.partitionColumnNames, relation))
-          Some((partAttrs, partAttrs, Nil, relation))
-
-        case p @ Project(projectList, child) if projectList.forall(_.deterministic) =>
-          unapply(child).flatMap { case (partAttrs, attrs, filters, relation) =>
-            if (p.references.subsetOf(attrs)) {
-              Some((partAttrs, p.outputSet, filters, relation))
-            } else {
-              None
-            }
-          }
-
-        case f @ Filter(condition, child) if condition.deterministic =>
-          unapply(child).flatMap { case (partAttrs, attrs, filters, relation) =>
-            if (f.references.subsetOf(partAttrs)) {
-              Some((partAttrs, attrs, splitConjunctivePredicates(condition) ++ filters, relation))
-            } else {
-              None
-            }
-          }
+          Some((partAttrs, relation))
 
         case _ => None
       }

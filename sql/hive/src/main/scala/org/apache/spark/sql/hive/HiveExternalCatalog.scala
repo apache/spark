@@ -114,7 +114,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * should interpret these special data source properties and restore the original table metadata
    * before returning it.
    */
-  private[hive] def getRawTable(db: String, table: String): CatalogTable = withClient {
+  private[hive] def getRawTable(db: String, table: String): CatalogTable = {
     client.getTable(db, table)
   }
 
@@ -138,17 +138,37 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /**
-   * Checks the validity of data column names. Hive metastore disallows the table to use comma in
-   * data column names. Partition columns do not have such a restriction. Views do not have such
-   * a restriction.
+   * Checks the validity of data column names. Hive metastore disallows the table to use some
+   * special characters (',', ':', and ';') in data column names, including nested column names.
+   * Partition columns do not have such a restriction. Views do not have such a restriction.
    */
   private def verifyDataSchema(
       tableName: TableIdentifier, tableType: CatalogTableType, dataSchema: StructType): Unit = {
     if (tableType != VIEW) {
-      dataSchema.map(_.name).foreach { colName =>
-        if (colName.contains(",")) {
-          throw new AnalysisException("Cannot create a table having a column whose name contains " +
-            s"commas in Hive metastore. Table: $tableName; Column: $colName")
+      val invalidChars = Seq(",", ":", ";")
+      def verifyNestedColumnNames(schema: StructType): Unit = schema.foreach { f =>
+        f.dataType match {
+          case st: StructType => verifyNestedColumnNames(st)
+          case _ if invalidChars.exists(f.name.contains) =>
+            val invalidCharsString = invalidChars.map(c => s"'$c'").mkString(", ")
+            val errMsg = "Cannot create a table having a nested column whose name contains " +
+              s"invalid characters ($invalidCharsString) in Hive metastore. Table: $tableName; " +
+              s"Column: ${f.name}"
+            throw new AnalysisException(errMsg)
+          case _ =>
+        }
+      }
+
+      dataSchema.foreach { f =>
+        f.dataType match {
+          // Checks top-level column names
+          case _ if f.name.contains(",") =>
+            throw new AnalysisException("Cannot create a table having a column whose name " +
+              s"contains commas in Hive metastore. Table: $tableName; Column: ${f.name}")
+          // Checks nested column names
+          case st: StructType =>
+            verifyNestedColumnNames(st)
+          case _ =>
         }
       }
     }
@@ -158,13 +178,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   // Databases
   // --------------------------------------------------------------------------
 
-  override protected def doCreateDatabase(
+  override def createDatabase(
       dbDefinition: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = withClient {
     client.createDatabase(dbDefinition, ignoreIfExists)
   }
 
-  override protected def doDropDatabase(
+  override def dropDatabase(
       db: String,
       ignoreIfNotExists: Boolean,
       cascade: Boolean): Unit = withClient {
@@ -177,7 +197,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    *
    * Note: As of now, this only supports altering database properties!
    */
-  override def doAlterDatabase(dbDefinition: CatalogDatabase): Unit = withClient {
+  override def alterDatabase(dbDefinition: CatalogDatabase): Unit = withClient {
     val existingDb = getDatabase(dbDefinition.name)
     if (existingDb.properties == dbDefinition.properties) {
       logWarning(s"Request to alter database ${dbDefinition.name} is a no-op because " +
@@ -211,7 +231,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   // Tables
   // --------------------------------------------------------------------------
 
-  override protected def doCreateTable(
+  override def createTable(
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = withClient {
     assert(tableDefinition.identifier.database.isDefined)
@@ -480,7 +500,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
-  override protected def doDropTable(
+  override def dropTable(
       db: String,
       table: String,
       ignoreIfNotExists: Boolean,
@@ -489,7 +509,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.dropTable(db, table, ignoreIfNotExists, purge)
   }
 
-  override protected def doRenameTable(
+  override def renameTable(
       db: String,
       oldName: String,
       newName: String): Unit = withClient {
@@ -540,7 +560,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * Note: As of now, this doesn't support altering table schema, partition column names and bucket
    * specification. We will ignore them even if users do specify different values for these fields.
    */
-  override def doAlterTable(tableDefinition: CatalogTable): Unit = withClient {
+  override def alterTable(tableDefinition: CatalogTable): Unit = withClient {
     assert(tableDefinition.identifier.database.isDefined)
     val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
@@ -624,7 +644,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * data schema should not have conflict column names with the existing partition columns, and
    * should still contain all the existing data columns.
    */
-  override def doAlterTableDataSchema(
+  override def alterTableDataSchema(
       db: String,
       table: String,
       newDataSchema: StructType): Unit = withClient {
@@ -656,7 +676,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /** Alter the statistics of a table. If `stats` is None, then remove all existing statistics. */
-  override def doAlterTableStats(
+  override def alterTableStats(
       db: String,
       table: String,
       stats: Option[CatalogStatistics]): Unit = withClient {
@@ -765,9 +785,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // schema we read back is different(ignore case and nullability) from the one in table
         // properties which was written when creating table, we should respect the table schema
         // from hive.
-        logWarning(s"The table schema given by Hive metastore(${table.schema.simpleString}) is " +
+        logWarning(s"The table schema given by Hive metastore(${table.schema.catalogString}) is " +
           "different from the schema when this table was created by Spark SQL" +
-          s"(${schemaFromTableProps.simpleString}). We have to fall back to the table schema " +
+          s"(${schemaFromTableProps.catalogString}). We have to fall back to the table schema " +
           "from Hive metastore which is not case preserving.")
         hiveTable.copy(schemaPreservesCase = false)
       }
@@ -1208,7 +1228,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   // Functions
   // --------------------------------------------------------------------------
 
-  override protected def doCreateFunction(
+  override def createFunction(
       db: String,
       funcDefinition: CatalogFunction): Unit = withClient {
     requireDbExists(db)
@@ -1221,12 +1241,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.createFunction(db, funcDefinition.copy(identifier = functionIdentifier))
   }
 
-  override protected def doDropFunction(db: String, name: String): Unit = withClient {
+  override def dropFunction(db: String, name: String): Unit = withClient {
     requireFunctionExists(db, name)
     client.dropFunction(db, name)
   }
 
-  override protected def doAlterFunction(
+  override def alterFunction(
       db: String, funcDefinition: CatalogFunction): Unit = withClient {
     requireDbExists(db)
     val functionName = funcDefinition.identifier.funcName.toLowerCase(Locale.ROOT)
@@ -1235,7 +1255,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.alterFunction(db, funcDefinition.copy(identifier = functionIdentifier))
   }
 
-  override protected def doRenameFunction(
+  override def renameFunction(
       db: String,
       oldName: String,
       newName: String): Unit = withClient {

@@ -66,7 +66,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
           </h4>
         </span> ++
         <div class="aggregated-poolTable collapsible-table">
-          {poolTable.toNodeSeq}
+          {poolTable.toNodeSeq(request)}
         </div>
       } else {
         Seq.empty[Node]
@@ -74,7 +74,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
 
     val content = summary ++ poolsDescription ++ tables.flatten.flatten
 
-    UIUtils.headerSparkPage("Stages for All Jobs", content, parent)
+    UIUtils.headerSparkPage(request, "Stages for All Jobs", content, parent)
   }
 
   private def summaryAndTableForStatus(

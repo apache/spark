@@ -77,7 +77,7 @@ import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
  * the heaviest part of the computation.  In general, this implementation is bound by either
  * the cost of statistics computation on workers or by communicating the sufficient statistics.
  */
-private[spark] object RandomForest extends Logging {
+private[spark] object RandomForest extends Logging with Serializable {
 
   /**
    * Train a random forest.
@@ -91,7 +91,7 @@ private[spark] object RandomForest extends Logging {
       numTrees: Int,
       featureSubsetStrategy: String,
       seed: Long,
-      instr: Option[Instrumentation[_]],
+      instr: Option[Instrumentation],
       prune: Boolean = true, // exposed for testing only, real trees are always pruned
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
 
@@ -108,9 +108,11 @@ private[spark] object RandomForest extends Logging {
       case Some(instrumentation) =>
         instrumentation.logNumFeatures(metadata.numFeatures)
         instrumentation.logNumClasses(metadata.numClasses)
+        instrumentation.logNumExamples(metadata.numExamples)
       case None =>
         logInfo("numFeatures: " + metadata.numFeatures)
         logInfo("numClasses: " + metadata.numClasses)
+        logInfo("numExamples: " + metadata.numExamples)
     }
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
@@ -405,7 +407,7 @@ private[spark] object RandomForest extends Logging {
       metadata.isMulticlassWithCategoricalFeatures)
     logDebug("using nodeIdCache = " + nodeIdCache.nonEmpty.toString)
 
-    /**
+    /*
      * Performs a sequential aggregation over a partition for a particular tree and node.
      *
      * For each feature, the aggregate sufficient statistics are updated for the relevant
@@ -436,7 +438,7 @@ private[spark] object RandomForest extends Logging {
       }
     }
 
-    /**
+    /*
      * Performs a sequential aggregation over a partition.
      *
      * Each data point contributes to one node. For each feature,

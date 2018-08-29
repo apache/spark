@@ -111,7 +111,9 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_EXECUTOR_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions").getOrElse("")
+    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions").map {
+      Utils.substituteAppNExecIds(_, appId, execId)
+    }.getOrElse("")
 
     val prefixEnv = sc.conf.getOption("spark.executor.extraLibraryPath").map { p =>
       Utils.libraryPathEnvPrefix(Seq(p))
@@ -451,4 +453,8 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       super.applicationId
     }
 
+  override def maxNumConcurrentTasks(): Int = {
+    // TODO SPARK-25074 support this method for MesosFineGrainedSchedulerBackend
+    0
+  }
 }
