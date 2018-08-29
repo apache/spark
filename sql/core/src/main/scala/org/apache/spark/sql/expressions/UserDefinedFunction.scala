@@ -19,6 +19,7 @@ package org.apache.spark.sql.expressions
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.ScalaUDF
 import org.apache.spark.sql.types.DataType
 
@@ -40,7 +41,7 @@ import org.apache.spark.sql.types.DataType
 case class UserDefinedFunction protected[sql] (
     f: AnyRef,
     dataType: DataType,
-    inputTypes: Option[Seq[DataType]]) {
+    inputTypes: Option[Seq[ScalaReflection.Schema]]) {
 
   private var _nameOption: Option[String] = None
   private var _nullable: Boolean = true
@@ -72,10 +73,11 @@ case class UserDefinedFunction protected[sql] (
       f,
       dataType,
       exprs.map(_.expr),
-      inputTypes.getOrElse(Nil),
+      inputTypes.map(_.map(_.dataType)).getOrElse(Nil),
       udfName = _nameOption,
       nullable = _nullable,
-      udfDeterministic = _deterministic))
+      udfDeterministic = _deterministic,
+      nullableTypes = inputTypes.map(_.map(_.nullable)).getOrElse(Nil)))
   }
 
   private def copyAll(): UserDefinedFunction = {
