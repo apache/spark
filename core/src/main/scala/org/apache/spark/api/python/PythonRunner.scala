@@ -216,6 +216,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
                   sock = serverSocket.get.accept()
                   // Wait for function call from python side.
                   sock.setSoTimeout(10000)
+                  authHelper.authClient(sock)
                   val input = new DataInputStream(sock.getInputStream())
                   input.readInt() match {
                     case BarrierTaskContextMessageProtocol.BARRIER_FUNCTION =>
@@ -333,8 +334,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
      */
     def barrierAndServe(sock: Socket): Unit = {
       require(serverSocket.isDefined, "No available ServerSocket to redirect the barrier() call.")
-
-      authHelper.authClient(sock)
 
       val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
       try {
