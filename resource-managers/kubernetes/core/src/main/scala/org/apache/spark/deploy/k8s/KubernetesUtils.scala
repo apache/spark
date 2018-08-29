@@ -65,7 +65,7 @@ private[spark] object KubernetesUtils {
 
   def parseMasterUrl(url: String): String = url.substring("k8s://".length)
 
-  def formatPairsBundle(pairs: Seq[(String, String)], indent: Int = 1) = {
+  def formatPairsBundle(pairs: Seq[(String, String)], indent: Int = 1) : String = {
     // Use more loggable format if value is null or empty
     val indentStr = "\t" * indent
     pairs.map {
@@ -74,10 +74,11 @@ private[spark] object KubernetesUtils {
   }
 
   /**
-    * Given a pod, output a human readable representation of its state
-    * @param pod Pod
-    * @return Human readable pod state
-    */
+   * Given a pod, output a human readable representation of its state
+   *
+   * @param pod Pod
+   * @return Human readable pod state
+   */
   def formatPodState(pod: Pod): String = {
     val details = Seq[(String, String)](
       // pod metadata
