@@ -30,6 +30,7 @@ import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -292,33 +293,14 @@ private[parquet] object ParquetReadSupport {
   private def clipParquetGroupFields(
       parquetRecord: GroupType, structType: StructType, caseSensitive: Boolean): Seq[Type] = {
     val toParquet = new SparkToParquetSchemaConverter(writeLegacyParquetFormat = false)
-    if (caseSensitive) {
-      val caseSensitiveParquetFieldMap =
-        parquetRecord.getFields.asScala.map(f => f.getName -> f).toMap
-      structType.map { f =>
-        caseSensitiveParquetFieldMap
-          .get(f.name)
-          .map(clipParquetType(_, f.dataType, caseSensitive))
-          .getOrElse(toParquet.convertField(f))
-      }
-    } else {
-      // Do case-insensitive resolution only if in case-insensitive mode
-      val caseInsensitiveParquetFieldMap =
-        parquetRecord.getFields.asScala.groupBy(_.getName.toLowerCase(Locale.ROOT))
-      structType.map { f =>
-        caseInsensitiveParquetFieldMap
-          .get(f.name.toLowerCase(Locale.ROOT))
-          .map { parquetTypes =>
-            if (parquetTypes.size > 1) {
-              // Need to fail if there is ambiguity, i.e. more than one field is matched
-              val parquetTypesString = parquetTypes.map(_.getName).mkString("[", ", ", "]")
-              throw new RuntimeException(s"""Found duplicate field(s) "${f.name}": """ +
-                s"$parquetTypesString in case-insensitive mode")
-            } else {
-              clipParquetType(parquetTypes.head, f.dataType, caseSensitive)
-            }
-          }.getOrElse(toParquet.convertField(f))
-      }
+    val fieldMap = parquetRecord.getFields.asScala.map(f => f.getName -> f).toMap
+    val finalParquetFieldMap =
+      if (caseSensitive) fieldMap else CaseInsensitiveMap(fieldMap)
+    structType.map { f =>
+      finalParquetFieldMap
+        .get(f.name)
+        .map(clipParquetType(_, f.dataType, caseSensitive))
+        .getOrElse(toParquet.convertField(f))
     }
   }
 

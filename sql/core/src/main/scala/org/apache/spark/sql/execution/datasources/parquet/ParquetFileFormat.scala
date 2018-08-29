@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.IOException
 import java.net.URI
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -36,7 +37,7 @@ import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.ParquetOutputFormat.JobSummaryLevel
 import org.apache.parquet.hadoop.codec.CodecConfig
 import org.apache.parquet.hadoop.util.ContextUtil
-import org.apache.parquet.schema.MessageType
+import org.apache.parquet.schema.{GroupType, MessageType}
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
@@ -367,11 +368,32 @@ class ParquetFileFormat
 
       val sharedConf = broadcastedHadoopConf.value.value
 
-      lazy val footerFileMetaData =
+      val footerFileMetaData =
         ParquetFileReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS).getFileMetaData
+      val parquetSchema = footerFileMetaData.getSchema
+
+      def checkDuplicateFields(parquetRecord: GroupType): Unit = {
+        val fields = parquetRecord.getFields.asScala
+        val fieldMap = fields.groupBy(_.getName.toLowerCase(Locale.ROOT))
+        fieldMap.foreach { case (_, types) =>
+          if (types.size > 1) {
+            // Need to fail if there is ambiguity, i.e. more than one field is duplicate
+            val typesString = types.map(_.getName).mkString("[", ", ", "]")
+            throw new RuntimeException(s"Found duplicate field(s):" +
+              s"$typesString in case-insensitive mode")
+          }
+        }
+
+        fields.filter(!_.isPrimitive).foreach { groupField =>
+          checkDuplicateFields(groupField.asGroupType())
+        }
+      }
+      if (!isCaseSensitive) {
+        checkDuplicateFields(parquetSchema)
+      }
+
       // Try to push down filters when filter push-down is enabled.
       val pushed = if (enableParquetFilterPushDown) {
-        val parquetSchema = footerFileMetaData.getSchema
         val parquetFilters = new ParquetFilters(pushDownDate, pushDownTimestamp, pushDownDecimal,
           pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive)
         filters

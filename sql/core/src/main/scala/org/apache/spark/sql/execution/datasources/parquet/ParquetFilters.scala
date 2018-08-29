@@ -364,24 +364,16 @@ private[parquet] class ParquetFilters(
     // Here we don't flatten the fields in the nested schema but just look up through
     // root fields. Currently, accessing to nested fields does not push down filters
     // and it does not support to create filters for them.
-    val primitiveFields =
+    val primitiveFieldMap =
       dataType.getFields.asScala.filter(_.isPrimitive).map(_.asPrimitiveType()).map { f =>
         f.getName -> ParquetField(f.getName,
           ParquetSchemaType(f.getOriginalType,
             f.getPrimitiveTypeName, f.getTypeLength, f.getDecimalMetadata))
-      }
+      }.toMap
     if (caseSensitive) {
-      primitiveFields.toMap
+      primitiveFieldMap
     } else {
-      // Don't consider ambiguity here, i.e. more than one field is matched in case insensitive
-      // mode, just skip pushdown for these fields, they will trigger Exception when reading,
-      // See: SPARK-25132.
-      val dedupPrimitiveFields =
-        primitiveFields
-          .groupBy(_._1.toLowerCase(Locale.ROOT))
-          .filter(_._2.size == 1)
-          .mapValues(_.head._2)
-      CaseInsensitiveMap(dedupPrimitiveFields)
+      CaseInsensitiveMap(primitiveFieldMap)
     }
   }
 
