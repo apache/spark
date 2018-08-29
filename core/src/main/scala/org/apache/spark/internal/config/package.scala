@@ -613,5 +613,5 @@ package object config {
         "unexpected ways.  So be sure to only use this for trusted plugins.")
       .stringConf
       .toSequence
-      .createOptional
+      .createWithDefault(Nil)
 }

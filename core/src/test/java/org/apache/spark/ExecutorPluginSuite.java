@@ -31,7 +31,7 @@ public class ExecutorPluginSuite {
   private JavaSparkContext sc;
 
   private String EXECUTOR_PLUGIN_CONF_NAME = "spark.executor.plugins";
-  private String testPluginName = "org.apache.spark.ExecutorPluginSuite$TestExecutorPlugin";
+  private String testPluginName = TestExecutorPlugin.class.getName();
 
   @Before
   public void setUp() {
@@ -64,23 +64,19 @@ public class ExecutorPluginSuite {
 
   @Test
   public void testAddPlugin() throws InterruptedException {
-    // Load the sample TestExecutorPlugin, which will change the value of pluginExecutionSuccessful
+    // Load the sample TestExecutorPlugin, which will change the value of numSuccessfulPlugins
     SparkConf conf = initializeSparkConf(testPluginName);
 
     try {
       sc = new JavaSparkContext(conf);
+      assertEquals(1, numSuccessfulPlugins);
     } catch (Exception e) {
       fail("Failed to start SparkContext with exception " + e.toString());
-    }
-
-    // Wait a moment since plugins run on separate threads
-    Thread.sleep(500);
-
-    assertEquals(1, numSuccessfulPlugins);
-
-    if (sc != null) {
-      sc.stop();
-      sc = null;
+    } finally {
+      if (sc != null) {
+        sc.stop();
+        sc = null;
+      }
     }
   }
 
@@ -91,18 +87,14 @@ public class ExecutorPluginSuite {
 
     try {
       sc = new JavaSparkContext(conf);
+      assertEquals(2, numSuccessfulPlugins);
     } catch (Exception e) {
       fail("Failed to start SparkContext with exception " + e.toString());
-    }
-
-    // Wait a moment since plugins run on a separate thread
-    Thread.sleep(500);
-
-    assertEquals(2, numSuccessfulPlugins);
-
-    if (sc != null) {
-      sc.stop();
-      sc = null;
+    } finally {
+      if (sc != null) {
+        sc.stop();
+        sc = null;
+      }
     }
   }
 
