@@ -399,6 +399,26 @@ private[spark] object PythonRDD extends Logging {
    *         data collected from this job, and the secret for authentication.
    */
   def serveIterator(items: Iterator[_], threadName: String): Array[Any] = {
+    serveToStream(threadName) { out =>
+      writeIteratorToStream(items, new DataOutputStream(out))
+    }
+  }
+
+  /**
+   * Create a socket server and background thread to execute the writeFunc
+   * with the given OutputStream.
+   *
+   * The socket server can only accept one connection, or close if no connection
+   * in 15 seconds.
+   *
+   * Once a connection comes in, it will execute the block of code and pass in
+   * the socket output stream.
+   *
+   * The thread will terminate after the block of code is executed or any
+   * exceptions happen.
+   */
+  private[spark] def serveToStream(
+      threadName: String)(writeFunc: OutputStream => Unit): Array[Any] = {
     val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
     // Close the socket if no connection in 15 seconds
     serverSocket.setSoTimeout(15000)
@@ -410,9 +430,9 @@ private[spark] object PythonRDD extends Logging {
           val sock = serverSocket.accept()
           authHelper.authClient(sock)
 
-          val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
+          val out = new BufferedOutputStream(sock.getOutputStream)
           Utils.tryWithSafeFinally {
-            writeIteratorToStream(items, out)
+            writeFunc(out)
           } {
             out.close()
             sock.close()
