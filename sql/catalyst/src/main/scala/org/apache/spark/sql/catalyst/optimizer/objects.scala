@@ -87,7 +87,7 @@ object CombineTypedFilters extends Rule[LogicalPlan] {
           f2.asInstanceOf[FilterFunction[Any]].call(input)
       case (f1: FilterFunction[_], f2) =>
         input => f1.asInstanceOf[FilterFunction[Any]].call(input) &&
-          f2.asInstanceOf[Any => Boolean](input)
+          f2.asInstanceOf[Any => Boolean].apply(input)
       case (f1, f2: FilterFunction[_]) =>
         input => f1.asInstanceOf[Any => Boolean].apply(input) &&
           f2.asInstanceOf[FilterFunction[Any]].call(input)
