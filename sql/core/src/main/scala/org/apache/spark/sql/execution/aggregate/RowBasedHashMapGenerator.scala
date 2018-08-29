@@ -39,47 +39,23 @@ class RowBasedHashMapGenerator(
     aggregateExpressions: Seq[AggregateExpression],
     generatedClassName: String,
     groupingKeySchema: StructType,
-    bufferSchema: StructType)
+    bufferSchema: StructType,
+    bitMaxCapacity: Int)
   extends HashMapGenerator (ctx, aggregateExpressions, generatedClassName,
     groupingKeySchema, bufferSchema) {
 
   override protected def initializeAggregateHashMap(): String = {
-    val generatedKeySchema: String =
-      s"new org.apache.spark.sql.types.StructType()" +
-        groupingKeySchema.map { key =>
-          val keyName = ctx.addReferenceObj("keyName", key.name)
-          key.dataType match {
-            case d: DecimalType =>
-              s""".add($keyName, org.apache.spark.sql.types.DataTypes.createDecimalType(
-                  |${d.precision}, ${d.scale}))""".stripMargin
-            case _ =>
-              s""".add($keyName, org.apache.spark.sql.types.DataTypes.${key.dataType})"""
-          }
-        }.mkString("\n").concat(";")
-
-    val generatedValueSchema: String =
-      s"new org.apache.spark.sql.types.StructType()" +
-        bufferSchema.map { key =>
-          val keyName = ctx.addReferenceObj("keyName", key.name)
-          key.dataType match {
-            case d: DecimalType =>
-              s""".add($keyName, org.apache.spark.sql.types.DataTypes.createDecimalType(
-                  |${d.precision}, ${d.scale}))""".stripMargin
-            case _ =>
-              s""".add($keyName, org.apache.spark.sql.types.DataTypes.${key.dataType})"""
-          }
-        }.mkString("\n").concat(";")
+    val keySchema = ctx.addReferenceObj("keySchemaTerm", groupingKeySchema)
+    val valueSchema = ctx.addReferenceObj("valueSchemaTerm", bufferSchema)
 
     s"""
        |  private org.apache.spark.sql.catalyst.expressions.RowBasedKeyValueBatch batch;
        |  private int[] buckets;
-       |  private int capacity = 1 << 16;
+       |  private int capacity = 1 << $bitMaxCapacity;
        |  private double loadFactor = 0.5;
        |  private int numBuckets = (int) (capacity / loadFactor);
        |  private int maxSteps = 2;
        |  private int numRows = 0;
-       |  private org.apache.spark.sql.types.StructType keySchema = $generatedKeySchema
-       |  private org.apache.spark.sql.types.StructType valueSchema = $generatedValueSchema
        |  private Object emptyVBase;
        |  private long emptyVOff;
        |  private int emptyVLen;
@@ -90,9 +66,9 @@ class RowBasedHashMapGenerator(
        |    org.apache.spark.memory.TaskMemoryManager taskMemoryManager,
        |    InternalRow emptyAggregationBuffer) {
        |    batch = org.apache.spark.sql.catalyst.expressions.RowBasedKeyValueBatch
-       |      .allocate(keySchema, valueSchema, taskMemoryManager, capacity);
+       |      .allocate($keySchema, $valueSchema, taskMemoryManager, capacity);
        |
-       |    final UnsafeProjection valueProjection = UnsafeProjection.create(valueSchema);
+       |    final UnsafeProjection valueProjection = UnsafeProjection.create($valueSchema);
        |    final byte[] emptyBuffer = valueProjection.apply(emptyAggregationBuffer).getBytes();
        |
        |    emptyVBase = emptyBuffer;

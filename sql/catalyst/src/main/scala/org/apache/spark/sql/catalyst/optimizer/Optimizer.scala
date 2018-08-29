@@ -130,6 +130,14 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
       CombineUnions) ::
+    // run this once earlier. this might simplify the plan and reduce cost of optimizer.
+    // for example, a query such as Filter(LocalRelation) would go through all the heavy
+    // optimizer rules that are triggered when there is a filter
+    // (e.g. InferFiltersFromConstraints). if we run this batch earlier, the query becomes just
+    // LocalRelation and does not trigger many rules
+    Batch("LocalRelation early", fixedPoint,
+      ConvertToLocalRelation,
+      PropagateEmptyRelation) ::
     Batch("Pullup Correlated Expressions", Once,
       PullupCorrelatedPredicates) ::
     Batch("Subquery", Once,
@@ -1349,6 +1357,12 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
 
     case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming)) =>
       LocalRelation(output, data.take(limit), isStreaming)
+
+    case Filter(condition, LocalRelation(output, data, isStreaming))
+        if !hasUnevaluableExpr(condition) =>
+      val predicate = InterpretedPredicate.create(condition, output)
+      predicate.initialize(0)
+      LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming)
   }
 
   private def hasUnevaluableExpr(expr: Expression): Boolean = {

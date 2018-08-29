@@ -82,6 +82,19 @@ object SQLConf {
   /** See [[get]] for more information. */
   def getFallbackConf: SQLConf = fallbackConf.get()
 
+  private lazy val existingConf = new ThreadLocal[SQLConf] {
+    override def initialValue: SQLConf = null
+  }
+
+  def withExistingConf[T](conf: SQLConf)(f: => T): T = {
+    existingConf.set(conf)
+    try {
+      f
+    } finally {
+      existingConf.remove()
+    }
+  }
+
   /**
    * Defines a getter that returns the SQLConf within scope.
    * See [[get]] for more information.
@@ -116,16 +129,24 @@ object SQLConf {
     if (TaskContext.get != null) {
       new ReadOnlySQLConf(TaskContext.get())
     } else {
-      if (Utils.isTesting && SparkContext.getActive.isDefined) {
+      val isSchedulerEventLoopThread = SparkContext.getActive
+        .map(_.dagScheduler.eventProcessLoop.eventThread)
+        .exists(_.getId == Thread.currentThread().getId)
+      if (isSchedulerEventLoopThread) {
         // DAGScheduler event loop thread does not have an active SparkSession, the `confGetter`
-        // will return `fallbackConf` which is unexpected. Here we prevent it from happening.
-        val schedulerEventLoopThread =
-          SparkContext.getActive.get.dagScheduler.eventProcessLoop.eventThread
-        if (schedulerEventLoopThread.getId == Thread.currentThread().getId) {
+        // will return `fallbackConf` which is unexpected. Here we require the caller to get the
+        // conf within `withExistingConf`, otherwise fail the query.
+        val conf = existingConf.get()
+        if (conf != null) {
+          conf
+        } else if (Utils.isTesting) {
           throw new RuntimeException("Cannot get SQLConf inside scheduler event loop thread.")
+        } else {
+          confGetter.get()()
         }
+      } else {
+        confGetter.get()()
       }
-      confGetter.get()()
     }
   }
 
@@ -652,6 +673,12 @@ object SQLConf {
     .doc("When false, we will treat bucketed table as normal table")
     .booleanConf
     .createWithDefault(true)
+
+  val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
+    .doc("The maximum number of buckets allowed. Defaults to 100000")
+    .intConf
+    .checkValue(_ > 0, "the value of spark.sql.sources.bucketing.maxBuckets must be larger than 0")
+    .createWithDefault(100000)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
@@ -1398,8 +1425,18 @@ object SQLConf {
         "issues. Turn on this config to insert a local sort before actually doing repartition " +
         "to generate consistent repartition results. The performance of repartition() may go " +
         "down since we insert extra local sort before it.")
+        .booleanConf
+        .createWithDefault(true)
+
+  val NESTED_SCHEMA_PRUNING_ENABLED =
+    buildConf("spark.sql.nestedSchemaPruning.enabled")
+      .internal()
+      .doc("Prune nested fields from a logical relation's output which are unnecessary in " +
+        "satisfying a query. This optimization allows columnar file format readers to avoid " +
+        "reading unnecessary nested column data. Currently Parquet is the only data source that " +
+        "implements this optimization.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
@@ -1453,6 +1490,17 @@ object SQLConf {
       "This only takes effect when spark.sql.repl.eagerEval.enabled is set to true.")
     .intConf
     .createWithDefault(20)
+
+  val FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT =
+    buildConf("spark.sql.codegen.aggregate.fastHashMap.capacityBit")
+      .internal()
+      .doc("Capacity for the max number of rows to be held in memory " +
+        "by the fast hash aggregate product operator. The bit is not for actual value, " +
+        "but the actual numBuckets is determined by loadFactor " +
+        "(e.g: default bit value 16 , the actual numBuckets is ((1 << 16) / 0.5).")
+      .intConf
+      .checkValue(bit => bit >= 10 && bit <= 30, "The bit value must be in [10, 30].")
+      .createWithDefault(16)
 
   val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
     .doc("Compression codec used in writing of AVRO files. Supported codecs: " +
@@ -1672,6 +1720,8 @@ class SQLConf extends Serializable with Logging {
 
   def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
 
+  def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
+
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
    * identifiers are equal.
@@ -1758,6 +1808,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_PARALLELISM)
 
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
+
+  def bucketingMaxBuckets: Int = getConf(SQLConf.BUCKETING_MAX_BUCKETS)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
@@ -1873,6 +1925,8 @@ class SQLConf extends Serializable with Logging {
 
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
+
+  def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 
   def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 
