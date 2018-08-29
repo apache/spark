@@ -38,7 +38,7 @@ private[execution] case class ProjectionOverSchema(schema: StructType) {
       case GetArrayItem(child, arrayItemOrdinal) =>
         getProjection(child).map { projection => GetArrayItem(projection, arrayItemOrdinal) }
       case a: GetArrayStructFields =>
-        getProjection(a.child).map(p => (p, p.dataType)).map {
+        getProjection(a.child).map(p => (p, p.dataType)).collect {
           case (projection, ArrayType(projSchema @ StructType(_), _)) =>
             GetArrayStructFields(projection,
               projSchema(a.field.name),
@@ -49,7 +49,7 @@ private[execution] case class ProjectionOverSchema(schema: StructType) {
       case GetMapValue(child, key) =>
         getProjection(child).map { projection => GetMapValue(projection, key) }
       case GetStructFieldObject(child, field: StructField) =>
-        getProjection(child).map(p => (p, p.dataType)).map {
+        getProjection(child).map(p => (p, p.dataType)).collect {
           case (projection, projSchema: StructType) =>
             GetStructField(projection, projSchema.fieldIndex(field.name))
         }
