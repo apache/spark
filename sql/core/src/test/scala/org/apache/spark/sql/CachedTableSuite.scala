@@ -70,7 +70,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     val maybeBlock = sparkContext.env.blockManager.get(RDDBlockId(rddId, 0))
     val isExpectLevel = maybeBlock.forall(_.readMethod === level)
     maybeBlock.foreach(_ => sparkContext.env.blockManager.releaseLock(RDDBlockId(rddId, 0)))
-    isExpectLevel
+    maybeBlock.nonEmpty && isExpectLevel
   }
 
   private def getNumInMemoryRelations(ds: Dataset[_]): Int = {
@@ -301,7 +301,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     sql("CACHE DISK_ONLY TABLE testData")
     assertCached(spark.table("testData"))
     val rddId = rddIdOf("testData")
-    assert(isMaterialized(rddId))
     assert(isExpectStorageLevel(rddId, Disk))
     assert(!isExpectStorageLevel(rddId, Memory))
     spark.catalog.uncacheTable("testData")
@@ -311,7 +310,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     sql("CACHE MEMORY_ONLY TABLE testData")
     assertCached(spark.table("testData"))
     val rddId = rddIdOf("testData")
-    assert(isMaterialized(rddId))
     assert(!isExpectStorageLevel(rddId, Disk))
     assert(isExpectStorageLevel(rddId, Memory))
   }
