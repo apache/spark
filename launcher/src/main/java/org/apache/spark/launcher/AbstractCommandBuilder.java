@@ -199,6 +199,7 @@ abstract class AbstractCommandBuilder {
     }
 
     addToClassPath(cp, getenv("HADOOP_CONF_DIR"));
+    addToClassPath(cp, getEffectiveConfig().get("spark.yarn.config.dir"));
     addToClassPath(cp, getenv("YARN_CONF_DIR"));
     addToClassPath(cp, getenv("SPARK_DIST_CLASSPATH"));
     return new ArrayList<>(cp);
