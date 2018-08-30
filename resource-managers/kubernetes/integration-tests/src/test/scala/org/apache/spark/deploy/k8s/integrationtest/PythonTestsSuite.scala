@@ -79,6 +79,7 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
       .set("spark.kubernetes.pyspark.pythonVersion", "3")
       .set("spark.kubernetes.memoryOverheadFactor", s"$memOverheadConstant")
       .set("spark.executor.pyspark.memory", s"${additionalMemory}Mi")
+      .set("spark.python.worker.reuse", "false")
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_FILES,
       mainClass = "",
