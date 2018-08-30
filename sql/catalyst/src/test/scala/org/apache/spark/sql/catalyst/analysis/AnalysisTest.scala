@@ -41,6 +41,8 @@ trait AnalysisTest extends PlanTest {
     catalog.createTempView("TaBlE", TestRelations.testRelation, overrideIfExists = true)
     catalog.createTempView("TaBlE2", TestRelations.testRelation2, overrideIfExists = true)
     catalog.createTempView("TaBlE3", TestRelations.testRelation3, overrideIfExists = true)
+    catalog.createGlobalTempView("TaBlE4", TestRelations.testRelation4, overrideIfExists = true)
+    catalog.createGlobalTempView("TaBlE5", TestRelations.testRelation5, overrideIfExists = true)
     new Analyzer(catalog, conf) {
       override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
     }
