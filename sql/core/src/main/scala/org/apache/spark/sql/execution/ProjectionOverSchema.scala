@@ -45,13 +45,21 @@ private[execution] case class ProjectionOverSchema(schema: StructType) {
               projSchema.fieldIndex(a.field.name),
               projSchema.size,
               a.containsNull)
+          case (_, projSchema) =>
+            throw new IllegalStateException(
+              s"unmatched child schema for GetArrayStructFields: ${projSchema.toString}"
+            )
         }
       case GetMapValue(child, key) =>
         getProjection(child).map { projection => GetMapValue(projection, key) }
       case GetStructFieldObject(child, field: StructField) =>
-        getProjection(child).map(p => (p, p.dataType)).collect {
+        getProjection(child).map(p => (p, p.dataType)).map {
           case (projection, projSchema: StructType) =>
             GetStructField(projection, projSchema.fieldIndex(field.name))
+          case (_, projSchema) =>
+            throw new IllegalStateException(
+              s"unmatched child schema for GetStructField: ${projSchema.toString}"
+            )
         }
       case _ =>
         None
