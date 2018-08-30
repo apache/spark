@@ -262,7 +262,6 @@ case class WindowInPandasSlidingExec(
 
         // Get all relevant projections.
         val result = createResultProjection(expressions)
-        val pythonInput =
         val grouping = UnsafeProjection.create(partitionSpec, child.output)
 
         // Manage the stream and the grouping.
