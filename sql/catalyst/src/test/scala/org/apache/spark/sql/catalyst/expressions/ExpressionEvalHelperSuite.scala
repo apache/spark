@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types.{DataType, IntegerType}
@@ -34,24 +34,6 @@ class ExpressionEvalHelperSuite extends SparkFunSuite with ExpressionEvalHelper 
   test("SPARK-16489 checkEvaluation should fail if expression reuses variable names") {
     val e = intercept[RuntimeException] { checkEvaluation(BadCodegenExpression(), 10) }
     assert(e.getMessage.contains("some_variable"))
-  }
-
-  test("SPARK-23466: checkEvaluationWithUnsafeProjection should fail if null is compared with " +
-    "primitive default value") {
-    val expected = Array(null, -1, 0, 1)
-    val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
-
-    val expression1 = CreateArray(
-      Seq(Literal(null, IntegerType), Literal(-1), Literal(0), Literal(1)))
-    assert(expression1.dataType.containsNull)
-    checkEvaluationWithUnsafeProjection(expression1, catalystValue)
-
-    val expression2 = CreateArray(Seq(Literal(0, IntegerType), Literal(-1), Literal(0), Literal(1)))
-    assert(!expression2.dataType.containsNull)
-    val e = intercept[RuntimeException] {
-      checkEvaluationWithUnsafeProjection(expression2, catalystValue)
-    }
-    assert(e.getMessage.contains("Incorrect evaluation in unsafe mode"))
   }
 }
 
