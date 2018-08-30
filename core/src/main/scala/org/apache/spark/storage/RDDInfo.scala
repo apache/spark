@@ -55,7 +55,7 @@ class RDDInfo(
 }
 
 private[spark] object RDDInfo {
-  private val callsiteForm = SparkEnv.get.conf.get(EVENT_LOG_CALLSITE_FORM)
+  private lazy val callsiteForm = SparkEnv.get.conf.get(EVENT_LOG_CALLSITE_FORM)
 
   def fromRdd(rdd: RDD[_]): RDDInfo = {
     val rddName = Option(rdd.name).getOrElse(Utils.getFormattedClassName(rdd))

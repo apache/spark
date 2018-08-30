@@ -538,6 +538,14 @@ private class LiveRDD(val info: RDDInfo) extends LiveEntity {
     distributions.get(exec.executorId)
   }
 
+  def getPartitions(): Map[String, LiveRDDPartition] = {
+    partitions.toMap
+  }
+
+  def getDistributions(): Map[String, LiveRDDDistribution] = {
+    distributions.toMap
+  }
+
   override protected def doUpdate(): Any = {
     val dists = if (distributions.nonEmpty) {
       Some(distributions.values.map(_.toApi()).toSeq)

@@ -23,6 +23,7 @@ import java.util.function.Function
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
+import scala.collection.mutable.HashSet
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
@@ -646,7 +647,47 @@ private[spark] class AppStatusListener(
   }
 
   override def onUnpersistRDD(event: SparkListenerUnpersistRDD): Unit = {
-    liveRDDs.remove(event.rddId)
+    liveRDDs.remove(event.rddId).foreach { liveRDD =>
+      val executorsToUpdate = new HashSet[LiveExecutor]()
+      val storageLevel = liveRDD.info.storageLevel
+      val distributions = liveRDD.getDistributions()
+
+      // Use RDD distribution to update executor memory and disk usage info.
+      distributions.foreach { case (executorId, rddDist) =>
+        val maybeExec = liveExecutors.get(executorId)
+
+        maybeExec.foreach { exec =>
+          if (exec.hasMemoryInfo) {
+            if (storageLevel.useOffHeap) {
+              exec.usedOffHeap = math.max(0, exec.usedOffHeap - rddDist.offHeapUsed)
+            } else {
+              exec.usedOnHeap = math.max(0, exec.usedOnHeap - rddDist.onHeapUsed)
+            }
+          }
+          exec.memoryUsed = math.max(0, exec.memoryUsed - rddDist.memoryUsed)
+          exec.diskUsed = math.max(0, exec.diskUsed - rddDist.diskUsed)
+          executorsToUpdate += exec
+        }
+      }
+
+      // Use RDD partition info to update executor block info.
+      val partitions = liveRDD.getPartitions()
+
+      partitions.foreach { case (_, part) =>
+        val executors = part.executors
+        executors.foreach { executorId =>
+          val maybeExec = liveExecutors.get(executorId)
+
+          maybeExec.foreach { exec =>
+            exec.rddBlocks = exec.rddBlocks - 1
+            executorsToUpdate += exec
+          }
+        }
+      }
+      val now = System.nanoTime()
+      executorsToUpdate.foreach(maybeUpdate(_, now))
+    }
+
     kvstore.delete(classOf[RDDStorageInfoWrapper], event.rddId)
   }
 
