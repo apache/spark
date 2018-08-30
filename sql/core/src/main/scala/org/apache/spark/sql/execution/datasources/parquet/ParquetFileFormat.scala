@@ -311,6 +311,9 @@ class ParquetFileFormat
     hadoopConf.set(
       SQLConf.SESSION_LOCAL_TIMEZONE.key,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
+    hadoopConf.setBoolean(
+      SQLConf.CASE_SENSITIVE.key,
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     ParquetWriteSupport.setSchema(requiredSchema, hadoopConf)
 
@@ -346,7 +349,6 @@ class ParquetFileFormat
     val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
     val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
-    hadoopConf.setBoolean(SQLConf.CASE_SENSITIVE.key, isCaseSensitive)
 
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
@@ -377,7 +379,7 @@ class ParquetFileFormat
           if (types.size > 1) {
             // Need to fail if there is ambiguity, i.e. more than one field is duplicate
             val typesString = types.map(_.getName).mkString("[", ", ", "]")
-            throw new RuntimeException(s"Found duplicate field(s): " +
+            throw new RuntimeException(s"Found duplicate field(s):" +
               s"$typesString in case-insensitive mode")
           }
         }
