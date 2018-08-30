@@ -438,6 +438,10 @@ def main():
     os.chdir(SPARK_HOME)
     original_head = get_current_ref()
 
+    # Check this up front to avoid failing the JIRA update at the very end
+    if not JIRA_USERNAME or not JIRA_PASSWORD:
+        continue_maybe("The env-vars JIRA_USERNAME and/or JIRA_PASSWORD are not set. Continue?")
+
     branches = get_json("%s/branches" % GITHUB_API_BASE)
     branch_names = filter(lambda x: x.startswith("branch-"), [x['name'] for x in branches])
     # Assumes branch names can be sorted lexicographically
