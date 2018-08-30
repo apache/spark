@@ -317,13 +317,15 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     checkUDF(udf1, expected1)
 
     // only primitive parameter needs special null handling
-    val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil)
+    val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil,
+      nullableTypes = true :: false :: Nil)
     val expected2 =
       If(IsNull(double), nullResult, udf2.copy(children = string :: KnownNotNull(double) :: Nil))
     checkUDF(udf2, expected2)
 
     // special null handling should apply to all primitive parameters
-    val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil)
+    val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil,
+      nullableTypes = false :: false :: Nil)
     val expected3 = If(
       IsNull(short) || IsNull(double),
       nullResult,
@@ -335,7 +337,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val udf4 = ScalaUDF(
       (s: Short, d: Double) => "x",
       StringType,
-      short :: double.withNullability(false) :: Nil)
+      short :: double.withNullability(false) :: Nil,
+      nullableTypes = false :: false :: Nil)
     val expected4 = If(
       IsNull(short),
       nullResult,

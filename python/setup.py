@@ -34,7 +34,7 @@ except IOError:
     print("Failed to load PySpark version file for packaging. You must be in Spark's python dir.",
           file=sys.stderr)
     sys.exit(-1)
-VERSION = __version__
+VERSION = __version__  # noqa
 # A temporary path so we can access above the Python project root and fetch scripts and jars we need
 TEMP_PATH = "deps"
 SPARK_HOME = os.path.abspath("../")

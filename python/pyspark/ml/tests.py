@@ -844,6 +844,23 @@ class FeatureTests(SparkSessionTestCase):
             .select(model_default.getOrDefault(model_default.outputCol)).collect()
         self.assertEqual(len(transformed_list), 5)
 
+    def test_vector_size_hint(self):
+        df = self.spark.createDataFrame(
+            [(0, Vectors.dense([0.0, 10.0, 0.5])),
+             (1, Vectors.dense([1.0, 11.0, 0.5, 0.6])),
+             (2, Vectors.dense([2.0, 12.0]))],
+            ["id", "vector"])
+
+        sizeHint = VectorSizeHint(
+            inputCol="vector",
+            handleInvalid="skip")
+        sizeHint.setSize(3)
+        self.assertEqual(sizeHint.getSize(), 3)
+
+        output = sizeHint.transform(df).head().vector
+        expected = DenseVector([0.0, 10.0, 0.5])
+        self.assertEqual(output, expected)
+
 
 class HasInducedError(Params):
 

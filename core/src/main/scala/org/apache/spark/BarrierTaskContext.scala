@@ -140,6 +140,7 @@ class BarrierTaskContext(
         throw e
     } finally {
       timerTask.cancel()
+      timer.purge()
     }
   }
 
