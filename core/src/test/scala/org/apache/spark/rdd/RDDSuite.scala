@@ -1220,16 +1220,16 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
   test("deadlock in UnionRDD") {
     val wide = 20
     def unionRDD(num: Int): UnionRDD[Int] = {
-      val rdds = (0 to 20).map(_ => sc.parallelize(1 to 10, 1))
+      val rdds = (0 until num).map(_ => sc.parallelize(1 to 10, 1))
       new UnionRDD(sc, rdds)
     }
-    val level0 = (0 to wide).map { i =>
-      val level1 = (0 to wide).map(_ => unionRDD(wide))
+    val level0 = (0 until wide).map { _ =>
+      val level1 = (0 until wide).map(_ => unionRDD(wide))
       new UnionRDD(sc, level1)
     }
     val rdd = new UnionRDD(sc, level0)
 
-    assert(rdd.partitions.length == (wide * wide))
+    assert(rdd.partitions.length == (wide * wide * wide))
   }
 }
 
