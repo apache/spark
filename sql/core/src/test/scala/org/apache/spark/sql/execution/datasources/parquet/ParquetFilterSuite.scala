@@ -1107,11 +1107,12 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("SPARK-25207: exception when duplicate fields in case-insensitive mode") {
     withTempPath { dir =>
+      val count = 10
       val tableName = "spark_25207"
       val tableDir = dir.getAbsoluteFile + "/table"
       withTable(tableName) {
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-          spark.range(10).selectExpr("id as A", "id as B", "id as b")
+          spark.range(count).selectExpr("id as A", "id as B", "id as b")
             .write.mode("overwrite").parquet(tableDir)
         }
         sql(
@@ -1125,6 +1126,10 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           }
           assert(e.getCause.isInstanceOf[RuntimeException] && e.getCause.getMessage.contains(
             """Found duplicate field(s) "B": [B, b] in case-insensitive mode"""))
+        }
+
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          checkAnswer(sql(s"select A from $tableName where B > 0"), (1 until count).map(Row(_)))
         }
       }
     }
