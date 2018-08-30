@@ -162,14 +162,16 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with Kaf
   object WithOffsetSync {
     /**
      * Run `func` to write some Kafka messages and wait until the latest offset of the given
-     * `TopicPartition` is not less than the return value of `func`.
+     * `TopicPartition` is not less than `expectedOffset`.
      */
-    def apply(topicPartition: TopicPartition)(func: () => Long): StreamAction = {
+    def apply(
+        topicPartition: TopicPartition,
+        expectedOffset: Long)(func: () => Unit): StreamAction = {
       Execute("Run Kafka Producer")(_ => {
-        val offset = func()
+        func()
         // This is a hack for the race condition that the committed message may be not visible to
         // consumer for a short time.
-        testUtils.waitUntilOffsetAppears(topicPartition, offset)
+        testUtils.waitUntilOffsetAppears(topicPartition, expectedOffset)
       })
     }
   }
@@ -661,21 +663,19 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         StartStream(ProcessingTime(100), clock),
         waitUntilBatchProcessed,
         CheckAnswer(),
-        WithOffsetSync(topicPartition) { () =>
+        WithOffsetSync(topicPartition, expectedOffset = 5) { () =>
           // Send 5 messages. They should be visible only after being committed.
           producer.beginTransaction()
           (0 to 4).foreach { i =>
             producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
           }
-          5
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
         // Should not see any uncommitted messages
         CheckNewAnswer(),
-        WithOffsetSync(topicPartition) { () =>
+        WithOffsetSync(topicPartition, expectedOffset = 6) { () =>
           producer.commitTransaction()
-          6
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
@@ -683,14 +683,13 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
         CheckNewAnswer(3, 4), // offset: 3, 4, 5* [* means it's not a committed data message]
-        WithOffsetSync(topicPartition) { () =>
+        WithOffsetSync(topicPartition, expectedOffset = 12) { () =>
           // Send 5 messages and abort the transaction. They should not be read.
           producer.beginTransaction()
           (6 to 10).foreach { i =>
             producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
           }
           producer.abortTransaction()
-          12
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
@@ -698,7 +697,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
         CheckNewAnswer(), // offset: 9*, 10*, 11*
-        WithOffsetSync(topicPartition) { () =>
+        WithOffsetSync(topicPartition, expectedOffset = 18) { () =>
           // Send 5 messages again. The consumer should skip the above aborted messages and read
           // them.
           producer.beginTransaction()
@@ -706,7 +705,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
             producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
           }
           producer.commitTransaction()
-          18
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
@@ -714,7 +712,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
         CheckNewAnswer(15, 16),  // offset: 15, 16, 17*
-        WithOffsetSync(topicPartition) { () =>
+        WithOffsetSync(topicPartition, expectedOffset = 25) { () =>
           producer.beginTransaction()
           producer.send(new ProducerRecord[String, String](topic, "18")).get()
           producer.commitTransaction()
@@ -725,7 +723,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
           producer.send(new ProducerRecord[String, String](topic, "22")).get()
           producer.send(new ProducerRecord[String, String](topic, "23")).get()
           producer.commitTransaction()
-          25
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
@@ -789,32 +786,29 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         StartStream(ProcessingTime(100), clock),
         waitUntilBatchProcessed,
         CheckNewAnswer(),
-        WithOffsetSync(topicPartition) { () =>
+        WithOffsetSync(topicPartition, expectedOffset = 5) { () =>
           // Send 5 messages. They should be visible only after being committed.
           producer.beginTransaction()
           (0 to 4).foreach { i =>
             producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
           }
-          5
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
         CheckNewAnswer(0, 1, 2), // offset 0, 1, 2
-        WithOffsetSync(topicPartition) { () =>
+        WithOffsetSync(topicPartition, expectedOffset = 6) { () =>
           producer.commitTransaction()
-          6
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
         CheckNewAnswer(3, 4), // offset: 3, 4, 5* [* means it's not a committed data message]
-        WithOffsetSync(topicPartition) { () =>
+        WithOffsetSync(topicPartition, expectedOffset = 12) { () =>
           // Send 5 messages and abort the transaction. They should not be read.
           producer.beginTransaction()
           (6 to 10).foreach { i =>
             producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
           }
           producer.abortTransaction()
-          12
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
@@ -822,7 +816,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
         CheckNewAnswer(9, 10), // offset: 9, 10, 11*
-        WithOffsetSync(topicPartition) { () =>
+        WithOffsetSync(topicPartition, expectedOffset = 18) { () =>
           // Send 5 messages again. The consumer should skip the above aborted messages and read
           // them.
           producer.beginTransaction()
@@ -830,7 +824,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
             producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
           }
           producer.commitTransaction()
-          18
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
@@ -838,7 +831,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
         CheckNewAnswer(15, 16),  // offset: 15, 16, 17*
-        WithOffsetSync(topicPartition) { () =>
+        WithOffsetSync(topicPartition, expectedOffset = 25) { () =>
           producer.beginTransaction()
           producer.send(new ProducerRecord[String, String](topic, "18")).get()
           producer.commitTransaction()
@@ -849,7 +842,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
           producer.send(new ProducerRecord[String, String](topic, "22")).get()
           producer.send(new ProducerRecord[String, String](topic, "23")).get()
           producer.commitTransaction()
-          25
         },
         AdvanceManualClock(100),
         waitUntilBatchProcessed,
