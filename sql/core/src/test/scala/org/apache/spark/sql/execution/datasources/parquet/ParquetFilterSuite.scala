@@ -1106,7 +1106,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   }
 
   test("SPARK-25207: exception when duplicate fields in case-insensitive mode") {
-    withTempPath { dir =>
+    withTempDir { dir =>
       val tableName = "spark_25207"
       val tableDir = dir.getAbsoluteFile + "/table"
       withTable(tableName) {
