@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.parquet.format.converter.ParquetMetadataConverter
+import org.apache.parquet.hadoop.ParquetFileReader
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.QueryTest
@@ -55,5 +57,26 @@ class ParquetFileFormatSuite extends QueryTest with ParquetTest with SharedSQLCo
       testReadFooters(false)
     }.getCause
     assert(exception.getMessage().contains("Could not read footer for file"))
+  }
+
+  test("read version from parquet file footer metadata") {
+    withTempDir { dir =>
+      val config = spark.sessionState.newHadoopConf()
+      val fs = FileSystem.get(config)
+      val basePath = dir.getCanonicalPath
+
+      val pathToDirectory = new Path(basePath, "path")
+
+      spark.range(1).toDF("a").coalesce(1).write.save(pathToDirectory.toString)
+
+      val pathToFile = fs.globStatus(new Path(basePath, "path/part*"))(0).getPath
+
+      val fileFooter = ParquetFileReader
+        .readFooter(config, pathToFile, ParquetMetadataConverter.SKIP_ROW_GROUPS)
+      val fileWriterModelName = fileFooter.getFileMetaData
+        .getKeyValueMetaData.get("writer.model.name")
+
+      assert(fileWriterModelName == spark.version)
+    }
   }
 }
