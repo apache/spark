@@ -891,6 +891,31 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       }
     }
   }
+
+  test("SPARK-25135: insert parquet table may all null when select from view") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val cnt = 30
+      val table1Path = s"$path/table1"
+      val table2Path = s"$path/table2"
+      spark.range(cnt).selectExpr("cast(id as bigint) as col1")
+        .write.mode(SaveMode.Overwrite).parquet(table1Path)
+      withTable("table1", "table2") {
+        spark.sql(s"CREATE TABLE table1(col1 bigint) using parquet location '$table1Path/'")
+        spark.sql(s"CREATE TABLE table2(COL1 bigint) using parquet location '$table2Path/'")
+
+        withView("view1") {
+          spark.sql("CREATE VIEW view1 as select col1 from table1 where col1 > -20")
+          spark.sql("INSERT OVERWRITE TABLE table2 select COL1 from view1")
+          assert(spark.table("table2").count() === cnt)
+          spark.read.parquet(table2Path).schema.zip(
+            spark.table("table2").schema).foreach { case (actual, table) =>
+            assert(actual.name.equals(table.name))
+          }
+        }
+      }
+    }
+  }
 }
 
 object TestingUDT {

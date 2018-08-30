@@ -87,7 +87,7 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
     val parsedPlan = AppendData.byName(table, query)
     val expectedPlan = AppendData.byName(table,
       Project(Seq(
-        Alias(Cast(toLower(X), FloatType, Some(conf.sessionLocalTimeZone)), "x")(),
+        Alias(Cast(X, FloatType, Some(conf.sessionLocalTimeZone)), "x")(),
         Alias(Cast(y, FloatType, Some(conf.sessionLocalTimeZone)), "y")()),
         query))
 
