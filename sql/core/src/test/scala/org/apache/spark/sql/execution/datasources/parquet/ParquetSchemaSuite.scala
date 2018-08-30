@@ -1573,4 +1573,26 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         |}
       """.stripMargin,
     caseSensitive = false)
+
+    test("Clipping - case-insensitive resolution: more than one field is matched") {
+      val parquetSchema =
+        """message root {
+          |  required group A {
+          |    optional int32 B;
+          |  }
+          |  optional int32 c;
+          |  optional int32 a;
+          |}
+        """.stripMargin
+      val catalystSchema = {
+        val nestedType = new StructType().add("b", IntegerType, nullable = true)
+        new StructType()
+          .add("a", nestedType, nullable = true)
+          .add("c", IntegerType, nullable = true)
+      }
+      assertThrows[RuntimeException] {
+        ParquetReadSupport.clipParquetSchema(
+          MessageTypeParser.parseMessageType(parquetSchema), catalystSchema, caseSensitive = false)
+      }
+    }
 }
