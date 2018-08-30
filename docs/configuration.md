@@ -1998,6 +1998,14 @@ showDF(properties, numRows = 200, truncate = FALSE)
   </td>
 </tr>
 <tr>
+    <td><code>spark.streaming.kafka.minRatePerPartition</code></td>
+    <td>1</td>
+    <td>
+      Minimum rate (number of records per second) at which data will be read from each Kafka
+      partition when using the new Kafka direct stream API.
+    </td>
+</tr>
+<tr>
   <td><code>spark.streaming.kafka.maxRetries</code></td>
   <td>1</td>
   <td>
