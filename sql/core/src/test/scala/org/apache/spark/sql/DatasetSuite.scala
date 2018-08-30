@@ -1013,7 +1013,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         |+---+----+---+
         |""".stripMargin
 
-    checkShowString(df, expected)
+    checkShowString(ds, expected)
   }
 
   test(
