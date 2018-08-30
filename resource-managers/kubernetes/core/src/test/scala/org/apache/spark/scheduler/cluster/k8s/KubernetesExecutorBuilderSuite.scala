@@ -18,7 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.io.File
 
-import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodBuilder, PodList}
+import io.fabric8.kubernetes.api.model.{Config => _, _}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.{MixedOperation, PodResource}
 import org.mockito.Matchers.any
@@ -137,19 +137,32 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     val pod = constructPodWithPodTemplate(
       new PodBuilder()
         .withNewMetadata()
-        .addToLabels("test-label-key", "test-label-value")
-        .endMetadata()
+          .addToLabels("test-label-key", "test-label-value")
+          .endMetadata()
         .withNewSpec()
-        .addNewContainer()
-        .withName("executor-container")
-        .endContainer()
-        .endSpec()
+          .addNewContainer()
+            .withName("executor-container")
+            .addToVolumeMounts(
+              new VolumeMountBuilder()
+                .withName("test-volume")
+                .withMountPath("/test")
+                .build())
+            .endContainer()
+          .addNewVolume()
+            .withNewHostPath()
+              .withPath("/test")
+              .endHostPath()
+            .withName("test-volume")
+            .endVolume()
+          .endSpec()
         .build())
 
     assert(pod.pod.getMetadata.getLabels.containsKey("test-label-key"))
     assert(!pod.pod.getSpec.getContainers.asScala.exists(_.getName == "executor-container"))
     assert(pod.pod.getMetadata.getLabels.get("test-label-key") === "test-label-value")
     assert(pod.container.getName === "executor-container")
+    assert(pod.container.getVolumeMounts.asScala.exists(_.getName == "test-volume"))
+    assert(pod.pod.getSpec.getVolumes.asScala.exists(_.getName == "test-volume"))
   }
 
   private def constructPodWithPodTemplate(pod: Pod) : SparkPod = {

@@ -32,28 +32,20 @@ private[spark] trait PodTemplateSuite { k8sSuite: KubernetesSuite =>
       .set("spark.kubernetes.executor.podTemplateFile", EXECUTOR_TEMPLATE_FILE.getAbsolutePath)
     runSparkPiAndVerifyCompletion(
       driverPodChecker = (driverPod: Pod) => {
-        checkDriverPod(driverPod)
+        assert(driverPod.getMetadata.getName === driverPodName)
+        assert(driverPod.getSpec.getContainers.get(0).getImage === image)
+        assert(driverPod.getSpec.getContainers.get(0).getName === "test-driver-container")
+        assert(driverPod.getMetadata.getLabels.containsKey(LABEL_KEY))
+        assert(driverPod.getMetadata.getLabels.get(LABEL_KEY) === "driver-template-label-value")
       },
       executorPodChecker = (executorPod: Pod) => {
-        checkExecutorPod(executorPod)
+        assert(executorPod.getMetadata.getName === "template-pod")
+        assert(executorPod.getSpec.getContainers.get(0).getImage === image)
+        assert(executorPod.getSpec.getContainers.get(0).getName === "test-executor-container")
+        assert(executorPod.getMetadata.getLabels.containsKey(LABEL_KEY))
+        assert(executorPod.getMetadata.getLabels.get(LABEL_KEY) === "executor-template-label-value")
       }
     )
-  }
-
-  private def checkDriverPod(pod: Pod): Unit = {
-    assert(pod.getMetadata.getName === driverPodName)
-    assert(pod.getSpec.getContainers.get(0).getImage === image)
-    assert(pod.getSpec.getContainers.get(0).getName === "test-driver-container")
-    assert(pod.getMetadata.getLabels.containsKey(LABEL_KEY))
-    assert(pod.getMetadata.getLabels.get(LABEL_KEY) === "driver-template-label-value")
-  }
-
-  private def checkExecutorPod(pod: Pod): Unit = {
-    assert(pod.getMetadata.getName === "template-pod")
-    assert(pod.getSpec.getContainers.get(0).getImage === image)
-    assert(pod.getSpec.getContainers.get(0).getName === "test-executor-container")
-    assert(pod.getMetadata.getLabels.containsKey(LABEL_KEY))
-    assert(pod.getMetadata.getLabels.get(LABEL_KEY) === "executor-template-label-value")
   }
 }
 

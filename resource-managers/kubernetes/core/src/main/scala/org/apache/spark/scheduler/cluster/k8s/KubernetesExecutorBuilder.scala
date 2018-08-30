@@ -20,10 +20,11 @@ import java.io.File
 
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, EnvSecretsFeatureStep, LocalDirsFeatureStep, MountSecretsFeatureStep}
+import org.apache.spark.internal.Logging
 
 private[spark] class KubernetesExecutorBuilder(
     provideBasicStep: (KubernetesConf [KubernetesExecutorSpecificConf])
@@ -68,12 +69,19 @@ private[spark] class KubernetesExecutorBuilder(
   }
 }
 
-private[spark] object KubernetesExecutorBuilder {
+private[spark] object KubernetesExecutorBuilder extends Logging {
   def apply(kubernetesClient: KubernetesClient, conf: SparkConf): KubernetesExecutorBuilder = {
     conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
       .map(new File(_))
       .map(file => new KubernetesExecutorBuilder(provideInitialPod = () => {
-        KubernetesUtils.loadPodFromTemplate(kubernetesClient, file)
+        try {
+          KubernetesUtils.loadPodFromTemplate(kubernetesClient, file)
+        } catch {
+          case e: Exception =>
+            logError(
+              s"Encountered exception while attempting to load initial pod spec from file", e)
+            throw new SparkException("Could not load executor pod from template file.", e)
+        }
       }))
       .getOrElse(new KubernetesExecutorBuilder())
   }
