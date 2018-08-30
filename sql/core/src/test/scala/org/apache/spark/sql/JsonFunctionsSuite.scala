@@ -563,10 +563,11 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(exception1.contains(
       "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
 
-    val exception2 = intercept[IllegalArgumentException] {
+    val exception2 = intercept[AnalysisException] {
       df.select(from_json($"value", schema, Map("mode" -> "DROPMALFORMED"))).collect()
     }.getMessage
     assert(exception2.contains(
-      "The functions supports only the PERMISSIVE and FAILFAST modes."))
+      "from_json() doesn't support the DROPMALFORMED mode. " +
+      "Acceptable modes are PERMISSIVE and FAILFAST."))
   }
 }

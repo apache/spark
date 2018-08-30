@@ -564,8 +564,10 @@ case class JsonToStructs(
   @transient lazy val parser = {
     val parsedOptions = new JSONOptions(options, timeZoneId.get)
     val mode = parsedOptions.parseMode
-    require(mode == PermissiveMode || mode == FailFastMode,
-      s"The functions supports only the ${PermissiveMode.name} and ${FailFastMode.name} modes.")
+    if (mode != PermissiveMode && mode != FailFastMode) {
+      throw new AnalysisException(s"from_json() doesn't support the ${mode.name} mode. " +
+        s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
+    }
     val rawParser = new JacksonParser(nullableSchema, parsedOptions)
     val createParser = CreateJacksonParser.utf8String _
 
