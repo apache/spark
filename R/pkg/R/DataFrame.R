@@ -499,7 +499,7 @@ setMethod("createOrReplaceTempView",
 
 #' (Deprecated) Register Temporary Table
 #'
-#' Registers a SparkDataFrame as a Temporary Table in the SparkSession
+#' (Deprecated) Registers a SparkDataFrame as a Temporary Table in the SparkSession
 #' @param x A SparkDataFrame
 #' @param tableName A character vector containing the name of the table
 #'
