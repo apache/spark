@@ -72,6 +72,26 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
       isJVM = false,
       pyFiles = Some(PYSPARK_CONTAINER_TESTS))
   }
+
+  test("Run PySpark with memory customization", k8sTestTag) {
+    sparkAppConf
+      .set("spark.kubernetes.container.image", s"${getTestImageRepo}/spark-py:${getTestImageTag}")
+      .set("spark.kubernetes.pyspark.pythonVersion", "3")
+      .set("spark.kubernetes.memoryOverheadFactor", s"$memOverheadConstant")
+      .set("spark.executor.pyspark.memory", s"${additionalMemory}Mi")
+    runSparkApplicationAndVerifyCompletion(
+      appResource = PYSPARK_FILES,
+      mainClass = "",
+      expectedLogOnCompletion = Seq(
+        "Python runtime version check is: True",
+        "Python environment version check is: True"),
+      appArgs = Array("python3"),
+      driverPodChecker = doDriverMemoryCheck,
+      executorPodChecker = doExecutorMemoryCheck,
+      appLocator = appLocator,
+      isJVM = false,
+      pyFiles = Some(PYSPARK_CONTAINER_TESTS))
+  }
 }
 
 private[spark] object PythonTestsSuite {
