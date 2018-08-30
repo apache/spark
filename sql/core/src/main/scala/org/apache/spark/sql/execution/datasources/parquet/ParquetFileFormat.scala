@@ -310,6 +310,9 @@ class ParquetFileFormat
     hadoopConf.set(
       SQLConf.SESSION_LOCAL_TIMEZONE.key,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
+    hadoopConf.setBoolean(
+      SQLConf.CASE_SENSITIVE.key,
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     ParquetWriteSupport.setSchema(requiredSchema, hadoopConf)
 
