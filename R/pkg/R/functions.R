@@ -3410,13 +3410,14 @@ setMethod("collect_set",
 #' \dontrun{
 #' head(select(df, split_string(df$Sex, "a")))
 #' head(select(df, split_string(df$Class, "\\d")))
+#' head(select(df, split_string(df$Class, "\\d", 2)))
 #' # This is equivalent to the following SQL expression
 #' head(selectExpr(df, "split(Class, '\\\\d')"))}
 #' @note split_string 2.3.0
 setMethod("split_string",
           signature(x = "Column", pattern = "character"),
-          function(x, pattern) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "split", x@jc, pattern)
+          function(x, pattern, limit = -1) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "split", x@jc, pattern, limit)
             column(jc)
           })
 
