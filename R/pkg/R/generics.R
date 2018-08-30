@@ -769,6 +769,14 @@ setGeneric("array_distinct", function(x) { standardGeneric("array_distinct") })
 
 #' @rdname column_collection_functions
 #' @name NULL
+setGeneric("array_except", function(x, y) { standardGeneric("array_except") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("array_intersect", function(x, y) { standardGeneric("array_intersect") })
+
+#' @rdname column_collection_functions
+#' @name NULL
 setGeneric("array_join", function(x, delimiter, ...) { standardGeneric("array_join") })
 
 #' @rdname column_collection_functions
@@ -801,7 +809,15 @@ setGeneric("arrays_overlap", function(x, y) { standardGeneric("arrays_overlap") 
 
 #' @rdname column_collection_functions
 #' @name NULL
+setGeneric("array_union", function(x, y) { standardGeneric("array_union") })
+
+#' @rdname column_collection_functions
+#' @name NULL
 setGeneric("arrays_zip", function(x, ...) { standardGeneric("arrays_zip") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("shuffle", function(x) { standardGeneric("shuffle") })
 
 #' @rdname column_string_functions
 #' @name NULL
