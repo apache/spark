@@ -34,6 +34,7 @@ if sys.version >= '3':
 from py4j.java_gateway import java_import, JavaGateway, GatewayParameters
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.serializers import read_int, write_with_length, UTF8Deserializer
+from pyspark.util import _exception_message
 
 
 def launch_gateway(conf=None):
