@@ -26,14 +26,14 @@ import org.apache.spark.unsafe.types.UTF8String
 class FailureSafeParser[IN](
     rawParser: IN => Seq[InternalRow],
     mode: ParseMode,
-    schema: DataType,
+    dataType: DataType,
     columnNameOfCorruptRecord: String,
     isMultiLine: Boolean) {
   // This function takes 2 parameters: an optional partial result, and the bad record. If the given
   // schema doesn't contain a field for corrupted record, we just return the partial result or a
   // row with all fields null. If the given schema contains a field for corrupted record, we will
   // set the bad record to this field, and set other fields according to the partial result or null.
-  private val toResultRow: (Option[InternalRow], () => UTF8String) => InternalRow = schema match {
+  private val toResultRow: (Option[InternalRow], () => UTF8String) => InternalRow = dataType match {
     case struct: StructType =>
       val corruptFieldIndex = struct.getFieldIndex(columnNameOfCorruptRecord)
       if (corruptFieldIndex.isDefined) {
@@ -56,7 +56,7 @@ class FailureSafeParser[IN](
     case _ => (row, _) => row.getOrElse(new GenericInternalRow(1))
   }
 
-  private val skipParsing = !isMultiLine && mode == PermissiveMode && (schema match {
+  private val skipParsing = !isMultiLine && mode == PermissiveMode && (dataType match {
     case struct: StructType => struct.isEmpty
     case _ => false
   })
