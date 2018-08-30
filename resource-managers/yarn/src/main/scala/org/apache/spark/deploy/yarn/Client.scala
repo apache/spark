@@ -699,7 +699,7 @@ private[spark] class Client(
     // tests so that custom conf dirs can be used by unit tests.
     val confDirsEnvKeys = Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR") ++
       (if (Utils.isTesting) Seq("SPARK_TEST_HADOOP_CONF_DIR") else Nil)
-    val configDirProp = sparkConf.getOption("spark.hadoop.config.dir")
+    val configDirProp = sparkConf.getOption("spark.yarn.conf.dir")
 
     val confDirPaths = (confDirsEnvKeys.map(sys.env.get) :+ configDirProp).flatMap(_.toList)
     confDirPaths.foreach { path =>
