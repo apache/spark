@@ -38,7 +38,7 @@ private[execution] case class ProjectionOverSchema(schema: StructType) {
       case GetArrayItem(child, arrayItemOrdinal) =>
         getProjection(child).map { projection => GetArrayItem(projection, arrayItemOrdinal) }
       case a: GetArrayStructFields =>
-        getProjection(a.child).map(p => (p, p.dataType)).collect {
+        getProjection(a.child).map(p => (p, p.dataType)).map {
           case (projection, ArrayType(projSchema @ StructType(_), _)) =>
             GetArrayStructFields(projection,
               projSchema(a.field.name),
