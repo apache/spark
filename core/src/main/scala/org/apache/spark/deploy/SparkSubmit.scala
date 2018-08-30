@@ -530,7 +530,6 @@ private[spark] class SparkSubmit extends Logging {
         CLUSTER, confKey = "spark.jars.excludes"),
 
       // Yarn only
-      OptionAssigner(args.)
       OptionAssigner(args.queue, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.queue"),
       OptionAssigner(args.numExecutors, YARN, ALL_DEPLOY_MODES,
         confKey = "spark.executor.instances"),
