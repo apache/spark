@@ -34,7 +34,7 @@ import org.apache.spark.rpc.RpcEndpoint
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
+import org.apache.spark.util.{AccumulatorV2, SystemClock, ThreadUtils, Utils}
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -115,6 +115,17 @@ private[spark] class TaskSchedulerImpl(
   protected val hostsByRack = new HashMap[String, HashSet[String]]
 
   protected val executorIdToHost = new HashMap[String, String]
+
+  // Threshold above which we abort the TaskSet if a task could not be scheduled because of complete
+  // blacklisting.
+  val UNSCHEDULABLE_TASKSET_TIMEOUT_MS =
+    conf.getTimeAsMs("spark.scheduler.unschedulableTaskSetTimeout", "120s")
+
+  private val abortTimer = new Timer(true)
+
+  private val clock = new SystemClock
+
+  protected val unschedulableTaskSetToExpiryTime = new HashMap[TaskSetManager, Long]
 
   // Listener object to pass upcalls into
   var dagScheduler: DAGScheduler = null
@@ -414,9 +425,54 @@ private[spark] class TaskSchedulerImpl(
             launchedAnyTask |= launchedTaskAtCurrentMaxLocality
           } while (launchedTaskAtCurrentMaxLocality)
         }
+
         if (!launchedAnyTask) {
-          taskSet.abortIfCompletelyBlacklisted(hostToExecutors)
-        }
+          taskSet.getCompletelyBlacklistedTaskIfAny(hostToExecutors) match {
+            case taskIndex: Some[Int] => // Returns the taskIndex which was unschedulable
+              if (conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
+                // If the taskSet is unschedulable we kill the existing blacklisted executor/s and
+                // kick off an abortTimer which after waiting will abort the taskSet if we were
+                // unable to get new executors and couldn't schedule a task from the taskSet.
+                // Note: We keep a track of schedulability on a per taskSet basis rather than on a
+                // per task basis.
+                if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
+                  hostToExecutors.valuesIterator.foreach(executors => executors.foreach({
+                    executor =>
+                      logDebug("Killing executor because of task unschedulability: " + executor)
+                      blacklistTrackerOpt.foreach(blt => blt.killBlacklistedExecutor(executor))
+                  })
+                  )
+                  unschedulableTaskSetToExpiryTime(taskSet) = clock.getTimeMillis()
+                  abortTimer.schedule(new TimerTask() {
+                    override def run() {
+                      if (unschedulableTaskSetToExpiryTime.contains(taskSet) &&
+                        (unschedulableTaskSetToExpiryTime(taskSet)
+                          + UNSCHEDULABLE_TASKSET_TIMEOUT_MS)
+                          <= clock.getTimeMillis()
+                      ) {
+                        logInfo("Cannot schedule any task because of complete blacklisting. " +
+                          "Wait time for scheduling expired. Aborting the application.")
+                        taskSet.abortSinceCompletelyBlacklisted(taskIndex.get)
+                      } else {
+                        this.cancel()
+                      }
+                    }
+                  }, UNSCHEDULABLE_TASKSET_TIMEOUT_MS)
+                }
+              } else {
+                // TODO: try acquiring new executors for static allocation before aborting.
+                taskSet.abortSinceCompletelyBlacklisted(taskIndex.get)
+              }
+            case _ => // Do nothing.
+            }
+          } else {
+            // If a task was scheduled, we clear the expiry time for the taskSet. The abort timer
+            // checks this entry to decide if we want to abort the taskSet.
+            if (unschedulableTaskSetToExpiryTime.contains(taskSet)) {
+              unschedulableTaskSetToExpiryTime.remove(taskSet)
+            }
+          }
+
         if (launchedAnyTask && taskSet.isBarrier) {
           // Check whether the barrier tasks are partially launched.
           // TODO SPARK-24818 handle the assert failure case (that can happen when some locality

@@ -623,8 +623,9 @@ private[spark] class TaskSetManager(
    *
    * It is possible that this taskset has become impossible to schedule *anywhere* due to the
    * blacklist.  The most common scenario would be if there are fewer executors than
-   * spark.task.maxFailures. We need to detect this so we can fail the task set, otherwise the job
-   * will hang.
+   * spark.task.maxFailures. We need to detect this so we can avoid the job from being hung.
+   * If dynamic allocation is enabled we try to acquire new executor/s by killing the existing one.
+   * In case of static allocation we abort the taskSet immediately to fail the job.
    *
    * There's a tradeoff here: we could make sure all tasks in the task set are schedulable, but that
    * would add extra time to each iteration of the scheduling loop. Here, we take the approach of
@@ -635,8 +636,8 @@ private[spark] class TaskSetManager(
    * failures (this is because the method picks one unscheduled task, and then iterates through each
    * executor until it finds one that the task isn't blacklisted on).
    */
-  private[scheduler] def abortIfCompletelyBlacklisted(
-      hostToExecutors: HashMap[String, HashSet[String]]): Unit = {
+  private[scheduler] def getCompletelyBlacklistedTaskIfAny(
+      hostToExecutors: HashMap[String, HashSet[String]]): Option[Int] = {
     taskSetBlacklistHelperOpt.foreach { taskSetBlacklist =>
       val appBlacklist = blacklistTracker.get
       // Only look for unschedulable tasks when at least one executor has registered. Otherwise,
@@ -679,19 +680,27 @@ private[spark] class TaskSetManager(
               }
             }
           }
+
           if (blacklistedEverywhere) {
-            val partition = tasks(indexInTaskSet).partitionId
-            abort(s"""
-              |Aborting $taskSet because task $indexInTaskSet (partition $partition)
-              |cannot run anywhere due to node and executor blacklist.
-              |Most recent failure:
-              |${taskSetBlacklist.getLatestFailureReason}
-              |
-              |Blacklisting behavior can be configured via spark.blacklist.*.
-              |""".stripMargin)
+            return Some(indexInTaskSet)
           }
         }
       }
+    }
+    None
+  }
+
+  private[scheduler] def abortSinceCompletelyBlacklisted(indexInTaskSet: Int): Unit = {
+    taskSetBlacklistHelperOpt.foreach { taskSetBlacklist =>
+      val partition = tasks(indexInTaskSet).partitionId
+      abort(s"""
+         |Aborting $taskSet because task $indexInTaskSet (partition $partition)
+         |cannot run anywhere due to node and executor blacklist.
+         |Most recent failure:
+         |${taskSetBlacklist.getLatestFailureReason}
+         |
+         |Blacklisting behavior can be configured via spark.blacklist.*.
+         |""".stripMargin)
     }
   }
 

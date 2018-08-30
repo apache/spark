@@ -146,7 +146,7 @@ private[scheduler] class BlacklistTracker (
     nextExpiryTime = math.min(execMinExpiry, nodeMinExpiry)
   }
 
-  private def killBlacklistedExecutor(exec: String): Unit = {
+  private[scheduler] def killBlacklistedExecutor(exec: String): Unit = {
     if (conf.get(config.BLACKLIST_KILL_ENABLED)) {
       allocationClient match {
         case Some(a) =>
