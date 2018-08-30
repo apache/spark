@@ -395,7 +395,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
       val wordSize = UnsafeRow.WORD_SIZE
       val structSize = UnsafeRow.calculateBitSetWidthInBytes(2) + wordSize * 2
       val (isPrimitive, elementSize) = if (isKeyPrimitive && isValuePrimitive) {
-        (false, structSize + wordSize)
+        (true, structSize + wordSize)
       } else {
         (isKeyPrimitive, childDataType.keyType.defaultSize)
       }
@@ -456,11 +456,10 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
     val wordSize = UnsafeRow.WORD_SIZE
     val structSizeAsLong = s"${structSize}L"
 
-    val setKey =
-      CodeGenerator.setColumn(unsafeRow, childDataType.keyType, 0, getKey(keys, z))
+    val setKey = CodeGenerator.setColumn(unsafeRow, childDataType.keyType, 0, getKey(keys, z))
 
-    val valueAssignment = CodeGenerator.createArrayAssignment(
-      unsafeRow, childDataType.valueType, values, z, "1", childDataType.valueContainsNull)
+    val valueAssignmentChecked = CodeGenerator.createArrayAssignment(
+      unsafeRow, childDataType.valueType, values, "1", z, childDataType.valueContainsNull)
 
     s"""
        |UnsafeArrayData $unsafeArrayData = (UnsafeArrayData)$arrayData;
@@ -472,7 +471,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
        |  $unsafeArrayData.setLong($z, ($offset << 32) + $structSizeAsLong);
        |  $unsafeRow.pointTo($baseObject, $baseOffset + $offset, $structSize);
        |  $setKey;
-       |  $valueAssignment
+       |  $valueAssignmentChecked
        |}
        |$resultArrayData = $arrayData;
      """.stripMargin

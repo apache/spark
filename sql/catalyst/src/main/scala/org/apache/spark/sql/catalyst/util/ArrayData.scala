@@ -52,7 +52,7 @@ object ArrayData {
       isPrimitiveType: Boolean,
       additionalErrorMessage: String): ArrayData = {
     if (isPrimitiveType && !UnsafeArrayData.shouldUseGenericArrayData(elementSize, numElements)) {
-      UnsafeArrayData.forPrimitiveArray(numElements.toInt, elementSize)
+      UnsafeArrayData.createFreshArray(numElements.toInt, elementSize)
     } else if (numElements <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toLong) {
       new GenericArrayData(new Array[Any](numElements.toInt))
     } else {

@@ -452,7 +452,7 @@ public final class UnsafeArrayData extends ArrayData {
 
   public static UnsafeArrayData fromPrimitiveArray(
        Object arr, int offset, int length, int elementSize) {
-    UnsafeArrayData result = forPrimitiveArray(length, elementSize);
+    UnsafeArrayData result = createFreshArray(length, elementSize);
     final long headerInBytes = calculateHeaderPortionInBytes(length);
     final long valueRegionInBytes = (long)elementSize * length;
     final Object data = result.getBaseObject();
@@ -461,7 +461,7 @@ public final class UnsafeArrayData extends ArrayData {
     return result;
   }
 
-  public static UnsafeArrayData forPrimitiveArray(int length, int elementSize) {
+  public static UnsafeArrayData createFreshArray(int length, int elementSize) {
     final long headerInBytes = calculateHeaderPortionInBytes(length);
     final long valueRegionInBytes = (long)elementSize * length;
     final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
