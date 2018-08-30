@@ -470,7 +470,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(sql("""select json[0] from jsonTable"""), Seq(Row(null)))
   }
 
-  test("to_json - array of primitive type") {
+  test("to_json - array of primitive types") {
     val df = Seq(Array(1, 2, 3)).toDF("a")
     checkAnswer(df.select(to_json($"a")), Seq(Row("[1,2,3]")))
   }

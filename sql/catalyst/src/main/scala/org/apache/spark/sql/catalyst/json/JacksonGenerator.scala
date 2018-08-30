@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
 import org.apache.spark.sql.types._
 
 /**
- * `JackGenerator` can only be initialized with a `StructType`, a `MapType` ot `ArrayType`.
+ * `JackGenerator` can only be initialized with a `StructType`, a `MapType` or an `ArrayType`.
  * Once it is initialized with `StructType`, it can be used to write out a struct or an array of
  * struct. Once it is initialized with `MapType`, it can be used to write out a map or an array
  * of map. An exception will be thrown if trying to write out a struct if it is initialized with
@@ -45,7 +45,7 @@ private[sql] class JacksonGenerator(
   // `JackGenerator` can only be initialized with a `StructType`, a `MapType` or a `ArrayType`.
   require(dataType.isInstanceOf[StructType] || dataType.isInstanceOf[MapType]
     || dataType.isInstanceOf[ArrayType],
-    s"JacksonGenerator only supports to be initialized with a ${StructType.simpleString} " +
+    s"JacksonGenerator only supports to be initialized with a ${StructType.simpleString}, " +
       s"${MapType.simpleString} or ${ArrayType.simpleString} but got ${dataType.catalogString}")
 
   // `ValueWriter`s for all fields of the schema

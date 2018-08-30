@@ -3497,7 +3497,7 @@ object functions {
    * a `MapType` into a JSON string with the specified schema.
    * Throws an exception, in the case of an unsupported type.
    *
-   * @param e a column containing a struct, a array or a map.
+   * @param e a column containing a struct, an array or a map.
    * @param options options to control how the struct column is converted into a json string.
    *                accepts the same options and the json data source.
    *
