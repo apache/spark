@@ -1021,18 +1021,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       }
     }
   }
-
-  test("SPARK-25206: wrong records are returned when Hive metastore schema and parquet schema " +
-    "are in different letter cases") {
-    withTempPath { path =>
-      val data = spark.range(1, 10).toDF("id")
-      data.write.parquet(path.getCanonicalPath)
-      withTable("SPARK_25206") {
-        sql(s"CREATE TABLE SPARK_25206 (ID LONG) USING parquet LOCATION '${path.getCanonicalPath}'")
-        checkAnswer(sql("select id from SPARK_25206 where id > 0"), data)
-      }
-    }
-  }
 }
 
 class NumRowGroupsAcc extends AccumulatorV2[Integer, Integer] {
