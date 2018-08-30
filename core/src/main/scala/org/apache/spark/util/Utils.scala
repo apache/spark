@@ -2798,7 +2798,7 @@ private[spark] object Utils extends Logging {
   /**
    * Regular expression matching full width characters
    */
-  private lazy val fullWidthRegex = ("""[""" +
+  private val fullWidthRegex = ("""[""" +
     """\u1100-\u115F""" +
     """\u2E80-\uA4CF""" +
     """\uAC00-\uD7A3""" +
@@ -2808,12 +2808,13 @@ private[spark] object Utils extends Logging {
     """\uFF00-\uFF60""" +
     """\uFFE0-\uFFE6""" +
     """]""").r
+
   /**
-   * Return the number of half width of a string
-   * A full width character occupies two half widths
+   * Return the number of half widths in a given string. Note that a full width character
+   * occupies two half widths.
    */
   def stringHalfWidth(str: String): Int = {
-    if(str == null) 0 else str.length + fullWidthRegex.findAllIn(str).size
+    if (str == null) 0 else str.length + fullWidthRegex.findAllIn(str).size
   }
 }
 
