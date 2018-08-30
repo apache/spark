@@ -397,7 +397,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
       val (isPrimitive, elementSize) = if (isKeyPrimitive && isValuePrimitive) {
         (true, structSize + wordSize)
       } else {
-        (isKeyPrimitive, childDataType.keyType.defaultSize)
+        (false, childDataType.keyType.defaultSize)
       }
 
       val allocation =
@@ -406,7 +406,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
            |  $elementSize, $numElements, $isPrimitive, " $prettyName failed.");
          """.stripMargin
 
-      val code = if (isKeyPrimitive && isValuePrimitive) {
+      val code = if (isPrimitive) {
         val genCodeForPrimitive = genCodeForPrimitiveElements(
           ctx, arrayData, keys, values, ev.value, numElements, structSize)
         s"""
