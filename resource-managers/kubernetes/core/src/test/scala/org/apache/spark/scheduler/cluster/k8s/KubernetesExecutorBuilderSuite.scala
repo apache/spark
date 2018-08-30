@@ -219,6 +219,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
           .build())),
       "prefix",
       "appId",
+      None,
       Map.empty,
       Map.empty,
       Map.empty,

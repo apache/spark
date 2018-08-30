@@ -20,20 +20,18 @@ import java.io.File
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
-
-import org.mockito.Mockito
-
 import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodBuilder, PodList}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.{MixedOperation, PodResource}
 import org.mockito.Matchers._
+import org.mockito.Mockito
 import org.mockito.Mockito._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config.{CONTAINER_IMAGE, KUBERNETES_DRIVER_PODTEMPLATE_FILE, KUBERNETES_EXECUTOR_PODTEMPLATE_FILE}
 import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep, _}
-import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
+import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
 import org.apache.spark.util.Utils
 
 class KubernetesDriverBuilderSuite extends SparkFunSuite {
@@ -291,6 +289,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
         Seq.empty),
       "prefix",
       "appId",
+      None,
       Map.empty,
       Map.empty,
       Map.empty,
@@ -377,6 +376,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
         Seq.empty),
       "prefix",
       "appId",
+      None,
       Map.empty,
       Map.empty,
       Map.empty,
