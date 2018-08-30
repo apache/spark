@@ -167,4 +167,14 @@
     </plugins>
   </build>
 
+  <profiles>
+    <profile>
+      <id>scala-2.12</id>
+      <properties>
+        <extra.source.dir>scala-2.12/src/main/scala</extra.source.dir>
+        <extra.testsource.dir>scala-2.12/src/test/scala</extra.testsource.dir>
+      </properties>
+    </profile>
+  </profiles>
+
 </project>
