@@ -19,12 +19,12 @@ package org.apache.spark.deploy.k8s.features
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, PodBuilder, VolumeBuilder, VolumeMountBuilder}
 import org.mockito.Mockito
 import org.scalatest._
-import org.scalatest.BeforeAndAfter
 import Matchers._
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
-import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.Config._
 
 class LocalDirsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   private val defaultLocalDir = "/var/data/default-local-dir"
