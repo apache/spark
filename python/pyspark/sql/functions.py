@@ -1679,12 +1679,14 @@ def split(str, regex, limit=-1):
     :param regex: a string representing a regular expression. The regex string should be
                   a Java regular expression.
     :param limit: an integer expression which controls the number of times the regex is applied.
-            * ``limit > 0``: The resulting array's length will not be more than `limit`, and the resulting
-                             array's last entry will contain all input beyond the last matched regex.
+            * ``limit > 0``: The resulting array's length will not be more than `limit`, and the
+                             resulting array's last entry will contain all input beyond the last
+                             matched regex.
             * ``limit < 0``: `regex` will be applied as many times as possible, and the resulting
                              array can be of any size.
-            * ``limit = 0``: `regex` will be applied as many times as possible, the resulting array can
-                             be of any size, and trailing empty strings will be discarded.
+            * ``limit = 0``: `regex` will be applied as many times as possible, the resulting
+                             array can be of any size, and trailing empty strings will be
+                             discarded.
 
     >>> df = spark.createDataFrame([('oneAtwoBthreeC',)], ['s',])
     >>> df.select(pyspark.sql.functions.split(df.s, '[ABC]', 2).alias('s')).collect()
