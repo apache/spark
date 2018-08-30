@@ -103,6 +103,14 @@ private[spark] class MetricsSystem private (
     sinks.foreach(_.start)
   }
 
+  // Same as start but this method only registers sinks
+  def startNoRegisterSources() {
+    require(!running, "Attempting to start a MetricsSystem that is already running")
+    running = true
+    registerSinks()
+    sinks.foreach(_.start)
+  }
+
   def stop() {
     if (running) {
       sinks.foreach(_.stop)
