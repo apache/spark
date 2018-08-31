@@ -1186,6 +1186,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   }
 
   test("stringHalfWidth") {
+    // scalastyle:off nonascii
     assert(Utils.stringHalfWidth(null) == 0)
     assert(Utils.stringHalfWidth("") == 0)
     assert(Utils.stringHalfWidth("ab c") == 4)
@@ -1202,6 +1203,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.stringHalfWidth("羍む") == 4)
     assert(Utils.stringHalfWidth("뺭ᾘ") == 3)
     assert(Utils.stringHalfWidth("\u0967\u0968\u0969") == 3)
+    // scalastyle:on nonascii
   }
 }
 

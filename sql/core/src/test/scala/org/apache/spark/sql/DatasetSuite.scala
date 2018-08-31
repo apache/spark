@@ -970,6 +970,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-25108 Fix the show method to display the full width character alignment problem") {
+    // scalastyle:off nonascii
     val df = Seq(
       (0, null, 1),
       (0, "", 1),
@@ -988,9 +989,10 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       (0, "뺭ᾘ", 1),
       (0, "\u0967\u0968\u0969", 1)
     ).toDF("b", "a", "c")
-
+    // scalastyle:on nonascii
     val ds = df.as[ClassData]
     val expected =
+      // scalastyle:off nonascii
       """+---+----+---+
         ||  b|   a|  c|
         |+---+----+---+
@@ -1012,7 +1014,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         ||  0| १२३|  1|
         |+---+----+---+
         |""".stripMargin
-
+    // scalastyle:on nonascii
     checkShowString(ds, expected)
   }
 
