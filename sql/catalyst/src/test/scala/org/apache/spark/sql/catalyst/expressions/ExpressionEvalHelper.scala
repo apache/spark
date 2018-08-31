@@ -223,9 +223,8 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
           }
         } else {
           val lit = InternalRow(expected, expected)
-          val dtAsNullable = expression.dataType.asNullable
           val expectedRow =
-            UnsafeProjection.create(Array(dtAsNullable, dtAsNullable)).apply(lit)
+            UnsafeProjection.create(Array(expression.dataType, expression.dataType)).apply(lit)
           if (unsafeRow != expectedRow) {
             fail("Incorrect evaluation in unsafe mode: " +
               s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
