@@ -387,8 +387,8 @@ public abstract class AbstractBytesToBytesMapSuite {
     try {
       // Fill the map to 90% full so that we can trigger probing
       for (int i = 0; i < size * 0.9; i++) {
-        final byte[] key = getRandomByteArray(rand.nextInt(256) + 1);
-        final byte[] value = getRandomByteArray(rand.nextInt(512) + 1);
+        final byte[] key = getRandomByteArray(rand.nextInt(128) + 1);
+        final byte[] value = getRandomByteArray(rand.nextInt(128) + 1);
         if (!expected.containsKey(ByteBuffer.wrap(key))) {
           expected.put(ByteBuffer.wrap(key), value);
           final BytesToBytesMap.Location loc = map.lookup(
