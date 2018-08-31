@@ -354,7 +354,7 @@ private[spark] class AppStatusListener(
           job.skippedStages += stage.info.stageId
           job.skippedTasks += stage.info.numTasks
           it.remove()
-          update(stage, now)
+          update(stage, now, last = true)
         }
       }
 
