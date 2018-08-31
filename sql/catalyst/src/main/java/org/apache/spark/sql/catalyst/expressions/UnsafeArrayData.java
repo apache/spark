@@ -463,8 +463,10 @@ public final class UnsafeArrayData extends ArrayData {
     final long[] data = new long[(int)totalSizeInLongs];
 
     Platform.putLong(data, Platform.LONG_ARRAY_OFFSET, length);
-    Platform.copyMemory(arr, offset, data,
-      Platform.LONG_ARRAY_OFFSET + headerInBytes, valueRegionInBytes);
+    if (arr != null) {
+      Platform.copyMemory(arr, offset, data,
+        Platform.LONG_ARRAY_OFFSET + headerInBytes, valueRegionInBytes);
+    }
 
     UnsafeArrayData result = new UnsafeArrayData();
     result.pointTo(data, Platform.LONG_ARRAY_OFFSET, (int)totalSizeInLongs * 8);
