@@ -109,6 +109,16 @@ object TestingUDT {
   }
 }
 
+object TestingValueClass {
+  case class IntWrapper(i: Int) extends AnyVal
+  case class StrWrapper(s: String) extends AnyVal
+
+  case class ValueClassData(
+    intField: Int,
+    wrappedInt: IntWrapper,
+    strField: String,
+    wrappedStr: StrWrapper)
+}
 
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
@@ -361,5 +371,21 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(numberOfCheckedArguments(deserializerFor[(Double, Double)]) == 2)
     assert(numberOfCheckedArguments(deserializerFor[(java.lang.Double, Int)]) == 1)
     assert(numberOfCheckedArguments(deserializerFor[(java.lang.Integer, java.lang.Integer)]) == 0)
+  }
+
+  test("schema for case class that is a value class") {
+    val schema = schemaFor[TestingValueClass.IntWrapper]
+    assert(schema === Schema(IntegerType, nullable = false))
+  }
+
+  test("schema for case class that contains value class fields") {
+    val schema = schemaFor[TestingValueClass.ValueClassData]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField("intField", IntegerType, nullable = false),
+        StructField("wrappedInt", IntegerType, nullable = false),
+        StructField("strField", StringType, nullable = true),
+        StructField("wrappedStr", StringType, nullable = true))),
+      nullable = true))
   }
 }
