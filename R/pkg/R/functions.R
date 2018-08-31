@@ -3417,7 +3417,8 @@ setMethod("collect_set",
 setMethod("split_string",
           signature(x = "Column", pattern = "character"),
           function(x, pattern, limit = -1) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "split", x@jc, pattern, limit)
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "split", x@jc, pattern, as.integer(limit))
             column(jc)
           })
 

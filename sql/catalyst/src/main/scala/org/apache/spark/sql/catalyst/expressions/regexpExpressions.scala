@@ -267,18 +267,36 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
 
   override def nullSafeEval(string: Any, regex: Any, limit: Any): Any = {
     val strings = string.asInstanceOf[UTF8String].split(
-      regex.asInstanceOf[UTF8String], limit.asInstanceOf[Int])
+      regex.asInstanceOf[UTF8String], maybeFallbackLimitValue(limit.asInstanceOf[Int]))
     new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
-    nullSafeCodeGen(ctx, ev, (str, regex, limit) =>
+    nullSafeCodeGen(ctx, ev, (str, regex, limit) => {
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
-      s"""${ev.value} = new $arrayClass($str.split($regex, $limit));""")
+      s"""${ev.value} = new $arrayClass($str.split(
+         $regex,${handleCodeGenLimitFallback(limit)}));""".stripMargin
+    })
   }
 
   override def prettyName: String = "split"
+
+  /**
+   * Java String's split method supports "ignore empty string" behavior when the limit is 0.
+   * To avoid this, we fall back to -1 when the limit is 0. Otherwise, this is a noop.
+   */
+  def maybeFallbackLimitValue(limit: Int): Int = {
+    if (limit == 0) {
+      return -1
+    }
+    return limit
+  }
+
+  def handleCodeGenLimitFallback(limit: String): String = {
+    return maybeFallbackLimitValue(limit.toInt).toString
+  }
+
 }
 
 

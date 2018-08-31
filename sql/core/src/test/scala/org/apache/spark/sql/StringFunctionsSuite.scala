@@ -346,11 +346,11 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(split($"a", "[1-9]+", 0)),
-      Row(Seq("aa", "bb", "cc")))
+      Row(Seq("aa", "bb", "cc", "")))
 
     checkAnswer(
       df.selectExpr("split(a, '[1-9]+', 0)"),
-      Row(Seq("aa", "bb", "cc")))
+      Row(Seq("aa", "bb", "cc", "")))
   }
 
   test("string split function with positive limit") {

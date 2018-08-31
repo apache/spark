@@ -228,8 +228,9 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       StringSplit(Literal("aa2bb3cc"), Literal("[1-9]+"), -1), Seq("aa", "bb", "cc"), row1)
     checkEvaluation(
       StringSplit(Literal("aa2bb3cc"), Literal("[1-9]+"), 2), Seq("aa", "bb3cc"), row1)
+    // limit = 0 should behave just like limit = -1
     checkEvaluation(
-      StringSplit(Literal("aacbbcddc"), Literal("c"), 0), Seq("aa", "bb", "dd"), row1)
+      StringSplit(Literal("aacbbcddc"), Literal("c"), 0), Seq("aa", "bb", "dd", ""), row1)
     checkEvaluation(
       StringSplit(Literal("aacbbcddc"), Literal("c"), -1), Seq("aa", "bb", "dd", ""), row1)
     checkEvaluation(

@@ -49,5 +49,7 @@ FROM (
 );
 
 -- split function
-select split('aa1cc2ee', '[1-9]+', 2);
-select split('aa1cc2ee', '[1-9]+');
+select split('aa1cc2ee3', '[1-9]+');
+select split('aa1cc2ee3', '[1-9]+', -1);
+select split('aa1cc2ee3', '[1-9]+', 0);
+select split('aa1cc2ee3', '[1-9]+', 2);
