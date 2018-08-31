@@ -137,13 +137,17 @@ private[spark] class Executor(
   env.serializerManager.setDefaultClassLoader(replClassLoader)
 
   private val pluginList = conf.get(EXECUTOR_PLUGINS)
-  if (pluginList != Nil) logDebug(s"Loading the following plugins: ${pluginList.mkString(", ")}")
+  if (pluginList.nonEmpty) {
+    logDebug(s"Loading the following plugins: ${pluginList.mkString(", ")}")
+  }
   // Load executor plugins
   Thread.currentThread().setContextClassLoader(replClassLoader)
   private val executorPlugins =
     Utils.loadExtensions(classOf[ExecutorPlugin], pluginList, conf)
   executorPlugins.foreach(_.init())
-  if (pluginList != Nil) logDebug("Finished loading plugins")
+  if (pluginList.nonEmpty) {
+    logDebug("Finished loading plugins")
+  }
 
   // Max size of direct result. If task result is bigger than this, we use the block manager
   // to send the result back.
