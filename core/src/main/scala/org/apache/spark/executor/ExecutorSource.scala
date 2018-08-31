@@ -19,11 +19,11 @@ package org.apache.spark.executor
 
 import java.lang.management.ManagementFactory
 import java.util.concurrent.ThreadPoolExecutor
+import javax.management.{MBeanServer, ObjectName}
 
 import scala.collection.JavaConverters._
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
-import com.sun.management.OperatingSystemMXBean
 import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.metrics.source.Source
@@ -75,11 +75,29 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
     registerFileSystemStat(scheme, "write_ops", _.getWriteOps(), 0)
   }
 
+  // will try to get JVM Process CPU time or return -1 otherwise
+  // will use proprietary extensions as com.sun.management.OperatingSystemMXBean or
+  // com.ibm.lang.management.OperatingSystemMXBean if available
+  def tryToGetJVMProcessPCUTime() : Long = {
+    val mBean: MBeanServer = ManagementFactory.getPlatformMBeanServer
+    try {
+      val name = new ObjectName("java.lang", "type", "OperatingSystem")
+      val attribute = mBean.getAttribute(name, "ProcessCpuTime")
+      if (attribute != null) {
+        attribute.asInstanceOf[Long]
+      }
+      else {
+        -1L
+      }
+    } catch {
+      case _ : Exception => -1L
+    }
+  }
+
   // Dropwizard metrics gauge measuring the executor's process (JVM) CPU time.
   // The value is returned in nanoseconds, the method return -1 if this operation is not supported.
-  val osMXBean = ManagementFactory.getOperatingSystemMXBean.asInstanceOf[OperatingSystemMXBean]
   metricRegistry.register(MetricRegistry.name("executorCPUTime" ), new Gauge[Long] {
-    override def getValue: Long = osMXBean.getProcessCpuTime()
+    override def getValue: Long = tryToGetJVMProcessPCUTime()
   })
 
   // Expose executor task metrics using the Dropwizard metrics system.
