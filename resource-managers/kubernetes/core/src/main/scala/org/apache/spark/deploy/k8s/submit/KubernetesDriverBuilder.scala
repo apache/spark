@@ -20,11 +20,10 @@ import java.io.File
 
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.{Config, KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, LocalDirsFeatureStep, MountSecretsFeatureStep, MountVolumesFeatureStep, PodTemplateConfigMapStep}
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
-import org.apache.spark.internal.Logging
 
 private[spark] class KubernetesDriverBuilder(
     provideBasicStep: (KubernetesConf[KubernetesDriverSpecificConf]) => BasicDriverFeatureStep =
@@ -114,20 +113,13 @@ private[spark] class KubernetesDriverBuilder(
   }
 }
 
-private[spark] object KubernetesDriverBuilder extends Logging {
+private[spark] object KubernetesDriverBuilder {
   def apply(kubernetesClient: KubernetesClient, conf: SparkConf): KubernetesDriverBuilder = {
     conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE)
       .map(new File(_))
-      .map(file => new KubernetesDriverBuilder(provideInitialPod = () => {
-        try {
-          KubernetesUtils.loadPodFromTemplate(kubernetesClient, file)
-        } catch {
-          case e: Exception =>
-            logError(
-              s"Encountered exception while attempting to load initial pod spec from file", e)
-            throw new SparkException("Could not load driver pod from template file.", e)
-        }
-      }))
+      .map(file => new KubernetesDriverBuilder(provideInitialPod = () =>
+        KubernetesUtils.loadPodFromTemplate(kubernetesClient, file)
+      ))
       .getOrElse(new KubernetesDriverBuilder())
   }
 }
