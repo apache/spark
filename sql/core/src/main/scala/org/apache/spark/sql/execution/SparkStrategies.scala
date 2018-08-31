@@ -460,7 +460,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case PhysicalWindow(
         WindowFunctionType.Python, windowExprs, partitionSpec, orderSpec, child) =>
-        execution.python.WindowInPandasBoundedExec(
+        execution.python.BoundedWindowInPandasExec(
           windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
 
       case _ => Nil

@@ -43,9 +43,15 @@ private[window] abstract class WindowFunctionFrame {
    */
   def write(index: Int, current: InternalRow): Unit
 
-  def currentLowIndex(): Int = 0
+  /**
+   * The row index of the lower window bound (inclusive)
+   */
+  def currentLowIndex(): Int = -1
 
-  def currentHighIndex(): Int = 0
+  /**
+   * The row index of the upper window bound (exclusive)
+   */
+  def currentHighIndex(): Int = -1
 }
 
 object WindowFunctionFrame {
@@ -252,22 +258,35 @@ private[sql] final class UnboundedWindowFunctionFrame(
     processor: AggregateProcessor)
   extends WindowFunctionFrame {
 
+  val inputLowIndex = 0
+  var inputHighIndex = 0
+
   /** Prepare the frame for calculating a new partition. Process all rows eagerly. */
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    processor.initialize(rows.length)
-
-    val iterator = rows.generateIterator()
-    while (iterator.hasNext) {
-      processor.update(iterator.next())
+    if (processor != null) {
+      processor.initialize(rows.length)
+      val iterator = rows.generateIterator()
+      while (iterator.hasNext) {
+        processor.update(iterator.next())
+      }
     }
+
+    inputHighIndex = rows.length
+
   }
 
   /** Write the frame columns for the current row to the given target row. */
   override def write(index: Int, current: InternalRow): Unit = {
     // Unfortunately we cannot assume that evaluation is deterministic. So we need to re-evaluate
     // for each row.
-    processor.evaluate(target)
+    if (processor != null) {
+      processor.evaluate(target)
+    }
   }
+
+  override def currentLowIndex(): Int = inputLowIndex
+
+  override def currentHighIndex(): Int = inputHighIndex
 }
 
 /**

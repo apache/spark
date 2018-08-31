@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.window._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-case class WindowInPandasBoundedExec(
+case class BoundedWindowInPandasExec(
     windowExpression: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
