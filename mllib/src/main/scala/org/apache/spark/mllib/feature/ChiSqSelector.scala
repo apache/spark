@@ -28,6 +28,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.Statistics
+import org.apache.spark.mllib.stat.test.ChiSqTestResult
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
@@ -277,7 +278,7 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
           .filter { case ((res, _), index) =>
             res.pValue <= fdr * (index + 1) / chiSqTestResult.length }
         if (selected.isEmpty) {
-          Array.empty
+          Array.empty[(ChiSqTestResult, Int)]
         } else {
           val maxIndex = selected.map(_._2).max
           tempRes.take(maxIndex + 1)
