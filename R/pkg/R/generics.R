@@ -815,10 +815,6 @@ setGeneric("array_union", function(x, y) { standardGeneric("array_union") })
 #' @name NULL
 setGeneric("arrays_zip", function(x, ...) { standardGeneric("arrays_zip") })
 
-#' @rdname column_collection_functions
-#' @name NULL
-setGeneric("shuffle", function(x) { standardGeneric("shuffle") })
-
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("ascii", function(x) { standardGeneric("ascii") })
@@ -1235,6 +1231,10 @@ setGeneric("shiftRight", function(y, x) { standardGeneric("shiftRight") })
 #' @rdname column_math_functions
 #' @name NULL
 setGeneric("shiftRightUnsigned", function(y, x) { standardGeneric("shiftRightUnsigned") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("shuffle", function(x) { standardGeneric("shuffle") })
 
 #' @rdname column_math_functions
 #' @name NULL
