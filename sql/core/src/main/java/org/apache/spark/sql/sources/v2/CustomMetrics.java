@@ -22,7 +22,7 @@ import org.apache.spark.annotation.InterfaceStability;
 /**
  * An interface for reporting custom metrics from streaming sources and sinks
  */
-@InterfaceStability.Evolving
+@InterfaceStability.Unstable
 public interface CustomMetrics {
   /**
    * Returns a JSON serialized representation of custom metrics
