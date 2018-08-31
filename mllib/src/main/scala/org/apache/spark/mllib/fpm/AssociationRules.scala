@@ -135,6 +135,9 @@ object AssociationRules {
     @Since("1.5.0")
     def confidence: Double = freqUnion / freqAntecedent
 
+    /**
+     * Returns the lift of the rule.
+     */
     @Since("2.4.0")
     def lift: Option[Double] = freqConsequent.map(fCons => confidence / fCons)
 

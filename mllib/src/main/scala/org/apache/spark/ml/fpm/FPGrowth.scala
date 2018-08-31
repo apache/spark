@@ -248,9 +248,9 @@ class FPGrowthModel private[ml] (
   @transient private var _cachedRules: DataFrame = _
 
   /**
-   * Get association rules fitted using the minConfidence. Returns a dataframe
-   * with three fields, "antecedent", "consequent" and "confidence", where "antecedent" and
-   * "consequent" are Array[T] and "confidence" is Double.
+   * Get association rules fitted using the minConfidence. Returns a dataframe with four fields,
+   * "antecedent", "consequent", "confidence" and "lift", where "antecedent" and "consequent" are
+   * Array[T], whereas "confidence" and "lift" are Double.
    */
   @Since("2.2.0")
   @transient def associationRules: DataFrame = {
@@ -381,8 +381,8 @@ private[fpm] object AssociationRules {
    * @param freqCol column name for appearance count of the frequent itemsets
    * @param minConfidence minimum confidence for generating the association rules
    * @param itemSupport map containing an item and its support
-   * @return a DataFrame("antecedent"[Array], "consequent"[Array], "confidence"[Double])
-   *         containing the association rules.
+   * @return a DataFrame("antecedent"[Array], "consequent"[Array], "confidence"[Double],
+   *         "lift" [Double]) containing the association rules.
    */
   def getAssociationRulesFromFP[T: ClassTag](
         dataset: Dataset[_],
