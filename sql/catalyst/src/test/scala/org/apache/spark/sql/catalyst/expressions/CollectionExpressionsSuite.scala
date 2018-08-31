@@ -383,10 +383,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a3 = Literal.create(null, ArrayType(StringType))
     val a4 = Literal.create(Seq(create_row(1)), ArrayType(StructType(Seq(
       StructField("a", IntegerType, true)))))
+    // Explicitly mark the array type not nullable (spark-xxxxx)
+    val a5 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, false))
 
     checkEvaluation(ArrayContains(a0, Literal(1)), true)
     checkEvaluation(ArrayContains(a0, Literal(0)), false)
     checkEvaluation(ArrayContains(a0, Literal.create(null, IntegerType)), null)
+    checkEvaluation(ArrayContains(a5, Literal(1)), true)
 
     checkEvaluation(ArrayContains(a1, Literal("")), true)
     checkEvaluation(ArrayContains(a1, Literal("a")), null)

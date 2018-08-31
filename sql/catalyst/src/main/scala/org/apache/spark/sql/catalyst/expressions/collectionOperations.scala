@@ -1464,17 +1464,28 @@ case class ArrayContains(left: Expression, right: Expression)
     nullSafeCodeGen(ctx, ev, (arr, value) => {
       val i = ctx.freshName("i")
       val getValue = CodeGenerator.getValue(arr, right.dataType, i)
-      s"""
-      for (int $i = 0; $i < $arr.numElements(); $i ++) {
-        if ($arr.isNullAt($i)) {
-          ${ev.isNull} = true;
-        } else if (${ctx.genEqual(right.dataType, value, getValue)}) {
-          ${ev.isNull} = false;
-          ${ev.value} = true;
-          break;
-        }
+      val checkAndSetIsNullCode = if (nullable) {
+        s"""
+           |if ($arr.isNullAt($i)) {
+           |    ${ev.isNull} = true;
+           |} else
+           |
+         """.stripMargin
+      } else {
+        ""
       }
-     """
+      val unsetIsNullCode = if (nullable) s"${ev.isNull} = false;" else ""
+
+      s"""
+         |for (int $i = 0; $i < $arr.numElements(); $i ++) {
+         |  $checkAndSetIsNullCode
+         |  if (${ctx.genEqual(right.dataType, value, getValue)}) {
+         |    $unsetIsNullCode
+         |    ${ev.value} = true;
+         |    break;
+         |  }
+         |}
+       """.stripMargin
     })
   }
 
