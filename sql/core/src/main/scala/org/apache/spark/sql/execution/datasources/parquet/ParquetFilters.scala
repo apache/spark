@@ -48,10 +48,14 @@ private[parquet] class ParquetFilters(
     pushDownInFilterThreshold: Int,
     caseSensitive: Boolean) {
 
+  /**
+   * Holds a single field information stored in the underlying parquet file.
+   *
+   * @param fieldName field name in parquet file
+   * @param fieldType field type related info in parquet file
+   */
   private case class ParquetField(
-      // field name in parquet file
       fieldName: String,
-      // field type related info in parquet file
       fieldType: ParquetSchemaType)
 
   private case class ParquetSchemaType(
