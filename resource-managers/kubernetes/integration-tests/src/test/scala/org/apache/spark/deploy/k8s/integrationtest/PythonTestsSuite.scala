@@ -23,9 +23,11 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
   import PythonTestsSuite._
   import KubernetesSuite.k8sTestTag
 
+  private val pySparkDockerImage =
+    s"${getTestImageRepo}/spark-py:${getTestImageTag}"
   test("Run PySpark on simple pi.py example", k8sTestTag) {
     sparkAppConf
-      .set("spark.kubernetes.container.image", s"${getTestImageRepo}/spark-py:${getTestImageTag}")
+      .set("spark.kubernetes.container.image", pySparkDockerImage)
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_PI,
       mainClass = "",
@@ -39,7 +41,7 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
 
   test("Run PySpark with Python2 to test a pyfiles example", k8sTestTag) {
     sparkAppConf
-      .set("spark.kubernetes.container.image", s"${getTestImageRepo}/spark-py:${getTestImageTag}")
+      .set("spark.kubernetes.container.image", pySparkDockerImage)
       .set("spark.kubernetes.pyspark.pythonVersion", "2")
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_FILES,
@@ -57,7 +59,7 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
 
   test("Run PySpark with Python3 to test a pyfiles example", k8sTestTag) {
     sparkAppConf
-      .set("spark.kubernetes.container.image", s"${getTestImageRepo}/spark-py:${getTestImageTag}")
+      .set("spark.kubernetes.container.image", pySparkDockerImage)
       .set("spark.kubernetes.pyspark.pythonVersion", "3")
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_FILES,
@@ -75,7 +77,7 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
 
   test("Run PySpark with memory customization", k8sTestTag) {
     sparkAppConf
-      .set("spark.kubernetes.container.image", s"${getTestImageRepo}/spark-py:${getTestImageTag}")
+      .set("spark.kubernetes.container.image", pySparkDockerImage)
       .set("spark.kubernetes.pyspark.pythonVersion", "3")
       .set("spark.kubernetes.memoryOverheadFactor", s"$memOverheadConstant")
       .set("spark.executor.pyspark.memory", s"${additionalMemory}m")

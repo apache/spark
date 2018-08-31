@@ -61,10 +61,12 @@ private[spark] class BasicExecutorFeatureStep(
   // TODO: Have memory limit checks on executorMemory
   private val executorMemoryTotal = kubernetesConf.sparkConf
     .getOption(APP_RESOURCE_TYPE.key).map{ res =>
-      val additionalPySparkMemory = if (res == "python") {
-        kubernetesConf.sparkConf
-          .get(PYSPARK_EXECUTOR_MEMORY).map(_.toInt).getOrElse(0)
-      } else 0
+      val additionalPySparkMemory = res match {
+        case "python" =>
+          kubernetesConf.sparkConf
+            .get(PYSPARK_EXECUTOR_MEMORY).map(_.toInt).getOrElse(0)
+        case _ => 0
+      }
     executorMemoryWithOverhead + additionalPySparkMemory
   }.getOrElse(executorMemoryWithOverhead)
 
