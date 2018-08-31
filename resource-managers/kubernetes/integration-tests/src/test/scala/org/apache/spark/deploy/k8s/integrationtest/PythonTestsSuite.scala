@@ -78,15 +78,14 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
       .set("spark.kubernetes.container.image", s"${getTestImageRepo}/spark-py:${getTestImageTag}")
       .set("spark.kubernetes.pyspark.pythonVersion", "3")
       .set("spark.kubernetes.memoryOverheadFactor", s"$memOverheadConstant")
-      .set("spark.executor.pyspark.memory", s"${additionalMemory}Mi")
+      .set("spark.executor.pyspark.memory", s"${additionalMemory}m")
       .set("spark.python.worker.reuse", "false")
     runSparkApplicationAndVerifyCompletion(
-      appResource = PYSPARK_FILES,
+      appResource = PYSPARK_MEMORY_CHECK,
       mainClass = "",
       expectedLogOnCompletion = Seq(
-        "Python runtime version check is: True",
-        "Python environment version check is: True"),
-      appArgs = Array("python3"),
+        "PySpark Worker Memory Check is: True"),
+      appArgs = Array(s"$additionalMemoryInBytes"),
       driverPodChecker = doDriverMemoryCheck,
       executorPodChecker = doExecutorMemoryCheck,
       appLocator = appLocator,
@@ -100,5 +99,6 @@ private[spark] object PythonTestsSuite {
   val PYSPARK_PI: String = CONTAINER_LOCAL_PYSPARK + "pi.py"
   val PYSPARK_FILES: String = CONTAINER_LOCAL_PYSPARK + "pyfiles.py"
   val PYSPARK_CONTAINER_TESTS: String = CONTAINER_LOCAL_PYSPARK + "py_container_checks.py"
+  val PYSPARK_MEMORY_CHECK: String = CONTAINER_LOCAL_PYSPARK + "worker_memory_check.py"
 }
 

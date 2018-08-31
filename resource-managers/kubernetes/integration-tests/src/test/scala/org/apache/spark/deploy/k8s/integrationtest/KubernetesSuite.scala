@@ -55,7 +55,11 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   protected val memOverheadConstant = 0.8
   private val standardNonJVMMemory = s"${(1024 + 0.4*1024).toInt}Mi"
   protected val additionalMemory = 200
-  private val extraTotalMemory = s"${(1024 + memOverheadConstant*1024 + additionalMemory).toInt}Mi"
+  // 209715200 is 200Mi
+  protected val additionalMemoryInBytes = 209715200
+  private val extraDriverTotalMemory = s"${(1024 + memOverheadConstant*1024).toInt}Mi"
+  private val extraExecTotalMemory =
+    s"${(1024 + memOverheadConstant*1024 + additionalMemory).toInt}Mi"
 
   override def beforeAll(): Unit = {
     // The scalatest-maven-plugin gives system properties that are referenced but not set null
@@ -285,12 +289,12 @@ private[spark] class KubernetesSuite extends SparkFunSuite
 
   protected def doDriverMemoryCheck(driverPod: Pod): Unit = {
     assert(driverPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
-      === extraTotalMemory)
+      === extraDriverTotalMemory)
   }
 
   protected def doExecutorMemoryCheck(executorPod: Pod): Unit = {
     assert(executorPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
-      === extraTotalMemory)
+      === extraExecTotalMemory)
   }
 
   protected def checkCustomSettings(pod: Pod): Unit = {
