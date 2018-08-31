@@ -351,7 +351,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
           .endMetadata()
           .build())
     }
-    assert(exception.getMessage.contains("Could not load driver pod from template file."))
+    assert(exception.getMessage.contains("Could not load pod from template file."))
   }
 
   private def constructSpecWithPodTemplate(pod: Pod) : KubernetesDriverSpec = {

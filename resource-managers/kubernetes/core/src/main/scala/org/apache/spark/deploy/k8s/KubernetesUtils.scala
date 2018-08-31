@@ -96,7 +96,7 @@ private[spark] object KubernetesUtils extends Logging {
       case e: Exception =>
         logError(
           s"Encountered exception while attempting to load initial pod spec from file", e)
-        throw new SparkException("Could not load driver pod from template file.", e)
+        throw new SparkException("Could not load pod from template file.", e)
     }
   }
 

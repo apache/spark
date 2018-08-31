@@ -24,7 +24,6 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
-import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 private[spark] class KubernetesDriverBuilder(
@@ -126,7 +125,7 @@ private[spark] class KubernetesDriverBuilder(
   }
 }
 
-private[spark] object KubernetesDriverBuilder extends Logging {
+private[spark] object KubernetesDriverBuilder {
   val MAX_SECRET_BUNDLE_SIZE_BYTES = 20480
   val MAX_SECRET_BUNDLE_SIZE_BYTES_STRING =
     Utils.bytesToString(MAX_SECRET_BUNDLE_SIZE_BYTES)
@@ -134,16 +133,9 @@ private[spark] object KubernetesDriverBuilder extends Logging {
   def apply(kubernetesClient: KubernetesClient, conf: SparkConf): KubernetesDriverBuilder = {
     conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE)
       .map(new File(_))
-      .map(file => new KubernetesDriverBuilder(provideInitialPod = () => {
-        try {
-          KubernetesUtils.loadPodFromTemplate(kubernetesClient, file)
-        } catch {
-          case e: Exception =>
-            logError(
-              s"Encountered exception while attempting to load initial pod spec from file", e)
-            throw new SparkException("Could not load driver pod from template file.", e)
-        }
-      }))
+      .map(file => new KubernetesDriverBuilder(provideInitialPod = () =>
+        KubernetesUtils.loadPodFromTemplate(kubernetesClient, file)
+      ))
       .getOrElse(new KubernetesDriverBuilder())
   }
 }
