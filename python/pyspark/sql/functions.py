@@ -1687,11 +1687,11 @@ def split(str, pattern, limit=-1):
                               array can be of any size.
 
     >>> df = spark.createDataFrame([('oneAtwoBthreeC',)], ['s',])
-    >>> df.select(pyspark.sql.functions.split(df.s, '[ABC]', 2).alias('s')).collect()
+    >>> df.select(split(df.s, '[ABC]', 2).alias('s')).collect()
     [Row(s=[u'one', u'twoBthreeC'])]
-    >>> df.select(pyspark.sql.functions.split(df.s, '[ABC]', -1).alias('s')).collect()
+    >>> df.select(split(df.s, '[ABC]', -1).alias('s')).collect()
     [Row(s=[u'one', u'two', u'three', u''])]
-    >>> df.select(pyspark.sql.functions.split(df.s, '[ABC]', 0).alias('s')).collect()
+    >>> df.select(split(df.s, '[ABC]', 0).alias('s')).collect()
     [Row(s=[u'one', u'two', u'three', u''])]
     """
     sc = SparkContext._active_spark_context
