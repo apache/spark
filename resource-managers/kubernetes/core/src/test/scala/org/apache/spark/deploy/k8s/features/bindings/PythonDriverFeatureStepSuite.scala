@@ -44,7 +44,7 @@ class PythonDriverFeatureStepSuite extends SparkFunSuite {
         Some(PythonMainAppResource("local:///main.py")),
         "test-app",
         "python-runner",
-        Seq("5 7")),
+        Seq("5", "7", "9")),
       appResourceNamePrefix = "",
       appId = "",
       roleLabels = Map.empty,
@@ -66,7 +66,7 @@ class PythonDriverFeatureStepSuite extends SparkFunSuite {
       .toMap
     assert(envs(ENV_PYSPARK_PRIMARY) === expectedMainResource)
     assert(envs(ENV_PYSPARK_FILES) === expectedPySparkFiles)
-    assert(envs(ENV_PYSPARK_ARGS) === "5 7")
+    assert(envs(ENV_PYSPARK_ARGS) === "5 7 9")
     assert(envs(ENV_PYSPARK_MAJOR_PYTHON_VERSION) === "2")
   }
   test("Python Step testing empty pyfiles") {
