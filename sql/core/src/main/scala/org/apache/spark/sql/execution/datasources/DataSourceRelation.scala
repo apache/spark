@@ -70,7 +70,7 @@ trait DataSourceRelation {
     }
   }
 
-  private[spark] final val sourceSchema: StructType = this match {
+  private[spark] final def sourceSchema: StructType = this match {
     case dsV1: DataSourceV1Relation => dsV1.schema
     case dsV2: DataSourceV2Relation => dsV2.schema
     case _ => throw new AnalysisException(s"Unexpected relation $this.")

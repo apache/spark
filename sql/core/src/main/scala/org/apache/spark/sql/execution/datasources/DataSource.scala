@@ -384,15 +384,15 @@ case class DataSource(
           format,
           caseInsensitiveOptions)(sparkSession)
 
-      case (datasourceV2: DataSourceV2, _) if datasourceV2.isInstanceOf[BatchReadSupportProvider] =>
+      case (dataSourceV2: DataSourceV2, _) if dataSourceV2.isInstanceOf[BatchReadSupportProvider] =>
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-          ds = datasourceV2, conf = sparkSession.sessionState.conf)
+          ds = dataSourceV2, conf = sparkSession.sessionState.conf)
         val pathsOption = {
           val objectMapper = new ObjectMapper()
           DataSourceOptions.PATHS_KEY -> objectMapper.writeValueAsString(paths.toArray)
         }
         DataSourceV2Relation.create(
-          datasourceV2, caseInsensitiveOptions ++ sessionOptions + pathsOption,
+          dataSourceV2, caseInsensitiveOptions ++ sessionOptions + pathsOption,
           userSpecifiedSchema = userSpecifiedSchema)
 
       case _ =>
