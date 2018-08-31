@@ -276,12 +276,12 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
           .zipWithIndex
           .filter { case ((res, _), index) =>
             res.pValue <= fdr * (index + 1) / chiSqTestResult.length }
-        val maxIndex = if (selected.isEmpty) {
-          -1
+        if (selected.isEmpty) {
+          Array.empty
         } else {
-          selected.map(_._2).max
+          val maxIndex = selected.map(_._2).max
+          tempRes.take(maxIndex + 1)
         }
-        tempRes.take(maxIndex + 1)
       case ChiSqSelector.FWE =>
         chiSqTestResult
           .filter { case (res, _) => res.pValue < fwe / chiSqTestResult.length }
