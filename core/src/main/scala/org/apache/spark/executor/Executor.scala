@@ -130,16 +130,24 @@ private[spark] class Executor(
   private val urlClassLoader = createClassLoader()
   private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
 
-  // Load executor plugins
-  Thread.currentThread().setContextClassLoader(replClassLoader)
-  Utils.loadExtensions(classOf[ExecutorPlugin], conf.get(EXECUTOR_PLUGINS), conf)
-      .foreach(_.init())
-
   // Set the classloader for serializer
   env.serializer.setDefaultClassLoader(replClassLoader)
   // SPARK-21928.  SerializerManager's internal instance of Kryo might get used in netty threads
   // for fetching remote cached RDD blocks, so need to make sure it uses the right classloader too.
   env.serializerManager.setDefaultClassLoader(replClassLoader)
+
+  private val pluginList = conf.get(EXECUTOR_PLUGINS)
+  if (pluginList != Nil) {
+    logDebug(s"Loading the following plugins: ${pluginList.mkString(", ")}")
+
+    // Load executor plugins
+    Thread.currentThread().setContextClassLoader(replClassLoader)
+    private val executorPlugins =
+      Utils.loadExtensions(classOf[ExecutorPlugin], pluginList, conf)
+    executorPlugins.foreach(_.init())
+
+    logDebug("Finished loading plugins")
+  }
 
   // Max size of direct result. If task result is bigger than this, we use the block manager
   // to send the result back.
@@ -223,6 +231,7 @@ private[spark] class Executor(
     env.metricsSystem.report()
     heartbeater.shutdown()
     heartbeater.awaitTermination(10, TimeUnit.SECONDS)
+    executorPlugins.foreach(_.stop())
     threadPool.shutdown()
     if (!isLocal) {
       env.stop()

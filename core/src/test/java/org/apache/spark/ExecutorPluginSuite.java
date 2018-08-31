@@ -28,6 +28,8 @@ import static org.junit.Assert.*;
 public class ExecutorPluginSuite {
   // Static value modified by testing plugin to ensure plugin loaded correctly.
   public static int numSuccessfulPlugins = 0;
+  // Static value modified by testing plugin to verify plugins shut down properly.
+  public static int numSuccessfulTerminations = 0;
   private JavaSparkContext sc;
 
   private String EXECUTOR_PLUGIN_CONF_NAME = "spark.executor.plugins";
@@ -37,6 +39,7 @@ public class ExecutorPluginSuite {
   public void setUp() {
     sc = null;
     numSuccessfulPlugins = 0;
+    numSuccessfulTerminations = 0;
   }
 
   private SparkConf initializeSparkConf(String pluginNames) {
@@ -76,6 +79,7 @@ public class ExecutorPluginSuite {
       if (sc != null) {
         sc.stop();
         sc = null;
+        assertEquals(1, numSuccessfulTerminations);
       }
     }
   }
@@ -94,6 +98,7 @@ public class ExecutorPluginSuite {
       if (sc != null) {
         sc.stop();
         sc = null;
+        assertEquals(2, numSuccessfulTerminations);
       }
     }
   }
@@ -101,6 +106,9 @@ public class ExecutorPluginSuite {
   public static class TestExecutorPlugin implements ExecutorPlugin {
     public void init() {
       ExecutorPluginSuite.numSuccessfulPlugins++;
+    }
+    public void stop() {
+      ExecutorPluginSuite.numSuccessfulTerminations++;
     }
   }
 }

@@ -35,5 +35,16 @@ import org.apache.spark.annotation.DeveloperApi;
  */
 @DeveloperApi
 public interface ExecutorPlugin {
+
+  /**
+   * Initialization method that will be called during executor startup, in the same thread as
+   * the executor. Plugins should override this method to add in their initialization logic.
+   */
   default void init() {}
+
+  /**
+   * Stop method, to be called when the executor is shutting down. Plugins should clean up
+   * their resources and prepare to terminate.
+   */
+  default void stop() {}
 }
