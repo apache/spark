@@ -36,6 +36,11 @@ class RuntimeConfigSuite extends SparkFunSuite {
     intercept[NoSuchElementException] {
       conf.get("notset")
     }
+
+    conf.set("k4", "v4").set("k5", 5).set("k6", value = true)
+    assert(conf.get("k4") == "v4")
+    assert(conf.get("k5") == "5")
+    assert(conf.get("k6") == "true")
   }
 
   test("getOption") {
@@ -52,6 +57,10 @@ class RuntimeConfigSuite extends SparkFunSuite {
     conf.unset("k1")
     intercept[NoSuchElementException] {
       conf.get("k1")
+    }
+
+    intercept[NoSuchElementException] {
+      conf.set("k2", "v2").unset("k2").get("k2")
     }
   }
 
