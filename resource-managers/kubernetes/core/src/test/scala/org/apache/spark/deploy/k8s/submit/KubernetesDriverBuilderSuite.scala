@@ -20,12 +20,10 @@ import java.io.File
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
-import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodBuilder, PodList}
+import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
-import io.fabric8.kubernetes.client.dsl.{MixedOperation, PodResource}
 import org.mockito.Matchers._
 import org.mockito.Mockito
-import org.mockito.Mockito._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
@@ -325,48 +323,42 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   }
 
   test("Starts with template if specified") {
-    val spec = constructSpecWithPodTemplate(
+    val kubernetesClient = PodBuilderSuiteUtils.loadingMockKubernetesClient()
+    val sparkConf = new SparkConf(false)
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(KUBERNETES_DRIVER_PODTEMPLATE_FILE, "template-file.yaml")
+    val kubernetesConf = new KubernetesConf(
+      sparkConf,
+      KubernetesDriverSpecificConf(
+        Some(JavaMainAppResource("example.jar")),
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Nil,
+      Seq.empty[String])
+    val driverSpec = KubernetesDriverBuilder
+      .apply(kubernetesClient, sparkConf)
+      .buildFromFeatures(kubernetesConf)
+    PodBuilderSuiteUtils.verifyPodWithSupportedFeatures(driverSpec.pod)
+  }
+
+  test("Throws on misconfigured pod template") {
+    val kubernetesClient = PodBuilderSuiteUtils.loadingMockKubernetesClient(
       new PodBuilder()
         .withNewMetadata()
         .addToLabels("test-label-key", "test-label-value")
         .endMetadata()
-        .withNewSpec()
-        .addNewContainer()
-        .withName("test-driver-container")
-        .endContainer()
-        .endSpec()
         .build())
-
-    assert(spec.pod.pod.getMetadata.getLabels.containsKey("test-label-key"))
-    assert(spec.pod.pod.getMetadata.getLabels.get("test-label-key") === "test-label-value")
-    assert(spec.pod.container.getName === "test-driver-container")
-  }
-
-  test("Throws on misconfigured pod template") {
-    val exception = intercept[SparkException] {
-      constructSpecWithPodTemplate(
-        new PodBuilder()
-          .withNewMetadata()
-          .addToLabels("test-label-key", "test-label-value")
-          .endMetadata()
-          .build())
-    }
-    assert(exception.getMessage.contains("Could not load pod from template file."))
-  }
-
-  private def constructSpecWithPodTemplate(pod: Pod) : KubernetesDriverSpec = {
-    val kubernetesClient = mock(classOf[KubernetesClient])
-    val pods =
-      mock(classOf[MixedOperation[Pod, PodList, DoneablePod, PodResource[Pod, DoneablePod]]])
-    val podResource = mock(classOf[PodResource[Pod, DoneablePod]])
-    when(kubernetesClient.pods()).thenReturn(pods)
-    when(pods.load(any(classOf[File]))).thenReturn(podResource)
-    when(podResource.get()).thenReturn(pod)
-
     val sparkConf = new SparkConf(false)
       .set(CONTAINER_IMAGE, "spark-driver:latest")
       .set(KUBERNETES_DRIVER_PODTEMPLATE_FILE, "template-file.yaml")
-
     val kubernetesConf = new KubernetesConf(
       sparkConf,
       KubernetesDriverSpecificConf(
@@ -384,7 +376,11 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Seq.empty[String])
-
-    KubernetesDriverBuilder.apply(kubernetesClient, sparkConf).buildFromFeatures(kubernetesConf)
+    val exception = intercept[SparkException] {
+      KubernetesDriverBuilder
+        .apply(kubernetesClient, sparkConf)
+        .buildFromFeatures(kubernetesConf)
+    }
+    assert(exception.getMessage.contains("Could not load pod from template file."))
   }
 }

@@ -119,7 +119,7 @@ private[spark] class BasicDriverFeatureStep(
         .addToLabels(conf.roleLabels.asJava)
         .addToAnnotations(conf.roleAnnotations.asJava)
         .endMetadata()
-      .withNewSpec()
+      .editOrNewSpec()
         .withRestartPolicy("Never")
         .addToNodeSelector(conf.nodeSelector().asJava)
         .addToImagePullSecrets(conf.imagePullSecrets(): _*)
