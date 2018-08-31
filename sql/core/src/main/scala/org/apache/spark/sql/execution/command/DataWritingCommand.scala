@@ -42,7 +42,7 @@ trait DataWritingCommand extends Command {
   override final def children: Seq[LogicalPlan] = query :: Nil
 
   // Output columns of the analyzed input query plan
-  def outputColumns: Seq[Attribute]
+  def outputColumnNames: Seq[String]
 
   lazy val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
 

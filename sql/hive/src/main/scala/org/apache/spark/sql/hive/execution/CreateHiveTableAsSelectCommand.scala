@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.command.DataWritingCommand
 case class CreateHiveTableAsSelectCommand(
     tableDesc: CatalogTable,
     query: LogicalPlan,
-    outputColumns: Seq[Attribute],
+    outputColumnNames: Seq[String],
     mode: SaveMode)
   extends DataWritingCommand {
 
@@ -63,7 +63,7 @@ case class CreateHiveTableAsSelectCommand(
         query,
         overwrite = false,
         ifPartitionNotExists = false,
-        outputColumns = outputColumns).run(sparkSession, child)
+        outputColumnNames = outputColumnNames).run(sparkSession, child)
     } else {
       // TODO ideally, we should get the output data ready first and then
       // add the relation into catalog, just in case of failure occurs while data
@@ -82,7 +82,7 @@ case class CreateHiveTableAsSelectCommand(
           query,
           overwrite = true,
           ifPartitionNotExists = false,
-          outputColumns = outputColumns).run(sparkSession, child)
+          outputColumnNames = outputColumnNames).run(sparkSession, child)
       } catch {
         case NonFatal(e) =>
           // drop the created table.

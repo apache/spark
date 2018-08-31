@@ -450,7 +450,7 @@ case class DataSource(
       mode = mode,
       catalogTable = catalogTable,
       fileIndex = fileIndex,
-      outputColumns = data.output)
+      outputColumnNames = data.output.map(_.name))
   }
 
   /**
@@ -460,9 +460,9 @@ case class DataSource(
    * @param mode The save mode for this writing.
    * @param data The input query plan that produces the data to be written. Note that this plan
    *             is analyzed and optimized.
-   * @param outputColumns The original output columns of the input query plan. The optimizer may not
-   *                      preserve the output column's names' case, so we need this parameter
-   *                      instead of `data.output`.
+   * @param outputColumnNames The original output column names of the input query plan. The
+   *                      optimizer may not preserve the output column's names' case, so we need
+   *                      this parameter instead of `data.output`.
    * @param physicalPlan The physical plan of the input query plan. We should run the writing
    *                     command with this physical plan instead of creating a new physical plan,
    *                     so that the metrics can be correctly linked to the given physical plan and
@@ -471,8 +471,9 @@ case class DataSource(
   def writeAndRead(
       mode: SaveMode,
       data: LogicalPlan,
-      outputColumns: Seq[Attribute],
+      outputColumnNames: Seq[String],
       physicalPlan: SparkPlan): BaseRelation = {
+    val outputColumns = data.outputWithNames(names = outputColumnNames)
     if (outputColumns.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
@@ -495,7 +496,9 @@ case class DataSource(
               s"Unable to resolve $name given [${data.output.map(_.name).mkString(", ")}]")
           }
         }
-        val resolved = cmd.copy(partitionColumns = resolvedPartCols, outputColumns = outputColumns)
+        val resolved = cmd.copy(
+          partitionColumns = resolvedPartCols,
+          outputColumnNames = outputColumns.map(_.name))
         resolved.run(sparkSession, physicalPlan)
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(outputColumns.toStructType.asNullable)).resolveRelation()

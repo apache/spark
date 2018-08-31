@@ -57,7 +57,7 @@ case class InsertIntoHiveDirCommand(
     storage: CatalogStorageFormat,
     query: LogicalPlan,
     overwrite: Boolean,
-    outputColumns: Seq[Attribute]) extends SaveAsHiveFile {
+    outputColumnNames: Seq[String]) extends SaveAsHiveFile {
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     assert(storage.locationUri.nonEmpty)
@@ -105,7 +105,7 @@ case class InsertIntoHiveDirCommand(
         hadoopConf = hadoopConf,
         fileSinkConf = fileSinkConf,
         outputLocation = tmpPath.toString,
-        allColumns = outputColumns)
+        allColumns = query.outputWithNames(outputColumnNames))
 
       val fs = writeToPath.getFileSystem(hadoopConf)
       if (overwrite && fs.exists(writeToPath)) {

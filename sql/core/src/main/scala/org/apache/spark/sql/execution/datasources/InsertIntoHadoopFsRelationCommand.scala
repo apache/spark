@@ -56,7 +56,7 @@ case class InsertIntoHadoopFsRelationCommand(
     mode: SaveMode,
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex],
-    outputColumns: Seq[Attribute])
+    outputColumnNames: Seq[String])
   extends DataWritingCommand {
   import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 
@@ -155,6 +155,7 @@ case class InsertIntoHadoopFsRelationCommand(
         }
       }
 
+      val outputColumns = query.outputWithNames(outputColumnNames)
       val updatedPartitionPaths =
         FileFormatWriter.write(
           sparkSession = sparkSession,
