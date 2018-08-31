@@ -1,0 +1,3 @@
+src/main/resources/docker-resources
+.gradle
+gradle-build

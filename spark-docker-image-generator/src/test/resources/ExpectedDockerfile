@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-FROM openjdk:8-alpine
+FROM fabric8/java-centos-openjdk8-jdk:latest
 
 ARG spark_jars=jars
 ARG img_path=kubernetes/dockerfiles
@@ -31,7 +31,7 @@ RUN set -ex && \
     apk upgrade --no-cache && \
     apk add --no-cache bash tini && \
     mkdir -p /opt/spark && \
-    mkdir -p /opt/spark/work-dir && \
+    mkdir -p /opt/spark/work-dir \
     touch /opt/spark/RELEASE && \
     rm /bin/sh && \
     ln -sv /bin/bash /bin/sh && \

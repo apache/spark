@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<fileset-config file-format-version="1.2.0" simple-config="false" sync-formatter="false">
+  <local-check-config name="Baseline" location="${configDir}/checkstyle/checkstyle.xml" type="external" description="">
+    <additional-data name="protect-config-file" value="false"/>
+  </local-check-config>
+  <fileset name="all" enabled="true" check-config-name="Baseline" local="true">
+    <file-match-pattern match-pattern="." include-pattern="false"/>
+    <file-match-pattern match-pattern=".*\\.java" include-pattern="true"/>
+    <file-match-pattern match-pattern=".*\\.cfg" include-pattern="true"/>
+    <file-match-pattern match-pattern=".*\\.coffee" include-pattern="true"/>
+    <file-match-pattern match-pattern=".*\\.erb" include-pattern="true"/>
+    <file-match-pattern match-pattern=".*\\.groovy" include-pattern="true"/>
+    <file-match-pattern match-pattern=".*\\.handlebars" include-pattern="true"/>
+    <file-match-pattern match-pattern=".*\\.json" include-pattern="true"/>
+    <file-match-pattern match-pattern=".*\\.less" include-pattern="true"/>
+    <file-match-pattern match-pattern=".*\\.pl" include-pattern="true"/>
+    <file-match-pattern match-pattern=".*\\.pp" include-pattern="true"/>
+    <file-match-pattern match-pattern=".*\\.sh" include-pattern="true"/>
+    <file-match-pattern match-pattern=".*\\.xml" include-pattern="true"/>
+    <file-match-pattern match-pattern="src/test/resources/.*" include-pattern="false"/>
+  </fileset>
+</fileset-config>

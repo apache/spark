@@ -1,0 +1,65 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+plugins {
+  id 'java-gradle-plugin'
+}
+
+apply plugin: 'java'
+apply plugin: 'idea'
+apply from: "${rootDir}/gradle/publish.gradle"
+
+sourceCompatibility = 1.8
+
+dependencies {
+  compile gradleApi()
+  compile 'org.apache.commons:commons-compress'
+  compile 'commons-io:commons-io'
+  testCompile 'org.assertj:assertj-core'
+  testCompile 'org.mockito:mockito-core'
+  testCompile 'junit:junit'
+  testCompile 'com.spotify:docker-client'
+  testCompile gradleTestKit()
+}
+
+test {
+  minHeapSize = "512m"
+  maxHeapSize = "512m"
+}
+
+task prepareDockerBundleDir(type: Sync) {
+  from("${rootDir}/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile") {
+    into 'kubernetes/dockerfiles/spark'
+    rename 'Dockerfile', 'Dockerfile.original'
+  }
+
+  from("${rootDir}/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/entrypoint.sh") {
+    into 'kubernetes/dockerfiles/spark'
+  }
+
+  from(fileTree("${rootDir}/bin")) {
+    into 'bin'
+  }
+  from(fileTree("${rootDir}/sbin")) {
+    into 'sbin'
+  }
+  into file("src/main/resources/docker-resources")
+  includeEmptyDirs = false
+}
+
+tasks.compileJava.dependsOn tasks.prepareDockerBundleDir
+tasks.idea.dependsOn tasks.prepareDockerBundleDir

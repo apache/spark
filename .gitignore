@@ -14,6 +14,7 @@
 .ensime_cache/
 .ensime_lucene
 .generated-mima*
+.gradle
 .idea/
 .idea_modules/
 .project
@@ -47,6 +48,7 @@ dev/pr-deps/
 dist/
 docs/_site
 docs/api
+gradle-build
 sql/docs
 sql/site
 lib_managed/

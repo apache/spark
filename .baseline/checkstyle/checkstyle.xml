@@ -1,0 +1,446 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+        "-//Puppy Crawl//DTD Check Configuration 1.3//EN"
+        "http://www.puppycrawl.com/dtds/configuration_1_3.dtd">
+
+<!--
+    Palantir Baseline Checkstyle configuration.
+    Authors: Robert Fink, Brian Worth, Merrick Zoubeiri, and many other contributors. Based in part on http://checkstyle.sourceforge.net/google_style.html
+    Please keep checks alphabetized with one exception: "relaxed" checks are grouped together at the bottom for easier disabling.
+    Check-specific comments reference documents internal to Palantir and can be safely ignored or removed.
+ -->
+
+<module name="Checker">
+    <property name="charset" value="UTF-8"/>
+    <property name="severity" value="error"/>
+
+    <module name="FileTabCharacter"/> <!-- Java Style Guide: Whitespace characters -->
+    <module name="NewlineAtEndOfFile"> <!-- Java Style Guide: Line ending: LF -->
+        <property name="lineSeparator" value="lf"/>
+    </module>
+    <module name="Header">
+        <!--<property name="header" value="^/\*$\n^ \* Licensed to the Apache Software Foundation (ASF) under one or more$\n"/>-->
+        <property name="headerFile" value="${config_loc}/header.txt"/>
+        <property name="fileExtensions" value=".java,.ts"/>
+    </module>
+    <module name="RegexpMultiline"> <!-- Development Practices: Writing good unit tests -->
+        <property name="fileExtensions" value="java"/>
+        <property name="format" value="@VisibleForTesting\s+(protected|public)"/>
+        <property name="message" value="@VisibleForTesting members should be package-private."/>
+    </module>
+    <module name="RegexpSingleline"> <!-- No reference needed as this is evident. -->
+        <property name="format" value="&lt;&lt;&lt;&lt;&lt;&lt;&lt;"/>
+        <property name="message" value="Found (&lt;&lt;&lt;&lt;&lt;&lt;&lt;), so it looks like you had a merge conflict that compiles. Please fix it."/>
+    </module>
+    <module name="RegexpSingleline"> <!-- No reference needed as this is evident. -->
+        <property name="format" value="&gt;&gt;&gt;&gt;&gt;&gt;&gt;"/>
+        <property name="message" value="Found (&gt;&gt;&gt;&gt;&gt;&gt;&gt;), so it looks like you had a merge conflict that compiles. Please fix it."/>
+    </module>
+    <module name="RegexpSingleline">
+        <property name="format" value="\s+$"/>
+        <property name="message" value="Whitespace at end-of-line"/>
+    </module>
+    <module name="RegexpMultiline"> <!-- Java Style Guide: Vertical Whitespace -->
+	<property name="fileExtensions" value="java"/>
+        <property name="format" value="^\n\n$"/>
+        <property name="message" value="Two consecutive blank lines are not permitted."/>
+    </module>
+    <module name="SuppressionFilter"> <!-- baseline-gradle: README.md -->
+        <property name="file" value="${config_loc}/checkstyle-suppressions.xml"/>
+    </module>
+    <module name="SuppressWarningsFilter"/> <!-- baseline-gradle: README.md -->
+    <module name="TreeWalker">
+        <module name="SuppressionCommentFilter"/> <!-- baseline-gradle: README.md -->
+        <module name="SuppressionCommentFilter">
+            <property name="offCommentFormat" value="CHECKSTYLE.OFF\: ([\w\|]+)"/>
+            <property name="onCommentFormat" value="CHECKSTYLE.ON\: ([\w\|]+)"/>
+            <property name="checkFormat" value="$1"/>
+        </module>
+        <module name="AbbreviationAsWordInName"> <!-- Java Style Guide: Camel case : defined -->
+            <property name="ignoreFinal" value="false"/>
+            <property name="allowedAbbreviationLength" value="1"/>
+        </module>
+        <module name="AnnotationLocation"> <!-- Java Style Guide: Annotations -->
+            <property name="tokens" value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, METHOD_DEF, CTOR_DEF"/>
+        </module>
+        <module name="AnnotationLocation"> <!-- Java Style Guide: Annotations -->
+            <property name="tokens" value="VARIABLE_DEF"/>
+            <property name="allowSamelineMultipleAnnotations" value="true"/>
+        </module>
+        <module name="AnnotationUseStyle"/> <!-- Java Style Guide: Annotations -->
+        <module name="ArrayTypeStyle"/> <!-- Java Style Guide: No C-style array declarations -->
+        <module name="AvoidEscapedUnicodeCharacters"> <!-- Java Style Guide: Non-ASCII characters -->
+            <property name="allowEscapesForControlCharacters" value="true"/>
+            <property name="allowByTailComment" value="true"/>
+            <property name="allowNonPrintableEscapes" value="true"/>
+        </module>
+        <module name="AvoidNestedBlocks"> <!-- Java Coding Guidelines: Avoid nested blocks -->
+            <property name="allowInSwitchCase" value="true"/>
+        </module>
+        <module name="AvoidStarImport"/> <!-- Java Style Guide: No wildcard imports -->
+        <module name="AvoidStaticImport"> <!-- Java Style Guide: No static imports -->
+            <property name="excludes" value="
+                java.util.Collections.*,
+                java.util.stream.Collectors.*,
+                com.palantir.logsafe.Preconditions.*,
+                com.google.common.base.Preconditions.*,
+                org.apache.commons.lang3.Validate.*"/>
+        </module>
+        <module name="ClassTypeParameterName"> <!-- Java Style Guide: Type variable names -->
+            <property name="format" value="(^[A-Z][0-9]?)$|([A-Z][a-zA-Z0-9]*[T]$)"/>
+            <message key="name.invalidPattern" value="Class type name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <module name="CovariantEquals"/> <!-- Java Coding Guidelines: Override ``Object#equals`` consistently -->
+        <module name="DefaultComesLast"/> <!-- Java Style Guide: The default case is present -->
+        <module name="EmptyBlock"> <!-- Java Style Guide: Empty blocks: documented -->
+            <property name="option" value="TEXT"/>
+        </module>
+        <module name="EmptyCatchBlock"> <!-- Java Style Guide: Empty blocks: documented -->
+            <property name="exceptionVariableName" value="expected"/>
+        </module>
+        <module name="EmptyForInitializerPad"/> <!-- Java Style Guide: Horizontal whitespace -->
+        <module name="EmptyLineSeparator"> <!-- Java Style Guide: Source file structure -->
+            <property name="tokens" value="IMPORT, CLASS_DEF, ENUM_DEF, INTERFACE_DEF, CTOR_DEF, STATIC_INIT, INSTANCE_INIT, VARIABLE_DEF"/>
+            <property name="allowNoEmptyLineBetweenFields" value="true"/>
+        </module>
+        <module name="EmptyStatement"/> <!-- Java Style Guide: One statement per line -->
+        <module name="EqualsHashCode"/>
+        <module name="FallThrough"/> <!-- Java Style Guide: Fall-through: commented -->
+        <module name="FinalClass"/> <!-- Java Coding Guidelines: Private constructors -->
+        <module name="GenericWhitespace"> <!-- Java Style Guide: Horizontal whitespace -->
+            <message key="ws.followed" value="GenericWhitespace ''{0}'' is followed by whitespace."/>
+            <message key="ws.preceded" value="GenericWhitespace ''{0}'' is preceded with whitespace."/>
+            <message key="ws.illegalFollow" value="GenericWhitespace ''{0}'' should followed by whitespace."/>
+            <message key="ws.notPreceded" value="GenericWhitespace ''{0}'' is not preceded with whitespace."/>
+        </module>
+        <module name="HiddenField"> <!-- Java Coding Guide: Avoid shadowing -->
+            <property name="ignoreConstructorParameter" value="true"/>
+            <property name="ignoreSetter" value="true"/>
+            <property name="setterCanReturnItsClass" value="true"/>
+        </module>
+        <module name="HideUtilityClassConstructor"/> <!-- Java Coding Guidelines: Private constructors -->
+        <module name="IllegalImport"> <!-- Java Coding Guidelines: Use JUnit 4-style test classes and assertions -->
+            <property name="illegalPkgs" value="junit.framework"/>
+            <message key="import.illegal" value="Use JUnit 4-style (org.junit.*) test classes and assertions instead of JUnit 3 (junit.framework.*)."/>
+        </module>
+        <module name="IllegalImport"> <!-- Java Coding Guidelines: Import the canonical package -->
+            <property name="illegalPkgs" value="org.elasticsearch.common.base, jersey.repackaged.com.google.common, com.google.api.client.repackaged, org.apache.hadoop.thirdparty.guava, com.clearspring.analytics.util, org.spark_project.guava"/>
+            <message key="import.illegal" value="Must not import repackaged classes."/>
+        </module>
+        <module name="IllegalImport">
+            <property name="illegalPkgs" value="^org\.gradle\..*internal"/>
+            <message key="import.illegal" value="Do not rely on gradle internal classes as these may change in minor releases - use org.gradle.api versions instead."/>
+        </module>
+        <module name="IllegalImport">
+            <property name="illegalPkgs" value="sun"/>
+            <message key="import.illegal" value="Must not use Oracle's Java implementation details. See http://www.oracle.com/technetwork/java/faq-sun-packages-142232.html ."/>
+        </module>
+        <module name="IllegalImport">
+            <property name="illegalPkgs" value="org.apache.commons.lang"/>
+            <message key="import.illegal" value="lang is deprecated, use lang3 instead."/>
+        </module>
+        <module name="IllegalImport">
+            <property name="illegalPkgs" value="org.apache.commons.math"/>
+            <message key="import.illegal" value="math is deprecated, use math3 instead."/>
+        </module>
+        <module name="IllegalImport">
+            <property name="id" value="BanLoggingImplementations"/>
+            <property name="illegalPkgs" value="org.apache.log4j, org.apache.logging.log4j, java.util.logging, ch.qos.logback"/>
+            <message key="import.illegal" value="Use SLF4J instead of a logging framework directly."/>
+        </module>
+        <module name="IllegalInstantiation"> <!-- Java Coding Guidelines: Never instantiate primitive types -->
+            <property name="classes" value="java.lang.Boolean"/>
+            <property name="classes" value="java.lang.Byte"/>
+            <property name="classes" value="java.lang.Character"/>
+            <property name="classes" value="java.lang.Double"/>
+            <property name="classes" value="java.lang.Float"/>
+            <property name="classes" value="java.lang.Integer"/>
+            <property name="classes" value="java.lang.Long"/>
+        </module>
+        <module name="IllegalThrows"/> <!-- Java Coding Guidelines: Throwable, Error, RuntimeException: Not declared -->
+        <module name="IllegalTokenText"> <!-- Java Style Guide: Special escape sequences -->
+            <property name="tokens" value="STRING_LITERAL, CHAR_LITERAL"/>
+            <property name="format" value="\\u00(08|09|0(a|A)|0(c|C)|0(d|D)|22|27|5(C|c))|\\(0(10|11|12|14|15|42|47)|134)"/>
+            <property name="message" value="Avoid using corresponding octal or Unicode escape."/>
+        </module>
+        <module name="IllegalType"> <!-- Java Coding Guide: Limit coupling on concrete classes -->
+            <property name="illegalClassNames" value="java.util.ArrayList, java.util.HashSet, java.util.HashMap, java.util.LinkedList, java.util.LinkedHashMap, java.util.LinkedHashSet, java.util.TreeSet, java.util.TreeMap, com.google.common.collect.ArrayListMultimap, com.google.common.collect.ForwardingListMultimap, com.google.common.collect.ForwardingMultimap, com.google.common.collect.ForwardingSetMultimap, com.google.common.collect.ForwardingSortedSetMultimap, com.google.common.collect.HashMultimap, com.google.common.collect.LinkedHashMultimap, com.google.common.collect.LinkedListMultimap, com.google.common.collect.TreeMultimap"/>
+        </module>
+        <module name="IllegalType">
+            <property name="id" value="BanGuavaCaches"/>
+            <property name="illegalClassNames" value="com.google.common.cache.CacheBuilder, com.google.common.cache.Cache, com.google.common.cache.LoadingCache"/>
+            <message key="illegal.type" value="Do not use Guava caches, they are outperformed by and harder to use than Caffeine caches"/>
+        </module>
+        <!-- Use Spark's built-in import ordering -->
+        <module name="ImportOrder">
+            <property name="separated" value="true"/>
+            <property name="ordered" value="true"/>
+            <property name="groups" value="/^javax?\./,scala,*,org.apache.spark"/>
+            <property name="sortStaticImportsAlphabetically" value="true"/>
+        </module>
+        <module name="Indentation"> <!-- Java Style Guide: Block indentation: +2 spaces -->
+            <property name="arrayInitIndent" value="4"/>
+            <property name="lineWrappingIndentation" value="4"/>
+            <property name="basicOffset" value="2"/>
+        </module>
+        <module name="InnerAssignment"/> <!-- Java Coding Guidelines: Inner assignments: Not used -->
+        <module name="LeftCurly"/> <!-- Java Style Guide: Nonempty blocks: K & R style -->
+        <module name="LineLength"> <!-- Java Style Guide: No line-wrapping -->
+            <property name="max" value="120"/>
+            <property name="ignorePattern" value="^package.*|^import.*|a href|href|http://|https://|ftp://"/>
+        </module>
+        <module name="MemberName"> <!-- Java Style Guide: Non-constant field names -->
+            <property name="format" value="^[a-z][a-zA-Z0-9]+$"/>
+            <message key="name.invalidPattern" value="Member name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <module name="MethodName"> <!-- Java Style Guide: Method names -->
+            <property name="format" value="^[a-z][a-zA-Z0-9_]+$"/>
+            <message key="name.invalidPattern" value="Method name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <module name="MethodParamPad"/> <!-- Java Style Guide: Horizontal whitespace -->
+        <module name="MissingDeprecated"/> <!-- Java Coding Guide: Deprecate per annotation and Javadoc -->
+        <module name="ModifiedControlVariable"/> <!-- Java Coding Guide: For-loop control variables: never modified -->
+        <module name="ModifierOrder"/> <!-- Java Style Guide: Modifiers -->
+        <module name="MultipleVariableDeclarations"/> <!-- Java Style Guide: One variable per declaration -->
+        <module name="MutableException"/> <!-- Java Coding Guidelines: Exceptions: Always immutable -->
+        <module name="NeedBraces"/> <!-- Java Style Guide: Braces are used where optional -->
+        <module name="NoClone"/> <!-- Java Coding Guidelines: Never override Object#finalize or Object#clone -->
+        <module name="NoFinalizer"/> <!-- Java Coding Guidelines: Never override Object#finalize -->
+        <module name="NoLineWrap"/> <!-- Java Style Guide: No line-wrapping -->
+        <module name="NoWhitespaceAfter"> <!-- Java Style Guide: Horizontal whitespace -->
+            <property name="allowLineBreaks" value="false"/>
+            <property name="tokens" value="BNOT,DEC,DOT,INC,LNOT,UNARY_MINUS,UNARY_PLUS"/>
+        </module>
+        <module name="NoWhitespaceBefore"> <!-- Java Style Guide: Horizontal whitespace -->
+            <property name="allowLineBreaks" value="true"/>
+        </module>
+        <module name="OneStatementPerLine"/> <!-- Java Style Guide: One statement per line -->
+        <module name="OneTopLevelClass"/> <!-- Java Style Guide: Exactly one top-level class declaration -->
+        <module name="OperatorWrap"> <!-- Java Style Guide: Where to break -->
+            <property name="option" value="NL"/>
+            <property name="tokens" value="BAND, BOR, BSR, BXOR, DIV, EQUAL, GE, GT, LAND, LE, LITERAL_INSTANCEOF, LOR, LT, MINUS, MOD, NOT_EQUAL, PLUS, QUESTION, SL, SR, STAR "/>
+        </module>
+        <module name="OuterTypeFilename"/> <!-- Java Style Guide: File name -->
+        <module name="OverloadMethodsDeclarationOrder"/> <!-- Java Style Guide: Overloads: never split -->
+        <module name="PackageAnnotation"/> <!-- Java Style Guide: Package statement -->
+        <module name="PackageDeclaration"/> <!-- Java Style Guide: Package statement -->
+        <module name="PackageName"> <!-- Java Style Guide: Package names -->
+            <property name="format" value="^[a-z]+(\.[a-z][a-z0-9]*)*$"/>
+            <message key="name.invalidPattern" value="Package name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <module name="ParameterAssignment"/> <!-- Java Coding Guidelines: Final variables and parameters -->
+        <module name="ParenPad"/> <!-- Java Style Guide: Horizontal whitespace -->
+        <module name="RedundantImport"/> <!-- Java Style Guide: No unused imports -->
+        <module name="RedundantModifier"/> <!-- Java Coding Guidelines: Avoid redundant modifiers -->
+        <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Use appropriate assertion methods -->
+            <property name="format" value="assertEquals\(false,"/>
+            <property name="message" value="Use assertFalse() instead."/>
+        </module>
+        <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Use appropriate assertion methods -->
+            <property name="format" value="assertEquals\(null,"/>
+            <property name="message" value="Use assertNull() instead."/>
+        </module>
+        <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Use appropriate assertion methods -->
+            <property name="format" value="assertEquals\(true,"/>
+            <property name="message" value="Use assertTrue() instead."/>
+        </module>
+        <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Use appropriate assertion methods -->
+            <property name="format" value="assertFalse\(.*[!=]="/>
+            <property name="message" value="Use better assertion method(s): assertEquals(), assertNull(), assertSame(), etc."/>
+        </module>
+        <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Use appropriate assertion methods -->
+            <property name="format" value="assertTrue\(!"/>
+            <property name="message" value="Use assertFalse()."/>
+        </module>
+        <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Use appropriate assertion methods -->
+            <property name="format" value="assertTrue\(.*[!=]="/>
+            <property name="message" value="Use better assertion method(s): assertEquals(), assertNull(), assertSame(), etc."/>
+        </module>
+        <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Avoid Generics clutter where possible -->
+            <property name="format" value="Collections\.EMPTY_LIST"/>
+            <property name="message" value="Use Collections.emptyList() or, better, ImmutableList.of()."/>
+        </module>
+        <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Avoid Generics clutter where possible -->
+            <property name="format" value="Collections\.EMPTY_MAP"/>
+            <property name="message" value="Use Collections.emptyMap() or, better, ImmutableMap.of()."/>
+        </module>
+        <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Avoid Generics clutter where possible -->
+            <property name="format" value="Collections\.EMPTY_SET"/>
+            <property name="message" value="Use Collections.emptySet() or, better, ImmutableSet.of()."/>
+        </module>
+        <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Use appropriate assertion methods -->
+            <property name="format" value="CoreMatchers\.equalTo"/>
+            <property name="message" value="Use Assert.assertEquals()."/>
+        </module>
+        <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Use appropriate assertion methods -->
+            <property name="format" value="CoreMatchers\.notNull"/>
+            <property name="message" value="Use better assertion method(s): Assert.assertEquals(), assertNull(), assertSame(), etc."/>
+        </module>
+        <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Avoid Generics clutter where possible -->
+            <property name="format" value="ImmutableList\.Builder.*new ImmutableList\.Builder"/>
+            <property name="message" value="Use ImmutableList.builder() for variable assignment."/>
+        </module>
+        <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Avoid Generics clutter where possible -->
+            <property name="format" value="ImmutableMap\.Builder.*new ImmutableMap\.Builder"/>
+            <property name="message" value="Use ImmutableMap.builder() for variable assignment."/>
+        </module>
+        <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Avoid Generics clutter where possible -->
+            <property name="format" value="ImmutableSet\.Builder.*new ImmutableSet\.Builder"/>
+            <property name="message" value="Use ImmutableSet.builder() for variable assignment."/>
+        </module>
+        <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Check parameters for validity -->
+            <property name="format" value="Preconditions\.checkNotNull\((?!.*,)([^()]*(\(([^()]*|\(([^()]*|\([^()]*\))*\))*\)[^()]*)*)\)"/>
+            <property name="message" value="Use Preconditions.checkNotNull(Object, String)."/>
+        </module>
+        <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Check parameters for validity -->
+            <property name="format" value="Validate\.notNull\((?!.*,)([^()]*(\(([^()]*|\(([^()]*|\([^()]*\))*\))*\)[^()]*)*)\)"/>
+            <property name="message" value="Use Validate.notNull(Object, String)."/>
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="^\s*super\(\);"/>
+            <property name="message" value="This is unnecessary; please delete."/>
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="@return.*\.$"/>
+            <property name="message" value="Please delete the period."/>
+        </module>
+        <module name="RegexpSinglelineJava"> <!-- Java Style Guide: Horizontal whitespace -->
+            <property name="format" value="\s+$"/>
+            <property name="message" value="Trailing whitespace is not allowed."/>
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="\? extends Object\W"/>
+            <property name="message" value="Use ? rather than ? extends Object."/>
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="(?i)log(ger)?\.(debug|info|warn|error)\(.*%[sd]"/>
+            <property name="message" value="SLF4J loggers support '{}' style formatting."/>
+            <property name="ignoreComments" value="true"/>
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="\.printStackTrace\(\)"/>
+            <property name="message" value="printStackTrace is not generally allowed."/>
+            <property name="ignoreComments" value="true"/>
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="\bCharsets\."/>
+            <property name="message" value="Use JDK StandardCharsets instead of alternatives."/>
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="\bCharset.defaultCharset\("/>
+            <property name="message" value="Use explicit charset (e.g. StandardCharsets.UTF-8) instead of default."/>
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="\bIOUtils\.toString\("/>
+            <property name="message" value="Prefer Guava''s [CharStreams,Files,Resources].toString to avoid charset/stream closing issues."/>
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="static enum"/>
+            <property name="message" value="Redundant ''static'' modifier."/>
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="\/\/TODO|\/\/ TODO(?!\([^()\s]+\): )"/>
+            <property name="message" value="TODO format: // TODO(#issue): explanation"/>
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="(void setUp\(\))|(void setup\(\))|(void setupStatic\(\))|(void setUpStatic\(\))|(void beforeTest\(\))|(void teardown\(\))|(void tearDown\(\))|(void beforeStatic\(\))|(void afterStatic\(\))"/>
+            <property name="message" value="Test setup/teardown methods are called before(), beforeClass(), after(), afterClass(), but not setUp, teardown, etc."/>
+        </module>
+        <module name="RightCurly"> <!-- Java Style Guide: Nonempty blocks: K & R style -->
+            <property name="option" value="same"/>
+            <property name="tokens" value="LITERAL_TRY, LITERAL_CATCH, LITERAL_FINALLY, LITERAL_IF, LITERAL_ELSE, LITERAL_DO"/>
+        </module>
+        <module name="RightCurly"> <!-- Java Style Guide: Nonempty blocks: K & R style -->
+            <property name="option" value="alone"/>
+            <property name="tokens" value="CLASS_DEF, METHOD_DEF, CTOR_DEF, LITERAL_FOR, LITERAL_WHILE, STATIC_INIT, INSTANCE_INIT"/>
+        </module>
+        <module name="SeparatorWrap"> <!-- Java Style Guide: Where to break -->
+            <property name="tokens" value="DOT"/>
+            <property name="option" value="nl"/>
+        </module>
+        <module name="SeparatorWrap"> <!-- Java Style Guide: Where to break -->
+            <property name="tokens" value="COMMA"/>
+            <property name="option" value="EOL"/>
+        </module>
+        <module name="SimplifyBooleanExpression"/> <!-- Java Coding Guidelines: Keep Boolean expressions simple -->
+        <module name="SimplifyBooleanReturn"/> <!-- Java Coding Guidelines: Keep Boolean expressions simple -->
+        <module name="StaticVariableName"/> <!-- Java Style Guide: Naming -->
+        <module name="StringLiteralEquality"/> <!-- Java Coding Guidelines: String equality: use String#equals -->
+        <module name="SuperClone"/>
+        <module name="SuppressWarnings">
+            <property name="format" value="serial"/>
+        </module>
+        <module name="SuppressWarningsHolder" />  <!-- Required for SuppressWarningsFilter -->
+        <module name="TypeName"> <!-- Java Style Guide: Class names -->
+            <message key="name.invalidPattern" value="Type name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <module name="TypecastParenPad"/> <!-- Java Style Guide: Horizontal whitespace -->
+        <module name="UnnecessaryParentheses"/>
+        <module name="UnusedImports"> <!-- Java Style Guide: No unused imports -->
+            <property name="processJavadoc" value="true"/>
+        </module>
+        <module name="UpperEll"/> <!-- Java Style Guide: Numeric Literals -->
+        <module name="VisibilityModifier"/> <!-- Java Coding Guidelines: Minimize mutability -->
+        <module name="WhitespaceAfter"/> <!-- Java Style Guide: Horizontal whitespace -->
+        <module name="WhitespaceAround"> <!-- Java Style Guide: Horizontal whitespace -->
+            <property name="allowEmptyConstructors" value="true"/>
+            <property name="allowEmptyMethods" value="true"/>
+            <property name="allowEmptyTypes" value="true"/>
+            <property name="allowEmptyLoops" value="true"/>
+            <property name="ignoreEnhancedForColon" value="false"/>
+            <message key="ws.notFollowed" value="WhitespaceAround: ''{0}'' is not followed by whitespace. Empty blocks may only be represented as '{}' when not part of a multi-block statement (4.1.3)"/>
+            <message key="ws.notPreceded" value="WhitespaceAround: ''{0}'' is not preceded with whitespace."/>
+        </module>
+
+        <!-- Stricter checks begin: delete some or all of the following for faster prototyping, but please restore before pushing to production. -->
+
+        <module name="AtclauseOrder"> <!-- Java Style Guide: At-clauses -->
+            <property name="tagOrder" value="@param, @return, @throws, @deprecated"/>
+            <property name="target" value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, METHOD_DEF, CTOR_DEF, VARIABLE_DEF"/>
+        </module>
+        <module name="CyclomaticComplexity"/> <!-- Java Coding Guidelines: Reduce Cyclomatic Complexity -->
+        <module name="DesignForExtension"> <!-- Java Coding Guidelines: Design for extension -->
+            <property name="ignoredAnnotations" value="Test, Before, BeforeEach, After, AfterEach, BeforeClass, BeforeAll, AfterClass, AfterAll"/>
+        </module>
+        <module name="JavadocMethod"> <!-- Java Style Guide: Where Javadoc is used -->
+            <property name="scope" value="public"/>
+            <property name="allowMissingParamTags" value="true"/>
+            <property name="allowMissingThrowsTags" value="true"/>
+            <property name="allowMissingReturnTag" value="true"/>
+            <property name="minLineCount" value="99999999"/>
+            <property name="allowedAnnotations" value="Override, Test"/>
+            <property name="allowThrowsTagsForSubclasses" value="true"/>
+        </module>
+        <module name="JavadocStyle"/> <!-- Java Style Guide: Javadoc -->
+        <module name="JavadocTagContinuationIndentation"> <!-- Java Style Guide: At-clauses -->
+            <property name="offset" value="0"/>
+        </module>
+        <module name="LocalFinalVariableName"/> <!-- Java Style Guide: Local variable names -->
+        <module name="LocalVariableName"> <!-- Java Style Guide: Local variable names -->
+            <property name="tokens" value="VARIABLE_DEF"/>
+            <property name="format" value="^[a-z][a-zA-Z0-9]+$"/>
+            <property name="allowOneCharVarInForLoop" value="true"/>
+            <message key="name.invalidPattern" value="Local variable name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <module name="MethodLength"/> <!-- Java Coding Guide: Methods and functions: focused, crisp, concise -->
+        <module name="MethodTypeParameterName"> <!-- Java Style Guide: Type variable names -->
+            <property name="format" value="(^[A-Z][0-9]?)$|([A-Z][a-zA-Z0-9]*[T]$)"/>
+            <message key="name.invalidPattern" value="Method type name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <module name="NestedForDepth">
+            <property name="max" value="2"/>
+        </module>
+        <module name="NestedTryDepth"/> <!-- Java Coding Guide: Try/catch blocks: never nested -->
+        <module name="NonEmptyAtclauseDescription"/> <!-- Java Style Guide: At-clauses -->
+        <module name="ParameterName"> <!-- Java Style Guide: Parameter names -->
+            <property name="format" value="^[a-z][a-zA-Z0-9]+$"/>
+            <message key="name.invalidPattern" value="Parameter name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <module name="SingleLineJavadoc"/> <!-- Java Style Guide: General form -->
+        <module name="SummaryJavadocCheck"> <!-- Java Coding Guidelines: Javadoc -->
+            <property name="forbiddenSummaryFragments" value="^@return the *|^This method returns |^A [{]@code [a-zA-Z0-9]+[}]( is a )"/>
+        </module>
+
+        <!-- Stricter checks end -->
+    </module>
+</module>

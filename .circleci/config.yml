@@ -163,6 +163,11 @@ jobs:
       - save_cache:
           key: build-maven-{{ .Branch }}-{{ .BuildNum }}
           paths: .
+  build-spark-docker-gradle-plugin:
+    <<: *defaults
+    steps:
+      - *checkout-code
+      - run: ./gradlew --info --stacktrace check -x test
 
   run-style-tests:
     # depends only on build-maven
@@ -251,6 +256,15 @@ jobs:
             - 'assembly/target/scala-*/jars'
             - 'examples/target/scala-*/jars'
             - 'external/*/target/scala-*/*.jar'
+
+  run-spark-docker-gradle-plugin-tests:
+    <<: *test-defaults
+    resource_class: small
+    steps:
+      - *checkout-code
+      - setup_remote_docker
+      - run: |
+          ./gradlew --info --stacktrace test | tee /tmp/run-spark-docker-gradle-plugin-tests.log
 
   run-backcompat-tests:
     # depends on build-sbt
@@ -471,6 +485,8 @@ workflows:
           <<: *all-branches-and-tags
       - build-sbt:
           <<: *all-branches-and-tags
+      - build-spark-docker-gradle-plugin:
+          <<: *all-branches-and-tags
       - run-backcompat-tests:
           requires:
             - build-sbt
@@ -478,6 +494,10 @@ workflows:
       - run-scala-tests:
           requires:
             - build-sbt
+          <<: *all-branches-and-tags
+      - run-spark-docker-gradle-plugin-tests:
+          requires:
+            - build-spark-docker-gradle-plugin
           <<: *all-branches-and-tags
       - run-python-tests:
           requires:

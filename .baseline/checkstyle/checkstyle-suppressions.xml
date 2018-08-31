@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+
+<!DOCTYPE suppressions PUBLIC
+    "-//Puppy Crawl//DTD Suppressions 1.1//EN"
+    "http://www.puppycrawl.com/dtds/suppressions_1_1.dtd">
+
+<!-- IMPORTANT ECLIPSE NOTE: If you change this file, you must restart Eclipse
+ for your changes to take effect in its Checkstyle integration. -->
+<suppressions>
+    <!-- Suppress test classes -->
+    <suppress files="[/\\]src[/\\].*[Tt]est[/\\](java|groovy)[/\\]" checks="Javadoc*" />
+    <suppress files="[/\\]src[/\\].*[Tt]est[/\\](java|groovy)[/\\]" checks="VariableDeclarationUsageDistance" />
+    <suppress files="[/\\]src[/\\].*[Tt]est[/\\](java|groovy)[/\\]" checks="VisibilityModifier" />
+    <suppress files="[/\\]src[/\\].*[Tt]est[/\\](java|groovy)[/\\]" checks="AvoidStaticImport" />
+
+    <!-- JavadocStyle enforces existence of package-info.java package-level Javadoc; we consider this a bug. -->
+    <suppress files="package-info.java" checks="JavadocStyle" />
+
+    <!-- non-code classes -->
+    <suppress files="\.(bdr|eot|gif|gzip|jar|json|otf|png|svg|ttf|woff|zip)$" checks="FileTabCharacter" />
+    <suppress files="\.(bdr|eot|gif|gzip|jar|json|otf|png|svg|ttf|woff|zip)$" checks="NewlineAtEndOfFile" />
+
+    <!-- Generated code should not be subjected to checkstyle. -->
+    <suppress files="[/\\].*[/\\]generated.*[/\\]" checks="." />
+    <suppress files="[/\\].*[/\\]docker-resources.*[/\\]" checks="." />
+</suppressions>
