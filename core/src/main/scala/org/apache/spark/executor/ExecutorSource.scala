@@ -75,29 +75,27 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
     registerFileSystemStat(scheme, "write_ops", _.getWriteOps(), 0)
   }
 
-  // will try to get JVM Process CPU time or return -1 otherwise
-  // will use proprietary extensions as com.sun.management.OperatingSystemMXBean or
-  // com.ibm.lang.management.OperatingSystemMXBean if available
-  def tryToGetJVMProcessPCUTime() : Long = {
-    val mBean: MBeanServer = ManagementFactory.getPlatformMBeanServer
-    try {
-      val name = new ObjectName("java.lang", "type", "OperatingSystem")
-      val attribute = mBean.getAttribute(name, "ProcessCpuTime")
-      if (attribute != null) {
-        attribute.asInstanceOf[Long]
-      }
-      else {
-        -1L
-      }
-    } catch {
-      case _ : Exception => -1L
-    }
-  }
-
-  // Dropwizard metrics gauge measuring the executor's process (JVM) CPU time.
-  // The value is returned in nanoseconds, the method return -1 if this operation is not supported.
+  /** Dropwizard metrics gauge measuring the executor's process CPU time.
+   *  This code will try to get JVM Process CPU time or return -1 otherwise.
+   *  The CPU time value is returned in nanoseconds.
+   *  It will use proprietary extensions as com.sun.management.OperatingSystemMXBean or
+   *  com.ibm.lang.management.OperatingSystemMXBean if available
+   */
+  val mBean: MBeanServer = ManagementFactory.getPlatformMBeanServer
+  val name = new ObjectName("java.lang", "type", "OperatingSystem")
   metricRegistry.register(MetricRegistry.name("executorCPUTime" ), new Gauge[Long] {
-    override def getValue: Long = tryToGetJVMProcessPCUTime()
+    override def getValue: Long = {
+      try {
+        val attribute = mBean.getAttribute(name, "ProcessCpuTime")
+        if (attribute != null) {
+          attribute.asInstanceOf[Long]
+        } else {
+          -1L
+        }
+      } catch {
+        case _ : Exception => -1L
+      }
+    }
   })
 
   // Expose executor task metrics using the Dropwizard metrics system.
