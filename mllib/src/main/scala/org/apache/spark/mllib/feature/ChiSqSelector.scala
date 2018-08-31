@@ -272,12 +272,15 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
         // https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure
         val tempRes = chiSqTestResult
           .sortBy { case (res, _) => res.pValue }
-        val maxIndex = tempRes
+        val selected = tempRes
           .zipWithIndex
           .filter { case ((res, _), index) =>
             res.pValue <= fdr * (index + 1) / chiSqTestResult.length }
-          .map { case (_, index) => index }
-          .max
+        val maxIndex = if (selected.isEmpty) {
+          -1
+        } else {
+          selected.map(_._2).max
+        }
         tempRes.take(maxIndex + 1)
       case ChiSqSelector.FWE =>
         chiSqTestResult
