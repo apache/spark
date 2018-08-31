@@ -18,14 +18,14 @@
 package org.apache.spark.sql.sources.v2.writer.streaming;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.CustomMetrics;
+import org.apache.spark.sql.sources.v2.streaming.CustomMetrics;
 
 /**
  * A mix in interface for {@link StreamingWriteSupport}. Data sources can implement this interface
  * to report custom metrics that gets reported under the
  * {@link org.apache.spark.sql.streaming.SinkProgress}
  */
-@InterfaceStability.Evolving
+@InterfaceStability.Unstable
 public interface SupportsCustomWriterMetrics extends StreamingWriteSupport {
 
   /**

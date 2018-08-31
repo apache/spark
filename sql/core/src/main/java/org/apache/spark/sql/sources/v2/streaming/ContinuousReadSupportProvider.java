@@ -15,27 +15,29 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2;
+package org.apache.spark.sql.sources.v2.streaming;
 
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils;
-import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReadSupport;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
+import org.apache.spark.sql.sources.v2.DataSourceV2;
+import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReadSupport;
 import org.apache.spark.sql.types.StructType;
 
 /**
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
- * provide data reading ability for micro-batch stream processing.
+ * provide data reading ability for continuous stream processing.
  *
- * This interface is used to create {@link MicroBatchReadSupport} instances when end users run
- * {@code SparkSession.readStream.format(...).option(...).load()} with a micro-batch trigger.
+ * This interface is used to create {@link ContinuousReadSupport} instances when end users run
+ * {@code SparkSession.readStream.format(...).option(...).load()} with a continuous trigger.
  */
 @InterfaceStability.Evolving
-public interface MicroBatchReadSupportProvider extends DataSourceV2 {
+public interface ContinuousReadSupportProvider extends DataSourceV2 {
 
   /**
-   * Creates a {@link MicroBatchReadSupport} instance to scan the data from this streaming data
+   * Creates a {@link ContinuousReadSupport} instance to scan the data from this streaming data
    * source with a user specified schema, which is called by Spark at the beginning of each
-   * micro-batch streaming query.
+   * continuous streaming query.
    *
    * By default this method throws {@link UnsupportedOperationException}, implementations should
    * override this method to handle user specified schema.
@@ -47,7 +49,7 @@ public interface MicroBatchReadSupportProvider extends DataSourceV2 {
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.
    */
-  default MicroBatchReadSupport createMicroBatchReadSupport(
+  default ContinuousReadSupport createContinuousReadSupport(
       StructType schema,
       String checkpointLocation,
       DataSourceOptions options) {
@@ -55,8 +57,8 @@ public interface MicroBatchReadSupportProvider extends DataSourceV2 {
   }
 
   /**
-   * Creates a {@link MicroBatchReadSupport} instance to scan the data from this streaming data
-   * source, which is called by Spark at the beginning of each micro-batch streaming query.
+   * Creates a {@link ContinuousReadSupport} instance to scan the data from this streaming data
+   * source, which is called by Spark at the beginning of each continuous streaming query.
    *
    * @param checkpointLocation a path to Hadoop FS scratch space that can be used for failure
    *                           recovery. Readers for the same logical source in the same query
@@ -64,7 +66,7 @@ public interface MicroBatchReadSupportProvider extends DataSourceV2 {
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.
    */
-  MicroBatchReadSupport createMicroBatchReadSupport(
+  ContinuousReadSupport createContinuousReadSupport(
       String checkpointLocation,
       DataSourceOptions options);
 }

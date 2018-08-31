@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming.sources.ConsoleWriteSupport
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, StreamingWriteSupportProvider}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2}
+import org.apache.spark.sql.sources.v2.streaming.StreamingWriteSupportProvider
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType

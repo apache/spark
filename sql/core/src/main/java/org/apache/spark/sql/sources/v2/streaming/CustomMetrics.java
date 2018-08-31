@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2;
+package org.apache.spark.sql.sources.v2.streaming;
 
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
  * An interface for reporting custom metrics from streaming sources and sinks
  */
-@InterfaceStability.Evolving
+@InterfaceStability.Unstable
 public interface CustomMetrics {
   /**
    * Returns a JSON serialized representation of custom metrics

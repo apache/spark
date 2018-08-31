@@ -22,6 +22,7 @@ import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousR
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupportProvider, MicroBatchReadSupportProvider}
 import org.apache.spark.sql.types._
 
 /**

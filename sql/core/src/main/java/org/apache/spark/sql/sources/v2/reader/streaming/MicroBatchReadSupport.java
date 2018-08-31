@@ -20,13 +20,14 @@ package org.apache.spark.sql.sources.v2.reader.streaming;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
 import org.apache.spark.sql.sources.v2.reader.*;
+import org.apache.spark.sql.sources.v2.streaming.MicroBatchReadSupportProvider;
 
 /**
  * An interface that defines how to scan the data from data source for micro-batch streaming
  * processing.
  *
  * The execution engine will get an instance of this interface from a data source provider
- * (e.g. {@link org.apache.spark.sql.sources.v2.MicroBatchReadSupportProvider}) at the start of a
+ * (e.g. {@link MicroBatchReadSupportProvider}) at the start of a
  * streaming query, then call {@link #newScanConfigBuilder(Offset, Offset)} and create an instance
  * of {@link ScanConfig} for each micro-batch. The {@link ScanConfig} will be used to create input
  * partitions and reader factory to scan a micro-batch with a Spark job. At the end {@link #stop()}

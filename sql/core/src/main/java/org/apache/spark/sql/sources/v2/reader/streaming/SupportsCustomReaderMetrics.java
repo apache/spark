@@ -18,14 +18,14 @@
 package org.apache.spark.sql.sources.v2.reader.streaming;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.CustomMetrics;
+import org.apache.spark.sql.sources.v2.streaming.CustomMetrics;
 
 /**
  * A mix in interface for {@link StreamingReadSupport}. Data sources can implement this interface
  * to report custom metrics that gets reported under the
  * {@link org.apache.spark.sql.streaming.SourceProgress}
  */
-@InterfaceStability.Evolving
+@InterfaceStability.Unstable
 public interface SupportsCustomReaderMetrics extends StreamingReadSupport {
 
   /**
