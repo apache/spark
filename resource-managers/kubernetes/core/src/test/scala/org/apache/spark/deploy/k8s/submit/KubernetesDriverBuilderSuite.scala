@@ -24,6 +24,7 @@ import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.mockito.Matchers._
 import org.mockito.Mockito
+import org.mockito.Mockito._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
@@ -336,6 +337,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
         Seq.empty),
       "prefix",
       "appId",
+      None,
       Map.empty,
       Map.empty,
       Map.empty,
