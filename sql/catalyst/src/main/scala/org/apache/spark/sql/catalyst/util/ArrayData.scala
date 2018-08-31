@@ -41,17 +41,16 @@ object ArrayData {
   /**
    * Allocate [[UnsafeArrayData]] or [[GenericArrayData]] based on given parameters.
    *
-   * @param elementSize a size of an element in bytes
+   * @param elementSize a size of an element in bytes. If less than zero, the type of an element is
+   *                    non-primitive type
    * @param numElements the number of elements the array should contain
-   * @param isPrimitiveType whether the type of an element is primitive type
    * @param additionalErrorMessage string to include in the error message
    */
   def allocateArrayData(
       elementSize: Int,
       numElements: Long,
-      isPrimitiveType: Boolean,
       additionalErrorMessage: String): ArrayData = {
-    if (isPrimitiveType && !UnsafeArrayData.shouldUseGenericArrayData(elementSize, numElements)) {
+    if (elementSize >= 0 && !UnsafeArrayData.shouldUseGenericArrayData(elementSize, numElements)) {
       UnsafeArrayData.createFreshArray(numElements.toInt, elementSize)
     } else if (numElements <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toLong) {
       new GenericArrayData(new Array[Any](numElements.toInt))

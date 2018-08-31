@@ -452,12 +452,22 @@ public final class UnsafeArrayData extends ArrayData {
 
   public static UnsafeArrayData fromPrimitiveArray(
        Object arr, int offset, int length, int elementSize) {
-    UnsafeArrayData result = createFreshArray(length, elementSize);
     final long headerInBytes = calculateHeaderPortionInBytes(length);
     final long valueRegionInBytes = (long)elementSize * length;
-    final Object data = result.getBaseObject();
+    final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
+    if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
+      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
+        "it's too big.");
+    }
+
+    final long[] data = new long[(int)totalSizeInLongs];
+
+    Platform.putLong(data, Platform.LONG_ARRAY_OFFSET, length);
     Platform.copyMemory(arr, offset, data,
       Platform.LONG_ARRAY_OFFSET + headerInBytes, valueRegionInBytes);
+
+    UnsafeArrayData result = new UnsafeArrayData();
+    result.pointTo(data, Platform.LONG_ARRAY_OFFSET, (int)totalSizeInLongs * 8);
     return result;
   }
 

@@ -1439,10 +1439,14 @@ object CodeGenerator extends Logging {
       elementType: DataType,
       numElements: String,
       additionalErrorMessage: String): String = {
-    val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
+    val elementSize = if (CodeGenerator.isPrimitiveType(elementType)) {
+      elementType.defaultSize
+    } else {
+      -1
+    }
     s"""
        |ArrayData $arrayName = ArrayData.allocateArrayData(
-       |  ${elementType.defaultSize}, $numElements, $isPrimitiveType, "$additionalErrorMessage");
+       |  $elementSize, $numElements, "$additionalErrorMessage");
      """.stripMargin
   }
 

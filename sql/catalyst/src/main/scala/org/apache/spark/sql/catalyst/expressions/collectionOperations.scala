@@ -397,13 +397,13 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
       val (isPrimitive, elementSize) = if (isKeyPrimitive && isValuePrimitive) {
         (true, structSize + wordSize)
       } else {
-        (false, childDataType.keyType.defaultSize)
+        (false, -1)
       }
 
       val allocation =
         s"""
            |ArrayData $arrayData = ArrayData.allocateArrayData(
-           |  $elementSize, $numElements, $isPrimitive, " $prettyName failed.");
+           |  $elementSize, $numElements, " $prettyName failed.");
          """.stripMargin
 
       val code = if (isPrimitive) {
