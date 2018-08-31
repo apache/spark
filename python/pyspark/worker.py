@@ -160,6 +160,28 @@ def wrap_window_agg_pandas_udf(f, return_type):
     return lambda *a: (wrapped(*a), arrow_return_type)
 
 
+def wrap_bounded_window_agg_pandas_udf(f, return_type):
+    arrow_return_type = to_arrow_type(return_type)
+
+    def wrapped(begin_index, end_index, *series):
+        import numpy as np
+        import pandas as pd
+        result = []
+        for i in range(0, len(begin_index)):
+            begin = begin_index[i]
+            end = end_index[i]
+            range_index = np.arange(begin, end)
+            # Note: Create a slice from a series is actually pretty expensive to
+            #       do for each window. However, there is no way to reduce/eliminate
+            #       the cost of creating sub series here AFAIK.
+            # TODO: s.take might be the best way to create sub series
+            series_slices = [s.take(range_index) for s in series]
+            result.append(f(*series_slices))
+        return pd.Series(result)
+
+    return lambda *a: (wrapped(*a), arrow_return_type)
+
+
 def read_single_udf(pickleSer, infile, eval_type, runner_conf):
     num_arg = read_int(infile)
     arg_offsets = [read_int(infile) for i in range(num_arg)]
@@ -184,7 +206,9 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf):
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return arg_offsets, wrap_grouped_agg_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
-        return arg_offsets, wrap_window_agg_pandas_udf(func, return_type)
+        return arg_offsets, wrap_bounded_window_agg_pandas_udf(func, return_type)
+    elif eval_type == PythonEvalType.SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF:
+        return arg_offsets, wrap_bounded_window_agg_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
         return arg_offsets, wrap_udf(func, return_type)
     else:
@@ -197,7 +221,8 @@ def read_udfs(pickleSer, infile, eval_type):
     if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                      PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
                      PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-                     PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF):
+                     PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+                     PythonEvalType.SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF):
 
         # Load conf used for pandas_udf evaluation
         num_conf = read_int(infile)

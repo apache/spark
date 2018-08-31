@@ -27,7 +27,7 @@ from pyspark.testing.utils import QuietTest
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,
     _pandas_requirement_message or _pyarrow_requirement_message)
-class UnboundedWindowPandasUDFTests(ReusedSQLTestCase):
+class BoundedWindowPandasUDFTests(ReusedSQLTestCase):
     @property
     def data(self):
         from pyspark.sql.functions import array, explode, col, lit
@@ -36,34 +36,6 @@ class UnboundedWindowPandasUDFTests(ReusedSQLTestCase):
             .withColumn("v", explode(col('vs'))) \
             .drop('vs') \
             .withColumn('w', lit(1.0))
-
-    def test_simple(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType, percent_rank, mean, max
-
-        df = self.data
-        w =  Window.partitionBy('id').rowsBetween(-2, Window.currentRow)
-
-        def pandas_agg_mean_udf():
-            from pyspark.sql.functions import pandas_udf, PandasUDFType
-
-            @pandas_udf('int', PandasUDFType.GROUPED_AGG)
-            def avg(v):
-                return v.mean()
-            return avg
-
-        mean_udf = pandas_agg_mean_udf()
-
-        result1 = df.withColumn('mean_v', mean_udf(df['v']).over(w))
-
-        result1.show()
-        #expected1 = df.withColumn('mean_v', mean(df['v']).over(w))
-
-        #result2 = df.select(mean_udf(df['v']).over(w))
-        #expected2 = df.select(mean(df['v']).over(w))
-
-        #self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
-        #self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
-
 
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,
@@ -291,6 +263,34 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
                     AnalysisException,
                     '.*Only unbounded window frame is supported.*'):
                 df.withColumn('mean_v', mean_udf(df['v']).over(ow))
+
+    def test_bounded_simple(self):
+        from pyspark.sql.functions import mean, max, min
+
+        df = self.data
+        w =  Window.partitionBy('id').rowsBetween(-2, 3)
+
+        mean_udf = self.pandas_agg_mean_udf
+        max_udf = self.pandas_agg_max_udf
+        min_udf = self.pandas_agg_min_udf
+
+        result1 = df.withColumn('mean_v', mean_udf(df['v']).over(w)) \
+            .withColumn('max_v', max_udf(df['v']).over(w)) \
+            .withColumn('min_v', min_udf(df['v']).over(w))
+
+        expected1 = df.withColumn('mean_v', mean(df['v']).over(w)) \
+            . withColumn('max_v', max(df['v']).over(w)) \
+            .withColumn('min_v', min(df['v']).over(w))
+
+        result1.show()
+        expected1.show()
+        #expected1 = df.withColumn('mean_v', mean(df['v']).over(w))
+
+        #result2 = df.select(mean_udf(df['v']).over(w))
+        #expected2 = df.select(mean(df['v']).over(w))
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        #self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
 
 
 if __name__ == "__main__":

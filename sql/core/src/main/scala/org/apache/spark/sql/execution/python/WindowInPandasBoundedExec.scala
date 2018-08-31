@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql.execution.python
 
+import java.io.File
+
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -29,8 +33,9 @@ import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPl
 import org.apache.spark.sql.execution.arrow.ArrowUtils
 import org.apache.spark.sql.execution.window._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
-case class WindowInPandasSlidingExec(
+case class WindowInPandasBoundedExec(
     windowExpression: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
@@ -250,19 +255,94 @@ case class WindowInPandasSlidingExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
+    val inputRDD = child.execute()
+
     // Unwrap the expressions and factories from the map.
     val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
+
     val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
     val inMemoryThreshold = sqlContext.conf.windowExecBufferInMemoryThreshold
     val spillThreshold = sqlContext.conf.windowExecBufferSpillThreshold
 
-    // Start processing.
-    child.execute().mapPartitions { stream =>
-      val pythonInputIter = new Iterator[Iterator[InternalRow]] {
+    val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
+    val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
+    val sessionLocalTimeZone = conf.sessionLocalTimeZone
+    val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
-        // Get all relevant projections.
-        val result = createResultProjection(expressions)
-        val grouping = UnsafeProjection.create(partitionSpec, child.output)
+    // Extract window expressions and window functions
+    val windowExpressions = windowExpression.flatMap(_.collect { case e: WindowExpression => e })
+    val udfExpressions = windowExpressions.map(_.windowFunction.asInstanceOf[PythonUDF])
+
+    println("expressions: " + expressions)
+    println("windowExpression: " + windowExpressions)
+    println("udfExpressions: " + udfExpressions)
+
+    val (pyFuncs, inputs) = udfExpressions.map(collectFunctions).unzip
+
+    // Filter child output attributes down to only those that are UDF inputs.
+    // Also eliminate duplicate UDF inputs.
+    val allInputs = new ArrayBuffer[Expression]
+    val dataTypes = new ArrayBuffer[DataType]
+    val argOffsets = inputs.map { input =>
+      input.map { e =>
+        if (allInputs.exists(_.semanticEquals(e))) {
+          allInputs.indexWhere(_.semanticEquals(e))
+        } else {
+          allInputs += e
+          dataTypes += e.dataType
+          allInputs.length - 1
+        }
+      }.toArray
+    }.toArray
+
+    // Add index columns and adjust argOffsets by 2 (begin and end indices)
+    // TODO: Handle multiple window frames
+    allInputs.prependAll(Seq(
+      BoundReference(0, IntegerType, true),
+      BoundReference(1, IntegerType, true)))
+    dataTypes.prependAll(
+      Seq(IntegerType, IntegerType))
+    for (i <- argOffsets.indices) {
+      argOffsets(i) = Array(0, 1) ++ argOffsets(i).map(_ + 2)
+    }
+
+    println("allInputs: " + allInputs)
+    println("argOffsets: " + argOffsets.deep)
+
+
+    // Schema of input rows to the python runner
+    val windowInputSchema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
+      StructField(s"_$i", dt)
+    })
+
+    println("window input schema: " + windowInputSchema)
+
+    // Start processing.
+    child.execute().mapPartitions { iter =>
+      val context = TaskContext.get()
+
+      // Get all relevant projections.
+      val resultProj = createResultProjection(expressions)
+      val inputSchemaWithIndex: Seq[Attribute] = Seq(
+        AttributeReference("begin_index", IntegerType)(),
+        AttributeReference("end_index", IntegerType)()
+      ) ++ child.output
+      val pythonInputProj = UnsafeProjection.create(
+        allInputs,
+        inputSchemaWithIndex)
+      val grouping = UnsafeProjection.create(partitionSpec, child.output)
+
+      // The queue used to buffer input rows so we can drain it to
+      // combine input with output from Python.
+      val queue = HybridRowQueue(context.taskMemoryManager(),
+        new File(Utils.getLocalDir(SparkEnv.get.conf)), child.output.length)
+
+      val stream = iter.map { row =>
+        queue.add(row.asInstanceOf[UnsafeRow])
+        row
+      }
+
+      val pythonInput = new Iterator[Iterator[UnsafeRow]] {
 
         // Manage the stream and the grouping.
         var nextRow: UnsafeRow = null
@@ -283,12 +363,11 @@ case class WindowInPandasSlidingExec(
         // Manage the current partition.
         val buffer: ExternalAppendOnlyUnsafeRowArray =
           new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
-
         var bufferIterator: Iterator[UnsafeRow] = _
 
-        val windowFunctionResult = new SpecificInternalRow(Seq(IntegerType, IntegerType))
+        val indexRow = new SpecificInternalRow(Seq(IntegerType, IntegerType))
 
-        val frames = factories.map(_(windowFunctionResult))
+        val frames = factories.map(_(indexRow))
         val numFrames = frames.length
         private[this] def fetchNextPartition() {
           // Collect all the rows in the current partition.
@@ -321,7 +400,7 @@ case class WindowInPandasSlidingExec(
         override final def hasNext: Boolean =
           (bufferIterator != null && bufferIterator.hasNext) || nextRowAvailable
 
-        override final def next(): Iterator[InternalRow] = {
+        override final def next(): Iterator[UnsafeRow] = {
           // Load the next partition if we need to.
           if ((bufferIterator == null || !bufferIterator.hasNext) && nextRowAvailable) {
             fetchNextPartition()
@@ -334,20 +413,38 @@ case class WindowInPandasSlidingExec(
               var i = 0
               while (i < numFrames) {
                 frames(i).write(rowIndex, current)
-                windowFunctionResult.setInt(2 * i + 0, frames(i).currentLowIndex())
-                windowFunctionResult.setInt(2 * i + 1, frames(i).currentHighIndex())
+                indexRow.setInt(2 * i + 0, frames(i).currentLowIndex())
+                indexRow.setInt(2 * i + 1, frames(i).currentHighIndex())
                 i += 1
               }
 
-              join(current, windowFunctionResult)
+              val r = pythonInputProj(join(indexRow, current))
+              // println(r.numFields())
+              // println(r.getInt(0))
+              // println(r.getInt(1))
+              // println(r.getDouble(2))
+              r
           }
         }
       }
 
+      val windowFunctionResult = new ArrowPythonRunner(
+        pyFuncs,
+        bufferSize,
+        reuseWorker,
+        PythonEvalType.SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF,
+        argOffsets,
+        windowInputSchema,
+        sessionLocalTimeZone,
+        pythonRunnerConf).compute(pythonInput, context.partitionId(), context)
 
+      val joined = new JoinedRow
 
-
-      pythonInputIter.flatten
+      windowFunctionResult.flatMap(_.rowIterator.asScala).map { windowOutput =>
+        val leftRow = queue.remove()
+        val joinedRow = joined(leftRow, windowOutput)
+        resultProj(joinedRow)
+      }
     }
   }
 
