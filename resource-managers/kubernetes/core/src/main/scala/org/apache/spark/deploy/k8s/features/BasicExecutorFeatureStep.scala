@@ -58,7 +58,6 @@ private[spark] class BasicExecutorFeatureStep(
       (kubernetesConf.get(MEMORY_OVERHEAD_FACTOR) * executorMemoryMiB).toInt,
       MEMORY_OVERHEAD_MIN_MIB))
   private val executorMemoryWithOverhead = executorMemoryMiB + memoryOverheadMiB
-  // TODO: Have memory limit checks on executorMemory
   private val executorMemoryTotal = kubernetesConf.sparkConf
     .getOption(APP_RESOURCE_TYPE.key).map{ res =>
       val additionalPySparkMemory = res match {

@@ -51,7 +51,6 @@ private[spark] class BasicDriverFeatureStep(
     .get(DRIVER_MEMORY_OVERHEAD)
     .getOrElse(math.max((conf.get(MEMORY_OVERHEAD_FACTOR) * driverMemoryMiB).toInt,
       MEMORY_OVERHEAD_MIN_MIB))
-  // TODO: Have memory limit checks on driverMemory
   private val driverMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
 
   override def configurePod(pod: SparkPod): SparkPod = {
