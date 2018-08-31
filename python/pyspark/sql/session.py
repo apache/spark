@@ -264,7 +264,7 @@ class SparkSession(object):
         True
         """
         return self._jsparkSession.getActiveSession()
-        
+
     @property
     @since(2.0)
     def sparkContext(self):
