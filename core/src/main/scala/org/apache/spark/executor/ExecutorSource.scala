@@ -22,11 +22,14 @@ import java.util.concurrent.ThreadPoolExecutor
 import javax.management.{MBeanServer, ObjectName}
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.metrics.source.Source
+
+
 
 private[spark]
 class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends Source {
@@ -75,16 +78,15 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
     registerFileSystemStat(scheme, "write_ops", _.getWriteOps(), 0)
   }
 
-  /** Dropwizard metrics gauge measuring the executor's process CPU time.
-   *  This code will try to get JVM Process CPU time or return -1 otherwise.
-   *  The CPU time value is returned in nanoseconds.
-   *  It will use proprietary extensions as com.sun.management.OperatingSystemMXBean or
-   *  com.ibm.lang.management.OperatingSystemMXBean if available
-   */
-  val mBean: MBeanServer = ManagementFactory.getPlatformMBeanServer
-  val name = new ObjectName("java.lang", "type", "OperatingSystem")
-  metricRegistry.register(MetricRegistry.name("executorCPUTime" ), new Gauge[Long] {
+  // Dropwizard metrics gauge measuring the executor's process CPU time.
+  // This Gauge will try to get and return the JVM Process CPU time or return -1 otherwise.
+  // The CPU time value is returned in nanoseconds.
+  // It will use proprietary extensions such as com.sun.management.OperatingSystemMXBean or
+  // com.ibm.lang.management.OperatingSystemMXBean, if available.
+  metricRegistry.register(MetricRegistry.name("jvmCpuTime"), new Gauge[Long] {
     override def getValue: Long = {
+      val mBean: MBeanServer = ManagementFactory.getPlatformMBeanServer
+      val name = new ObjectName("java.lang", "type", "OperatingSystem")
       try {
         val attribute = mBean.getAttribute(name, "ProcessCpuTime")
         if (attribute != null) {
@@ -93,7 +95,7 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
           -1L
         }
       } catch {
-        case _ : Exception => -1L
+        case NonFatal(_) => -1L
       }
     }
   })
