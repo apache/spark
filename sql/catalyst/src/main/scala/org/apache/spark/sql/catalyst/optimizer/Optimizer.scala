@@ -515,8 +515,7 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
  */
 object ColumnPruning extends Rule[LogicalPlan] {
   private def sameOutput(output1: Seq[Attribute], output2: Seq[Attribute]): Boolean =
-    output1.size == output2.size &&
-      output1.zip(output2).forall(pair => pair._1.semanticEquals(pair._2))
+    output1.size == output2.size && output1.zip(output2).forall(pair => pair._1 == pair._2)
 
   def apply(plan: LogicalPlan): LogicalPlan = removeProjectBeforeFilter(plan transform {
     // Prunes the unused columns from project list of Project/Aggregate/Expand
@@ -649,9 +648,12 @@ object CollapseProject extends Rule[LogicalPlan] {
       }
   }
 
-  private def collectAliases(projectList: Seq[NamedExpression]): AttributeMap[Alias] = {
-    AttributeMap(projectList.collect {
-      case a: Alias => a.toAttribute -> a
+  private def collectAliases(
+      upper: Seq[NamedExpression], lower: Seq[NamedExpression]): AttributeMap[Alias] = {
+    AttributeMap(lower.zipWithIndex.collect {
+      case (a: Alias, index: Int) =>
+        a.toAttribute ->
+          a.copy(name = upper(index).name)(a.exprId, a.qualifier, a.explicitMetadata)
     })
   }
 
@@ -659,7 +661,7 @@ object CollapseProject extends Rule[LogicalPlan] {
       upper: Seq[NamedExpression], lower: Seq[NamedExpression]): Boolean = {
     // Create a map of Aliases to their values from the lower projection.
     // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
-    val aliases = collectAliases(lower)
+    val aliases = collectAliases(upper, lower)
 
     // Collapse upper and lower Projects if and only if their overlapped expressions are all
     // deterministic.
@@ -673,7 +675,7 @@ object CollapseProject extends Rule[LogicalPlan] {
       lower: Seq[NamedExpression]): Seq[NamedExpression] = {
     // Create a map of Aliases to their values from the lower projection.
     // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
-    val aliases = collectAliases(lower)
+    val aliases = collectAliases(upper, lower)
 
     // Substitute any attributes that are produced by the lower projection, so that we safely
     // eliminate it.
