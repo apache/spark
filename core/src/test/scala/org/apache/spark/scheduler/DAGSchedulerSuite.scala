@@ -30,6 +30,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
+import org.apache.spark.internal.config
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
@@ -406,7 +407,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // reset the test context with the right shuffle service config
     afterEach()
     val conf = new SparkConf()
-    conf.set("spark.shuffle.service.enabled", "true")
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
     conf.set("spark.files.fetchFailure.unRegisterOutputOnHost", "true")
     init(conf)
     runEvent(ExecutorAdded("exec-hostA1", "hostA"))
@@ -728,7 +729,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       // reset the test context with the right shuffle service config
       afterEach()
       val conf = new SparkConf()
-      conf.set("spark.shuffle.service.enabled", shuffleServiceOn.toString)
+      conf.set(config.SHUFFLE_SERVICE_ENABLED.key, shuffleServiceOn.toString)
       init(conf)
       assert(sc.env.blockManager.externalShuffleServiceEnabled == shuffleServiceOn)
 
