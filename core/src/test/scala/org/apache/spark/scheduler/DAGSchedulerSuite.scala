@@ -2708,7 +2708,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(failedStages.collect {
       case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId1 => stage
     }.head.findMissingPartitions() == Seq(0))
-    // The second shuffle map stage is entirely rollbacked, because the root RDD is indeterminate.
+    // The second shuffle map stage is entirely rollbacked, because its succeeding map stage is
+    // indeterminate.
     assert(failedStages.collect {
       case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
     }.head.findMissingPartitions() == Seq(0, 1))
@@ -2717,9 +2718,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
     // complete the first task of first shuffle map stage
     runEvent(makeCompletionEvent(
-      taskSets(0).tasks(0), Success, makeMapStatus("hostA", 2)))
-    // Complete the map stage.
-    completeShuffleMapStageSuccessfully(0, 1, numShufflePartitions = 2)
+      taskSets.last.tasks(0), Success, makeMapStatus("hostA", 2)))
+    // Complete the second map stage.
     completeShuffleMapStageSuccessfully(1, 2, numShufflePartitions = 2)
     // Complete the result stage.
     completeNextResultStageWithSuccess(2, 1)
