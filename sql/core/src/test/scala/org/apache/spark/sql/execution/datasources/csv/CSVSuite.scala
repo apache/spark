@@ -1357,11 +1357,54 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
       checkAnswer(computed, expected)
     }
-    // Keeps the old behavior where empty string us coerced to nullValue is not passed.
+
+    // Checks for new behavior where an empty string is not coerced to null when `nullValue` is
+    // set to anything but an empty string literal and quote character is changed.
+    withTempPath { path =>
+      df.write
+        .option("nullValue", "-")
+        .option("quote", "'")
+        .csv(path.getAbsolutePath)
+      val computed = spark.read
+        .option("nullValue", "-")
+        .option("quote", "'")
+        .schema(df.schema)
+        .csv(path.getAbsolutePath)
+      val expected = Seq(
+        (1, "John Doe"),
+        (2, ""),
+        (3, litNull),
+        (4, litNull)
+      ).toDF("id", "name")
+
+      checkAnswer(computed, expected)
+    }
+
+    // Keeps the old behavior where empty string is coerced to nullValue if not passed.
     withTempPath { path =>
       df.write
         .csv(path.getAbsolutePath)
       val computed = spark.read
+        .schema(df.schema)
+        .csv(path.getAbsolutePath)
+      val expected = Seq(
+        (1, "John Doe"),
+        (2, litNull),
+        (3, "-"),
+        (4, litNull)
+      ).toDF("id", "name")
+
+      checkAnswer(computed, expected)
+    }
+
+    // Keeps the old behavior where empty string is coerced to nullValue if not passed
+    // with quotes disabled.
+    withTempPath { path =>
+      df.write
+        .option("quote", "")
+        .csv(path.getAbsolutePath)
+      val computed = spark.read
+        .option("quote", "")
         .schema(df.schema)
         .csv(path.getAbsolutePath)
       val expected = Seq(
