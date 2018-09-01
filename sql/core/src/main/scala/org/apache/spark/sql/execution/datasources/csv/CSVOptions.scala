@@ -173,7 +173,7 @@ class CSVOptions(
     writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
     writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
     writerSettings.setNullValue(nullValue)
-    if (quote == '\u0000') {
+    if (nullValue == "" || quote == '\u0000') {
       writerSettings.setEmptyValue(nullValue)
     } else {
       writerSettings.setEmptyValue(s"${quote}${quote}")
@@ -198,11 +198,7 @@ class CSVOptions(
     settings.setInputBufferSize(inputBufferSize)
     settings.setMaxColumns(maxColumns)
     settings.setNullValue(nullValue)
-    if (quote == '\u0000') {
-      settings.setEmptyValue(null)
-    } else {
-      settings.setEmptyValue("")
-    }
+    settings.setEmptyValue("")
     settings.setMaxCharsPerColumn(maxCharsPerColumn)
     settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
     settings
