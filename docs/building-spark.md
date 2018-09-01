@@ -263,6 +263,10 @@ To build Spark using other supported Scala version, please change the major Scal
 
     ./dev/change-scala-version.sh 2.12
 
+For Maven, please enable the profile (e.g. 2.12):
+
+    ./build/mvn -Pscala-2.12 compile
+
 For SBT, specify a complete scala version using (e.g. 2.12.6):
 
     ./build/sbt -Dscala.version=2.12.6
