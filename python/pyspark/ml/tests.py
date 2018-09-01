@@ -2158,8 +2158,8 @@ class FPGrowthTests(SparkSessionTestCase):
         fpm = fp.fit(self.data)
 
         expected_association_rules = self.spark.createDataFrame(
-            [([3], [1], 1.0), ([2], [1], 1.0)],
-            ["antecedent", "consequent", "confidence"]
+            [([3], [1], 1.0, 1.0), ([2], [1], 1.0, 1.0)],
+            ["antecedent", "consequent", "confidence", "lift"]
         )
         actual_association_rules = fpm.associationRules
 
