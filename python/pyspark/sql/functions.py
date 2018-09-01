@@ -2313,6 +2313,10 @@ def to_json(col, options={}):
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_json(df.value).alias("json")).collect()
     [Row(json=u'[{"name":"Alice"},{"name":"Bob"}]')]
+    >>> data = [(1, ["Alice", "Bob"])]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(to_json(df.value).alias("json")).collect()
+    [Row(json=u'["Alice","Bob"]')]
     """
 
     sc = SparkContext._active_spark_context
