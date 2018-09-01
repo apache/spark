@@ -82,9 +82,9 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
   // It will use proprietary extensions such as com.sun.management.OperatingSystemMXBean or
   // com.ibm.lang.management.OperatingSystemMXBean, if available.
   metricRegistry.register(MetricRegistry.name("jvmCpuTime"), new Gauge[Long] {
+    val mBean: MBeanServer = ManagementFactory.getPlatformMBeanServer
+    val name = new ObjectName("java.lang", "type", "OperatingSystem")
     override def getValue: Long = {
-      val mBean: MBeanServer = ManagementFactory.getPlatformMBeanServer
-      val name = new ObjectName("java.lang", "type", "OperatingSystem")
       try {
         val attribute = mBean.getAttribute(name, "ProcessCpuTime")
         if (attribute != null) {
