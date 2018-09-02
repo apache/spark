@@ -26,14 +26,16 @@ import static org.junit.Assert.*;
 
 // Tests loading plugins into executors
 public class ExecutorPluginSuite {
+  private static final String EXECUTOR_PLUGIN_CONF_NAME = "spark.executor.plugins";
+  private static final String testPluginName = TestExecutorPlugin.class.getName();
+
   // Static value modified by testing plugin to ensure plugin loaded correctly.
   public static int numSuccessfulPlugins = 0;
+
   // Static value modified by testing plugin to verify plugins shut down properly.
   public static int numSuccessfulTerminations = 0;
-  private JavaSparkContext sc;
 
-  private String EXECUTOR_PLUGIN_CONF_NAME = "spark.executor.plugins";
-  private String testPluginName = TestExecutorPlugin.class.getName();
+  private JavaSparkContext sc;
 
   @Before
   public void setUp() {

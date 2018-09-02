@@ -609,7 +609,7 @@ package object config {
     ConfigBuilder("spark.executor.plugins")
       .doc("Comma-separated list of class names for \"plugins\" implementing " +
         "org.apache.spark.ExecutorPlugin.  Plugins have the same privileges as any task " +
-        "in a spark executor.  They can also interfere with task execution and fail in " +
+        "in a Spark executor.  They can also interfere with task execution and fail in " +
         "unexpected ways.  So be sure to only use this for trusted plugins.")
       .stringConf
       .toSequence
