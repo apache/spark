@@ -320,4 +320,15 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(df, expected)
   }
+
+  test("pivoting column list") {
+    val exception = intercept[RuntimeException] {
+      trainingSales
+        .groupBy($"sales.year")
+        .pivot(struct(lower($"sales.course"), $"training"))
+        .agg(sum($"sales.earnings"))
+        .collect()
+    }
+    assert(exception.getMessage.contains("Unsupported literal type"))
+  }
 }
