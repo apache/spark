@@ -1623,12 +1623,13 @@ case class ArraysOverlap(left: Expression, right: Expression)
     val set = ctx.freshName("set")
     val addToSetFromSmallerCode = nullSafeElementCodegen(
       smaller, i, s"$set.add($getFromSmaller);", s"${ev.isNull} = true;")
+    val setIsNullCode = if (nullable) s"${ev.isNull} = false;" else ""
     val elementIsInSetCode = nullSafeElementCodegen(
       bigger,
       i,
       s"""
          |if ($set.contains($getFromBigger)) {
-         |  ${ev.isNull} = false;
+         |  $setIsNullCode
          |  ${ev.value} = true;
          |  break;
          |}

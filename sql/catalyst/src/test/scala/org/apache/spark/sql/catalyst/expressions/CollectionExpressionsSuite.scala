@@ -439,6 +439,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a4 = Literal.create(Seq[String](null, ""), ArrayType(StringType))
     val a5 = Literal.create(Seq[String]("", "abc"), ArrayType(StringType))
     val a6 = Literal.create(Seq[String]("def", "ghi"), ArrayType(StringType))
+    val a7 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, false))
 
     val emptyIntArray = Literal.create(Seq.empty[Int], ArrayType(IntegerType))
 
@@ -453,6 +454,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArraysOverlap(a4, a5), true)
     checkEvaluation(ArraysOverlap(a4, a6), null)
     checkEvaluation(ArraysOverlap(a5, a6), false)
+
+    checkEvaluation(ArraysOverlap(a7, a7), true)
 
     // null handling
     checkEvaluation(ArraysOverlap(emptyIntArray, a2), false)
