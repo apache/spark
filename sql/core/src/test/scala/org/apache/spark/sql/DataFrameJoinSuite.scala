@@ -295,4 +295,17 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       df.join(df, df("id") <=> df("id")).queryExecution.optimizedPlan
     }
   }
+
+  test("SPARK-25150: Attribute deduplication handles attributes in join condition properly") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      val a = spark.range(1, 5)
+      val b = spark.range(10)
+      val c = b.filter($"id" % 2 === 0)
+
+      val r = a.join(b, a("id") === b("id"), "inner").join(c, a("id") === c("id"), "inner")
+
+      checkAnswer(r, Row(2, 2, 2) :: Row(4, 4, 4) :: Nil)
+    }
+  }
+
 }

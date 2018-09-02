@@ -758,7 +758,9 @@ class Analyzer(
      * Generate a new logical plan for the right child with different expression IDs
      * for all conflicting attributes.
      */
-    private def dedupRight (left: LogicalPlan, right: LogicalPlan): LogicalPlan = {
+    private def dedupRight(
+        left: LogicalPlan,
+        right: LogicalPlan): (LogicalPlan, AttributeMap[Attribute]) = {
       val conflictingAttributes = left.outputSet.intersect(right.outputSet)
       logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} " +
         s"between $left and $right")
@@ -805,10 +807,10 @@ class Analyzer(
            * that this rule cannot handle. When that is the case, there must be another rule
            * that resolves these conflicts. Otherwise, the analysis will fail.
            */
-          right
+          (right, AttributeMap.empty[Attribute])
         case Some((oldRelation, newRelation)) =>
           val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
-          right transformUp {
+          (right transformUp {
             case r if r == oldRelation => newRelation
           } transformUp {
             case other => other transformExpressions {
@@ -817,7 +819,7 @@ class Analyzer(
               case s: SubqueryExpression =>
                 s.withNewPlan(dedupOuterReferencesInSubquery(s.plan, attributeRewrites))
             }
-          }
+          }, attributeRewrites)
       }
     }
 
@@ -895,6 +897,13 @@ class Analyzer(
       case _ => e.mapChildren(resolve(_, q))
     }
 
+    private def rewriteJoinCondition(
+        e: Expression,
+        attributeRewrites: AttributeMap[Attribute]): Expression = e match {
+      case a: Attribute => attributeRewrites.getOrElse(a, a)
+      case _ => e.mapChildren(rewriteJoinCondition(_, attributeRewrites))
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p: LogicalPlan if !p.childrenResolved => p
 
@@ -921,12 +930,16 @@ class Analyzer(
         failAnalysis("Invalid usage of '*' in explode/json_tuple/UDTF")
 
       // To resolve duplicate expression IDs for Join and Intersect
-      case j @ Join(left, right, _, _) if !j.duplicateResolved =>
-        j.copy(right = dedupRight(left, right))
+      case j @ Join(left, right, _, condition) if !j.duplicateResolved =>
+        val (dedupedRight, attributeRewrites) = dedupRight(left, right)
+        val changedCondition = condition.map(rewriteJoinCondition(_, attributeRewrites))
+        j.copy(right = dedupedRight, condition = changedCondition)
       case i @ Intersect(left, right, _) if !i.duplicateResolved =>
-        i.copy(right = dedupRight(left, right))
+        val (dedupedRight, _) = dedupRight(left, right)
+        i.copy(right = dedupedRight)
       case e @ Except(left, right, _) if !e.duplicateResolved =>
-        e.copy(right = dedupRight(left, right))
+        val (dedupedRight, _) = dedupRight(left, right)
+        e.copy(right = dedupedRight)
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on its descendants
       case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
