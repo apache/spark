@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.functions.{lit, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NumericType, StructType}
 
@@ -72,7 +73,8 @@ class RelationalGroupedDataset protected[sql](
       case RelationalGroupedDataset.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
         Dataset.ofRows(
-          df.sparkSession, Pivot(Some(aliasedGrps), pivotCol, values, aggExprs, df.logicalPlan))
+          df.sparkSession,
+          Pivot(Some(aliasedGrps), pivotCol, values.map(_.expr), aggExprs, df.logicalPlan))
     }
   }
 
@@ -335,7 +337,7 @@ class RelationalGroupedDataset protected[sql](
    * @since 1.6.0
    */
   def pivot(pivotColumn: String, values: Seq[Any]): RelationalGroupedDataset = {
-    pivot(Column(pivotColumn), values)
+    pivot(Column(pivotColumn), values.map(lit))
   }
 
   /**
@@ -359,7 +361,7 @@ class RelationalGroupedDataset protected[sql](
    * @since 1.6.0
    */
   def pivot(pivotColumn: String, values: java.util.List[Any]): RelationalGroupedDataset = {
-    pivot(Column(pivotColumn), values)
+    pivot(Column(pivotColumn), values.asScala.map(lit))
   }
 
   /**
@@ -369,6 +371,12 @@ class RelationalGroupedDataset protected[sql](
    * {{{
    *   // Or without specifying column values (less efficient)
    *   df.groupBy($"year").pivot($"course").sum($"earnings");
+   * }}}
+   *
+   * For pivoting by multiple columns, use the `struct` function to combine the columns:
+   *
+   * {{{
+   *   df.groupBy($"year").pivot(struct($"course", $"training")).agg(sum($"earnings"))
    * }}}
    *
    * @param pivotColumn he column to pivot.
@@ -384,6 +392,10 @@ class RelationalGroupedDataset protected[sql](
       .sort(pivotColumn)  // ensure that the output columns are in a consistent logical order
       .collect()
       .map(_.get(0))
+      .collect {
+        case row: GenericRow => struct(row.values.map(lit): _*)
+        case value => lit(value)
+      }
       .toSeq
 
     if (values.length > maxValues) {
@@ -403,20 +415,29 @@ class RelationalGroupedDataset protected[sql](
    *
    * {{{
    *   // Compute the sum of earnings for each year by course with each course as a separate column
-   *   df.groupBy($"year").pivot($"course", Seq("dotNET", "Java")).sum($"earnings")
+   *   df.groupBy($"year").pivot($"course", Seq(lit("dotNET"), lit("Java"))).sum($"earnings")
+   * }}}
+   *
+   * For pivoting by multiple columns, use the `struct` function to combine the columns and values:
+   *
+   * {{{
+   *   df
+   *     .groupBy($"year")
+   *     .pivot(struct($"course", $"training"), Seq(struct(lit("java"), lit("Experts"))))
+   *     .agg(sum($"earnings"))
    * }}}
    *
    * @param pivotColumn the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.
    * @since 2.4.0
    */
-  def pivot(pivotColumn: Column, values: Seq[Any]): RelationalGroupedDataset = {
+  def pivot(pivotColumn: Column, values: Seq[Column]): RelationalGroupedDataset = {
     groupType match {
       case RelationalGroupedDataset.GroupByType =>
         new RelationalGroupedDataset(
           df,
           groupingExprs,
-          RelationalGroupedDataset.PivotType(pivotColumn.expr, values.map(Literal.apply)))
+          RelationalGroupedDataset.PivotType(pivotColumn.expr, values))
       case _: RelationalGroupedDataset.PivotType =>
         throw new UnsupportedOperationException("repeated pivots are not supported")
       case _ =>
@@ -433,7 +454,7 @@ class RelationalGroupedDataset protected[sql](
    * @param values List of values that will be translated to columns in the output DataFrame.
    * @since 2.4.0
    */
-  def pivot(pivotColumn: Column, values: java.util.List[Any]): RelationalGroupedDataset = {
+  def pivot(pivotColumn: Column, values: java.util.List[Column]): RelationalGroupedDataset = {
     pivot(pivotColumn, values.asScala)
   }
 
@@ -561,5 +582,5 @@ private[sql] object RelationalGroupedDataset {
   /**
    * To indicate it's the PIVOT
    */
-  private[sql] case class PivotType(pivotCol: Expression, values: Seq[Literal]) extends GroupType
+  private[sql] case class PivotType(pivotCol: Expression, values: Seq[Column]) extends GroupType
 }
