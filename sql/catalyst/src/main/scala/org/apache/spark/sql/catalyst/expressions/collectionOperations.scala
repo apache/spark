@@ -1469,7 +1469,6 @@ case class ArrayContains(left: Expression, right: Expression)
            |if ($arr.isNullAt($i)) {
            |    ${ev.isNull} = true;
            |} else
-           |
          """.stripMargin
       } else {
         ""
