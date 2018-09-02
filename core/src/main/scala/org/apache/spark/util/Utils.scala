@@ -2063,7 +2063,7 @@ private[spark] object Utils extends Logging {
    * @param str
    * @return the trimmed value of str
    */
-  def trimExceptCRLF(str: String): String = {
+  private[util] def trimExceptCRLF(str: String): String = {
     val firstPos = str.indexWhere(nonSpaceOrNaturalLineDelimiter)
     val lastPos = str.lastIndexWhere(nonSpaceOrNaturalLineDelimiter)
     if (firstPos >= 0 && lastPos >= 0) {
