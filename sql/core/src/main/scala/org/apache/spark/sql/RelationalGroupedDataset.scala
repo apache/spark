@@ -410,8 +410,7 @@ class RelationalGroupedDataset protected[sql](
    * For pivoting by multiple columns, use the `struct` function to combine the columns and values:
    *
    * {{{
-   *   df
-   *     .groupBy($"year")
+   *   df.groupBy($"year")
    *     .pivot(struct($"course", $"training"), Seq(struct(lit("java"), lit("Experts"))))
    *     .agg(sum($"earnings"))
    * }}}
