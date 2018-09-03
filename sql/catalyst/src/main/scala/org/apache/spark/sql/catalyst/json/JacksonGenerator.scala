@@ -58,14 +58,7 @@ private[sql] class JacksonGenerator(
   // `ValueWriter` for array data storing rows of the schema.
   private lazy val arrElementWriter: ValueWriter = dataType match {
     case at: ArrayType => makeWriter(at.elementType)
-    case st: StructType =>
-      (arr: SpecializedGetters, i: Int) => {
-        writeObject(writeFields(arr.getStruct(i, st.length), st, rootFieldWriters))
-      }
-    case mt: MapType =>
-      (arr: SpecializedGetters, i: Int) => {
-        writeObject(writeMapData(arr.getMap(i), mt, mapElementWriter))
-      }
+    case _: StructType | _: MapType => makeWriter(dataType)
     case _ => throw new UnsupportedOperationException(
       s"Initial type ${dataType.catalogString} must be " +
       s"an ${ArrayType.simpleString}, a ${StructType.simpleString} or a ${MapType.simpleString}")
