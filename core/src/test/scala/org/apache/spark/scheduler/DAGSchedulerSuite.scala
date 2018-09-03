@@ -2683,7 +2683,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       FetchFailed(makeBlockManagerId("hostC"), shuffleId2, 0, 0, "ignored"),
       null))
 
-    var failedStages = scheduler.failedStages.toSeq
+    val failedStages = scheduler.failedStages.toSeq
     assert(failedStages.length == 2)
     // Shuffle blocks of "hostC" is lost, so first task of the `shuffleMapRdd2` needs to retry.
     assert(failedStages.collect {
@@ -2702,30 +2702,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0, 0, "ignored"),
       null))
 
-    failedStages = scheduler.failedStages.toSeq
-    assert(failedStages.length == 2)
-    // Shuffle blocks of "hostA" is lost, so first task of the `shuffleMapRdd1` needs to retry.
-    assert(failedStages.collect {
-      case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId1 => stage
-    }.head.findMissingPartitions() == Seq(0))
-    // The second shuffle map stage is entirely rollbacked, because its succeeding map stage is
-    // indeterminate.
-    assert(failedStages.collect {
-      case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
-    }.head.findMissingPartitions() == Seq(0, 1))
-
-    scheduler.resubmitFailedStages()
-
-    // complete the first task of first shuffle map stage
-    runEvent(makeCompletionEvent(
-      taskSets.last.tasks(0), Success, makeMapStatus("hostA", 2)))
-    // Complete the second map stage.
-    completeShuffleMapStageSuccessfully(1, 2, numShufflePartitions = 2)
-    // Complete the result stage.
-    completeNextResultStageWithSuccess(2, 1)
-
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
-    assertDataStructuresEmpty()
+    // The job should fail because Spark can't rollback the shuffle map stage.
+    assert(failure != null && failure.getMessage.contains("Spark cannot rollback"))
   }
 
   private def assertResultStageFailToRollback(mapRdd: MyRDD): Unit = {

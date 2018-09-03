@@ -1513,37 +1513,34 @@ private[spark] class DAGScheduler(
                   }
                 }
 
+                def generateErrorMessage(stage: Stage): String = {
+                  "A shuffle map stage with indeterminate output was failed and retried. " +
+                    s"However, Spark cannot rollback the $stage to re-process the input data, " +
+                    "and has to fail this job. Please eliminate the determinism by checkpointing " +
+                    "the RDD before repartition and try again."
+                }
+
                 activeJobs.foreach(job => collectStagesToRollback(job.finalStage :: Nil))
 
                 stagesToRollback.foreach {
                   case mapStage: ShuffleMapStage =>
                     val numMissingPartitions = mapStage.findMissingPartitions().length
                     if (numMissingPartitions < mapStage.numTasks) {
-                      val reason = "preceding shuffle map stage with indeterminate output gets " +
-                        "retried."
-                      try {
-                        taskScheduler.killAllTaskAttempts(
-                          mapStage.id, interruptThread = false, reason)
-                      } catch {
-                        case e: UnsupportedOperationException =>
-                          logWarning(s"Could not kill all tasks for $mapStage", e)
-                      }
-                      markStageAsFinished(mapStage, Some(reason), willRetry = true)
-                      mapOutputTracker.unregisterAllMapOutput(mapStage.shuffleDep.shuffleId)
-                      failedStages += mapStage
+                      // TODO: support to rollback shuffle files.
+                      // Currently the shuffle writing is "first write wins", so we can't re-run a
+                      // shuffle map stage and overwrite existing shuffle files. We have to finish
+                      // SPARK-8029 first.
+                      abortStage(mapStage, generateErrorMessage(mapStage), None)
                     }
 
-                  case resultStage =>
+                  case resultStage: ResultStage if resultStage.activeJob.isDefined =>
                     val numMissingPartitions = resultStage.findMissingPartitions().length
                     if (numMissingPartitions < resultStage.numTasks) {
                       // TODO: support to rollback result tasks.
-                      val errorMessage = "A shuffle map stage with indeterminate output was " +
-                        s"failed and retried. However, Spark cannot rollback the $resultStage " +
-                        "to re-process the input data, and has to fail this job. Please " +
-                        "eliminate the determinism by checkpointing the RDD before " +
-                        "repartition/zip and try again."
-                      abortStage(failedStage, errorMessage, None)
+                      abortStage(resultStage, generateErrorMessage(resultStage), None)
                     }
+
+                  case _ =>
                 }
               }
 
