@@ -1021,9 +1021,6 @@ trait ArraySortLike extends ExpectsInputTypes {
   }
 
   def sortCodegen(ctx: CodegenContext, ev: ExprCode, base: String, order: String): String = {
-    def canPerformFastSort(): Boolean = {
-      CodeGenerator.isPrimitiveType(elementType) && elementType != BooleanType && !containsNull
-    }
     val arrayData = classOf[ArrayData].getName
     val genericArrayData = classOf[GenericArrayData].getName
     val unsafeArrayData = classOf[UnsafeArrayData].getName
@@ -1049,7 +1046,9 @@ trait ArraySortLike extends ExpectsInputTypes {
       } else {
         s"int $c = ${ctx.genComp(elementType, s"(($jt) $o1)", s"(($jt) $o2)")};"
       }
-      val nonNullPrimitiveAscendingSort = if (canPerformFastSort()) {
+      val canPerformFastSort =
+        CodeGenerator.isPrimitiveType(elementType) && elementType != BooleanType && !containsNull
+      val nonNullPrimitiveAscendingSort = if (canPerformFastSort) {
           val javaType = CodeGenerator.javaType(elementType)
           val primitiveTypeName = CodeGenerator.primitiveTypeName(elementType)
           s"""
