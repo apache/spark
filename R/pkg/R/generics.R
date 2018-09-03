@@ -769,6 +769,14 @@ setGeneric("array_distinct", function(x) { standardGeneric("array_distinct") })
 
 #' @rdname column_collection_functions
 #' @name NULL
+setGeneric("array_except", function(x, y) { standardGeneric("array_except") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("array_intersect", function(x, y) { standardGeneric("array_intersect") })
+
+#' @rdname column_collection_functions
+#' @name NULL
 setGeneric("array_join", function(x, delimiter, ...) { standardGeneric("array_join") })
 
 #' @rdname column_collection_functions
@@ -798,6 +806,10 @@ setGeneric("array_sort", function(x) { standardGeneric("array_sort") })
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("arrays_overlap", function(x, y) { standardGeneric("arrays_overlap") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("array_union", function(x, y) { standardGeneric("array_union") })
 
 #' @rdname column_collection_functions
 #' @name NULL
@@ -1219,6 +1231,10 @@ setGeneric("shiftRight", function(y, x) { standardGeneric("shiftRight") })
 #' @rdname column_math_functions
 #' @name NULL
 setGeneric("shiftRightUnsigned", function(y, x) { standardGeneric("shiftRightUnsigned") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("shuffle", function(x) { standardGeneric("shuffle") })
 
 #' @rdname column_math_functions
 #' @name NULL

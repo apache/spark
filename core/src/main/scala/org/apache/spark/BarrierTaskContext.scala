@@ -138,6 +138,7 @@ class BarrierTaskContext private[spark] (
         throw e
     } finally {
       timerTask.cancel()
+      timer.purge()
     }
   }
 

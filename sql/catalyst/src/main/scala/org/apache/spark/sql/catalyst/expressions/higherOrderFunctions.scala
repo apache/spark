@@ -90,6 +90,8 @@ object LambdaFunction {
  */
 trait HigherOrderFunction extends Expression with ExpectsInputTypes {
 
+  override def nullable: Boolean = arguments.exists(_.nullable)
+
   override def children: Seq[Expression] = arguments ++ functions
 
   /**
@@ -217,8 +219,6 @@ case class ArrayTransform(
     function: Expression)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  override def nullable: Boolean = argument.nullable
-
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayTransform = {
@@ -287,8 +287,6 @@ case class MapFilter(
     copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
   }
 
-  override def nullable: Boolean = argument.nullable
-
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val m = argumentValue.asInstanceOf[MapData]
     val f = functionForEval
@@ -327,8 +325,6 @@ case class ArrayFilter(
     argument: Expression,
     function: Expression)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
-
-  override def nullable: Boolean = argument.nullable
 
   override def dataType: DataType = argument.dataType
 
@@ -374,8 +370,6 @@ case class ArrayExists(
     argument: Expression,
     function: Expression)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
-
-  override def nullable: Boolean = argument.nullable
 
   override def dataType: DataType = BooleanType
 
@@ -516,8 +510,6 @@ case class TransformKeys(
     function: Expression)
   extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  override def nullable: Boolean = argument.nullable
-
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
   override def dataType: DataType = MapType(function.dataType, valueType, valueContainsNull)
@@ -567,8 +559,6 @@ case class TransformValues(
     argument: Expression,
     function: Expression)
   extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
-
-  override def nullable: Boolean = argument.nullable
 
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
@@ -637,8 +627,6 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   override def functions: Seq[Expression] = function :: Nil
 
   override def functionTypes: Seq[AbstractDataType] = AnyDataType :: Nil
-
-  override def nullable: Boolean = left.nullable || right.nullable
 
   override def dataType: DataType = MapType(keyType, function.dataType, function.nullable)
 
@@ -809,8 +797,6 @@ case class ZipWith(left: Expression, right: Expression, function: Expression)
   override def functions: Seq[Expression] = List(function)
 
   override def functionTypes: Seq[AbstractDataType] = AnyDataType :: Nil
-
-  override def nullable: Boolean = left.nullable || right.nullable
 
   override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
 

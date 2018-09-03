@@ -370,7 +370,8 @@ class SimpleSinglePartitionSource extends DataSourceV2 with BatchReadSupportProv
   }
 }
 
-
+// This class is used by pyspark tests. If this class is modified/moved, make sure pyspark
+// tests still pass.
 class SimpleDataSourceV2 extends DataSourceV2 with BatchReadSupportProvider {
 
   class ReadSupport extends SimpleReadSupport {

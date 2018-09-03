@@ -39,15 +39,13 @@ import org.apache.spark.util.Utils
  */
 class ArrowPythonRunner(
     funcs: Seq[ChainedPythonFunctions],
-    bufferSize: Int,
-    reuseWorker: Boolean,
     evalType: Int,
     argOffsets: Array[Array[Int]],
     schema: StructType,
     timeZoneId: String,
     conf: Map[String, String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
-    funcs, bufferSize, reuseWorker, evalType, argOffsets) {
+    funcs, evalType, argOffsets) {
 
   protected override def newWriterThread(
       env: SparkEnv,

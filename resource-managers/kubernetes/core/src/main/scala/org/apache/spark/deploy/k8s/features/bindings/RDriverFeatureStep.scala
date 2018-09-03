@@ -30,11 +30,12 @@ private[spark] class RDriverFeatureStep(
   override def configurePod(pod: SparkPod): SparkPod = {
     val roleConf = kubernetesConf.roleSpecificConf
     require(roleConf.mainAppResource.isDefined, "R Main Resource must be defined")
+    // Delineation is done by " " because that is input into RRunner
     val maybeRArgs = Option(roleConf.appArgs).filter(_.nonEmpty).map(
       rArgs =>
         new EnvVarBuilder()
           .withName(ENV_R_ARGS)
-          .withValue(rArgs.mkString(","))
+          .withValue(rArgs.mkString(" "))
           .build())
     val envSeq =
       Seq(new EnvVarBuilder()
