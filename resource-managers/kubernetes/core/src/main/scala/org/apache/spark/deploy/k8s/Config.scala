@@ -235,6 +235,18 @@ private[spark] object Config extends Logging {
         "Ensure that major Python version is either Python2 or Python3")
       .createWithDefault("2")
 
+  val KUBERNETES_DRIVER_PODTEMPLATE_FILE =
+    ConfigBuilder("spark.kubernetes.driver.podTemplateFile")
+      .doc("File containing a template pod spec for the driver")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_PODTEMPLATE_FILE =
+    ConfigBuilder("spark.kubernetes.executor.podTemplateFile")
+      .doc("File containing a template pod spec for executors")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 

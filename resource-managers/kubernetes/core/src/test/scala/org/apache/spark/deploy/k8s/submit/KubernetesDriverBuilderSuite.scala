@@ -20,10 +20,16 @@ import java.io.File
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
+import io.fabric8.kubernetes.api.model.PodBuilder
+import io.fabric8.kubernetes.client.KubernetesClient
+import org.mockito.Matchers._
+import org.mockito.Mockito
+import org.mockito.Mockito._
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
-import org.apache.spark.deploy.k8s.features._
+import org.apache.spark.deploy.k8s.Config.{CONTAINER_IMAGE, KUBERNETES_DRIVER_PODTEMPLATE_FILE, KUBERNETES_EXECUTOR_PODTEMPLATE_FILE}
+import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep, _}
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
 import org.apache.spark.util.Utils
 
@@ -39,6 +45,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val PYSPARK_STEP_TYPE = "pyspark-bindings"
   private val ENV_SECRETS_STEP_TYPE = "env-secrets"
   private val MOUNT_VOLUMES_STEP_TYPE = "mount-volumes"
+  private val TEMPLATE_VOLUME_STEP_TYPE = "template-volume"
 
   private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     BASIC_STEP_TYPE, classOf[BasicDriverFeatureStep])
@@ -70,6 +77,10 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val mountVolumesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     MOUNT_VOLUMES_STEP_TYPE, classOf[MountVolumesFeatureStep])
 
+  private val templateVolumeStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    TEMPLATE_VOLUME_STEP_TYPE, classOf[PodTemplateConfigMapStep]
+  )
+
   private val builderUnderTest: KubernetesDriverBuilder =
     new KubernetesDriverBuilder(
       _ => basicFeatureStep,
@@ -81,7 +92,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       _ => mountLocalFilesStep,
       _ => mountVolumesStep,
       _ => javaStep,
-      _ => pythonStep)
+      _ => pythonStep,
+      _ => templateVolumeStep)
 
   test("Apply fundamental steps all the time.") {
     val conf = KubernetesConf(
@@ -263,6 +275,36 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       JAVA_STEP_TYPE)
   }
 
+  test("Apply template volume step if executor template is present.") {
+    val sparkConf = spy(new SparkConf(false))
+    doReturn(Option("filename")).when(sparkConf)
+      .get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
+    val conf = KubernetesConf(
+      sparkConf,
+      KubernetesDriverSpecificConf(
+        Some(JavaMainAppResource("example.jar")),
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      None,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Nil,
+      Seq.empty[String])
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf),
+      BASIC_STEP_TYPE,
+      CREDENTIALS_STEP_TYPE,
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
+      JAVA_STEP_TYPE,
+      TEMPLATE_VOLUME_STEP_TYPE)
+  }
 
   private def validateStepTypesApplied(resolvedSpec: KubernetesDriverSpec, stepTypes: String*)
     : Unit = {
@@ -273,5 +315,74 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
         KubernetesFeaturesTestUtils.getSecretsForStepType(stepType)))
       assert(resolvedSpec.systemProperties(stepType) === stepType)
     }
+  }
+
+  test("Start with empty pod if template is not specified") {
+    val kubernetesClient = mock(classOf[KubernetesClient])
+    val driverBuilder = KubernetesDriverBuilder.apply(kubernetesClient, new SparkConf())
+    verify(kubernetesClient, never()).pods()
+  }
+
+  test("Starts with template if specified") {
+    val kubernetesClient = PodBuilderSuiteUtils.loadingMockKubernetesClient()
+    val sparkConf = new SparkConf(false)
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(KUBERNETES_DRIVER_PODTEMPLATE_FILE, "template-file.yaml")
+    val kubernetesConf = new KubernetesConf(
+      sparkConf,
+      KubernetesDriverSpecificConf(
+        Some(JavaMainAppResource("example.jar")),
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      None,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Nil,
+      Seq.empty[String])
+    val driverSpec = KubernetesDriverBuilder
+      .apply(kubernetesClient, sparkConf)
+      .buildFromFeatures(kubernetesConf)
+    PodBuilderSuiteUtils.verifyPodWithSupportedFeatures(driverSpec.pod)
+  }
+
+  test("Throws on misconfigured pod template") {
+    val kubernetesClient = PodBuilderSuiteUtils.loadingMockKubernetesClient(
+      new PodBuilder()
+        .withNewMetadata()
+        .addToLabels("test-label-key", "test-label-value")
+        .endMetadata()
+        .build())
+    val sparkConf = new SparkConf(false)
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(KUBERNETES_DRIVER_PODTEMPLATE_FILE, "template-file.yaml")
+    val kubernetesConf = new KubernetesConf(
+      sparkConf,
+      KubernetesDriverSpecificConf(
+        Some(JavaMainAppResource("example.jar")),
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      None,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Nil,
+      Seq.empty[String])
+    val exception = intercept[SparkException] {
+      KubernetesDriverBuilder
+        .apply(kubernetesClient, sparkConf)
+        .buildFromFeatures(kubernetesConf)
+    }
+    assert(exception.getMessage.contains("Could not load pod from template file."))
   }
 }
