@@ -326,7 +326,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val d2 = new Decimal().set(100)
     val a4 = Literal.create(Seq(d2, d1), ArrayType(DecimalType(10, 0)))
     val a5 = Literal.create(Seq(null, null), ArrayType(NullType))
-    val a6 = Literal.create(Seq(true, false, true, false), ArrayType(BooleanType, false))
+    val a6 = Literal.create(Seq(true, false, true, false),
+      ArrayType(BooleanType, containsNull = false))
     val a7 = Literal.create(Seq(true, false, true, false), ArrayType(BooleanType))
     val a8 = Literal.create(Seq(true, false, true, null, false), ArrayType(BooleanType))
 
