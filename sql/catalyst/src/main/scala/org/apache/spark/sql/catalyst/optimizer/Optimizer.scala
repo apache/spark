@@ -515,7 +515,9 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
  */
 object ColumnPruning extends Rule[LogicalPlan] {
   private def sameOutput(output1: Seq[Attribute], output2: Seq[Attribute]): Boolean =
-    output1.size == output2.size && output1.zip(output2).forall(pair => pair._1 == pair._2)
+    output1.size == output2.size &&
+      output1.zip(output2).forall(pair =>
+        pair._1.semanticEquals(pair._2) && pair._1.name == pair._2.name)
 
   def apply(plan: LogicalPlan): LogicalPlan = removeProjectBeforeFilter(plan transform {
     // Prunes the unused columns from project list of Project/Aggregate/Expand
@@ -648,12 +650,9 @@ object CollapseProject extends Rule[LogicalPlan] {
       }
   }
 
-  private def collectAliases(
-      upper: Seq[NamedExpression], lower: Seq[NamedExpression]): AttributeMap[Alias] = {
-    AttributeMap(lower.zipWithIndex.collect {
-      case (a: Alias, index: Int) =>
-        a.toAttribute ->
-          a.copy(name = upper(index).name)(a.exprId, a.qualifier, a.explicitMetadata)
+  private def collectAliases(projectList: Seq[NamedExpression]): AttributeMap[Alias] = {
+    AttributeMap(projectList.collect {
+      case a: Alias => a.toAttribute -> a
     })
   }
 
@@ -661,7 +660,7 @@ object CollapseProject extends Rule[LogicalPlan] {
       upper: Seq[NamedExpression], lower: Seq[NamedExpression]): Boolean = {
     // Create a map of Aliases to their values from the lower projection.
     // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
-    val aliases = collectAliases(upper, lower)
+    val aliases = collectAliases(lower)
 
     // Collapse upper and lower Projects if and only if their overlapped expressions are all
     // deterministic.
@@ -675,14 +674,19 @@ object CollapseProject extends Rule[LogicalPlan] {
       lower: Seq[NamedExpression]): Seq[NamedExpression] = {
     // Create a map of Aliases to their values from the lower projection.
     // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
-    val aliases = collectAliases(upper, lower)
+    val aliases = collectAliases(lower)
 
     // Substitute any attributes that are produced by the lower projection, so that we safely
     // eliminate it.
     // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...'
     // Use transformUp to prevent infinite recursion.
     val rewrittenUpper = upper.map(_.transformUp {
-      case a: Attribute => aliases.getOrElse(a, a)
+      case a: Attribute => if (aliases.contains(a)) {
+        val alias = aliases.get(a).get
+        alias.copy(name = a.name)(alias.exprId, alias.qualifier, alias.explicitMetadata)
+      } else {
+        a
+      }
     })
     // collapse upper and lower Projects may introduce unnecessary Aliases, trim them here.
     rewrittenUpper.map { p =>
