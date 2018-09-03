@@ -16,21 +16,15 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-<<<<<<< HEAD
 import java.io.File
 
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
-import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
+import org.apache.spark.deploy.k8s.features.bindings._
 import org.apache.spark.util.Utils
-=======
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf}
-import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, LocalDirsFeatureStep, MountSecretsFeatureStep, MountVolumesFeatureStep}
-import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
->>>>>>> master
 
 private[spark] class KubernetesDriverBuilder(
     provideBasicStep: (KubernetesConf[KubernetesDriverSpecificConf]) => BasicDriverFeatureStep =
@@ -55,33 +49,21 @@ private[spark] class KubernetesDriverBuilder(
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
       new MountVolumesFeatureStep(_),
-<<<<<<< HEAD
-    provideJavaStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
+    providePythonStep: (KubernetesConf[KubernetesDriverSpecificConf]
+        => PythonDriverFeatureStep) =
+    new PythonDriverFeatureStep(_),
+    provideRStep: (KubernetesConf[KubernetesDriverSpecificConf]
+        => RDriverFeatureStep) =
+    new RDriverFeatureStep(_),
+    provideJavaStep: (KubernetesConf[KubernetesDriverSpecificConf]
         => JavaDriverFeatureStep) =
-      new JavaDriverFeatureStep(_),
-    providePythonStep: (KubernetesConf[KubernetesDriverSpecificConf] => PythonDriverFeatureStep) =
-      new PythonDriverFeatureStep(_),
+    new JavaDriverFeatureStep(_),
     providePodTemplateConfigMapStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => PodTemplateConfigMapStep) =
-      new PodTemplateConfigMapStep(_),
+    new PodTemplateConfigMapStep(_),
     provideInitialPod: () => SparkPod = SparkPod.initialPod) {
 
   import KubernetesDriverBuilder._
-=======
-    providePythonStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
-      => PythonDriverFeatureStep) =
-      new PythonDriverFeatureStep(_),
-    provideRStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
-        => RDriverFeatureStep) =
-    new RDriverFeatureStep(_),
-    provideJavaStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
-        => JavaDriverFeatureStep) =
-    new JavaDriverFeatureStep(_)) {
->>>>>>> master
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesDriverSpec = {

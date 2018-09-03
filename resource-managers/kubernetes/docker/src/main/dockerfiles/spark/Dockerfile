@@ -29,17 +29,12 @@ ARG img_path=kubernetes/dockerfiles
 
 RUN set -ex && \
     apk upgrade --no-cache && \
-<<<<<<< HEAD
     apk add --no-cache bash tini && \
-=======
-    apk add --no-cache bash tini libc6-compat linux-pam && \
->>>>>>> master
     mkdir -p /opt/spark && \
     mkdir -p /opt/spark/work-dir && \
     touch /opt/spark/RELEASE && \
     rm /bin/sh && \
     ln -sv /bin/bash /bin/sh && \
-    echo "auth required pam_wheel.so use_uid" >> /etc/pam.d/su && \
     chgrp root /etc/passwd && chmod ug+rw /etc/passwd
 
 COPY ${spark_jars} /opt/spark/jars

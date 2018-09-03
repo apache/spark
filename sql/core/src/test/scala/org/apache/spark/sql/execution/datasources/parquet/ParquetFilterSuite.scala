@@ -1119,9 +1119,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
     testCaseInsensitiveResolution(
       schema,
-      FilterApi.or(
-        FilterApi.eq(intColumn("cint"), 10: Integer),
-        FilterApi.eq(intColumn("cint"), 20: Integer)),
+      FilterApi.userDefined(intColumn("cint"), SetInFilter[Integer](Set(10, 20))),
       sources.In("CINT", Array(10, 20)))
 
     val dupFieldSchema = StructType(

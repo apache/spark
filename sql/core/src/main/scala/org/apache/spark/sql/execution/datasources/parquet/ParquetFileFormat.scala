@@ -622,29 +622,6 @@ object ParquetFileFormat extends Logging {
       conf: Configuration,
       partFiles: Seq[FileStatus],
       ignoreCorruptFiles: Boolean): Seq[Footer] = {
-<<<<<<< HEAD
-    val parFiles = partFiles.par
-    val pool = ThreadUtils.newForkJoinPool("readingParquetFooters", 8)
-    parFiles.tasksupport = new ForkJoinTaskSupport(pool)
-    val tc = TaskContext.get()
-    try {
-      parFiles.flatMap { currentFile =>
-        TaskContext.setTaskContext(tc)
-        try {
-          // Skips row group information since we only need the schema.
-          // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
-          // when it can't read the footer.
-          Some(new Footer(currentFile.getPath(),
-            ParquetFileReader.readFooter(
-              conf, currentFile, SKIP_ROW_GROUPS)))
-        } catch { case e: RuntimeException =>
-          if (ignoreCorruptFiles) {
-            logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
-            None
-          } else {
-            throw new IOException(s"Could not read footer for file: $currentFile", e)
-          }
-=======
     ThreadUtils.parmap(partFiles, "readingParquetFooters", 8) { currentFile =>
       try {
         // Skips row group information since we only need the schema.
@@ -659,7 +636,6 @@ object ParquetFileFormat extends Logging {
           None
         } else {
           throw new IOException(s"Could not read footer for file: $currentFile", e)
->>>>>>> master
         }
       }
     }.flatten

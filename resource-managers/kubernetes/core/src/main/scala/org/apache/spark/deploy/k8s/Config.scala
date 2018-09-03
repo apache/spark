@@ -139,8 +139,6 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
-<<<<<<< HEAD
-=======
   val KUBERNETES_R_MAIN_APP_RESOURCE =
     ConfigBuilder("spark.kubernetes.r.mainAppResource")
       .doc("The main app resource for SparkR jobs")
@@ -155,7 +153,6 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
->>>>>>> master
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
       .doc("Number of pods to launch at once in each round of executor allocation.")

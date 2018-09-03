@@ -55,15 +55,8 @@ if hash virtualenv 2>/dev/null && [ ! -n "$USE_CONDA" ]; then
     fi
   fi
 elif hash conda 2>/dev/null; then
-<<<<<<< HEAD
-  echo "Using conda virtual enviroments"
-  if [[ ${#PYTHON_EXECS[@]} == 0 ]]; then
-    PYTHON_EXECS=('3.5')
-  fi
-=======
   echo "Using conda virtual environments"
   PYTHON_EXECS=('3.5')
->>>>>>> master
   USE_CONDA=1
 else
   echo "Missing virtualenv & conda, skipping pip installability tests"

@@ -141,11 +141,6 @@
     <jetty.version>9.4.8.v20171121</jetty.version>
     <orc.version>1.5.2</orc.version>
     <orc.classifier>nohive</orc.classifier>
-<<<<<<< HEAD
-=======
-    <hive.parquet.version>1.6.0</hive.parquet.version>
-    <jetty.version>9.3.24.v20180605</jetty.version>
->>>>>>> master
     <javaxservlet.version>3.1.0</javaxservlet.version>
     <chill.version>0.8.4</chill.version>
     <ivy.version>2.4.0</ivy.version>
@@ -159,13 +154,9 @@
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.271</aws.java.sdk.version>
     <!-- the producer is used in tests -->
-<<<<<<< HEAD
-    <aws.kinesis.producer.version>0.10.2</aws.kinesis.producer.version>
+    <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <commons-beanutils.version>1.9.3</commons-beanutils.version>
     <commons-logging.version>1.2</commons-logging.version>
-=======
-    <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
->>>>>>> master
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.6</commons.httpclient.version>
     <commons.httpcore.version>4.4.10</commons.httpcore.version>
@@ -191,17 +182,11 @@
     <commons-compress.version>1.8.1</commons-compress.version>
     <commons-pool.version>1.6</commons-pool.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
-<<<<<<< HEAD
     <javax-activation.version>1.1.1</javax-activation.version>
     <objenesis.version>2.5.1</objenesis.version>
-    <janino.version>3.0.8</janino.version>
+    <janino.version>3.0.9</janino.version>
     <jersey.version>2.25.1</jersey.version>
     <joda.version>2.9.9</joda.version>
-=======
-    <janino.version>3.0.9</janino.version>
-    <jersey.version>2.22.2</jersey.version>
-    <joda.version>2.9.3</joda.version>
->>>>>>> master
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.1</jsr305.version>
     <libthrift.version>0.9.3</libthrift.version>
@@ -1289,15 +1274,6 @@
         <artifactId>activation</artifactId>
         <version>1.1.1</version>
         <scope>${hadoop.deps.scope}</scope>
-<<<<<<< HEAD
-        <exclusions>
-          <exclusion>
-            <groupId>commons-logging</groupId>
-            <artifactId>commons-logging</artifactId>
-          </exclusion>
-        </exclusions>
-=======
->>>>>>> master
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>

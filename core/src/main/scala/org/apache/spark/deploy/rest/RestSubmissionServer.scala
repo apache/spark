@@ -50,13 +50,7 @@ import org.apache.spark.util.Utils
 private[spark] abstract class RestSubmissionServer(
     val host: String,
     val requestedPort: Int,
-<<<<<<< HEAD
-    val masterConf: SparkConf,
-    val sslOptions: SSLOptions = SSLOptions()) extends Logging {
-=======
     val masterConf: SparkConf) extends Logging {
-
->>>>>>> master
   protected val submitRequestServlet: SubmitRequestServlet
   protected val killRequestServlet: KillRequestServlet
   protected val statusRequestServlet: StatusRequestServlet
@@ -90,18 +84,6 @@ private[spark] abstract class RestSubmissionServer(
     threadPool.setDaemon(true)
     val server = new Server(threadPool)
 
-    val resolvedConnectionFactories = sslOptions
-      .createJettySslContextFactory()
-      .map(sslFactory => {
-        val sslConnectionFactory = new SslConnectionFactory(
-          sslFactory, HttpVersion.HTTP_1_1.asString())
-        val rawHttpConfiguration = new HttpConfiguration()
-        rawHttpConfiguration.setSecureScheme("https")
-        rawHttpConfiguration.setSecurePort(startPort)
-        val rawHttpConnectionFactory = new HttpConnectionFactory(rawHttpConfiguration)
-        Array(sslConnectionFactory, rawHttpConnectionFactory)
-      }).getOrElse(Array(new HttpConnectionFactory()))
-
     val connector = new ServerConnector(
         server,
         null,
@@ -110,7 +92,7 @@ private[spark] abstract class RestSubmissionServer(
         null,
         -1,
         -1,
-        resolvedConnectionFactories: _*)
+        new HttpConnectionFactory())
     connector.setHost(host)
     connector.setPort(startPort)
     connector.setReuseAddress(!Utils.isWindows)

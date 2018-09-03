@@ -22,22 +22,14 @@ import com.google.common.base.Charsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
-import org.mockito.Matchers._
-import org.mockito.Mockito
 import org.mockito.Mockito._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
-<<<<<<< HEAD
 import org.apache.spark.deploy.k8s.Config.{CONTAINER_IMAGE, KUBERNETES_DRIVER_PODTEMPLATE_FILE, KUBERNETES_EXECUTOR_PODTEMPLATE_FILE}
-import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep, _}
-import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
-import org.apache.spark.util.Utils
-=======
 import org.apache.spark.deploy.k8s.features._
-import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep}
-import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
->>>>>>> master
+import org.apache.spark.deploy.k8s.features.bindings._
+import org.apache.spark.util.Utils
 
 class KubernetesDriverBuilderSuite extends SparkFunSuite {
 
@@ -101,15 +93,10 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       _ => localDirsStep,
       _ => mountLocalFilesStep,
       _ => mountVolumesStep,
-<<<<<<< HEAD
-      _ => javaStep,
-      _ => pythonStep,
-      _ => templateVolumeStep)
-=======
       _ => pythonStep,
       _ => rStep,
-      _ => javaStep)
->>>>>>> master
+      _ => javaStep,
+      _ => templateVolumeStep)
 
   test("Apply fundamental steps all the time.") {
     val conf = KubernetesConf(
@@ -291,7 +278,6 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       JAVA_STEP_TYPE)
   }
 
-<<<<<<< HEAD
   test("Apply template volume step if executor template is present.") {
     val sparkConf = spy(new SparkConf(false))
     doReturn(Option("filename")).when(sparkConf)
@@ -300,22 +286,12 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       sparkConf,
       KubernetesDriverSpecificConf(
         Some(JavaMainAppResource("example.jar")),
-=======
-  test("Apply R step if main resource is R.") {
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesDriverSpecificConf(
-        Some(RMainAppResource("example.R")),
->>>>>>> master
         "test-app",
         "main",
         Seq.empty),
       "prefix",
       "appId",
-<<<<<<< HEAD
       None,
-=======
->>>>>>> master
       Map.empty,
       Map.empty,
       Map.empty,
@@ -329,12 +305,35 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
-<<<<<<< HEAD
       JAVA_STEP_TYPE,
       TEMPLATE_VOLUME_STEP_TYPE)
-=======
+  }
+
+  test("Apply R step if main resource is R.") {
+    val conf = KubernetesConf(
+      new SparkConf(false),
+      KubernetesDriverSpecificConf(
+        Some(RMainAppResource("example.R")),
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      None,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Nil,
+      Seq.empty[String])
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf),
+      BASIC_STEP_TYPE,
+      CREDENTIALS_STEP_TYPE,
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
       R_STEP_TYPE)
->>>>>>> master
   }
 
   private def validateStepTypesApplied(resolvedSpec: KubernetesDriverSpec, stepTypes: String*)

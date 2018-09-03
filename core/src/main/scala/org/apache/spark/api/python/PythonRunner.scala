@@ -103,15 +103,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
     }
-<<<<<<< HEAD
-    val worker: Socket = env.createPythonWorker(
-      pythonExec, envVars.asScala.toMap, condaInstructions)
-=======
     if (memoryMb.isDefined) {
       envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", memoryMb.get.toString)
     }
-    val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap)
->>>>>>> master
+    val worker: Socket = env.createPythonWorker(
+      pythonExec, envVars.asScala.toMap, condaInstructions)
     // Whether is the worker released into idle pool
     val released = new AtomicBoolean(false)
 

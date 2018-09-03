@@ -462,11 +462,10 @@ private[parquet] class ParquetFilters(
     // Parquet's type in the given file should be matched to the value's type
     // in the pushed filter in order to push down the filter to Parquet.
     def valueCanMakeFilterOn(name: String, value: Any): Boolean = {
-<<<<<<< HEAD
       value == null ||
         (value.isInstanceOf[Array[_]]
           && canMakeFilterOn(name, value.asInstanceOf[Array[_]].apply(0))) ||
-        (nameToType(name) match {
+        (nameToParquetField(name).fieldType match {
           case ParquetBooleanType => value.isInstanceOf[JBoolean]
           case ParquetByteType | ParquetShortType | ParquetIntegerType => value.isInstanceOf[Number]
           case ParquetLongType => value.isInstanceOf[JLong]
@@ -485,27 +484,6 @@ private[parquet] class ParquetFilters(
             isDecimalMatched(value, decimalMeta)
           case _ => false
         })
-=======
-      value == null || (nameToParquetField(name).fieldType match {
-        case ParquetBooleanType => value.isInstanceOf[JBoolean]
-        case ParquetByteType | ParquetShortType | ParquetIntegerType => value.isInstanceOf[Number]
-        case ParquetLongType => value.isInstanceOf[JLong]
-        case ParquetFloatType => value.isInstanceOf[JFloat]
-        case ParquetDoubleType => value.isInstanceOf[JDouble]
-        case ParquetStringType => value.isInstanceOf[String]
-        case ParquetBinaryType => value.isInstanceOf[Array[Byte]]
-        case ParquetDateType => value.isInstanceOf[Date]
-        case ParquetTimestampMicrosType | ParquetTimestampMillisType =>
-          value.isInstanceOf[Timestamp]
-        case ParquetSchemaType(DECIMAL, INT32, _, decimalMeta) =>
-          isDecimalMatched(value, decimalMeta)
-        case ParquetSchemaType(DECIMAL, INT64, _, decimalMeta) =>
-          isDecimalMatched(value, decimalMeta)
-        case ParquetSchemaType(DECIMAL, FIXED_LEN_BYTE_ARRAY, _, decimalMeta) =>
-          isDecimalMatched(value, decimalMeta)
-        case _ => false
-      })
->>>>>>> master
     }
 
     // Parquet does not allow dots in the column name because dots are used as a column path
@@ -514,11 +492,7 @@ private[parquet] class ParquetFilters(
     // filters for the column having dots in the names. Thus, we do not push down such filters.
     // See SPARK-20364.
     def canMakeFilterOn(name: String, value: Any): Boolean = {
-<<<<<<< HEAD
-      nameToType.contains(name) && valueCanMakeFilterOn(name, value)
-=======
-      nameToParquetField.contains(name) && !name.contains(".") && valueCanMakeFilterOn(name, value)
->>>>>>> master
+      nameToParquetField.contains(name) && valueCanMakeFilterOn(name, value)
     }
 
     // NOTE:
@@ -587,17 +561,9 @@ private[parquet] class ParquetFilters(
           .map(FilterApi.not)
           .map(LogicalInverseRewriter.rewrite)
 
-<<<<<<< HEAD
       case sources.In(name, values) if canMakeFilterOn(name, values) =>
-        makeInSet.lift(nameToType(name)).map(_(name, values.toSet))
-=======
-      case sources.In(name, values) if canMakeFilterOn(name, values.head)
-        && values.distinct.length <= pushDownInFilterThreshold =>
-        values.distinct.flatMap { v =>
-          makeEq.lift(nameToParquetField(name).fieldType)
-            .map(_(nameToParquetField(name).fieldName, v))
-        }.reduceLeftOption(FilterApi.or)
->>>>>>> master
+        makeInSet.lift(nameToParquetField(name).fieldType)
+          .map(_(nameToParquetField(name).fieldName, values.toSet))
 
       case sources.StringStartsWith(name, prefix)
           if pushDownStartWith && canMakeFilterOn(name, prefix) =>

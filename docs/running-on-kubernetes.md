@@ -185,7 +185,6 @@ To use a secret through an environment variable use the following options to the
 --conf spark.kubernetes.executor.secretKeyRef.ENV_NAME=name:key
 ```
 
-<<<<<<< HEAD
 ## Pod Template
 Kubernetes allows defining pods from [template files](https://kubernetes.io/docs/concepts/workloads/pods/pod-overview/#pod-templates).
 Spark users can similarly use template files to define the driver or executor pod configurations that Spark configurations do not support.
@@ -200,7 +199,7 @@ For details, see the [full list](#pod-template-properties) of pod template value
 
 Pod template files can also define multiple containers. In such cases, Spark will always assume that the first container in
 the list will be the driver or executor container.
-=======
+
 ## Using Kubernetes Volumes
 
 Starting with Spark 2.4.0, users can mount the following types of Kubernetes [volumes](https://kubernetes.io/docs/concepts/storage/volumes/) into the driver and executor pods:
@@ -230,7 +229,6 @@ spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.options.clai
 ```
 
 The configuration properties for mounting volumes into the executor pods use prefix `spark.kubernetes.executor.` instead of `spark.kubernetes.driver.`. For a complete list of available options for each supported type of volumes, please refer to the [Spark Properties](#spark-properties) section below. 
->>>>>>> master
 
 ## Introspection and Debugging
 
