@@ -454,7 +454,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArraysOverlap(a4, a5), true)
     checkEvaluation(ArraysOverlap(a4, a6), null)
     checkEvaluation(ArraysOverlap(a5, a6), false)
-
     checkEvaluation(ArraysOverlap(a7, a7), true)
 
     // null handling
