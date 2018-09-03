@@ -754,6 +754,9 @@ class Analyzer(
    * a logical plan node's children.
    */
   object ResolveReferences extends Rule[LogicalPlan] {
+
+    private val emptyAttrMap = new AttributeMap[Attribute](Map.empty)
+
     /**
      * Generate a new logical plan for the right child with different expression IDs
      * for all conflicting attributes.
@@ -807,10 +810,10 @@ class Analyzer(
            * that this rule cannot handle. When that is the case, there must be another rule
            * that resolves these conflicts. Otherwise, the analysis will fail.
            */
-          (right, AttributeMap.empty[Attribute])
+          (right, emptyAttrMap)
         case Some((oldRelation, newRelation)) =>
           val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
-          (right transformUp {
+          val newRight = right transformUp {
             case r if r == oldRelation => newRelation
           } transformUp {
             case other => other transformExpressions {
@@ -819,7 +822,8 @@ class Analyzer(
               case s: SubqueryExpression =>
                 s.withNewPlan(dedupOuterReferencesInSubquery(s.plan, attributeRewrites))
             }
-          }, attributeRewrites)
+          }
+          (newRight, attributeRewrites)
       }
     }
 
@@ -897,13 +901,6 @@ class Analyzer(
       case _ => e.mapChildren(resolve(_, q))
     }
 
-    private def rewriteJoinCondition(
-        e: Expression,
-        attributeRewrites: AttributeMap[Attribute]): Expression = e match {
-      case a: Attribute => attributeRewrites.getOrElse(a, a)
-      case _ => e.mapChildren(rewriteJoinCondition(_, attributeRewrites))
-    }
-
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p: LogicalPlan if !p.childrenResolved => p
 
@@ -932,7 +929,9 @@ class Analyzer(
       // To resolve duplicate expression IDs for Join and Intersect
       case j @ Join(left, right, _, condition) if !j.duplicateResolved =>
         val (dedupedRight, attributeRewrites) = dedupRight(left, right)
-        val changedCondition = condition.map(rewriteJoinCondition(_, attributeRewrites))
+        val changedCondition = condition.map(_.transform {
+          case attr: Attribute if attr.resolved => attributeRewrites.getOrElse(attr, attr)
+        })
         j.copy(right = dedupedRight, condition = changedCondition)
       case i @ Intersect(left, right, _) if !i.duplicateResolved =>
         val (dedupedRight, _) = dedupRight(left, right)
