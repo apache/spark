@@ -830,8 +830,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         spark.sql("CREATE VIEW view1 AS SELECT * FROM tbl")
         spark.sql("CREATE TABLE tbl2(COL1 long, COL2 int, COL3 int) USING parquet PARTITIONED " +
           "BY (COL2) CLUSTERED BY (COL3) INTO 3 BUCKETS")
-        spark.sql("INSERT OVERWRITE TABLE tbl2 SELECT COL1, COL2, COL3 " +
-          "FROM view1 CLUSTER BY COL3")
+        spark.sql("INSERT OVERWRITE TABLE tbl2 SELECT COL1, COL2, COL3 FROM view1")
         val identifier = TableIdentifier("tbl2", Some("default"))
         val location = spark.sessionState.catalog.getTableMetadata(identifier).location.toString
         val expectedSchema = StructType(Seq(
