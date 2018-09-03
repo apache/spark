@@ -41,9 +41,10 @@ trait DataWritingCommand extends Command {
 
   override final def children: Seq[LogicalPlan] = query :: Nil
 
-  // Output columns of the analyzed input query plan
+  // Output column names of the analyzed input query plan.
   def outputColumnNames: Seq[String]
 
+  // Output columns of the analyzed input query plan.
   def outputColumns: Seq[Attribute] =
     DataWritingCommand.logicalPlanOutputWithNames(query, outputColumnNames)
 
@@ -69,8 +70,8 @@ object DataWritingCommand {
     val outputAttributes = query.output
     assert(outputAttributes.length == names.length,
       "The length of provided names doesn't match the length of output attributes.")
-    outputAttributes.zipWithIndex.map { case (element, index) =>
-      element.withName(names(index))
+    outputAttributes.zip(names).map { case (attr, outputName) =>
+      attr.withName(outputName)
     }
   }
 }
