@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.util.{Properties, Timer, TimerTask}
+import java.util.{Timer, TimerTask}
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -39,8 +39,7 @@ import org.apache.spark.util._
 @Experimental
 @Since("2.4.0")
 class BarrierTaskContext private[spark] (
-    taskContext: TaskContext,
-    localProperties: Properties) extends TaskContext with Logging {
+    taskContext: TaskContext) extends TaskContext with Logging {
 
   // Find the driver side RPCEndpointRef of the coordinator that handles all the barrier() calls.
   private val barrierCoordinator: RpcEndpointRef = {
@@ -66,7 +65,7 @@ class BarrierTaskContext private[spark] (
    *
    * CAUTION! In a barrier stage, each task must have the same number of barrier() calls, in all
    * possible code branches. Otherwise, you may get the job hanging or a SparkException after
-   * timeout. Some examples of '''misuses''' listed below:
+   * timeout. Some examples of '''misuses''' are listed below:
    * 1. Only call barrier() function on a subset of all the tasks in the same barrier stage, it
    * shall lead to timeout of the function call.
    * {{{
@@ -149,7 +148,7 @@ class BarrierTaskContext private[spark] (
   @Experimental
   @Since("2.4.0")
   def getTaskInfos(): Array[BarrierTaskInfo] = {
-    val addressesStr = localProperties.getProperty("addresses", "")
+    val addressesStr = Option(taskContext.getLocalProperty("addresses")).getOrElse("")
     addressesStr.split(",").map(_.trim()).map(new BarrierTaskInfo(_))
   }
 
@@ -204,6 +203,22 @@ class BarrierTaskContext private[spark] (
   override private[spark] def setFetchFailed(fetchFailed: FetchFailedException): Unit = {
     taskContext.setFetchFailed(fetchFailed)
   }
+
+  override private[spark] def markInterrupted(reason: String): Unit = {
+    taskContext.markInterrupted(reason)
+  }
+
+  override private[spark] def markTaskFailed(error: Throwable): Unit = {
+    taskContext.markTaskFailed(error)
+  }
+
+  override private[spark] def markTaskCompleted(error: Option[Throwable]): Unit = {
+    taskContext.markTaskCompleted(error)
+  }
+
+  override private[spark] def fetchFailed: Option[FetchFailedException] = {
+    taskContext.fetchFailed
+  }
 }
 
 @Experimental
@@ -211,7 +226,7 @@ class BarrierTaskContext private[spark] (
 object BarrierTaskContext {
   /**
    * :: Experimental ::
-   * Return the currently active BarrierTaskContext. This can be called inside of user functions to
+   * Returns the currently active BarrierTaskContext. This can be called inside of user functions to
    * access contextual information about running barrier tasks.
    */
   @Experimental
