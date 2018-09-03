@@ -20,10 +20,9 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
-import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
-import org.scalatest.concurrent.TimeLimits
-import org.scalatest.time.SpanSugar._
 import scala.collection.JavaConverters._
+
+import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
 
 import org.apache.spark.sql.{Column, DataFrame}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -40,7 +39,7 @@ import org.apache.spark.sql.types._
  * - OrcFilterSuite uses 'org.apache.orc.storage.ql.io.sarg' package.
  * - HiveOrcFilterSuite uses 'org.apache.hadoop.hive.ql.io.sarg' package.
  */
-class OrcFilterSuite extends OrcTest with SharedSQLContext with TimeLimits {
+class OrcFilterSuite extends OrcTest with SharedSQLContext {
 
   private def checkFilterPredicate(
       df: DataFrame,
@@ -382,15 +381,6 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext with TimeLimits {
           StringContains("b", "prefix")
         ))
       )).get.toString
-    }
-  }
-
-  test("createFilter should not hang") {
-    import org.apache.spark.sql.sources._
-    val schema = new StructType(Array(StructField("a", IntegerType, nullable = true)))
-    val filters = (1 to 500).map(LessThan("a", _)).toArray[Filter]
-    failAfter(2 seconds) {
-      OrcFilters.createFilter(schema, filters)
     }
   }
 }

@@ -17,13 +17,9 @@
 
 package org.apache.spark.sql.hive.orc
 
-import java.util.concurrent.TimeUnit
-
-import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.apache.hadoop.hive.ql.io.sarg.{SearchArgument, SearchArgumentFactory}
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -59,32 +55,6 @@ import org.apache.spark.sql.types._
  * known to be convertible.
  */
 private[orc] object OrcFilters extends Logging {
-  case class FilterWithTypeMap(filter: Filter, typeMap: Map[String, DataType])
-
-  private lazy val cacheExpireTimeout =
-    org.apache.spark.sql.execution.datasources.orc.OrcFilters.cacheExpireTimeout
-
-  private lazy val searchArgumentCache = CacheBuilder.newBuilder()
-    .expireAfterAccess(cacheExpireTimeout, TimeUnit.SECONDS)
-    .build(
-      new CacheLoader[FilterWithTypeMap, Option[Builder]]() {
-        override def load(typeMapAndFilter: FilterWithTypeMap): Option[Builder] = {
-          buildSearchArgument(
-            typeMapAndFilter.typeMap, typeMapAndFilter.filter, SearchArgumentFactory.newBuilder())
-        }
-      })
-
-  private def getOrBuildSearchArgumentWithNewBuilder(
-      dataTypeMap: Map[String, DataType],
-      expression: Filter): Option[Builder] = {
-    // When `spark.sql.orc.cache.sarg.timeout` is 0, cache is disabled.
-    if (cacheExpireTimeout > 0) {
-      searchArgumentCache.get(FilterWithTypeMap(expression, dataTypeMap))
-    } else {
-      buildSearchArgument(dataTypeMap, expression, SearchArgumentFactory.newBuilder())
-    }
-  }
-
   def createFilter(schema: StructType, filters: Array[Filter]): Option[SearchArgument] = {
     val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
 
@@ -92,19 +62,12 @@ private[orc] object OrcFilters extends Logging {
     // collect all convertible ones to build the final `SearchArgument`.
     val convertibleFilters = for {
       filter <- filters
-      _ <- getOrBuildSearchArgumentWithNewBuilder(dataTypeMap, filter)
+      _ <- buildSearchArgument(dataTypeMap, filter, SearchArgumentFactory.newBuilder())
     } yield filter
 
     for {
       // Combines all convertible filters using `And` to produce a single conjunction
-      conjunction <- convertibleFilters.reduceOption { (x, y) =>
-        val newFilter = org.apache.spark.sql.sources.And(x, y)
-        if (cacheExpireTimeout > 0) {
-          // Build in a bottom-up manner
-          getOrBuildSearchArgumentWithNewBuilder(dataTypeMap, newFilter)
-        }
-        newFilter
-      }
+      conjunction <- convertibleFilters.reduceOption(And)
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
       builder <- buildSearchArgument(dataTypeMap, conjunction, SearchArgumentFactory.newBuilder())
     } yield builder.build()
@@ -114,6 +77,8 @@ private[orc] object OrcFilters extends Logging {
       dataTypeMap: Map[String, DataType],
       expression: Filter,
       builder: Builder): Option[Builder] = {
+    def newBuilder = SearchArgumentFactory.newBuilder()
+
     def isSearchableType(dataType: DataType): Boolean = dataType match {
       // Only the values in the Spark types below can be recognized by
       // the `SearchArgumentImpl.BuilderImpl.boxLiteral()` method.
@@ -133,23 +98,23 @@ private[orc] object OrcFilters extends Logging {
         // Pushing one side of AND down is only safe to do at the top level.
         // You can see ParquetRelation's initializeLocalJobFunc method as an example.
         for {
-          _ <- getOrBuildSearchArgumentWithNewBuilder(dataTypeMap, left)
-          _ <- getOrBuildSearchArgumentWithNewBuilder(dataTypeMap, right)
+          _ <- buildSearchArgument(dataTypeMap, left, newBuilder)
+          _ <- buildSearchArgument(dataTypeMap, right, newBuilder)
           lhs <- buildSearchArgument(dataTypeMap, left, builder.startAnd())
           rhs <- buildSearchArgument(dataTypeMap, right, lhs)
         } yield rhs.end()
 
       case Or(left, right) =>
         for {
-          _ <- getOrBuildSearchArgumentWithNewBuilder(dataTypeMap, left)
-          _ <- getOrBuildSearchArgumentWithNewBuilder(dataTypeMap, right)
+          _ <- buildSearchArgument(dataTypeMap, left, newBuilder)
+          _ <- buildSearchArgument(dataTypeMap, right, newBuilder)
           lhs <- buildSearchArgument(dataTypeMap, left, builder.startOr())
           rhs <- buildSearchArgument(dataTypeMap, right, lhs)
         } yield rhs.end()
 
       case Not(child) =>
         for {
-          _ <- getOrBuildSearchArgumentWithNewBuilder(dataTypeMap, child)
+          _ <- buildSearchArgument(dataTypeMap, child, newBuilder)
           negate <- buildSearchArgument(dataTypeMap, child, builder.startNot())
         } yield negate.end()
 
