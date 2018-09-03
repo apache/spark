@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -461,8 +462,8 @@ case class DataSource(
    * @param data The input query plan that produces the data to be written. Note that this plan
    *             is analyzed and optimized.
    * @param outputColumnNames The original output column names of the input query plan. The
-   *                      optimizer may not preserve the output column's names' case, so we need
-   *                      this parameter instead of `data.output`.
+   *                          optimizer may not preserve the output column's names' case, so we need
+   *                          this parameter instead of `data.output`.
    * @param physicalPlan The physical plan of the input query plan. We should run the writing
    *                     command with this physical plan instead of creating a new physical plan,
    *                     so that the metrics can be correctly linked to the given physical plan and
@@ -473,7 +474,7 @@ case class DataSource(
       data: LogicalPlan,
       outputColumnNames: Seq[String],
       physicalPlan: SparkPlan): BaseRelation = {
-    val outputColumns = data.outputWithNames(names = outputColumnNames)
+    val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(data, outputColumnNames)
     if (outputColumns.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
@@ -498,7 +499,7 @@ case class DataSource(
         }
         val resolved = cmd.copy(
           partitionColumns = resolvedPartCols,
-          outputColumnNames = outputColumns.map(_.name))
+          outputColumnNames = outputColumnNames)
         resolved.run(sparkSession, physicalPlan)
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(outputColumns.toStructType.asNullable)).resolveRelation()

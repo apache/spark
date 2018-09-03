@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
 import org.apache.spark.sql.execution.datasources.FileFormatWriter
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -44,6 +44,9 @@ trait DataWritingCommand extends Command {
   // Output columns of the analyzed input query plan
   def outputColumnNames: Seq[String]
 
+  def outputColumns: Seq[Attribute] =
+    DataWritingCommand.logicalPlanOutputWithNames(query, outputColumnNames)
+
   lazy val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
 
   def basicWriteJobStatsTracker(hadoopConf: Configuration): BasicWriteJobStatsTracker = {
@@ -52,4 +55,22 @@ trait DataWritingCommand extends Command {
   }
 
   def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row]
+}
+
+object DataWritingCommand {
+  /**
+   * Returns output attributes with provided names.
+   * The length of provided names should be the same of the length of [[LogicalPlan.output]].
+   */
+  def logicalPlanOutputWithNames(
+      query: LogicalPlan,
+      names: Seq[String]): Seq[Attribute] = {
+    // Save the output attributes to a variable to avoid duplicated function calls.
+    val outputAttributes = query.output
+    assert(outputAttributes.length == names.length,
+      "The length of provided names doesn't match the length of output attributes.")
+    outputAttributes.zipWithIndex.map { case (element, index) =>
+      element.withName(names(index))
+    }
+  }
 }

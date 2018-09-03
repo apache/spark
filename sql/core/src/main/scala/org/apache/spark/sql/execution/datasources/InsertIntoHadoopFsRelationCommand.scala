@@ -155,7 +155,6 @@ case class InsertIntoHadoopFsRelationCommand(
         }
       }
 
-      val outputColumns = query.outputWithNames(outputColumnNames)
       val updatedPartitionPaths =
         FileFormatWriter.write(
           sparkSession = sparkSession,

@@ -105,7 +105,7 @@ case class InsertIntoHiveDirCommand(
         hadoopConf = hadoopConf,
         fileSinkConf = fileSinkConf,
         outputLocation = tmpPath.toString,
-        allColumns = query.outputWithNames(outputColumnNames))
+        allColumns = outputColumns)
 
       val fs = writeToPath.getFileSystem(hadoopConf)
       if (overwrite && fs.exists(writeToPath)) {

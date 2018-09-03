@@ -39,20 +39,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   def outputSet: AttributeSet = AttributeSet(output)
 
   /**
-   * Returns output attributes with provided names.
-   * The length of provided names should be the same of the length of [[output]].
-   */
-  def outputWithNames(names: Seq[String]): Seq[Attribute] = {
-    // Save the output attributes to a variable to avoid duplicated function calls.
-    val outputAttributes = output
-    assert(outputAttributes.length == names.length,
-      "The length of provided names doesn't match the length of output attributes.")
-    outputAttributes.zipWithIndex.map { case (element, index) =>
-      element.withName(names(index))
-    }
-  }
-
-  /**
    * All Attributes that appear in expressions from this operator.  Note that this set does not
    * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
