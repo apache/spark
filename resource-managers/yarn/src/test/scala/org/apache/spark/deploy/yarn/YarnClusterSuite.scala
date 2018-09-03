@@ -133,7 +133,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       appArgs = Seq("key=value", "spark.test.key=testvalue", result.getAbsolutePath()),
       extraConf = Map(
         "spark.hadoop.key" -> "value",
-        "spark.yarn.conf.dir" -> customConf.getAbsolutePath))
+        "spark.hadoop.conf.dir" -> customConf.getAbsolutePath))
     checkResult(finalState, result)
   }
 
