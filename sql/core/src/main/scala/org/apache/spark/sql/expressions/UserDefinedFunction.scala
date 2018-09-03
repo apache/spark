@@ -135,3 +135,11 @@ case class UserDefinedFunction protected[sql] (
     }
   }
 }
+
+object UserDefinedFunction {
+  // This is to keep backward compatibility for this case class.
+  // TODO: revisit this case class in Spark 3.0, and narrow down the public surface.
+  def unapply(arg: UserDefinedFunction): Option[(AnyRef, DataType, Option[Seq[DataType]])] = {
+    Some(arg.f, arg.dataType, arg.inputSchemas.map(_.map(_.dataType)))
+  }
+}
