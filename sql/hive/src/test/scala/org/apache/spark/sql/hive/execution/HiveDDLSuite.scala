@@ -754,6 +754,47 @@ class HiveDDLSuite
     }
   }
 
+  test("Insert overwrite Hive table should output correct schema") {
+    withTable("tbl", "tbl2") {
+      withView("view1") {
+        spark.sql("CREATE TABLE tbl(id long)")
+        spark.sql("INSERT OVERWRITE TABLE tbl SELECT 4")
+        spark.sql("CREATE VIEW view1 AS SELECT id FROM tbl")
+        spark.sql("CREATE TABLE tbl2(ID long)")
+        spark.sql("INSERT OVERWRITE TABLE tbl2 SELECT ID FROM view1")
+        checkAnswer(spark.table("tbl2"), Seq(Row(4)))
+      }
+    }
+  }
+
+  test("Insert into Hive directory should output correct schema") {
+    withTable("tbl") {
+      withView("view1") {
+        withTempPath { path =>
+          spark.sql("CREATE TABLE tbl(id long)")
+          spark.sql("INSERT OVERWRITE TABLE tbl SELECT 4")
+          spark.sql("CREATE VIEW view1 AS SELECT id FROM tbl")
+          spark.sql(s"CREATE TABLE tbl2(ID long) location '${path.toURI}'")
+          spark.sql(s"INSERT OVERWRITE DIRECTORY '${path.toURI}' SELECT ID FROM view1")
+          // spark.sql("INSERT OVERWRITE TABLE tbl2 SELECT ID FROM view1")
+          checkAnswer(spark.table("tbl2"), Seq(Row(4)))
+        }
+      }
+    }
+  }
+
+  test("Create Hive table as select should output correct schema") {
+    withTable("tbl", "tbl2") {
+      withView("view1") {
+        spark.sql("CREATE TABLE tbl(id long)")
+        spark.sql("INSERT OVERWRITE TABLE tbl SELECT 4")
+        spark.sql("CREATE VIEW view1 AS SELECT id FROM tbl")
+        spark.sql("CREATE TABLE tbl2 AS SELECT ID FROM view1")
+        checkAnswer(spark.table("tbl2"), Seq(Row(4)))
+      }
+    }
+  }
+
   test("alter table partition - storage information") {
     sql("CREATE TABLE boxes (height INT, length INT) PARTITIONED BY (width INT)")
     sql("INSERT OVERWRITE TABLE boxes PARTITION (width=4) SELECT 4, 4")
