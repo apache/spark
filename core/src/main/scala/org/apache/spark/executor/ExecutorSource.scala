@@ -86,12 +86,8 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
     val name = new ObjectName("java.lang", "type", "OperatingSystem")
     override def getValue: Long = {
       try {
-        val attribute = mBean.getAttribute(name, "ProcessCpuTime")
-        if (attribute != null) {
-          attribute.asInstanceOf[Long]
-        } else {
-          -1L
-        }
+        // return JVM process CPU time if the ProcessCpuTime method is available
+        mBean.getAttribute(name, "ProcessCpuTime").asInstanceOf[Long]
       } catch {
         case NonFatal(_) => -1L
       }
