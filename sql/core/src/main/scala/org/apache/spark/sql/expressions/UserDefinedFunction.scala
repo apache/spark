@@ -140,7 +140,7 @@ case class UserDefinedFunction protected[sql] (
 
 private[sql] object UserDefinedFunction {
 
-  def apply(
+  def create(
       f: AnyRef,
       dataType: DataType,
       inputSchemas: Option[Seq[ScalaReflection.Schema]]): UserDefinedFunction = {
