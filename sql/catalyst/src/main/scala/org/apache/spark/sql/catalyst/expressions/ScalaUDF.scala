@@ -1032,6 +1032,8 @@ case class ScalaUDF(
          |}
        """.stripMargin
 
+    val initNullable = s"boolean nullable = $nullable;"
+
     ev.copy(code =
       code"""
          |$evalCode
@@ -1039,10 +1041,11 @@ case class ScalaUDF(
          |$callFunc
          |
          |boolean ${ev.isNull} = $resultTerm == null;
+         |$initNullable
          |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |if (!${ev.isNull}) {
          |  ${ev.value} = $resultTerm;
-         |} else if (!$nullable) {
+         |} else if (!nullable) {
          |  throw new RuntimeException($errorMsgNonNullableTerm);
          |}
        """.stripMargin)
