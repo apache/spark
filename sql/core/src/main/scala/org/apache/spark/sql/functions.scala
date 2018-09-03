@@ -3856,7 +3856,7 @@ object functions {
       | */
       |def udf(f: UDF$i[$extTypeArgs], returnType: DataType): UserDefinedFunction = {
       |  val func = f$anyCast.call($anyParams)
-      |  UserDefinedFunction($funcCall, returnType, inputTypes = None)
+      |  UserDefinedFunction($funcCall, returnType, inputSchemas = None)
       |}""".stripMargin)
   }
 
@@ -4057,7 +4057,7 @@ object functions {
    */
   def udf(f: UDF0[_], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF0[Any]].call()
-    UserDefinedFunction(() => func, returnType, inputTypes = None)
+    UserDefinedFunction(() => func, returnType, inputSchemas = None)
   }
 
   /**
@@ -4071,7 +4071,7 @@ object functions {
    */
   def udf(f: UDF1[_, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF1[Any, Any]].call(_: Any)
-    UserDefinedFunction(func, returnType, inputTypes = None)
+    UserDefinedFunction(func, returnType, inputSchemas = None)
   }
 
   /**
@@ -4085,7 +4085,7 @@ object functions {
    */
   def udf(f: UDF2[_, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF2[Any, Any, Any]].call(_: Any, _: Any)
-    UserDefinedFunction(func, returnType, inputTypes = None)
+    UserDefinedFunction(func, returnType, inputSchemas = None)
   }
 
   /**
@@ -4099,7 +4099,7 @@ object functions {
    */
   def udf(f: UDF3[_, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF3[Any, Any, Any, Any]].call(_: Any, _: Any, _: Any)
-    UserDefinedFunction(func, returnType, inputTypes = None)
+    UserDefinedFunction(func, returnType, inputSchemas = None)
   }
 
   /**
@@ -4113,7 +4113,7 @@ object functions {
    */
   def udf(f: UDF4[_, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF4[Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any)
-    UserDefinedFunction(func, returnType, inputTypes = None)
+    UserDefinedFunction(func, returnType, inputSchemas = None)
   }
 
   /**
@@ -4127,7 +4127,7 @@ object functions {
    */
   def udf(f: UDF5[_, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF5[Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any)
-    UserDefinedFunction(func, returnType, inputTypes = None)
+    UserDefinedFunction(func, returnType, inputSchemas = None)
   }
 
   /**
@@ -4141,7 +4141,7 @@ object functions {
    */
   def udf(f: UDF6[_, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF6[Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    UserDefinedFunction(func, returnType, inputTypes = None)
+    UserDefinedFunction(func, returnType, inputSchemas = None)
   }
 
   /**
@@ -4155,7 +4155,7 @@ object functions {
    */
   def udf(f: UDF7[_, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF7[Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    UserDefinedFunction(func, returnType, inputTypes = None)
+    UserDefinedFunction(func, returnType, inputSchemas = None)
   }
 
   /**
@@ -4169,7 +4169,7 @@ object functions {
    */
   def udf(f: UDF8[_, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF8[Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    UserDefinedFunction(func, returnType, inputTypes = None)
+    UserDefinedFunction(func, returnType, inputSchemas = None)
   }
 
   /**
@@ -4183,7 +4183,7 @@ object functions {
    */
   def udf(f: UDF9[_, _, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF9[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    UserDefinedFunction(func, returnType, inputTypes = None)
+    UserDefinedFunction(func, returnType, inputSchemas = None)
   }
 
   /**
@@ -4197,7 +4197,7 @@ object functions {
    */
   def udf(f: UDF10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
     val func = f.asInstanceOf[UDF10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    UserDefinedFunction(func, returnType, inputTypes = None)
+    UserDefinedFunction(func, returnType, inputSchemas = None)
   }
 
   // scalastyle:on parameter.number
