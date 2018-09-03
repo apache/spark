@@ -38,7 +38,7 @@ fi
 
 SPARK_K8S_CMD="$1"
 case "$SPARK_K8S_CMD" in
-    driver | driver-py | executor)
+    driver | driver-py | driver-r | executor)
       shift 1
       ;;
     "")
@@ -69,6 +69,10 @@ if [ -n "$PYSPARK_APP_ARGS" ]; then
     PYSPARK_ARGS="$PYSPARK_APP_ARGS"
 fi
 
+R_ARGS=""
+if [ -n "$R_APP_ARGS" ]; then
+    R_ARGS="$R_APP_ARGS"
+fi
 
 if [ "$PYSPARK_MAJOR_PYTHON_VERSION" == "2" ]; then
     pyv="$(python -V 2>&1)"
@@ -97,6 +101,14 @@ case "$SPARK_K8S_CMD" in
       --conf "spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS"
       --deploy-mode client
       "$@" $PYSPARK_PRIMARY $PYSPARK_ARGS
+    )
+    ;;
+    driver-r)
+    CMD=(
+      "$SPARK_HOME/bin/spark-submit"
+      --conf "spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS"
+      --deploy-mode client
+      "$@" $R_PRIMARY $R_ARGS
     )
     ;;
   executor)

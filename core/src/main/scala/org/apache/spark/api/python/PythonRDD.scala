@@ -46,11 +46,9 @@ import org.apache.spark.util._
 private[spark] class PythonRDD(
     parent: RDD[_],
     func: PythonFunction,
-    preservePartitoning: Boolean)
+    preservePartitoning: Boolean,
+    isFromBarrier: Boolean = false)
   extends RDD[Array[Byte]](parent) {
-
-  val bufferSize = conf.getInt("spark.buffer.size", 65536)
-  val reuseWorker = conf.getBoolean("spark.python.worker.reuse", true)
 
   override def getPartitions: Array[Partition] = firstParent.partitions
 
@@ -61,9 +59,12 @@ private[spark] class PythonRDD(
   val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
-    val runner = PythonRunner(func, bufferSize, reuseWorker)
+    val runner = PythonRunner(func)
     runner.compute(firstParent.iterator(split, context), split.index, context)
   }
+
+  @transient protected lazy override val isBarrier_ : Boolean =
+    isFromBarrier || dependencies.exists(_.rdd.isBarrier())
 }
 
 /**
@@ -400,6 +401,26 @@ private[spark] object PythonRDD extends Logging {
    *         data collected from this job, and the secret for authentication.
    */
   def serveIterator(items: Iterator[_], threadName: String): Array[Any] = {
+    serveToStream(threadName) { out =>
+      writeIteratorToStream(items, new DataOutputStream(out))
+    }
+  }
+
+  /**
+   * Create a socket server and background thread to execute the writeFunc
+   * with the given OutputStream.
+   *
+   * The socket server can only accept one connection, or close if no connection
+   * in 15 seconds.
+   *
+   * Once a connection comes in, it will execute the block of code and pass in
+   * the socket output stream.
+   *
+   * The thread will terminate after the block of code is executed or any
+   * exceptions happen.
+   */
+  private[spark] def serveToStream(
+      threadName: String)(writeFunc: OutputStream => Unit): Array[Any] = {
     val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
     // Close the socket if no connection in 15 seconds
     serverSocket.setSoTimeout(15000)
@@ -411,9 +432,9 @@ private[spark] object PythonRDD extends Logging {
           val sock = serverSocket.accept()
           authHelper.authClient(sock)
 
-          val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
+          val out = new BufferedOutputStream(sock.getOutputStream)
           Utils.tryWithSafeFinally {
-            writeIteratorToStream(items, out)
+            writeFunc(out)
           } {
             out.close()
             sock.close()
@@ -620,7 +641,7 @@ private[spark] class PythonAccumulatorV2(
   override def merge(other: AccumulatorV2[Array[Byte], JList[Array[Byte]]]): Unit = synchronized {
     val otherPythonAccumulator = other.asInstanceOf[PythonAccumulatorV2]
     // This conditional isn't strictly speaking needed - merging only currently happens on the
-    // driver program - but that isn't gauranteed so incase this changes.
+    // driver program - but that isn't guaranteed so incase this changes.
     if (serverHost == null) {
       // We are on the worker
       super.merge(otherPythonAccumulator)

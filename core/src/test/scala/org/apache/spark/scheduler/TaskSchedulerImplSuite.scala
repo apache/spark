@@ -36,6 +36,7 @@ class FakeSchedulerBackend extends SchedulerBackend {
   def stop() {}
   def reviveOffers() {}
   def defaultParallelism(): Int = 1
+  def maxNumConcurrentTasks(): Int = 0
 }
 
 class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach
@@ -1116,5 +1117,23 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(0 === tsm.runningTasks)
     assert(!tsm.isZombie)
     assert(taskScheduler.taskSetManagerForAttempt(0, 0).isDefined)
+  }
+
+  test("mark taskset for a barrier stage as zombie in case a task fails") {
+    val taskScheduler = setupScheduler()
+
+    val attempt = FakeTask.createBarrierTaskSet(3)
+    taskScheduler.submitTasks(attempt)
+
+    val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
+    val offers = (0 until 3).map{ idx =>
+      WorkerOffer(s"exec-$idx", s"host-$idx", 1, Some(s"192.168.0.101:4962$idx"))
+    }
+    taskScheduler.resourceOffers(offers)
+    assert(tsm.runningTasks === 3)
+
+    // Fail a task from the stage attempt.
+    tsm.handleFailedTask(tsm.taskAttempts.head.head.taskId, TaskState.FAILED, TaskKilled("test"))
+    assert(tsm.isZombie)
   }
 }

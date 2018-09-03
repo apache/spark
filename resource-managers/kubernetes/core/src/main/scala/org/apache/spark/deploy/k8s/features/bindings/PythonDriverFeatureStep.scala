@@ -30,11 +30,12 @@ private[spark] class PythonDriverFeatureStep(
   override def configurePod(pod: SparkPod): SparkPod = {
     val roleConf = kubernetesConf.roleSpecificConf
     require(roleConf.mainAppResource.isDefined, "PySpark Main Resource must be defined")
+    // Delineation is done by " " because that is input into PythonRunner
     val maybePythonArgs = Option(roleConf.appArgs).filter(_.nonEmpty).map(
       pyArgs =>
         new EnvVarBuilder()
           .withName(ENV_PYSPARK_ARGS)
-          .withValue(pyArgs.mkString(","))
+          .withValue(pyArgs.mkString(" "))
           .build())
     val maybePythonFiles = kubernetesConf.pyFiles().map(
       // Dilineation by ":" is to append the PySpark Files to the PYTHONPATH

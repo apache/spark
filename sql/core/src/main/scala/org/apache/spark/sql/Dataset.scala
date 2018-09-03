@@ -48,7 +48,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.arrow.{ArrowConverters, ArrowPayload}
+import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.python.EvaluatePython
@@ -65,7 +65,12 @@ private[sql] object Dataset {
     val dataset = new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
     // Eagerly bind the encoder so we verify that the encoder matches the underlying
     // schema. The user will get an error if this is not the case.
-    dataset.deserializer
+    // optimization: it is guaranteed that [[InternalRow]] can be converted to [[Row]] so
+    // do not do this check in that case. this check can be expensive since it requires running
+    // the whole [[Analyzer]] to resolve the deserializer
+    if (dataset.exprEnc.clsTag.runtimeClass != classOf[Row]) {
+      dataset.deserializer
+    }
     dataset
   }
 
@@ -1383,8 +1388,7 @@ class Dataset[T] private[sql](
   @InterfaceStability.Evolving
   def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = {
     implicit val encoder = c1.encoder
-    val project = Project(c1.withInputType(exprEnc, logicalPlan.output).named :: Nil,
-      logicalPlan)
+    val project = Project(c1.withInputType(exprEnc, logicalPlan.output).named :: Nil, logicalPlan)
 
     if (encoder.flat) {
       new Dataset[U1](sparkSession, project, encoder)
@@ -1658,15 +1662,14 @@ class Dataset[T] private[sql](
   @Experimental
   @InterfaceStability.Evolving
   def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
-    val inputPlan = logicalPlan
-    val withGroupingKey = AppendColumns(func, inputPlan)
+    val withGroupingKey = AppendColumns(func, logicalPlan)
     val executed = sparkSession.sessionState.executePlan(withGroupingKey)
 
     new KeyValueGroupedDataset(
       encoderFor[K],
       encoderFor[T],
       executed,
-      inputPlan.output,
+      logicalPlan.output,
       withGroupingKey.newColumns)
   }
 
@@ -3270,13 +3273,49 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Collect a Dataset as ArrowPayload byte arrays and serve to PySpark.
+   * Collect a Dataset as Arrow batches and serve stream to PySpark.
    */
   private[sql] def collectAsArrowToPython(): Array[Any] = {
+    val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
+
     withAction("collectAsArrowToPython", queryExecution) { plan =>
-      val iter: Iterator[Array[Byte]] =
-        toArrowPayload(plan).collect().iterator.map(_.asPythonSerializable)
-      PythonRDD.serveIterator(iter, "serve-Arrow")
+      PythonRDD.serveToStream("serve-Arrow") { out =>
+        val batchWriter = new ArrowBatchStreamWriter(schema, out, timeZoneId)
+        val arrowBatchRdd = toArrowBatchRdd(plan)
+        val numPartitions = arrowBatchRdd.partitions.length
+
+        // Store collection results for worst case of 1 to N-1 partitions
+        val results = new Array[Array[Array[Byte]]](numPartitions - 1)
+        var lastIndex = -1  // index of last partition written
+
+        // Handler to eagerly write partitions to Python in order
+        def handlePartitionBatches(index: Int, arrowBatches: Array[Array[Byte]]): Unit = {
+          // If result is from next partition in order
+          if (index - 1 == lastIndex) {
+            batchWriter.writeBatches(arrowBatches.iterator)
+            lastIndex += 1
+            // Write stored partitions that come next in order
+            while (lastIndex < results.length && results(lastIndex) != null) {
+              batchWriter.writeBatches(results(lastIndex).iterator)
+              results(lastIndex) = null
+              lastIndex += 1
+            }
+            // After last batch, end the stream
+            if (lastIndex == results.length) {
+              batchWriter.end()
+            }
+          } else {
+            // Store partitions received out of order
+            results(index - 1) = arrowBatches
+          }
+        }
+
+        sparkSession.sparkContext.runJob(
+          arrowBatchRdd,
+          (ctx: TaskContext, it: Iterator[Array[Byte]]) => it.toArray,
+          0 until numPartitions,
+          handlePartitionBatches)
+      }
     }
   }
 
@@ -3383,20 +3422,20 @@ class Dataset[T] private[sql](
     }
   }
 
-  /** Convert to an RDD of ArrowPayload byte arrays */
-  private[sql] def toArrowPayload(plan: SparkPlan): RDD[ArrowPayload] = {
+  /** Convert to an RDD of serialized ArrowRecordBatches. */
+  private[sql] def toArrowBatchRdd(plan: SparkPlan): RDD[Array[Byte]] = {
     val schemaCaptured = this.schema
     val maxRecordsPerBatch = sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
     plan.execute().mapPartitionsInternal { iter =>
       val context = TaskContext.get()
-      ArrowConverters.toPayloadIterator(
+      ArrowConverters.toBatchIterator(
         iter, schemaCaptured, maxRecordsPerBatch, timeZoneId, context)
     }
   }
 
   // This is only used in tests, for now.
-  private[sql] def toArrowPayload: RDD[ArrowPayload] = {
-    toArrowPayload(queryExecution.executedPlan)
+  private[sql] def toArrowBatchRdd: RDD[Array[Byte]] = {
+    toArrowBatchRdd(queryExecution.executedPlan)
   }
 }

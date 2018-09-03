@@ -40,7 +40,7 @@ except ImportError:
     JIRA_IMPORTED = False
 
 if sys.version < '3':
-    input = raw_input
+    input = raw_input  # noqa
 
 # Location of your Spark git development area
 SPARK_HOME = os.environ.get("SPARK_HOME", os.getcwd())
@@ -374,8 +374,8 @@ def standardize_jira_ref(text):
     >>> standardize_jira_ref("[SPARK-979] a LRU scheduler for load balancing in TaskSchedulerImpl")
     '[SPARK-979] a LRU scheduler for load balancing in TaskSchedulerImpl'
     >>> standardize_jira_ref(
-    ...     "SPARK-1094 Support MiMa for reporting binary compatibility accross versions.")
-    '[SPARK-1094] Support MiMa for reporting binary compatibility accross versions.'
+    ...     "SPARK-1094 Support MiMa for reporting binary compatibility across versions.")
+    '[SPARK-1094] Support MiMa for reporting binary compatibility across versions.'
     >>> standardize_jira_ref("[WIP]  [SPARK-1146] Vagrant support for Spark")
     '[SPARK-1146][WIP] Vagrant support for Spark'
     >>> standardize_jira_ref(
@@ -437,6 +437,10 @@ def main():
 
     os.chdir(SPARK_HOME)
     original_head = get_current_ref()
+
+    # Check this up front to avoid failing the JIRA update at the very end
+    if not JIRA_USERNAME or not JIRA_PASSWORD:
+        continue_maybe("The env-vars JIRA_USERNAME and/or JIRA_PASSWORD are not set. Continue?")
 
     branches = get_json("%s/branches" % GITHUB_API_BASE)
     branch_names = filter(lambda x: x.startswith("branch-"), [x['name'] for x in branches])

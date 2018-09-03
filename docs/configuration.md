@@ -152,8 +152,9 @@ of the most common options to set are:
   <td><code>spark.driver.memory</code></td>
   <td>1g</td>
   <td>
-    Amount of memory to use for the driver process, i.e. where SparkContext is initialized, in MiB 
-    unless otherwise specified (e.g. <code>1g</code>, <code>2g</code>).
+    Amount of memory to use for the driver process, i.e. where SparkContext is initialized, in the
+    same format as JVM memory strings with a size unit suffix ("k", "m", "g" or "t")
+    (e.g. <code>512m</code>, <code>2g</code>).
     <br />
     <em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
@@ -175,8 +176,20 @@ of the most common options to set are:
   <td><code>spark.executor.memory</code></td>
   <td>1g</td>
   <td>
-    Amount of memory to use per executor process, in MiB unless otherwise specified.
-    (e.g. <code>2g</code>, <code>8g</code>).
+    Amount of memory to use per executor process, in the same format as JVM memory strings with
+    a size unit suffix ("k", "m", "g" or "t") (e.g. <code>512m</code>, <code>2g</code>).
+  </td>
+</tr>
+<tr>
+ <td><code>spark.executor.pyspark.memory</code></td>
+  <td>Not set</td>
+  <td>
+    The amount of memory to be allocated to PySpark in each executor, in MiB
+    unless otherwise specified.  If set, PySpark memory for an executor will be
+    limited to this amount. If not set, Spark will not limit Python's memory use
+    and it is up to the application to avoid exceeding the overhead memory space
+    shared with other non-JVM processes. When PySpark is run in YARN, this memory
+    is added to executor resource requests.
   </td>
 </tr>
 <tr>
@@ -1827,7 +1840,7 @@ Apart from these, the following properties are also available, and may be useful
     executors w.r.t. full parallelism.
     Defaults to 1.0 to give maximum parallelism.
     0.5 will divide the target number of executors by 2
-    The target number of executors computed by the dynamicAllocation can still be overriden
+    The target number of executors computed by the dynamicAllocation can still be overridden
     by the <code>spark.dynamicAllocation.minExecutors</code> and
     <code>spark.dynamicAllocation.maxExecutors</code> settings
   </td>
@@ -1984,6 +1997,14 @@ showDF(properties, numRows = 200, truncate = FALSE)
     <a href="streaming-kafka-integration.html">Kafka Integration guide</a>
     for more details.
   </td>
+</tr>
+<tr>
+    <td><code>spark.streaming.kafka.minRatePerPartition</code></td>
+    <td>1</td>
+    <td>
+      Minimum rate (number of records per second) at which data will be read from each Kafka
+      partition when using the new Kafka direct stream API.
+    </td>
 </tr>
 <tr>
   <td><code>spark.streaming.kafka.maxRetries</code></td>
@@ -2213,7 +2234,7 @@ Spark's classpath for each application. In a Spark cluster running on YARN, thes
 files are set cluster-wide, and cannot safely be changed by the application.
 
 The better choice is to use spark hadoop properties in the form of `spark.hadoop.*`. 
-They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-default.conf`
+They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-defaults.conf`
 
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
 instance, Spark allows you to simply create an empty conf and set spark/spark hadoop properties.

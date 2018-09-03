@@ -1603,6 +1603,39 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
   }
 
+  test("SPARK-25134: check header on parsing of dataset with projection and column pruning") {
+    withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "true") {
+      Seq(false, true).foreach { multiLine =>
+        withTempPath { path =>
+          val dir = path.getAbsolutePath
+          Seq(("a", "b")).toDF("columnA", "columnB").write
+            .format("csv")
+            .option("header", true)
+            .save(dir)
+
+          // schema with one column
+          checkAnswer(spark.read
+            .format("csv")
+            .option("header", true)
+            .option("enforceSchema", false)
+            .option("multiLine", multiLine)
+            .load(dir)
+            .select("columnA"),
+            Row("a"))
+
+          // empty schema
+          assert(spark.read
+            .format("csv")
+            .option("header", true)
+            .option("enforceSchema", false)
+            .option("multiLine", multiLine)
+            .load(dir)
+            .count() === 1L)
+        }
+      }
+    }
+  }
+
   test("SPARK-24645 skip parsing when columnPruning enabled and partitions scanned only") {
     withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "true") {
       withTempPath { path =>
@@ -1640,5 +1673,31 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         checkAnswer(df2, Row(1, 2, null))
       }
     }
+  }
+
+  test("count() for malformed input") {
+    def countForMalformedCSV(expected: Long, input: Seq[String]): Unit = {
+      val schema = new StructType().add("a", IntegerType)
+      val strings = spark.createDataset(input)
+      val df = spark.read.schema(schema).option("header", false).csv(strings)
+
+      assert(df.count() == expected)
+    }
+    def checkCount(expected: Long): Unit = {
+      val validRec = "1"
+      val inputs = Seq(
+        Seq("{-}", validRec),
+        Seq(validRec, "?"),
+        Seq("0xAC", validRec),
+        Seq(validRec, "0.314"),
+        Seq("\\\\\\", validRec)
+      )
+      inputs.foreach { input =>
+        countForMalformedCSV(expected, input)
+      }
+    }
+
+    checkCount(2)
+    countForMalformedCSV(0, Seq(""))
   }
 }

@@ -16,6 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
+<<<<<<< HEAD
 import java.io.File
 
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -25,6 +26,11 @@ import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
 import org.apache.spark.util.Utils
+=======
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf}
+import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, LocalDirsFeatureStep, MountSecretsFeatureStep, MountVolumesFeatureStep}
+import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
+>>>>>>> master
 
 private[spark] class KubernetesDriverBuilder(
     provideBasicStep: (KubernetesConf[KubernetesDriverSpecificConf]) => BasicDriverFeatureStep =
@@ -49,6 +55,7 @@ private[spark] class KubernetesDriverBuilder(
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
       new MountVolumesFeatureStep(_),
+<<<<<<< HEAD
     provideJavaStep: (
       KubernetesConf[KubernetesDriverSpecificConf]
         => JavaDriverFeatureStep) =
@@ -61,6 +68,20 @@ private[spark] class KubernetesDriverBuilder(
     provideInitialPod: () => SparkPod = SparkPod.initialPod) {
 
   import KubernetesDriverBuilder._
+=======
+    providePythonStep: (
+      KubernetesConf[KubernetesDriverSpecificConf]
+      => PythonDriverFeatureStep) =
+      new PythonDriverFeatureStep(_),
+    provideRStep: (
+      KubernetesConf[KubernetesDriverSpecificConf]
+        => RDriverFeatureStep) =
+    new RDriverFeatureStep(_),
+    provideJavaStep: (
+      KubernetesConf[KubernetesDriverSpecificConf]
+        => JavaDriverFeatureStep) =
+    new JavaDriverFeatureStep(_)) {
+>>>>>>> master
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesDriverSpec = {
@@ -88,7 +109,9 @@ private[spark] class KubernetesDriverBuilder(
         case JavaMainAppResource(_) =>
           provideJavaStep(kubernetesConf)
         case PythonMainAppResource(_) =>
-          providePythonStep(kubernetesConf)}
+          providePythonStep(kubernetesConf)
+        case RMainAppResource(_) =>
+          provideRStep(kubernetesConf)}
       .getOrElse(provideJavaStep(kubernetesConf))
 
     val localFiles = KubernetesUtils.submitterLocalFiles(kubernetesConf.sparkFiles)

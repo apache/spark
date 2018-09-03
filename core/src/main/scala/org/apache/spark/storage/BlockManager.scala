@@ -41,6 +41,7 @@ import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.{ExternalShuffleClient, TempFileManager}
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
@@ -412,6 +413,63 @@ private[spark] class BlockManager(
     putBytes(blockId, new ChunkedByteBuffer(data.nioByteBuffer()), level)(classTag)
   }
 
+  override def putBlockDataAsStream(
+      blockId: BlockId,
+      level: StorageLevel,
+      classTag: ClassTag[_]): StreamCallbackWithID = {
+    // TODO if we're going to only put the data in the disk store, we should just write it directly
+    // to the final location, but that would require a deeper refactor of this code.  So instead
+    // we just write to a temp file, and call putBytes on the data in that file.
+    val tmpFile = diskBlockManager.createTempLocalBlock()._2
+    val channel = new CountingWritableChannel(
+      Channels.newChannel(serializerManager.wrapForEncryption(new FileOutputStream(tmpFile))))
+    logTrace(s"Streaming block $blockId to tmp file $tmpFile")
+    new StreamCallbackWithID {
+
+      override def getID: String = blockId.name
+
+      override def onData(streamId: String, buf: ByteBuffer): Unit = {
+        while (buf.hasRemaining) {
+          channel.write(buf)
+        }
+      }
+
+      override def onComplete(streamId: String): Unit = {
+        logTrace(s"Done receiving block $blockId, now putting into local blockManager")
+        // Read the contents of the downloaded file as a buffer to put into the blockManager.
+        // Note this is all happening inside the netty thread as soon as it reads the end of the
+        // stream.
+        channel.close()
+        // TODO SPARK-25035 Even if we're only going to write the data to disk after this, we end up
+        // using a lot of memory here.  With encryption, we'll read the whole file into a regular
+        // byte buffer and OOM.  Without encryption, we'll memory map the file and won't get a jvm
+        // OOM, but might get killed by the OS / cluster manager.  We could at least read the tmp
+        // file as a stream in both cases.
+        val buffer = securityManager.getIOEncryptionKey() match {
+          case Some(key) =>
+            // we need to pass in the size of the unencrypted block
+            val blockSize = channel.getCount
+            val allocator = level.memoryMode match {
+              case MemoryMode.ON_HEAP => ByteBuffer.allocate _
+              case MemoryMode.OFF_HEAP => Platform.allocateDirectBuffer _
+            }
+            new EncryptedBlockData(tmpFile, blockSize, conf, key).toChunkedByteBuffer(allocator)
+
+          case None =>
+            ChunkedByteBuffer.map(tmpFile, conf.get(config.MEMORY_MAP_LIMIT_FOR_TESTS).toInt)
+        }
+        putBytes(blockId, buffer, level)(classTag)
+        tmpFile.delete()
+      }
+
+      override def onFailure(streamId: String, cause: Throwable): Unit = {
+        // the framework handles the connection itself, we just need to do local cleanup
+        channel.close()
+        tmpFile.delete()
+      }
+    }
+  }
+
   /**
    * Get the BlockStatus for the block identified by the given ID, if it exists.
    * NOTE: This is mainly for testing.
@@ -673,7 +731,7 @@ private[spark] class BlockManager(
     // TODO if we change this method to return the ManagedBuffer, then getRemoteValues
     // could just use the inputStream on the temp file, rather than memory-mapping the file.
     // Until then, replication can cause the process to use too much memory and get killed
-    // by the OS / cluster manager (not a java OOM, since its a memory-mapped file) even though
+    // by the OS / cluster manager (not a java OOM, since it's a memory-mapped file) even though
     // we've read the data to disk.
     logDebug(s"Getting remote block $blockId")
     require(blockId != null, "BlockId is null")
@@ -1364,12 +1422,16 @@ private[spark] class BlockManager(
       try {
         val onePeerStartTime = System.nanoTime
         logTrace(s"Trying to replicate $blockId of ${data.size} bytes to $peer")
+        // This thread keeps a lock on the block, so we do not want the netty thread to unlock
+        // block when it finishes sending the message.
+        val buffer = new BlockManagerManagedBuffer(blockInfoManager, blockId, data, false,
+          unlockOnDeallocate = false)
         blockTransferService.uploadBlockSync(
           peer.host,
           peer.port,
           peer.executorId,
           blockId,
-          new BlockManagerManagedBuffer(blockInfoManager, blockId, data, false),
+          buffer,
           tLevel,
           classTag)
         logTrace(s"Replicated $blockId of ${data.size} bytes to $peer" +

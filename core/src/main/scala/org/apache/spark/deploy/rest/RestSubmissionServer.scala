@@ -50,8 +50,13 @@ import org.apache.spark.util.Utils
 private[spark] abstract class RestSubmissionServer(
     val host: String,
     val requestedPort: Int,
+<<<<<<< HEAD
     val masterConf: SparkConf,
     val sslOptions: SSLOptions = SSLOptions()) extends Logging {
+=======
+    val masterConf: SparkConf) extends Logging {
+
+>>>>>>> master
   protected val submitRequestServlet: SubmitRequestServlet
   protected val killRequestServlet: KillRequestServlet
   protected val statusRequestServlet: StatusRequestServlet

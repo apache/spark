@@ -77,7 +77,7 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
 
   /**
    * Disable stdout and stderr when running the test. To not output the logs to the console,
-   * ConsoleAppender's `follow` should be set to `true` so that it will honors reassignments of
+   * ConsoleAppender's `follow` should be set to `true` so that it will honor reassignments of
    * System.out or System.err. Otherwise, ConsoleAppender will still output to the console even if
    * we change System.out and System.err.
    */

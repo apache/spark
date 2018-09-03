@@ -28,6 +28,8 @@ import org.apache.spark.sql.types._
 
 class DefaultSource extends SimpleScanSource
 
+// This class is used by pyspark tests. If this class is modified/moved, make sure pyspark
+// tests still pass.
 class SimpleScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,

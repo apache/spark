@@ -1863,7 +1863,8 @@ abstract class RDD[T: ClassTag](
 
   // From performance concern, cache the value to avoid repeatedly compute `isBarrier()` on a long
   // RDD chain.
-  @transient protected lazy val isBarrier_ : Boolean = dependencies.exists(_.rdd.isBarrier())
+  @transient protected lazy val isBarrier_ : Boolean =
+    dependencies.filter(!_.isInstanceOf[ShuffleDependency[_, _, _]]).exists(_.rdd.isBarrier())
 }
 
 
