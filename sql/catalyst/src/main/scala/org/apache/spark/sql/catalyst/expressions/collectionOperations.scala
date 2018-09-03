@@ -1654,12 +1654,13 @@ case class ArraysOverlap(left: Expression, right: Expression)
     val j = ctx.freshName("j")
     val getFromSmaller = CodeGenerator.getValue(smaller, elementType, j)
     val getFromBigger = CodeGenerator.getValue(bigger, elementType, i)
+    val setIsNullCode = if (nullable) s"${ev.isNull} = false;" else ""
     val compareValues = nullSafeElementCodegen(
       smaller,
       j,
       s"""
          |if (${ctx.genEqual(elementType, getFromSmaller, getFromBigger)}) {
-         |  ${ev.isNull} = false;
+         |  $setIsNullCode
          |  ${ev.value} = true;
          |}
        """.stripMargin,
