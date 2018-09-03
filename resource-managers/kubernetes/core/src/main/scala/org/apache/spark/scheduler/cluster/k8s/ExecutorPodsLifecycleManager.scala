@@ -156,8 +156,8 @@ private[spark] class ExecutorPodsLifecycleManager(
     val message = Option(pod.getStatus.getMessage)
     s"""
        |The executor with id $execId exited with exit code $exitCode.
-       |The API gave the following brief reason: ${reason.getOrElse("")}
-       |The API gave the following message: ${message.getOrElse("")}
+       |The API gave the following brief reason: ${reason.getOrElse("N/A")}
+       |The API gave the following message: ${message.getOrElse("N/A")}
        |The API gave the following container statuses:
        |
        |${containersDescription(pod)}

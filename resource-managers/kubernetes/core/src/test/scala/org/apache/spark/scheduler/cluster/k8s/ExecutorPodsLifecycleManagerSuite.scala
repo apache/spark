@@ -109,8 +109,8 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     val message = Option(failedPod.getStatus.getMessage)
     s"""
        |The executor with id $failedExecutorId exited with exit code 1.
-       |The API gave the following brief reason: ${reason.getOrElse("")}
-       |The API gave the following message: ${message.getOrElse("")}
+       |The API gave the following brief reason: ${reason.getOrElse("N/A")}
+       |The API gave the following message: ${message.getOrElse("N/A")}
        |The API gave the following container statuses:
        |
        |${containersDescription(failedPod)}
