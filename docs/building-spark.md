@@ -259,7 +259,7 @@ or
 
 ## Change Scala Version
 
-To build Spark using other supported Scala version, please change the major Scala version using (e.g. 2.12):
+To build Spark using another supported Scala version, please change the major Scala version using (e.g. 2.12):
 
     ./dev/change-scala-version.sh 2.12
 
