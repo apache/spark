@@ -41,11 +41,17 @@ import org.apache.spark.sql.types.DataType
 case class UserDefinedFunction protected[sql] (
     f: AnyRef,
     dataType: DataType,
-    inputTypes: Option[Seq[ScalaReflection.Schema]]) {
+    inputSchemas: Option[Seq[ScalaReflection.Schema]]) {
 
   private var _nameOption: Option[String] = None
   private var _nullable: Boolean = true
   private var _deterministic: Boolean = true
+
+  // This is to keep backward compatibility for this case class.
+  // TODO: revisit this case class in Spark 3.0, and narrow down the public surface.
+  def inputTypes: Option[Seq[DataType]] = {
+    inputSchemas.map(_.map(_.dataType))
+  }
 
   /**
    * Returns true when the UDF can return a nullable value.
@@ -73,11 +79,11 @@ case class UserDefinedFunction protected[sql] (
       f,
       dataType,
       exprs.map(_.expr),
-      inputTypes.map(_.map(_.dataType)).getOrElse(Nil),
+      inputSchemas.map(_.map(_.dataType)).getOrElse(Nil),
       udfName = _nameOption,
       nullable = _nullable,
       udfDeterministic = _deterministic,
-      nullableTypes = inputTypes.map(_.map(_.nullable)).getOrElse(Nil)))
+      nullableTypes = inputSchemas.map(_.map(_.nullable)).getOrElse(Nil)))
   }
 
   private def copyAll(): UserDefinedFunction = {
