@@ -82,6 +82,15 @@ The following table describes the different options available for configuring th
   </td>
 </tr>
 <tr>
+  <td><code>spark.network.crypto.keyFactoryIterations</code></td>
+  <td>1024</td>
+  <td>
+    The number of iterations to run when generating keys. The default value was picked for speed,
+    assuming that a secret has good entropy. Should be used maximum number of iterations which have
+    negligible impact on the system.
+  </td>
+</tr>
+<tr>
   <td><code>spark.network.crypto.config.*</code></td>
   <td>None</td>
   <td>
