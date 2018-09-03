@@ -54,7 +54,7 @@ import org.apache.spark.sql.types._
  * builder methods mentioned above can only be found in test code, where all tested filters are
  * known to be convertible.
  */
-private[orc] object OrcFilters {
+private[sql] object OrcFilters {
 
   /**
    * Create ORC filter as a SearchArgument instance.
@@ -71,10 +71,22 @@ private[orc] object OrcFilters {
 
     for {
       // Combines all convertible filters using `And` to produce a single conjunction
-      conjunction <- convertibleFilters.reduceOption(org.apache.spark.sql.sources.And)
+      conjunction <- buildTree(convertibleFilters)
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
       builder <- buildSearchArgument(dataTypeMap, conjunction, SearchArgumentFactory.newBuilder())
     } yield builder.build()
+  }
+
+  def buildTree(filters: Seq[Filter]): Option[Filter] = {
+    import org.apache.spark.sql.sources.And
+    filters match {
+      case Seq() => None
+      case Seq(filter) => Some(filter)
+      case Seq(filter1, filter2) => Some(And(filter1, filter2))
+      case _ => // length > 2
+        val (left, right) = filters.splitAt(filters.length / 2)
+        Some(And(buildTree(left).get, buildTree(right).get))
+    }
   }
 
   /**

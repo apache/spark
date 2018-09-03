@@ -23,6 +23,9 @@ import java.sql.{Date, Timestamp}
 import scala.collection.JavaConverters._
 
 import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
+import org.scalatest.concurrent.TimeLimits
+import org.scalatest.time.SpanSugar._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{Column, DataFrame}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -39,7 +42,7 @@ import org.apache.spark.sql.types._
  * - OrcFilterSuite uses 'org.apache.orc.storage.ql.io.sarg' package.
  * - HiveOrcFilterSuite uses 'org.apache.hadoop.hive.ql.io.sarg' package.
  */
-class OrcFilterSuite extends OrcTest with SharedSQLContext {
+class OrcFilterSuite extends OrcTest with SharedSQLContext with TimeLimits {
 
   private def checkFilterPredicate(
       df: DataFrame,
@@ -381,6 +384,15 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
           StringContains("b", "prefix")
         ))
       )).get.toString
+    }
+  }
+
+  test("SPARK-25306 createFilter should not hang") {
+    import org.apache.spark.sql.sources._
+    val schema = new StructType(Array(StructField("a", IntegerType, nullable = true)))
+    val filters = (1 to 2000).map(LessThan("a", _)).toArray[Filter]
+    failAfter(2 seconds) {
+      OrcFilters.createFilter(schema, filters)
     }
   }
 }

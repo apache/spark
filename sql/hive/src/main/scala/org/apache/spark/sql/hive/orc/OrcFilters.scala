@@ -21,6 +21,7 @@ import org.apache.hadoop.hive.ql.io.sarg.{SearchArgument, SearchArgumentFactory}
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.datasources.orc.OrcFilters.buildTree
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
@@ -67,7 +68,7 @@ private[orc] object OrcFilters extends Logging {
 
     for {
       // Combines all convertible filters using `And` to produce a single conjunction
-      conjunction <- convertibleFilters.reduceOption(And)
+      conjunction <- buildTree(convertibleFilters)
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
       builder <- buildSearchArgument(dataTypeMap, conjunction, SearchArgumentFactory.newBuilder())
     } yield builder.build()
