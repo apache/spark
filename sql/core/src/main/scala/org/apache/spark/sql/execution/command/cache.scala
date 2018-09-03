@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.Locale
-
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.storage.StorageLevel
@@ -43,7 +42,7 @@ case class CacheTableCommand(
     if (storageLevel.nonEmpty) {
       sparkSession.catalog.cacheTable(
         tableIdent.quotedString,
-        StorageLevel.fromString(storageLevel.get.toUpperCase(Locale.ROOT)))
+        StorageLevel.fromString(storageLevel.get))
     } else {
       sparkSession.catalog.cacheTable(tableIdent.quotedString)
     }
