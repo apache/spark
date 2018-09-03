@@ -412,6 +412,26 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     assert(!ser2.getAutoReset)
   }
 
+  test("ClassCastException when writing a Map after previously " +
+    "reading a Map with different generic type") {
+    // This test copy from: https://github.com/EsotericSoftware/kryo/issues/384
+    import java.util
+    val ser = new KryoSerializer(new SparkConf).newInstance().asInstanceOf[KryoSerializerInstance]
+
+    class MapHolder {
+      private val mapOne = new util.HashMap[Int, String]
+      private val mapTwo = this.mapOne
+    }
+
+    val serializedMapHolder = ser.serialize(new MapHolder)
+    ser.deserialize[MapHolder](serializedMapHolder)
+
+    val stringMap = new util.HashMap[Int, util.List[String]]
+    stringMap.put(1, new util.ArrayList[String])
+    val serializedMap = ser.serialize[util.Map[Int, util.List[String]]](stringMap)
+    ser.deserialize[util.HashMap[Int, util.List[String]]](serializedMap)
+  }
+
   private def testSerializerInstanceReuse(autoReset: Boolean, referenceTracking: Boolean): Unit = {
     val conf = new SparkConf(loadDefaults = false)
       .set("spark.kryo.referenceTracking", referenceTracking.toString)
