@@ -101,6 +101,8 @@ class SessionCatalog(
   @GuardedBy("this")
   protected var currentDb: String = formatDatabaseName(DEFAULT_DATABASE)
 
+  private val validNameFormat = "([\\w_]+)".r
+
   /**
    * Checks if the given name conforms the Hive standard ("[a-zA-Z_0-9]+"),
    * i.e. if this name only contains characters, numbers, and _.
@@ -109,7 +111,6 @@ class SessionCatalog(
    * org.apache.hadoop.hive.metastore.MetaStoreUtils.validateName.
    */
   private def validateName(name: String): Unit = {
-    val validNameFormat = "([\\w_]+)".r
     if (!validNameFormat.pattern.matcher(name).matches()) {
       throw new AnalysisException(s"`$name` is not a valid name for tables/databases. " +
         "Valid names only contain alphabet characters, numbers and _.")
@@ -684,6 +685,7 @@ class SessionCatalog(
    *
    * If the relation is a view, we generate a [[View]] operator from the view description, and
    * wrap the logical plan in a [[SubqueryAlias]] which will track the name of the view.
+   * [[SubqueryAlias]] will also keep track of the name and database(optional) of the table/view
    *
    * @param name The name of the table/view that we look up.
    */
@@ -693,7 +695,7 @@ class SessionCatalog(
       val table = formatTableName(name.table)
       if (db == globalTempViewManager.database) {
         globalTempViewManager.get(table).map { viewDef =>
-          SubqueryAlias(table, viewDef)
+          SubqueryAlias(table, db, viewDef)
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempViews.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
@@ -706,9 +708,9 @@ class SessionCatalog(
             desc = metadata,
             output = metadata.schema.toAttributes,
             child = parser.parsePlan(viewText))
-          SubqueryAlias(table, child)
+          SubqueryAlias(table, db, child)
         } else {
-          SubqueryAlias(table, UnresolvedCatalogRelation(metadata))
+          SubqueryAlias(table, db, UnresolvedCatalogRelation(metadata))
         }
       } else {
         SubqueryAlias(table, tempViews(table))
@@ -1059,7 +1061,7 @@ class SessionCatalog(
   }
 
   /**
-   * overwirte a metastore function in the database specified in `funcDefinition`..
+   * overwrite a metastore function in the database specified in `funcDefinition`..
    * If no database is specified, assume the function is in the current database.
    */
   def alterFunction(funcDefinition: CatalogFunction): Unit = {

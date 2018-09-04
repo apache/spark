@@ -131,6 +131,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       )
     }
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val columnPruning = sparkSession.sessionState.conf.csvColumnPruning
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
@@ -144,7 +145,8 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         parser,
         requiredSchema,
         dataSchema,
-        caseSensitive)
+        caseSensitive,
+        columnPruning)
     }
   }
 

@@ -150,17 +150,16 @@
     <spark-influx-sink.version>0.4.0</spark-influx-sink.version>
     <avro.version>1.8.2</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
-    <jets3t.version>0.9.4</jets3t.version>
-    <aws.kinesis.client.version>1.7.3</aws.kinesis.client.version>
+    <aws.kinesis.client.version>1.8.10</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
-    <aws.java.sdk.version>1.11.76</aws.java.sdk.version>
+    <aws.java.sdk.version>1.11.271</aws.java.sdk.version>
     <!-- the producer is used in tests -->
-    <aws.kinesis.producer.version>0.10.2</aws.kinesis.producer.version>
+    <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <commons-beanutils.version>1.9.3</commons-beanutils.version>
     <commons-logging.version>1.2</commons-logging.version>
     <!--  org.apache.httpcomponents/httpclient-->
-    <commons.httpclient.version>4.5.4</commons.httpclient.version>
-    <commons.httpcore.version>4.4.8</commons.httpcore.version>
+    <commons.httpclient.version>4.5.6</commons.httpclient.version>
+    <commons.httpcore.version>4.4.10</commons.httpcore.version>
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>
@@ -185,7 +184,7 @@
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
     <javax-activation.version>1.1.1</javax-activation.version>
     <objenesis.version>2.5.1</objenesis.version>
-    <janino.version>3.0.8</janino.version>
+    <janino.version>3.0.9</janino.version>
     <jersey.version>2.25.1</jersey.version>
     <joda.version>2.9.9</joda.version>
     <jodd.version>3.5.2</jodd.version>
@@ -205,7 +204,7 @@
     If you are changing Arrow version specification, please check ./python/pyspark/sql/utils.py,
     ./python/run-tests.py and ./python/setup.py too.
     -->
-    <arrow.version>0.8.0</arrow.version>
+    <arrow.version>0.10.0</arrow.version>
 
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
@@ -969,7 +968,7 @@
       <dependency>
         <groupId>jline</groupId>
         <artifactId>jline</artifactId>
-        <version>2.14.3</version>
+        <version>2.14.6</version>
       </dependency>
       <dependency>
         <groupId>org.scalatest</groupId>
@@ -1133,6 +1132,10 @@
             <groupId>com.sun.jersey.contribs</groupId>
             <artifactId>*</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>net.java.dev.jets3t</groupId>
+            <artifactId>jets3t</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1262,18 +1265,15 @@
           </exclusion>
         </exclusions>
       </dependency>
-      <!-- See SPARK-1556 for info on this dependency: -->
+      <!-- See SPARK-23654 for info on this dependency;
+      It is used to keep javax.activation at v1.1.1 after dropping
+      jets3t as a dependency.
+       -->
       <dependency>
-        <groupId>net.java.dev.jets3t</groupId>
-        <artifactId>jets3t</artifactId>
-        <version>${jets3t.version}</version>
+        <groupId>javax.activation</groupId>
+        <artifactId>activation</artifactId>
+        <version>1.1.1</version>
         <scope>${hadoop.deps.scope}</scope>
-        <exclusions>
-          <exclusion>
-            <groupId>commons-logging</groupId>
-            <artifactId>commons-logging</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>

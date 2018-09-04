@@ -88,8 +88,8 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>net.java.dev.jets3t</groupId>
-      <artifactId>jets3t</artifactId>
+      <groupId>javax.activation</groupId>
+      <artifactId>activation</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.curator</groupId>

@@ -134,6 +134,7 @@ abstract class BaseYarnClusterSuite
       extraJars: Seq[String] = Nil,
       extraConf: Map[String, String] = Map(),
       extraEnv: Map[String, String] = Map(),
+      outFile: Option[File] = None,
       timeoutDuration: FiniteDuration = 2.minutes): SparkAppHandle.State = {
     val deployMode = if (clientMode) "client" else "cluster"
     val propsFile = createConfFile(extraClassPath = extraClassPath, extraConf = extraConf)
@@ -162,6 +163,11 @@ abstract class BaseYarnClusterSuite
     }
     extraJars.foreach(launcher.addJar)
 
+    if (outFile.isDefined) {
+      launcher.redirectOutput(outFile.get)
+      launcher.redirectError()
+    }
+
     val handle = launcher.startApplication()
     try {
       eventually(timeout(timeoutDuration), interval(1 second)) {
@@ -180,17 +186,22 @@ abstract class BaseYarnClusterSuite
    * the tests enforce that something is written to a file after everything is ok to indicate
    * that the job succeeded.
    */
-  protected def checkResult(finalState: SparkAppHandle.State, result: File): Unit = {
-    checkResult(finalState, result, "success")
-  }
-
   protected def checkResult(
       finalState: SparkAppHandle.State,
       result: File,
-      expected: String): Unit = {
-    finalState should be (SparkAppHandle.State.FINISHED)
+      expected: String = "success",
+      outFile: Option[File] = None): Unit = {
+    // the context message is passed to assert as Any instead of a function. to lazily load the
+    // output from the file, this passes an anonymous object that loads it in toString when building
+    // an error message
+    val output = new Object() {
+      override def toString: String = outFile
+          .map(Files.toString(_, StandardCharsets.UTF_8))
+          .getOrElse("(stdout/stderr was not captured)")
+    }
+    assert(finalState === SparkAppHandle.State.FINISHED, output)
     val resultString = Files.toString(result, StandardCharsets.UTF_8)
-    resultString should be (expected)
+    assert(resultString === expected, output)
   }
 
   protected def mainClassName(klass: Class[_]): String = {

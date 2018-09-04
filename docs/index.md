@@ -12,7 +12,7 @@ It also supports a rich set of higher-level tools including [Spark SQL](sql-prog
 
 # Downloading
 
-Get Spark from the [downloads page](http://spark.apache.org/downloads.html) of the project website. This documentation is for Spark version {{site.SPARK_VERSION}}. Spark uses Hadoop's client libraries for HDFS and YARN. Downloads are pre-packaged for a handful of popular Hadoop versions.
+Get Spark from the [downloads page](https://spark.apache.org/downloads.html) of the project website. This documentation is for Spark version {{site.SPARK_VERSION}}. Spark uses Hadoop's client libraries for HDFS and YARN. Downloads are pre-packaged for a handful of popular Hadoop versions.
 Users can also download a "Hadoop free" binary and run Spark with any Hadoop version
 [by augmenting Spark's classpath](hadoop-provided.html).
 Scala and Java users can include Spark in their projects using its Maven coordinates and in the future Python users can also install Spark from PyPI.
@@ -111,7 +111,7 @@ options for deployment:
   * [Amazon EC2](https://github.com/amplab/spark-ec2): scripts that let you launch a cluster on EC2 in about 5 minutes
   * [Standalone Deploy Mode](spark-standalone.html): launch a standalone cluster quickly without a third-party cluster manager
   * [Mesos](running-on-mesos.html): deploy a private cluster using
-      [Apache Mesos](http://mesos.apache.org)
+      [Apache Mesos](https://mesos.apache.org)
   * [YARN](running-on-yarn.html): deploy Spark on top of Hadoop NextGen (YARN)
   * [Kubernetes](running-on-kubernetes.html): deploy Spark on top of Kubernetes
 
@@ -127,20 +127,20 @@ options for deployment:
   * [Cloud Infrastructures](cloud-integration.html)
   * [OpenStack Swift](storage-openstack-swift.html)
 * [Building Spark](building-spark.html): build Spark using the Maven system
-* [Contributing to Spark](http://spark.apache.org/contributing.html)
-* [Third Party Projects](http://spark.apache.org/third-party-projects.html): related third party Spark projects
+* [Contributing to Spark](https://spark.apache.org/contributing.html)
+* [Third Party Projects](https://spark.apache.org/third-party-projects.html): related third party Spark projects
 
 **External Resources:**
 
-* [Spark Homepage](http://spark.apache.org)
-* [Spark Community](http://spark.apache.org/community.html) resources, including local meetups
+* [Spark Homepage](https://spark.apache.org)
+* [Spark Community](https://spark.apache.org/community.html) resources, including local meetups
 * [StackOverflow tag `apache-spark`](http://stackoverflow.com/questions/tagged/apache-spark)
-* [Mailing Lists](http://spark.apache.org/mailing-lists.html): ask questions about Spark here
+* [Mailing Lists](https://spark.apache.org/mailing-lists.html): ask questions about Spark here
 * [AMP Camps](http://ampcamp.berkeley.edu/): a series of training camps at UC Berkeley that featured talks and
   exercises about Spark, Spark Streaming, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/6/),
   [slides](http://ampcamp.berkeley.edu/6/) and [exercises](http://ampcamp.berkeley.edu/6/exercises/) are
   available online for free.
-* [Code Examples](http://spark.apache.org/examples.html): more are also available in the `examples` subfolder of Spark ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
+* [Code Examples](https://spark.apache.org/examples.html): more are also available in the `examples` subfolder of Spark ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
  [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
  [R]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/r))

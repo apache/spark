@@ -231,6 +231,11 @@ object ShuffleExchangeExec {
           override def numPartitions: Int = 1
           override def getPartition(key: Any): Int = 0
         }
+      case l: LocalPartitioning =>
+        new Partitioner {
+          override def numPartitions: Int = l.numPartitions
+          override def getPartition(key: Any): Int = key.asInstanceOf[Int]
+        }
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
@@ -247,6 +252,9 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
         row => projection(row).getInt(0)
       case RangePartitioning(_, _) | SinglePartition => identity
+      case _: LocalPartitioning =>
+        val partitionId = TaskContext.get().partitionId()
+        _ => partitionId
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
     }
 

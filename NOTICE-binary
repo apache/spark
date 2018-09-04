@@ -5,6 +5,29 @@ This product includes software developed at
 The Apache Software Foundation (http://www.apache.org/).
 
 
+Export Control Notice
+---------------------
+
+This distribution includes cryptographic software. The country in which you currently reside may have
+restrictions on the import, possession, use, and/or re-export to another country, of encryption software.
+BEFORE using any encryption software, please check your country's laws, regulations and policies concerning
+the import, possession, or use, and re-export of encryption software, to see if this is permitted. See
+<http://www.wassenaar.org/> for more information.
+
+The U.S. Government Department of Commerce, Bureau of Industry and Security (BIS), has classified this
+software as Export Commodity Control Number (ECCN) 5D002.C.1, which includes information security software
+using or performing cryptographic functions with asymmetric algorithms. The form and manner of this Apache
+Software Foundation distribution makes it eligible for export under the License Exception ENC Technology
+Software Unrestricted (TSU) exception (see the BIS Export Administration Regulations, Section 740.13) for
+both object code and source code.
+
+The following provides more details on the included cryptographic software:
+
+This software uses Apache Commons Crypto (https://commons.apache.org/proper/commons-crypto/) to
+support authentication, and encryption and decryption of data sent across the network between
+services.
+
+
 // ------------------------------------------------------------------
 // NOTICE file corresponding to the section 4d of The Apache License,
 // Version 2.0, in this case for
@@ -451,7 +474,7 @@ which has the following notices:
     PureJavaCrc32C from apache-hadoop-common http://hadoop.apache.org/
     (Apache 2.0 license)
 
-   This library containd statically linked libstdc++. This inclusion is allowed by
+   This library contains statically linked libstdc++. This inclusion is allowed by
    "GCC RUntime Library Exception"
    http://gcc.gnu.org/onlinedocs/libstdc++/manual/license.html
 
@@ -1135,25 +1158,6 @@ QuadraticMinimizer class in package breeze.optimize.proximal is distributed with
 
 NonlinearMinimizer class in package breeze.optimize.proximal is distributed with Copyright (c)
 2015, Debasish Das (Verizon), all rights reserved.
-
-
-   =========================================================================
-   ==  NOTICE file corresponding to section 4(d) of the Apache License,   ==
-   ==  Version 2.0, in this case for the distribution of jets3t.          ==
-   =========================================================================
-
-   This product includes software developed by:
-
-   The Apache Software Foundation (http://www.apache.org/).
-
-   The ExoLab Project (http://www.exolab.org/)
-
-   Sun Microsystems (http://www.sun.com/)
-
-   Codehaus (http://castor.codehaus.org)
-
-   Tatu Saloranta (http://wiki.fasterxml.com/TatuSaloranta)
-
 
 
 stream-lib

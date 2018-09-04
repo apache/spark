@@ -61,7 +61,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
   }
 
   /**
-   * This can be overriden by subclasses if there is any extra cleanup to do when removing a
+   * This can be overridden by subclasses if there is any extra cleanup to do when removing a
    * listener.  In particular AsyncEventQueues can clean up queues in the LiveListenerBus.
    */
   def removeListenerOnError(listener: L): Unit = {

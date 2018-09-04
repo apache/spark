@@ -235,7 +235,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     checkAnalysis(plan, expected)
   }
 
-  test("Analysis may leave unnecassary aliases") {
+  test("Analysis may leave unnecessary aliases") {
     val att1 = testRelation.output.head
     var plan = testRelation.select(
       CreateStruct(Seq(att1, ((att1.as("aa")) + 1).as("a_plus_1"))).as("col"),
@@ -317,17 +317,19 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     checkUDF(udf1, expected1)
 
     // only primitive parameter needs special null handling
-    val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil)
+    val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil,
+      nullableTypes = true :: false :: Nil)
     val expected2 =
-      If(IsNull(double), nullResult, udf2.copy(children = string :: KnowNotNull(double) :: Nil))
+      If(IsNull(double), nullResult, udf2.copy(children = string :: KnownNotNull(double) :: Nil))
     checkUDF(udf2, expected2)
 
     // special null handling should apply to all primitive parameters
-    val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil)
+    val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil,
+      nullableTypes = false :: false :: Nil)
     val expected3 = If(
       IsNull(short) || IsNull(double),
       nullResult,
-      udf3.copy(children = KnowNotNull(short) :: KnowNotNull(double) :: Nil))
+      udf3.copy(children = KnownNotNull(short) :: KnownNotNull(double) :: Nil))
     checkUDF(udf3, expected3)
 
     // we can skip special null handling for primitive parameters that are not nullable
@@ -335,11 +337,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val udf4 = ScalaUDF(
       (s: Short, d: Double) => "x",
       StringType,
-      short :: double.withNullability(false) :: Nil)
+      short :: double.withNullability(false) :: Nil,
+      nullableTypes = false :: false :: Nil)
     val expected4 = If(
       IsNull(short),
       nullResult,
-      udf4.copy(children = KnowNotNull(short) :: double.withNullability(false) :: Nil))
+      udf4.copy(children = KnownNotNull(short) :: double.withNullability(false) :: Nil))
     // checkUDF(udf4, expected4)
   }
 

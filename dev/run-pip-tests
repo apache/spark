@@ -55,10 +55,8 @@ if hash virtualenv 2>/dev/null && [ ! -n "$USE_CONDA" ]; then
     fi
   fi
 elif hash conda 2>/dev/null; then
-  echo "Using conda virtual enviroments"
-  if [[ ${#PYTHON_EXECS[@]} == 0 ]]; then
-    PYTHON_EXECS=('3.5')
-  fi
+  echo "Using conda virtual environments"
+  PYTHON_EXECS=('3.5')
   USE_CONDA=1
 else
   echo "Missing virtualenv & conda, skipping pip installability tests"
@@ -93,7 +91,7 @@ for python in "${PYTHON_EXECS[@]}"; do
       virtualenv --python=$python "$VIRTUALENV_PATH"
       source "$VIRTUALENV_PATH"/bin/activate
     fi
-    # Upgrade pip & friends if using virutal env
+    # Upgrade pip & friends if using virtual env
     if [ ! -n "$USE_CONDA" ]; then
       pip install --upgrade pip pypandoc wheel numpy
     fi
@@ -128,7 +126,7 @@ for python in "${PYTHON_EXECS[@]}"; do
 
     cd "$FWDIR"
 
-    # conda / virtualenv enviroments need to be deactivated differently
+    # conda / virtualenv environments need to be deactivated differently
     if [ -n "$USE_CONDA" ]; then
       source deactivate
     else

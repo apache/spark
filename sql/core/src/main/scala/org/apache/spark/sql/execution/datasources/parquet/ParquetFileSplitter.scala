@@ -59,13 +59,14 @@ class ParquetMetadataFileSplitter(
   extends ParquetFileSplitter
   with Logging {
 
-  val sqlConf = session.sessionState.conf
+  private val sqlConf = session.sessionState.conf
   val parquetFilters = new ParquetFilters(
     sqlConf.parquetFilterPushDownDate,
     sqlConf.parquetFilterPushDownTimestamp,
     sqlConf.parquetFilterPushDownDecimal,
     sqlConf.parquetFilterPushDownStringStartWith,
-    sqlConf.parquetFilterPushDownInFilterThreshold)
+    sqlConf.parquetFilterPushDownInFilterThreshold,
+    sqlConf.caseSensitiveAnalysis)
 
   private val referencedFiles = blocks.map(bmd => new Path(root, bmd.getPath)).toSet
 

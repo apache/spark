@@ -1035,7 +1035,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     def setOptimizer(self, value):
         """
         Sets the value of :py:attr:`optimizer`.
-        Currenlty only support 'em' and 'online'.
+        Currently only support 'em' and 'online'.
 
         >>> algo = LDA().setOptimizer("em")
         >>> algo.getOptimizer()

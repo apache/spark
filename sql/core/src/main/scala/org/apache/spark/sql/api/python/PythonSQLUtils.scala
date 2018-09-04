@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.api.python
 
-import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
@@ -34,17 +33,19 @@ private[sql] object PythonSQLUtils {
   }
 
   /**
-   * Python Callable function to convert ArrowPayloads into a [[DataFrame]].
+   * Python callable function to read a file in Arrow stream format and create a [[DataFrame]]
+   * using each serialized ArrowRecordBatch as a partition.
    *
-   * @param payloadRDD A JavaRDD of ArrowPayloads.
-   * @param schemaString JSON Formatted Schema for ArrowPayloads.
    * @param sqlContext The active [[SQLContext]].
-   * @return The converted [[DataFrame]].
+   * @param filename File to read the Arrow stream from.
+   * @param schemaString JSON Formatted Spark schema for Arrow batches.
+   * @return A new [[DataFrame]].
    */
-  def arrowPayloadToDataFrame(
-      payloadRDD: JavaRDD[Array[Byte]],
-      schemaString: String,
-      sqlContext: SQLContext): DataFrame = {
-    ArrowConverters.toDataFrame(payloadRDD, schemaString, sqlContext)
+  def arrowReadStreamFromFile(
+      sqlContext: SQLContext,
+      filename: String,
+      schemaString: String): DataFrame = {
+    val jrdd = ArrowConverters.readArrowStreamFromFile(sqlContext, filename)
+    ArrowConverters.toDataFrame(jrdd, schemaString, sqlContext)
   }
 }

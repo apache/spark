@@ -1608,6 +1608,15 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * Get the max number of tasks that can be concurrent launched currently.
+   * Note that please don't cache the value returned by this method, because the number can change
+   * due to add/remove executors.
+   *
+   * @return The max number of tasks that can be concurrent launched currently.
+   */
+  private[spark] def maxNumConcurrentTasks(): Int = schedulerBackend.maxNumConcurrentTasks()
+
+  /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
    * to help it make decisions.
    * @param numExecutors The total number of executors we'd like to have. The cluster manager
@@ -1966,6 +1975,12 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.tryLogNonFatalError {
       _executorAllocationManager.foreach(_.stop())
     }
+    if (_dagScheduler != null) {
+      Utils.tryLogNonFatalError {
+        _dagScheduler.stop()
+      }
+      _dagScheduler = null
+    }
     if (_listenerBusStarted) {
       Utils.tryLogNonFatalError {
         listenerBus.stop()
@@ -1974,12 +1989,6 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     Utils.tryLogNonFatalError {
       _eventLogger.foreach(_.stop())
-    }
-    if (_dagScheduler != null) {
-      Utils.tryLogNonFatalError {
-        _dagScheduler.stop()
-      }
-      _dagScheduler = null
     }
     if (env != null && _heartbeatReceiver != null) {
       Utils.tryLogNonFatalError {

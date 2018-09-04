@@ -524,6 +524,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     sortTest()
   }
 
+  test("limit for skew dataframe") {
+    // Create a skew dataframe.
+    val df = testData.repartition(100).union(testData).limit(50)
+    // Because `rdd` of dataframe will add a `DeserializeToObject` on top of `GlobalLimit`,
+    // the `GlobalLimit` will not be replaced with `CollectLimit`. So we can test if `GlobalLimit`
+    // work on skew partitions.
+    assert(df.rdd.count() == 50L)
+  }
+
   test("CTE feature") {
     checkAnswer(
       sql("with q1 as (select * from testData limit 10) select * from q1"),
@@ -1943,7 +1952,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     // TODO: support subexpression elimination in whole stage codegen
     withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
       // select from a table to prevent constant folding.
-      val df = sql("SELECT a, b from testData2 limit 1")
+      val df = sql("SELECT a, b from testData2 order by a, b limit 1")
       checkAnswer(df, Row(1, 1))
 
       checkAnswer(df.selectExpr("a + 1", "a + 1"), Row(2, 2))
@@ -2697,7 +2706,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         val m = intercept[AnalysisException] {
           sql("SELECT * FROM t, S WHERE c = C")
         }.message
-        assert(m.contains("cannot resolve '(t.`c` = S.`C`)' due to data type mismatch"))
+        assert(
+          m.contains("cannot resolve '(default.t.`c` = default.S.`C`)' due to data type mismatch"))
       }
     }
   }
@@ -2838,4 +2848,24 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-25084: 'distribute by' on multiple columns may lead to codegen issue") {
+    withView("spark_25084") {
+      val count = 1000
+      val df = spark.range(count)
+      val columns = (0 until 400).map{ i => s"id as id$i" }
+      val distributeExprs = (0 until 100).map(c => s"id$c").mkString(",")
+      df.selectExpr(columns : _*).createTempView("spark_25084")
+      assert(
+        spark.sql(s"select * from spark_25084 distribute by ($distributeExprs)").count === count)
+    }
+  }
+
+  test("SPARK-25144 'distinct' causes memory leak") {
+    val ds = List(Foo(Some("bar"))).toDS
+    val result = ds.flatMap(_.bar).distinct
+    result.rdd.isEmpty
+  }
 }
+
+case class Foo(bar: Option[String])

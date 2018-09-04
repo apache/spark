@@ -20,10 +20,10 @@ import java.io.File
 
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
-import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep}
+import org.apache.spark.deploy.k8s.features.bindings._
 import org.apache.spark.util.Utils
 
 private[spark] class KubernetesDriverBuilder(
@@ -49,15 +49,18 @@ private[spark] class KubernetesDriverBuilder(
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
       new MountVolumesFeatureStep(_),
-    provideJavaStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
+    providePythonStep: (KubernetesConf[KubernetesDriverSpecificConf]
+        => PythonDriverFeatureStep) =
+    new PythonDriverFeatureStep(_),
+    provideRStep: (KubernetesConf[KubernetesDriverSpecificConf]
+        => RDriverFeatureStep) =
+    new RDriverFeatureStep(_),
+    provideJavaStep: (KubernetesConf[KubernetesDriverSpecificConf]
         => JavaDriverFeatureStep) =
-      new JavaDriverFeatureStep(_),
-    providePythonStep: (KubernetesConf[KubernetesDriverSpecificConf] => PythonDriverFeatureStep) =
-      new PythonDriverFeatureStep(_),
+    new JavaDriverFeatureStep(_),
     providePodTemplateConfigMapStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => PodTemplateConfigMapStep) =
-      new PodTemplateConfigMapStep(_),
+    new PodTemplateConfigMapStep(_),
     provideInitialPod: () => SparkPod = SparkPod.initialPod) {
 
   import KubernetesDriverBuilder._
@@ -88,7 +91,9 @@ private[spark] class KubernetesDriverBuilder(
         case JavaMainAppResource(_) =>
           provideJavaStep(kubernetesConf)
         case PythonMainAppResource(_) =>
-          providePythonStep(kubernetesConf)}
+          providePythonStep(kubernetesConf)
+        case RMainAppResource(_) =>
+          provideRStep(kubernetesConf)}
       .getOrElse(provideJavaStep(kubernetesConf))
 
     val localFiles = KubernetesUtils.submitterLocalFiles(kubernetesConf.sparkFiles)

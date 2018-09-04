@@ -499,6 +499,14 @@ class TypeCoercionSuite extends AnalysisTest {
       ArrayType(new StructType().add("num", ShortType), containsNull = false),
       ArrayType(new StructType().add("num", LongType), containsNull = false),
       Some(ArrayType(new StructType().add("num", LongType), containsNull = false)))
+    widenTestWithStringPromotion(
+      ArrayType(IntegerType, containsNull = false),
+      ArrayType(DecimalType.IntDecimal, containsNull = false),
+      Some(ArrayType(DecimalType.IntDecimal, containsNull = false)))
+    widenTestWithStringPromotion(
+      ArrayType(DecimalType(36, 0), containsNull = false),
+      ArrayType(DecimalType(36, 35), containsNull = false),
+      Some(ArrayType(DecimalType(38, 35), containsNull = true)))
 
     // MapType
     widenTestWithStringPromotion(
@@ -517,6 +525,22 @@ class TypeCoercionSuite extends AnalysisTest {
       MapType(IntegerType, new StructType().add("num", ShortType), valueContainsNull = false),
       MapType(LongType, new StructType().add("num", LongType), valueContainsNull = false),
       Some(MapType(LongType, new StructType().add("num", LongType), valueContainsNull = false)))
+    widenTestWithStringPromotion(
+      MapType(StringType, IntegerType, valueContainsNull = false),
+      MapType(StringType, DecimalType.IntDecimal, valueContainsNull = false),
+      Some(MapType(StringType, DecimalType.IntDecimal, valueContainsNull = false)))
+    widenTestWithStringPromotion(
+      MapType(StringType, DecimalType(36, 0), valueContainsNull = false),
+      MapType(StringType, DecimalType(36, 35), valueContainsNull = false),
+      Some(MapType(StringType, DecimalType(38, 35), valueContainsNull = true)))
+    widenTestWithStringPromotion(
+      MapType(IntegerType, StringType, valueContainsNull = false),
+      MapType(DecimalType.IntDecimal, StringType, valueContainsNull = false),
+      Some(MapType(DecimalType.IntDecimal, StringType, valueContainsNull = false)))
+    widenTestWithStringPromotion(
+      MapType(DecimalType(36, 0), StringType, valueContainsNull = false),
+      MapType(DecimalType(36, 35), StringType, valueContainsNull = false),
+      None)
 
     // StructType
     widenTestWithStringPromotion(
@@ -540,6 +564,14 @@ class TypeCoercionSuite extends AnalysisTest {
         .add("map", MapType(DoubleType, StringType, valueContainsNull = false), nullable = false),
       Some(new StructType()
         .add("map", MapType(DoubleType, StringType, valueContainsNull = true), nullable = false)))
+    widenTestWithStringPromotion(
+      new StructType().add("num", IntegerType, nullable = false),
+      new StructType().add("num", DecimalType.IntDecimal, nullable = false),
+      Some(new StructType().add("num", DecimalType.IntDecimal, nullable = false)))
+    widenTestWithStringPromotion(
+      new StructType().add("num", DecimalType(36, 0), nullable = false),
+      new StructType().add("num", DecimalType(36, 35), nullable = false),
+      Some(new StructType().add("num", DecimalType(38, 35), nullable = true)))
 
     widenTestWithStringPromotion(
       new StructType().add("num", IntegerType),

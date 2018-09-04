@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.{BufferedWriter, File, FileWriter}
 
-import scala.tools.nsc.Properties
+import scala.util.Properties
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfterEach, Matchers}

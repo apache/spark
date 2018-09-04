@@ -2241,7 +2241,7 @@ def json_tuple(col, *fields):
 def from_json(col, schema, options={}):
     """
     Parses a column containing a JSON string into a :class:`MapType` with :class:`StringType`
-    as keys type, :class:`StructType` or :class:`ArrayType` of :class:`StructType`\\s with
+    as keys type, :class:`StructType` or :class:`ArrayType` with
     the specified schema. Returns `null`, in the case of an unparseable string.
 
     :param col: string column in json format
@@ -2269,6 +2269,11 @@ def from_json(col, schema, options={}):
     >>> schema = schema_of_json(lit('''{"a": 0}'''))
     >>> df.select(from_json(df.value, schema).alias("json")).collect()
     [Row(json=Row(a=1))]
+    >>> data = [(1, '''[1, 2, 3]''')]
+    >>> schema = ArrayType(IntegerType())
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=[1, 2, 3])]
     """
 
     sc = SparkContext._active_spark_context
@@ -2926,6 +2931,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
 __all__ = [k for k, v in globals().items()
            if not k.startswith('_') and k[0].islower() and callable(v) and k not in blacklist]
+__all__ += ["PandasUDFType"]
 __all__.sort()
 
 
