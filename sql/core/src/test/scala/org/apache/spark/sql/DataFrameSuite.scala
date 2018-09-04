@@ -831,13 +831,21 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       }.toSeq)
     assert(df.schema.map(_.name) === Seq("key", "value", "newCol"))
 
-    val df2 = testData.toDF().withColumn("newCol", col("key") + 1, false)
+    val df2 = testData.toDF().withColumn("newCol", col("key") + 1, 0)
     checkAnswer(
       df2,
       testData.collect().map { case Row(key: Int, value: String) =>
         Row(key, value, key + 1)
       }.toSeq)
     assert(df2.schema.map(_.name) === Seq("newCol", "key", "value"))
+
+    val df3 = testData.toDF().withColumn("newCol", col("key") + 1, 1)
+    checkAnswer(
+      df3,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1)
+      }.toSeq)
+    assert(df3.schema.map(_.name) === Seq("key", "newCol", "value"))
   }
 
   test("withColumns") {
@@ -851,13 +859,22 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("key", "value", "newCol1", "newCol2"))
 
     val df2 = testData.toDF().withColumns(Seq("newCol1", "newCol2"),
-      Seq(col("key") + 1, col("key") + 2), false)
+      Seq(col("key") + 1, col("key") + 2), 0)
     checkAnswer(
       df2,
       testData.collect().map { case Row(key: Int, value: String) =>
         Row(key, value, key + 1, key + 2)
       }.toSeq)
     assert(df2.schema.map(_.name) === Seq("newCol1", "newCol2", "key", "value"))
+
+    val df3 = testData.toDF().withColumns(Seq("newCol1", "newCol2"),
+      Seq(col("key") + 1, col("key") + 2), 0)
+    checkAnswer(
+      df3,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1, key + 2)
+      }.toSeq)
+    assert(df3.schema.map(_.name) === Seq("key", "newCol1", "newCol2", "value"))
 
     val err = intercept[IllegalArgumentException] {
       testData.toDF().withColumns(Seq("newCol1"),

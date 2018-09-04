@@ -2217,7 +2217,7 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
-  def withColumn(colName: String, col: Column): DataFrame = withColumn(colName, col, true)
+  def withColumn(colName: String, col: Column): DataFrame = withColumn(colName, col, -1)
 
   /**
     * Returns a new Dataset by adding a column or replacing the existing column that has
@@ -2226,16 +2226,18 @@ class Dataset[T] private[sql](
     * `column`'s expression must only refer to attributes supplied by this Dataset. It is an
     * error to add a column that refers to some other Dataset.
     *
-    * You can choose to add new columns either at the end (default behavior) or at the beginning.
+    * The position of the new column start from 0, and a negative position means at the end (default behavior).
     */
-  def withColumn(colName: String, col: Column, atTheEnd: Boolean): DataFrame =
-    withColumns(Seq(colName), Seq(col), atTheEnd)
+  def withColumn(colName: String, col: Column, atPosition: Int): DataFrame =
+    withColumns(Seq(colName), Seq(col), atPosition)
 
   /**
    * Returns a new Dataset by adding columns or replacing the existing columns that has
    * the same names.
+   *
+   * The position of new columns start from 0, and a negative position means at the end (default behavior).
    */
-  private[spark] def withColumns(colNames: Seq[String], cols: Seq[Column], atTheEnd: Boolean = true): DataFrame = {
+  private[spark] def withColumns(colNames: Seq[String], cols: Seq[Column], atPosition: Int = -1): DataFrame = {
     require(colNames.size == cols.size,
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of columns: ${cols.size}")
@@ -2262,10 +2264,10 @@ class Dataset[T] private[sql](
       !output.exists(f => resolver(f.name, colName))
     }.map { case (colName, col) => col.as(colName) }
 
-    val allColumns = if (atTheEnd) {
+    val allColumns = if (atPosition < 0) {
       replacedAndExistingColumns ++ newColumns
     } else {
-      newColumns.toSeq ++ replacedAndExistingColumns
+      replacedAndExistingColumns.take(atPosition) ++ newColumns ++ replacedAndExistingColumns.drop(atPosition)
     }
 
     select(allColumns : _*)
