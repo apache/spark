@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, GreaterThan, In}
 import org.apache.spark.sql.execution.{FilterExec, InputAdapter, SparkPlanTest, WholeStageCodegenExec}
@@ -106,14 +107,24 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
 
   test("SPARK-25314: Python UDF refers to the attributes from more than one child" +
     " in join condition") {
-    val df = Seq(("Hello", 4)).toDF("a", "b")
-    val df2 = Seq(("Hello", 4)).toDF("c", "d")
-    val joinDF = df.join(df2,
-      dummyPythonUDF(col("a"), col("b")) === dummyPythonUDF(col("d"), col("c")))
-    val qualifiedPlanNodes = joinDF.queryExecution.executedPlan.collect {
-      case b: BatchEvalPythonExec => b
+    def dummyPythonUDFTest(): Unit = {
+      val df = Seq(("Hello", 4)).toDF("a", "b")
+      val df2 = Seq(("Hello", 4)).toDF("c", "d")
+      val joinDF = df.join(df2,
+        dummyPythonUDF(col("a"), col("c")) === dummyPythonUDF(col("d"), col("c")))
+      val qualifiedPlanNodes = joinDF.queryExecution.executedPlan.collect {
+        case b: BatchEvalPythonExec => b
+      }
+      assert(qualifiedPlanNodes.size == 1)
     }
-    assert(qualifiedPlanNodes.size == 1)
+    // Test without spark.sql.crossJoin.enabled set
+    val errMsg = intercept[AnalysisException] {
+      dummyPythonUDFTest()
+    }
+    assert(errMsg.getMessage.startsWith("Detected the whole commonJoinCondition:"))
+    // Test with spark.sql.crossJoin.enabled=true
+    spark.conf.set("spark.sql.crossJoin.enabled", "true")
+    dummyPythonUDFTest()
   }
 }
 

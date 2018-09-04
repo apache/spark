@@ -1237,16 +1237,28 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           val (newJoinConditions, others) =
             commonJoinCondition.partition(canEvaluateWithinJoin)
           val newJoinCond = newJoinConditions.reduceLeftOption(And)
-          // if condition expression is unevaluable, it will be removed from
-          // the new join conditions, if all conditions is unevaluable, we should
-          // change the join type to CrossJoin.
           val newJoinType =
             if (commonJoinCondition.nonEmpty && newJoinCond.isEmpty) {
-              logWarning(s"The whole commonJoinCondition:$commonJoinCondition of the join " +
-                s"plan:\n $j is unevaluable, it will be ignored and the join plan will be " +
-                s"turned to cross join.")
-              Cross
-            } else joinType
+              if (SQLConf.get.crossJoinEnabled) {
+                // if condition expression is unevaluable, it will be removed from
+                // the new join conditions, if all conditions is unevaluable, we should
+                // change the join type to CrossJoin.
+                logWarning(s"The whole commonJoinCondition:$commonJoinCondition of the join " +
+                  "plan is unevaluable, it will be ignored and the join plan will be " +
+                  s"turned to cross join. This plan shows below:\n $j")
+                Cross
+              } else {
+                // if the crossJoinEnabled is false, an AnalysisException will throw by
+                // [[CheckCartesianProducts]], we throw firstly here for better readable
+                // information.
+                throw new AnalysisException("Detected the whole commonJoinCondition:" +
+                  "$commonJoinCondition of the join plan is unevaluable, we need to cast the" +
+                  " join to cross join by setting the configuration variable" +
+                  " spark.sql.crossJoin.enabled = true.")
+              }
+            } else {
+              joinType
+            }
 
           val join = Join(newLeft, newRight, newJoinType, newJoinCond)
           if (others.nonEmpty) {
