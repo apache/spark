@@ -106,7 +106,7 @@ You can also use `bin/pyspark` to launch an interactive Python shell.
 
 If you wish to access HDFS data, you need to use a build of PySpark linking
 to your version of HDFS.
-[Prebuilt packages](http://spark.apache.org/downloads.html) are also available on the Spark homepage
+[Prebuilt packages](https://spark.apache.org/downloads.html) are also available on the Spark homepage
 for common HDFS versions.
 
 Finally, you need to import some Spark classes into your program. Add the following line:
@@ -1569,7 +1569,7 @@ as Spark does not support two contexts running concurrently in the same program.
 
 # Where to Go from Here
 
-You can see some [example Spark programs](http://spark.apache.org/examples.html) on the Spark website.
+You can see some [example Spark programs](https://spark.apache.org/examples.html) on the Spark website.
 In addition, Spark includes several samples in the `examples` directory
 ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),

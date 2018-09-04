@@ -20,14 +20,11 @@ package org.apache.spark.sql.avro
 import scala.collection.JavaConverters._
 import scala.util.Random
 
-import com.fasterxml.jackson.annotation.ObjectIdGenerators.UUIDGenerator
-import org.apache.avro.{LogicalType, LogicalTypes, Schema, SchemaBuilder}
+import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.LogicalTypes.{Date, Decimal, TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
-import org.apache.spark.sql.internal.SQLConf.AvroOutputTimestampType
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.Decimal.{maxPrecisionForBytes, minBytesForPrecision}
 
@@ -126,8 +123,7 @@ object SchemaConverters {
       catalystType: DataType,
       nullable: Boolean = false,
       recordName: String = "topLevelRecord",
-      prevNameSpace: String = "",
-      outputTimestampType: AvroOutputTimestampType.Value = AvroOutputTimestampType.TIMESTAMP_MICROS)
+      nameSpace: String = "")
     : Schema = {
     val builder = SchemaBuilder.builder()
 
@@ -138,13 +134,7 @@ object SchemaConverters {
       case DateType =>
         LogicalTypes.date().addToSchema(builder.intType())
       case TimestampType =>
-        val timestampType = outputTimestampType match {
-          case AvroOutputTimestampType.TIMESTAMP_MILLIS => LogicalTypes.timestampMillis()
-          case AvroOutputTimestampType.TIMESTAMP_MICROS => LogicalTypes.timestampMicros()
-          case other =>
-            throw new IncompatibleSchemaException(s"Unexpected output timestamp type $other.")
-        }
-        timestampType.addToSchema(builder.longType())
+        LogicalTypes.timestampMicros().addToSchema(builder.longType())
 
       case FloatType => builder.floatType()
       case DoubleType => builder.doubleType()
@@ -153,29 +143,25 @@ object SchemaConverters {
         val avroType = LogicalTypes.decimal(d.precision, d.scale)
         val fixedSize = minBytesForPrecision(d.precision)
         // Need to avoid naming conflict for the fixed fields
-        val name = prevNameSpace match {
+        val name = nameSpace match {
           case "" => s"$recordName.fixed"
-          case _ => s"$prevNameSpace.$recordName.fixed"
+          case _ => s"$nameSpace.$recordName.fixed"
         }
         avroType.addToSchema(SchemaBuilder.fixed(name).size(fixedSize))
 
       case BinaryType => builder.bytesType()
       case ArrayType(et, containsNull) =>
         builder.array()
-          .items(toAvroType(et, containsNull, recordName, prevNameSpace, outputTimestampType))
+          .items(toAvroType(et, containsNull, recordName, nameSpace))
       case MapType(StringType, vt, valueContainsNull) =>
         builder.map()
-          .values(toAvroType(vt, valueContainsNull, recordName, prevNameSpace, outputTimestampType))
+          .values(toAvroType(vt, valueContainsNull, recordName, nameSpace))
       case st: StructType =>
-        val nameSpace = prevNameSpace match {
-          case "" => recordName
-          case _ => s"$prevNameSpace.$recordName"
-        }
-
+        val childNameSpace = if (nameSpace != "") s"$nameSpace.$recordName" else recordName
         val fieldsAssembler = builder.record(recordName).namespace(nameSpace).fields()
         st.foreach { f =>
           val fieldAvroType =
-            toAvroType(f.dataType, f.nullable, f.name, nameSpace, outputTimestampType)
+            toAvroType(f.dataType, f.nullable, f.name, childNameSpace)
           fieldsAssembler.name(f.name).`type`(fieldAvroType).noDefault()
         }
         fieldsAssembler.endRecord()

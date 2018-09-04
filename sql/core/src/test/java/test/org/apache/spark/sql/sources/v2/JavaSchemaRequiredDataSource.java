@@ -17,43 +17,39 @@
 
 package test.org.apache.spark.sql.sources.v2;
 
-import java.util.List;
-
-import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.sources.v2.BatchReadSupportProvider;
 import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
-import org.apache.spark.sql.sources.v2.ReadSupport;
-import org.apache.spark.sql.sources.v2.reader.DataSourceReader;
-import org.apache.spark.sql.sources.v2.reader.InputPartition;
+import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.StructType;
 
-public class JavaSchemaRequiredDataSource implements DataSourceV2, ReadSupport {
+public class JavaSchemaRequiredDataSource implements DataSourceV2, BatchReadSupportProvider {
 
-  class Reader implements DataSourceReader {
+  class ReadSupport extends JavaSimpleReadSupport {
     private final StructType schema;
 
-    Reader(StructType schema) {
+    ReadSupport(StructType schema) {
       this.schema = schema;
     }
 
     @Override
-    public StructType readSchema() {
+    public StructType fullSchema() {
       return schema;
     }
 
     @Override
-    public List<InputPartition<InternalRow>> planInputPartitions() {
-      return java.util.Collections.emptyList();
+    public InputPartition[] planInputPartitions(ScanConfig config) {
+      return new InputPartition[0];
     }
   }
 
   @Override
-  public DataSourceReader createReader(DataSourceOptions options) {
+  public BatchReadSupport createBatchReadSupport(DataSourceOptions options) {
     throw new IllegalArgumentException("requires a user-supplied schema");
   }
 
   @Override
-  public DataSourceReader createReader(StructType schema, DataSourceOptions options) {
-    return new Reader(schema);
+  public BatchReadSupport createBatchReadSupport(StructType schema, DataSourceOptions options) {
+    return new ReadSupport(schema);
   }
 }

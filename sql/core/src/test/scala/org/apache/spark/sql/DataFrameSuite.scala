@@ -27,6 +27,7 @@ import scala.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
@@ -2528,4 +2529,28 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       checkAnswer(aggPlusFilter1, aggPlusFilter2.collect())
     }
   }
+
+  test("SPARK-25159: json schema inference should only trigger one job") {
+    withTempPath { path =>
+      // This test is to prove that the `JsonInferSchema` does not use `RDD#toLocalIterator` which
+      // triggers one Spark job per RDD partition.
+      Seq(1 -> "a", 2 -> "b").toDF("i", "p")
+        // The data set has 2 partitions, so Spark will write at least 2 json files.
+        // Use a non-splittable compression (gzip), to make sure the json scan RDD has at least 2
+        // partitions.
+        .write.partitionBy("p").option("compression", "gzip").json(path.getCanonicalPath)
+
+      var numJobs = 0
+      sparkContext.addSparkListener(new SparkListener {
+        override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+          numJobs += 1
+        }
+      })
+
+      val df = spark.read.json(path.getCanonicalPath)
+      assert(df.columns === Array("i", "p"))
+      assert(numJobs == 1)
+    }
+  }
+
 }

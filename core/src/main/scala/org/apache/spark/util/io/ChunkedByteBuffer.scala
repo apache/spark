@@ -181,6 +181,10 @@ object ChunkedByteBuffer {
     }
   }
 
+  def map(file: File, maxChunkSize: Int): ChunkedByteBuffer = {
+    map(file, maxChunkSize, 0, file.length())
+  }
+
   def map(file: File, maxChunkSize: Int, offset: Long, length: Long): ChunkedByteBuffer = {
     Utils.tryWithResource(FileChannel.open(file.toPath, StandardOpenOption.READ)) { channel =>
       var remaining = length
