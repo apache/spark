@@ -473,13 +473,27 @@ public final class UnsafeArrayData extends ArrayData {
     return result;
   }
 
-  public static UnsafeArrayData forPrimitiveArray(int offset, int length, int elementSize) {
-    return fromPrimitiveArray(null, offset, length, elementSize);
-  }
-
-  public static boolean shouldUseGenericArrayData(int elementSize, int length) {
+  public static UnsafeArrayData createFreshArray(int length, int elementSize) {
     final long headerInBytes = calculateHeaderPortionInBytes(length);
     final long valueRegionInBytes = (long)elementSize * length;
+    final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
+    if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
+      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
+        "it's too big.");
+    }
+
+    final long[] data = new long[(int)totalSizeInLongs];
+
+    Platform.putLong(data, Platform.LONG_ARRAY_OFFSET, length);
+
+    UnsafeArrayData result = new UnsafeArrayData();
+    result.pointTo(data, Platform.LONG_ARRAY_OFFSET, (int)totalSizeInLongs * 8);
+    return result;
+  }
+
+  public static boolean shouldUseGenericArrayData(int elementSize, long length) {
+    final long headerInBytes = calculateHeaderPortionInBytes(length);
+    final long valueRegionInBytes = elementSize * length;
     final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
     return totalSizeInLongs > Integer.MAX_VALUE / 8;
   }
