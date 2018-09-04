@@ -2679,7 +2679,7 @@
     <profile>
       <id>hadoop-2.7</id>
       <properties>
-        <hadoop.version>2.7.7</hadoop.version>
+        <hadoop.version>2.7.3</hadoop.version>
         <curator.version>2.7.1</curator.version>
       </properties>
     </profile>
