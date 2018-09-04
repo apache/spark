@@ -22,8 +22,6 @@ import java.util.concurrent.CountDownLatch
 import scala.collection.mutable
 
 import org.apache.commons.lang3.RandomStringUtils
-import org.json4s.NoTypeHints
-import org.json4s.jackson.Serialization
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
@@ -455,31 +453,6 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         sq.stop()
       }
     }
-  }
-
-  test("Check if custom metrics are reported") {
-    val streamInput = MemoryStream[Int]
-    implicit val formats = Serialization.formats(NoTypeHints)
-    testStream(streamInput.toDF(), useV2Sink = true)(
-      AddData(streamInput, 1, 2, 3),
-      CheckAnswer(1, 2, 3),
-      AssertOnQuery { q =>
-        val lastProgress = getLastProgressWithData(q)
-        assert(lastProgress.nonEmpty)
-        assert(lastProgress.get.numInputRows == 3)
-        assert(lastProgress.get.sink.customMetrics == "{\"numRows\":3}")
-        true
-      },
-      AddData(streamInput, 4, 5, 6, 7),
-      CheckAnswer(1, 2, 3, 4, 5, 6, 7),
-      AssertOnQuery { q =>
-        val lastProgress = getLastProgressWithData(q)
-        assert(lastProgress.nonEmpty)
-        assert(lastProgress.get.numInputRows == 4)
-        assert(lastProgress.get.sink.customMetrics == "{\"numRows\":7}")
-        true
-      }
-    )
   }
 
   test("input row calculation with same V1 source used twice in self-join") {
