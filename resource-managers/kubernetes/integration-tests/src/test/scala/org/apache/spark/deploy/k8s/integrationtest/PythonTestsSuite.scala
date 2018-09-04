@@ -99,8 +99,8 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
 private[spark] object PythonTestsSuite {
   val CONTAINER_LOCAL_PYSPARK: String = "local:///opt/spark/examples/src/main/python/"
   val PYSPARK_PI: String = CONTAINER_LOCAL_PYSPARK + "pi.py"
-  val PYSPARK_FILES: String = CONTAINER_LOCAL_PYSPARK + "pyfiles.py"
-  val PYSPARK_CONTAINER_TESTS: String = CONTAINER_LOCAL_PYSPARK + "py_container_checks.py"
-  val PYSPARK_MEMORY_CHECK: String = CONTAINER_LOCAL_PYSPARK + "worker_memory_check.py"
+  val TEST_LOCAL_PYSPARK: String = "local:///opt/spark/tests/"
+  val PYSPARK_FILES: String = TEST_LOCAL_PYSPARK + "pyfiles.py"
+  val PYSPARK_CONTAINER_TESTS: String = TEST_LOCAL_PYSPARK + "py_container_checks.py"
+  val PYSPARK_MEMORY_CHECK: String = TEST_LOCAL_PYSPARK + "worker_memory_check.py"
 }
-

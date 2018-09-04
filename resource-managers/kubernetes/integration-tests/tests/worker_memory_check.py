@@ -29,7 +29,7 @@ if __name__ == "__main__":
     """
     spark = SparkSession \
         .builder \
-        .appName("PyFilesTest") \
+        .appName("PyMemoryTest") \
         .getOrCreate()
     sc = spark.sparkContext
     if len(sys.argv) < 2:
