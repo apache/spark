@@ -69,7 +69,8 @@ case class CreateHiveTableAsSelectCommand(
       // add the relation into catalog, just in case of failure occurs while data
       // processing.
       assert(tableDesc.schema.isEmpty)
-      catalog.createTable(tableDesc.copy(schema = query.schema), ignoreIfExists = false)
+      val schema = DataWritingCommand.logicalPlanSchemaWithNames(query, outputColumnNames)
+      catalog.createTable(tableDesc.copy(schema = schema), ignoreIfExists = false)
 
       try {
         // Read back the metadata of the table which was created just now.
