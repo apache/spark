@@ -23,9 +23,6 @@ import java.sql.{Date, Timestamp}
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
-import org.scalatest.concurrent.TimeLimits
-import org.scalatest.time.SpanSugar._
-import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{Column, DataFrame}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -39,7 +36,7 @@ import org.apache.spark.sql.types._
 /**
  * A test suite that tests Hive ORC filter API based filter pushdown optimization.
  */
-class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton with TimeLimits {
+class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
 
   override val orcImp: String = "hive"
 
@@ -385,15 +382,6 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton with TimeLimits 
           StringContains("b", "prefix")
         ))
       )).get.toString
-    }
-  }
-
-  test("SPARK-25306 createFilter should not hang") {
-    import org.apache.spark.sql.sources._
-    val schema = new StructType(Array(StructField("a", IntegerType, nullable = true)))
-    val filters = (1 to 2000).map(LessThan("a", _)).toArray[Filter]
-    failAfter(2 seconds) {
-      OrcFilters.createFilter(schema, filters)
     }
   }
 }

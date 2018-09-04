@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument, SearchArgumentFactory}
+import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
 import org.apache.orc.storage.ql.io.sarg.SearchArgument.Builder
+import org.apache.orc.storage.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.orc.storage.serde2.io.HiveDecimalWritable
 
-import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.sources.{And, Filter}
 import org.apache.spark.sql.types._
 
 /**
@@ -55,30 +56,7 @@ import org.apache.spark.sql.types._
  * known to be convertible.
  */
 private[sql] object OrcFilters {
-
-  /**
-   * Create ORC filter as a SearchArgument instance.
-   */
-  def createFilter(schema: StructType, filters: Seq[Filter]): Option[SearchArgument] = {
-    val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
-
-    // First, tries to convert each filter individually to see whether it's convertible, and then
-    // collect all convertible ones to build the final `SearchArgument`.
-    val convertibleFilters = for {
-      filter <- filters
-      _ <- buildSearchArgument(dataTypeMap, filter, SearchArgumentFactory.newBuilder())
-    } yield filter
-
-    for {
-      // Combines all convertible filters using `And` to produce a single conjunction
-      conjunction <- buildTree(convertibleFilters)
-      // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
-      builder <- buildSearchArgument(dataTypeMap, conjunction, SearchArgumentFactory.newBuilder())
-    } yield builder.build()
-  }
-
-  def buildTree(filters: Seq[Filter]): Option[Filter] = {
-    import org.apache.spark.sql.sources.And
+  private[sql] def buildTree(filters: Seq[Filter]): Option[Filter] = {
     filters match {
       case Seq() => None
       case Seq(filter) => Some(filter)
@@ -87,6 +65,17 @@ private[sql] object OrcFilters {
         val (left, right) = filters.splitAt(filters.length / 2)
         Some(And(buildTree(left).get, buildTree(right).get))
     }
+  }
+
+  /**
+   * Create ORC filter as a SearchArgument instance.
+   */
+  def createFilter(schema: StructType, filters: Seq[Filter]): Option[SearchArgument] = {
+    val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
+
+    buildTree(filters.filter(buildSearchArgument(dataTypeMap, _, newBuilder).isDefined))
+      .flatMap(buildSearchArgument(dataTypeMap, _, newBuilder))
+      .map(_.build)
   }
 
   /**
@@ -139,8 +128,6 @@ private[sql] object OrcFilters {
       dataTypeMap: Map[String, DataType],
       expression: Filter,
       builder: Builder): Option[Builder] = {
-    def newBuilder = SearchArgumentFactory.newBuilder()
-
     def getType(attribute: String): PredicateLeaf.Type =
       getPredicateLeafType(dataTypeMap(attribute))
 

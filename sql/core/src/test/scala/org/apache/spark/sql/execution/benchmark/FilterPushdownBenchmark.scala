@@ -398,6 +398,24 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
       }
     }
   }
+
+  test(s"Pushdown benchmark with many filters") {
+    val numRows = 1
+    val width = 500
+
+    withTempPath { dir =>
+      val columns = (1 to width).map(i => s"id c$i")
+      val df = spark.range(1).selectExpr(columns: _*)
+      withTempTable("orcTable", "patquetTable") {
+        saveAsTable(df, dir)
+        Seq(1, 250, 500).foreach { numFilter =>
+          val whereExpr = (1 to numFilter).map(i => s"c$i = 0").mkString(" and ")
+          // Note: InferFiltersFromConstraints will add more filters to this given filters
+          filterPushDownBenchmark(numRows, s"Select 1 row with $numFilter filters", whereExpr)
+        }
+      }
+    }
+  }
 }
 
 trait BenchmarkBeforeAndAfterEachTest extends BeforeAndAfterEachTestData { this: Suite =>
