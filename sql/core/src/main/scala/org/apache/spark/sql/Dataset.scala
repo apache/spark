@@ -2208,7 +2208,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset by adding a column or replacing the existing column that has
+   * Returns a new Dataset by adding a column at the end or replacing the existing column that has
    * the same name.
    *
    * `column`'s expression must only refer to attributes supplied by this Dataset. It is an
@@ -2217,13 +2217,25 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
-  def withColumn(colName: String, col: Column): DataFrame = withColumns(Seq(colName), Seq(col))
+  def withColumn(colName: String, col: Column): DataFrame = withColumn(colName, col, true)
+
+  /**
+    * Returns a new Dataset by adding a column or replacing the existing column that has
+    * the same name.
+    *
+    * `column`'s expression must only refer to attributes supplied by this Dataset. It is an
+    * error to add a column that refers to some other Dataset.
+    *
+    * You can choose to add new columns either at the end (default behavior) or at the beginning.
+    */
+  def withColumn(colName: String, col: Column, atTheEnd: Boolean): DataFrame =
+    withColumns(Seq(colName), Seq(col), atTheEnd)
 
   /**
    * Returns a new Dataset by adding columns or replacing the existing columns that has
    * the same names.
    */
-  private[spark] def withColumns(colNames: Seq[String], cols: Seq[Column]): DataFrame = {
+  private[spark] def withColumns(colNames: Seq[String], cols: Seq[Column], atTheEnd: Boolean = true): DataFrame = {
     require(colNames.size == cols.size,
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of columns: ${cols.size}")
@@ -2250,7 +2262,13 @@ class Dataset[T] private[sql](
       !output.exists(f => resolver(f.name, colName))
     }.map { case (colName, col) => col.as(colName) }
 
-    select(replacedAndExistingColumns ++ newColumns : _*)
+    val allColumns = if (atTheEnd) {
+      replacedAndExistingColumns ++ newColumns
+    } else {
+      newColumns.toSeq ++ replacedAndExistingColumns
+    }
+
+    select(allColumns : _*)
   }
 
   /**
