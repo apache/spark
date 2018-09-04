@@ -712,27 +712,27 @@ Intel(R) Core(TM) i7-4770HQ CPU @ 2.20GHz
 
 Select 1 row with 1 filters:             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                             167 /  183          0.0   166581369.0       1.0X
-Parquet Vectorized (Pushdown)                  148 /  157          0.0   148497299.0       1.1X
-Native ORC Vectorized                          142 /  151          0.0   142053680.0       1.2X
-Native ORC Vectorized (Pushdown)               142 /  148          0.0   142490700.0       1.2X
+Parquet Vectorized                             158 /  182          0.0   158442969.0       1.0X
+Parquet Vectorized (Pushdown)                  150 /  158          0.0   149718289.0       1.1X
+Native ORC Vectorized                          141 /  148          0.0   141259852.0       1.1X
+Native ORC Vectorized (Pushdown)               142 /  147          0.0   142016472.0       1.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_181-b13 on Mac OS X 10.13.6
 Intel(R) Core(TM) i7-4770HQ CPU @ 2.20GHz
 
 Select 1 row with 250 filters:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            1135 / 1147          0.0  1134508548.0       1.0X
-Parquet Vectorized (Pushdown)                 1432 / 1442          0.0  1431916497.0       0.8X
-Native ORC Vectorized                         1122 / 1128          0.0  1121722239.0       1.0X
-Native ORC Vectorized (Pushdown)              1175 / 1182          0.0  1175152267.0       1.0X
+Parquet Vectorized                            1013 / 1026          0.0  1013194322.0       1.0X
+Parquet Vectorized (Pushdown)                 1326 / 1332          0.0  1326301956.0       0.8X
+Native ORC Vectorized                         1005 / 1010          0.0  1005266379.0       1.0X
+Native ORC Vectorized (Pushdown)              1068 / 1071          0.0  1067964993.0       0.9X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_181-b13 on Mac OS X 10.13.6
 Intel(R) Core(TM) i7-4770HQ CPU @ 2.20GHz
 
 Select 1 row with 500 filters:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Parquet Vectorized                            4480 / 4517          0.0  4480162380.0       1.0X
-Parquet Vectorized (Pushdown)                 5191 / 5222          0.0  5191121525.0       0.9X
-Native ORC Vectorized                         4474 / 4485          0.0  4474218663.0       1.0X
-Native ORC Vectorized (Pushdown)              4704 / 4721          0.0  4704080940.0       1.0X
+Parquet Vectorized                            3598 / 3614          0.0  3598001202.0       1.0X
+Parquet Vectorized (Pushdown)                 4282 / 4333          0.0  4281849770.0       0.8X
+Native ORC Vectorized                         3594 / 3619          0.0  3593551548.0       1.0X
+Native ORC Vectorized (Pushdown)              3834 / 3840          0.0  3834240570.0       0.9X
