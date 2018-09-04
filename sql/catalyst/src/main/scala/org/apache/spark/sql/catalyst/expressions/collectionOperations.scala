@@ -1046,8 +1046,9 @@ trait ArraySortLike extends ExpectsInputTypes {
       } else {
         s"int $c = ${ctx.genComp(elementType, s"(($jt) $o1)", s"(($jt) $o2)")};"
       }
-      val nonNullPrimitiveAscendingSort =
-        if (CodeGenerator.isPrimitiveType(elementType) && !containsNull) {
+      val canPerformFastSort =
+        CodeGenerator.isPrimitiveType(elementType) && elementType != BooleanType && !containsNull
+      val nonNullPrimitiveAscendingSort = if (canPerformFastSort) {
           val javaType = CodeGenerator.javaType(elementType)
           val primitiveTypeName = CodeGenerator.primitiveTypeName(elementType)
           s"""
