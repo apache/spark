@@ -1698,7 +1698,7 @@ setMethod("to_date",
 
 #' @details
 #' \code{to_json}: Converts a column containing a \code{structType}, a \code{mapType}
-#' or an array into a Column of JSON string.
+#' or an \code{arrayType} into a Column of JSON string.
 #' Resolving the Column can fail if an unsupported type is encountered.
 #'
 #' @rdname column_collection_functions

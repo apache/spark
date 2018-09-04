@@ -659,10 +659,10 @@ case class StructsToJson(
 
   @transient
   lazy val gen = new JacksonGenerator(
-    rowSchema, writer, new JSONOptions(options, timeZoneId.get))
+    inputSchema, writer, new JSONOptions(options, timeZoneId.get))
 
   @transient
-  lazy val rowSchema = child.dataType
+  lazy val inputSchema = child.dataType
 
   // This converts rows to the JSON output according to the given schema.
   @transient
@@ -674,7 +674,7 @@ case class StructsToJson(
       UTF8String.fromString(json)
     }
 
-    child.dataType match {
+    inputSchema match {
       case _: StructType =>
         (row: Any) =>
           gen.write(row.asInstanceOf[InternalRow])
@@ -692,28 +692,28 @@ case class StructsToJson(
 
   override def dataType: DataType = StringType
 
-  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case _: StructType =>
+  override def checkInputDataTypes(): TypeCheckResult = inputSchema match {
+    case struct: StructType =>
       try {
-        JacksonUtils.verifySchema(rowSchema.asInstanceOf[StructType])
+        JacksonUtils.verifySchema(struct)
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: UnsupportedOperationException =>
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
-    case _: MapType =>
+    case map: MapType =>
       // TODO: let `JacksonUtils.verifySchema` verify a `MapType`
       try {
-        val st = StructType(StructField("a", rowSchema.asInstanceOf[MapType]) :: Nil)
+        val st = StructType(StructField("a", map) :: Nil)
         JacksonUtils.verifySchema(st)
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: UnsupportedOperationException =>
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
-    case _: ArrayType =>
+    case array: ArrayType =>
       try {
-        JacksonUtils.verifyType(prettyName, rowSchema)
+        JacksonUtils.verifyType(prettyName, array)
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: UnsupportedOperationException =>
