@@ -1241,7 +1241,12 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           // the new join conditions, if all conditions is unevaluable, we should
           // change the join type to CrossJoin.
           val newJoinType =
-            if (commonJoinCondition.nonEmpty && newJoinCond.isEmpty) Cross else joinType
+            if (commonJoinCondition.nonEmpty && newJoinCond.isEmpty) {
+              logWarning(s"The whole commonJoinCondition:$commonJoinCondition of the join " +
+                s"plan:\n $j is unevaluable, it will be ignored and the join plan will be " +
+                s"turned to cross join.")
+              Cross
+            } else joinType
 
           val join = Join(newLeft, newRight, newJoinType, newJoinCond)
           if (others.nonEmpty) {

@@ -104,7 +104,8 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
     assert(qualifiedPlanNodes.size == 1)
   }
 
-  test("Python UDF refers to the attributes from more than one child in join condition") {
+  test("SPARK-25314: Python UDF refers to the attributes from more than one child" +
+    " in join condition") {
     val df = Seq(("Hello", 4)).toDF("a", "b")
     val df2 = Seq(("Hello", 4)).toDF("c", "d")
     val joinDF = df.join(df2,
