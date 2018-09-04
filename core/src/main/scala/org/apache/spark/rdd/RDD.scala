@@ -1649,7 +1649,15 @@ abstract class RDD[T: ClassTag](
 
   /**
    * :: Experimental ::
-   * Indicates that Spark must launch the tasks together for the current stage.
+   * Marks the current stage as a barrier stage, where Spark must launch all tasks together.
+   * In case of a task failure, instead of only restarting the failed task, Spark will abort the
+   * entire stage and re-launch all tasks for this stage.
+   * The barrier execution mode feature is experimental and it only handles limited scenarios.
+   * Please read the linked SPIP and design docs to understand the limitations and future plans.
+   * @return an [[RDDBarrier]] instance that provides actions within a barrier stage
+   * @see [[org.apache.spark.BarrierTaskContext]]
+   * @see <a href="https://jira.apache.org/jira/browse/SPARK-24374">SPIP: Barrier Execution Mode</a>
+   * @see <a href="https://jira.apache.org/jira/browse/SPARK-24582">Design Doc</a>
    */
   @Experimental
   @Since("2.4.0")
