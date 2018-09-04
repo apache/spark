@@ -444,10 +444,23 @@ final class ShuffleBlockFetcherIterator(
               throwFetchFailedException(blockId, address, e)
           }
 
-          input = streamWrapper(blockId, in)
+          var wrapCorruption: Boolean = false
+          try {
+            input = streamWrapper(blockId, in)
+          } catch {
+            case e: IOException =>
+              buf.release()
+              logWarning(s"got a corrupted block $blockId from $address while wrapping it" +
+                s" locally, fetch again", e)
+              corruptedBlocks += blockId
+              fetchRequests += FetchRequest(address, Array((blockId, size)))
+              wrapCorruption = true
+              result = null
+              in.close
+          }
           // Only copy the stream if it's wrapped by compression or encryption, also the size of
           // block is small (the decompressed block is smaller than maxBytesInFlight)
-          if (detectCorrupt && !input.eq(in) && size < maxBytesInFlight / 3) {
+          if (detectCorrupt && !wrapCorruption && !input.eq(in) && size < maxBytesInFlight / 3) {
             val originalInput = input
             val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
             try {
