@@ -2796,7 +2796,10 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Regular expression matching full width characters
+   * Regular expression matching full width characters.
+   *
+   * Looked at all the 0x0000-0xFFFF characters (unicode) and showed them under Xshell.
+   * Found all the full width characters, then get the regular expression.
    */
   private val fullWidthRegex = ("""[""" +
     // scalastyle:off nonascii
@@ -2814,6 +2817,9 @@ private[spark] object Utils extends Logging {
   /**
    * Return the number of half widths in a given string. Note that a full width character
    * occupies two half widths.
+   *
+   * For a string consisting of 1 million characters, the execution of this method requires
+   * about 50ms.
    */
   def stringHalfWidth(str: String): Int = {
     if (str == null) 0 else str.length + fullWidthRegex.findAllIn(str).size
