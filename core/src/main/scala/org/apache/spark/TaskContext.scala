@@ -232,4 +232,7 @@ abstract class TaskContext extends Serializable {
 
   /** Optionally returns the stored fetch failure in the task. */
   private[spark] def fetchFailed: Option[FetchFailedException]
+
+  /** Gets local properties set upstream in the driver. */
+  private[spark] def getLocalProperties: Properties
 }

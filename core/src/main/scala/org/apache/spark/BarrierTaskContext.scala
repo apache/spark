@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.util.{Timer, TimerTask}
+import java.util.{Properties, Timer, TimerTask}
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -219,6 +219,8 @@ class BarrierTaskContext private[spark] (
   override private[spark] def fetchFailed: Option[FetchFailedException] = {
     taskContext.fetchFailed
   }
+
+  override private[spark] def getLocalProperties: Properties = taskContext.getLocalProperties
 }
 
 @Experimental
