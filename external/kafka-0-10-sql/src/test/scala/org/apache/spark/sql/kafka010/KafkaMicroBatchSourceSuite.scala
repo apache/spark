@@ -30,8 +30,6 @@ import scala.util.Random
 
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord, RecordMetadata}
 import org.apache.kafka.common.TopicPartition
-import org.json4s.DefaultFormats
-import org.json4s.jackson.JsonMethods._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
@@ -956,41 +954,6 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
     intercept[IllegalArgumentException] { test(minPartitions = "1.0", 1, true) }
     intercept[IllegalArgumentException] { test(minPartitions = "0", 1, true) }
     intercept[IllegalArgumentException] { test(minPartitions = "-1", 1, true) }
-  }
-
-  test("custom lag metrics") {
-    import testImplicits._
-    val topic = newTopic()
-    testUtils.createTopic(topic, partitions = 2)
-    testUtils.sendMessages(topic, (1 to 100).map(_.toString).toArray)
-    require(testUtils.getLatestOffsets(Set(topic)).size === 2)
-
-    val kafka = spark
-      .readStream
-      .format("kafka")
-      .option("subscribe", topic)
-      .option("startingOffsets", s"earliest")
-      .option("maxOffsetsPerTrigger", 10)
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .load()
-      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-      .as[(String, String)]
-
-    implicit val formats = DefaultFormats
-
-    val mapped = kafka.map(kv => kv._2.toInt + 1)
-    testStream(mapped)(
-      StartStream(trigger = OneTimeTrigger),
-      AssertOnQuery { query =>
-        query.awaitTermination()
-        val source = query.lastProgress.sources(0)
-        // masOffsetsPerTrigger is 10, and there are two partitions containing 50 events each
-        // so 5 events should be processed from each partition and a lag of 45 events
-        val custom = parse(source.customMetrics)
-          .extract[Map[String, Map[String, Map[String, Long]]]]
-        custom("lag")(topic)("0") == 45 && custom("lag")(topic)("1") == 45
-      }
-    )
   }
 
 }
