@@ -93,6 +93,7 @@ case class UserDefinedFunction protected[sql] (
     udf._nameOption = _nameOption
     udf._nullable = _nullable
     udf._deterministic = _deterministic
+    udf.nullableTypes = nullableTypes
     udf
   }
 
