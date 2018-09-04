@@ -722,6 +722,62 @@ with encryption, at least.
 The Kerberos login will be periodically renewed using the provided credentials, and new delegation
 tokens for supported will be created.
 
+## Secure Interaction with Kubernetes
+
+When talking to Hadoop-based services behind Kerberos, it was noted that Spark needs to obtain delegation tokens
+so that non-local processes can authenticate. These delegation tokens in Kubernetes are stored in Secrets that are 
+shared by the Driver and its Executors. As such, there are three ways of submitting a kerberos job: 
+
+1. Submitting with a $kinit that stores a TGT in the Local Ticket Cache:
+```bash
+/usr/bin/kinit -kt <keytab_file> <username>/<krb5 realm>
+/opt/spark/bin/spark-submit \
+    --deploy-mode cluster \
+    --class org.apache.spark.examples.HdfsTest \
+    --master k8s://<KUBERNETES_MASTER_ENDPOINT> \
+    --conf spark.executor.instances=1 \
+    --conf spark.app.name=spark-hdfs \
+    --conf spark.kubernetes.container.image=spark:latest \
+    --conf spark.kubernetes.kerberos.krb5location=/etc/krb5.conf \
+    local:///opt/spark/examples/jars/spark-examples_2.11-2.4.0-SNAPSHOT.jar \
+    <HDFS_FILE_LOCATION>
+```
+3. Submitting with a local keytab and principle
+```bash
+/opt/spark/bin/spark-submit \
+    --deploy-mode cluster \
+    --class org.apache.spark.examples.HdfsTest \
+    --master k8s://<KUBERNETES_MASTER_ENDPOINT> \
+    --conf spark.executor.instances=1 \
+    --conf spark.app.name=spark-hdfs \
+    --conf spark.kubernetes.container.image=spark:latest \
+    --conf spark.kubernetes.kerberos.keytab=<KEYTAB_FILE> \
+    --conf spark.kubernetes.kerberos.principal=<PRINCIPLE> \
+    --conf spark.kubernetes.kerberos.krb5location=/etc/krb5.conf \
+    local:///opt/spark/examples/jars/spark-examples_2.11-2.4.0-SNAPSHOT.jar \
+    <HDFS_FILE_LOCATION>
+```
+
+3. Submitting with pre-populated secrets already existing within the namespace
+```bash
+/opt/spark/bin/spark-submit \
+    --deploy-mode cluster \
+    --class org.apache.spark.examples.HdfsTest \
+    --master k8s://<KUBERNETES_MASTER_ENDPOINT> \
+    --conf spark.executor.instances=1 \
+    --conf spark.app.name=spark-hdfs \
+    --conf spark.kubernetes.container.image=spark:latest \
+    --conf spark.kubernetes.kerberos.tokensecret.name=<SECRET_TOKEN_NAME> \
+    --conf spark.kubernetes.kerberos.tokensecret.itemkey=<SECRET_ITEM_KEY> \
+    --conf spark.kubernetes.kerberos.krb5location=/etc/krb5.conf \
+    local:///opt/spark/examples/jars/spark-examples_2.11-2.4.0-SNAPSHOT.jar \
+    
+    <HDFS_FILE_LOCATION>
+```
+
+
+
+
 
 # Event Logging
 

@@ -45,9 +45,6 @@ private[spark] class HadoopGlobalFeatureDriverStep(
      .getOrElse(Seq.empty[HadoopConfigurationStep])
 
    var currentHadoopSpec = HadoopConfigSpec(
-     podVolumes = Seq.empty,
-     containerEnvs = Seq.empty,
-     containerVMs = Seq.empty,
      configMapProperties = Map.empty[String, String],
      dtSecret = None,
      dtSecretName = KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME,
@@ -59,22 +56,11 @@ private[spark] class HadoopGlobalFeatureDriverStep(
    }
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val hadoopBasedPod = new PodBuilder(pod.pod)
-        .editSpec()
-          .addAllToVolumes(currentHadoopSpec.podVolumes.asJava)
-        .endSpec()
-      .build()
-
-    val hadoopBasedContainer = new ContainerBuilder(pod.container)
-      .addAllToEnv(currentHadoopSpec.containerEnvs.asJava)
-      .addAllToVolumeMounts(currentHadoopSpec.containerVMs.asJava)
-      .build()
-
     val hadoopBasedSparkPod = HadoopBootstrapUtil.bootstrapHadoopConfDir(
       kubernetesConf.hadoopConfDir.get,
       kubernetesConf.getHadoopConfigMapName,
       kubernetesConf.getTokenManager,
-      SparkPod(hadoopBasedPod, hadoopBasedContainer))
+      pod)
 
     val maybeKerberosModification =
       for {

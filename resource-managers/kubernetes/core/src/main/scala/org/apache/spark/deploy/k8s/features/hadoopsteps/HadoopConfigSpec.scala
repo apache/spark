@@ -22,9 +22,6 @@ import io.fabric8.kubernetes.api.model.{EnvVar, Secret, Volume, VolumeMount}
   * Represents a given configuration of the hadoop configuration logic, informing the
   * HadoopConfigBootstrapStep of how the driver should be configured. This includes:
   * <p>
-  * - Volumes that need to mounted onto the pod
-  * - Environmental variables that need to be launched with the container
-  * - Volume Mounts that need to mounted with the container
   * - The properties that will be stored into the config map which have (key, value)
   *   pairs of (path, data)
   * - The secret containing a DT, either previously specified or built on the fly
@@ -33,9 +30,6 @@ import io.fabric8.kubernetes.api.model.{EnvVar, Secret, Volume, VolumeMount}
   * - The Job User's username
   */
 private[spark] case class HadoopConfigSpec(
-  podVolumes: Seq[Volume],
-  containerEnvs: Seq[EnvVar],
-  containerVMs: Seq[VolumeMount],
   configMapProperties: Map[String, String],
   dtSecret: Option[Secret],
   dtSecretName: String,

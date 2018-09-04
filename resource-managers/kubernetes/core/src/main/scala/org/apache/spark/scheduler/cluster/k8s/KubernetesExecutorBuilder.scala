@@ -75,8 +75,8 @@ private[spark] class KubernetesExecutorBuilder(
         } yield {
           provideKerberosConfStep(kubernetesConf)
         }
-      Seq(provideHadoopConfStep(kubernetesConf)) ++
-        maybeKerberosStep :+ maybeKerberosStep.getOrElse(
+      Seq(provideHadoopConfStep(kubernetesConf)) :+
+        maybeKerberosStep.getOrElse(
         provideHadoopSparkUserStep(kubernetesConf))
     }.getOrElse(Seq.empty[KubernetesFeatureConfigStep])
 
