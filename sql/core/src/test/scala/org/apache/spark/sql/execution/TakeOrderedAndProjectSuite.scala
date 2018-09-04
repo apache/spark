@@ -45,6 +45,7 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSQLContext {
 
   protected override def afterAll() = {
     SQLConf.get.setConf(SQLConf.LIMIT_FLAT_GLOBAL_LIMIT, originalLimitFlatGlobalLimit)
+    super.afterAll()
   }
 
   private def generateRandomInputData(): DataFrame = {
