@@ -1636,12 +1636,13 @@ case class ArraysOverlap(left: Expression, right: Expression)
     val set = ctx.freshName("set")
     val addToSetFromSmallerCode = nullSafeElementCodegen(
       smaller, i, s"$set.add($getFromSmaller);", s"${ev.isNull} = true;")
+    val setIsNullCode = if (nullable) s"${ev.isNull} = false;" else ""
     val elementIsInSetCode = nullSafeElementCodegen(
       bigger,
       i,
       s"""
          |if ($set.contains($getFromBigger)) {
-         |  ${ev.isNull} = false;
+         |  $setIsNullCode
          |  ${ev.value} = true;
          |  break;
          |}
@@ -1666,12 +1667,13 @@ case class ArraysOverlap(left: Expression, right: Expression)
     val j = ctx.freshName("j")
     val getFromSmaller = CodeGenerator.getValue(smaller, elementType, j)
     val getFromBigger = CodeGenerator.getValue(bigger, elementType, i)
+    val setIsNullCode = if (nullable) s"${ev.isNull} = false;" else ""
     val compareValues = nullSafeElementCodegen(
       smaller,
       j,
       s"""
          |if (${ctx.genEqual(elementType, getFromSmaller, getFromBigger)}) {
-         |  ${ev.isNull} = false;
+         |  $setIsNullCode
          |  ${ev.value} = true;
          |}
        """.stripMargin,
