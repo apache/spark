@@ -1234,9 +1234,21 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
           val newRight = rightJoinConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
-          val newJoinCond = commonJoinCondition.reduceLeftOption(And)
+          val (newJoinConditions, others) =
+            commonJoinCondition.partition(canEvaluateWithinJoin)
+          val newJoinCond = newJoinConditions.reduceLeftOption(And)
+          // if condition expression is unevaluable, it will be removed from
+          // the new join conditions, if all conditions is unevaluable, we should
+          // change the join type to CrossJoin.
+          val newJoinType =
+            if (commonJoinCondition.nonEmpty && newJoinCond.isEmpty) Cross else joinType
 
-          Join(newLeft, newRight, joinType, newJoinCond)
+          val join = Join(newLeft, newRight, newJoinType, newJoinCond)
+          if (others.nonEmpty) {
+            Filter(others.reduceLeft(And), join)
+          } else {
+            join
+          }
         case RightOuter =>
           // push down the left side only join filter for left side sub query
           val newLeft = leftJoinConditions.

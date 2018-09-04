@@ -1153,7 +1153,7 @@ class FilterPushdownSuite extends PlanTest {
       "x.a".attr === Rand(10) && "y.b".attr === 5))
     val correctAnswer =
       x.where("x.a".attr === 5).join(y.where("y.a".attr === 5 && "y.b".attr === 5),
-        condition = Some("x.a".attr === Rand(10)))
+        joinType = Cross).where("x.a".attr === Rand(10))
 
     // CheckAnalysis will ensure nondeterministic expressions not appear in join condition.
     // TODO support nondeterministic expressions in join condition.
