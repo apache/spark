@@ -412,7 +412,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     assert(!ser2.getAutoReset)
   }
 
-  test("ClassCastException when writing a Map after previously " +
+  test("SPARK-25176: ClassCastException when writing a Map after previously " +
     "reading a Map with different generic type") {
     // This test copy from: https://github.com/EsotericSoftware/kryo/issues/384
     import java.util
