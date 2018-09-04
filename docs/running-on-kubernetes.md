@@ -191,6 +191,7 @@ Spark users can similarly use template files to define the driver or executor po
 To do so, specify the spark properties `spark.kubernetes.driver.podTemplateFile` and `spark.kubernetes.executor.podTemplateFile`
 to point to local files accessible to the `spark-submit` process. To allow the driver pod access the executor pod template
 file, the file will be automatically mounted onto a volume in the driver pod when it's created.
+Spark does not do any validation after unmarshalling these template files and relies on the Kubernetes API server for validation.
 
 It is important to note that Spark is opinionated about certain pod configurations so there are values in the
 pod template that will always be overwritten by Spark. Therefore, users of this feature should note that specifying
