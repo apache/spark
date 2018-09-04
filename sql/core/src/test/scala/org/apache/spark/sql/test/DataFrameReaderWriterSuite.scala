@@ -813,7 +813,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         spark.sql("CREATE VIEW view1 AS SELECT id FROM tbl")
         spark.sql("CREATE TABLE tbl2(ID long) USING parquet")
         spark.sql("INSERT OVERWRITE TABLE tbl2 SELECT ID FROM view1")
-        val identifier = TableIdentifier("tbl2", Some("default"))
+        val identifier = TableIdentifier("tbl2")
         val location = spark.sessionState.catalog.getTableMetadata(identifier).location.toString
         val expectedSchema = StructType(Seq(StructField("ID", LongType, true)))
         assert(spark.read.parquet(location).schema == expectedSchema)

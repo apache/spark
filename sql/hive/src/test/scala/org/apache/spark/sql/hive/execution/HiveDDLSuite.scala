@@ -776,7 +776,6 @@ class HiveDDLSuite
           spark.sql("CREATE VIEW view1 AS SELECT id FROM tbl")
           spark.sql(s"CREATE TABLE tbl2(ID long) location '${path.toURI}'")
           spark.sql(s"INSERT OVERWRITE DIRECTORY '${path.toURI}' SELECT ID FROM view1")
-          // spark.sql("INSERT OVERWRITE TABLE tbl2 SELECT ID FROM view1")
           checkAnswer(spark.table("tbl2"), Seq(Row(4)))
         }
       }
