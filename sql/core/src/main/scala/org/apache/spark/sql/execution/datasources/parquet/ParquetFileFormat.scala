@@ -300,6 +300,8 @@ class ParquetFileFormat
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
+    val parquetOptions = new ParquetOptions(options, sparkSession.sessionState.conf)
+
     hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
     hadoopConf.set(
       ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
@@ -313,6 +315,10 @@ class ParquetFileFormat
     hadoopConf.setBoolean(
       SQLConf.CASE_SENSITIVE.key,
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    hadoopConf.set(
+      ParquetOptions.DUPLICATED_FIELDS_RESOLUTION_MODE,
+      parquetOptions.duplicatedFieldsResolutionMode
+    )
 
     ParquetWriteSupport.setSchema(requiredSchema, hadoopConf)
 

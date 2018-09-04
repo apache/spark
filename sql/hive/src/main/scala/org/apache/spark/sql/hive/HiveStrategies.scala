@@ -32,7 +32,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.{CreateTable, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetDuplicatedFieldsResolutionMode,
+  ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
@@ -181,9 +182,20 @@ case class RelationConversions(
     conf: SQLConf,
     sessionCatalog: HiveSessionCatalog) extends Rule[LogicalPlan] {
   private def isConvertible(relation: HiveTableRelation): Boolean = {
+    var isConvertible = false
     val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
-    serde.contains("parquet") && conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
-      serde.contains("orc") && conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
+    if (serde.contains("parquet") && conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET)) {
+      if (conf.getConf(SQLConf.CASE_SENSITIVE)) {
+        logWarning("The behavior must be consistent to do the conversion. We skip the " +
+          "conversion in case-sensitive mode because hive parquet table always do " +
+          "case-insensitive field resolution.")
+      } else {
+        isConvertible = true
+      }
+    } else if (serde.contains("orc") && conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)) {
+      isConvertible = true
+    }
+    isConvertible
   }
 
   // Return true for Apache ORC and Hive ORC-related configuration names.
@@ -200,9 +212,14 @@ case class RelationConversions(
     // Consider table and storage properties. For properties existing in both sides, storage
     // properties will supersede table properties.
     if (serde.contains("parquet")) {
+      logInfo("When converting hive parquet table to parquet data source, we switch the " +
+        "duplicated fields resolution mode to ask parquet data source to pick the first matched " +
+        "field - the same behavior as hive parquet table - to keep behaviors consistent.")
       val options = relation.tableMeta.properties.filterKeys(isParquetProperty) ++
         relation.tableMeta.storage.properties + (ParquetOptions.MERGE_SCHEMA ->
-        conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
+        conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString) +
+        (ParquetOptions.DUPLICATED_FIELDS_RESOLUTION_MODE ->
+          ParquetDuplicatedFieldsResolutionMode.FIRST_MATCH.toString)
       sessionCatalog.metastoreCatalog
         .convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet")
     } else {

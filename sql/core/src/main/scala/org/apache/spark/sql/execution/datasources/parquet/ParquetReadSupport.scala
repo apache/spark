@@ -65,17 +65,16 @@ private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone])
    * readers.  Responsible for figuring out Parquet requested schema used for column pruning.
    */
   override def init(context: InitContext): ReadContext = {
+    val conf = context.getConfiguration
+
     catalystRequestedSchema = {
-      val conf = context.getConfiguration
       val schemaString = conf.get(ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA)
       assert(schemaString != null, "Parquet requested schema not set.")
       StructType.fromString(schemaString)
     }
 
-    val caseSensitive = context.getConfiguration.getBoolean(SQLConf.CASE_SENSITIVE.key,
-      SQLConf.CASE_SENSITIVE.defaultValue.get)
     val parquetRequestedSchema = ParquetReadSupport.clipParquetSchema(
-      context.getFileSchema, catalystRequestedSchema, caseSensitive)
+      context.getFileSchema, catalystRequestedSchema, conf)
 
     new ReadContext(parquetRequestedSchema, Map.empty[String, String].asJava)
   }
@@ -123,9 +122,9 @@ private[parquet] object ParquetReadSupport {
   def clipParquetSchema(
       parquetSchema: MessageType,
       catalystSchema: StructType,
-      caseSensitive: Boolean = true): MessageType = {
+      conf: Configuration): MessageType = {
     val clippedParquetFields = clipParquetGroupFields(
-      parquetSchema.asGroupType(), catalystSchema, caseSensitive)
+      parquetSchema.asGroupType(), catalystSchema, conf)
     if (clippedParquetFields.isEmpty) {
       ParquetSchemaConverter.EMPTY_MESSAGE
     } else {
@@ -137,20 +136,20 @@ private[parquet] object ParquetReadSupport {
   }
 
   private def clipParquetType(
-      parquetType: Type, catalystType: DataType, caseSensitive: Boolean): Type = {
+      parquetType: Type, catalystType: DataType, conf: Configuration): Type = {
     catalystType match {
       case t: ArrayType if !isPrimitiveCatalystType(t.elementType) =>
         // Only clips array types with nested type as element type.
-        clipParquetListType(parquetType.asGroupType(), t.elementType, caseSensitive)
+        clipParquetListType(parquetType.asGroupType(), t.elementType, conf)
 
       case t: MapType
         if !isPrimitiveCatalystType(t.keyType) ||
            !isPrimitiveCatalystType(t.valueType) =>
         // Only clips map types with nested key type or value type
-        clipParquetMapType(parquetType.asGroupType(), t.keyType, t.valueType, caseSensitive)
+        clipParquetMapType(parquetType.asGroupType(), t.keyType, t.valueType, conf)
 
       case t: StructType =>
-        clipParquetGroup(parquetType.asGroupType(), t, caseSensitive)
+        clipParquetGroup(parquetType.asGroupType(), t, conf)
 
       case _ =>
         // UDTs and primitive types are not clipped.  For UDTs, a clipped version might not be able
@@ -177,14 +176,14 @@ private[parquet] object ParquetReadSupport {
    * [[StructType]].
    */
   private def clipParquetListType(
-      parquetList: GroupType, elementType: DataType, caseSensitive: Boolean): Type = {
+      parquetList: GroupType, elementType: DataType, conf: Configuration): Type = {
     // Precondition of this method, should only be called for lists with nested element types.
     assert(!isPrimitiveCatalystType(elementType))
 
     // Unannotated repeated group should be interpreted as required list of required element, so
     // list element type is just the group itself.  Clip it.
     if (parquetList.getOriginalType == null && parquetList.isRepetition(Repetition.REPEATED)) {
-      clipParquetType(parquetList, elementType, caseSensitive)
+      clipParquetType(parquetList, elementType, conf)
     } else {
       assert(
         parquetList.getOriginalType == OriginalType.LIST,
@@ -216,7 +215,7 @@ private[parquet] object ParquetReadSupport {
         Types
           .buildGroup(parquetList.getRepetition)
           .as(OriginalType.LIST)
-          .addField(clipParquetType(repeatedGroup, elementType, caseSensitive))
+          .addField(clipParquetType(repeatedGroup, elementType, conf))
           .named(parquetList.getName)
       } else {
         // Otherwise, the repeated field's type is the element type with the repeated field's
@@ -227,7 +226,7 @@ private[parquet] object ParquetReadSupport {
           .addField(
             Types
               .repeatedGroup()
-              .addField(clipParquetType(repeatedGroup.getType(0), elementType, caseSensitive))
+              .addField(clipParquetType(repeatedGroup.getType(0), elementType, conf))
               .named(repeatedGroup.getName))
           .named(parquetList.getName)
       }
@@ -243,7 +242,7 @@ private[parquet] object ParquetReadSupport {
       parquetMap: GroupType,
       keyType: DataType,
       valueType: DataType,
-      caseSensitive: Boolean): GroupType = {
+      conf: Configuration): GroupType = {
     // Precondition of this method, only handles maps with nested key types or value types.
     assert(!isPrimitiveCatalystType(keyType) || !isPrimitiveCatalystType(valueType))
 
@@ -255,8 +254,8 @@ private[parquet] object ParquetReadSupport {
       Types
         .repeatedGroup()
         .as(repeatedGroup.getOriginalType)
-        .addField(clipParquetType(parquetKeyType, keyType, caseSensitive))
-        .addField(clipParquetType(parquetValueType, valueType, caseSensitive))
+        .addField(clipParquetType(parquetKeyType, keyType, conf))
+        .addField(clipParquetType(parquetValueType, valueType, conf))
         .named(repeatedGroup.getName)
 
     Types
@@ -275,8 +274,8 @@ private[parquet] object ParquetReadSupport {
    *       pruning.
    */
   private def clipParquetGroup(
-      parquetRecord: GroupType, structType: StructType, caseSensitive: Boolean): GroupType = {
-    val clippedParquetFields = clipParquetGroupFields(parquetRecord, structType, caseSensitive)
+      parquetRecord: GroupType, structType: StructType, conf: Configuration): GroupType = {
+    val clippedParquetFields = clipParquetGroupFields(parquetRecord, structType, conf)
     Types
       .buildGroup(parquetRecord.getRepetition)
       .as(parquetRecord.getOriginalType)
@@ -290,7 +289,9 @@ private[parquet] object ParquetReadSupport {
    * @return A list of clipped [[GroupType]] fields, which can be empty.
    */
   private def clipParquetGroupFields(
-      parquetRecord: GroupType, structType: StructType, caseSensitive: Boolean): Seq[Type] = {
+      parquetRecord: GroupType, structType: StructType, conf: Configuration): Seq[Type] = {
+    val caseSensitive = conf.getBoolean(SQLConf.CASE_SENSITIVE.key,
+      SQLConf.CASE_SENSITIVE.defaultValue.get)
     val toParquet = new SparkToParquetSchemaConverter(writeLegacyParquetFormat = false)
     if (caseSensitive) {
       val caseSensitiveParquetFieldMap =
@@ -298,7 +299,7 @@ private[parquet] object ParquetReadSupport {
       structType.map { f =>
         caseSensitiveParquetFieldMap
           .get(f.name)
-          .map(clipParquetType(_, f.dataType, caseSensitive))
+          .map(clipParquetType(_, f.dataType, conf))
           .getOrElse(toParquet.convertField(f))
       }
     } else {
@@ -310,12 +311,19 @@ private[parquet] object ParquetReadSupport {
           .get(f.name.toLowerCase(Locale.ROOT))
           .map { parquetTypes =>
             if (parquetTypes.size > 1) {
-              // Need to fail if there is ambiguity, i.e. more than one field is matched
-              val parquetTypesString = parquetTypes.map(_.getName).mkString("[", ", ", "]")
-              throw new RuntimeException(s"""Found duplicate field(s) "${f.name}": """ +
-                s"$parquetTypesString in case-insensitive mode")
+              val resolutionMode = ParquetDuplicatedFieldsResolutionMode.withName(
+                conf.get(ParquetOptions.DUPLICATED_FIELDS_RESOLUTION_MODE,
+                  ParquetDuplicatedFieldsResolutionMode.FAIL.toString))
+              resolutionMode match {
+                case ParquetDuplicatedFieldsResolutionMode.FAIL =>
+                  val parquetTypesString = parquetTypes.map(_.getName).mkString("[", ", ", "]")
+                  throw new RuntimeException(s"""Found duplicate field(s) "${f.name}": """ +
+                    s"$parquetTypesString in case-insensitive mode")
+                case ParquetDuplicatedFieldsResolutionMode.FIRST_MATCH =>
+                  clipParquetType(parquetTypes.head, f.dataType, conf)
+              }
             } else {
-              clipParquetType(parquetTypes.head, f.dataType, caseSensitive)
+              clipParquetType(parquetTypes.head, f.dataType, conf)
             }
           }.getOrElse(toParquet.convertField(f))
       }
