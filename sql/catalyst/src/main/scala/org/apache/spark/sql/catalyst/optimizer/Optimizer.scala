@@ -1252,16 +1252,16 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
                 // [[CheckCartesianProducts]], we throw firstly here for better readable
                 // information.
                 throw new AnalysisException("Detected the whole commonJoinCondition:" +
-                  "$commonJoinCondition of the join plan is unevaluable, we need to cast the" +
-                  " join to cross join by setting the configuration variable" +
-                  " spark.sql.crossJoin.enabled = true.")
+                  s"$commonJoinCondition of the join plan is unevaluable, we need to cast the " +
+                  "join to cross join by setting the configuration variable " +
+                  s"${SQLConf.CROSS_JOINS_ENABLED.key}=true")
               }
             } else {
               joinType
             }
 
           val join = Join(newLeft, newRight, newJoinType, newJoinCond)
-          if (others.nonEmpty) {
+          if (others.nonEmpty && joinType.isInstanceOf[InnerLike]) {
             Filter(others.reduceLeft(And), join)
           } else {
             join
@@ -1347,7 +1347,7 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
                |Join condition is missing or trivial.
                |Either: use the CROSS JOIN syntax to allow cartesian products between these
                |relations, or: enable implicit cartesian products by setting the configuration
-               |variable spark.sql.crossJoin.enabled=true"""
+               |variable ${SQLConf.CROSS_JOINS_ENABLED.key}=true"""
             .stripMargin)
     }
 }
