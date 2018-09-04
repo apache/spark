@@ -20,36 +20,29 @@ package org.apache.spark.sql.execution.datasources
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
-import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.test.SharedSQLContext
 
 
-class FileSourceSuite extends QueryTest with SharedSQLContext with PredicateHelper {
+class FileSourceSuite extends SharedSQLContext {
 
-  test("[SPARK-25237] remove updateBytesReadWithFileSize in FileScanRdd") {
+  test("SPARK-25237 compute correct input metrics in FileScanRDD") {
     withTempPath { p =>
       val path = p.getAbsolutePath
-      spark.range(1000).selectExpr("id AS c0", "rand() AS c1").repartition(10).write.csv(path)
-      val df = spark.read.csv(path).limit(1)
-
+      spark.range(1000).repartition(1).write.csv(path)
       val bytesReads = new ArrayBuffer[Long]()
       val bytesReadListener = new SparkListener() {
         override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
           bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
         }
       }
-      // Avoid receiving earlier taskEnd events
-      spark.sparkContext.listenerBus.waitUntilEmpty(500)
-
-      spark.sparkContext.addSparkListener(bytesReadListener)
-
-      df.collect()
-
-      spark.sparkContext.listenerBus.waitUntilEmpty(500)
-      spark.sparkContext.removeSparkListener(bytesReadListener)
-
-      assert(bytesReads.sum < 3000)
+      sparkContext.addSparkListener(bytesReadListener)
+      try {
+        spark.read.csv(path).limit(1).collect()
+        sparkContext.listenerBus.waitUntilEmpty(1000L)
+        assert(bytesReads.sum === 7860)
+      } finally {
+        sparkContext.removeSparkListener(bytesReadListener)
+      }
     }
   }
 }
