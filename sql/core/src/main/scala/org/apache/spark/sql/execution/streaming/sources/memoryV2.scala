@@ -23,9 +23,6 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
-import org.json4s.NoTypeHints
-import org.json4s.jackson.Serialization
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -35,9 +32,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.{Append, Complete, Update}
 import org.apache.spark.sql.execution.streaming.{MemorySinkBase, Sink}
-import org.apache.spark.sql.sources.v2.{CustomMetrics, DataSourceOptions, DataSourceV2, StreamingWriteSupportProvider}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, StreamingWriteSupportProvider}
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteSupport, SupportsCustomWriterMetrics}
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteSupport}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -119,26 +116,15 @@ class MemorySinkV2 extends DataSourceV2 with StreamingWriteSupportProvider
     batches.clear()
   }
 
-  def numRows: Int = synchronized {
-    batches.foldLeft(0)(_ + _.data.length)
-  }
-
   override def toString(): String = "MemorySinkV2"
 }
 
 case class MemoryWriterCommitMessage(partition: Int, data: Seq[Row])
   extends WriterCommitMessage {}
 
-class MemoryV2CustomMetrics(sink: MemorySinkV2) extends CustomMetrics {
-  private implicit val formats = Serialization.formats(NoTypeHints)
-  override def json(): String = Serialization.write(Map("numRows" -> sink.numRows))
-}
-
 class MemoryStreamingWriteSupport(
     val sink: MemorySinkV2, outputMode: OutputMode, schema: StructType)
-  extends StreamingWriteSupport with SupportsCustomWriterMetrics {
-
-  private val customMemoryV2Metrics = new MemoryV2CustomMetrics(sink)
+  extends StreamingWriteSupport {
 
   override def createStreamingWriterFactory: MemoryWriterFactory = {
     MemoryWriterFactory(outputMode, schema)
@@ -154,8 +140,6 @@ class MemoryStreamingWriteSupport(
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
     // Don't accept any of the new input.
   }
-
-  override def getCustomMetrics: CustomMetrics = customMemoryV2Metrics
 }
 
 case class MemoryWriterFactory(outputMode: OutputMode, schema: StructType)
