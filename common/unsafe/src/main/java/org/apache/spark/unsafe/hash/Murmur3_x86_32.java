@@ -117,12 +117,10 @@ public final class Murmur3_x86_32 {
   }
 
   private static int hashBytesByIntBlock(MemoryBlock base, int lengthInBytes, int seed) {
-    Object o = base.getBaseObject();
-    long offset = base.getBaseOffset();
     assert (lengthInBytes % 4 == 0);
     int h1 = seed;
     for (int i = 0; i < lengthInBytes; i += 4) {
-      int halfWord = Platform.getInt(o, offset + i);
+      int halfWord = base.getInt(i);
       int k1 = mixK1(halfWord);
       h1 = mixH1(h1, k1);
     }
