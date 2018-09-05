@@ -22,13 +22,14 @@ import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
 import org.apache.spark.sql.sources.v2.reader.InputPartition;
 import org.apache.spark.sql.sources.v2.reader.ScanConfig;
 import org.apache.spark.sql.sources.v2.reader.ScanConfigBuilder;
+import org.apache.spark.sql.sources.v2.streaming.ContinuousReadSupportProvider;
 
 /**
  * An interface that defines how to load the data from data source for continuous streaming
  * processing.
  *
  * The execution engine will get an instance of this interface from a data source provider
- * (e.g. {@link org.apache.spark.sql.sources.v2.ContinuousReadSupportProvider}) at the start of a
+ * (e.g. {@link ContinuousReadSupportProvider}) at the start of a
  * streaming query, then call {@link #newScanConfigBuilder(Offset)} and create an instance of
  * {@link ScanConfig} for the duration of the streaming query or until
  * {@link #needsReconfiguration(ScanConfig)} is true. The {@link ScanConfig} will be used to create
