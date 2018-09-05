@@ -2226,16 +2226,18 @@ class Dataset[T] private[sql](
     * `column`'s expression must only refer to attributes supplied by this Dataset. It is an
     * error to add a column that refers to some other Dataset.
     *
-    * The position of the new column start from 0, and a negative position means at the end (default behavior).
+    * The position of the new column starts at 0. Any negative position means to add the column at the end.
+    *
+    * @since 2.4.0
     */
   def withColumn(colName: String, col: Column, atPosition: Int): DataFrame =
     withColumns(Seq(colName), Seq(col), atPosition)
 
   /**
-   * Returns a new Dataset by adding columns or replacing the existing columns that has
+   * Returns a new Dataset by adding columns or replacing the existing columns that have
    * the same names.
    *
-   * The position of new columns start from 0, and a negative position means at the end (default behavior).
+   * The position of new columns starts at 0. Any negative position means to add the column at the end.
    */
   private[spark] def withColumns(colNames: Seq[String], cols: Seq[Column], atPosition: Int = -1): DataFrame = {
     require(colNames.size == cols.size,
