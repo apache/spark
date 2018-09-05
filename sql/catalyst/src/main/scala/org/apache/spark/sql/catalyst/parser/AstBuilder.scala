@@ -300,6 +300,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       ctx: DropPartitionSpecContext): Seq[(String, String, String)] = {
     withOrigin(ctx) {
       ctx.dropPartitionVal().asScala.map { pFilter =>
+        if (pFilter.identifier() == null || pFilter.constant() == null ||
+            pFilter.comparisonOperator() == null) {
+          throw new ParseException(s"Invalid partition spec: ${pFilter.getText}", ctx)
+        }
         val partition = pFilter.identifier().getText
         val value = visitStringConstant(pFilter.constant())
         val operator = pFilter.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]

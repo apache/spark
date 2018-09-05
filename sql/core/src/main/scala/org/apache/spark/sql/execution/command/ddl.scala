@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.{PartitionFiltersSpec, TablePartitionSpec}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, EqualNullSafe, EqualTo, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, Not}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Cast, EqualNullSafe, EqualTo, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, Not}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
@@ -544,7 +544,8 @@ case class AlterTableDropPartitionCommand(
           table.identifier,
           catalog,
           sparkSession.sessionState.conf.resolver,
-          timeZone)
+          timeZone,
+          ifExists)
       } else {
         val partitionSpec = filtersSpec.map {
           case (key, _, value) => key -> value
@@ -577,7 +578,8 @@ case class AlterTableDropPartitionCommand(
       tableIdentifier: TableIdentifier,
       catalog: SessionCatalog,
       resolver: Resolver,
-      timeZone: Option[String]): Seq[TablePartitionSpec] = {
+      timeZone: Option[String],
+      ifExists: Boolean): Seq[TablePartitionSpec] = {
     val filters = partitionFilterSpec.map { case (partitionColumn, operator, value) =>
       val normalizedPartition = PartitioningUtils.normalizePartitionColumn(
         partitionColumn,
@@ -604,6 +606,9 @@ case class AlterTableDropPartitionCommand(
       }
     }
     val partitions = catalog.listPartitionsByFilter(tableIdentifier, filters)
+    if (partitions.isEmpty && !ifExists) {
+      throw new AnalysisException(s"There is no partition for ${filters.reduceLeft(And).sql}")
+    }
     partitions.map(_.spec)
   }
 }
