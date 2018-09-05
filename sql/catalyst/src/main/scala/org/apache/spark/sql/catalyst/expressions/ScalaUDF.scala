@@ -1032,7 +1032,8 @@ case class ScalaUDF(
          |}
        """.stripMargin
 
-    val initNullable = s"boolean canBeNull = $nullable;"
+    val canBeNull = ctx.freshName("canBeNull")
+    val initNullable = s"boolean $canBeNull = $nullable;"
 
     ev.copy(code =
       code"""
@@ -1045,7 +1046,7 @@ case class ScalaUDF(
          |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |if (!${ev.isNull}) {
          |  ${ev.value} = $resultTerm;
-         |} else if (!canBeNull) {
+         |} else if (!$canBeNull) {
          |  throw new RuntimeException($errorMsgNonNullableTerm);
          |}
        """.stripMargin)
