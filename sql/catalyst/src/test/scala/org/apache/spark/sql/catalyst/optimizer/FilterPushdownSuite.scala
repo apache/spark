@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -1157,8 +1158,31 @@ class FilterPushdownSuite extends PlanTest {
 
     // CheckAnalysis will ensure nondeterministic expressions not appear in join condition.
     // TODO support nondeterministic expressions in join condition.
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
-      checkAnalysis = false)
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
+        checkAnalysis = false)
+    }
+  }
+
+  test("join condition pushdown: deterministic and non-deterministic in left semi join") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    // Verify that all conditions except the watermark touching condition are pushed down
+    // by the optimizer and others are not.
+    val originalQuery = x.join(y, LeftSemi, Some("x.a".attr === 5 && "y.a".attr === 5 &&
+      "x.a".attr === Rand(10) && "y.b".attr === 5))
+    val correctAnswer =
+      x.where("x.a".attr === 5).join(y.where("y.a".attr === 5 && "y.b".attr === 5),
+        joinType = Cross).where("x.a".attr === Rand(10))
+        .select("x.a".attr, "x.b".attr, "x.c".attr)
+
+    // CheckAnalysis will ensure nondeterministic expressions not appear in join condition.
+    // TODO support nondeterministic expressions in join condition.
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
+        checkAnalysis = false)
+    }
   }
 
   test("watermark pushdown: no pushdown on watermark attribute #1") {

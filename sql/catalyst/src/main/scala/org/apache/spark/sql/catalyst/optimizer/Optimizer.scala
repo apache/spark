@@ -1175,6 +1175,26 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ nonDeterministic)
   }
 
+  private def tryToGetCrossType(commonJoinCondition: Seq[Expression], j: LogicalPlan) = {
+    if (SQLConf.get.crossJoinEnabled) {
+      // if condition expression is unevaluable, it will be removed from
+      // the new join conditions, if all conditions is unevaluable, we should
+      // change the join type to CrossJoin.
+      logWarning(s"The whole commonJoinCondition:$commonJoinCondition of the join " +
+        "plan is unevaluable, it will be ignored and the join plan will be " +
+        s"turned to cross join. This plan shows below:\n $j")
+      Cross
+    } else {
+      // if the crossJoinEnabled is false, an AnalysisException will throw by
+      // [[CheckCartesianProducts]], we throw firstly here for better readable
+      // information.
+      throw new AnalysisException("Detected the whole commonJoinCondition:" +
+        s"$commonJoinCondition of the join plan is unevaluable, we need to cast the " +
+        "join to cross join by setting the configuration variable " +
+        s"${SQLConf.CROSS_JOINS_ENABLED.key}=true")
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // push the where condition down into join filter
     case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition)) =>
@@ -1228,7 +1248,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         split(joinCondition.map(splitConjunctivePredicates).getOrElse(Nil), left, right)
 
       joinType match {
-        case _: InnerLike | LeftSemi =>
+        case LeftSemi =>
           // push down the single side only join filter for both sides sub queries
           val newLeft = leftJoinConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
@@ -1237,31 +1257,37 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           val (newJoinConditions, others) =
             commonJoinCondition.partition(canEvaluateWithinJoin)
           val newJoinCond = newJoinConditions.reduceLeftOption(And)
-          val newJoinType =
-            if (commonJoinCondition.nonEmpty && newJoinCond.isEmpty) {
-              if (SQLConf.get.crossJoinEnabled) {
-                // if condition expression is unevaluable, it will be removed from
-                // the new join conditions, if all conditions is unevaluable, we should
-                // change the join type to CrossJoin.
-                logWarning(s"The whole commonJoinCondition:$commonJoinCondition of the join " +
-                  "plan is unevaluable, it will be ignored and the join plan will be " +
-                  s"turned to cross join. This plan shows below:\n $j")
-                Cross
-              } else {
-                // if the crossJoinEnabled is false, an AnalysisException will throw by
-                // [[CheckCartesianProducts]], we throw firstly here for better readable
-                // information.
-                throw new AnalysisException("Detected the whole commonJoinCondition:" +
-                  s"$commonJoinCondition of the join plan is unevaluable, we need to cast the " +
-                  "join to cross join by setting the configuration variable " +
-                  s"${SQLConf.CROSS_JOINS_ENABLED.key}=true")
-              }
-            } else {
-              joinType
-            }
+          // need to add cross join when unevaluable condition exists
+          val newJoinType = if (others.nonEmpty) {
+            tryToGetCrossType(commonJoinCondition, j)
+          } else {
+            joinType
+          }
 
           val join = Join(newLeft, newRight, newJoinType, newJoinCond)
-          if (others.nonEmpty && joinType.isInstanceOf[InnerLike]) {
+          if (others.nonEmpty) {
+            Project(newLeft.output.map(_.toAttribute), Filter(others.reduceLeft(And), join))
+          } else {
+            join
+          }
+        case _: InnerLike =>
+          // push down the single side only join filter for both sides sub queries
+          val newLeft = leftJoinConditions.
+            reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
+          val newRight = rightJoinConditions.
+            reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
+          val (newJoinConditions, others) =
+            commonJoinCondition.partition(canEvaluateWithinJoin)
+          val newJoinCond = newJoinConditions.reduceLeftOption(And)
+          // only need to add cross join when whole commonJoinCondition are unevaluable
+          val newJoinType = if (commonJoinCondition.nonEmpty && newJoinCond.isEmpty) {
+            tryToGetCrossType(commonJoinCondition, j)
+          } else {
+            joinType
+          }
+
+          val join = Join(newLeft, newRight, newJoinType, newJoinCond)
+          if (others.nonEmpty) {
             Filter(others.reduceLeft(And), join)
           } else {
             join
