@@ -755,8 +755,6 @@ class Analyzer(
    */
   object ResolveReferences extends Rule[LogicalPlan] {
 
-    private val emptyAttrMap = new AttributeMap[Attribute](Map.empty)
-
     /**
      * Generate a new logical plan for the right child with different expression IDs
      * for all conflicting attributes.
@@ -810,7 +808,7 @@ class Analyzer(
            * that this rule cannot handle. When that is the case, there must be another rule
            * that resolves these conflicts. Otherwise, the analysis will fail.
            */
-          (right, emptyAttrMap)
+          (right, AttributeMap.empty)
         case Some((oldRelation, newRelation)) =>
           val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
           val newRight = right transformUp {
