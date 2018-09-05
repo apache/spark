@@ -42,7 +42,8 @@ private[image] class ImageFileFormat extends FileFormat with DataSourceRegister 
 
   override def prepareWrite(
       sparkSession: SparkSession,
-      job: Job, options: Map[String, String],
+      job: Job,
+      options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
     throw new UnsupportedOperationException("Write is not supported for image data source")
   }

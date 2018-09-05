@@ -21,10 +21,11 @@ package org.apache.spark.ml.source.image
  * `image` package implements Spark SQL data source API for loading IMAGE data as `DataFrame`.
  * The loaded `DataFrame` has one `StructType` column: `image`.
  * The schema of the `image` column is:
- *  - origin: String (represent the origin of image. If loaded from file, then it is file path)
- *  - height: Int (height of image)
- *  - width: Int (width of image)
- *  - nChannels: Int (number of image channels)
+ *  - origin: String (represents the origin of the image.
+ *                    If loaded from files, then it is the file path)
+ *  - height: Int (height of the image)
+ *  - width: Int (width of the image)
+ *  - nChannels: Int (number of the image channels)
  *  - mode: Int (OpenCV-compatible type)
  *  - data: BinaryType (Image bytes in OpenCV-compatible order: row-wise BGR in most cases)
  *
