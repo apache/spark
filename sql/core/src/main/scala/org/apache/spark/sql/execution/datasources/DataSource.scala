@@ -567,7 +567,6 @@ object DataSource extends Logging {
     val parquet = classOf[ParquetFileFormat].getCanonicalName
     val csv = classOf[CSVFileFormat].getCanonicalName
     val libsvm = "org.apache.spark.ml.source.libsvm.LibSVMFileFormat"
-    val image = "org.apache.spark.ml.source.image.ImageFileFormat"
     val orc = "org.apache.spark.sql.hive.orc.OrcFileFormat"
     val nativeOrc = classOf[OrcFileFormat].getCanonicalName
     val socket = classOf[TextSocketSourceProvider].getCanonicalName
@@ -592,7 +591,6 @@ object DataSource extends Logging {
       "org.apache.spark.sql.execution.datasources.orc" -> nativeOrc,
       "org.apache.spark.ml.source.libsvm.DefaultSource" -> libsvm,
       "org.apache.spark.ml.source.libsvm" -> libsvm,
-      "org.apache.spark.ml.source.image.ImageFileFormat" -> image,
       "com.databricks.spark.csv" -> csv,
       "org.apache.spark.sql.execution.streaming.TextSocketSourceProvider" -> socket,
       "org.apache.spark.sql.execution.streaming.RateSourceProvider" -> rate
