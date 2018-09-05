@@ -429,19 +429,17 @@ private[spark] class TaskSchedulerImpl(
         if (!launchedAnyTask) {
           taskSet.getCompletelyBlacklistedTaskIfAny(hostToExecutors) match {
             case taskIndex: Some[Int] => // Returns the taskIndex which was unschedulable
-              if (conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
-                // If the taskSet is unschedulable we kill the existing blacklisted executor/s and
-                // kick off an abortTimer which after waiting will abort the taskSet if we were
-                // unable to get new executors and couldn't schedule a task from the taskSet.
-                // Note: We keep a track of schedulability on a per taskSet basis rather than on a
-                // per task basis.
-                if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
-                  hostToExecutors.valuesIterator.foreach(executors => executors.foreach({
-                    executor =>
-                      logDebug("Killing executor because of task unschedulability: " + executor)
-                      blacklistTrackerOpt.foreach(blt => blt.killBlacklistedExecutor(executor))
-                  })
-                  )
+
+              // If the taskSet is unschedulable we kill an existing blacklisted executor/s and
+              // kick off an abortTimer which after waiting will abort the taskSet if we were
+              // unable to schedule any task from the taskSet.
+              // Note: We keep a track of schedulability on a per taskSet basis rather than on a
+              // per task basis.
+              val executor = hostToExecutors.valuesIterator.next().iterator.next()
+              logDebug("Killing executor because of task unschedulability: " + executor)
+              blacklistTrackerOpt.foreach(blt => blt.killBlacklistedExecutor(executor))
+
+              if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
                   unschedulableTaskSetToExpiryTime(taskSet) = clock.getTimeMillis()
                   abortTimer.schedule(new TimerTask() {
                     override def run() {
@@ -459,10 +457,6 @@ private[spark] class TaskSchedulerImpl(
                     }
                   }, UNSCHEDULABLE_TASKSET_TIMEOUT_MS)
                 }
-              } else {
-                // TODO: try acquiring new executors for static allocation before aborting.
-                taskSet.abortSinceCompletelyBlacklisted(taskIndex.get)
-              }
             case _ => // Do nothing.
             }
           } else {
