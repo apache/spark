@@ -21,13 +21,11 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
+import org.apache.spark.sql.{SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.{QueryExecution, SessionWindowMergeExec, SparkPlan, SparkPlanner, UnaryExecNode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.Utils
@@ -118,6 +116,25 @@ class IncrementalExecution(
               Some(aggStateInfo),
               stateFormatVersion,
               child) :: Nil))
+      case SessionWindowStateStoreSaveExec(keys, None, None, None,
+             UnaryExecNode(agg,
+               SessionWindowMergeExec(exp,
+                sessionSpec,
+                  UnaryExecNode(agg2,
+                    SessionWindowStateStoreRestoreExec(sessionSpec2, None, child))))) =>
+        val aggStateInfo = nextStatefulOperationStateInfo
+        SessionWindowStateStoreSaveExec(
+          keys,
+          Some(aggStateInfo),
+          Some(outputMode),
+          Some(offsetSeqMetadata.batchWatermarkMs),
+          agg.withNewChildren(
+            SessionWindowMergeExec(
+              exp,
+              sessionSpec,
+              agg2.withNewChildren(
+                SessionWindowStateStoreRestoreExec(sessionSpec2, Some(aggStateInfo), child) :: Nil
+              ))::Nil))
 
       case StreamingDeduplicateExec(keys, child, None, None) =>
         StreamingDeduplicateExec(

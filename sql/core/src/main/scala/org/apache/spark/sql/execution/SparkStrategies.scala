@@ -303,7 +303,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
-      // --- Cases where this strategy does not apply ---------------------------------------------
+      // --- Cases where this strategy does not apply ----
 
       case _ => Nil
     }
@@ -331,13 +331,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
 
-        aggregate.AggUtils.planStreamingAggregation(
-          namedGroupingExpressions,
-          aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
-          rewrittenResultExpressions,
-          stateVersion,
-          planLater(child))
-
+        if (aggregate.AggUtils.hasSessionWindowExpression(namedGroupingExpressions)) {
+          aggregate.AggUtils.planStreamingAggregationWithSessionWindow(
+            namedGroupingExpressions,
+            aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
+            rewrittenResultExpressions,
+            planLater(child))
+        } else {
+          aggregate.AggUtils.planStreamingAggregation(
+            namedGroupingExpressions,
+            aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
+            rewrittenResultExpressions,
+            stateVersion,
+            planLater(child))
+        }
       case _ => Nil
     }
   }

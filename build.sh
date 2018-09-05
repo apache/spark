@@ -96,5 +96,6 @@ function main() {
   download_tools
   setup_compile_env 
   compile $1
+  mkdir output 
 }
 main "$@"

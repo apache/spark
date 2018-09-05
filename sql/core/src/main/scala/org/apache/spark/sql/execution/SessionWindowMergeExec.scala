@@ -22,22 +22,19 @@ import scala.collection.mutable
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution}
-import org.apache.spark.sql.types.{LongType, TimestampType}
 
 /**
  * The physical plan for streaming query, merge session window after restore from state store.
+ * Note: the end time of window that restore from statestore has already contain session windowGap
  *
  * @param windowExpressions
  * @param sessionSpec
- * @param windowGap window gap in micro second
  * @param child
  */
 case class SessionWindowMergeExec(
     windowExpressions: NamedExpression,
     sessionSpec: Seq[Expression],
-    windowGap: Long,
     child: SparkPlan)
   extends UnaryExecNode {
 
@@ -64,13 +61,13 @@ case class SessionWindowMergeExec(
     val spillThreshold = sqlContext.conf.windowExecBufferSpillThreshold
 
     // Get all relevant projections.
-    val grouping = UnsafeProjection.create(sessionSpec, child.output)
     // Get session window index.
     val sessionWindowIdx = output.zipWithIndex.find(_._1.name == windowExpressions.name).get._2
 
     // Start processing.
     child.execute().mapPartitions { stream =>
       new Iterator[InternalRow] {
+        val grouping = UnsafeProjection.create(sessionSpec, child.output)
 
         // Manage the stream and the grouping.
         var nextRow: UnsafeRow = _
@@ -119,7 +116,9 @@ case class SessionWindowMergeExec(
           rowIndexWithinPartition = 0
 
           // Init windowStartTime and lastEndTime for this partition.
-          (windowStartTime, lastEndTime) = getWindowStartAndEnd(nextRow)
+          val pair = getWindowStartAndEnd(nextRow)
+          windowStartTime = pair._1
+          lastEndTime = pair._2
 
           while (nextRowAvailable && nextGroup == currentGroup) {
             // Get start and end of the session window.
