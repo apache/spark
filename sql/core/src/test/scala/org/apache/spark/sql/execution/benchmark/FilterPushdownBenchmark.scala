@@ -399,7 +399,7 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
     }
   }
 
-  test(s"Pushdown benchmark with many filters") {
+  ignore(s"Pushdown benchmark with many filters") {
     val numRows = 1
     val width = 500
 
