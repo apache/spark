@@ -34,7 +34,7 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
     val df1 = spark.read.format("image").load(imagePath)
     assert(df1.count === 9)
 
-    val df2 = spark.read.format("image").option("dropImageFailures", "true").load(imagePath)
+    val df2 = spark.read.format("image").option("dropImageFailures", true).load(imagePath)
     assert(df2.count === 8)
   }
 
@@ -50,11 +50,11 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("image datasource test: read non image") {
     val filePath = imagePath + "/cls=kittens/date=2018-01/not-image.txt"
-    val df = spark.read.format("image").option("dropImageFailures", "true")
+    val df = spark.read.format("image").option("dropImageFailures", true)
       .load(filePath)
     assert(df.count() === 0)
 
-    val df2 = spark.read.format("image").option("dropImageFailures", "false")
+    val df2 = spark.read.format("image").option("dropImageFailures", false)
       .load(filePath)
     assert(df2.count() === 1)
     val result = df2.head()
@@ -64,7 +64,7 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("image datasource partition test") {
     val result = spark.read.format("image")
-      .option("dropImageFailures", "true").load(imagePath)
+      .option("dropImageFailures", true).load(imagePath)
       .select(substring_index(col("image.origin"), "/", -1).as("origin"), col("cls"), col("date"))
       .collect()
 
@@ -82,7 +82,7 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   // Images with the different number of channels
   test("readImages pixel values test") {
-    val images = spark.read.format("image").option("dropImageFailures", "true")
+    val images = spark.read.format("image").option("dropImageFailures", true)
       .load(imagePath + "/cls=multichannel/").collect()
 
     val firstBytes20Set = images.map { rrow =>

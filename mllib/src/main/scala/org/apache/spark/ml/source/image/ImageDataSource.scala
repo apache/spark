@@ -34,12 +34,12 @@ package org.apache.spark.ml.source.image
  * {{{
  *   // Scala
  *   val df = spark.read.format("image")
- *     .option("dropImageFailures", "true")
+ *     .option("dropImageFailures", true)
  *     .load("data/mllib/images/partitioned")
  *
  *   // Java
  *   Dataset<Row> df = spark.read().format("image")
- *     .option("dropImageFailures", "true")
+ *     .option("dropImageFailures", true)
  *     .load("data/mllib/images/partitioned");
  * }}}
  *
