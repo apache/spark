@@ -182,6 +182,25 @@ def wrap_bounded_window_agg_pandas_udf(f, return_type):
     return lambda *a: (wrapped(*a), arrow_return_type)
 
 
+def wrap_bounded_window_agg_pandas_udf_np(f, return_type):
+    arrow_return_type = to_arrow_type(return_type)
+
+    def wrapped(begin_index, end_index, *series):
+        import numpy as np
+        import pandas as pd
+
+        begin = begin_index.values
+        end = end_index.values
+        np_series = [s.values for s in series]
+
+        return pd.Series(
+            f(*[s[begin[i] : end[i]].copy() for s in np_series])
+            for i in range(len(begin))
+        )
+
+    return lambda *a: (wrapped(*a), arrow_return_type)
+
+
 def read_single_udf(pickleSer, infile, eval_type, runner_conf):
     num_arg = read_int(infile)
     arg_offsets = [read_int(infile) for i in range(num_arg)]
@@ -206,9 +225,9 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf):
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return arg_offsets, wrap_grouped_agg_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
-        return arg_offsets, wrap_bounded_window_agg_pandas_udf(func, return_type)
+        return arg_offsets, wrap_bounded_window_agg_pandas_udf_np(func, return_type)
     elif eval_type == PythonEvalType.SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF:
-        return arg_offsets, wrap_bounded_window_agg_pandas_udf(func, return_type)
+        return arg_offsets, wrap_bounded_window_agg_pandas_udf_np(func, return_type)
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
         return arg_offsets, wrap_udf(func, return_type)
     else:

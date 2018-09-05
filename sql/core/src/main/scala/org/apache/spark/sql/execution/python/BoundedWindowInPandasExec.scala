@@ -297,6 +297,7 @@ case class BoundedWindowInPandasExec(
 
     // Add index columns and adjust argOffsets by 2 (begin and end indices)
     // TODO: Handle multiple window frames
+    // TODO: Handle short circuit code path for unbounded window
     allInputs.prependAll(Seq(
       BoundReference(0, IntegerType, true),
       BoundReference(1, IntegerType, true)))
