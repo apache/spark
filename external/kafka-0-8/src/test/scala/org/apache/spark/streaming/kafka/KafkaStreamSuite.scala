@@ -49,6 +49,7 @@ class KafkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter
       kafkaTestUtils.teardown()
       kafkaTestUtils = null
     }
+    super.afterAll()
   }
 
   test("Kafka input stream") {

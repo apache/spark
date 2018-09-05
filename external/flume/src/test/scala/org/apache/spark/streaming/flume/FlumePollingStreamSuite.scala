@@ -58,6 +58,7 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfterAll with 
       _sc.stop()
       _sc = null
     }
+    super.afterAll()
   }
 
   test("flume polling test") {

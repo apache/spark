@@ -45,6 +45,7 @@ class KafkaClusterSuite extends SparkFunSuite with BeforeAndAfterAll {
       kafkaTestUtils.teardown()
       kafkaTestUtils = null
     }
+    super.afterAll()
   }
 
   test("metadata apis") {

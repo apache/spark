@@ -51,8 +51,8 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
     if (testUtils != null) {
       testUtils.teardown()
       testUtils = null
-      super.afterAll()
     }
+    super.afterAll()
   }
 
   test("batch - write to kafka") {

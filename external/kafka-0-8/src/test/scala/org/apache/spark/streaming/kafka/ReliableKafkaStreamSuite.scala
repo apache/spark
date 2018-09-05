@@ -71,6 +71,7 @@ class ReliableKafkaStreamSuite extends SparkFunSuite
       kafkaTestUtils.teardown()
       kafkaTestUtils = null
     }
+    super.afterAll()
   }
 
   before {

@@ -59,6 +59,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       kafkaTestUtils.teardown()
       kafkaTestUtils = null
     }
+    super.afterAll()
   }
 
   private def getKafkaParams() = Map[String, Object](

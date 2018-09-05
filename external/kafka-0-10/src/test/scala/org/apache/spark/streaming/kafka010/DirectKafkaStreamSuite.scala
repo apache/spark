@@ -68,6 +68,7 @@ class DirectKafkaStreamSuite
       kafkaTestUtils.teardown()
       kafkaTestUtils = null
     }
+    super.afterAll()
   }
 
   after {

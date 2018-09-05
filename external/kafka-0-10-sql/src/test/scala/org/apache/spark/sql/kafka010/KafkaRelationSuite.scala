@@ -51,8 +51,8 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     if (testUtils != null) {
       testUtils.teardown()
       testUtils = null
-      super.afterAll()
     }
+    super.afterAll()
   }
 
   private def createDF(

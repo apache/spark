@@ -83,6 +83,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       testUtils.deleteStream()
       testUtils.deleteDynamoDBTable(appName)
     }
+    super.afterAll()
   }
 
   before {

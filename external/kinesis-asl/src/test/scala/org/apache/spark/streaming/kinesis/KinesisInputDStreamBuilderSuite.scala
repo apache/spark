@@ -41,6 +41,7 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
 
   override def afterAll(): Unit = {
     ssc.stop()
+    super.afterAll()
   }
 
   test("should raise an exception if the StreamingContext is missing") {
