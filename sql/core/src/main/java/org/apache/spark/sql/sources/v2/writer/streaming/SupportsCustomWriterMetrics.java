@@ -25,7 +25,7 @@ import org.apache.spark.sql.sources.v2.CustomMetrics;
  * to report custom metrics that gets reported under the
  * {@link org.apache.spark.sql.streaming.SinkProgress}
  */
-@InterfaceStability.Evolving
+@InterfaceStability.Unstable
 public interface SupportsCustomWriterMetrics extends StreamingWriteSupport {
 
   /**
