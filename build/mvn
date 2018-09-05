@@ -92,7 +92,7 @@ install_mvn() {
 
 # Install zinc under the build/ folder
 install_zinc() {
-  ZINC_VERSION=0.3.15
+  local ZINC_VERSION=0.3.15
   ZINC_BIN="$(command -v zinc)"
   if [ "$ZINC_BIN" ]; then
     local ZINC_DETECTED_VERSION="$(zinc -version | head -n1 | awk '{print $5}')"
