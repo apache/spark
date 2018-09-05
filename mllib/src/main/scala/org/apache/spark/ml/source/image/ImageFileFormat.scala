@@ -69,7 +69,7 @@ private[image] class ImageFileFormat extends FileFormat with DataSourceRegister 
 
     (file: PartitionedFile) => {
       val emptyUnsafeRow = new UnsafeRow(0)
-      if (!imageSourceOptions.dropImageFailures && requiredSchema.isEmpty) {
+      if (!imageSourceOptions.dropInvalid && requiredSchema.isEmpty) {
         Iterator(emptyUnsafeRow)
       } else {
         val origin = file.filePath
@@ -82,7 +82,7 @@ private[image] class ImageFileFormat extends FileFormat with DataSourceRegister 
           Closeables.close(stream, true)
         }
         val resultOpt = ImageSchema.decode(origin, bytes)
-        val filteredResult = if (imageSourceOptions.dropImageFailures) {
+        val filteredResult = if (imageSourceOptions.dropInvalid) {
           resultOpt.toIterator
         } else {
           Iterator(resultOpt.getOrElse(ImageSchema.invalidImageRow(origin)))

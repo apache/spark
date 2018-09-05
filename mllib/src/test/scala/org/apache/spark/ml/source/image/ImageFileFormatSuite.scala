@@ -34,7 +34,7 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
     val df1 = spark.read.format("image").load(imagePath)
     assert(df1.count === 9)
 
-    val df2 = spark.read.format("image").option("dropImageFailures", true).load(imagePath)
+    val df2 = spark.read.format("image").option("dropInvalid", true).load(imagePath)
     assert(df2.count === 8)
   }
 
@@ -50,11 +50,11 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("image datasource test: read non image") {
     val filePath = imagePath + "/cls=kittens/date=2018-01/not-image.txt"
-    val df = spark.read.format("image").option("dropImageFailures", true)
+    val df = spark.read.format("image").option("dropInvalid", true)
       .load(filePath)
     assert(df.count() === 0)
 
-    val df2 = spark.read.format("image").option("dropImageFailures", false)
+    val df2 = spark.read.format("image").option("dropInvalid", false)
       .load(filePath)
     assert(df2.count() === 1)
     val result = df2.head()
@@ -64,7 +64,7 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("image datasource partition test") {
     val result = spark.read.format("image")
-      .option("dropImageFailures", true).load(imagePath)
+      .option("dropInvalid", true).load(imagePath)
       .select(substring_index(col("image.origin"), "/", -1).as("origin"), col("cls"), col("date"))
       .collect()
 
@@ -82,7 +82,7 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   // Images with the different number of channels
   test("readImages pixel values test") {
-    val images = spark.read.format("image").option("dropImageFailures", true)
+    val images = spark.read.format("image").option("dropInvalid", true)
       .load(imagePath + "/cls=multichannel/").collect()
 
     val firstBytes20Set = images.map { rrow =>
@@ -90,7 +90,8 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
       val filename = Paths.get(getOrigin(row)).getFileName().toString()
       val mode = getMode(row)
       val bytes20 = getData(row).slice(0, 20).toList
-      filename -> Tuple2(mode, bytes20)
+      filename -> Tuple2(mode, bytes20) // Cannot remove `Tuple2`, otherwise `->` operator
+                                        // will match 2 arguments
     }.toSet
 
     assert(firstBytes20Set === expectedFirstBytes20Set)

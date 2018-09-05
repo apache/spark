@@ -18,33 +18,32 @@
 package org.apache.spark.ml.source.image
 
 /**
- * `image` package implements Spark SQL data source API for loading IMAGE data as `DataFrame`.
+ * `image` package implements Spark SQL data source API for loading image data as `DataFrame`.
  * The loaded `DataFrame` has one `StructType` column: `image`.
  * The schema of the `image` column is:
- *  - origin: String (represents the origin of the image.
- *                    If loaded from files, then it is the file path)
+ *  - origin: String (represents the file path of the image)
  *  - height: Int (height of the image)
  *  - width: Int (width of the image)
  *  - nChannels: Int (number of the image channels)
  *  - mode: Int (OpenCV-compatible type)
  *  - data: BinaryType (Image bytes in OpenCV-compatible order: row-wise BGR in most cases)
  *
- * To use IMAGE data source, you need to set "image" as the format in `DataFrameReader` and
+ * To use image data source, you need to set "image" as the format in `DataFrameReader` and
  * optionally specify the data source options, for example:
  * {{{
  *   // Scala
  *   val df = spark.read.format("image")
- *     .option("dropImageFailures", true)
+ *     .option("dropInvalid", true)
  *     .load("data/mllib/images/partitioned")
  *
  *   // Java
  *   Dataset<Row> df = spark.read().format("image")
- *     .option("dropImageFailures", true)
+ *     .option("dropInvalid", true)
  *     .load("data/mllib/images/partitioned");
  * }}}
  *
- * IMAGE data source supports the following options:
- *  - "dropImageFailures": Whether to drop the files that are not valid images from the result.
+ * Image data source supports the following options:
+ *  - "dropInvalid": Whether to drop the files that are not valid images from the result.
  *
  * @note This IMAGE data source does not support saving images to files.
  *

@@ -24,5 +24,9 @@ private[image] class ImageOptions(
 
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
-  val dropImageFailures = parameters.getOrElse("dropImageFailures", "false").toBoolean
+  /**
+   * Whether to drop invalid images. If true, invalid images will be removed, otherwise
+   * invalid images will be returned with empty data and all other field filled with `-1`.
+   */
+  val dropInvalid = parameters.getOrElse("dropInvalid", "false").toBoolean
 }
