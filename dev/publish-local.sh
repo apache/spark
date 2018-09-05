@@ -9,7 +9,7 @@ MVN_LOCAL="~/.m2/repository"
 
 publish_artifacts() {
   ./build/mvn versions:set -DnewVersion=$version
-  ./build/mvn -DskipTests "${PALANTIR_FLAGS[@]}" install clean
+  ./build/mvn -DskipTests "${PALANTIR_FLAGS[@]}" install
 }
 
 make_dist() {
