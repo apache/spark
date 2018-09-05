@@ -49,7 +49,7 @@ case class UserDefinedFunction protected[sql] (
 
   // This is a `var` instead of in the constructor for backward compatibility of this case class.
   // TODO: revisit this case class in Spark 3.0, and narrow down the public surface.
-  private var nullableTypes: Option[Seq[Boolean]] = None
+  private[sql] var nullableTypes: Option[Seq[Boolean]] = None
 
   /**
    * Returns true when the UDF can return a nullable value.
@@ -139,7 +139,9 @@ case class UserDefinedFunction protected[sql] (
   }
 }
 
-private[sql] object UserDefinedFunction {
+// We have to use a name different than `UserDefinedFunction` here, to avoid breaking the binary
+// compatibility of the auto-generate UserDefinedFunction object.
+private[sql] object SparkUserDefinedFunction {
 
   def create(
       f: AnyRef,

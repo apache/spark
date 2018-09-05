@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.execution.aggregate.ScalaUDAF
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
-import org.apache.spark.sql.expressions.{UserDefinedAggregateFunction, UserDefinedFunction}
+import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedFunction}
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
@@ -131,7 +131,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         |      ". Expected: $x; Found: " + e.length)
         |  }
         |  functionRegistry.createOrReplaceTempFunction(name, builder)
-        |  val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+        |  val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
         |  if (nullable) udf else udf.asNonNullable()
         |}""".stripMargin)
     }
@@ -177,7 +177,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 0; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -197,7 +197,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 1; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -217,7 +217,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 2; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -237,7 +237,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 3; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -257,7 +257,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 4; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -277,7 +277,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 5; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -297,7 +297,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 6; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -317,7 +317,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 7; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -337,7 +337,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 8; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -357,7 +357,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 9; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -377,7 +377,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 10; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -397,7 +397,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 11; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -417,7 +417,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 12; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -437,7 +437,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 13; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -457,7 +457,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 14; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -477,7 +477,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 15; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -497,7 +497,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 16; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -517,7 +517,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 17; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -537,7 +537,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 18; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -557,7 +557,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 19; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -577,7 +577,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 20; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -597,7 +597,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 21; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
@@ -617,7 +617,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 22; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    val udf = UserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
+    val udf = SparkUserDefinedFunction.create(func, dataType, inputSchemas).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
 
