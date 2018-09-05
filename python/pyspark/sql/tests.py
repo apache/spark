@@ -592,7 +592,7 @@ class SQLTests(ReusedSQLTestCase):
         left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
         right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=2, b1=1, b2=2)])
         f = udf(lambda a, b: a == b, BooleanType())
-        df =  left.join(right, [f("a", "b1"), left.a == 1, right.b == 2], "left_semi")
+        df = left.join(right, [f("a", "b1"), left.a == 1, right.b == 2], "left_semi")
         with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
             self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1)])
 
