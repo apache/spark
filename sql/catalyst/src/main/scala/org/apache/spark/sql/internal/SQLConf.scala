@@ -971,9 +971,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val SUPPORT_PARTIAL_AGGREGATION = buildConf("spark.sql.execution.supportPartialAggregation")
+  val SUPPORT_PARTIAL_AGGREGATION_HIVE_UDAF =
+    buildConf("spark.sql.execution.supportPartialAggregationHiveUDAF")
     .internal()
-    .doc("Decides whether partial aggregation is supported or not by the UDAF")
+    .doc("Decides whether partial aggregation is supported or not by the hive UDAF")
+    .booleanConf
+    .createWithDefault(true)
+
+  val SUPPORT_PARTIAL_AGGREGATION_WINDOW_FUNCTION_UDAF =
+    buildConf("spark.sql.execution.supportPartialAggregationWindowFunctionUDAF")
+    .internal()
+    .doc("Decides whether partial aggregation is supported or not by the window function UDAF")
     .booleanConf
     .createWithDefault(true)
 
@@ -1776,7 +1784,10 @@ class SQLConf extends Serializable with Logging {
 
   def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
 
-  def supportPartialAggregation: Boolean = getConf(SUPPORT_PARTIAL_AGGREGATION)
+  def supportPartialAggregationHiveUDAF: Boolean = getConf(SUPPORT_PARTIAL_AGGREGATION_HIVE_UDAF)
+
+  def supportPartialAggregationWindowFunctionUDAF: Boolean =
+    getConf(SUPPORT_PARTIAL_AGGREGATION_WINDOW_FUNCTION_UDAF)
 
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 

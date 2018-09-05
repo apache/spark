@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.hive.HiveShim._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -390,6 +391,8 @@ private[hive] case class HiveUDAFFunction(
   private lazy val aggBufferSerDe: AggregationBufferSerDe = new AggregationBufferSerDe
 
   override def nullable: Boolean = true
+
+  override def supportsPartial: Boolean = SQLConf.get.supportPartialAggregationHiveUDAF
 
   override lazy val dataType: DataType = inspectorToDataType(returnInspector)
 

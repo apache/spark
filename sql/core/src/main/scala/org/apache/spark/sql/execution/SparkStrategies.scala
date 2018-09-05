@@ -411,7 +411,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         val aggregateOperator =
-          if (!child.conf.supportPartialAggregation) {
+          if (aggregateExpressions.map(_.aggregateFunction).exists(!_.supportsPartial)) {
             if (functionsWithDistinct.nonEmpty) {
               sys.error("Distinct columns cannot exist in Aggregate operator containing " +
                 "aggregate functions which don't support partial aggregation.")

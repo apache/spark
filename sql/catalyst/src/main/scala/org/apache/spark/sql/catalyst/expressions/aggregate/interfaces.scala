@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /** The mode of an [[AggregateFunction]]. */
@@ -182,6 +183,11 @@ abstract class AggregateFunction extends Expression {
    * These attributes are created automatically by cloning the [[aggBufferAttributes]].
    */
   def inputAggBufferAttributes: Seq[AttributeReference]
+
+  /**
+  * Indicates if this function supports partial aggregation.
+  */
+  def supportsPartial: Boolean = true
 
   /**
    * Result of the aggregate function when the input is empty. This is currently only used for the

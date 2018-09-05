@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
 import org.apache.spark.sql.hive.execution.TestingTypedCount.State
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
@@ -41,6 +42,8 @@ case class TestingTypedCount(
   override def dataType: DataType = LongType
 
   override def nullable: Boolean = false
+
+  override val supportsPartial: Boolean = true
 
   override def createAggregationBuffer(): State = TestingTypedCount.State(0L)
 
