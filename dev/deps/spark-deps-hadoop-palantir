@@ -20,8 +20,8 @@ avro-mapred-1.8.2-hadoop2.jar
 aws-java-sdk-bundle-1.11.201.jar
 breeze-macros_2.11-0.13.2.jar
 breeze_2.11-0.13.2.jar
-chill-java-0.8.4.jar
-chill_2.11-0.8.4.jar
+chill-java-0.9.3.jar
+chill_2.11-0.9.3.jar
 classmate-1.1.0.jar
 commons-beanutils-1.9.3.jar
 commons-beanutils-core-1.8.0.jar
@@ -137,7 +137,7 @@ jsr305-3.0.1.jar
 jtransforms-2.4.0.jar
 jul-to-slf4j-1.7.25.jar
 kafka-clients-0.11.0.0.jar
-kryo-shaded-3.0.3.jar
+kryo-shaded-4.0.2.jar
 kubernetes-client-3.0.0.jar
 kubernetes-model-2.0.0.jar
 leveldbjni-all-1.8.jar
