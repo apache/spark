@@ -1516,8 +1516,8 @@ private[spark] class DAGScheduler(
                 def generateErrorMessage(stage: Stage): String = {
                   "A shuffle map stage with indeterminate output was failed and retried. " +
                     s"However, Spark cannot rollback the $stage to re-process the input data, " +
-                    "and has to fail this job. Please eliminate the determinism by checkpointing " +
-                    "the RDD before repartition and try again."
+                    "and has to fail this job. Please eliminate the indeterminacy by " +
+                    "checkpointing the RDD before repartition and try again."
                 }
 
                 activeJobs.foreach(job => collectStagesToRollback(job.finalStage :: Nil))
