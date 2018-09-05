@@ -33,15 +33,6 @@ import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-
-private[image] class ImageFileFormatOptions(
-    @transient private val parameters: CaseInsensitiveMap[String]) extends Serializable {
-
-  def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
-
-  val dropImageFailures = parameters.getOrElse("dropImageFailures", "false").toBoolean
-}
-
 private[image] class ImageFileFormat extends FileFormat with DataSourceRegister {
 
   override def inferSchema(
@@ -53,8 +44,7 @@ private[image] class ImageFileFormat extends FileFormat with DataSourceRegister 
       sparkSession: SparkSession,
       job: Job, options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    throw new UnsupportedOperationException(
-      s"prepareWrite is not supported for image data source")
+    throw new UnsupportedOperationException("Write is not supported for image data source")
   }
 
   override def shortName(): String = "image"
@@ -74,7 +64,7 @@ private[image] class ImageFileFormat extends FileFormat with DataSourceRegister 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-    val imageSourceOptions = new ImageFileFormatOptions(options)
+    val imageSourceOptions = new ImageOptions(options)
 
     (file: PartitionedFile) => {
       val emptyUnsafeRow = new UnsafeRow(0)

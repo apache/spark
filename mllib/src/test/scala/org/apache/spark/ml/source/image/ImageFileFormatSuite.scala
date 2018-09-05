@@ -28,7 +28,7 @@ import org.apache.spark.sql.functions.{col, substring_index}
 class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   // Single column of images named "image"
-  private lazy val imagePath = "../data/mllib/images/imagesWithPartitions"
+  private lazy val imagePath = "../data/mllib/images/partitioned"
 
   test("image datasource count test") {
     val df1 = spark.read.format("image").load(imagePath)
@@ -82,19 +82,18 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   // Images with the different number of channels
   test("readImages pixel values test") {
-
     val images = spark.read.format("image").option("dropImageFailures", "true")
       .load(imagePath + "/cls=multichannel/").collect()
 
-    val firstBytes20Map = images.map { rrow =>
+    val firstBytes20Set = images.map { rrow =>
       val row = rrow.getAs[Row]("image")
       val filename = Paths.get(getOrigin(row)).getFileName().toString()
       val mode = getMode(row)
       val bytes20 = getData(row).slice(0, 20).toList
       filename -> Tuple2(mode, bytes20)
-    }.toMap
+    }.toSet
 
-    assert(firstBytes20Map === expectedFirstBytes20Map)
+    assert(firstBytes20Set === expectedFirstBytes20Set)
   }
 
   // number of channels and first 20 bytes of OpenCV representation
@@ -102,7 +101,7 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
   //   (B00, G00, R00,      B10, G10, R10,      ...)
   // - default representation for 4-channel RGB images is BGRA row-wise:
   //   (B00, G00, R00, A00, B10, G10, R10, A10, ...)
-  private val expectedFirstBytes20Map = Map(
+  private val expectedFirstBytes20Set = Set(
     "grayscale.jpg" ->
       ((0, List[Byte](-2, -33, -61, -60, -59, -59, -64, -59, -66, -67, -73, -73, -62,
         -57, -60, -63, -53, -49, -55, -69))),

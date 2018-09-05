@@ -29,7 +29,7 @@ package org.apache.spark.ml.source.image
  *  - data: BinaryType (Image bytes in OpenCV-compatible order: row-wise BGR in most cases)
  *
  * To use IMAGE data source, you need to set "image" as the format in `DataFrameReader` and
- * optionally specify options, for example:
+ * optionally specify the datasource options, for example:
  * {{{
  *   // Scala
  *   val df = spark.read.format("image")
@@ -44,6 +44,8 @@ package org.apache.spark.ml.source.image
  *
  * IMAGE data source supports the following options:
  *  - "dropImageFailures": Whether to drop the files that are not valid images from the result.
+ *
+ * @note This IMAGE data source does not support "write".
  *
  * @note This class is public for documentation purpose. Please don't use this class directly.
  * Rather, use the data source API as illustrated above.

@@ -592,7 +592,6 @@ object DataSource extends Logging {
       "org.apache.spark.sql.execution.datasources.orc" -> nativeOrc,
       "org.apache.spark.ml.source.libsvm.DefaultSource" -> libsvm,
       "org.apache.spark.ml.source.libsvm" -> libsvm,
-      "org.apache.spark.ml.source.image.ImageFileFormat.DefaultSource" -> image,
       "org.apache.spark.ml.source.image.ImageFileFormat" -> image,
       "com.databricks.spark.csv" -> csv,
       "org.apache.spark.sql.execution.streaming.TextSocketSourceProvider" -> socket,
