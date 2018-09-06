@@ -754,7 +754,6 @@ class Analyzer(
    * a logical plan node's children.
    */
   object ResolveReferences extends Rule[LogicalPlan] {
-
     private val emptyAttrMap = new AttributeMap[Attribute](Map.empty)
 
     /**
@@ -930,7 +929,7 @@ class Analyzer(
       case j @ Join(left, right, _, condition) if !j.duplicateResolved =>
         val (dedupedRight, attributeRewrites) = dedupRight(left, right)
         val changedCondition = condition.map(_.transform {
-          case attr: Attribute if attr.resolved => attributeRewrites.getOrElse(attr, attr)
+          case attr: Attribute if attr.resolved => dedupAttr(attr, attributeRewrites)
         })
         j.copy(right = dedupedRight, condition = changedCondition)
       case i @ Intersect(left, right, _) if !i.duplicateResolved =>
