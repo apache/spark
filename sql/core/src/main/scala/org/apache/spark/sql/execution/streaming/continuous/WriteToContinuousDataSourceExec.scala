@@ -26,21 +26,21 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.StreamExecution
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
 
 /**
- * The physical plan for writing data into a continuous processing [[StreamWriter]].
+ * The physical plan for writing data into a continuous processing [[StreamingWriteSupport]].
  */
-case class WriteToContinuousDataSourceExec(writer: StreamWriter, query: SparkPlan)
+case class WriteToContinuousDataSourceExec(writeSupport: StreamingWriteSupport, query: SparkPlan)
     extends SparkPlan with Logging {
   override def children: Seq[SparkPlan] = Seq(query)
   override def output: Seq[Attribute] = Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val writerFactory = writer.createWriterFactory()
+    val writerFactory = writeSupport.createStreamingWriterFactory()
     val rdd = new ContinuousWriteRDD(query.execute(), writerFactory)
 
-    logInfo(s"Start processing data source writer: $writer. " +
+    logInfo(s"Start processing data source write support: $writeSupport. " +
       s"The input RDD has ${rdd.partitions.length} partitions.")
     EpochCoordinatorRef.get(
       sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),

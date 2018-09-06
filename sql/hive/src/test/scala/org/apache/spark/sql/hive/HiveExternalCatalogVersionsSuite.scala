@@ -181,7 +181,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         "--conf", s"spark.sql.test.version.index=$index",
         "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
         tempPyFile.getCanonicalPath)
-      runSparkSubmit(args, Some(sparkHome.getCanonicalPath))
+      runSparkSubmit(args, Some(sparkHome.getCanonicalPath), false)
     }
 
     tempPyFile.delete()

@@ -216,7 +216,7 @@ class _ImageSchema(object):
         :return: a :class:`DataFrame` with a single column of "images",
                see ImageSchema for details.
 
-        >>> df = ImageSchema.readImages('data/mllib/images/kittens', recursive=True)
+        >>> df = ImageSchema.readImages('data/mllib/images/origin/kittens', recursive=True)
         >>> df.count()
         5
 

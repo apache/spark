@@ -77,9 +77,18 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("resolve avro data source") {
-    Seq("avro", "com.databricks.spark.avro").foreach { provider =>
+    val databricksAvro = "com.databricks.spark.avro"
+    // By default the backward compatibility for com.databricks.spark.avro is enabled.
+    Seq("avro", "org.apache.spark.sql.avro.AvroFileFormat", databricksAvro).foreach { provider =>
       assert(DataSource.lookupDataSource(provider, spark.sessionState.conf) ===
         classOf[org.apache.spark.sql.avro.AvroFileFormat])
+    }
+
+    withSQLConf(SQLConf.LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED.key -> "false") {
+      val message = intercept[AnalysisException] {
+        DataSource.lookupDataSource(databricksAvro, spark.sessionState.conf)
+      }.getMessage
+      assert(message.contains(s"Failed to find data source: $databricksAvro"))
     }
   }
 
@@ -1073,7 +1082,6 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val schema = getAvroSchemaStringFromFiles(dir.toString)
       assert(schema.contains("\"namespace\":\"topLevelRecord\""))
       assert(schema.contains("\"namespace\":\"topLevelRecord.data\""))
-      assert(schema.contains("\"namespace\":\"topLevelRecord.data.data\""))
     }
   }
 
@@ -1088,6 +1096,47 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       // Check if the written DataFrame is equals than read DataFrame
       assert(readDf.collect().sameElements(writeDf.collect()))
     }
+  }
+
+  test("check namespace - toAvroType") {
+    val sparkSchema = StructType(Seq(
+      StructField("name", StringType, nullable = false),
+      StructField("address", StructType(Seq(
+        StructField("city", StringType, nullable = false),
+        StructField("state", StringType, nullable = false))),
+        nullable = false)))
+    val employeeType = SchemaConverters.toAvroType(sparkSchema,
+      recordName = "employee",
+      nameSpace = "foo.bar")
+
+    assert(employeeType.getFullName == "foo.bar.employee")
+    assert(employeeType.getName == "employee")
+    assert(employeeType.getNamespace == "foo.bar")
+
+    val addressType = employeeType.getField("address").schema()
+    assert(addressType.getFullName == "foo.bar.employee.address")
+    assert(addressType.getName == "address")
+    assert(addressType.getNamespace == "foo.bar.employee")
+  }
+
+  test("check empty namespace - toAvroType") {
+    val sparkSchema = StructType(Seq(
+      StructField("name", StringType, nullable = false),
+      StructField("address", StructType(Seq(
+        StructField("city", StringType, nullable = false),
+        StructField("state", StringType, nullable = false))),
+        nullable = false)))
+    val employeeType = SchemaConverters.toAvroType(sparkSchema,
+      recordName = "employee")
+
+    assert(employeeType.getFullName == "employee")
+    assert(employeeType.getName == "employee")
+    assert(employeeType.getNamespace == null)
+
+    val addressType = employeeType.getField("address").schema()
+    assert(addressType.getFullName == "employee.address")
+    assert(addressType.getName == "address")
+    assert(addressType.getNamespace == "employee")
   }
 
   case class NestedMiddleArray(id: Int, data: Array[NestedBottom])

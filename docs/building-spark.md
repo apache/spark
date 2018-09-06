@@ -45,7 +45,7 @@ Other build examples can be found below.
 ## Building a Runnable Distribution
 
 To create a Spark distribution like those distributed by the
-[Spark Downloads](http://spark.apache.org/downloads.html) page, and that is laid out so as
+[Spark Downloads](https://spark.apache.org/downloads.html) page, and that is laid out so as
 to be runnable, use `./dev/make-distribution.sh` in the project root directory. It can be configured
 with Maven profile settings and so on like the direct Maven build. Example:
 
@@ -164,7 +164,7 @@ prompt.
 Developers who compile Spark frequently may want to speed up compilation; e.g., by using Zinc
 (for developers who build with Maven) or by avoiding re-compilation of the assembly JAR (for
 developers who build with SBT).  For more information about how to do this, refer to the
-[Useful Developer Tools page](http://spark.apache.org/developer-tools.html#reducing-build-times).
+[Useful Developer Tools page](https://spark.apache.org/developer-tools.html#reducing-build-times).
 
 ## Encrypted Filesystems
 
@@ -182,7 +182,7 @@ to the `sharedSettings` val. See also [this PR](https://github.com/apache/spark/
 ## IntelliJ IDEA or Eclipse
 
 For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troubleshooting, refer to the
-[Useful Developer Tools page](http://spark.apache.org/developer-tools.html).
+[Useful Developer Tools page](https://spark.apache.org/developer-tools.html).
 
 
 # Running Tests
@@ -203,7 +203,7 @@ The following is an example of a command to run the tests:
 ## Running Individual Tests
 
 For information about how to run individual tests, refer to the
-[Useful Developer Tools page](http://spark.apache.org/developer-tools.html#running-individual-tests).
+[Useful Developer Tools page](https://spark.apache.org/developer-tools.html#running-individual-tests).
 
 ## PySpark pip installable
 
@@ -236,7 +236,8 @@ The run-tests script also can be limited to a specific Python version or a speci
 
 To run the SparkR tests you will need to install the [knitr](https://cran.r-project.org/package=knitr), [rmarkdown](https://cran.r-project.org/package=rmarkdown), [testthat](https://cran.r-project.org/package=testthat), [e1071](https://cran.r-project.org/package=e1071) and [survival](https://cran.r-project.org/package=survival) packages first:
 
-    R -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'e1071', 'survival'), repos='http://cran.us.r-project.org')"
+    R -e "install.packages(c('knitr', 'rmarkdown', 'devtools', 'e1071', 'survival'), repos='http://cran.us.r-project.org')"
+    R -e "devtools::install_version('testthat', version = '1.0.2', repos='http://cran.us.r-project.org')"
 
 You can run just the SparkR tests using the command:
 
@@ -255,3 +256,19 @@ On Linux, this can be done by `sudo service docker start`.
 or
 
     ./build/sbt docker-integration-tests/test
+
+## Change Scala Version
+
+To build Spark using another supported Scala version, please change the major Scala version using (e.g. 2.12):
+
+    ./dev/change-scala-version.sh 2.12
+
+For Maven, please enable the profile (e.g. 2.12):
+
+    ./build/mvn -Pscala-2.12 compile
+
+For SBT, specify a complete scala version using (e.g. 2.12.6):
+
+    ./build/sbt -Dscala.version=2.12.6
+
+Otherwise, the sbt-pom-reader plugin will use the `scala.version` specified in the spark-parent pom.

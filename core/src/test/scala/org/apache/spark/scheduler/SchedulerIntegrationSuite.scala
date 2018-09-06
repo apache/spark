@@ -385,6 +385,8 @@ private[spark] abstract class MockBackend(
     }.toIndexedSeq
   }
 
+  override def maxNumConcurrentTasks(): Int = 0
+
   /**
    * This is called by the scheduler whenever it has tasks it would like to schedule, when a tasks
    * completes (which will be in a result-getter thread), and by the reviveOffers thread for delay
@@ -398,7 +400,8 @@ private[spark] abstract class MockBackend(
       // get the task now, since that requires a lock on TaskSchedulerImpl, to prevent individual
       // tests from introducing a race if they need it.
       val newTasks = newTaskDescriptions.map { taskDescription =>
-        val taskSet = taskScheduler.taskIdToTaskSetManager(taskDescription.taskId).taskSet
+        val taskSet =
+          Option(taskScheduler.taskIdToTaskSetManager.get(taskDescription.taskId).taskSet).get
         val task = taskSet.tasks(taskDescription.index)
         (taskDescription, task)
       }

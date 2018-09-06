@@ -138,11 +138,10 @@ parallelize <- function(sc, coll, numSlices = 1) {
 
   sizeLimit <- getMaxAllocationLimit(sc)
   objectSize <- object.size(coll)
+  len <- length(coll)
 
   # For large objects we make sure the size of each slice is also smaller than sizeLimit
-  numSerializedSlices <- max(numSlices, ceiling(objectSize / sizeLimit))
-  if (numSerializedSlices > length(coll))
-    numSerializedSlices <- length(coll)
+  numSerializedSlices <- min(len, max(numSlices, ceiling(objectSize / sizeLimit)))
 
   # Generate the slice ids to put each row
   # For instance, for numSerializedSlices of 22, length of 50
@@ -153,8 +152,8 @@ parallelize <- function(sc, coll, numSlices = 1) {
   splits <- if (numSerializedSlices > 0) {
     unlist(lapply(0: (numSerializedSlices - 1), function(x) {
       # nolint start
-      start <- trunc((x * length(coll)) / numSerializedSlices)
-      end <- trunc(((x + 1) * length(coll)) / numSerializedSlices)
+      start <- trunc((as.numeric(x) * len) / numSerializedSlices)
+      end <- trunc(((as.numeric(x) + 1) * len) / numSerializedSlices)
       # nolint end
       rep(start, end - start)
     }))
