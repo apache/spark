@@ -21,7 +21,7 @@
     An attribute of this module that contains the instance of :class:`_ImageSchema`.
 
 .. note:: Deprecated in 2.4.0. Use `spark.read.format("image").load(path)` instead and
-    this :py:attribute:`ImageSchema` will be removed in 3.0.0.
+    this `ImageSchema` will be removed in 3.0.0.
 
 .. autoclass:: _ImageSchema
    :members:
