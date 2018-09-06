@@ -1510,16 +1510,16 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val seed1 = Some(r.nextLong())
     assert(evaluateWithoutCodegen(Shuffle(ai0, seed1)) ===
       evaluateWithoutCodegen(Shuffle(ai0, seed1)))
-    assert(evaluateWithGeneratedMutableProjection(Shuffle(ai0, seed1)) ===
-      evaluateWithGeneratedMutableProjection(Shuffle(ai0, seed1)))
+    assert(evaluateWithMutableProjection(Shuffle(ai0, seed1)) ===
+      evaluateWithMutableProjection(Shuffle(ai0, seed1)))
     assert(evaluateWithUnsafeProjection(Shuffle(ai0, seed1)) ===
       evaluateWithUnsafeProjection(Shuffle(ai0, seed1)))
 
     val seed2 = Some(r.nextLong())
     assert(evaluateWithoutCodegen(Shuffle(ai0, seed1)) !==
       evaluateWithoutCodegen(Shuffle(ai0, seed2)))
-    assert(evaluateWithGeneratedMutableProjection(Shuffle(ai0, seed1)) !==
-      evaluateWithGeneratedMutableProjection(Shuffle(ai0, seed2)))
+    assert(evaluateWithMutableProjection(Shuffle(ai0, seed1)) !==
+      evaluateWithMutableProjection(Shuffle(ai0, seed2)))
     assert(evaluateWithUnsafeProjection(Shuffle(ai0, seed1)) !==
       evaluateWithUnsafeProjection(Shuffle(ai0, seed2)))
 
