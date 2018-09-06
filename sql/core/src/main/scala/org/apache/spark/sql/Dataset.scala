@@ -2208,7 +2208,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset by adding a column or replacing the existing column that has
+   * Returns a new Dataset by adding a column at the end or replacing the existing column that has
    * the same name.
    *
    * `column`'s expression must only refer to attributes supplied by this Dataset. It is an
@@ -2217,13 +2217,29 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
-  def withColumn(colName: String, col: Column): DataFrame = withColumns(Seq(colName), Seq(col))
+  def withColumn(colName: String, col: Column): DataFrame = withColumn(colName, col, -1)
 
   /**
-   * Returns a new Dataset by adding columns or replacing the existing columns that has
+    * Returns a new Dataset by adding a column or replacing the existing column that has
+    * the same name.
+    *
+    * `column`'s expression must only refer to attributes supplied by this Dataset. It is an
+    * error to add a column that refers to some other Dataset.
+    *
+    * The position of the new column starts at 0. Any negative position means to add the column at the end.
+    *
+    * @since 2.4.0
+    */
+  def withColumn(colName: String, col: Column, atPosition: Int): DataFrame =
+    withColumns(Seq(colName), Seq(col), atPosition)
+
+  /**
+   * Returns a new Dataset by adding columns or replacing the existing columns that have
    * the same names.
+   *
+   * The position of new columns starts at 0. Any negative position means to add the column at the end.
    */
-  private[spark] def withColumns(colNames: Seq[String], cols: Seq[Column]): DataFrame = {
+  private[spark] def withColumns(colNames: Seq[String], cols: Seq[Column], atPosition: Int = -1): DataFrame = {
     require(colNames.size == cols.size,
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of columns: ${cols.size}")
@@ -2250,7 +2266,13 @@ class Dataset[T] private[sql](
       !output.exists(f => resolver(f.name, colName))
     }.map { case (colName, col) => col.as(colName) }
 
-    select(replacedAndExistingColumns ++ newColumns : _*)
+    val allColumns = if (atPosition < 0) {
+      replacedAndExistingColumns ++ newColumns
+    } else {
+      replacedAndExistingColumns.take(atPosition) ++ newColumns ++ replacedAndExistingColumns.drop(atPosition)
+    }
+
+    select(allColumns : _*)
   }
 
   /**

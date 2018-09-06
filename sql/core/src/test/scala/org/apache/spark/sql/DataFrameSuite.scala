@@ -832,6 +832,35 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("key", "value", "newCol"))
   }
 
+  test("SPARK-25333 withColumn: with a user-defined position") {
+    val df = testData.toDF().withColumn("newCol", col("key") + 1, 0)
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key + 1, key, value)
+      }.toSeq)
+    assert(df.schema.map(_.name) === Seq("newCol", "key", "value"))
+
+    val df2 = testData.toDF().withColumn("newCol", col("key") + 1, 1)
+    checkAnswer(
+      df2,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, key + 1, value)
+      }.toSeq)
+    assert(df2.schema.map(_.name) === Seq("key", "newCol", "value"))
+
+    val atPosition = Seq(2, -4, 15)
+    atPosition.foreach { position =>
+      val df3 = testData.toDF().withColumn("newCol", col("key") + 1, position)
+      checkAnswer(
+        df3,
+        testData.collect().map { case Row(key: Int, value: String) =>
+          Row(key, value, key + 1)
+        }.toSeq)
+      assert(df3.schema.map(_.name) === Seq("key", "value", "newCol"))
+    }
+  }
+
   test("withColumns") {
     val df = testData.toDF().withColumns(Seq("newCol1", "newCol2"),
       Seq(col("key") + 1, col("key") + 2))
@@ -854,6 +883,38 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         Seq(col("key") + 1, col("key") + 2))
     }
     assert(err2.getMessage.contains("Found duplicate column(s)"))
+  }
+
+  test("SPARK-25333 withColumns: with a user-defined position") {
+    val df = testData.toDF().withColumns(Seq("newCol1", "newCol2"),
+      Seq(col("key") + 1, col("key") + 2), 0)
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key + 1, key + 2, key, value)
+      }.toSeq)
+    assert(df.schema.map(_.name) === Seq("newCol1", "newCol2", "key", "value"))
+
+    val df2 = testData.toDF().withColumns(Seq("newCol1", "newCol2"),
+      Seq(col("key") + 1, col("key") + 2), 1)
+    checkAnswer(
+      df2,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, key + 1, key + 2, value)
+      }.toSeq)
+    assert(df2.schema.map(_.name) === Seq("key", "newCol1", "newCol2", "value"))
+
+    val atPosition = Seq(2, -4, 15)
+    atPosition.foreach { position =>
+      val df3 = testData.toDF().withColumns(Seq("newCol1", "newCol2"),
+        Seq(col("key") + 1, col("key") + 2), position)
+      checkAnswer(
+        df3,
+        testData.collect().map { case Row(key: Int, value: String) =>
+          Row(key, value, key + 1, key + 2)
+        }.toSeq)
+      assert(df3.schema.map(_.name) === Seq("key", "value", "newCol1", "newCol2"))
+    }
   }
 
   test("withColumns: case sensitive") {
