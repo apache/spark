@@ -54,8 +54,11 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   override def afterAll() {
-    super.afterAll()
-    out.close()
+    try {
+      super.afterAll()
+    } finally {
+      out.close()
+    }
   }
 
   override def afterEach() {

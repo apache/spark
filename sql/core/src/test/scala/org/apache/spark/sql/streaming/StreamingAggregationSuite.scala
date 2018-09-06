@@ -50,8 +50,11 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     with BeforeAndAfterAll with Assertions {
 
   override def afterAll(): Unit = {
-    super.afterAll()
-    StateStore.stop()
+    try {
+      super.afterAll()
+    } finally {
+      StateStore.stop()
+    }
   }
 
   import testImplicits._

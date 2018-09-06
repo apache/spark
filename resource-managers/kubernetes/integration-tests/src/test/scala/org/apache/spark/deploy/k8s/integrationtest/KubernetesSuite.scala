@@ -93,7 +93,11 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   }
 
   override def afterAll(): Unit = {
-    testBackend.cleanUp()
+    try {
+      testBackend.cleanUp()
+    } finally {
+      super.afterAll()
+    }
   }
 
   before {

@@ -54,8 +54,11 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
   import FlatMapGroupsWithStateSuite._
 
   override def afterAll(): Unit = {
-    super.afterAll()
-    StateStore.stop()
+    try {
+      super.afterAll()
+    } finally {
+      StateStore.stop()
+    }
   }
 
   test("GroupState - get, exists, update, remove") {

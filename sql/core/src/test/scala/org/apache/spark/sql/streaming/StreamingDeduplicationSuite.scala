@@ -31,8 +31,11 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest with BeforeAndAf
   import testImplicits._
 
   override def afterAll(): Unit = {
-    super.afterAll()
-    StateStore.stop()
+    try {
+      super.afterAll()
+    } finally {
+      StateStore.stop()
+    }
   }
 
   test("deduplicate with all columns") {
