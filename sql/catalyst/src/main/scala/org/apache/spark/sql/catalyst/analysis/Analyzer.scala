@@ -754,6 +754,7 @@ class Analyzer(
    * a logical plan node's children.
    */
   object ResolveReferences extends Rule[LogicalPlan] {
+
     /**
      * Generate a new logical plan for the right child with different expression IDs
      * for all conflicting attributes.

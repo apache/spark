@@ -23,7 +23,7 @@ package org.apache.spark.sql.catalyst.expressions
  * of the name, or the expected nullability).
  */
 object AttributeMap {
-  val empty = new AttributeMap(Map.empty)
+  var empty = new AttributeMap(Map.empty)
 
   def apply[A](kvs: Seq[(Attribute, A)]): AttributeMap[A] = {
     new AttributeMap(kvs.map(kv => (kv._1.exprId, kv)).toMap)
