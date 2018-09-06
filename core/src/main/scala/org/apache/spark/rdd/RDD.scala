@@ -396,14 +396,24 @@ abstract class RDD[T: ClassTag](
    * Return a new RDD containing the distinct elements in this RDD.
    */
   def distinct(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] = withScope {
-    // If the data is already approriately partitioned with a known partitioner we can work locally.
-    def removeDuplicatesInPartition(itr: Iterator[T]): Iterator[T] = {
-      val set = new mutable.HashSet[T]()
-      itr.filter(set.add(_))
-    }
     partitioner match {
       case Some(p) if numPartitions == partitions.length =>
-        mapPartitions(removeDuplicatesInPartition, preservesPartitioning = true)
+        def key(x: T): (T, Null) = (x, null)
+        val cleanKey = sc.clean(key _)
+        val keyed = new MapPartitionsRDD[(T, Null), T](
+          this,
+          (context, pid, iter) => iter.map(cleanKey),
+          knownPartitioner = Some(new WrappedPartitioner(p)))
+        val duplicatesRemoved = keyed.reduceByKey((x, y) => x)
+
+        def deKey(x: (T, Null)): T = x._1
+        val cleanDeKey = sc.clean(deKey _)
+        val deKeyed = new MapPartitionsRDD[T, (T, Null)](
+          duplicatesRemoved,
+          (context, pid, iter) => iter.map(cleanDeKey),
+          knownPartitioner = Some(p))
+        deKeyed
+
       case _ => map(x => (x, null)).reduceByKey((x, y) => x, numPartitions).map(_._1)
     }
   }
