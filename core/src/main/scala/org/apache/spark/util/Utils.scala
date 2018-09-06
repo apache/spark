@@ -60,7 +60,7 @@ import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
@@ -83,6 +83,7 @@ private[spark] object Utils extends Logging {
   val random = new Random()
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
+  @volatile private var cachedLocalDir: String = ""
 
   /**
    * Define a default value for driver memory here since this value is referenced across the code
@@ -462,7 +463,15 @@ private[spark] object Utils extends Logging {
     if (useCache && fetchCacheEnabled) {
       val cachedFileName = s"${url.hashCode}${timestamp}_cache"
       val lockFileName = s"${url.hashCode}${timestamp}_lock"
-      val localDir = new File(getLocalDir(conf))
+      // Set the cachedLocalDir for the first time and re-use it later
+      if (cachedLocalDir.isEmpty) {
+        this.synchronized {
+          if (cachedLocalDir.isEmpty) {
+            cachedLocalDir = getLocalDir(conf)
+          }
+        }
+      }
+      val localDir = new File(cachedLocalDir)
       val lockFile = new File(localDir, lockFileName)
       val lockFileChannel = new RandomAccessFile(lockFile, "rw").getChannel()
       // Only one executor entry.
@@ -767,13 +776,17 @@ private[spark] object Utils extends Logging {
    *   - Otherwise, this will return java.io.tmpdir.
    *
    * Some of these configuration options might be lists of multiple paths, but this method will
-   * always return a single directory.
+   * always return a single directory. The return directory is chosen randomly from the array
+   * of directories it gets from getOrCreateLocalRootDirs.
    */
   def getLocalDir(conf: SparkConf): String = {
-    getOrCreateLocalRootDirs(conf).headOption.getOrElse {
+    val localRootDirs = getOrCreateLocalRootDirs(conf)
+    if (localRootDirs.isEmpty) {
       val configuredLocalDirs = getConfiguredLocalDirs(conf)
       throw new IOException(
         s"Failed to get a temp directory under [${configuredLocalDirs.mkString(",")}].")
+    } else {
+      localRootDirs(scala.util.Random.nextInt(localRootDirs.length))
     }
   }
 
@@ -809,13 +822,13 @@ private[spark] object Utils extends Logging {
    * logic of locating the local directories according to deployment mode.
    */
   def getConfiguredLocalDirs(conf: SparkConf): Array[String] = {
-    val shuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
+    val shuffleServiceEnabled = conf.get(config.SHUFFLE_SERVICE_ENABLED)
     if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
       // to what Yarn on this system said was available. Note this assumes that Yarn has
       // created the directories already, and that they are secured so that only the
       // user has access to them.
-      getYarnLocalDirs(conf).split(",")
+      randomizeInPlace(getYarnLocalDirs(conf).split(","))
     } else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
       conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
     } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
@@ -1374,7 +1387,7 @@ private[spark] object Utils extends Logging {
         originalThrowable = cause
         try {
           logError("Aborting task", originalThrowable)
-          TaskContext.get().asInstanceOf[TaskContextImpl].markTaskFailed(originalThrowable)
+          TaskContext.get().markTaskFailed(originalThrowable)
           catchBlock
         } catch {
           case t: Throwable =>
@@ -1396,13 +1409,14 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  // A regular expression to match classes of the internal Spark API's
+  // that we want to skip when finding the call site of a method.
+  private val SPARK_CORE_CLASS_REGEX =
+    """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?(\.broadcast)?\.[A-Z]""".r
+  private val SPARK_SQL_CLASS_REGEX = """^org\.apache\.spark\.sql.*""".r
+
   /** Default filtering function for finding call sites using `getCallSite`. */
   private def sparkInternalExclusionFunction(className: String): Boolean = {
-    // A regular expression to match classes of the internal Spark API's
-    // that we want to skip when finding the call site of a method.
-    val SPARK_CORE_CLASS_REGEX =
-      """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?(\.broadcast)?\.[A-Z]""".r
-    val SPARK_SQL_CLASS_REGEX = """^org\.apache\.spark\.sql.*""".r
     val SCALA_CORE_CLASS_PREFIX = "scala"
     val isSparkClass = SPARK_CORE_CLASS_REGEX.findFirstIn(className).isDefined ||
       SPARK_SQL_CLASS_REGEX.findFirstIn(className).isDefined
@@ -2780,6 +2794,36 @@ private[spark] object Utils extends Logging {
           }
       }
     }
+  }
+
+  /**
+   * Regular expression matching full width characters.
+   *
+   * Looked at all the 0x0000-0xFFFF characters (unicode) and showed them under Xshell.
+   * Found all the full width characters, then get the regular expression.
+   */
+  private val fullWidthRegex = ("""[""" +
+    // scalastyle:off nonascii
+    """\u1100-\u115F""" +
+    """\u2E80-\uA4CF""" +
+    """\uAC00-\uD7A3""" +
+    """\uF900-\uFAFF""" +
+    """\uFE10-\uFE19""" +
+    """\uFE30-\uFE6F""" +
+    """\uFF00-\uFF60""" +
+    """\uFFE0-\uFFE6""" +
+    // scalastyle:on nonascii
+    """]""").r
+
+  /**
+   * Return the number of half widths in a given string. Note that a full width character
+   * occupies two half widths.
+   *
+   * For a string consisting of 1 million characters, the execution of this method requires
+   * about 50ms.
+   */
+  def stringHalfWidth(str: String): Int = {
+    if (str == null) 0 else str.length + fullWidthRegex.findAllIn(str).size
   }
 }
 

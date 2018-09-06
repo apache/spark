@@ -21,14 +21,18 @@ import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
 
+import org.apache.avro.{LogicalTypes, Schema}
+import org.apache.avro.Conversions.DecimalConversion
+import org.apache.avro.LogicalTypes.{TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema
-import org.apache.avro.Schema.Type.NULL
+import org.apache.avro.Schema.Type
+import org.apache.avro.Schema.Type._
+import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed, Record}
 import org.apache.avro.generic.GenericData.Record
 import org.apache.avro.util.Utf8
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -66,70 +70,121 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
 
   private type Converter = (SpecializedGetters, Int) => Any
 
-  private def newConverter(catalystType: DataType, avroType: Schema): Converter = {
-    catalystType match {
-      case NullType =>
-        (getter, ordinal) => null
-      case BooleanType =>
-        (getter, ordinal) => getter.getBoolean(ordinal)
-      case ByteType =>
-        (getter, ordinal) => getter.getByte(ordinal).toInt
-      case ShortType =>
-        (getter, ordinal) => getter.getShort(ordinal).toInt
-      case IntegerType =>
-        (getter, ordinal) => getter.getInt(ordinal)
-      case LongType =>
-        (getter, ordinal) => getter.getLong(ordinal)
-      case FloatType =>
-        (getter, ordinal) => getter.getFloat(ordinal)
-      case DoubleType =>
-        (getter, ordinal) => getter.getDouble(ordinal)
-      case d: DecimalType =>
-        (getter, ordinal) => getter.getDecimal(ordinal, d.precision, d.scale).toString
-      case StringType =>
-        (getter, ordinal) => new Utf8(getter.getUTF8String(ordinal).getBytes)
-      case BinaryType =>
-        (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
-      case DateType =>
-        (getter, ordinal) => getter.getInt(ordinal) * DateTimeUtils.MILLIS_PER_DAY
-      case TimestampType =>
-        (getter, ordinal) => getter.getLong(ordinal) / 1000
+  private lazy val decimalConversions = new DecimalConversion()
 
-      case ArrayType(et, containsNull) =>
+  private def newConverter(catalystType: DataType, avroType: Schema): Converter = {
+    (catalystType, avroType.getType) match {
+      case (NullType, NULL) =>
+        (getter, ordinal) => null
+      case (BooleanType, BOOLEAN) =>
+        (getter, ordinal) => getter.getBoolean(ordinal)
+      case (ByteType, INT) =>
+        (getter, ordinal) => getter.getByte(ordinal).toInt
+      case (ShortType, INT) =>
+        (getter, ordinal) => getter.getShort(ordinal).toInt
+      case (IntegerType, INT) =>
+        (getter, ordinal) => getter.getInt(ordinal)
+      case (LongType, LONG) =>
+        (getter, ordinal) => getter.getLong(ordinal)
+      case (FloatType, FLOAT) =>
+        (getter, ordinal) => getter.getFloat(ordinal)
+      case (DoubleType, DOUBLE) =>
+        (getter, ordinal) => getter.getDouble(ordinal)
+      case (d: DecimalType, FIXED)
+        if avroType.getLogicalType == LogicalTypes.decimal(d.precision, d.scale) =>
+        (getter, ordinal) =>
+          val decimal = getter.getDecimal(ordinal, d.precision, d.scale)
+          decimalConversions.toFixed(decimal.toJavaBigDecimal, avroType,
+            LogicalTypes.decimal(d.precision, d.scale))
+
+      case (d: DecimalType, BYTES)
+        if avroType.getLogicalType == LogicalTypes.decimal(d.precision, d.scale) =>
+        (getter, ordinal) =>
+          val decimal = getter.getDecimal(ordinal, d.precision, d.scale)
+          decimalConversions.toBytes(decimal.toJavaBigDecimal, avroType,
+            LogicalTypes.decimal(d.precision, d.scale))
+
+      case (StringType, ENUM) =>
+        val enumSymbols: Set[String] = avroType.getEnumSymbols.asScala.toSet
+        (getter, ordinal) =>
+          val data = getter.getUTF8String(ordinal).toString
+          if (!enumSymbols.contains(data)) {
+            throw new IncompatibleSchemaException(
+              "Cannot write \"" + data + "\" since it's not defined in enum \"" +
+                enumSymbols.mkString("\", \"") + "\"")
+          }
+          new EnumSymbol(avroType, data)
+
+      case (StringType, STRING) =>
+        (getter, ordinal) => new Utf8(getter.getUTF8String(ordinal).getBytes)
+
+      case (BinaryType, FIXED) =>
+        val size = avroType.getFixedSize()
+        (getter, ordinal) =>
+          val data: Array[Byte] = getter.getBinary(ordinal)
+          if (data.length != size) {
+            throw new IncompatibleSchemaException(
+              s"Cannot write ${data.length} ${if (data.length > 1) "bytes" else "byte"} of " +
+                "binary data into FIXED Type with size of " +
+                s"$size ${if (size > 1) "bytes" else "byte"}")
+          }
+          new Fixed(avroType, data)
+
+      case (BinaryType, BYTES) =>
+        (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
+
+      case (DateType, INT) =>
+        (getter, ordinal) => getter.getInt(ordinal)
+
+      case (TimestampType, LONG) => avroType.getLogicalType match {
+          case _: TimestampMillis => (getter, ordinal) => getter.getLong(ordinal) / 1000
+          case _: TimestampMicros => (getter, ordinal) => getter.getLong(ordinal)
+          // For backward compatibility, if the Avro type is Long and it is not logical type,
+          // output the timestamp value as with millisecond precision.
+          case null => (getter, ordinal) => getter.getLong(ordinal) / 1000
+          case other => throw new IncompatibleSchemaException(
+            s"Cannot convert Catalyst Timestamp type to Avro logical type ${other}")
+        }
+
+      case (ArrayType(et, containsNull), ARRAY) =>
         val elementConverter = newConverter(
           et, resolveNullableType(avroType.getElementType, containsNull))
         (getter, ordinal) => {
           val arrayData = getter.getArray(ordinal)
-          val result = new java.util.ArrayList[Any]
+          val len = arrayData.numElements()
+          val result = new Array[Any](len)
           var i = 0
-          while (i < arrayData.numElements()) {
-            if (arrayData.isNullAt(i)) {
-              result.add(null)
+          while (i < len) {
+            if (containsNull && arrayData.isNullAt(i)) {
+              result(i) = null
             } else {
-              result.add(elementConverter(arrayData, i))
+              result(i) = elementConverter(arrayData, i)
             }
             i += 1
           }
-          result
+          // avro writer is expecting a Java Collection, so we convert it into
+          // `ArrayList` backed by the specified array without data copying.
+          java.util.Arrays.asList(result: _*)
         }
 
-      case st: StructType =>
+      case (st: StructType, RECORD) =>
         val structConverter = newStructConverter(st, avroType)
         val numFields = st.length
         (getter, ordinal) => structConverter(getter.getStruct(ordinal, numFields))
 
-      case MapType(kt, vt, valueContainsNull) if kt == StringType =>
+      case (MapType(kt, vt, valueContainsNull), MAP) if kt == StringType =>
         val valueConverter = newConverter(
           vt, resolveNullableType(avroType.getValueType, valueContainsNull))
         (getter, ordinal) =>
           val mapData = getter.getMap(ordinal)
-          val result = new java.util.HashMap[String, Any](mapData.numElements())
+          val len = mapData.numElements()
+          val result = new java.util.HashMap[String, Any](len)
           val keyArray = mapData.keyArray()
           val valueArray = mapData.valueArray()
           var i = 0
-          while (i < mapData.numElements()) {
+          while (i < len) {
             val key = keyArray.getUTF8String(i).toString
-            if (valueArray.isNullAt(i)) {
+            if (valueContainsNull && valueArray.isNullAt(i)) {
               result.put(key, null)
             } else {
               result.put(key, valueConverter(valueArray, i))
@@ -139,15 +194,18 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
           result
 
       case other =>
-        throw new IncompatibleSchemaException(s"Unexpected type: $other")
+        throw new IncompatibleSchemaException(s"Cannot convert Catalyst type $catalystType to " +
+          s"Avro type $avroType.")
     }
   }
 
   private def newStructConverter(
       catalystStruct: StructType, avroStruct: Schema): InternalRow => Record = {
-    val avroFields = avroStruct.getFields
-    assert(avroFields.size() == catalystStruct.length)
-    val fieldConverters = catalystStruct.zip(avroFields.asScala).map {
+    if (avroStruct.getType != RECORD || avroStruct.getFields.size() != catalystStruct.length) {
+      throw new IncompatibleSchemaException(s"Cannot convert Catalyst type $catalystStruct to " +
+        s"Avro type $avroStruct.")
+    }
+    val fieldConverters = catalystStruct.zip(avroStruct.getFields.asScala).map {
       case (f1, f2) => newConverter(f1.dataType, resolveNullableType(f2.schema(), f1.nullable))
     }
     val numFields = catalystStruct.length
@@ -166,11 +224,11 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
   }
 
   private def resolveNullableType(avroType: Schema, nullable: Boolean): Schema = {
-    if (nullable) {
+    if (nullable && avroType.getType != NULL) {
       // avro uses union to represent nullable type.
       val fields = avroType.getTypes.asScala
       assert(fields.length == 2)
-      val actualType = fields.filter(_.getType != NULL)
+      val actualType = fields.filter(_.getType != Type.NULL)
       assert(actualType.length == 1)
       actualType.head
     } else {

@@ -56,14 +56,18 @@ object HiveStringType {
 }
 
 /**
- * Hive char type.
+ * Hive char type. Similar to other HiveStringType's, these datatypes should only used for
+ * parsing, and should NOT be used anywhere else. Any instance of these data types should be
+ * replaced by a [[StringType]] before analysis.
  */
 case class CharType(length: Int) extends HiveStringType {
   override def simpleString: String = s"char($length)"
 }
 
 /**
- * Hive varchar type.
+ * Hive varchar type. Similar to other HiveStringType's, these datatypes should only used for
+ * parsing, and should NOT be used anywhere else. Any instance of these data types should be
+ * replaced by a [[StringType]] before analysis.
  */
 case class VarcharType(length: Int) extends HiveStringType {
   override def simpleString: String = s"varchar($length)"

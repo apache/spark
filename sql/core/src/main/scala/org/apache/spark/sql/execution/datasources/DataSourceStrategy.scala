@@ -131,7 +131,7 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
     projectList
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
       DDLUtils.checkDataColNames(tableDesc)
       CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
@@ -139,7 +139,7 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
     case CreateTable(tableDesc, mode, Some(query))
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
       DDLUtils.checkDataColNames(tableDesc.copy(schema = query.schema))
-      CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output)
+      CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
     case InsertIntoTable(l @ LogicalRelation(_: InsertableRelation, _, _, _),
         parts, query, overwrite, false) if parts.isEmpty =>
@@ -209,7 +209,7 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
         mode,
         table,
         Some(t.location),
-        actualQuery.output)
+        actualQuery.output.map(_.name))
   }
 }
 
@@ -252,7 +252,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       table.partitionSchema.asNullable.toAttributes)
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _)
         if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta))

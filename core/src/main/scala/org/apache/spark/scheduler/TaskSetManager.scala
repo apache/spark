@@ -29,7 +29,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.scheduler.SchedulingMode._
-import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
+import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
 
 /**
@@ -122,6 +122,10 @@ private[spark] class TaskSetManager(
   // state in order to continue to track and account for the running tasks.
   // TODO: We should kill any running task attempts when the task set manager becomes a zombie.
   private[scheduler] var isZombie = false
+
+  // Whether the taskSet run tasks from a barrier stage. Spark must launch all the tasks at the
+  // same time for a barrier stage.
+  private[scheduler] def isBarrier = taskSet.tasks.nonEmpty && taskSet.tasks(0).isBarrier
 
   // Set of pending tasks for each executor. These collections are actually
   // treated as stacks, in which new tasks are added to the end of the
@@ -512,6 +516,7 @@ private[spark] class TaskSetManager(
           execId,
           taskName,
           index,
+          task.partitionId,
           addedFiles,
           addedJars,
           task.localProperties,
@@ -723,6 +728,23 @@ private[spark] class TaskSetManager(
   def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
     val info = taskInfos(tid)
     val index = info.index
+    // Check if any other attempt succeeded before this and this attempt has not been handled
+    if (successful(index) && killedByOtherAttempt.contains(tid)) {
+      // Undo the effect on calculatedTasks and totalResultSize made earlier when
+      // checking if can fetch more results
+      calculatedTasks -= 1
+      val resultSizeAcc = result.accumUpdates.find(a =>
+        a.name == Some(InternalAccumulator.RESULT_SIZE))
+      if (resultSizeAcc.isDefined) {
+        totalResultSize -= resultSizeAcc.get.asInstanceOf[LongAccumulator].value
+      }
+
+      // Handle this task as a killed task
+      handleFailedTask(tid, TaskState.KILLED,
+        TaskKilled("Finish but did not commit due to another attempt succeeded"))
+      return
+    }
+
     info.markFinished(TaskState.FINISHED, clock.getTimeMillis())
     if (speculationEnabled) {
       successfulTaskDurations.insert(info.duration)
@@ -871,6 +893,10 @@ private[spark] class TaskSetManager(
         None
     }
 
+    if (tasks(index).isBarrier) {
+      isZombie = true
+    }
+
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
 
     if (!isZombie && reason.countTowardsTaskFailures) {
@@ -979,8 +1005,8 @@ private[spark] class TaskSetManager(
    */
   override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
     // Can't speculate if we only have one task, and no need to speculate if the task set is a
-    // zombie.
-    if (isZombie || numTasks == 1) {
+    // zombie or is from a barrier stage.
+    if (isZombie || isBarrier || numTasks == 1) {
       return false
     }
     var foundTasks = false

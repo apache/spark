@@ -2035,6 +2035,25 @@ def array_distinct(col):
 
 @ignore_unicode_prefix
 @since(2.4)
+def array_intersect(col1, col2):
+    """
+    Collection function: returns an array of the elements in the intersection of col1 and col2,
+    without duplicates.
+
+    :param col1: name of column containing array
+    :param col2: name of column containing array
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
+    >>> df.select(array_intersect(df.c1, df.c2)).collect()
+    [Row(array_intersect(c1, c2)=[u'a', u'c'])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_intersect(_to_java_column(col1), _to_java_column(col2)))
+
+
+@ignore_unicode_prefix
+@since(2.4)
 def array_union(col1, col2):
     """
     Collection function: returns an array of the elements in the union of col1 and col2,
@@ -2050,6 +2069,25 @@ def array_union(col1, col2):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_union(_to_java_column(col1), _to_java_column(col2)))
+
+
+@ignore_unicode_prefix
+@since(2.4)
+def array_except(col1, col2):
+    """
+    Collection function: returns an array of the elements in col1 but not in col2,
+    without duplicates.
+
+    :param col1: name of column containing array
+    :param col2: name of column containing array
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
+    >>> df.select(array_except(df.c1, df.c2)).collect()
+    [Row(array_except(c1, c2)=[u'b'])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_except(_to_java_column(col1), _to_java_column(col2)))
 
 
 @since(1.4)
@@ -2203,7 +2241,7 @@ def json_tuple(col, *fields):
 def from_json(col, schema, options={}):
     """
     Parses a column containing a JSON string into a :class:`MapType` with :class:`StringType`
-    as keys type, :class:`StructType` or :class:`ArrayType` of :class:`StructType`\\s with
+    as keys type, :class:`StructType` or :class:`ArrayType` with
     the specified schema. Returns `null`, in the case of an unparseable string.
 
     :param col: string column in json format
@@ -2231,6 +2269,11 @@ def from_json(col, schema, options={}):
     >>> schema = schema_of_json(lit('''{"a": 0}'''))
     >>> df.select(from_json(df.value, schema).alias("json")).collect()
     [Row(json=Row(a=1))]
+    >>> data = [(1, '''[1, 2, 3]''')]
+    >>> schema = ArrayType(IntegerType())
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=[1, 2, 3])]
     """
 
     sc = SparkContext._active_spark_context
@@ -2246,13 +2289,11 @@ def from_json(col, schema, options={}):
 @since(2.1)
 def to_json(col, options={}):
     """
-    Converts a column containing a :class:`StructType`, :class:`ArrayType` of
-    :class:`StructType`\\s, a :class:`MapType` or :class:`ArrayType` of :class:`MapType`\\s
+    Converts a column containing a :class:`StructType`, :class:`ArrayType` or a :class:`MapType`
     into a JSON string. Throws an exception, in the case of an unsupported type.
 
-    :param col: name of column containing the struct, array of the structs, the map or
-        array of the maps.
-    :param options: options to control converting. accepts the same options as the json datasource
+    :param col: name of column containing a struct, an array or a map.
+    :param options: options to control converting. accepts the same options as the JSON datasource
 
     >>> from pyspark.sql import Row
     >>> from pyspark.sql.types import *
@@ -2272,6 +2313,10 @@ def to_json(col, options={}):
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_json(df.value).alias("json")).collect()
     [Row(json=u'[{"name":"Alice"},{"name":"Bob"}]')]
+    >>> data = [(1, ["Alice", "Bob"])]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(to_json(df.value).alias("json")).collect()
+    [Row(json=u'["Alice","Bob"]')]
     """
 
     sc = SparkContext._active_spark_context
@@ -2380,6 +2425,23 @@ def array_sort(col):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_sort(_to_java_column(col)))
+
+
+@since(2.4)
+def shuffle(col):
+    """
+    Collection function: Generates a random permutation of the given array.
+
+    .. note:: The function is non-deterministic.
+
+    :param col: name of column or expression
+
+    >>> df = spark.createDataFrame([([1, 20, 3, 5],), ([1, 20, None, 3],)], ['data'])
+    >>> df.select(shuffle(df.data).alias('s')).collect()  # doctest: +SKIP
+    [Row(s=[3, 1, 5, 20]), Row(s=[20, None, 3, 1])]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.shuffle(_to_java_column(col)))
 
 
 @since(1.5)
@@ -2721,14 +2783,14 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        +---+-------------------+
 
        Alternatively, the user can define a function that takes two arguments.
-       In this case, the grouping key will be passed as the first argument and the data will
-       be passed as the second argument. The grouping key will be passed as a tuple of numpy
+       In this case, the grouping key(s) will be passed as the first argument and the data will
+       be passed as the second argument. The grouping key(s) will be passed as a tuple of numpy
        data types, e.g., `numpy.int32` and `numpy.float64`. The data will still be passed in
        as a `pandas.DataFrame` containing all columns from the original Spark DataFrame.
-       This is useful when the user does not want to hardcode grouping key in the function.
+       This is useful when the user does not want to hardcode grouping key(s) in the function.
 
-       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> import pandas as pd  # doctest: +SKIP
+       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> df = spark.createDataFrame(
        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
        ...     ("id", "v"))  # doctest: +SKIP
@@ -2744,6 +2806,22 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        |  1|1.5|
        |  2|6.0|
        +---+---+
+       >>> @pandas_udf(
+       ...    "id long, `ceil(v / 2)` long, v double",
+       ...    PandasUDFType.GROUPED_MAP)  # doctest: +SKIP
+       >>> def sum_udf(key, pdf):
+       ...     # key is a tuple of two numpy.int64s, which is the values
+       ...     # of 'id' and 'ceil(df.v / 2)' for the current group
+       ...     return pd.DataFrame([key + (pdf.v.sum(),)])
+       >>> df.groupby(df.id, ceil(df.v / 2)).apply(sum_udf).show()  # doctest: +SKIP
+       +---+-----------+----+
+       | id|ceil(v / 2)|   v|
+       +---+-----------+----+
+       |  2|          5|10.0|
+       |  1|          1| 3.0|
+       |  2|          3| 5.0|
+       |  2|          2| 3.0|
+       +---+-----------+----+
 
        .. note:: If returning a new `pandas.DataFrame` constructed with a dictionary, it is
            recommended to explicitly index the columns by name to ensure the positions are correct,
@@ -2793,8 +2871,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        >>> @pandas_udf("double", PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
        ... def mean_udf(v):
        ...     return v.mean()
-       >>> w = Window.partitionBy('id') \\
-       ...           .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+       >>> w = Window \\
+       ...     .partitionBy('id') \\
+       ...     .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
        >>> df.withColumn('mean_v', mean_udf(df['v']).over(w)).show()  # doctest: +SKIP
        +---+----+------+
        | id|   v|mean_v|
@@ -2870,6 +2949,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
 __all__ = [k for k, v in globals().items()
            if not k.startswith('_') and k[0].islower() and callable(v) and k not in blacklist]
+__all__ += ["PandasUDFType"]
 __all__.sort()
 
 

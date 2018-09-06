@@ -49,6 +49,8 @@ import org.apache.spark.util._
  * @param jobId id of the job this task belongs to
  * @param appId id of the app this task belongs to
  * @param appAttemptId attempt id of the app this task belongs to
+ * @param isBarrier whether this task belongs to a barrier stage. Spark must launch all the tasks
+ *                  at the same time for a barrier stage.
  */
 private[spark] abstract class Task[T](
     val stageId: Int,
@@ -60,7 +62,8 @@ private[spark] abstract class Task[T](
       SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array(),
     val jobId: Option[Int] = None,
     val appId: Option[String] = None,
-    val appAttemptId: Option[String] = None) extends Serializable {
+    val appAttemptId: Option[String] = None,
+    val isBarrier: Boolean = false) extends Serializable {
 
   @transient lazy val metrics: TaskMetrics =
     SparkEnv.get.closureSerializer.newInstance().deserialize(ByteBuffer.wrap(serializedTaskMetrics))
@@ -77,7 +80,9 @@ private[spark] abstract class Task[T](
       attemptNumber: Int,
       metricsSystem: MetricsSystem): T = {
     SparkEnv.get.blockManager.registerTask(taskAttemptId)
-    context = new TaskContextImpl(
+    // TODO SPARK-24874 Allow create BarrierTaskContext based on partitions, instead of whether
+    // the stage is barrier.
+    val taskContext = new TaskContextImpl(
       stageId,
       stageAttemptId, // stageAttemptId and stageAttemptNumber are semantically equal
       partitionId,
@@ -87,6 +92,13 @@ private[spark] abstract class Task[T](
       localProperties,
       metricsSystem,
       metrics)
+
+    context = if (isBarrier) {
+      new BarrierTaskContext(taskContext)
+    } else {
+      taskContext
+    }
+
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
 
@@ -161,7 +173,7 @@ private[spark] abstract class Task[T](
   var epoch: Long = -1
 
   // Task context, to be initialized in run().
-  @transient var context: TaskContextImpl = _
+  @transient var context: TaskContext = _
 
   // The actual Thread on which the task is running, if any. Initialized in run().
   @volatile @transient private var taskThread: Thread = _

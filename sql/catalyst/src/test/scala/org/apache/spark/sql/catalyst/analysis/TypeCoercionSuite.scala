@@ -499,6 +499,14 @@ class TypeCoercionSuite extends AnalysisTest {
       ArrayType(new StructType().add("num", ShortType), containsNull = false),
       ArrayType(new StructType().add("num", LongType), containsNull = false),
       Some(ArrayType(new StructType().add("num", LongType), containsNull = false)))
+    widenTestWithStringPromotion(
+      ArrayType(IntegerType, containsNull = false),
+      ArrayType(DecimalType.IntDecimal, containsNull = false),
+      Some(ArrayType(DecimalType.IntDecimal, containsNull = false)))
+    widenTestWithStringPromotion(
+      ArrayType(DecimalType(36, 0), containsNull = false),
+      ArrayType(DecimalType(36, 35), containsNull = false),
+      Some(ArrayType(DecimalType(38, 35), containsNull = true)))
 
     // MapType
     widenTestWithStringPromotion(
@@ -517,6 +525,22 @@ class TypeCoercionSuite extends AnalysisTest {
       MapType(IntegerType, new StructType().add("num", ShortType), valueContainsNull = false),
       MapType(LongType, new StructType().add("num", LongType), valueContainsNull = false),
       Some(MapType(LongType, new StructType().add("num", LongType), valueContainsNull = false)))
+    widenTestWithStringPromotion(
+      MapType(StringType, IntegerType, valueContainsNull = false),
+      MapType(StringType, DecimalType.IntDecimal, valueContainsNull = false),
+      Some(MapType(StringType, DecimalType.IntDecimal, valueContainsNull = false)))
+    widenTestWithStringPromotion(
+      MapType(StringType, DecimalType(36, 0), valueContainsNull = false),
+      MapType(StringType, DecimalType(36, 35), valueContainsNull = false),
+      Some(MapType(StringType, DecimalType(38, 35), valueContainsNull = true)))
+    widenTestWithStringPromotion(
+      MapType(IntegerType, StringType, valueContainsNull = false),
+      MapType(DecimalType.IntDecimal, StringType, valueContainsNull = false),
+      Some(MapType(DecimalType.IntDecimal, StringType, valueContainsNull = false)))
+    widenTestWithStringPromotion(
+      MapType(DecimalType(36, 0), StringType, valueContainsNull = false),
+      MapType(DecimalType(36, 35), StringType, valueContainsNull = false),
+      None)
 
     // StructType
     widenTestWithStringPromotion(
@@ -540,6 +564,14 @@ class TypeCoercionSuite extends AnalysisTest {
         .add("map", MapType(DoubleType, StringType, valueContainsNull = false), nullable = false),
       Some(new StructType()
         .add("map", MapType(DoubleType, StringType, valueContainsNull = true), nullable = false)))
+    widenTestWithStringPromotion(
+      new StructType().add("num", IntegerType, nullable = false),
+      new StructType().add("num", DecimalType.IntDecimal, nullable = false),
+      Some(new StructType().add("num", DecimalType.IntDecimal, nullable = false)))
+    widenTestWithStringPromotion(
+      new StructType().add("num", DecimalType(36, 0), nullable = false),
+      new StructType().add("num", DecimalType(36, 35), nullable = false),
+      Some(new StructType().add("num", DecimalType(38, 35), nullable = true)))
 
     widenTestWithStringPromotion(
       new StructType().add("num", IntegerType),
@@ -1223,8 +1255,10 @@ class TypeCoercionSuite extends AnalysisTest {
 
     val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType)
 
-    val r1 = widenSetOperationTypes(Except(firstTable, secondTable)).asInstanceOf[Except]
-    val r2 = widenSetOperationTypes(Intersect(firstTable, secondTable)).asInstanceOf[Intersect]
+    val r1 = widenSetOperationTypes(
+      Except(firstTable, secondTable, isAll = false)).asInstanceOf[Except]
+    val r2 = widenSetOperationTypes(
+      Intersect(firstTable, secondTable, isAll = false)).asInstanceOf[Intersect]
     checkOutput(r1.left, expectedTypes)
     checkOutput(r1.right, expectedTypes)
     checkOutput(r2.left, expectedTypes)
@@ -1289,8 +1323,10 @@ class TypeCoercionSuite extends AnalysisTest {
     val expectedType1 = Seq(DecimalType(10, 8))
 
     val r1 = widenSetOperationTypes(Union(left1, right1)).asInstanceOf[Union]
-    val r2 = widenSetOperationTypes(Except(left1, right1)).asInstanceOf[Except]
-    val r3 = widenSetOperationTypes(Intersect(left1, right1)).asInstanceOf[Intersect]
+    val r2 = widenSetOperationTypes(
+      Except(left1, right1, isAll = false)).asInstanceOf[Except]
+    val r3 = widenSetOperationTypes(
+      Intersect(left1, right1, isAll = false)).asInstanceOf[Intersect]
 
     checkOutput(r1.children.head, expectedType1)
     checkOutput(r1.children.last, expectedType1)
@@ -1310,16 +1346,20 @@ class TypeCoercionSuite extends AnalysisTest {
         AttributeReference("r", rType)())
 
       val r1 = widenSetOperationTypes(Union(plan1, plan2)).asInstanceOf[Union]
-      val r2 = widenSetOperationTypes(Except(plan1, plan2)).asInstanceOf[Except]
-      val r3 = widenSetOperationTypes(Intersect(plan1, plan2)).asInstanceOf[Intersect]
+      val r2 = widenSetOperationTypes(
+        Except(plan1, plan2, isAll = false)).asInstanceOf[Except]
+      val r3 = widenSetOperationTypes(
+        Intersect(plan1, plan2, isAll = false)).asInstanceOf[Intersect]
 
       checkOutput(r1.children.last, Seq(expectedType))
       checkOutput(r2.right, Seq(expectedType))
       checkOutput(r3.right, Seq(expectedType))
 
       val r4 = widenSetOperationTypes(Union(plan2, plan1)).asInstanceOf[Union]
-      val r5 = widenSetOperationTypes(Except(plan2, plan1)).asInstanceOf[Except]
-      val r6 = widenSetOperationTypes(Intersect(plan2, plan1)).asInstanceOf[Intersect]
+      val r5 = widenSetOperationTypes(
+        Except(plan2, plan1, isAll = false)).asInstanceOf[Except]
+      val r6 = widenSetOperationTypes(
+        Intersect(plan2, plan1, isAll = false)).asInstanceOf[Intersect]
 
       checkOutput(r4.children.last, Seq(expectedType))
       checkOutput(r5.left, Seq(expectedType))

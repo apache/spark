@@ -242,7 +242,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
         val workOffers = activeExecutors.map {
           case (id, executorData) =>
-            new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
+            new WorkerOffer(id, executorData.executorHost, executorData.freeCores,
+              Some(executorData.executorAddress.hostPort))
         }.toIndexedSeq
         scheduler.resourceOffers(workOffers)
       }
@@ -267,7 +268,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         if (executorIsAlive(executorId)) {
           val executorData = executorDataMap(executorId)
           val workOffers = IndexedSeq(
-            new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))
+            new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores,
+              Some(executorData.executorAddress.hostPort)))
           scheduler.resourceOffers(workOffers)
         } else {
           Seq.empty
@@ -288,7 +290,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       for (task <- tasks.flatten) {
         val serializedTask = TaskDescription.encode(task)
         if (serializedTask.limit() >= maxRpcMessageSize) {
-          scheduler.taskIdToTaskSetManager.get(task.taskId).foreach { taskSetMgr =>
+          Option(scheduler.taskIdToTaskSetManager.get(task.taskId)).foreach { taskSetMgr =>
             try {
               var msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
                 "spark.rpc.message.maxSize (%d bytes). Consider increasing " +
@@ -492,6 +494,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   override def getExecutorIds(): Seq[String] = {
     executorDataMap.keySet.toSeq
+  }
+
+  override def maxNumConcurrentTasks(): Int = {
+    executorDataMap.values.map { executor =>
+      executor.totalCores / scheduler.CPUS_PER_TASK
+    }.sum
   }
 
   /**

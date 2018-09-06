@@ -95,7 +95,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(!deserial.toString().isEmpty())
   }
 
-  test("distinct with known partitioner does not cause shuffle") {
+  test("distinct with known partitioner preserves partitioning") {
     val rdd = sc.parallelize(1.to(100), 10).map(x => (x % 10, x % 10)).sortByKey()
     val initialPartitioner = rdd.partitioner
     val distinctRdd = rdd.distinct()

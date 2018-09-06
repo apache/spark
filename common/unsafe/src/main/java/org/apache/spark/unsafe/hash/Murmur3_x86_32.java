@@ -19,6 +19,7 @@ package org.apache.spark.unsafe.hash;
 
 import com.google.common.primitives.Ints;
 
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -59,7 +60,7 @@ public final class Murmur3_x86_32 {
     // This is based on Guava's `Murmur32_Hasher.processRemaining(ByteBuffer)` method.
     int lengthInBytes = Ints.checkedCast(base.size());
     assert (lengthInBytes % 8 == 0): "lengthInBytes must be a multiple of 8 (word-aligned)";
-    int h1 = hashBytesByIntBlock(base, seed);
+    int h1 = hashBytesByIntBlock(base, lengthInBytes, seed);
     return fmix(h1, lengthInBytes);
   }
 
@@ -69,14 +70,19 @@ public final class Murmur3_x86_32 {
   }
 
   public static int hashUnsafeBytesBlock(MemoryBlock base, int seed) {
+    return hashUnsafeBytesBlock(base, Ints.checkedCast(base.size()), seed);
+  }
+
+  private static int hashUnsafeBytesBlock(MemoryBlock base, int lengthInBytes, int seed) {
     // This is not compatible with original and another implementations.
     // But remain it for backward compatibility for the components existing before 2.3.
-    int lengthInBytes = Ints.checkedCast(base.size());
     assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
     int lengthAligned = lengthInBytes - lengthInBytes % 4;
-    int h1 = hashBytesByIntBlock(base.subBlock(0, lengthAligned), seed);
+    int h1 = hashBytesByIntBlock(base, lengthAligned, seed);
+    long offset = base.getBaseOffset();
+    Object o = base.getBaseObject();
     for (int i = lengthAligned; i < lengthInBytes; i++) {
-      int halfWord = base.getByte(i);
+      int halfWord = Platform.getByte(o, offset + i);
       int k1 = mixK1(halfWord);
       h1 = mixH1(h1, k1);
     }
@@ -84,7 +90,7 @@ public final class Murmur3_x86_32 {
   }
 
   public static int hashUTF8String(UTF8String str, int seed) {
-    return hashUnsafeBytesBlock(str.getMemoryBlock(), seed);
+    return hashUnsafeBytesBlock(str.getMemoryBlock(), str.numBytes(), seed);
   }
 
   public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes, int seed) {
@@ -101,7 +107,7 @@ public final class Murmur3_x86_32 {
     int lengthInBytes = Ints.checkedCast(base.size());
     assert (lengthInBytes >= 0) : "lengthInBytes cannot be negative";
     int lengthAligned = lengthInBytes - lengthInBytes % 4;
-    int h1 = hashBytesByIntBlock(base.subBlock(0, lengthAligned), seed);
+    int h1 = hashBytesByIntBlock(base, lengthAligned, seed);
     int k1 = 0;
     for (int i = lengthAligned, shift = 0; i < lengthInBytes; i++, shift += 8) {
       k1 ^= (base.getByte(i) & 0xFF) << shift;
@@ -110,11 +116,10 @@ public final class Murmur3_x86_32 {
     return fmix(h1, lengthInBytes);
   }
 
-  private static int hashBytesByIntBlock(MemoryBlock base, int seed) {
-    long lengthInBytes = base.size();
+  private static int hashBytesByIntBlock(MemoryBlock base, int lengthInBytes, int seed) {
     assert (lengthInBytes % 4 == 0);
     int h1 = seed;
-    for (long i = 0; i < lengthInBytes; i += 4) {
+    for (int i = 0; i < lengthInBytes; i += 4) {
       int halfWord = base.getInt(i);
       int k1 = mixK1(halfWord);
       h1 = mixH1(h1, k1);

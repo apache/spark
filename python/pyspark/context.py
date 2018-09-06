@@ -126,7 +126,7 @@ class SparkContext(object):
         self.environment = environment or {}
         # java gateway must have been launched at this point.
         if conf is not None and conf._jconf is not None:
-            # conf has been initialized in JVM properly, so use conf directly. This represent the
+            # conf has been initialized in JVM properly, so use conf directly. This represents the
             # scenario that JVM has been launched before SparkConf is created (e.g. SparkContext is
             # created and then stopped, and we create a new SparkConf and new SparkContext again)
             self._conf = conf
@@ -183,9 +183,10 @@ class SparkContext(object):
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server
-        self._accumulatorServer = accumulators._start_update_server()
+        auth_token = self._gateway.gateway_parameters.auth_token
+        self._accumulatorServer = accumulators._start_update_server(auth_token)
         (host, port) = self._accumulatorServer.server_address
-        self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port)
+        self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port, auth_token)
         self._jsc.sc().register(self._javaAccumulator)
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
@@ -493,10 +494,14 @@ class SparkContext(object):
             c = list(c)    # Make it a list so we can compute its length
         batchSize = max(1, min(len(c) // numSlices, self._batchSize or 1024))
         serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
-        jrdd = self._serialize_to_jvm(c, numSlices, serializer)
+
+        def reader_func(temp_filename):
+            return self._jvm.PythonRDD.readRDDFromFile(self._jsc, temp_filename, numSlices)
+
+        jrdd = self._serialize_to_jvm(c, serializer, reader_func)
         return RDD(jrdd, self, serializer)
 
-    def _serialize_to_jvm(self, data, parallelism, serializer):
+    def _serialize_to_jvm(self, data, serializer, reader_func):
         """
         Calling the Java parallelize() method with an ArrayList is too slow,
         because it sends O(n) Py4J commands.  As an alternative, serialized
@@ -506,8 +511,7 @@ class SparkContext(object):
         try:
             serializer.dump_stream(data, tempFile)
             tempFile.close()
-            readRDDFromFile = self._jvm.PythonRDD.readRDDFromFile
-            return readRDDFromFile(self._jsc, tempFile.name, parallelism)
+            return reader_func(tempFile.name)
         finally:
             # readRDDFromFile eagerily reads the file so we can delete right after.
             os.unlink(tempFile.name)
@@ -933,10 +937,10 @@ class SparkContext(object):
         >>> def stop_job():
         ...     sleep(5)
         ...     sc.cancelJobGroup("job_to_cancel")
-        >>> supress = lock.acquire()
-        >>> supress = threading.Thread(target=start_job, args=(10,)).start()
-        >>> supress = threading.Thread(target=stop_job).start()
-        >>> supress = lock.acquire()
+        >>> suppress = lock.acquire()
+        >>> suppress = threading.Thread(target=start_job, args=(10,)).start()
+        >>> suppress = threading.Thread(target=stop_job).start()
+        >>> suppress = lock.acquire()
         >>> print(result)
         Cancelled
 

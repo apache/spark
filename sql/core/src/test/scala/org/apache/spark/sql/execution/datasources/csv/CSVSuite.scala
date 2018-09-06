@@ -18,12 +18,14 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
-import java.nio.charset.UnsupportedCharsetException
+import java.nio.charset.{Charset, UnsupportedCharsetException}
+import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+import scala.util.Properties
 
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
@@ -512,6 +514,41 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
       checkAnswer(df1, df3)
     }
+  }
+
+  test("SPARK-19018: Save csv with custom charset") {
+
+    // scalastyle:off nonascii
+    val content = "µß áâä ÁÂÄ"
+    // scalastyle:on nonascii
+
+    Seq("iso-8859-1", "utf-8", "utf-16", "utf-32", "windows-1250").foreach { encoding =>
+      withTempPath { path =>
+        val csvDir = new File(path, "csv")
+        Seq(content).toDF().write
+          .option("encoding", encoding)
+          .csv(csvDir.getCanonicalPath)
+
+        csvDir.listFiles().filter(_.getName.endsWith("csv")).foreach({ csvFile =>
+          val readback = Files.readAllBytes(csvFile.toPath)
+          val expected = (content + Properties.lineSeparator).getBytes(Charset.forName(encoding))
+          assert(readback === expected)
+        })
+      }
+    }
+  }
+
+  test("SPARK-19018: error handling for unsupported charsets") {
+    val exception = intercept[SparkException] {
+      withTempPath { path =>
+        val csvDir = new File(path, "csv").getCanonicalPath
+        Seq("a,A,c,A,b,B").toDF().write
+          .option("encoding", "1-9588-osi")
+          .csv(csvDir)
+      }
+    }
+
+    assert(exception.getCause.getMessage.contains("1-9588-osi"))
   }
 
   test("commented lines in CSV data") {
@@ -1566,6 +1603,39 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
   }
 
+  test("SPARK-25134: check header on parsing of dataset with projection and column pruning") {
+    withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "true") {
+      Seq(false, true).foreach { multiLine =>
+        withTempPath { path =>
+          val dir = path.getAbsolutePath
+          Seq(("a", "b")).toDF("columnA", "columnB").write
+            .format("csv")
+            .option("header", true)
+            .save(dir)
+
+          // schema with one column
+          checkAnswer(spark.read
+            .format("csv")
+            .option("header", true)
+            .option("enforceSchema", false)
+            .option("multiLine", multiLine)
+            .load(dir)
+            .select("columnA"),
+            Row("a"))
+
+          // empty schema
+          assert(spark.read
+            .format("csv")
+            .option("header", true)
+            .option("enforceSchema", false)
+            .option("multiLine", multiLine)
+            .load(dir)
+            .count() === 1L)
+        }
+      }
+    }
+  }
+
   test("SPARK-24645 skip parsing when columnPruning enabled and partitions scanned only") {
     withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "true") {
       withTempPath { path =>
@@ -1603,5 +1673,31 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         checkAnswer(df2, Row(1, 2, null))
       }
     }
+  }
+
+  test("count() for malformed input") {
+    def countForMalformedCSV(expected: Long, input: Seq[String]): Unit = {
+      val schema = new StructType().add("a", IntegerType)
+      val strings = spark.createDataset(input)
+      val df = spark.read.schema(schema).option("header", false).csv(strings)
+
+      assert(df.count() == expected)
+    }
+    def checkCount(expected: Long): Unit = {
+      val validRec = "1"
+      val inputs = Seq(
+        Seq("{-}", validRec),
+        Seq(validRec, "?"),
+        Seq("0xAC", validRec),
+        Seq(validRec, "0.314"),
+        Seq("\\\\\\", validRec)
+      )
+      inputs.foreach { input =>
+        countForMalformedCSV(expected, input)
+      }
+    }
+
+    checkCount(2)
+    countForMalformedCSV(0, Seq(""))
   }
 }

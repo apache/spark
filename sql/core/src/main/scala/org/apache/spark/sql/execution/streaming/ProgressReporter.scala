@@ -24,12 +24,12 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExec
-import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader
+import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReadSupport
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.util.Clock
@@ -167,6 +167,7 @@ trait ProgressReporter extends Logging {
         processedRowsPerSecond = numRecords / processingTimeSec
       )
     }
+
     val sinkProgress = new SinkProgress(sink.toString)
 
     val newProgress = new StreamingQueryProgress(
@@ -250,7 +251,7 @@ trait ProgressReporter extends Logging {
       // Check whether the streaming query's logical plan has only V2 data sources
       val allStreamingLeaves =
         logicalPlan.collect { case s: StreamingExecutionRelation => s }
-      allStreamingLeaves.forall { _.source.isInstanceOf[MicroBatchReader] }
+      allStreamingLeaves.forall { _.source.isInstanceOf[MicroBatchReadSupport] }
     }
 
     if (onlyDataSourceV2Sources) {
@@ -259,7 +260,7 @@ trait ProgressReporter extends Logging {
       // DataSourceV2ScanExec records the number of rows it has read using SQLMetrics. However,
       // just collecting all DataSourceV2ScanExec nodes and getting the metric is not correct as
       // a DataSourceV2ScanExec instance may be referred to in the execution plan from two (or
-      // even multiple times) points and considering it twice will leads to double counting. We
+      // even multiple times) points and considering it twice will lead to double counting. We
       // can't dedup them using their hashcode either because two different instances of
       // DataSourceV2ScanExec can have the same hashcode but account for separate sets of
       // records read, and deduping them to consider only one of them would be undercounting the
@@ -277,7 +278,7 @@ trait ProgressReporter extends Logging {
         new IdentityHashMap[DataSourceV2ScanExec, DataSourceV2ScanExec]()
 
       lastExecution.executedPlan.collectLeaves().foreach {
-        case s: DataSourceV2ScanExec if s.reader.isInstanceOf[BaseStreamingSource] =>
+        case s: DataSourceV2ScanExec if s.readSupport.isInstanceOf[BaseStreamingSource] =>
           uniqueStreamingExecLeavesMap.put(s, s)
         case _ =>
       }
@@ -285,7 +286,7 @@ trait ProgressReporter extends Logging {
       val sourceToInputRowsTuples =
         uniqueStreamingExecLeavesMap.values.asScala.map { execLeaf =>
           val numRows = execLeaf.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
-          val source = execLeaf.reader.asInstanceOf[BaseStreamingSource]
+          val source = execLeaf.readSupport.asInstanceOf[BaseStreamingSource]
           source -> numRows
         }.toSeq
       logDebug("Source -> # input rows\n\t" + sourceToInputRowsTuples.mkString("\n\t"))

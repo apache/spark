@@ -69,7 +69,7 @@ case class InsertIntoHiveTable(
     query: LogicalPlan,
     overwrite: Boolean,
     ifPartitionNotExists: Boolean,
-    outputColumns: Seq[Attribute]) extends SaveAsHiveFile {
+    outputColumnNames: Seq[String]) extends SaveAsHiveFile {
 
   /**
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the

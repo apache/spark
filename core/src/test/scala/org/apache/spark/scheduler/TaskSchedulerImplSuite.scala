@@ -36,6 +36,7 @@ class FakeSchedulerBackend extends SchedulerBackend {
   def stop() {}
   def reviveOffers() {}
   def defaultParallelism(): Int = 1
+  def maxNumConcurrentTasks(): Int = 0
 }
 
 class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach
@@ -62,7 +63,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   override def afterEach(): Unit = {
-    super.afterEach()
     if (taskScheduler != null) {
       taskScheduler.stop()
       taskScheduler = null
@@ -71,6 +71,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       dagScheduler.stop()
       dagScheduler = null
     }
+    super.afterEach()
   }
 
   def setupScheduler(confs: (String, String)*): TaskSchedulerImpl = {
@@ -247,7 +248,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskScheduler.submitTasks(attempt2)
     val taskDescriptions3 = taskScheduler.resourceOffers(workerOffers).flatten
     assert(1 === taskDescriptions3.length)
-    val mgr = taskScheduler.taskIdToTaskSetManager.get(taskDescriptions3(0).taskId).get
+    val mgr = Option(taskScheduler.taskIdToTaskSetManager.get(taskDescriptions3(0).taskId)).get
     assert(mgr.taskSet.stageAttemptId === 1)
     assert(!failedTaskSet)
   }
@@ -285,7 +286,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(10 === taskDescriptions3.length)
 
     taskDescriptions3.foreach { task =>
-      val mgr = taskScheduler.taskIdToTaskSetManager.get(task.taskId).get
+      val mgr = Option(taskScheduler.taskIdToTaskSetManager.get(task.taskId)).get
       assert(mgr.taskSet.stageAttemptId === 1)
     }
     assert(!failedTaskSet)
@@ -723,7 +724,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // only schedule one task because of locality
     assert(taskDescs.size === 1)
 
-    val mgr = taskScheduler.taskIdToTaskSetManager.get(taskDescs(0).taskId).get
+    val mgr = Option(taskScheduler.taskIdToTaskSetManager.get(taskDescs(0).taskId)).get
     assert(mgr.myLocalityLevels.toSet === Set(TaskLocality.NODE_LOCAL, TaskLocality.ANY))
     // we should know about both executors, even though we only scheduled tasks on one of them
     assert(taskScheduler.getExecutorsAliveOnHost("host0") === Some(Set("executor0")))
@@ -1020,5 +1021,119 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       // perspective, as the failures weren't from a problem w/ the tasks themselves.
       verify(blacklist).updateBlacklistForSuccessfulTaskSet(meq(0), meq(stageAttempt), anyObject())
     }
+  }
+
+  test("don't schedule for a barrier taskSet if available slots are less than pending tasks") {
+    val taskCpus = 2
+    val taskScheduler = setupScheduler("spark.task.cpus" -> taskCpus.toString)
+
+    val numFreeCores = 3
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625")),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627")))
+    val attempt1 = FakeTask.createBarrierTaskSet(3)
+
+    // submit attempt 1, offer some resources, since the available slots are less than pending
+    // tasks, don't schedule barrier tasks on the resource offer.
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(0 === taskDescriptions.length)
+  }
+
+  test("schedule tasks for a barrier taskSet if all tasks can be launched together") {
+    val taskCpus = 2
+    val taskScheduler = setupScheduler("spark.task.cpus" -> taskCpus.toString)
+
+    val numFreeCores = 3
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625")),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627")),
+      new WorkerOffer("executor2", "host2", numFreeCores, Some("192.168.0.101:49629")))
+    val attempt1 = FakeTask.createBarrierTaskSet(3)
+
+    // submit attempt 1, offer some resources, all tasks get launched together
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(3 === taskDescriptions.length)
+  }
+
+  test("cancelTasks shall kill all the running tasks and fail the stage") {
+    val taskScheduler = setupScheduler()
+
+    taskScheduler.initialize(new FakeSchedulerBackend {
+      override def killTask(
+          taskId: Long,
+          executorId: String,
+          interruptThread: Boolean,
+          reason: String): Unit = {
+        // Since we only submit one stage attempt, the following call is sufficient to mark the
+        // task as killed.
+        taskScheduler.taskSetManagerForAttempt(0, 0).get.runningTasksSet.remove(taskId)
+      }
+    })
+
+    val attempt1 = FakeTask.createTaskSet(10, 0)
+    taskScheduler.submitTasks(attempt1)
+
+    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 1),
+      new WorkerOffer("executor1", "host1", 1))
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(2 === taskDescriptions.length)
+    val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
+    assert(2 === tsm.runningTasks)
+
+    taskScheduler.cancelTasks(0, false)
+    assert(0 === tsm.runningTasks)
+    assert(tsm.isZombie)
+    assert(taskScheduler.taskSetManagerForAttempt(0, 0).isEmpty)
+  }
+
+  test("killAllTaskAttempts shall kill all the running tasks and not fail the stage") {
+    val taskScheduler = setupScheduler()
+
+    taskScheduler.initialize(new FakeSchedulerBackend {
+      override def killTask(
+          taskId: Long,
+          executorId: String,
+          interruptThread: Boolean,
+          reason: String): Unit = {
+        // Since we only submit one stage attempt, the following call is sufficient to mark the
+        // task as killed.
+        taskScheduler.taskSetManagerForAttempt(0, 0).get.runningTasksSet.remove(taskId)
+      }
+    })
+
+    val attempt1 = FakeTask.createTaskSet(10, 0)
+    taskScheduler.submitTasks(attempt1)
+
+    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 1),
+      new WorkerOffer("executor1", "host1", 1))
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(2 === taskDescriptions.length)
+    val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
+    assert(2 === tsm.runningTasks)
+
+    taskScheduler.killAllTaskAttempts(0, false, "test")
+    assert(0 === tsm.runningTasks)
+    assert(!tsm.isZombie)
+    assert(taskScheduler.taskSetManagerForAttempt(0, 0).isDefined)
+  }
+
+  test("mark taskset for a barrier stage as zombie in case a task fails") {
+    val taskScheduler = setupScheduler()
+
+    val attempt = FakeTask.createBarrierTaskSet(3)
+    taskScheduler.submitTasks(attempt)
+
+    val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
+    val offers = (0 until 3).map{ idx =>
+      WorkerOffer(s"exec-$idx", s"host-$idx", 1, Some(s"192.168.0.101:4962$idx"))
+    }
+    taskScheduler.resourceOffers(offers)
+    assert(tsm.runningTasks === 3)
+
+    // Fail a task from the stage attempt.
+    tsm.handleFailedTask(tsm.taskAttempts.head.head.taskId, TaskState.FAILED, TaskKilled("test"))
+    assert(tsm.isZombie)
   }
 }

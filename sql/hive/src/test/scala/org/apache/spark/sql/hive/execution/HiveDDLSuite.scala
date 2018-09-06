@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
+import java.util.Date
 
 import scala.language.existentials
 
@@ -59,7 +60,8 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
   protected override def generateTable(
       catalog: SessionCatalog,
       name: TableIdentifier,
-      isDataSource: Boolean): CatalogTable = {
+      isDataSource: Boolean,
+      partitionCols: Seq[String] = Seq("a", "b")): CatalogTable = {
     val storage =
       if (isDataSource) {
         val serde = HiveSerDe.sourceToSerDe("parquet")
@@ -83,17 +85,17 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     val metadata = new MetadataBuilder()
       .putString("key", "value")
       .build()
+    val schema = new StructType()
+      .add("col1", "int", nullable = true, metadata = metadata)
+      .add("col2", "string")
     CatalogTable(
       identifier = name,
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
-      schema = new StructType()
-        .add("col1", "int", nullable = true, metadata = metadata)
-        .add("col2", "string")
-        .add("a", "int")
-        .add("b", "int"),
+      schema = schema.copy(
+        fields = schema.fields ++ partitionCols.map(StructField(_, IntegerType))),
       provider = if (isDataSource) Some("parquet") else Some("hive"),
-      partitionColumnNames = Seq("a", "b"),
+      partitionColumnNames = partitionCols,
       createTime = 0L,
       createVersion = org.apache.spark.SPARK_VERSION,
       tracksPartitionsInCatalog = true)
@@ -753,6 +755,54 @@ class HiveDDLSuite
     }
   }
 
+  test("Insert overwrite Hive table should output correct schema") {
+    withSQLConf(CONVERT_METASTORE_PARQUET.key -> "false") {
+      withTable("tbl", "tbl2") {
+        withView("view1") {
+          spark.sql("CREATE TABLE tbl(id long)")
+          spark.sql("INSERT OVERWRITE TABLE tbl VALUES 4")
+          spark.sql("CREATE VIEW view1 AS SELECT id FROM tbl")
+          withTempPath { path =>
+            sql(
+              s"""
+                |CREATE TABLE tbl2(ID long) USING hive
+                |OPTIONS(fileFormat 'parquet')
+                |LOCATION '${path.toURI}'
+              """.stripMargin)
+            spark.sql("INSERT OVERWRITE TABLE tbl2 SELECT ID FROM view1")
+            val expectedSchema = StructType(Seq(StructField("ID", LongType, true)))
+            assert(spark.read.parquet(path.toString).schema == expectedSchema)
+            checkAnswer(spark.table("tbl2"), Seq(Row(4)))
+          }
+        }
+      }
+    }
+  }
+
+  test("Create Hive table as select should output correct schema") {
+    withSQLConf(CONVERT_METASTORE_PARQUET.key -> "false") {
+      withTable("tbl", "tbl2") {
+        withView("view1") {
+          spark.sql("CREATE TABLE tbl(id long)")
+          spark.sql("INSERT OVERWRITE TABLE tbl VALUES 4")
+          spark.sql("CREATE VIEW view1 AS SELECT id FROM tbl")
+          withTempPath { path =>
+            sql(
+              s"""
+                |CREATE TABLE tbl2 USING hive
+                |OPTIONS(fileFormat 'parquet')
+                |LOCATION '${path.toURI}'
+                |AS SELECT ID FROM view1
+              """.stripMargin)
+            val expectedSchema = StructType(Seq(StructField("ID", LongType, true)))
+            assert(spark.read.parquet(path.toString).schema == expectedSchema)
+            checkAnswer(spark.table("tbl2"), Seq(Row(4)))
+          }
+        }
+      }
+    }
+  }
+
   test("alter table partition - storage information") {
     sql("CREATE TABLE boxes (height INT, length INT) PARTITIONED BY (width INT)")
     sql("INSERT OVERWRITE TABLE boxes PARTITION (width=4) SELECT 4, 4")
@@ -782,7 +832,7 @@ class HiveDDLSuite
     val part1 = Map("a" -> "1", "b" -> "5")
     val part2 = Map("a" -> "2", "b" -> "6")
     val root = new Path(catalog.getTableMetadata(tableIdent).location)
-    val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
+    val fs = root.getFileSystem(spark.sessionState.newHadoopConf())
     // valid
     fs.mkdirs(new Path(new Path(root, "a=1"), "b=5"))
     fs.createNewFile(new Path(new Path(root, "a=1/b=5"), "a.csv"))  // file
@@ -2247,6 +2297,18 @@ class HiveDDLSuite
       spark.range(1).select('id, 'id as 'col1, 'id as 'col2).write.saveAsTable("t3")
       spark.sql("select COL1, COL2 from t3").write.format("hive").saveAsTable("t4")
       checkAnswer(spark.table("t4"), Row(0, 0))
+    }
+  }
+
+  test("SPARK-24812: desc formatted table for last access verification") {
+    withTable("t1") {
+      sql(
+        "CREATE TABLE IF NOT EXISTS t1 (c1_int INT, c2_string STRING, c3_float FLOAT)")
+      val desc = sql("DESC FORMATTED t1").filter($"col_name".startsWith("Last Access"))
+        .select("data_type")
+      // check if the last access time doesnt have the default date of year
+      // 1970 as its a wrong access time
+      assert(!(desc.first.toString.contains("1970")))
     }
   }
 

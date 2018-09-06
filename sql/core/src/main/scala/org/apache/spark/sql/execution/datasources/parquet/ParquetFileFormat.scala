@@ -22,7 +22,6 @@ import java.net.URI
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.parallel.ForkJoinTaskSupport
 import scala.util.{Failure, Try}
 
 import org.apache.hadoop.conf.Configuration
@@ -311,6 +310,9 @@ class ParquetFileFormat
     hadoopConf.set(
       SQLConf.SESSION_LOCAL_TIMEZONE.key,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
+    hadoopConf.setBoolean(
+      SQLConf.CASE_SENSITIVE.key,
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     ParquetWriteSupport.setSchema(requiredSchema, hadoopConf)
 
@@ -345,6 +347,7 @@ class ParquetFileFormat
     val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
     val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
     val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
+    val isCaseSensitive = sqlConf.caseSensitiveAnalysis
 
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
@@ -370,7 +373,7 @@ class ParquetFileFormat
       val pushed = if (enableParquetFilterPushDown) {
         val parquetSchema = footerFileMetaData.getSchema
         val parquetFilters = new ParquetFilters(pushDownDate, pushDownTimestamp, pushDownDecimal,
-          pushDownStringStartWith, pushDownInFilterThreshold)
+          pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive)
         filters
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
@@ -411,7 +414,7 @@ class ParquetFileFormat
           convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined, capacity)
         val iter = new RecordReaderIterator(vectorizedReader)
         // SPARK-23457 Register a task completion lister before `initialization`.
-        taskContext.foreach(_.addTaskCompletionListener(_ => iter.close()))
+        taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
         vectorizedReader.initBatch(partitionSchema, file.partitionValues)
@@ -432,7 +435,7 @@ class ParquetFileFormat
         }
         val iter = new RecordReaderIterator(reader)
         // SPARK-23457 Register a task completion lister before `initialization`.
-        taskContext.foreach(_.addTaskCompletionListener(_ => iter.close()))
+        taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
         reader.initialize(split, hadoopAttemptContext)
 
         val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
@@ -532,30 +535,23 @@ object ParquetFileFormat extends Logging {
       conf: Configuration,
       partFiles: Seq[FileStatus],
       ignoreCorruptFiles: Boolean): Seq[Footer] = {
-    val parFiles = partFiles.par
-    val pool = ThreadUtils.newForkJoinPool("readingParquetFooters", 8)
-    parFiles.tasksupport = new ForkJoinTaskSupport(pool)
-    try {
-      parFiles.flatMap { currentFile =>
-        try {
-          // Skips row group information since we only need the schema.
-          // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
-          // when it can't read the footer.
-          Some(new Footer(currentFile.getPath(),
-            ParquetFileReader.readFooter(
-              conf, currentFile, SKIP_ROW_GROUPS)))
-        } catch { case e: RuntimeException =>
-          if (ignoreCorruptFiles) {
-            logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
-            None
-          } else {
-            throw new IOException(s"Could not read footer for file: $currentFile", e)
-          }
+    ThreadUtils.parmap(partFiles, "readingParquetFooters", 8) { currentFile =>
+      try {
+        // Skips row group information since we only need the schema.
+        // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
+        // when it can't read the footer.
+        Some(new Footer(currentFile.getPath(),
+          ParquetFileReader.readFooter(
+            conf, currentFile, SKIP_ROW_GROUPS)))
+      } catch { case e: RuntimeException =>
+        if (ignoreCorruptFiles) {
+          logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
+          None
+        } else {
+          throw new IOException(s"Could not read footer for file: $currentFile", e)
         }
-      }.seq
-    } finally {
-      pool.shutdown()
-    }
+      }
+    }.flatten
   }
 
   /**

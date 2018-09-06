@@ -138,6 +138,66 @@ case class Not(child: Expression)
   override def sql: String = s"(NOT ${child.sql})"
 }
 
+/**
+ * Evaluates to `true` if `values` are returned in `query`'s result set.
+ */
+case class InSubquery(values: Seq[Expression], query: ListQuery)
+  extends Predicate with Unevaluable {
+
+  @transient lazy val value: Expression = if (values.length > 1) {
+    CreateNamedStruct(values.zipWithIndex.flatMap {
+      case (v: NamedExpression, _) => Seq(Literal(v.name), v)
+      case (v, idx) => Seq(Literal(s"_$idx"), v)
+    })
+  } else {
+    values.head
+  }
+
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val mismatchOpt = !DataType.equalsStructurally(query.dataType, value.dataType,
+      ignoreNullability = true)
+    if (mismatchOpt) {
+      if (values.length != query.childOutputs.length) {
+        TypeCheckResult.TypeCheckFailure(
+          s"""
+             |The number of columns in the left hand side of an IN subquery does not match the
+             |number of columns in the output of subquery.
+             |#columns in left hand side: ${values.length}.
+             |#columns in right hand side: ${query.childOutputs.length}.
+             |Left side columns:
+             |[${values.map(_.sql).mkString(", ")}].
+             |Right side columns:
+             |[${query.childOutputs.map(_.sql).mkString(", ")}].""".stripMargin)
+      } else {
+        val mismatchedColumns = values.zip(query.childOutputs).flatMap {
+          case (l, r) if l.dataType != r.dataType =>
+            Seq(s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})")
+          case _ => None
+        }
+        TypeCheckResult.TypeCheckFailure(
+          s"""
+             |The data type of one or more elements in the left hand side of an IN subquery
+             |is not compatible with the data type of the output of the subquery
+             |Mismatched columns:
+             |[${mismatchedColumns.mkString(", ")}]
+             |Left side:
+             |[${values.map(_.dataType.catalogString).mkString(", ")}].
+             |Right side:
+             |[${query.childOutputs.map(_.dataType.catalogString).mkString(", ")}].""".stripMargin)
+      }
+    } else {
+      TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
+    }
+  }
+
+  override def children: Seq[Expression] = values :+ query
+  override def nullable: Boolean = children.exists(_.nullable)
+  override def foldable: Boolean = children.forall(_.foldable)
+  override def toString: String = s"$value IN ($query)"
+  override def sql: String = s"(${value.sql} IN (${query.sql}))"
+}
+
 
 /**
  * Evaluates to `true` if `list` contains `value`.
@@ -169,44 +229,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     val mismatchOpt = list.find(l => !DataType.equalsStructurally(l.dataType, value.dataType,
       ignoreNullability = true))
     if (mismatchOpt.isDefined) {
-      list match {
-        case ListQuery(_, _, _, childOutputs) :: Nil =>
-          val valExprs = value match {
-            case cns: CreateNamedStruct => cns.valExprs
-            case expr => Seq(expr)
-          }
-          if (valExprs.length != childOutputs.length) {
-            TypeCheckResult.TypeCheckFailure(
-              s"""
-                 |The number of columns in the left hand side of an IN subquery does not match the
-                 |number of columns in the output of subquery.
-                 |#columns in left hand side: ${valExprs.length}.
-                 |#columns in right hand side: ${childOutputs.length}.
-                 |Left side columns:
-                 |[${valExprs.map(_.sql).mkString(", ")}].
-                 |Right side columns:
-                 |[${childOutputs.map(_.sql).mkString(", ")}].""".stripMargin)
-          } else {
-            val mismatchedColumns = valExprs.zip(childOutputs).flatMap {
-              case (l, r) if l.dataType != r.dataType =>
-                s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
-              case _ => None
-            }
-            TypeCheckResult.TypeCheckFailure(
-              s"""
-                 |The data type of one or more elements in the left hand side of an IN subquery
-                 |is not compatible with the data type of the output of the subquery
-                 |Mismatched columns:
-                 |[${mismatchedColumns.mkString(", ")}]
-                 |Left side:
-                 |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
-                 |Right side:
-                 |[${childOutputs.map(_.dataType.catalogString).mkString(", ")}].""".stripMargin)
-          }
-        case _ =>
-          TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
-            s"${value.dataType.catalogString} != ${mismatchOpt.get.dataType.catalogString}")
-      }
+      TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
+        s"${value.dataType.catalogString} != ${mismatchOpt.get.dataType.catalogString}")
     } else {
       TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
     }
@@ -307,9 +331,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   }
 
   override def sql: String = {
-    val childrenSQL = children.map(_.sql)
-    val valueSQL = childrenSQL.head
-    val listSQL = childrenSQL.tail.mkString(", ")
+    val valueSQL = value.sql
+    val listSQL = list.map(_.sql).mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }
 }

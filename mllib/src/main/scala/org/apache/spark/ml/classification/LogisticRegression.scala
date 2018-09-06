@@ -503,7 +503,7 @@ class LogisticRegression @Since("1.2.0") (
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(regParam, elasticNetParam, standardization, threshold,
+    instr.logParams(this, regParam, elasticNetParam, standardization, threshold,
       maxIter, tol, fitIntercept)
 
     val (summarizer, labelSummarizer) = {
@@ -519,7 +519,7 @@ class LogisticRegression @Since("1.2.0") (
         (new MultivariateOnlineSummarizer, new MultiClassSummarizer)
       )(seqOp, combOp, $(aggregationDepth))
     }
-    instr.logNamedValue(Instrumentation.loggerTags.numExamples, summarizer.count)
+    instr.logNumExamples(summarizer.count)
     instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
     instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
 
@@ -1484,7 +1484,7 @@ sealed trait LogisticRegressionSummary extends Serializable {
 
   /**
    * Convenient method for casting to binary logistic regression summary.
-   * This method will throws an Exception if the summary is not a binary summary.
+   * This method will throw an Exception if the summary is not a binary summary.
    */
   @Since("2.3.0")
   def asBinary: BinaryLogisticRegressionSummary = this match {

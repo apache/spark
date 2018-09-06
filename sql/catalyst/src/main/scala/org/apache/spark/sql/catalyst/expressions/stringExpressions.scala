@@ -91,7 +91,7 @@ case class ConcatWs(children: Seq[Expression])
       val args = ctx.freshName("args")
 
       val inputs = strings.zipWithIndex.map { case (eval, index) =>
-        if (eval.isNull != "true") {
+        if (eval.isNull != TrueLiteral) {
           s"""
              ${eval.code}
              if (!${eval.isNull}) {
@@ -123,14 +123,14 @@ case class ConcatWs(children: Seq[Expression])
         child.dataType match {
           case StringType =>
             ("", // we count all the StringType arguments num at once below.
-             if (eval.isNull == "true") {
+             if (eval.isNull == TrueLiteral) {
                ""
              } else {
                s"$array[$idxVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.value};"
              })
           case _: ArrayType =>
             val size = ctx.freshName("n")
-            if (eval.isNull == "true") {
+            if (eval.isNull == TrueLiteral) {
               ("", "")
             } else {
               (s"""
@@ -1554,10 +1554,9 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
  * A function that returns the char length of the given string expression or
  * number of bytes of the given binary expression.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the character length of string data or number of bytes of " +
-    "binary data. The length of string data includes the trailing spaces. The length of binary " +
-    "data includes binary zeros.",
+  usage = "_FUNC_(expr) - Returns the character length of string data or number of bytes of binary data. The length of string data includes the trailing spaces. The length of binary data includes binary zeros.",
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL ');
@@ -1567,6 +1566,7 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
       > SELECT CHARACTER_LENGTH('Spark SQL ');
        10
   """)
+// scalastyle:on line.size.limit
 case class Length(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))

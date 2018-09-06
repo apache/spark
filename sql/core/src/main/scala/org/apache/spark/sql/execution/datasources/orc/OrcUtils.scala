@@ -79,9 +79,10 @@ object OrcUtils extends Logging {
     val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
     val conf = sparkSession.sessionState.newHadoopConf()
     // TODO: We need to support merge schema. Please see SPARK-11412.
-    files.map(_.getPath).flatMap(readSchema(_, conf, ignoreCorruptFiles)).headOption.map { schema =>
-      logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
-      CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType]
+    files.toIterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
+      case Some(schema) =>
+        logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
+        CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType]
     }
   }
 

@@ -20,16 +20,19 @@ package org.apache.spark.sql.execution.streaming
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
+import org.apache.spark.sql.types.StructType
 
 class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
   test("data writer") {
     val partition = 1234
-    val writer = new MemoryDataWriter(partition, OutputMode.Append())
-    writer.write(Row(1))
-    writer.write(Row(2))
-    writer.write(Row(44))
+    val writer = new MemoryDataWriter(
+      partition, OutputMode.Append(), new StructType().add("i", "int"))
+    writer.write(InternalRow(1))
+    writer.write(InternalRow(2))
+    writer.write(InternalRow(44))
     val msg = writer.commit()
     assert(msg.data.map(_.getInt(0)) == Seq(1, 2, 44))
     assert(msg.partition == partition)
@@ -38,10 +41,11 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
     assert(writer.commit().data.isEmpty)
   }
 
-  test("continuous writer") {
+  test("streaming writer") {
     val sink = new MemorySinkV2
-    val writer = new MemoryStreamWriter(sink, OutputMode.Append())
-    writer.commit(0,
+    val writeSupport = new MemoryStreamingWriteSupport(
+      sink, OutputMode.Append(), new StructType().add("i", "int"))
+    writeSupport.commit(0,
       Array(
         MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))),
         MemoryWriterCommitMessage(1, Seq(Row(3), Row(4))),
@@ -49,28 +53,7 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
       ))
     assert(sink.latestBatchId.contains(0))
     assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7))
-    writer.commit(19,
-      Array(
-        MemoryWriterCommitMessage(3, Seq(Row(11), Row(22))),
-        MemoryWriterCommitMessage(0, Seq(Row(33)))
-      ))
-    assert(sink.latestBatchId.contains(19))
-    assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(11, 22, 33))
-
-    assert(sink.allData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7, 11, 22, 33))
-  }
-
-  test("microbatch writer") {
-    val sink = new MemorySinkV2
-    new MemoryWriter(sink, 0, OutputMode.Append()).commit(
-      Array(
-        MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))),
-        MemoryWriterCommitMessage(1, Seq(Row(3), Row(4))),
-        MemoryWriterCommitMessage(2, Seq(Row(6), Row(7)))
-      ))
-    assert(sink.latestBatchId.contains(0))
-    assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7))
-    new MemoryWriter(sink, 19, OutputMode.Append()).commit(
+    writeSupport.commit(19,
       Array(
         MemoryWriterCommitMessage(3, Seq(Row(11), Row(22))),
         MemoryWriterCommitMessage(0, Seq(Row(33)))
