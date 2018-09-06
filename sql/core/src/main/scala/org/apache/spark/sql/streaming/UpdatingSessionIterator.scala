@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, BindReferences, Cre
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.types.{LongType, TimestampType}
 
-class UpdateSessionIterator(
+class UpdatingSessionIterator(
     iter: Iterator[InternalRow],
     groupWithoutSessionExpressions: Seq[Expression],
     sessionExpression: Expression,
@@ -32,18 +32,17 @@ class UpdateSessionIterator(
     inputSchema: Seq[Attribute]) extends Iterator[InternalRow] {
 
   var currentKeys: InternalRow = _
-  var currentSessionStart: Long = null
-  var currentSessionEnd: Long = null
+  var currentSessionStart: Long = Long.MaxValue
+  var currentSessionEnd: Long = Long.MinValue
 
   var currentRows: mutable.MutableList[InternalRow] = _
 
   var returnRowsIter: Iterator[InternalRow] = _
-
-  val keysProjection = GenerateUnsafeProjection.generate(groupWithoutSessionExpressions)
-  val sessionProjection = GenerateUnsafeProjection.generate(Seq(sessionExpression))
-  val aggregateProjections = GenerateUnsafeProjection.generate(Seq(aggregateProjections))
+  var errorOnIterator: Boolean = false
 
   override def hasNext: Boolean = {
+    assertIteratorNotCorrupted()
+
     if (returnRowsIter != null && returnRowsIter.hasNext) {
       return true
     }
@@ -56,23 +55,35 @@ class UpdateSessionIterator(
   }
 
   override def next(): InternalRow = {
+    assertIteratorNotCorrupted()
+
     if (returnRowsIter != null && returnRowsIter.hasNext) {
       return returnRowsIter.next()
     }
 
-    while (iter.hasNext) {
+    var exitCondition = false
+    while (iter.hasNext && !exitCondition) {
       val row = iter.next()
+
+      val keysProjection = GenerateUnsafeProjection.generate(groupWithoutSessionExpressions,
+        inputSchema)
+      val sessionProjection = GenerateUnsafeProjection.generate(Seq(sessionExpression), inputSchema)
 
       val keys = keysProjection(row)
       val session = sessionProjection(row)
-      val sessionStart = session.getLong(0)
-      val sessionEnd = session.getLong(1)
+      val sessionRow = session.getStruct(0, 2)
+      val sessionStart = sessionRow.getLong(0)
+      val sessionEnd = sessionRow.getLong(1)
 
-      if (keys != currentKeys) {
+      if (currentKeys == null) {
+        startNewSession(row, keys, sessionStart, sessionEnd)
+      } else if (keys != currentKeys) {
         closeCurrentSession()
         startNewSession(row, keys, sessionStart, sessionEnd)
+        exitCondition = true
       } else {
         if (sessionStart < currentSessionStart) {
+          errorOnIterator = true
           throw new IllegalStateException("The iterator must be sorted by key and session start!")
         } else if (sessionStart <= currentSessionEnd) {
           // expanding session length if needed
@@ -81,6 +92,7 @@ class UpdateSessionIterator(
         } else {
           closeCurrentSession()
           startNewSession(row, keys, sessionStart, sessionEnd)
+          exitCondition = true
         }
       }
     }
@@ -90,7 +102,7 @@ class UpdateSessionIterator(
       closeCurrentSession()
     }
 
-    // here returnRowsIter should be at least one row
+    // here returnRowsIter should be able to provide at least one row
     require(returnRowsIter != null && returnRowsIter.hasNext)
 
     returnRowsIter.next()
@@ -139,8 +151,15 @@ class UpdateSessionIterator(
     returnRowsIter = returnRows.iterator
 
     currentKeys = null
-    currentSessionStart = null
-    currentSessionEnd = null
+    currentSessionStart = Long.MaxValue
+    currentSessionEnd = Long.MinValue
     currentRows = null
   }
+
+  private def assertIteratorNotCorrupted(): Unit = {
+    if (errorOnIterator) {
+      throw new IllegalStateException("The iterator is already corrupted.")
+    }
+  }
+
 }
