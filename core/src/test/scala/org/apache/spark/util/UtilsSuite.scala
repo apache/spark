@@ -1184,6 +1184,27 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.getSimpleName(classOf[MalformedClassObject.MalformedClass]) ===
       "UtilsSuite$MalformedClassObject$MalformedClass")
   }
+
+  test("stringHalfWidth") {
+    // scalastyle:off nonascii
+    assert(Utils.stringHalfWidth(null) == 0)
+    assert(Utils.stringHalfWidth("") == 0)
+    assert(Utils.stringHalfWidth("ab c") == 4)
+    assert(Utils.stringHalfWidth("1098") == 4)
+    assert(Utils.stringHalfWidth("mø") == 2)
+    assert(Utils.stringHalfWidth("γύρ") == 3)
+    assert(Utils.stringHalfWidth("pê") == 2)
+    assert(Utils.stringHalfWidth("ー") == 2)
+    assert(Utils.stringHalfWidth("测") == 2)
+    assert(Utils.stringHalfWidth("か") == 2)
+    assert(Utils.stringHalfWidth("걸") == 2)
+    assert(Utils.stringHalfWidth("à") == 1)
+    assert(Utils.stringHalfWidth("焼") == 2)
+    assert(Utils.stringHalfWidth("羍む") == 4)
+    assert(Utils.stringHalfWidth("뺭ᾘ") == 3)
+    assert(Utils.stringHalfWidth("\u0967\u0968\u0969") == 3)
+    // scalastyle:on nonascii
+  }
 }
 
 private class SimpleExtension
