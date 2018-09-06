@@ -1669,7 +1669,7 @@ def repeat(col, n):
     return Column(sc._jvm.functions.repeat(_to_java_column(col), n))
 
 
-@since(2.4)
+@since(1.5)
 @ignore_unicode_prefix
 def split(str, pattern, limit=-1):
     """
@@ -1678,7 +1678,7 @@ def split(str, pattern, limit=-1):
     :param str: a string expression to split
     :param pattern: a string representing a regular expression. The regex string should be
                   a Java regular expression.
-    :param limit: an integer expression which controls the number of times the pattern is applied.
+    :param limit: an integer which controls the number of times `pattern` is applied.
 
             * ``limit > 0``: The resulting array's length will not be more than `limit`, and the
                              resulting array's last entry will contain all input beyond the last
@@ -1686,12 +1686,13 @@ def split(str, pattern, limit=-1):
             * ``limit <= 0``: `pattern` will be applied as many times as possible, and the resulting
                               array can be of any size.
 
+    .. versionchanged:: 2.4
+       `split` now takes an optional `limit` field. If not provided, default limit value is -1.
+
     >>> df = spark.createDataFrame([('oneAtwoBthreeC',)], ['s',])
     >>> df.select(split(df.s, '[ABC]', 2).alias('s')).collect()
     [Row(s=[u'one', u'twoBthreeC'])]
     >>> df.select(split(df.s, '[ABC]', -1).alias('s')).collect()
-    [Row(s=[u'one', u'two', u'three', u''])]
-    >>> df.select(split(df.s, '[ABC]', 0).alias('s')).collect()
     [Row(s=[u'one', u'two', u'three', u''])]
     """
     sc = SparkContext._active_spark_context

@@ -3404,6 +3404,10 @@ setMethod("collect_set",
 #' Equivalent to \code{split} SQL function.
 #'
 #' @rdname column_string_functions
+#' @param pattern a regular expression
+#' @param limit determines the size of the returned array. If `limit` is positive,
+#'        size of the array will be at most `limit`. If `limit` is negative, the
+#'        returned array can have any size.
 #' @aliases split_string split_string,Column-method
 #' @examples
 #'

@@ -233,19 +233,18 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
  */
 @ExpressionDescription(
   usage = "_FUNC_(str, regex, limit) - Splits `str` around occurrences that match `regex`" +
-    " and returns an array of at most `limit`",
+    " and returns an array with a length of at most `limit`",
   arguments = """
     Arguments:
       * str - a string expression to split.
       * regex - a string representing a regular expression. The regex string should be a
         Java regular expression.
       * limit - an integer expression which controls the number of times the regex is applied.
-
-        limit > 0: The resulting array's length will not be more than `limit`,
-                   and the resulting array's last entry will contain all input
-                   beyond the last matched regex.
-        limit <= 0: `regex` will be applied as many times as possible, and
-                    the resulting array can be of any size.
+          * limit > 0: The resulting array's length will not be more than `limit`,
+                     and the resulting array's last entry will contain all input
+                     beyond the last matched regex.
+          * limit <= 0: `regex` will be applied as many times as possible, and
+                      the resulting array can be of any size.
   """,
   examples = """
     Examples:
@@ -280,7 +279,6 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   }
 
   override def prettyName: String = "split"
-
 }
 
 

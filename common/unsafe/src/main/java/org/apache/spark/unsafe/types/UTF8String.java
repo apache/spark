@@ -952,8 +952,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String[] split(UTF8String pattern, int limit) {
-    // Java String's split method supports "ignore empty string" behavior when the limit is 0.
-    // To avoid this, we fall back to -1 when the limit is 0.
+    // Java String's split method supports "ignore empty string" behavior when the limit is 0
+    // whereas other languages do not. To avoid this java specific behavior, we fall back to
+    // -1 when the limit is 0.
     if (limit == 0) {
       limit = -1;
     }

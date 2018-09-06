@@ -395,11 +395,11 @@ public class UTF8StringSuite {
   @Test
   public void split() {
     UTF8String[] negativeAndZeroLimitCase =
-            new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi"), fromString("")};
+      new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi"), fromString("")};
     assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 0),
-            negativeAndZeroLimitCase));
+      negativeAndZeroLimitCase));
     assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), -1),
-            negativeAndZeroLimitCase));
+      negativeAndZeroLimitCase));
     assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 2),
       new UTF8String[]{fromString("ab"), fromString("def,ghi,")}));
   }
