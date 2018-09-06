@@ -297,18 +297,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a partition specification map with filters.
    */
   override def visitDropPartitionSpec(
-      ctx: DropPartitionSpecContext): Seq[(String, String, String)] = {
+      ctx: DropPartitionSpecContext): Seq[Expression] = {
     withOrigin(ctx) {
       ctx.dropPartitionVal().asScala.map { pFilter =>
         if (pFilter.identifier() == null || pFilter.constant() == null ||
             pFilter.comparisonOperator() == null) {
           throw new ParseException(s"Invalid partition spec: ${pFilter.getText}", ctx)
         }
-        val partition = pFilter.identifier().getText
-        val value = visitStringConstant(pFilter.constant())
+        // We cannot use UnresolvedAttribute because resolution is performed after Analysis, when
+        // running the command. The type is not relevant, it is replaced during the real resolution
+        val partition =
+          AttributeReference(pFilter.identifier().getText, StringType)()
+        val value = Literal(visitStringConstant(pFilter.constant()))
         val operator = pFilter.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
-        val stringOperator = SqlBaseParser.VOCABULARY.getSymbolicName(operator.getSymbol.getType)
-        (partition, stringOperator, value)
+        buildComparison(partition, value, operator)
       }
     }
   }
@@ -1035,6 +1037,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val left = expression(ctx.left)
     val right = expression(ctx.right)
     val operator = ctx.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
+    buildComparison(left, right, operator)
+  }
+
+  /**
+   * Creates a comparison expression. The following comparison operators are supported:
+   * - Equal: '=' or '=='
+   * - Null-safe Equal: '<=>'
+   * - Not Equal: '<>' or '!='
+   * - Less than: '<'
+   * - Less then or Equal: '<='
+   * - Greater than: '>'
+   * - Greater then or Equal: '>='
+   */
+  private def buildComparison(
+      left: Expression,
+      right: Expression,
+      operator: TerminalNode): Expression = {
     operator.getSymbol.getType match {
       case SqlBaseParser.EQ =>
         EqualTo(left, right)
