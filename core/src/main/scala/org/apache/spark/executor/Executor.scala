@@ -140,6 +140,7 @@ private[spark] class Executor(
   if (pluginList.nonEmpty) {
     logDebug(s"Initializing the following plugins: ${pluginList.mkString(", ")}")
   }
+
   val executorPluginThread = new Thread {
     var plugins: Seq[ExecutorPlugin] = Nil
 

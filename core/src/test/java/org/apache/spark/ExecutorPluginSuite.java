@@ -31,6 +31,7 @@ public class ExecutorPluginSuite {
 
   // Static value modified by testing plugin to ensure plugin loaded correctly.
   public static int numSuccessfulPlugins = 0;
+
   // Static value modified by testing plugin to verify plugins shut down properly.
   public static int numSuccessfulTerminations = 0;
 
