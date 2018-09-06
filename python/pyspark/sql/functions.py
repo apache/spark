@@ -2805,21 +2805,21 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        |  2|6.0|
        +---+---+
        >>> @pandas_udf(
-       ...    "id long, additional_key double, v double",
+       ...    "id long, `ceil(v / 2)` long, v double",
        ...    PandasUDFType.GROUPED_MAP)  # doctest: +SKIP
        >>> def sum_udf(key, pdf):
        ...     # key is a tuple of two numpy.int64s, which is the values
        ...     # of 'id' and 'ceil(df.v / 2)' for the current group
        ...     return pd.DataFrame([key + (pdf.v.sum(),)])
        >>> df.groupby(df.id, ceil(df.v / 2)).apply(sum_udf).show()  # doctest: +SKIP
-       +---+--------------+----+
-       | id|additional_key|  v2|
-       +---+--------------+----+
-       |  2|           5.0|10.0|
-       |  1|           1.0| 3.0|
-       |  2|           3.0| 5.0|
-       |  2|           2.0| 3.0|
-       +---+--------------+----+
+       +---+-----------+----+
+       | id|ceil(v / 2)|   v|
+       +---+-----------+----+
+       |  2|          5|10.0|
+       |  1|          1| 3.0|
+       |  2|          3| 5.0|
+       |  2|          2| 3.0|
+       +---+-----------+----+
 
        .. note:: If returning a new `pandas.DataFrame` constructed with a dictionary, it is
            recommended to explicitly index the columns by name to ensure the positions are correct,
