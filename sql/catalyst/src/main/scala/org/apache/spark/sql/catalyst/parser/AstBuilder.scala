@@ -1311,7 +1311,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   protected def visitFunctionName(ctx: QualifiedNameContext): FunctionIdentifier = {
     ctx.identifier().asScala.map(_.getText) match {
       case Seq(db, fn) => FunctionIdentifier(fn, Option(db))
-      case Seq(fn) => FunctionIdentifier(fn, None)
+      case Seq(fn) => fn.split('.').toSeq match {
+        case Seq(d, f) => FunctionIdentifier(f, Option(d))
+        case _ => FunctionIdentifier(fn, None)
+      }
       case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
     }
   }

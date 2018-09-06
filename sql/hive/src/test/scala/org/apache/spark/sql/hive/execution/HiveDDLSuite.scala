@@ -2329,4 +2329,23 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("SPARK-25301: checks view with udf from non default database") {
+    val db = "d1"
+    withDatabase(db) {
+      spark.sql(s"CREATE DATABASE $db")
+      val table = "t1"
+      withTable(s"$db.$table") {
+        spark.sql(s"CREATE TABLE $db.$table AS SELECT 'abcd' c1, 'xyz' c2")
+        val functionNameUpper = "udfUpper"
+        withUserDefinedFunction(s"$db.$functionNameUpper" -> false) {
+          val functionClass =
+            classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper].getCanonicalName
+          sql(s"CREATE FUNCTION $db.$functionNameUpper AS '$functionClass'")
+          val ds = sql(s"SELECT `$db.$functionNameUpper`(`$table`.`c1`)  FROM `$db`.`$table`")
+          checkAnswer(ds, Row("ABCD"))
+        }
+      }
+    }
+  }
 }
