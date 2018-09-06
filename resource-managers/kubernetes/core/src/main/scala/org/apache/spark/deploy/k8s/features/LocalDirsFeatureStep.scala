@@ -47,10 +47,7 @@ private[spark] class LocalDirsFeatureStep(
         new VolumeBuilder()
           .withName(s"spark-local-dir-${index + 1}")
           .withNewEmptyDir()
-            .withMedium(useLocalDirTmpFs match {
-              case true => "Memory" // Use tmpfs
-              case false => null    // Default - use nodes backing storage
-             })
+            .withMedium(if (useLocalDirTmpFs) "Memory" else null)
           .endEmptyDir()
           .build()
       }
