@@ -22,18 +22,22 @@ import java.util.concurrent.TimeoutException
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
+import org.scalatest.concurrent.Eventually
+
 import org.apache.spark._
 import org.apache.spark.rpc.RpcTimeout
 
-class BarrierCoordinatorSuite extends SparkFunSuite with LocalSparkContext {
+class BarrierCoordinatorSuite extends SparkFunSuite with LocalSparkContext with Eventually {
 
   /**
-   * Get the current barrierEpoch from barrierCoordinator.states by ContextBarrierId
+   * Get the current ContextBarrierState from barrierCoordinator.states by ContextBarrierId.
    */
-  def getCurrentBarrierEpoch(
-      stageId: Int, stageAttemptId: Int, barrierCoordinator: BarrierCoordinator): Int = {
+  private def getBarrierState(
+      stageId: Int,
+      stageAttemptId: Int,
+      barrierCoordinator: BarrierCoordinator) = {
     val barrierId = ContextBarrierId(stageId, stageAttemptId)
-    barrierCoordinator.states.get(barrierId).barrierEpoch
+    barrierCoordinator.states.get(barrierId)
   }
 
   test("normal test for single task") {
@@ -46,9 +50,12 @@ class BarrierCoordinatorSuite extends SparkFunSuite with LocalSparkContext {
       message = RequestToSync(numTasks = 1, stageId, stageAttemptNumber, taskAttemptId = 0,
         barrierEpoch = 0),
       timeout = new RpcTimeout(5 seconds, "rpcTimeOut"))
-    // sleep for waiting barrierEpoch value change
-    Thread.sleep(500)
-    assert(getCurrentBarrierEpoch(stageId, stageAttemptNumber, barrierCoordinator) == 1)
+    eventually(timeout(10.seconds)) {
+      // Ensure barrierEpoch value have been changed.
+      val barrierState = getBarrierState(stageId, stageAttemptNumber, barrierCoordinator)
+      assert(barrierState.barrierEpoch == 1)
+      assert(barrierState.cleanCheck())
+    }
   }
 
   test("normal test for multi tasks") {
@@ -71,9 +78,12 @@ class BarrierCoordinatorSuite extends SparkFunSuite with LocalSparkContext {
         }
       }.start()
     }
-    // sleep for waiting barrierEpoch value change
-    Thread.sleep(500)
-    assert(getCurrentBarrierEpoch(stageId, stageAttemptNumber, barrierCoordinator) == 1)
+    eventually(timeout(10.seconds)) {
+      // Ensure barrierEpoch value have been changed.
+      val barrierState = getBarrierState(stageId, stageAttemptNumber, barrierCoordinator)
+      assert(barrierState.barrierEpoch == 1)
+      assert(barrierState.cleanCheck())
+    }
   }
 
   test("abnormal test for syncing with illegal barrierId") {
@@ -111,9 +121,12 @@ class BarrierCoordinatorSuite extends SparkFunSuite with LocalSparkContext {
         }
       }.start()
     }
-    // sleep for waiting barrierEpoch value change
-    Thread.sleep(500)
-    assert(getCurrentBarrierEpoch(stageId, stageAttemptNumber, barrierCoordinator) == 1)
+    eventually(timeout(10.seconds)) {
+      // Ensure barrierEpoch value have been changed.
+      val barrierState = getBarrierState(stageId, stageAttemptNumber, barrierCoordinator)
+      assert(barrierState.barrierEpoch == 1)
+      assert(barrierState.cleanCheck())
+    }
     intercept[SparkException](
       rpcEndpointRef.askSync[Unit](
         message = RequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId = 0,

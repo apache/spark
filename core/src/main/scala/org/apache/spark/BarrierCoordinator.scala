@@ -63,8 +63,12 @@ private[spark] class BarrierCoordinator(
     }
   }
 
-  // Record all active stage attempts that make barrier() call(s), and the corresponding internal
-  // state.
+  /**
+   * Record all active stage attempts that make barrier() call(s), and the corresponding internal
+   * state.
+   *
+   * Visible for testing.
+   */
   private[spark] val states = new ConcurrentHashMap[ContextBarrierId, ContextBarrierState]
 
   override def onStart(): Unit = {
@@ -84,7 +88,7 @@ private[spark] class BarrierCoordinator(
 
   /**
    * Provide the current state of a barrier() call. A state is created when a new stage attempt
-   * sends out a barrier() call, and recycled on stage completed.
+   * sends out a barrier() call, and recycled on stage completed. Visible for testing.
    *
    * @param barrierId Identifier of the barrier stage that make a barrier() call.
    * @param numTasks Number of tasks of the barrier stage, all barrier() calls from the stage shall
@@ -187,6 +191,9 @@ private[spark] class BarrierCoordinator(
       requesters.clear()
       cancelTimerTask()
     }
+
+    // Check for clearing internal data, visible for test only.
+    private[spark] def cleanCheck(): Boolean = requesters.isEmpty && timerTask == null
   }
 
   // Clean up the [[ContextBarrierState]] that correspond to a specific stage attempt.
