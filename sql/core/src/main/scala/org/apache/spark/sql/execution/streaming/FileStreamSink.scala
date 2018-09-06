@@ -113,7 +113,7 @@ class FileStreamSink(
         outputPath = path)
 
       committer match {
-        case manifestCommitter: ManifestFileCommitProtocol =>
+        case manifestCommitter: ManifestCommitProtocol =>
           manifestCommitter.setupManifestOptions(fileLog, batchId)
         case _ =>  // Do nothing
       }

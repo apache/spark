@@ -218,7 +218,7 @@ object FileFormatWriter extends Logging {
       hadoopConf.set("mapreduce.task.id", taskAttemptId.getTaskID.toString)
       hadoopConf.set("mapreduce.task.attempt.id", taskAttemptId.toString)
       hadoopConf.setBoolean("mapreduce.task.ismap", true)
-      hadoopConf.setInt("mapreduce.task.partition", 0)
+      hadoopConf.setInt("mapreduce.task.partition", sparkPartitionId)
 
       new TaskAttemptContextImpl(hadoopConf, taskAttemptId)
     }

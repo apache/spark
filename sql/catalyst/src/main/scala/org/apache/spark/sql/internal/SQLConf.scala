@@ -973,7 +973,7 @@ object SQLConf {
     buildConf("spark.sql.streaming.commitProtocolClass")
       .internal()
       .stringConf
-      .createWithDefault("org.apache.spark.sql.execution.streaming.ManifestFileCommitProtocol")
+      .createWithDefault("org.apache.spark.sql.execution.streaming.StagingFileCommitProtocol")
 
   val STREAMING_MULTIPLE_WATERMARK_POLICY =
     buildConf("spark.sql.streaming.multipleWatermarkPolicy")

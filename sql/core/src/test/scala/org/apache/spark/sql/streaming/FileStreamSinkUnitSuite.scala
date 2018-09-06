@@ -19,30 +19,29 @@ package org.apache.spark.sql.streaming
 
 import java.io.{File, FilenameFilter}
 
-import scala.io.Source
-
 import com.google.common.io.PatternFilenameFilter
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.mapreduce.JobContext
 import org.scalatest.BeforeAndAfter
+import scala.io.Source
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
-import org.apache.spark.sql.execution.streaming.{FileStreamSink, ManifestFileCommitProtocol}
+import org.apache.spark.sql.execution.streaming.{FileStreamSink, ManifestFileCommitProtocol, StagingFileCommitProtocol}
 import org.apache.spark.sql.internal.SQLConf.STREAMING_FILE_COMMIT_PROTOCOL_CLASS
 
 
 class FailingManifestFileCommitProtocol(jobId: String, path: String)
-  extends ManifestFileCommitProtocol(jobId, path) {
+  extends StagingFileCommitProtocol(jobId, path) {
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
     logError("Skipping job commit simulating ungraceful shutdown")
   }
 }
 
 class ExceptionThrowingManifestFileCommitProtocol(jobId: String, path: String)
-  extends ManifestFileCommitProtocol(jobId, path) {
+  extends StagingFileCommitProtocol(jobId, path) {
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
     throw new IllegalStateException("Simulating exception on job commit")
   }

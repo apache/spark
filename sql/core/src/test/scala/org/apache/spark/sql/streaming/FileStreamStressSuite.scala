@@ -151,6 +151,6 @@ class FileStreamStressSuite extends StreamTest {
     }
 
     logError(s"Stream restarted $failures times.")
-    assert(spark.read.parquet(outputDir).distinct().count() == numRecords)
+    assert(spark.read.parquet(outputDir).count() == numRecords)
   }
 }

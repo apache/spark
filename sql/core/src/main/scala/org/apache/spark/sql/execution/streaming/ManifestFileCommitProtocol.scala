@@ -35,22 +35,11 @@ import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
  * @param path path to write the final output to.
  */
 class ManifestFileCommitProtocol(jobId: String, path: String)
-  extends FileCommitProtocol with Serializable with Logging {
+  extends FileCommitProtocol with Serializable with Logging
+  with ManifestCommitProtocol {
 
   // Track the list of files added by a task, only used on the executors.
   @transient private var addedFiles: ArrayBuffer[String] = _
-
-  @transient private var fileLog: FileStreamSinkLog = _
-  private var batchId: Long = _
-
-  /**
-   * Sets up the manifest log output and the batch id for this job.
-   * Must be called before any other function.
-   */
-  def setupManifestOptions(fileLog: FileStreamSinkLog, batchId: Long): Unit = {
-    this.fileLog = fileLog
-    this.batchId = batchId
-  }
 
   override def setupJob(jobContext: JobContext): Unit = {
     require(fileLog != null, "setupManifestOptions must be called before this function")
