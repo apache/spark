@@ -123,6 +123,9 @@ class ParquetFileFormat
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 
+    // Sets Parquet block size
+    conf.setInt(ParquetOutputFormat.BLOCK_SIZE, sparkSession.sessionState.conf.parquetBlockSize)
+
     // SPARK-15719: Disables writing Parquet summary files by default.
     if (conf.get(ParquetOutputFormat.JOB_SUMMARY_LEVEL) == null
       && conf.get(ParquetOutputFormat.ENABLE_JOB_SUMMARY) == null) {

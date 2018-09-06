@@ -404,6 +404,11 @@ object SQLConf {
     .checkValues(Set("none", "uncompressed", "snappy", "gzip", "lzo", "lz4", "brotli", "zstd"))
     .createWithDefault("snappy")
 
+  val PARQUET_BLOCK_SIZE = buildConf("spark.sql.parquet.block.size")
+    .doc("Sets the block size of parquet when operating Parquet files.")
+    .intConf
+    .createWithDefault(128 * 1024 *1024)
+
   val PARQUET_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.filterPushdown")
     .doc("Enables Parquet filter push-down optimization when set to true.")
     .booleanConf
@@ -1625,6 +1630,8 @@ class SQLConf extends Serializable with Logging {
   def orcVectorizedReaderBatchSize: Int = getConf(ORC_VECTORIZED_READER_BATCH_SIZE)
 
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
+
+  def parquetBlockSize: Int = getConf(PARQUET_BLOCK_SIZE)
 
   def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
 
