@@ -315,9 +315,9 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
         StandardCharsets.UTF_8)
     }
 
-    assert(sc.binaryFiles(tempDirPath, minPartitions = 1).getNumPartitions === 1)
-    assert(sc.binaryFiles(tempDirPath, minPartitions = 2).getNumPartitions === 2)
-    assert(sc.binaryFiles(tempDirPath, minPartitions = 8).getNumPartitions === 8)
+    for (p <- Seq(1, 2, 8)) {
+      assert(sc.binaryFiles(tempDirPath, minPartitions = p).getNumPartitions === p)
+    }
   }
 
   test("fixed record length binary file as byte array") {
