@@ -35,6 +35,8 @@ import org.apache.spark.sql.types._
  */
 @Experimental
 @Since("2.3.0")
+@deprecated("use `spark.read.format(\"image\").load(path)` and this `ImageSchema` will be " +
+  "removed in 3.0.0.", "2.4.0")
 object ImageSchema {
 
   val undefinedImageType = "Undefined"
