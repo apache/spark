@@ -1686,6 +1686,15 @@ test_that("column functions", {
     expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 })))
   }
 
+  # Test to_json() supports arrays of primitive types and arrays
+  df <- sql("SELECT array(19, 42, 70) as age")
+  j <- collect(select(df, alias(to_json(df$age), "json")))
+  expect_equal(j[order(j$json), ][1], "[19,42,70]")
+
+  df <- sql("SELECT array(array(1, 2), array(3, 4)) as matrix")
+  j <- collect(select(df, alias(to_json(df$matrix), "json")))
+  expect_equal(j[order(j$json), ][1], "[[1,2],[3,4]]")
+
   # passing option
   df <- as.DataFrame(list(list("col" = "{\"date\":\"21/10/2014\"}")))
   schema2 <- structType(structField("date", "date"))
