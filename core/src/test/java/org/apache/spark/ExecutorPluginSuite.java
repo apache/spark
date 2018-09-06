@@ -73,6 +73,10 @@ public class ExecutorPluginSuite {
 
     try {
       sc = new JavaSparkContext(conf);
+
+      // Sleep briefly because plugins initialize on a separate thread
+      Thread.sleep(500);
+
       assertEquals(1, numSuccessfulPlugins);
     } catch (Exception e) {
       fail("Failed to start SparkContext with exception " + e.toString());
@@ -92,6 +96,10 @@ public class ExecutorPluginSuite {
 
     try {
       sc = new JavaSparkContext(conf);
+
+      // Sleep briefly because plugins initialize on a separate thread
+      Thread.sleep(500);
+
       assertEquals(2, numSuccessfulPlugins);
     } catch (Exception e) {
       fail("Failed to start SparkContext with exception " + e.toString());
@@ -108,7 +116,7 @@ public class ExecutorPluginSuite {
     public void init() {
       ExecutorPluginSuite.numSuccessfulPlugins++;
     }
-    public void stop() {
+    public void shutdown() {
       ExecutorPluginSuite.numSuccessfulTerminations++;
     }
   }

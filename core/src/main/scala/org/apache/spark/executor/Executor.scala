@@ -138,15 +138,27 @@ private[spark] class Executor(
 
   private val pluginList = conf.get(EXECUTOR_PLUGINS)
   if (pluginList.nonEmpty) {
-    logDebug(s"Loading the following plugins: ${pluginList.mkString(", ")}")
+    logDebug(s"Initializing the following plugins: ${pluginList.mkString(", ")}")
   }
-  // Load executor plugins
-  Thread.currentThread().setContextClassLoader(replClassLoader)
-  private val executorPlugins =
-    Utils.loadExtensions(classOf[ExecutorPlugin], pluginList, conf)
-  executorPlugins.foreach(_.init())
+  val executorPluginThread = new Thread {
+    var plugins: Seq[ExecutorPlugin] = Nil
+
+    override def run(): Unit = {
+      plugins = Utils.loadExtensions(classOf[ExecutorPlugin], pluginList, conf)
+      plugins.foreach(_.init())
+    }
+
+    override def interrupt(): Unit = {
+      plugins.foreach(_.shutdown())
+      super.interrupt()
+    }
+  }
+
+  executorPluginThread.setContextClassLoader(replClassLoader)
+  executorPluginThread.start()
+
   if (pluginList.nonEmpty) {
-    logDebug("Finished loading plugins")
+    logDebug("Finished initializing plugins")
   }
 
   // Max size of direct result. If task result is bigger than this, we use the block manager
@@ -231,7 +243,8 @@ private[spark] class Executor(
     env.metricsSystem.report()
     heartbeater.shutdown()
     heartbeater.awaitTermination(10, TimeUnit.SECONDS)
-    executorPlugins.foreach(_.stop())
+    executorPluginThread.interrupt()
+    executorPluginThread.join()
     threadPool.shutdown()
     if (!isLocal) {
       env.stop()
