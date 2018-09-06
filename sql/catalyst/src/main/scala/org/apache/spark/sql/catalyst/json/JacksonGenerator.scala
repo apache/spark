@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.json
 
 import java.io.Writer
+import java.nio.charset.StandardCharsets
 
 import com.fasterxml.jackson.core._
 
@@ -44,14 +45,14 @@ private[sql] class JacksonGenerator(
 
   // `JackGenerator` can only be initialized with a `StructType` or a `MapType`.
   require(dataType.isInstanceOf[StructType] || dataType.isInstanceOf[MapType],
-    "JacksonGenerator only supports to be initialized with a StructType " +
-      s"or MapType but got ${dataType.simpleString}")
+    s"JacksonGenerator only supports to be initialized with a ${StructType.simpleString} " +
+      s"or ${MapType.simpleString} but got ${dataType.catalogString}")
 
   // `ValueWriter`s for all fields of the schema
   private lazy val rootFieldWriters: Array[ValueWriter] = dataType match {
     case st: StructType => st.map(_.dataType).map(makeWriter).toArray
     case _ => throw new UnsupportedOperationException(
-      s"Initial type ${dataType.simpleString} must be a struct")
+      s"Initial type ${dataType.catalogString} must be a struct")
   }
 
   // `ValueWriter` for array data storing rows of the schema.
@@ -69,10 +70,12 @@ private[sql] class JacksonGenerator(
   private lazy val mapElementWriter: ValueWriter = dataType match {
     case mt: MapType => makeWriter(mt.valueType)
     case _ => throw new UnsupportedOperationException(
-      s"Initial type ${dataType.simpleString} must be a map")
+      s"Initial type ${dataType.catalogString} must be a map")
   }
 
   private val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
+
+  private val lineSeparator: String = options.lineSeparatorInWrite
 
   private def makeWriter(dataType: DataType): ValueWriter = dataType match {
     case NullType =>
@@ -251,5 +254,8 @@ private[sql] class JacksonGenerator(
       mapType = dataType.asInstanceOf[MapType]))
   }
 
-  def writeLineEnding(): Unit = gen.writeRaw('\n')
+  def writeLineEnding(): Unit = {
+    // Note that JSON uses writer with UTF-8 charset. This string will be written out as UTF-8.
+    gen.writeRaw(lineSeparator)
+  }
 }

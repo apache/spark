@@ -21,7 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificInternalRow, UpCast}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, Literal, SpecificInternalRow, UpCast}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, NewInstance}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -261,23 +261,6 @@ class ScalaReflectionSuite extends SparkFunSuite {
     }
   }
 
-  test("get parameter type from a function object") {
-    val primitiveFunc = (i: Int, j: Long) => "x"
-    val primitiveTypes = getParameterTypes(primitiveFunc)
-    assert(primitiveTypes.forall(_.isPrimitive))
-    assert(primitiveTypes === Seq(classOf[Int], classOf[Long]))
-
-    val boxedFunc = (i: java.lang.Integer, j: java.lang.Long) => "x"
-    val boxedTypes = getParameterTypes(boxedFunc)
-    assert(boxedTypes.forall(!_.isPrimitive))
-    assert(boxedTypes === Seq(classOf[java.lang.Integer], classOf[java.lang.Long]))
-
-    val anyFunc = (i: Any, j: AnyRef) => "x"
-    val anyTypes = getParameterTypes(anyFunc)
-    assert(anyTypes.forall(!_.isPrimitive))
-    assert(anyTypes === Seq(classOf[java.lang.Object], classOf[java.lang.Object]))
-  }
-
   test("SPARK-15062: Get correct serializer for List[_]") {
     val list = List(1, 2, 3)
     val serializer = serializerFor[List[Int]](BoundReference(
@@ -364,5 +347,15 @@ class ScalaReflectionSuite extends SparkFunSuite {
         StructField("_1", IntegerType, nullable = false),
         StructField("_2", NullType, nullable = true))),
       nullable = true))
+  }
+
+  test("SPARK-23835: add null check to non-nullable types in Tuples") {
+    def numberOfCheckedArguments(deserializer: Expression): Int = {
+      assert(deserializer.isInstanceOf[NewInstance])
+      deserializer.asInstanceOf[NewInstance].arguments.count(_.isInstanceOf[AssertNotNull])
+    }
+    assert(numberOfCheckedArguments(deserializerFor[(Double, Double)]) == 2)
+    assert(numberOfCheckedArguments(deserializerFor[(java.lang.Double, Int)]) == 1)
+    assert(numberOfCheckedArguments(deserializerFor[(java.lang.Integer, java.lang.Integer)]) == 0)
   }
 }

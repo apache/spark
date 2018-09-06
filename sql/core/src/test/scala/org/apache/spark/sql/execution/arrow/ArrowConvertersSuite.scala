@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.arrow
 
-import java.io.File
+import java.io.{ByteArrayOutputStream, DataOutputStream, File}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
@@ -26,7 +26,7 @@ import com.google.common.io.Files
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.ipc.JsonFileReader
-import org.apache.arrow.vector.util.Validator
+import org.apache.arrow.vector.util.{ByteArrayReadableSeekableByteChannel, Validator}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkException, TaskContext}
@@ -51,11 +51,11 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
 
   test("collect to arrow record batch") {
     val indexData = (1 to 6).toDF("i")
-    val arrowPayloads = indexData.toArrowPayload.collect()
-    assert(arrowPayloads.nonEmpty)
-    assert(arrowPayloads.length == indexData.rdd.getNumPartitions)
+    val arrowBatches = indexData.toArrowBatchRdd.collect()
+    assert(arrowBatches.nonEmpty)
+    assert(arrowBatches.length == indexData.rdd.getNumPartitions)
     val allocator = new RootAllocator(Long.MaxValue)
-    val arrowRecordBatches = arrowPayloads.map(_.loadBatch(allocator))
+    val arrowRecordBatches = arrowBatches.map(ArrowConverters.loadBatch(_, allocator))
     val rowCount = arrowRecordBatches.map(_.getLength).sum
     assert(rowCount === indexData.count())
     arrowRecordBatches.foreach(batch => assert(batch.getNodes.size() > 0))
@@ -1153,9 +1153,9 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |}
        """.stripMargin
 
-    val arrowPayloads = testData2.toArrowPayload.collect()
-    // NOTE: testData2 should have 2 partitions -> 2 arrow batches in payload
-    assert(arrowPayloads.length === 2)
+    val arrowBatches = testData2.toArrowBatchRdd.collect()
+    // NOTE: testData2 should have 2 partitions -> 2 arrow batches
+    assert(arrowBatches.length === 2)
     val schema = testData2.schema
 
     val tempFile1 = new File(tempDataPath, "testData2-ints-part1.json")
@@ -1163,25 +1163,25 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     Files.write(json1, tempFile1, StandardCharsets.UTF_8)
     Files.write(json2, tempFile2, StandardCharsets.UTF_8)
 
-    validateConversion(schema, arrowPayloads(0), tempFile1)
-    validateConversion(schema, arrowPayloads(1), tempFile2)
+    validateConversion(schema, arrowBatches(0), tempFile1)
+    validateConversion(schema, arrowBatches(1), tempFile2)
   }
 
   test("empty frame collect") {
-    val arrowPayload = spark.emptyDataFrame.toArrowPayload.collect()
-    assert(arrowPayload.isEmpty)
+    val arrowBatches = spark.emptyDataFrame.toArrowBatchRdd.collect()
+    assert(arrowBatches.isEmpty)
 
     val filteredDF = List[Int](1, 2, 3, 4, 5, 6).toDF("i")
-    val filteredArrowPayload = filteredDF.filter("i < 0").toArrowPayload.collect()
-    assert(filteredArrowPayload.isEmpty)
+    val filteredArrowBatches = filteredDF.filter("i < 0").toArrowBatchRdd.collect()
+    assert(filteredArrowBatches.isEmpty)
   }
 
   test("empty partition collect") {
     val emptyPart = spark.sparkContext.parallelize(Seq(1), 2).toDF("i")
-    val arrowPayloads = emptyPart.toArrowPayload.collect()
-    assert(arrowPayloads.length === 1)
+    val arrowBatches = emptyPart.toArrowBatchRdd.collect()
+    assert(arrowBatches.length === 1)
     val allocator = new RootAllocator(Long.MaxValue)
-    val arrowRecordBatches = arrowPayloads.map(_.loadBatch(allocator))
+    val arrowRecordBatches = arrowBatches.map(ArrowConverters.loadBatch(_, allocator))
     assert(arrowRecordBatches.head.getLength == 1)
     arrowRecordBatches.foreach(_.close())
     allocator.close()
@@ -1192,10 +1192,10 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     val maxRecordsPerBatch = 3
     spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", maxRecordsPerBatch)
     val df = spark.sparkContext.parallelize(1 to totalRecords, 2).toDF("i")
-    val arrowPayloads = df.toArrowPayload.collect()
-    assert(arrowPayloads.length >= 4)
+    val arrowBatches = df.toArrowBatchRdd.collect()
+    assert(arrowBatches.length >= 4)
     val allocator = new RootAllocator(Long.MaxValue)
-    val arrowRecordBatches = arrowPayloads.map(_.loadBatch(allocator))
+    val arrowRecordBatches = arrowBatches.map(ArrowConverters.loadBatch(_, allocator))
     var recordCount = 0
     arrowRecordBatches.foreach { batch =>
       assert(batch.getLength > 0)
@@ -1217,8 +1217,8 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
       assert(msg.getCause.getClass === classOf[UnsupportedOperationException])
     }
 
-    runUnsupported { mapData.toDF().toArrowPayload.collect() }
-    runUnsupported { complexData.toArrowPayload.collect() }
+    runUnsupported { mapData.toDF().toArrowBatchRdd.collect() }
+    runUnsupported { complexData.toArrowBatchRdd.collect() }
   }
 
   test("test Arrow Validator") {
@@ -1318,7 +1318,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     }
   }
 
-  test("roundtrip payloads") {
+  test("roundtrip arrow batches") {
     val inputRows = (0 until 9).map { i =>
       InternalRow(i)
     } :+ InternalRow(null)
@@ -1326,10 +1326,41 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
 
     val ctx = TaskContext.empty()
-    val payloadIter = ArrowConverters.toPayloadIterator(inputRows.toIterator, schema, 0, null, ctx)
-    val outputRowIter = ArrowConverters.fromPayloadIterator(payloadIter, ctx)
+    val batchIter = ArrowConverters.toBatchIterator(inputRows.toIterator, schema, 5, null, ctx)
+    val outputRowIter = ArrowConverters.fromBatchIterator(batchIter, schema, null, ctx)
 
-    assert(schema == outputRowIter.schema)
+    var count = 0
+    outputRowIter.zipWithIndex.foreach { case (row, i) =>
+      if (i != 9) {
+        assert(row.getInt(0) == i)
+      } else {
+        assert(row.isNullAt(0))
+      }
+      count += 1
+    }
+
+    assert(count == inputRows.length)
+  }
+
+  test("ArrowBatchStreamWriter roundtrip") {
+    val inputRows = (0 until 9).map(InternalRow(_)) :+ InternalRow(null)
+
+    val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
+    val ctx = TaskContext.empty()
+    val batchIter = ArrowConverters.toBatchIterator(inputRows.toIterator, schema, 5, null, ctx)
+
+    // Write batches to Arrow stream format as a byte array
+    val out = new ByteArrayOutputStream()
+    Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null)
+      writer.writeBatches(batchIter)
+      writer.end()
+    }
+
+    // Read Arrow stream into batches, then convert back to rows
+    val in = new ByteArrayReadableSeekableByteChannel(out.toByteArray)
+    val readBatches = ArrowConverters.getBatchesFromStream(in)
+    val outputRowIter = ArrowConverters.fromBatchIterator(readBatches, schema, null, ctx)
 
     var count = 0
     outputRowIter.zipWithIndex.foreach { case (row, i) =>
@@ -1348,15 +1379,15 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
   private def collectAndValidate(
       df: DataFrame, json: String, file: String, timeZoneId: String = null): Unit = {
     // NOTE: coalesce to single partition because can only load 1 batch in validator
-    val arrowPayload = df.coalesce(1).toArrowPayload.collect().head
+    val batchBytes = df.coalesce(1).toArrowBatchRdd.collect().head
     val tempFile = new File(tempDataPath, file)
     Files.write(json, tempFile, StandardCharsets.UTF_8)
-    validateConversion(df.schema, arrowPayload, tempFile, timeZoneId)
+    validateConversion(df.schema, batchBytes, tempFile, timeZoneId)
   }
 
   private def validateConversion(
       sparkSchema: StructType,
-      arrowPayload: ArrowPayload,
+      batchBytes: Array[Byte],
       jsonFile: File,
       timeZoneId: String = null): Unit = {
     val allocator = new RootAllocator(Long.MaxValue)
@@ -1368,7 +1399,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
 
     val arrowRoot = VectorSchemaRoot.create(arrowSchema, allocator)
     val vectorLoader = new VectorLoader(arrowRoot)
-    val arrowRecordBatch = arrowPayload.loadBatch(allocator)
+    val arrowRecordBatch = ArrowConverters.loadBatch(batchBytes, allocator)
     vectorLoader.load(arrowRecordBatch)
     val jsonRoot = jsonReader.read()
     Validator.compareVectorSchemaRoot(arrowRoot, jsonRoot)

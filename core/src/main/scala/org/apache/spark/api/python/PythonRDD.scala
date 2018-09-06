@@ -38,17 +38,16 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
 
 
 private[spark] class PythonRDD(
     parent: RDD[_],
     func: PythonFunction,
-    preservePartitoning: Boolean)
+    preservePartitoning: Boolean,
+    isFromBarrier: Boolean = false)
   extends RDD[Array[Byte]](parent) {
-
-  val bufferSize = conf.getInt("spark.buffer.size", 65536)
-  val reuseWorker = conf.getBoolean("spark.python.worker.reuse", true)
 
   override def getPartitions: Array[Partition] = firstParent.partitions
 
@@ -59,9 +58,12 @@ private[spark] class PythonRDD(
   val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
-    val runner = PythonRunner(func, bufferSize, reuseWorker)
+    val runner = PythonRunner(func)
     runner.compute(firstParent.iterator(split, context), split.index, context)
   }
+
+  @transient protected lazy override val isBarrier_ : Boolean =
+    isFromBarrier || dependencies.exists(_.rdd.isBarrier())
 }
 
 /**
@@ -107,6 +109,12 @@ private[spark] object PythonRDD extends Logging {
   // remember the broadcasts sent to each worker
   private val workerBroadcasts = new mutable.WeakHashMap[Socket, mutable.Set[Long]]()
 
+  // Authentication helper used when serving iterator data.
+  private lazy val authHelper = {
+    val conf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
+    new SocketAuthHelper(conf)
+  }
+
   def getWorkerBroadcasts(worker: Socket): mutable.Set[Long] = {
     synchronized {
       workerBroadcasts.getOrElseUpdate(worker, new mutable.HashSet[Long]())
@@ -129,12 +137,13 @@ private[spark] object PythonRDD extends Logging {
    * (effectively a collect()), but allows you to run on a certain subset of partitions,
    * or to enable local execution.
    *
-   * @return the port number of a local socket which serves the data collected from this job.
+   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, and the secret for authentication.
    */
   def runJob(
       sc: SparkContext,
       rdd: JavaRDD[Array[Byte]],
-      partitions: JArrayList[Int]): Int = {
+      partitions: JArrayList[Int]): Array[Any] = {
     type ByteArray = Array[Byte]
     type UnrolledPartition = Array[ByteArray]
     val allPartitions: Array[UnrolledPartition] =
@@ -147,13 +156,14 @@ private[spark] object PythonRDD extends Logging {
   /**
    * A helper function to collect an RDD as an iterator, then serve it via socket.
    *
-   * @return the port number of a local socket which serves the data collected from this job.
+   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, and the secret for authentication.
    */
-  def collectAndServe[T](rdd: RDD[T]): Int = {
+  def collectAndServe[T](rdd: RDD[T]): Array[Any] = {
     serveIterator(rdd.collect().iterator, s"serve RDD ${rdd.id}")
   }
 
-  def toLocalIteratorAndServe[T](rdd: RDD[T]): Int = {
+  def toLocalIteratorAndServe[T](rdd: RDD[T]): Array[Any] = {
     serveIterator(rdd.toLocalIterator, s"serve toLocalIterator")
   }
 
@@ -384,8 +394,31 @@ private[spark] object PythonRDD extends Logging {
    * and send them into this connection.
    *
    * The thread will terminate after all the data are sent or any exceptions happen.
+   *
+   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, and the secret for authentication.
    */
-  def serveIterator[T](items: Iterator[T], threadName: String): Int = {
+  def serveIterator(items: Iterator[_], threadName: String): Array[Any] = {
+    serveToStream(threadName) { out =>
+      writeIteratorToStream(items, new DataOutputStream(out))
+    }
+  }
+
+  /**
+   * Create a socket server and background thread to execute the writeFunc
+   * with the given OutputStream.
+   *
+   * The socket server can only accept one connection, or close if no connection
+   * in 15 seconds.
+   *
+   * Once a connection comes in, it will execute the block of code and pass in
+   * the socket output stream.
+   *
+   * The thread will terminate after the block of code is executed or any
+   * exceptions happen.
+   */
+  private[spark] def serveToStream(
+      threadName: String)(writeFunc: OutputStream => Unit): Array[Any] = {
     val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
     // Close the socket if no connection in 15 seconds
     serverSocket.setSoTimeout(15000)
@@ -395,11 +428,14 @@ private[spark] object PythonRDD extends Logging {
       override def run() {
         try {
           val sock = serverSocket.accept()
-          val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
+          authHelper.authClient(sock)
+
+          val out = new BufferedOutputStream(sock.getOutputStream)
           Utils.tryWithSafeFinally {
-            writeIteratorToStream(items, out)
+            writeFunc(out)
           } {
             out.close()
+            sock.close()
           }
         } catch {
           case NonFatal(e) =>
@@ -410,7 +446,7 @@ private[spark] object PythonRDD extends Logging {
       }
     }.start()
 
-    serverSocket.getLocalPort
+    Array(serverSocket.getLocalPort, authHelper.secret)
   }
 
   private def getMergedConf(confAsMap: java.util.HashMap[String, String],
@@ -571,8 +607,9 @@ class BytesToString extends org.apache.spark.api.java.function.Function[Array[By
  */
 private[spark] class PythonAccumulatorV2(
     @transient private val serverHost: String,
-    private val serverPort: Int)
-  extends CollectionAccumulator[Array[Byte]] {
+    private val serverPort: Int,
+    private val secretToken: String)
+  extends CollectionAccumulator[Array[Byte]] with Logging{
 
   Utils.checkHost(serverHost)
 
@@ -587,17 +624,22 @@ private[spark] class PythonAccumulatorV2(
   private def openSocket(): Socket = synchronized {
     if (socket == null || socket.isClosed) {
       socket = new Socket(serverHost, serverPort)
+      logInfo(s"Connected to AccumulatorServer at host: $serverHost port: $serverPort")
+      // send the secret just for the initial authentication when opening a new connection
+      socket.getOutputStream.write(secretToken.getBytes(StandardCharsets.UTF_8))
     }
     socket
   }
 
   // Need to override so the types match with PythonFunction
-  override def copyAndReset(): PythonAccumulatorV2 = new PythonAccumulatorV2(serverHost, serverPort)
+  override def copyAndReset(): PythonAccumulatorV2 = {
+    new PythonAccumulatorV2(serverHost, serverPort, secretToken)
+  }
 
   override def merge(other: AccumulatorV2[Array[Byte], JList[Array[Byte]]]): Unit = synchronized {
     val otherPythonAccumulator = other.asInstanceOf[PythonAccumulatorV2]
     // This conditional isn't strictly speaking needed - merging only currently happens on the
-    // driver program - but that isn't gauranteed so incase this changes.
+    // driver program - but that isn't guaranteed so incase this changes.
     if (serverHost == null) {
       // We are on the worker
       super.merge(otherPythonAccumulator)

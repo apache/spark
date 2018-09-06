@@ -17,16 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.util.Optional
-
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.streaming.sources.ConsoleWriter
+import org.apache.spark.sql.execution.streaming.sources.ConsoleWriteSupport
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
-import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options}
-import org.apache.spark.sql.sources.v2.streaming.MicroBatchWriteSupport
-import org.apache.spark.sql.sources.v2.writer.DataSourceV2Writer
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, StreamingWriteSupportProvider}
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -36,17 +31,16 @@ case class ConsoleRelation(override val sqlContext: SQLContext, data: DataFrame)
 }
 
 class ConsoleSinkProvider extends DataSourceV2
-  with MicroBatchWriteSupport
+  with StreamingWriteSupportProvider
   with DataSourceRegister
   with CreatableRelationProvider {
 
-  override def createMicroBatchWriter(
+  override def createStreamingWriteSupport(
       queryId: String,
-      epochId: Long,
       schema: StructType,
       mode: OutputMode,
-      options: DataSourceV2Options): Optional[DataSourceV2Writer] = {
-    Optional.of(new ConsoleWriter(epochId, schema, options))
+      options: DataSourceOptions): StreamingWriteSupport = {
+    new ConsoleWriteSupport(schema, options)
   }
 
   def createRelation(

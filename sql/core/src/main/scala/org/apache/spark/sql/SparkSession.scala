@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext}
+import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
@@ -44,7 +44,7 @@ import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{CallSite, Utils}
 
 
 /**
@@ -81,6 +81,9 @@ class SparkSession private(
     @transient private[sql] val extensions: SparkSessionExtensions)
   extends Serializable with Closeable with Logging { self =>
 
+  // The call site where this SparkSession was constructed.
+  private val creationSite: CallSite = Utils.getCallSite()
+
   private[sql] def this(sc: SparkContext) {
     this(sc, None, None, new SparkSessionExtensions)
   }
@@ -89,7 +92,8 @@ class SparkSession private(
 
   // If there is no active SparkSession, uses the default SQL conf. Otherwise, use the session's.
   SQLConf.setSQLConfGetter(() => {
-    SparkSession.getActiveSession.map(_.sessionState.conf).getOrElse(SQLConf.getFallbackConf)
+    SparkSession.getActiveSession.filterNot(_.sparkContext.isStopped).map(_.sessionState.conf)
+      .getOrElse(SQLConf.getFallbackConf)
   })
 
   /**
@@ -266,7 +270,7 @@ class SparkSession private(
    */
   @transient
   lazy val emptyDataFrame: DataFrame = {
-    createDataFrame(sparkContext.emptyRDD[Row], StructType(Nil))
+    createDataFrame(sparkContext.emptyRDD[Row].setName("empty"), StructType(Nil))
   }
 
   /**
@@ -391,7 +395,7 @@ class SparkSession private(
     // BeanInfo is not serializable so we must rediscover it remotely for each partition.
       SQLContext.beansToRows(iter, Utils.classForName(className), attributeSeq)
     }
-    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd)(self))
+    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd.setName(rdd.name))(self))
   }
 
   /**
@@ -590,7 +594,7 @@ class SparkSession private(
     } else {
       rowRDD.map { r: Row => InternalRow.fromSeq(r.toSeq) }
     }
-    internalCreateDataFrame(catalystRows, schema)
+    internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
   }
 
 
@@ -763,7 +767,7 @@ class SparkSession private(
 
 
 @InterfaceStability.Stable
-object SparkSession {
+object SparkSession extends Logging {
 
   /**
    * Builder for [[SparkSession]].
@@ -895,6 +899,7 @@ object SparkSession {
      * @since 2.0.0
      */
     def getOrCreate(): SparkSession = synchronized {
+      assertOnDriver()
       // Get the session from current thread's active session.
       var session = activeThreadSession.get()
       if ((session ne null) && !session.sparkContext.isStopped) {
@@ -951,7 +956,8 @@ object SparkSession {
 
         session = new SparkSession(sparkContext, None, None, extensions)
         options.foreach { case (k, v) => session.initialSessionOptions.put(k, v) }
-        defaultSession.set(session)
+        setDefaultSession(session)
+        setActiveSession(session)
 
         // Register a successfully instantiated context to the singleton. This should be at the
         // end of the class definition so that the singleton is updated only if there is no
@@ -1016,16 +1022,45 @@ object SparkSession {
   /**
    * Returns the active SparkSession for the current thread, returned by the builder.
    *
+   * @note Return None, when calling this function on executors
+   *
    * @since 2.2.0
    */
-  def getActiveSession: Option[SparkSession] = Option(activeThreadSession.get)
+  def getActiveSession: Option[SparkSession] = {
+    if (TaskContext.get != null) {
+      // Return None when running on executors.
+      None
+    } else {
+      Option(activeThreadSession.get)
+    }
+  }
 
   /**
    * Returns the default SparkSession that is returned by the builder.
    *
+   * @note Return None, when calling this function on executors
+   *
    * @since 2.2.0
    */
-  def getDefaultSession: Option[SparkSession] = Option(defaultSession.get)
+  def getDefaultSession: Option[SparkSession] = {
+    if (TaskContext.get != null) {
+      // Return None when running on executors.
+      None
+    } else {
+      Option(defaultSession.get)
+    }
+  }
+
+  /**
+   * Returns the currently active SparkSession, otherwise the default one. If there is no default
+   * SparkSession, throws an exception.
+   *
+   * @since 2.4.0
+   */
+  def active: SparkSession = {
+    getActiveSession.getOrElse(getDefaultSession.getOrElse(
+      throw new IllegalStateException("No active or default Spark session found")))
+  }
 
   ////////////////////////////////////////////////////////////////////////////////////////
   // Private methods from now on
@@ -1044,6 +1079,14 @@ object SparkSession {
     conf.get(CATALOG_IMPLEMENTATION) match {
       case "hive" => HIVE_SESSION_STATE_BUILDER_CLASS_NAME
       case "in-memory" => classOf[SessionStateBuilder].getCanonicalName
+    }
+  }
+
+  private def assertOnDriver(): Unit = {
+    if (Utils.isTesting && TaskContext.get != null) {
+      // we're accessing it during task execution, fail.
+      throw new IllegalStateException(
+        "SparkSession should only be created and accessed on the driver.")
     }
   }
 
@@ -1078,4 +1121,20 @@ object SparkSession {
     }
   }
 
+  private[spark] def cleanupAnyExistingSession(): Unit = {
+    val session = getActiveSession.orElse(getDefaultSession)
+    if (session.isDefined) {
+      logWarning(
+        s"""An existing Spark session exists as the active or default session.
+           |This probably means another suite leaked it. Attempting to stop it before continuing.
+           |This existing Spark session was created at:
+           |
+           |${session.get.creationSite.longForm}
+           |
+         """.stripMargin)
+      session.get.stop()
+      SparkSession.clearActiveSession()
+      SparkSession.clearDefaultSession()
+    }
+  }
 }

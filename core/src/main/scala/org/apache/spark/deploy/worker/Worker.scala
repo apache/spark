@@ -23,6 +23,7 @@ import java.text.SimpleDateFormat
 import java.util.{Date, Locale, UUID}
 import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
+import java.util.function.Supplier
 
 import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
 import scala.concurrent.ExecutionContext
@@ -35,7 +36,7 @@ import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
 import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
@@ -49,7 +50,8 @@ private[deploy] class Worker(
     endpointName: String,
     workDirPath: String = null,
     val conf: SparkConf,
-    val securityMgr: SecurityManager)
+    val securityMgr: SecurityManager,
+    externalShuffleServiceSupplier: Supplier[ExternalShuffleService] = null)
   extends ThreadSafeRpcEndpoint with Logging {
 
   private val host = rpcEnv.address.host
@@ -97,6 +99,10 @@ private[deploy] class Worker(
   private val APP_DATA_RETENTION_SECONDS =
     conf.getLong("spark.worker.cleanup.appDataTtl", 7 * 24 * 3600)
 
+  // Whether or not cleanup the non-shuffle files on executor exits.
+  private val CLEANUP_NON_SHUFFLE_FILES_ENABLED =
+    conf.getBoolean("spark.storage.cleanupFilesAfterExecutorExit", true)
+
   private val testing: Boolean = sys.props.contains("spark.testing")
   private var master: Option[RpcEndpointRef] = None
 
@@ -142,7 +148,11 @@ private[deploy] class Worker(
     WorkerWebUI.DEFAULT_RETAINED_DRIVERS)
 
   // The shuffle service is not actually started unless configured.
-  private val shuffleService = new ExternalShuffleService(conf, securityMgr)
+  private val shuffleService = if (externalShuffleServiceSupplier != null) {
+    externalShuffleServiceSupplier.get()
+  } else {
+    new ExternalShuffleService(conf, securityMgr)
+  }
 
   private val publicAddress = {
     val envVar = conf.getenv("SPARK_PUBLIC_DNS")
@@ -441,7 +451,7 @@ private[deploy] class Worker(
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker
       // rpcEndpoint.
       // Copy ids so that it can be used in the cleanup thread.
-      val appIds = executors.values.map(_.appId).toSet
+      val appIds = (executors.values.map(_.appId) ++ drivers.values.map(_.driverId)).toSet
       val cleanupFuture = concurrent.Future {
         val appDirs = workDir.listFiles()
         if (appDirs == null) {
@@ -732,6 +742,9 @@ private[deploy] class Worker(
           trimFinishedExecutorsIfNecessary()
           coresUsed -= executor.cores
           memoryUsed -= executor.memory
+          if (CLEANUP_NON_SHUFFLE_FILES_ENABLED) {
+            shuffleService.executorRemoved(executorStateChanged.execId.toString, appId)
+          }
         case None =>
           logInfo("Unknown Executor " + fullId + " finished with state " + state +
             message.map(" message " + _).getOrElse("") +
@@ -745,6 +758,7 @@ private[deploy] class Worker(
 private[deploy] object Worker extends Logging {
   val SYSTEM_NAME = "sparkWorker"
   val ENDPOINT_NAME = "Worker"
+  private val SSL_NODE_LOCAL_CONFIG_PATTERN = """\-Dspark\.ssl\.useNodeLocalConf\=(.+)""".r
 
   def main(argStrings: Array[String]) {
     Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler(
@@ -759,7 +773,7 @@ private[deploy] object Worker extends Logging {
     // bound, we may launch no more than one external shuffle service on each host.
     // When this happens, we should give explicit reason of failure instead of fail silently. For
     // more detail see SPARK-20989.
-    val externalShuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
+    val externalShuffleServiceEnabled = conf.get(config.SHUFFLE_SERVICE_ENABLED)
     val sparkWorkerInstances = scala.sys.env.getOrElse("SPARK_WORKER_INSTANCES", "1").toInt
     require(externalShuffleServiceEnabled == false || sparkWorkerInstances <= 1,
       "Starting multiple workers on one host is failed because we may launch no more than one " +
@@ -790,9 +804,8 @@ private[deploy] object Worker extends Logging {
   }
 
   def isUseLocalNodeSSLConfig(cmd: Command): Boolean = {
-    val pattern = """\-Dspark\.ssl\.useNodeLocalConf\=(.+)""".r
     val result = cmd.javaOpts.collectFirst {
-      case pattern(_result) => _result.toBoolean
+      case SSL_NODE_LOCAL_CONFIG_PATTERN(_result) => _result.toBoolean
     }
     result.getOrElse(false)
   }

@@ -95,7 +95,7 @@ public class UnsafeShuffleWriterSuite {
   @SuppressWarnings("unchecked")
   public void setUp() throws IOException {
     MockitoAnnotations.initMocks(this);
-    tempDir = Utils.createTempDir("test", "test");
+    tempDir = Utils.createTempDir(null, "test");
     mergedOutputFile = File.createTempFile("mergedoutput", "", tempDir);
     partitionSizesInMergedFile = null;
     spillFilesCreated.clear();
@@ -233,6 +233,7 @@ public class UnsafeShuffleWriterSuite {
     writer.write(Iterators.emptyIterator());
     final Option<MapStatus> mapStatus = writer.stop(true);
     assertTrue(mapStatus.isDefined());
+    assertEquals(0, mapStatus.get().numberOfOutput());
     assertTrue(mergedOutputFile.exists());
     assertArrayEquals(new long[NUM_PARTITITONS], partitionSizesInMergedFile);
     assertEquals(0, taskMetrics.shuffleWriteMetrics().recordsWritten());
@@ -252,6 +253,7 @@ public class UnsafeShuffleWriterSuite {
     writer.write(dataToWrite.iterator());
     final Option<MapStatus> mapStatus = writer.stop(true);
     assertTrue(mapStatus.isDefined());
+    assertEquals(NUM_PARTITITONS, mapStatus.get().numberOfOutput());
     assertTrue(mergedOutputFile.exists());
 
     long sumOfPartitionSizes = 0;

@@ -27,7 +27,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
 import org.apache.spark.util.Utils
 
 /**
@@ -103,6 +103,13 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   /** Returns all field names in an array. */
   def fieldNames: Array[String] = fields.map(_.name)
+
+  /**
+   * Returns all field names in an array. This is an alias of `fieldNames`.
+   *
+   * @since 2.4.0
+   */
+  def names: Array[String] = fieldNames
 
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
@@ -264,7 +271,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   def apply(name: String): StructField = {
     nameToField.getOrElse(name,
-      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
+      throw new IllegalArgumentException(
+        s"""Field "$name" does not exist.
+           |Available fields: ${fieldNames.mkString(", ")}""".stripMargin))
   }
 
   /**
@@ -277,7 +286,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     val nonExistFields = names -- fieldNamesSet
     if (nonExistFields.nonEmpty) {
       throw new IllegalArgumentException(
-        s"Field ${nonExistFields.mkString(",")} does not exist.")
+        s"""Nonexistent field(s): ${nonExistFields.mkString(", ")}.
+           |Available fields: ${fieldNames.mkString(", ")}""".stripMargin)
     }
     // Preserve the original order of fields.
     StructType(fields.filter(f => names.contains(f.name)))
@@ -290,7 +300,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   def fieldIndex(name: String): Int = {
     nameToIndex.getOrElse(name,
-      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
+      throw new IllegalArgumentException(
+        s"""Field "$name" does not exist.
+           |Available fields: ${fieldNames.mkString(", ")}""".stripMargin))
   }
 
   private[sql] def getFieldIndex(name: String): Option[Int] = {
@@ -347,6 +359,14 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     val fieldTypes = fields.map(f => s"${quoteIdentifier(f.name)}: ${f.dataType.sql}")
     s"STRUCT<${fieldTypes.mkString(", ")}>"
   }
+
+  /**
+   * Returns a string containing a schema in DDL format. For example, the following value:
+   * `StructType(Seq(StructField("eventId", IntegerType), StructField("s", StringType)))`
+   * will be converted to `eventId` INT, `s` STRING.
+   * The returned DDL schema can be used in a table creation.
+   */
+  def toDDL: String = fields.map(_.toDDL).mkString(",")
 
   private[sql] override def simpleString(maxNumberFields: Int): String = {
     val builder = new StringBuilder
@@ -414,7 +434,7 @@ object StructType extends AbstractDataType {
   private[sql] def fromString(raw: String): StructType = {
     Try(DataType.fromJson(raw)).getOrElse(LegacyTypeStringParser.parse(raw)) match {
       case t: StructType => t
-      case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
+      case _ => throw new RuntimeException(s"Failed parsing ${StructType.simpleString}: $raw")
     }
   }
 
@@ -516,7 +536,8 @@ object StructType extends AbstractDataType {
         leftType
 
       case _ =>
-        throw new SparkException(s"Failed to merge incompatible data types $left and $right")
+        throw new SparkException(s"Failed to merge incompatible data types ${left.catalogString}" +
+          s" and ${right.catalogString}")
     }
 
   private[sql] def fieldsMap(fields: Array[StructField]): Map[String, StructField] = {

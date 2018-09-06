@@ -84,7 +84,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   // Testing the Broadcast based join for cartesian join (cross join)
-  // We assume that the Broadcast Join Threshold will works since the src is a small table
+  // We assume that the Broadcast Join Threshold will work since the src is a small table
   private val spark_10484_1 = """
                                 | SELECT a.key, b.key
                                 | FROM src a LEFT JOIN src b WHERE a.key > b.key + 300
@@ -1177,13 +1177,18 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         assert(spark.table("with_parts").filter($"p" === 2).collect().head == Row(1, 2))
       }
 
-      val originalValue = spark.sparkContext.hadoopConfiguration.get(modeConfKey, "nonstrict")
+      // Turn off style check since the following test is to modify hadoop configuration on purpose.
+      // scalastyle:off hadoopconfiguration
+      val hadoopConf = spark.sparkContext.hadoopConfiguration
+      // scalastyle:on hadoopconfiguration
+
+      val originalValue = hadoopConf.get(modeConfKey, "nonstrict")
       try {
-        spark.sparkContext.hadoopConfiguration.set(modeConfKey, "nonstrict")
+        hadoopConf.set(modeConfKey, "nonstrict")
         sql("INSERT OVERWRITE TABLE with_parts partition(p) select 3, 4")
         assert(spark.table("with_parts").filter($"p" === 4).collect().head == Row(3, 4))
       } finally {
-        spark.sparkContext.hadoopConfiguration.set(modeConfKey, originalValue)
+        hadoopConf.set(modeConfKey, originalValue)
       }
     }
   }

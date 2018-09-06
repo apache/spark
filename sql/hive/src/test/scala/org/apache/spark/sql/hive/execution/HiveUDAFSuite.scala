@@ -49,8 +49,12 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   protected override def afterAll(): Unit = {
-    sql(s"DROP TEMPORARY FUNCTION IF EXISTS mock")
-    sql(s"DROP TEMPORARY FUNCTION IF EXISTS hive_max")
+    try {
+      sql(s"DROP TEMPORARY FUNCTION IF EXISTS mock")
+      sql(s"DROP TEMPORARY FUNCTION IF EXISTS hive_max")
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("built-in Hive UDAF") {

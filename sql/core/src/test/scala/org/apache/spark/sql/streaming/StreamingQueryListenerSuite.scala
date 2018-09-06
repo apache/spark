@@ -33,6 +33,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.sql.{Encoder, SparkSession}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.util.JsonProtocol
@@ -230,7 +231,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   test("event ordering") {
     val listener = new EventCollector
     withListenerAdded(listener) {
-      for (i <- 1 to 100) {
+      for (i <- 1 to 50) {
         listener.reset()
         require(listener.startEvent === null)
         testStream(MemoryStream[Int].toDS)(
@@ -298,9 +299,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       try {
         val input = new MemoryStream[Int](0, sqlContext) {
           @volatile var numTriggers = 0
-          override def getOffset: Option[Offset] = {
+          override def latestOffset(): OffsetV2 = {
             numTriggers += 1
-            super.getOffset
+            super.latestOffset()
           }
         }
         val clock = new StreamManualClock()

@@ -106,7 +106,7 @@ You can also use `bin/pyspark` to launch an interactive Python shell.
 
 If you wish to access HDFS data, you need to use a build of PySpark linking
 to your version of HDFS.
-[Prebuilt packages](http://spark.apache.org/downloads.html) are also available on the Spark homepage
+[Prebuilt packages](https://spark.apache.org/downloads.html) are also available on the Spark homepage
 for common HDFS versions.
 
 Finally, you need to import some Spark classes into your program. Add the following line:
@@ -818,7 +818,7 @@ The behavior of the above code is undefined, and may not work as intended. To ex
 
 The variables within the closure sent to each executor are now copies and thus, when **counter** is referenced within the `foreach` function, it's no longer the **counter** on the driver node. There is still a **counter** in the memory of the driver node but this is no longer visible to the executors! The executors only see the copy from the serialized closure. Thus, the final value of **counter** will still be zero since all operations on **counter** were referencing the value within the serialized closure.
 
-In local mode, in some circumstances the `foreach` function will actually execute within the same JVM as the driver and will reference the same original **counter**, and may actually update it.
+In local mode, in some circumstances, the `foreach` function will actually execute within the same JVM as the driver and will reference the same original **counter**, and may actually update it.
 
 To ensure well-defined behavior in these sorts of scenarios one should use an [`Accumulator`](#accumulators). Accumulators in Spark are used specifically to provide a mechanism for safely updating a variable when execution is split up across worker nodes in a cluster. The Accumulators section of this guide discusses these in more detail.
 
@@ -1569,7 +1569,7 @@ as Spark does not support two contexts running concurrently in the same program.
 
 # Where to Go from Here
 
-You can see some [example Spark programs](http://spark.apache.org/examples.html) on the Spark website.
+You can see some [example Spark programs](https://spark.apache.org/examples.html) on the Spark website.
 In addition, Spark includes several samples in the `examples` directory
 ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),

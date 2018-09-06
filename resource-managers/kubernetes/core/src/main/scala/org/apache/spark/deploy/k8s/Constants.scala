@@ -25,9 +25,6 @@ private[spark] object Constants {
   val SPARK_POD_DRIVER_ROLE = "driver"
   val SPARK_POD_EXECUTOR_ROLE = "executor"
 
-  // Annotations
-  val SPARK_APP_NAME_ANNOTATION = "spark-app-name"
-
   // Credentials secrets
   val DRIVER_CREDENTIALS_SECRETS_BASE_DIR =
     "/mnt/secrets/spark-kubernetes-credentials"
@@ -50,39 +47,35 @@ private[spark] object Constants {
   val DEFAULT_BLOCKMANAGER_PORT = 7079
   val DRIVER_PORT_NAME = "driver-rpc-port"
   val BLOCK_MANAGER_PORT_NAME = "blockmanager"
-  val EXECUTOR_PORT_NAME = "executor"
+  val UI_PORT_NAME = "spark-ui"
 
   // Environment Variables
-  val ENV_EXECUTOR_PORT = "SPARK_EXECUTOR_PORT"
   val ENV_DRIVER_URL = "SPARK_DRIVER_URL"
   val ENV_EXECUTOR_CORES = "SPARK_EXECUTOR_CORES"
   val ENV_EXECUTOR_MEMORY = "SPARK_EXECUTOR_MEMORY"
   val ENV_APPLICATION_ID = "SPARK_APPLICATION_ID"
   val ENV_EXECUTOR_ID = "SPARK_EXECUTOR_ID"
   val ENV_EXECUTOR_POD_IP = "SPARK_EXECUTOR_POD_IP"
-  val ENV_MOUNTED_CLASSPATH = "SPARK_MOUNTED_CLASSPATH"
   val ENV_JAVA_OPT_PREFIX = "SPARK_JAVA_OPT_"
   val ENV_CLASSPATH = "SPARK_CLASSPATH"
-  val ENV_DRIVER_MAIN_CLASS = "SPARK_DRIVER_CLASS"
-  val ENV_DRIVER_ARGS = "SPARK_DRIVER_ARGS"
-  val ENV_DRIVER_JAVA_OPTS = "SPARK_DRIVER_JAVA_OPTS"
   val ENV_DRIVER_BIND_ADDRESS = "SPARK_DRIVER_BIND_ADDRESS"
-  val ENV_DRIVER_MEMORY = "SPARK_DRIVER_MEMORY"
-  val ENV_MOUNTED_FILES_DIR = "SPARK_MOUNTED_FILES_DIR"
+  val ENV_SPARK_CONF_DIR = "SPARK_CONF_DIR"
+  // Spark app configs for containers
+  val SPARK_CONF_VOLUME = "spark-conf-volume"
+  val SPARK_CONF_DIR_INTERNAL = "/opt/spark/conf"
+  val SPARK_CONF_FILE_NAME = "spark.properties"
+  val SPARK_CONF_PATH = s"$SPARK_CONF_DIR_INTERNAL/$SPARK_CONF_FILE_NAME"
 
-  // Bootstrapping dependencies with the init-container
-  val INIT_CONTAINER_DOWNLOAD_JARS_VOLUME_NAME = "download-jars-volume"
-  val INIT_CONTAINER_DOWNLOAD_FILES_VOLUME_NAME = "download-files-volume"
-  val INIT_CONTAINER_PROPERTIES_FILE_VOLUME = "spark-init-properties"
-  val INIT_CONTAINER_PROPERTIES_FILE_DIR = "/etc/spark-init"
-  val INIT_CONTAINER_PROPERTIES_FILE_NAME = "spark-init.properties"
-  val INIT_CONTAINER_PROPERTIES_FILE_PATH =
-    s"$INIT_CONTAINER_PROPERTIES_FILE_DIR/$INIT_CONTAINER_PROPERTIES_FILE_NAME"
-  val INIT_CONTAINER_SECRET_VOLUME_NAME = "spark-init-secret"
+  // BINDINGS
+  val ENV_PYSPARK_PRIMARY = "PYSPARK_PRIMARY"
+  val ENV_PYSPARK_FILES = "PYSPARK_FILES"
+  val ENV_PYSPARK_ARGS = "PYSPARK_APP_ARGS"
+  val ENV_PYSPARK_MAJOR_PYTHON_VERSION = "PYSPARK_MAJOR_PYTHON_VERSION"
+  val ENV_R_PRIMARY = "R_PRIMARY"
+  val ENV_R_ARGS = "R_APP_ARGS"
 
   // Miscellaneous
   val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
   val DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
-  val MEMORY_OVERHEAD_FACTOR = 0.10
   val MEMORY_OVERHEAD_MIN_MIB = 384L
 }

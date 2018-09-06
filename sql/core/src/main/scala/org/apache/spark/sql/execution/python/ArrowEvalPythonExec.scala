@@ -23,7 +23,9 @@ import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.arrow.ArrowUtils
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -56,42 +58,48 @@ private class BatchIterator[T](iter: Iterator[T], batchSize: Int)
 }
 
 /**
- * A physical plan that evaluates a [[PythonUDF]],
+ * A logical plan that evaluates a [[PythonUDF]].
+ */
+case class ArrowEvalPython(udfs: Seq[PythonUDF], output: Seq[Attribute], child: LogicalPlan)
+  extends UnaryNode
+
+/**
+ * A physical plan that evaluates a [[PythonUDF]].
  */
 case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], child: SparkPlan)
   extends EvalPythonExec(udfs, output, child) {
 
   private val batchSize = conf.arrowMaxRecordsPerBatch
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
-  private val pandasRespectSessionTimeZone = conf.pandasRespectSessionTimeZone
+  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
   protected override def evaluate(
       funcs: Seq[ChainedPythonFunctions],
-      bufferSize: Int,
-      reuseWorker: Boolean,
       argOffsets: Array[Array[Int]],
       iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[InternalRow] = {
 
-    val schemaOut = StructType.fromAttributes(output.drop(child.output.length).zipWithIndex
-      .map { case (attr, i) => attr.withName(s"_$i") })
+    val outputTypes = output.drop(child.output.length).map(_.dataType)
 
     // DO NOT use iter.grouped(). See BatchIterator.
     val batchIter = if (batchSize > 0) new BatchIterator(iter, batchSize) else Iterator(iter)
 
     val columnarBatchIter = new ArrowPythonRunner(
-        funcs, bufferSize, reuseWorker,
-        PythonEvalType.SQL_PANDAS_SCALAR_UDF, argOffsets, schema,
-        sessionLocalTimeZone, pandasRespectSessionTimeZone)
-      .compute(batchIter, context.partitionId(), context)
+      funcs,
+      PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+      argOffsets,
+      schema,
+      sessionLocalTimeZone,
+      pythonRunnerConf).compute(batchIter, context.partitionId(), context)
 
     new Iterator[InternalRow] {
 
       private var currentIter = if (columnarBatchIter.hasNext) {
         val batch = columnarBatchIter.next()
-        assert(schemaOut.equals(batch.schema),
-          s"Invalid schema from pandas_udf: expected $schemaOut, got ${batch.schema}")
+        val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
+        assert(outputTypes == actualDataTypes, "Invalid schema from pandas_udf: " +
+          s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
         batch.rowIterator.asScala
       } else {
         Iterator.empty

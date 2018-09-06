@@ -23,8 +23,8 @@ import scala.util.Random
 
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.{SparkException, TaskContext}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.SparkException
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -153,23 +153,17 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
 
   test("Cancelling stage in a query with Range.") {
     val listener = new SparkListener {
-      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-        eventually(timeout(10.seconds)) {
-          assert(DataFrameRangeSuite.stageToKill > 0)
-        }
-        sparkContext.cancelStage(DataFrameRangeSuite.stageToKill)
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+        sparkContext.cancelStage(taskStart.stageId)
       }
     }
 
     sparkContext.addSparkListener(listener)
     for (codegen <- Seq(true, false)) {
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString()) {
-        DataFrameRangeSuite.stageToKill = -1
         val ex = intercept[SparkException] {
-          spark.range(1000000000L).map { x =>
-            DataFrameRangeSuite.stageToKill = TaskContext.get().stageId()
-            x
-          }.toDF("id").agg(sum("id")).collect()
+          spark.range(0, 100000000000L, 1, 1)
+            .toDF("id").agg(sum("id")).collect()
         }
         ex.getCause() match {
           case null =>
@@ -180,10 +174,13 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
             fail("Expected the cause to be SparkException, got " + cause.toString() + " instead.")
         }
       }
+      // Wait until all ListenerBus events consumed to make sure cancelStage called for all stages
+      sparkContext.listenerBus.waitUntilEmpty(20.seconds.toMillis)
       eventually(timeout(20.seconds)) {
         assert(sparkContext.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
       }
     }
+    sparkContext.removeSparkListener(listener)
   }
 
   test("SPARK-20430 Initialize Range parameters in a driver side") {
@@ -202,8 +199,4 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
       }
     }
   }
-}
-
-object DataFrameRangeSuite {
-  @volatile var stageToKill = -1
 }

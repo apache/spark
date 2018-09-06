@@ -20,48 +20,28 @@ package test.org.apache.spark.sql.sources.v2;
 import java.io.IOException;
 import java.util.*;
 
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.sources.GreaterThan;
+import org.apache.spark.sql.sources.v2.BatchReadSupportProvider;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
-import org.apache.spark.sql.sources.v2.DataSourceV2Options;
-import org.apache.spark.sql.sources.v2.ReadSupport;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.StructType;
 
-public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
+public class JavaAdvancedDataSourceV2 implements DataSourceV2, BatchReadSupportProvider {
 
-  class Reader implements DataSourceV2Reader, SupportsPushDownRequiredColumns,
-      SupportsPushDownFilters {
-
-    private StructType requiredSchema = new StructType().add("i", "int").add("j", "int");
-    private Filter[] filters = new Filter[0];
-
+  public class ReadSupport extends JavaSimpleReadSupport {
     @Override
-    public StructType readSchema() {
-      return requiredSchema;
+    public ScanConfigBuilder newScanConfigBuilder() {
+      return new AdvancedScanConfigBuilder();
     }
 
     @Override
-    public void pruneColumns(StructType requiredSchema) {
-      this.requiredSchema = requiredSchema;
-    }
-
-    @Override
-    public Filter[] pushFilters(Filter[] filters) {
-      this.filters = filters;
-      return new Filter[0];
-    }
-
-    @Override
-    public Filter[] pushedFilters() {
-      return filters;
-    }
-
-    @Override
-    public List<ReadTask<Row>> createReadTasks() {
-      List<ReadTask<Row>> res = new ArrayList<>();
+    public InputPartition[] planInputPartitions(ScanConfig config) {
+      Filter[] filters = ((AdvancedScanConfigBuilder) config).filters;
+      List<InputPartition> res = new ArrayList<>();
 
       Integer lowerBound = null;
       for (Filter filter : filters) {
@@ -75,63 +55,120 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
       }
 
       if (lowerBound == null) {
-        res.add(new JavaAdvancedReadTask(0, 5, requiredSchema));
-        res.add(new JavaAdvancedReadTask(5, 10, requiredSchema));
+        res.add(new JavaRangeInputPartition(0, 5));
+        res.add(new JavaRangeInputPartition(5, 10));
       } else if (lowerBound < 4) {
-        res.add(new JavaAdvancedReadTask(lowerBound + 1, 5, requiredSchema));
-        res.add(new JavaAdvancedReadTask(5, 10, requiredSchema));
+        res.add(new JavaRangeInputPartition(lowerBound + 1, 5));
+        res.add(new JavaRangeInputPartition(5, 10));
       } else if (lowerBound < 9) {
-        res.add(new JavaAdvancedReadTask(lowerBound + 1, 10, requiredSchema));
+        res.add(new JavaRangeInputPartition(lowerBound + 1, 10));
       }
 
-      return res;
+      return res.stream().toArray(InputPartition[]::new);
+    }
+
+    @Override
+    public PartitionReaderFactory createReaderFactory(ScanConfig config) {
+      StructType requiredSchema = ((AdvancedScanConfigBuilder) config).requiredSchema;
+      return new AdvancedReaderFactory(requiredSchema);
     }
   }
 
-  static class JavaAdvancedReadTask implements ReadTask<Row>, DataReader<Row> {
-    private int start;
-    private int end;
-    private StructType requiredSchema;
+  public static class AdvancedScanConfigBuilder implements ScanConfigBuilder, ScanConfig,
+    SupportsPushDownFilters, SupportsPushDownRequiredColumns {
 
-    JavaAdvancedReadTask(int start, int end, StructType requiredSchema) {
-      this.start = start;
-      this.end = end;
+    // Exposed for testing.
+    public StructType requiredSchema = new StructType().add("i", "int").add("j", "int");
+    public Filter[] filters = new Filter[0];
+
+    @Override
+    public void pruneColumns(StructType requiredSchema) {
       this.requiredSchema = requiredSchema;
     }
 
     @Override
-    public DataReader<Row> createDataReader() {
-      return new JavaAdvancedReadTask(start - 1, end, requiredSchema);
+    public StructType readSchema() {
+      return requiredSchema;
     }
 
     @Override
-    public boolean next() {
-      start += 1;
-      return start < end;
-    }
-
-    @Override
-    public Row get() {
-      Object[] values = new Object[requiredSchema.size()];
-      for (int i = 0; i < values.length; i++) {
-        if ("i".equals(requiredSchema.apply(i).name())) {
-          values[i] = start;
-        } else if ("j".equals(requiredSchema.apply(i).name())) {
-          values[i] = -start;
+    public Filter[] pushFilters(Filter[] filters) {
+      Filter[] supported = Arrays.stream(filters).filter(f -> {
+        if (f instanceof GreaterThan) {
+          GreaterThan gt = (GreaterThan) f;
+          return gt.attribute().equals("i") && gt.value() instanceof Integer;
+        } else {
+          return false;
         }
-      }
-      return new GenericRow(values);
+      }).toArray(Filter[]::new);
+
+      Filter[] unsupported = Arrays.stream(filters).filter(f -> {
+        if (f instanceof GreaterThan) {
+          GreaterThan gt = (GreaterThan) f;
+          return !gt.attribute().equals("i") || !(gt.value() instanceof Integer);
+        } else {
+          return true;
+        }
+      }).toArray(Filter[]::new);
+
+      this.filters = supported;
+      return unsupported;
     }
 
     @Override
-    public void close() throws IOException {
+    public Filter[] pushedFilters() {
+      return filters;
+    }
 
+    @Override
+    public ScanConfig build() {
+      return this;
+    }
+  }
+
+  static class AdvancedReaderFactory implements PartitionReaderFactory {
+    StructType requiredSchema;
+
+    AdvancedReaderFactory(StructType requiredSchema) {
+      this.requiredSchema = requiredSchema;
+    }
+
+    @Override
+    public PartitionReader<InternalRow> createReader(InputPartition partition) {
+      JavaRangeInputPartition p = (JavaRangeInputPartition) partition;
+      return new PartitionReader<InternalRow>() {
+        private int current = p.start - 1;
+
+        @Override
+        public boolean next() throws IOException {
+          current += 1;
+          return current < p.end;
+        }
+
+        @Override
+        public InternalRow get() {
+          Object[] values = new Object[requiredSchema.size()];
+          for (int i = 0; i < values.length; i++) {
+            if ("i".equals(requiredSchema.apply(i).name())) {
+              values[i] = current;
+            } else if ("j".equals(requiredSchema.apply(i).name())) {
+              values[i] = -current;
+            }
+          }
+          return new GenericInternalRow(values);
+        }
+
+        @Override
+        public void close() throws IOException {
+
+        }
+      };
     }
   }
 
 
   @Override
-  public DataSourceV2Reader createReader(DataSourceV2Options options) {
-    return new Reader();
+  public BatchReadSupport createBatchReadSupport(DataSourceOptions options) {
+    return new ReadSupport();
   }
 }

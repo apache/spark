@@ -50,17 +50,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  */
 public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
-  /**
-   * The default size of batch. We use this value for ORC reader to make it consistent with Spark's
-   * columnar batch, because their default batch sizes are different like the following:
-   *
-   * - ORC's VectorizedRowBatch.DEFAULT_SIZE = 1024
-   * - Spark's ColumnarBatch.DEFAULT_BATCH_SIZE = 4 * 1024
-   */
-  private static final int DEFAULT_SIZE = 4 * 1024;
-
-  // ORC File Reader
-  private Reader reader;
+  // The capacity of vectorized batch.
+  private int capacity;
 
   // Vectorized ORC Row Batch
   private VectorizedRowBatch batch;
@@ -91,29 +82,30 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   // Whether or not to copy the ORC columnar batch to Spark columnar batch.
   private final boolean copyToSpark;
 
-  public OrcColumnarBatchReader(boolean useOffHeap, boolean copyToSpark) {
+  public OrcColumnarBatchReader(boolean useOffHeap, boolean copyToSpark, int capacity) {
     MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
     this.copyToSpark = copyToSpark;
+    this.capacity = capacity;
   }
 
 
   @Override
-  public Void getCurrentKey() throws IOException, InterruptedException {
+  public Void getCurrentKey() {
     return null;
   }
 
   @Override
-  public ColumnarBatch getCurrentValue() throws IOException, InterruptedException {
+  public ColumnarBatch getCurrentValue() {
     return columnarBatch;
   }
 
   @Override
-  public float getProgress() throws IOException, InterruptedException {
+  public float getProgress() throws IOException {
     return recordReader.getProgress();
   }
 
   @Override
-  public boolean nextKeyValue() throws IOException, InterruptedException {
+  public boolean nextKeyValue() throws IOException {
     return nextBatch();
   }
 
@@ -134,16 +126,15 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
    * Please note that `initBatch` is needed to be called after this.
    */
   @Override
-  public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
-      throws IOException, InterruptedException {
+  public void initialize(
+      InputSplit inputSplit, TaskAttemptContext taskAttemptContext) throws IOException {
     FileSplit fileSplit = (FileSplit)inputSplit;
     Configuration conf = taskAttemptContext.getConfiguration();
-    reader = OrcFile.createReader(
+    Reader reader = OrcFile.createReader(
       fileSplit.getPath(),
       OrcFile.readerOptions(conf)
         .maxLength(OrcConf.MAX_FILE_LENGTH.getLong(conf))
         .filesystem(fileSplit.getPath().getFileSystem(conf)));
-
     Reader.Options options =
       OrcInputFormat.buildOptions(conf, reader, fileSplit.getStart(), fileSplit.getLength());
     recordReader = reader.rows(options);
@@ -159,7 +150,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       StructField[] requiredFields,
       StructType partitionSchema,
       InternalRow partitionValues) {
-    batch = orcSchema.createRowBatch(DEFAULT_SIZE);
+    batch = orcSchema.createRowBatch(capacity);
     assert(!batch.selectedInUse); // `selectedInUse` should be initialized with `false`.
 
     this.requiredFields = requiredFields;
@@ -170,8 +161,6 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
     for (StructField f : partitionSchema.fields()) {
       resultSchema = resultSchema.add(f);
     }
-
-    int capacity = DEFAULT_SIZE;
 
     if (copyToSpark) {
       if (MEMORY_MODE == MemoryMode.OFF_HEAP) {
@@ -196,7 +185,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
         }
       }
 
-      columnarBatch = new ColumnarBatch(resultSchema, columnVectors, capacity);
+      columnarBatch = new ColumnarBatch(columnVectors);
     } else {
       // Just wrap the ORC column vector instead of copying it to Spark column vector.
       orcVectorWrappers = new org.apache.spark.sql.vectorized.ColumnVector[resultSchema.length()];
@@ -226,7 +215,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
         }
       }
 
-      columnarBatch = new ColumnarBatch(resultSchema, orcVectorWrappers, capacity);
+      columnarBatch = new ColumnarBatch(orcVectorWrappers);
     }
   }
 
@@ -302,10 +291,9 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
         toColumn.putDoubles(0, batchSize, ((DoubleColumnVector)fromColumn).vector[0]);
       } else if (type instanceof StringType || type instanceof BinaryType) {
         BytesColumnVector data = (BytesColumnVector)fromColumn;
-        WritableColumnVector arrayData = toColumn.getChildColumn(0);
         int size = data.vector[0].length;
-        arrayData.reserve(size);
-        arrayData.putBytes(0, size, data.vector[0], 0);
+        toColumn.arrayData().reserve(size);
+        toColumn.arrayData().putBytes(0, size, data.vector[0], 0);
         for (int index = 0; index < batchSize; index++) {
           toColumn.putArray(index, 0, size);
         }
@@ -365,7 +353,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       toColumn.putDoubles(0, batchSize, ((DoubleColumnVector)fromColumn).vector, 0);
     } else if (type instanceof StringType || type instanceof BinaryType) {
       BytesColumnVector data = ((BytesColumnVector)fromColumn);
-      WritableColumnVector arrayData = toColumn.getChildColumn(0);
+      WritableColumnVector arrayData = toColumn.arrayData();
       int totalNumBytes = IntStream.of(data.length).sum();
       arrayData.reserve(totalNumBytes);
       for (int index = 0, pos = 0; index < batchSize; pos += data.length[index], index++) {
@@ -376,8 +364,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       DecimalType decimalType = (DecimalType)type;
       DecimalColumnVector data = ((DecimalColumnVector)fromColumn);
       if (decimalType.precision() > Decimal.MAX_LONG_DIGITS()) {
-        WritableColumnVector arrayData = toColumn.getChildColumn(0);
-        arrayData.reserve(batchSize * 16);
+        toColumn.arrayData().reserve(batchSize * 16);
       }
       for (int index = 0; index < batchSize; index++) {
         putDecimalWritable(
@@ -472,7 +459,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       }
     } else if (type instanceof StringType || type instanceof BinaryType) {
       BytesColumnVector vector = (BytesColumnVector)fromColumn;
-      WritableColumnVector arrayData = toColumn.getChildColumn(0);
+      WritableColumnVector arrayData = toColumn.arrayData();
       int totalNumBytes = IntStream.of(vector.length).sum();
       arrayData.reserve(totalNumBytes);
       for (int index = 0, pos = 0; index < batchSize; pos += vector.length[index], index++) {
@@ -487,8 +474,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       DecimalType decimalType = (DecimalType)type;
       HiveDecimalWritable[] vector = ((DecimalColumnVector)fromColumn).vector;
       if (decimalType.precision() > Decimal.MAX_LONG_DIGITS()) {
-        WritableColumnVector arrayData = toColumn.getChildColumn(0);
-        arrayData.reserve(batchSize * 16);
+        toColumn.arrayData().reserve(batchSize * 16);
       }
       for (int index = 0; index < batchSize; index++) {
         if (fromColumn.isNull[index]) {
@@ -511,7 +497,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
    * Returns the number of micros since epoch from an element of TimestampColumnVector.
    */
   private static long fromTimestampColumnVector(TimestampColumnVector vector, int index) {
-    return vector.time[index] * 1000L + vector.nanos[index] / 1000L;
+    return vector.time[index] * 1000 + (vector.nanos[index] / 1000 % 1000);
   }
 
   /**
@@ -534,8 +520,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       toColumn.putLong(index, value.toUnscaledLong());
     } else {
       byte[] bytes = value.toJavaBigDecimal().unscaledValue().toByteArray();
-      WritableColumnVector arrayData = toColumn.getChildColumn(0);
-      arrayData.putBytes(index * 16, bytes.length, bytes, 0);
+      toColumn.arrayData().putBytes(index * 16, bytes.length, bytes, 0);
       toColumn.putArray(index, index * 16, bytes.length);
     }
   }
@@ -560,9 +545,8 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       toColumn.putLongs(0, size, value.toUnscaledLong());
     } else {
       byte[] bytes = value.toJavaBigDecimal().unscaledValue().toByteArray();
-      WritableColumnVector arrayData = toColumn.getChildColumn(0);
-      arrayData.reserve(bytes.length);
-      arrayData.putBytes(0, bytes.length, bytes, 0);
+      toColumn.arrayData().reserve(bytes.length);
+      toColumn.arrayData().putBytes(0, bytes.length, bytes, 0);
       for (int index = 0; index < size; index++) {
         toColumn.putArray(index, 0, bytes.length);
       }

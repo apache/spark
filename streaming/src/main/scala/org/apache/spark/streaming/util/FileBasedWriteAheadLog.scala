@@ -222,7 +222,7 @@ private[streaming] class FileBasedWriteAheadLog(
         pastLogs += LogInfo(currentLogWriterStartTime, currentLogWriterStopTime, _)
       }
       currentLogWriterStartTime = currentTime
-      currentLogWriterStopTime = currentTime + (rollingIntervalSecs * 1000)
+      currentLogWriterStopTime = currentTime + (rollingIntervalSecs * 1000L)
       val newLogPath = new Path(logDirectory,
         timeToLogFile(currentLogWriterStartTime, currentLogWriterStopTime))
       currentLogPath = Some(newLogPath.toString)
@@ -312,6 +312,7 @@ private[streaming] object FileBasedWriteAheadLog {
       handler: I => Iterator[O]): Iterator[O] = {
     val taskSupport = new ExecutionContextTaskSupport(executionContext)
     val groupSize = taskSupport.parallelismLevel.max(8)
+
     source.grouped(groupSize).flatMap { group =>
       val parallelCollection = group.par
       parallelCollection.tasksupport = taskSupport

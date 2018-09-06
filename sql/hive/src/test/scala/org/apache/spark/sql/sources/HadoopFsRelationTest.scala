@@ -335,16 +335,17 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   test("saveAsTable()/load() - non-partitioned table - ErrorIfExists") {
     withTable("t") {
-      sql("CREATE TABLE t(i INT) USING parquet")
-      intercept[AnalysisException] {
+      sql(s"CREATE TABLE t(i INT) USING $dataSourceName")
+      val msg = intercept[AnalysisException] {
         testDF.write.format(dataSourceName).mode(SaveMode.ErrorIfExists).saveAsTable("t")
-      }
+      }.getMessage
+      assert(msg.contains("Table `t` already exists"))
     }
   }
 
   test("saveAsTable()/load() - non-partitioned table - Ignore") {
     withTable("t") {
-      sql("CREATE TABLE t(i INT) USING parquet")
+      sql(s"CREATE TABLE t(i INT) USING $dataSourceName")
       testDF.write.format(dataSourceName).mode(SaveMode.Ignore).saveAsTable("t")
       assert(spark.table("t").collect().isEmpty)
     }
@@ -665,7 +666,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             assert(expectedResult.isRight, s"Was not expecting error with $path: " + e)
             assert(
               e.getMessage.contains(expectedResult.right.get),
-              s"Did not find expected error message wiht $path")
+              s"Did not find expected error message with $path")
         }
       }
 
