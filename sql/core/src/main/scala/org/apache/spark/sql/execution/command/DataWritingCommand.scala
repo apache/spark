@@ -40,7 +40,7 @@ trait DataWritingCommand extends Command {
    */
   def query: LogicalPlan
 
-  override final def children: Seq[LogicalPlan] = query :: Nil
+  override final def innerChildren: Seq[LogicalPlan] = query :: Nil
 
   // Output column names of the analyzed input query plan.
   def outputColumnNames: Seq[String]

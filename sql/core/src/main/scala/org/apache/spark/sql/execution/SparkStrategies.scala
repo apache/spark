@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{execution, AnalysisException, Strategy}
+import org.apache.spark.sql.{execution, AnalysisException, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -534,7 +534,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case d: DataWritingCommand => DataWritingCommandExec(d, planLater(d.query)) :: Nil
+      case d: DataWritingCommand =>
+        val plan = SparkSession.getActiveSession.get.sessionState.executePlan(d.query).sparkPlan
+        DataWritingCommandExec(d, plan) :: Nil
       case r: RunnableCommand => ExecutedCommandExec(r) :: Nil
 
       case MemoryPlan(sink, output) =>

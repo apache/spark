@@ -2300,6 +2300,38 @@ class HiveDDLSuite
     }
   }
 
+  test("SPARK-25135: FileFormatWriter should respect the input query schema in HIVE") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val cnt = 30
+      val table1Path = s"$path/table1"
+      val table2Path = s"$path/table2"
+      val table3Path = s"$path/table3"
+      val data =
+        spark.range(cnt).selectExpr("cast(id as bigint) as col1", "cast(id % 3 as bigint) as col2")
+      data.write.mode(SaveMode.Overwrite).parquet(table1Path)
+      withTable("table1", "table2", "table3") {
+        spark.sql(
+          s"CREATE TABLE table1(col1 bigint, col2 bigint) using parquet location '$table1Path'")
+        spark.sql(
+          s"CREATE TABLE table2(COL1 bigint, COL2 bigint) using parquet location '$table2Path'")
+        spark.sql("CREATE TABLE table3(COL1 bigint, COL2 bigint) using parquet " +
+          "PARTITIONED BY (COL2) " +
+          s"CLUSTERED BY (COL1) INTO 2 BUCKETS location '$table3Path'")
+
+        withView("view1") {
+          spark.sql("CREATE VIEW view1 as select col1, col2 from table1 where col1 > -20")
+          spark.sql("INSERT OVERWRITE TABLE table2 select COL1, COL2 from view1")
+          checkAnswer(spark.table("table2"), data)
+          assert(spark.read.parquet(table2Path).schema === spark.table("table2").schema)
+
+          spark.sql("INSERT OVERWRITE TABLE table3 select COL1, COL2 from view1 CLUSTER BY COL1")
+          checkAnswer(spark.table("table3"), data)
+        }
+      }
+    }
+  }
+
   test("SPARK-24812: desc formatted table for last access verification") {
     withTable("t1") {
       sql(
