@@ -26,7 +26,7 @@ import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql._
+import org.apache.spark.sql.{Column, _}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -83,8 +83,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       filterClass: Class[_ <: FilterPredicate],
       checker: (DataFrame, Seq[Row]) => Unit,
       expected: Seq[Row]): Unit = {
-    val output = predicate.collect { case a: Attribute => a }.distinct
-
     withSQLConf(
       SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
       SQLConf.PARQUET_FILTER_PUSHDOWN_DATE_ENABLED.key -> "true",
@@ -93,7 +91,9 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED.key -> "true",
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         val query = df
-          .select(output.map(e => Column(e)): _*)
+          // The following select will flatten the nested data structure,
+          // so comment it out for now until we find a better approach.
+          // .select(output.map(e => Column(e)): _*)
           .where(Column(predicate))
 
         var maybeRelation: Option[HadoopFsRelation] = None
@@ -150,7 +150,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     checkBinaryFilterPredicate(predicate, filterClass, Seq(Row(expected)))(df)
   }
 
-  private def testTimestampPushdown(data: Seq[Timestamp]): Unit = {
+  private def testTimestampPushDown(data: Seq[Timestamp]): Unit = {
     assert(data.size === 4)
     val ts1 = data.head
     val ts2 = data(1)
@@ -215,14 +215,43 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
+  case class N1[T](a: Option[T])
+
+  case class N2[T](b: Option[T])
+
   test("filter pushdown - boolean") {
-    withParquetDataFrame((true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) { implicit df =>
+    val data0 = (true :: false :: Nil).map(b => Tuple1.apply(Option(b)))
+    val data1 = data0.map(x => N1(Some(x)))
+    val data2 = data1.map(x => N2(Some(x)))
+
+    // zero nesting
+    withParquetDataFrame(data0) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
       checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], Seq(Row(true), Row(false)))
-
       checkFilterPredicate('_1 === true, classOf[Eq[_]], true)
       checkFilterPredicate('_1 <=> true, classOf[Eq[_]], true)
       checkFilterPredicate('_1 =!= true, classOf[NotEq[_]], false)
+    }
+
+    // one level nesting
+    withParquetDataFrame(data1) { implicit df =>
+      val col = Symbol("a._1")
+      checkFilterPredicate(col.isNull, classOf[Eq[_]], Seq.empty[Row])
+      checkFilterPredicate(col.isNotNull, classOf[NotEq[_]], Seq(Row(Row(true)), Row(Row(false))))
+      checkFilterPredicate(col === true, classOf[Eq[_]], Seq(Row(Row(true))))
+      checkFilterPredicate(col <=> true, classOf[Eq[_]], Seq(Row(Row(true))))
+      checkFilterPredicate(col =!= true, classOf[NotEq[_]], Seq(Row(Row(false))))
+    }
+
+    // two level nesting
+    withParquetDataFrame(data2) { implicit df =>
+      val col = Symbol("b.a._1")
+      checkFilterPredicate(col.isNull, classOf[Eq[_]], Seq.empty[Row])
+      checkFilterPredicate(col.isNotNull, classOf[NotEq[_]],
+        Seq(Row(Row(Row(true))), Row(Row(Row(false)))))
+      checkFilterPredicate(col === true, classOf[Eq[_]], Seq(Row(Row(Row(true)))))
+      checkFilterPredicate(col <=> true, classOf[Eq[_]], Seq(Row(Row(Row(true)))))
+      checkFilterPredicate(col =!= true, classOf[NotEq[_]], Seq(Row(Row(Row(false)))))
     }
   }
 
@@ -498,7 +527,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       Timestamp.valueOf("2018-06-17 08:28:53.123"))
     withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
       ParquetOutputTimestampType.TIMESTAMP_MILLIS.toString) {
-      testTimestampPushdown(millisData)
+      testTimestampPushDown(millisData)
     }
 
     // spark.sql.parquet.outputTimestampType = TIMESTAMP_MICROS
@@ -508,7 +537,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       Timestamp.valueOf("2018-06-17 08:28:53.123456"))
     withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
       ParquetOutputTimestampType.TIMESTAMP_MICROS.toString) {
-      testTimestampPushdown(microsData)
+      testTimestampPushDown(microsData)
     }
 
     // spark.sql.parquet.outputTimestampType = INT96 doesn't support pushdown
