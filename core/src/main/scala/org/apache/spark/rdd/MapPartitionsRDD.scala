@@ -19,18 +19,31 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Partition, TaskContext}
+import org.apache.spark.{Partition, Partitioner, TaskContext}
 
 /**
  * An RDD that applies the provided function to every partition of the parent RDD.
+ *
+ * @param prev The RDD being mapped over.
+ * @param f The function applied to each partition
+ * @param preservesPartitioning If the function changes does not change the keys or
+ *                              does so in such a way the previous partitioner is still valid.
+ * @param knownPartitioner If the result has a known partitioner.
  */
 private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     var prev: RDD[T],
     f: (TaskContext, Int, Iterator[T]) => Iterator[U],  // (TaskContext, partition index, iterator)
-    preservesPartitioning: Boolean = false)
+    preservesPartitioning: Boolean = false,
+    knownPartitioner: Option[Partitioner] = None)
   extends RDD[U](prev) {
 
-  override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
+  override val partitioner = {
+    if (preservesPartitioning) {
+      firstParent[T].partitioner
+    } else {
+      knownPartitioner
+    }
+  }
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
