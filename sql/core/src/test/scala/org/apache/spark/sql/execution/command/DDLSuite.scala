@@ -1704,8 +1704,19 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     assert(column.get.dataType == StringType)
 
     // Ensure that changing partition column type throw exception
-    intercept[AnalysisException] {
+    var msg = intercept[AnalysisException] {
       sql("ALTER TABLE dbx.tab1 CHANGE COLUMN a a STRING")
+    }
+    assert(msg.getMessage.startsWith(
+      "Can't find column `a` given table data columns"))
+
+    withTable("t") {
+      sql("CREATE TABLE t(s STRUCT<a:INT, b:STRING>) USING PARQUET")
+      msg = intercept[AnalysisException]{
+        sql("ALTER TABLE t CHANGE COLUMN s s INT")
+      }
+      assert(msg.getMessage.startsWith(
+        "ALTER TABLE CHANGE COLUMN is not supported for changing column "))
     }
   }
 

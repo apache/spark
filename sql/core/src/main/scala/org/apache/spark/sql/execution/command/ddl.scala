@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Resolver}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
@@ -318,8 +318,8 @@ case class AlterTableChangeColumnCommand(
 
     // Find the origin column from dataSchema by column name.
     val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
-    // Throw an AnalysisException if the column name is changed.
-    if (!columnEqual(originColumn, newColumn, resolver)) {
+    // Throw an AnalysisException if the column name is changed or type change is incompatible.
+    if (!columnCheck(originColumn, newColumn, resolver)) {
       throw new AnalysisException(
         "ALTER TABLE CHANGE COLUMN is not supported for changing column " +
           s"'${originColumn.name}' with type '${originColumn.dataType}' to " +
@@ -327,20 +327,11 @@ case class AlterTableChangeColumnCommand(
     }
 
     val typeChanged = originColumn.dataType != newColumn.dataType
-    val partitionColumnChanged = table.partitionColumnNames.contains(originColumn.name)
-
-    // Throw an AnalysisException if the type of partition column is changed.
-    if (typeChanged && partitionColumnChanged) {
-      throw new AnalysisException(
-        "ALTER TABLE CHANGE COLUMN is not supported for changing partition column" +
-          s"'${originColumn.name}' with type '${originColumn.dataType}' to " +
-          s"'${newColumn.name}' with type '${newColumn.dataType}'")
-    }
 
     val newDataSchema = table.dataSchema.fields.map { field =>
       if (field.name == originColumn.name) {
         // Add the comment to a column, if comment is empty, return the original column.
-        val newField = newColumn.getComment.map(field.withComment(_)).getOrElse(field)
+        val newField = newColumn.getComment().map(field.withComment).getOrElse(field)
         if (typeChanged) {
           newField.copy(dataType = newColumn.dataType)
         } else {
@@ -367,10 +358,10 @@ case class AlterTableChangeColumnCommand(
   }
 
   // Compare a [[StructField]] to another, return true if they have the same column
-  // name(by resolver) and dataType.
-  private def columnEqual(
+  // name(by resolver) and dataType and data type compatible.
+  private def columnCheck(
       field: StructField, other: StructField, resolver: Resolver): Boolean = {
-    resolver(field.name, other.name)
+    resolver(field.name, other.name) && Cast.canCast(field.dataType, other.dataType)
   }
 }
 
