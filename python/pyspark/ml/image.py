@@ -20,9 +20,6 @@
 
     An attribute of this module that contains the instance of :class:`_ImageSchema`.
 
-.. note:: Deprecated in 2.4.0. Use `spark.read.format("image").load(path)` instead and
-    this `ImageSchema` will be removed in 3.0.0.
-
 .. autoclass:: _ImageSchema
    :members:
 """
@@ -209,6 +206,9 @@ class _ImageSchema(object):
 
         .. note:: If sample ratio is less than 1, sampling uses a PathFilter that is efficient but
             potentially non-deterministic.
+
+        .. note:: Deprecated in 2.4.0. Use `spark.read.format("image").load(path)` instead and
+            this `readImages` will be removed in 3.0.0.
 
         :param str path: Path to the image directory.
         :param bool recursive: Recursive search flag.

@@ -35,8 +35,6 @@ import org.apache.spark.sql.types._
  */
 @Experimental
 @Since("2.3.0")
-@deprecated("use `spark.read.format(\"image\").load(path)` and this `ImageSchema` will be " +
-  "removed in 3.0.0.", "2.4.0")
 object ImageSchema {
 
   val undefinedImageType = "Undefined"
@@ -200,6 +198,8 @@ object ImageSchema {
    * @return DataFrame with a single column "image" of images;
    *         see ImageSchema for the details
    */
+  @deprecated("use `spark.read.format(\"image\").load(path)` and this `readImages` will be " +
+    "removed in 3.0.0.", "2.4.0")
   def readImages(path: String): DataFrame = readImages(path, null, false, -1, false, 1.0, 0)
 
   /**
@@ -220,6 +220,8 @@ object ImageSchema {
    * @return DataFrame with a single column "image" of images;
    *         see ImageSchema for the details
    */
+  @deprecated("use `spark.read.format(\"image\").load(path)` and this `readImages` will be " +
+    "removed in 3.0.0.", "2.4.0")
   def readImages(
       path: String,
       sparkSession: SparkSession,
