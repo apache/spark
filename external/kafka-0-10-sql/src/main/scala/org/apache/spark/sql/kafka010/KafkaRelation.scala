@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.{util => ju}
 import java.util.UUID
 
 import org.apache.kafka.common.TopicPartition
