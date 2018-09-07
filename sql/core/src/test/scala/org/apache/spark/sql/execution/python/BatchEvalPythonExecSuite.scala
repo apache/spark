@@ -126,22 +126,6 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
     spark.conf.set("spark.sql.crossJoin.enabled", "true")
     dummyPythonUDFTest()
   }
-
-  test("SPARK-25314") {
-    def dummyPythonUDFTest(): Unit = {
-      val df = Seq(("Hello", 4)).toDF("a", "b")
-      val df2 = Seq(("Hello", 4)).toDF("c", "d")
-      val joinDF = df.join(df2,
-        dummyPythonUDF(col("a"), col("c")) === dummyPythonUDF(col("d"), col("c")), "left_semi")
-      val qualifiedPlanNodes = joinDF.queryExecution.executedPlan.collect {
-        case b: BatchEvalPythonExec => b
-      }
-      assert(qualifiedPlanNodes.size == 1)
-    }
-    // Test with spark.sql.crossJoin.enabled=true
-    spark.conf.set("spark.sql.crossJoin.enabled", "true")
-    dummyPythonUDFTest()
-  }
 }
 
 // This Python UDF is dummy and just for testing. Unable to execute.
