@@ -19,14 +19,15 @@ package org.apache.spark;
 
 import org.apache.spark.api.java.JavaSparkContext;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
 
-// Tests loading plugins into executors
 public class ExecutorPluginSuite {
   private static final String EXECUTOR_PLUGIN_CONF_NAME = "spark.executor.plugins";
+  private static final String testBadPluginName = TestBadShutdownPlugin.class.getName();
   private static final String testPluginName = TestExecutorPlugin.class.getName();
 
   // Static value modified by testing plugin to ensure plugin loaded correctly.
@@ -44,6 +45,14 @@ public class ExecutorPluginSuite {
     numSuccessfulTerminations = 0;
   }
 
+  @After
+  public void tearDown() {
+    if (sc != null) {
+      sc.stop();
+      sc = null;
+    }
+  }
+
   private SparkConf initializeSparkConf(String pluginNames) {
     return new SparkConf()
         .setMaster("local")
@@ -59,11 +68,6 @@ public class ExecutorPluginSuite {
     } catch (Exception e) {
       // We cannot catch ClassNotFoundException directly because Java doesn't think it'll be thrown
       assertTrue(e.toString().startsWith("java.lang.ClassNotFoundException"));
-    } finally {
-      if (sc != null) {
-        sc.stop();
-        sc = null;
-      }
     }
   }
 
@@ -71,38 +75,34 @@ public class ExecutorPluginSuite {
   public void testAddPlugin() throws InterruptedException {
     // Load the sample TestExecutorPlugin, which will change the value of numSuccessfulPlugins
     SparkConf conf = initializeSparkConf(testPluginName);
-
-    try {
-      sc = new JavaSparkContext(conf);
-      assertEquals(1, numSuccessfulPlugins);
-    } catch (Exception e) {
-      fail("Failed to start SparkContext with exception " + e.toString());
-    } finally {
-      if (sc != null) {
-        sc.stop();
-        sc = null;
-        assertEquals(1, numSuccessfulTerminations);
-      }
-    }
+    sc = new JavaSparkContext(conf);
+    assertEquals(1, numSuccessfulPlugins);
+    sc.stop();
+    sc = null;
+    assertEquals(1, numSuccessfulTerminations);
   }
 
   @Test
   public void testAddMultiplePlugins() throws InterruptedException {
     // Load the sample TestExecutorPlugin twice
     SparkConf conf = initializeSparkConf(testPluginName + "," + testPluginName);
+    sc = new JavaSparkContext(conf);
+    assertEquals(2, numSuccessfulPlugins);
+    sc.stop();
+    sc = null;
+    assertEquals(2, numSuccessfulTerminations);
+  }
 
-    try {
-      sc = new JavaSparkContext(conf);
-      assertEquals(2, numSuccessfulPlugins);
-    } catch (Exception e) {
-      fail("Failed to start SparkContext with exception " + e.toString());
-    } finally {
-      if (sc != null) {
-        sc.stop();
-        sc = null;
-        assertEquals(2, numSuccessfulTerminations);
-      }
-    }
+  @Test
+  public void testPluginShutdownWithException() {
+    // Verify an exception in one plugin shutdown does not affect the others
+    String pluginNames = testPluginName + "," + testBadPluginName + "," + testPluginName;
+    SparkConf conf = initializeSparkConf(pluginNames);
+    sc = new JavaSparkContext(conf);
+    assertEquals(2, numSuccessfulPlugins);
+    sc.stop();
+    sc = null;
+    assertEquals(2, numSuccessfulTerminations);
   }
 
   public static class TestExecutorPlugin implements ExecutorPlugin {
@@ -111,6 +111,12 @@ public class ExecutorPluginSuite {
     }
     public void shutdown() {
       ExecutorPluginSuite.numSuccessfulTerminations++;
+    }
+  }
+
+  public static class TestBadShutdownPlugin implements ExecutorPlugin {
+    public void shutdown() {
+      throw new RuntimeException("This plugin will fail to cleanly shut down");
     }
   }
 }

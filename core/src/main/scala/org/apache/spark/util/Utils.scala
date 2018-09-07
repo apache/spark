@@ -241,6 +241,16 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Run a segment of code using a different context class loader in the current thread
+   */
+  def withContextClassLoader(ctxClassLoader: ClassLoader)(fn: => Unit): Unit = {
+    val oldClassLoader = getContextOrSparkClassLoader
+    Thread.currentThread().setContextClassLoader(ctxClassLoader)
+    fn
+    Thread.currentThread().setContextClassLoader(oldClassLoader)
+  }
+
+  /**
    * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.DataOutput]]
    */
   def writeByteBuffer(bb: ByteBuffer, out: DataOutput): Unit = {

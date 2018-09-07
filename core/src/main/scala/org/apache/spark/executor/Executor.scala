@@ -136,21 +136,24 @@ private[spark] class Executor(
   // for fetching remote cached RDD blocks, so need to make sure it uses the right classloader too.
   env.serializerManager.setDefaultClassLoader(replClassLoader)
 
-  private val pluginList = conf.get(EXECUTOR_PLUGINS)
-  if (pluginList.nonEmpty) {
-    logDebug(s"Initializing the following plugins: ${pluginList.mkString(", ")}")
-  }
+  private val plugins: Seq[ExecutorPlugin] = {
+    val pluginNames = conf.get(EXECUTOR_PLUGINS)
+    if (pluginNames.nonEmpty) {
+      logDebug(s"Initializing the following plugins: ${pluginNames.mkString(", ")}")
 
-  // Before loading the executor plugins, we need to temporarily change the class loader
-  // to one that can discover and load jars passed into Spark using --jars
-  private val oldContextClassLoader = Utils.getContextOrSparkClassLoader
-  Thread.currentThread.setContextClassLoader(replClassLoader)
-  private val plugins = Utils.loadExtensions(classOf[ExecutorPlugin], pluginList, conf)
-  plugins.foreach(_.init())
-  Thread.currentThread.setContextClassLoader(oldContextClassLoader)
+      // Before loading the executor plugins, we need to temporarily change the class loader
+      // to one that can discover and load jars passed into Spark using --jars
+      var pluginList: Seq[ExecutorPlugin] = Nil
+      Utils.withContextClassLoader(replClassLoader) {
+        pluginList = Utils.loadExtensions(classOf[ExecutorPlugin], pluginNames, conf)
+        pluginList.foreach(_.init())
+      }
 
-  if (pluginList.nonEmpty) {
-    logDebug("Finished initializing plugins")
+      logDebug("Finished initializing plugins")
+      pluginList
+    } else {
+      Nil
+    }
   }
 
   // Max size of direct result. If task result is bigger than this, we use the block manager
@@ -238,11 +241,16 @@ private[spark] class Executor(
     threadPool.shutdown()
 
     // Notify plugins that executor is shutting down so they can terminate cleanly
-    // oldContextClassLoader is redefined in case the class loader changed during execution
-    val oldContextClassLoader = Utils.getContextOrSparkClassLoader
-    Thread.currentThread.setContextClassLoader(replClassLoader)
-    plugins.foreach(_.shutdown())
-    Thread.currentThread.setContextClassLoader(oldContextClassLoader)
+    Utils.withContextClassLoader(replClassLoader) {
+      plugins.foreach(plugin => {
+        try {
+          plugin.shutdown()
+        } catch {
+          case e: Exception =>
+            logWarning(s"Plugin ${plugin.getClass} failed to shutdown: ${e.getMessage()}")
+        }
+      })
+    }
     if (!isLocal) {
       env.stop()
     }
