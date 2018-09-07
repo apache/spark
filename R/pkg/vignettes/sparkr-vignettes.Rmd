@@ -157,8 +157,8 @@ Property Name | Property group | spark-submit equivalent
 `spark.driver.extraClassPath` | Runtime Environment | `--driver-class-path`
 `spark.driver.extraJavaOptions` | Runtime Environment | `--driver-java-options`
 `spark.driver.extraLibraryPath` | Runtime Environment | `--driver-library-path`
-`spark.yarn.keytab` | Application Properties | `--keytab`
-`spark.yarn.principal` | Application Properties | `--principal`
+`spark.kerberos.keytab` | Application Properties | `--keytab`
+`spark.kerberos.principal` | Application Properties | `--principal`
 
 **For Windows users**: Due to different file prefixes across operating systems, to avoid the issue of potential wrong prefix, a current workaround is to specify `spark.sql.warehouse.dir` when starting the `SparkSession`.
 

@@ -465,7 +465,7 @@ providers can be disabled individually by setting `spark.security.credentials.{s
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.yarn.keytab</code></td>
+  <td><code>spark.kerberos.keytab</code></td>
   <td>(none)</td>
   <td>
   The full path to the file that contains the keytab for the principal specified above. This keytab
@@ -477,7 +477,7 @@ providers can be disabled individually by setting `spark.security.credentials.{s
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.principal</code></td>
+  <td><code>spark.kerberos.principal</code></td>
   <td>(none)</td>
   <td>
   Principal to be used to login to KDC, while running on secure clusters. Equivalent to the

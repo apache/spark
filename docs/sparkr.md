@@ -70,12 +70,12 @@ The following Spark driver properties can be set in `sparkConfig` with `sparkR.s
     <td><code>--master</code></td>
   </tr>
   <tr>
-    <td><code>spark.yarn.keytab</code></td>
+    <td><code>spark.kerberos.keytab</code></td>
     <td>Application Properties</td>
     <td><code>--keytab</code></td>
   </tr>
   <tr>
-    <td><code>spark.yarn.principal</code></td>
+    <td><code>spark.kerberos.principal</code></td>
     <td>Application Properties</td>
     <td><code>--principal</code></td>
   </tr>

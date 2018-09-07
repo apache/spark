@@ -152,11 +152,11 @@ package object config {
   private[spark] val SHUFFLE_SERVICE_PORT =
     ConfigBuilder("spark.shuffle.service.port").intConf.createWithDefault(7337)
 
-  private[spark] val KEYTAB = ConfigBuilder("spark.yarn.keytab")
+  private[spark] val KEYTAB = ConfigBuilder("spark.kerberos.keytab")
     .doc("Location of user's keytab.")
     .stringConf.createOptional
 
-  private[spark] val PRINCIPAL = ConfigBuilder("spark.yarn.principal")
+  private[spark] val PRINCIPAL = ConfigBuilder("spark.kerberos.principal")
     .doc("Name of the Kerberos principal.")
     .stringConf.createOptional
 
