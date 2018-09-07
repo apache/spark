@@ -297,7 +297,7 @@ object ShuffleExchange {
       }
 
       // round-robin function is order sensitive if we don't sort the input.
-      val isOrderSensitive = isRoundRobin && !SQLConf.get.sortBeforeRepartition
+      val isOrderSensitive = isRoundRobin && !SparkEnv.get.conf.get(SQLConf.SORT_BEFORE_REPARTITION)
       if (needToCopyObjectsBeforeShuffle(part, serializer)) {
         newRdd.mapPartitionsWithIndexInternal((_, iter) => {
           val getPartitionKey = getPartitionKeyExtractor()
