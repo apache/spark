@@ -57,72 +57,72 @@ public final class ByteArrayMemoryBlock extends MemoryBlock {
   }
 
   @Override
-  public int getInt(long offset) {
+  public final int getInt(long offset) {
     return Platform.getInt(array, this.offset + offset);
   }
 
   @Override
-  public void putInt(long offset, int value) {
+  public final void putInt(long offset, int value) {
     Platform.putInt(array, this.offset + offset, value);
   }
 
   @Override
-  public boolean getBoolean(long offset) {
+  public final boolean getBoolean(long offset) {
     return Platform.getBoolean(array, this.offset + offset);
   }
 
   @Override
-  public void putBoolean(long offset, boolean value) {
+  public final void putBoolean(long offset, boolean value) {
     Platform.putBoolean(array, this.offset + offset, value);
   }
 
   @Override
-  public byte getByte(long offset) {
+  public final byte getByte(long offset) {
     return array[(int)(this.offset + offset - Platform.BYTE_ARRAY_OFFSET)];
   }
 
   @Override
-  public void putByte(long offset, byte value) {
+  public final void putByte(long offset, byte value) {
     array[(int)(this.offset + offset - Platform.BYTE_ARRAY_OFFSET)] = value;
   }
 
   @Override
-  public short getShort(long offset) {
+  public final short getShort(long offset) {
     return Platform.getShort(array, this.offset + offset);
   }
 
   @Override
-  public void putShort(long offset, short value) {
+  public final void putShort(long offset, short value) {
     Platform.putShort(array, this.offset + offset, value);
   }
 
   @Override
-  public long getLong(long offset) {
+  public final long getLong(long offset) {
     return Platform.getLong(array, this.offset + offset);
   }
 
   @Override
-  public void putLong(long offset, long value) {
+  public final void putLong(long offset, long value) {
     Platform.putLong(array, this.offset + offset, value);
   }
 
   @Override
-  public float getFloat(long offset) {
+  public final float getFloat(long offset) {
     return Platform.getFloat(array, this.offset + offset);
   }
 
   @Override
-  public void putFloat(long offset, float value) {
+  public final void putFloat(long offset, float value) {
     Platform.putFloat(array, this.offset + offset, value);
   }
 
   @Override
-  public double getDouble(long offset) {
+  public final double getDouble(long offset) {
     return Platform.getDouble(array, this.offset + offset);
   }
 
   @Override
-  public void putDouble(long offset, double value) {
+  public final void putDouble(long offset, double value) {
     Platform.putDouble(array, this.offset + offset, value);
   }
 }

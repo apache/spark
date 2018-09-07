@@ -123,7 +123,7 @@ public class MemoryBlockSuite {
   }
 
   @Test
-  public void testByteArrayMemoryBlock() {
+  public void ByteArrayMemoryBlockTest() {
     byte[] obj = new byte[56];
     long offset = Platform.BYTE_ARRAY_OFFSET;
     int length = obj.length;
@@ -140,7 +140,7 @@ public class MemoryBlockSuite {
   }
 
   @Test
-  public void testOnHeapMemoryBlock() {
+  public void OnHeapMemoryBlockTest() {
     long[] obj = new long[7];
     long offset = Platform.LONG_ARRAY_OFFSET;
     int length = obj.length * 8;
@@ -157,7 +157,7 @@ public class MemoryBlockSuite {
   }
 
   @Test
-  public void testOffHeapArrayMemoryBlock() {
+  public void OffHeapArrayMemoryBlockTest() {
     MemoryAllocator memoryAllocator = new UnsafeMemoryAllocator();
     MemoryBlock memory = memoryAllocator.allocate(56);
     Object obj = memory.getBaseObject();

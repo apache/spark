@@ -20,7 +20,7 @@ package org.apache.spark.unsafe.memory;
 import org.apache.spark.unsafe.Platform;
 
 public class OffHeapMemoryBlock extends MemoryBlock {
-  public static final OffHeapMemoryBlock NULL = new OffHeapMemoryBlock(0, 0);
+  static public final OffHeapMemoryBlock NULL = new OffHeapMemoryBlock(0, 0);
 
   public OffHeapMemoryBlock(long address, long size) {
     super(null, address, size);

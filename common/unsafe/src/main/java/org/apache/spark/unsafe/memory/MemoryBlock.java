@@ -111,7 +111,7 @@ public abstract class MemoryBlock {
   /**
    * Instantiate MemoryBlock for given object type with new offset
    */
-  public static final MemoryBlock allocateFromObject(Object obj, long offset, long length) {
+  public final static MemoryBlock allocateFromObject(Object obj, long offset, long length) {
     MemoryBlock mb = null;
     if (obj instanceof byte[]) {
       byte[] array = (byte[])obj;

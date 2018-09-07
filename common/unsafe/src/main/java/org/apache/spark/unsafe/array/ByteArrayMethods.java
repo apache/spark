@@ -58,7 +58,7 @@ public class ByteArrayMethods {
    * @return true if the arrays are equal, false otherwise
    */
   public static boolean arrayEqualsBlock(
-      MemoryBlock leftBase, long leftOffset, MemoryBlock rightBase, long rightOffset, long length) {
+      MemoryBlock leftBase, long leftOffset, MemoryBlock rightBase, long rightOffset, final long length) {
     return arrayEquals(leftBase.getBaseObject(), leftBase.getBaseOffset() + leftOffset,
       rightBase.getBaseObject(), rightBase.getBaseOffset() + rightOffset, length);
   }
@@ -68,7 +68,7 @@ public class ByteArrayMethods {
    * @return true if the arrays are equal, false otherwise
    */
   public static boolean arrayEquals(
-      Object leftBase, long leftOffset, Object rightBase, long rightOffset, long length) {
+      Object leftBase, long leftOffset, Object rightBase, long rightOffset, final long length) {
     int i = 0;
 
     // check if starts align and we can get both offsets to be aligned

@@ -16,6 +16,9 @@
  */
 package org.apache.spark.sql.catalyst.expressions;
 
+import com.google.common.primitives.Ints;
+
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.types.UTF8String;
 
