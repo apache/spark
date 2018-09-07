@@ -270,7 +270,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         dataOut.writeInt(context.partitionId())
         dataOut.writeInt(context.attemptNumber())
         dataOut.writeLong(context.taskAttemptId())
-        val localProps = context.asInstanceOf[TaskContextImpl].getLocalProperties.asScala
+        val localProps = context.getLocalProperties.asScala
         dataOut.writeInt(localProps.size)
         localProps.foreach { case (k, v) =>
           PythonRDD.writeUTF(k, dataOut)

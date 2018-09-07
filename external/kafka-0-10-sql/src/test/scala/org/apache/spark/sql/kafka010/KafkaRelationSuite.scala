@@ -260,6 +260,7 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
       producer.commitTransaction()
 
       // Should read all committed messages
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 6)
       checkAnswer(df, (1 to 5).map(_.toString).toDF)
 
       producer.beginTransaction()
@@ -269,6 +270,7 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
       producer.abortTransaction()
 
       // Should not read aborted messages
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 12)
       checkAnswer(df, (1 to 5).map(_.toString).toDF)
 
       producer.beginTransaction()
@@ -278,6 +280,7 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
       producer.commitTransaction()
 
       // Should skip aborted messages and read new committed ones.
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 18)
       checkAnswer(df, ((1 to 5) ++ (11 to 15)).map(_.toString).toDF)
     }
   }
@@ -301,11 +304,13 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
       }
 
       // "read_uncommitted" should see all messages including uncommitted ones
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 5)
       checkAnswer(df, (1 to 5).map(_.toString).toDF)
 
       producer.commitTransaction()
 
       // Should read all committed messages
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 6)
       checkAnswer(df, (1 to 5).map(_.toString).toDF)
 
       producer.beginTransaction()
@@ -315,6 +320,7 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
       producer.abortTransaction()
 
       // "read_uncommitted" should see all messages including uncommitted or aborted ones
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 12)
       checkAnswer(df, (1 to 10).map(_.toString).toDF)
 
       producer.beginTransaction()
@@ -324,6 +330,7 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
       producer.commitTransaction()
 
       // Should read all messages
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 18)
       checkAnswer(df, (1 to 15).map(_.toString).toDF)
     }
   }

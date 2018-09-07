@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.hive.orc
 
-import org.apache.hadoop.hive.ql.io.sarg.{SearchArgument, SearchArgumentFactory}
+import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
+import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.datasources.orc.OrcFilters.buildTree
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
@@ -62,14 +64,14 @@ private[orc] object OrcFilters extends Logging {
     // collect all convertible ones to build the final `SearchArgument`.
     val convertibleFilters = for {
       filter <- filters
-      _ <- buildSearchArgument(dataTypeMap, filter, SearchArgumentFactory.newBuilder())
+      _ <- buildSearchArgument(dataTypeMap, filter, newBuilder)
     } yield filter
 
     for {
       // Combines all convertible filters using `And` to produce a single conjunction
-      conjunction <- convertibleFilters.reduceOption(And)
+      conjunction <- buildTree(convertibleFilters)
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
-      builder <- buildSearchArgument(dataTypeMap, conjunction, SearchArgumentFactory.newBuilder())
+      builder <- buildSearchArgument(dataTypeMap, conjunction, newBuilder)
     } yield builder.build()
   }
 
@@ -77,8 +79,6 @@ private[orc] object OrcFilters extends Logging {
       dataTypeMap: Map[String, DataType],
       expression: Filter,
       builder: Builder): Option[Builder] = {
-    def newBuilder = SearchArgumentFactory.newBuilder()
-
     def isSearchableType(dataType: DataType): Boolean = dataType match {
       // Only the values in the Spark types below can be recognized by
       // the `SearchArgumentImpl.BuilderImpl.boxLiteral()` method.
