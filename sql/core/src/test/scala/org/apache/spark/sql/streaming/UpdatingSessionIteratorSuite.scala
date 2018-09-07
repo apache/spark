@@ -234,9 +234,42 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
       sessionAttribute, valuesAttributes, rowAttributes)
 
     // UpdatingSessionIterator can't detect error on hasNext
-    iterator.hasNext
+    assert(iterator.hasNext)
 
     // when calling next() it can detect error and throws IllegalStateException
+    intercept[IllegalStateException] {
+      iterator.next()
+    }
+
+    // afterwards, calling either hasNext() or next() will throw IllegalStateException
+    intercept[IllegalStateException] {
+      iterator.hasNext
+    }
+
+    intercept[IllegalStateException] {
+      iterator.next()
+    }
+  }
+
+  test("throws exception if data is not sorted by key") {
+    val row1 = createRow("a", 1, 100, 110, 10, 1.1)
+    val row2 = createRow("a", 2, 100, 110, 20, 1.2)
+    val row3 = createRow("a", 1, 113, 123, 40, 1.4)
+    val rows = List(row1, row2, row3)
+
+    val iterator = new UpdatingSessionIterator(rows.iterator, keysWithoutSessionAttributes,
+      sessionAttribute, valuesAttributes, rowAttributes)
+
+    // UpdatingSessionIterator can't detect error on hasNext
+    assert(iterator.hasNext)
+
+    assertRowsEquals(row1, iterator.next())
+
+    assert(iterator.hasNext)
+
+    // second row itself is OK but while finding end of session it reads third row, and finds
+    // its key is already finished processing, hence precondition for sorting is broken, and
+    // it throws IllegalStateException
     intercept[IllegalStateException] {
       iterator.next()
     }

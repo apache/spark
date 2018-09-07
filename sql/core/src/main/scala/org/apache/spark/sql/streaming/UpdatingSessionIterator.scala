@@ -35,10 +35,12 @@ class UpdatingSessionIterator(
   var currentSessionStart: Long = Long.MaxValue
   var currentSessionEnd: Long = Long.MinValue
 
-  var currentRows: mutable.MutableList[InternalRow] = _
+  val currentRows: mutable.MutableList[InternalRow] = new mutable.MutableList[InternalRow]()
 
   var returnRowsIter: Iterator[InternalRow] = _
   var errorOnIterator: Boolean = false
+
+  val processedKeys: mutable.HashSet[InternalRow] = new mutable.HashSet[InternalRow]()
 
   override def hasNext: Boolean = {
     assertIteratorNotCorrupted()
@@ -78,19 +80,19 @@ class UpdatingSessionIterator(
       if (currentKeys == null) {
         startNewSession(row, keys, sessionStart, sessionEnd)
       } else if (keys != currentKeys) {
-        closeCurrentSession()
+        closeCurrentSession(keyChanged = true)
+        processedKeys.add(currentKeys)
         startNewSession(row, keys, sessionStart, sessionEnd)
         exitCondition = true
       } else {
         if (sessionStart < currentSessionStart) {
-          errorOnIterator = true
-          throw new IllegalStateException("The iterator must be sorted by key and session start!")
+          handleBrokenPreconditionForSort()
         } else if (sessionStart <= currentSessionEnd) {
           // expanding session length if needed
           expandEndOfCurrentSession(sessionEnd)
           currentRows += row
         } else {
-          closeCurrentSession()
+          closeCurrentSession(keyChanged = false)
           startNewSession(row, keys, sessionStart, sessionEnd)
           exitCondition = true
         }
@@ -99,7 +101,7 @@ class UpdatingSessionIterator(
 
     if (!iter.hasNext) {
       // no further row: closing session
-      closeCurrentSession()
+      closeCurrentSession(keyChanged = false)
     }
 
     // here returnRowsIter should be able to provide at least one row
@@ -116,14 +118,23 @@ class UpdatingSessionIterator(
 
   private def startNewSession(row: InternalRow, keys: UnsafeRow, sessionStart: Long,
                               sessionEnd: Long): Unit = {
+    if (processedKeys.contains(keys)) {
+      handleBrokenPreconditionForSort()
+    }
+
     currentKeys = keys
     currentSessionStart = sessionStart
     currentSessionEnd = sessionEnd
-    currentRows = new mutable.MutableList[InternalRow]()
+    currentRows.clear()
     currentRows += row
   }
 
-  private def closeCurrentSession(): Unit = {
+  private def handleBrokenPreconditionForSort(): Unit = {
+    errorOnIterator = true
+    throw new IllegalStateException("The iterator must be sorted by key and session start!")
+  }
+
+  private def closeCurrentSession(keyChanged: Boolean): Unit = {
     val convertedGroupWithoutSessionExpressions = groupWithoutSessionExpressions.map { x =>
       BindReferences.bindReference[Expression](x, inputSchema)
     }
@@ -150,10 +161,12 @@ class UpdatingSessionIterator(
 
     returnRowsIter = returnRows.iterator
 
+    if (keyChanged) processedKeys.add(currentKeys)
+
     currentKeys = null
     currentSessionStart = Long.MaxValue
     currentSessionEnd = Long.MinValue
-    currentRows = null
+    currentRows.clear()
   }
 
   private def assertIteratorNotCorrupted(): Unit = {
