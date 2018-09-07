@@ -622,8 +622,10 @@ object ParquetFileFormat extends Logging {
       conf: Configuration,
       partFiles: Seq[FileStatus],
       ignoreCorruptFiles: Boolean): Seq[Footer] = {
+    val taskContext = TaskContext.get()
     ThreadUtils.parmap(partFiles, "readingParquetFooters", 8) { currentFile =>
       try {
+        TaskContext.setTaskContext(taskContext)
         // Skips row group information since we only need the schema.
         // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
         // when it can't read the footer.
