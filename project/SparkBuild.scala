@@ -94,6 +94,12 @@ object SparkBuild extends PomBuild {
       case Some(v) =>
         v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
+
+    Option(System.getProperty("scala.version"))
+      .filter(_.startsWith("2.12"))
+      .foreach { versionString =>
+        System.setProperty("scala-2.12", "true")
+      }
     if (System.getProperty("scala-2.12") == "") {
       // To activate scala-2.10 profile, replace empty property value to non-empty value
       // in the same way as Maven which handles -Dname as -Dname=true before executes build process.

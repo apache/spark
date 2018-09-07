@@ -23,7 +23,7 @@ import org.apache.spark.annotation.InterfaceStability;
 
 /**
  * An interface to represent statistics for a data source, which is returned by
- * {@link SupportsReportStatistics#getStatistics()}.
+ * {@link SupportsReportStatistics#estimateStatistics(ScanConfig)}.
  */
 @InterfaceStability.Evolving
 public interface Statistics {

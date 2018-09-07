@@ -68,8 +68,16 @@ except ImportError as e:
     # If Arrow version requirement is not satisfied, skip related tests.
     _pyarrow_requirement_message = _exception_message(e)
 
+_test_not_compiled_message = None
+try:
+    from pyspark.sql.utils import require_test_compiled
+    require_test_compiled()
+except Exception as e:
+    _test_not_compiled_message = _exception_message(e)
+
 _have_pandas = _pandas_requirement_message is None
 _have_pyarrow = _pyarrow_requirement_message is None
+_test_compiled = _test_not_compiled_message is None
 
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
@@ -268,6 +276,10 @@ class DataTypeTests(unittest.TestCase):
     def test_struct_field_type_name(self):
         struct_field = StructField("a", IntegerType())
         self.assertRaises(TypeError, struct_field.typeName)
+
+    def test_invalid_create_row(self):
+        row_class = Row("c1", "c2")
+        self.assertRaises(ValueError, lambda: row_class(1, 2, 3))
 
 
 class SQLTests(ReusedSQLTestCase):
@@ -3367,6 +3379,47 @@ class SQLTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(path)
 
+    # SPARK-24721
+    @unittest.skipIf(not _test_compiled, _test_not_compiled_message)
+    def test_datasource_with_udf(self):
+        from pyspark.sql.functions import udf, lit, col
+
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+
+        try:
+            self.spark.range(1).write.mode("overwrite").format('csv').save(path)
+            filesource_df = self.spark.read.option('inferSchema', True).csv(path).toDF('i')
+            datasource_df = self.spark.read \
+                .format("org.apache.spark.sql.sources.SimpleScanSource") \
+                .option('from', 0).option('to', 1).load().toDF('i')
+            datasource_v2_df = self.spark.read \
+                .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+                .load().toDF('i', 'j')
+
+            c1 = udf(lambda x: x + 1, 'int')(lit(1))
+            c2 = udf(lambda x: x + 1, 'int')(col('i'))
+
+            f1 = udf(lambda x: False, 'boolean')(lit(1))
+            f2 = udf(lambda x: False, 'boolean')(col('i'))
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                result = df.withColumn('c', c1)
+                expected = df.withColumn('c', lit(2))
+                self.assertEquals(expected.collect(), result.collect())
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                result = df.withColumn('c', c2)
+                expected = df.withColumn('c', col('i') + 1)
+                self.assertEquals(expected.collect(), result.collect())
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                for f in [f1, f2]:
+                    result = df.filter(f)
+                    self.assertEquals(0, result.count())
+        finally:
+            shutil.rmtree(path)
+
     def test_repr_behaviors(self):
         import re
         pattern = re.compile(r'^ *\|', re.MULTILINE)
@@ -5268,6 +5321,51 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             .withColumn('f3_f2_f1', df['v'] + 111)
 
         self.assertEquals(expected.collect(), df1.collect())
+
+    # SPARK-24721
+    @unittest.skipIf(not _test_compiled, _test_not_compiled_message)
+    def test_datasource_with_udf(self):
+        # Same as SQLTests.test_datasource_with_udf, but with Pandas UDF
+        # This needs to a separate test because Arrow dependency is optional
+        import pandas as pd
+        import numpy as np
+        from pyspark.sql.functions import pandas_udf, lit, col
+
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+
+        try:
+            self.spark.range(1).write.mode("overwrite").format('csv').save(path)
+            filesource_df = self.spark.read.option('inferSchema', True).csv(path).toDF('i')
+            datasource_df = self.spark.read \
+                .format("org.apache.spark.sql.sources.SimpleScanSource") \
+                .option('from', 0).option('to', 1).load().toDF('i')
+            datasource_v2_df = self.spark.read \
+                .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+                .load().toDF('i', 'j')
+
+            c1 = pandas_udf(lambda x: x + 1, 'int')(lit(1))
+            c2 = pandas_udf(lambda x: x + 1, 'int')(col('i'))
+
+            f1 = pandas_udf(lambda x: pd.Series(np.repeat(False, len(x))), 'boolean')(lit(1))
+            f2 = pandas_udf(lambda x: pd.Series(np.repeat(False, len(x))), 'boolean')(col('i'))
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                result = df.withColumn('c', c1)
+                expected = df.withColumn('c', lit(2))
+                self.assertEquals(expected.collect(), result.collect())
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                result = df.withColumn('c', c2)
+                expected = df.withColumn('c', col('i') + 1)
+                self.assertEquals(expected.collect(), result.collect())
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                for f in [f1, f2]:
+                    result = df.filter(f)
+                    self.assertEquals(0, result.count())
+        finally:
+            shutil.rmtree(path)
 
 
 @unittest.skipIf(

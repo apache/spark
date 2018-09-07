@@ -61,6 +61,7 @@ SELECT
     map_concat(tinyint_map1, smallint_map2) ts_map,
     map_concat(smallint_map1, int_map2) si_map,
     map_concat(int_map1, bigint_map2) ib_map,
+    map_concat(bigint_map1, decimal_map2) bd_map,
     map_concat(decimal_map1, float_map2) df_map,
     map_concat(string_map1, date_map2) std_map,
     map_concat(timestamp_map1, string_map2) tst_map,

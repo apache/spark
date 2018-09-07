@@ -558,7 +558,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-18004 limit + aggregates") {
     withSQLConf(SQLConf.LIMIT_FLAT_GLOBAL_LIMIT.key -> "true") {
-      val df = Seq(("a", 1), ("b", 2), ("c", 1), ("d", 5)).toDF("id", "value")
+      val df = Seq(("a", 1), ("b", 2), ("c", 1), ("d", 5)).toDF("id", "value").repartition(1)
       val limit2Df = df.limit(2)
       checkAnswer(
         limit2Df.groupBy("id").count().select($"id"),

@@ -38,7 +38,7 @@ class RDriverFeatureStepSuite extends SparkFunSuite {
         Some(RMainAppResource(mainResource)),
         "test-app",
         "r-runner",
-        Seq("5 7")),
+        Seq("5", "7", "9")),
       appResourceNamePrefix = "",
       appId = "",
       roleLabels = Map.empty,
@@ -58,6 +58,6 @@ class RDriverFeatureStepSuite extends SparkFunSuite {
       .map(env => (env.getName, env.getValue))
       .toMap
     assert(envs(ENV_R_PRIMARY) === expectedMainResource)
-    assert(envs(ENV_R_ARGS) === "5 7")
+    assert(envs(ENV_R_ARGS) === "5 7 9")
   }
 }
