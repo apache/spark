@@ -26,8 +26,8 @@ import static org.junit.Assert.*;
 
 // Tests loading plugins into executors
 public class ExecutorPluginSuite {
-  private final static String EXECUTOR_PLUGIN_CONF_NAME = "spark.executor.plugins";
-  private final static String testPluginName = TestExecutorPlugin.class.getName();
+  private static final String EXECUTOR_PLUGIN_CONF_NAME = "spark.executor.plugins";
+  private static final String testPluginName = TestExecutorPlugin.class.getName();
 
   // Static value modified by testing plugin to ensure plugin loaded correctly.
   public static int numSuccessfulPlugins = 0;
@@ -74,10 +74,6 @@ public class ExecutorPluginSuite {
 
     try {
       sc = new JavaSparkContext(conf);
-
-      // Sleep briefly because plugins initialize on a separate thread
-      Thread.sleep(500);
-
       assertEquals(1, numSuccessfulPlugins);
     } catch (Exception e) {
       fail("Failed to start SparkContext with exception " + e.toString());
@@ -97,10 +93,6 @@ public class ExecutorPluginSuite {
 
     try {
       sc = new JavaSparkContext(conf);
-
-      // Sleep briefly because plugins initialize on a separate thread
-      Thread.sleep(500);
-
       assertEquals(2, numSuccessfulPlugins);
     } catch (Exception e) {
       fail("Failed to start SparkContext with exception " + e.toString());

@@ -141,22 +141,13 @@ private[spark] class Executor(
     logDebug(s"Initializing the following plugins: ${pluginList.mkString(", ")}")
   }
 
-  val executorPluginThread = new Thread {
-    var plugins: Seq[ExecutorPlugin] = Nil
-
-    override def run(): Unit = {
-      plugins = Utils.loadExtensions(classOf[ExecutorPlugin], pluginList, conf)
-      plugins.foreach(_.init())
-    }
-
-    override def interrupt(): Unit = {
-      plugins.foreach(_.shutdown())
-      super.interrupt()
-    }
-  }
-
-  executorPluginThread.setContextClassLoader(replClassLoader)
-  executorPluginThread.start()
+  // Before loading the executor plugins, we need to temporarily change the class loader
+  // to one that can discover and load jars passed into Spark using --jars
+  private val oldContextClassLoader = Utils.getContextOrSparkClassLoader
+  Thread.currentThread.setContextClassLoader(replClassLoader)
+  private val plugins = Utils.loadExtensions(classOf[ExecutorPlugin], pluginList, conf)
+  plugins.foreach(_.init())
+  Thread.currentThread.setContextClassLoader(oldContextClassLoader)
 
   if (pluginList.nonEmpty) {
     logDebug("Finished initializing plugins")
@@ -244,9 +235,14 @@ private[spark] class Executor(
     env.metricsSystem.report()
     heartbeater.shutdown()
     heartbeater.awaitTermination(10, TimeUnit.SECONDS)
-    executorPluginThread.interrupt()
-    executorPluginThread.join()
     threadPool.shutdown()
+
+    // Notify plugins that executor is shutting down so they can terminate cleanly
+    // oldContextClassLoader is redefined in case the class loader changed during execution
+    val oldContextClassLoader = Utils.getContextOrSparkClassLoader
+    Thread.currentThread.setContextClassLoader(replClassLoader)
+    plugins.foreach(_.shutdown())
+    Thread.currentThread.setContextClassLoader(oldContextClassLoader)
     if (!isLocal) {
       env.stop()
     }
