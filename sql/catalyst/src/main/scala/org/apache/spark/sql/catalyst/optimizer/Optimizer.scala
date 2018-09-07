@@ -528,12 +528,12 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = removeProjectBeforeFilter(plan transform {
     // Prunes the unused columns from project list of Project/Aggregate/Expand
-    case p @ Project(_, p2: Project) if (p2.outputSet -- p.references).nonEmpty =>
+    case p @ Project(_, p2: Project) if !p2.outputSet.subsetOf(p.references) =>
       p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
-    case p @ Project(_, a: Aggregate) if (a.outputSet -- p.references).nonEmpty =>
+    case p @ Project(_, a: Aggregate) if !a.outputSet.subsetOf(p.references) =>
       p.copy(
         child = a.copy(aggregateExpressions = a.aggregateExpressions.filter(p.references.contains)))
-    case a @ Project(_, e @ Expand(_, _, grandChild)) if (e.outputSet -- a.references).nonEmpty =>
+    case a @ Project(_, e @ Expand(_, _, grandChild)) if !e.outputSet.subsetOf(a.references) =>
       val newOutput = e.output.filter(a.references.contains(_))
       val newProjects = e.projections.map { proj =>
         proj.zip(e.output).filter { case (_, a) =>
@@ -543,18 +543,18 @@ object ColumnPruning extends Rule[LogicalPlan] {
       a.copy(child = Expand(newProjects, newOutput, grandChild))
 
     // Prunes the unused columns from child of `DeserializeToObject`
-    case d @ DeserializeToObject(_, _, child) if (child.outputSet -- d.references).nonEmpty =>
+    case d @ DeserializeToObject(_, _, child) if !child.outputSet.subsetOf(d.references) =>
       d.copy(child = prunedChild(child, d.references))
 
     // Prunes the unused columns from child of Aggregate/Expand/Generate/ScriptTransformation
-    case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
+    case a @ Aggregate(_, _, child) if !child.outputSet.subsetOf(a.references) =>
       a.copy(child = prunedChild(child, a.references))
-    case f @ FlatMapGroupsInPandas(_, _, _, child) if (child.outputSet -- f.references).nonEmpty =>
+    case f @ FlatMapGroupsInPandas(_, _, _, child) if !child.outputSet.subsetOf(f.references) =>
       f.copy(child = prunedChild(child, f.references))
-    case e @ Expand(_, _, child) if (child.outputSet -- e.references).nonEmpty =>
+    case e @ Expand(_, _, child) if !child.outputSet.subsetOf(e.references) =>
       e.copy(child = prunedChild(child, e.references))
     case s @ ScriptTransformation(_, _, _, child, _)
-        if (child.outputSet -- s.references).nonEmpty =>
+        if !child.outputSet.subsetOf(s.references) =>
       s.copy(child = prunedChild(child, s.references))
 
     // prune unrequired references
@@ -591,7 +591,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       }
 
     // Prune unnecessary window expressions
-    case p @ Project(_, w: Window) if (w.windowOutputSet -- p.references).nonEmpty =>
+    case p @ Project(_, w: Window) if !w.windowOutputSet.subsetOf(p.references) =>
       p.copy(child = w.copy(
         windowExpressions = w.windowExpressions.filter(p.references.contains)))
 
