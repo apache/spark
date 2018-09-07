@@ -35,21 +35,26 @@ class ParquetSchemaPruningSuite
     with SchemaPruningTest
     with SharedSQLContext {
   case class FullName(first: String, middle: String, last: String)
+  case class Company(name: String, address: String)
+  case class Employer(id: Int, company: Company)
   case class Contact(
     id: Int,
     name: FullName,
     address: String,
     pets: Int,
     friends: Array[FullName] = Array.empty,
-    relatives: Map[String, FullName] = Map.empty)
+    relatives: Map[String, FullName] = Map.empty,
+    employer: Employer = null)
 
   val janeDoe = FullName("Jane", "X.", "Doe")
   val johnDoe = FullName("John", "Y.", "Doe")
   val susanSmith = FullName("Susan", "Z.", "Smith")
 
+  val company = Employer(0, Company("abc", "123 Business Street"))
+
   private val contacts =
     Contact(0, janeDoe, "123 Main Street", 1, friends = Array(susanSmith),
-      relatives = Map("brother" -> johnDoe)) ::
+      relatives = Map("brother" -> johnDoe), employer = company) ::
     Contact(1, johnDoe, "321 Wall Street", 3, relatives = Map("sister" -> janeDoe)) :: Nil
 
   case class Name(first: String, last: String)
@@ -66,13 +71,14 @@ class ParquetSchemaPruningSuite
     pets: Int,
     friends: Array[FullName] = Array(),
     relatives: Map[String, FullName] = Map(),
+    employer: Employer = null,
     p: Int)
 
   case class BriefContactWithDataPartitionColumn(id: Int, name: Name, address: String, p: Int)
 
   private val contactsWithDataPartitionColumn =
-    contacts.map { case Contact(id, name, address, pets, friends, relatives) =>
-      ContactWithDataPartitionColumn(id, name, address, pets, friends, relatives, 1) }
+    contacts.map { case Contact(id, name, address, pets, friends, relatives, employer) =>
+      ContactWithDataPartitionColumn(id, name, address, pets, friends, relatives, employer, 1) }
   private val briefContactsWithDataPartitionColumn =
     briefContacts.map { case BriefContact(id, name, address) =>
       BriefContactWithDataPartitionColumn(id, name, address, 2) }
@@ -156,9 +162,26 @@ class ParquetSchemaPruningSuite
   }
 
   testSchemaPruning("select a single complex field and in where clause") {
-    val query = sql("select name.first from contacts where name.first = 'Jane'")
-    checkScan(query, "struct<name:struct<first:string>>")
-    checkAnswer(query, Row("Jane") :: Nil)
+    val query1 = sql("select name.first from contacts where name.first = 'Jane'")
+    checkScan(query1, "struct<name:struct<first:string>>")
+    checkAnswer(query1, Row("Jane") :: Nil)
+
+    val query2 = sql("select name.first, name.last from contacts where name.first = 'Jane'")
+    checkScan(query2, "struct<name:struct<first:string,last:string>>")
+    checkAnswer(query2, Row("Jane", "Doe") :: Nil)
+
+    val query3 = sql("select name.first from contacts " +
+      "where employer.company.name = 'abc' and p = 1")
+    checkScan(query3, "struct<name:struct<first:string>," +
+      "employer:struct<company:struct<name:string>>>")
+    checkAnswer(query3, Row("Jane") :: Nil)
+  }
+
+  testSchemaPruning("select a single complex field and is null expression in project") {
+    val query = sql("select name.first, address is not null from contacts")
+    checkScan(query, "struct<name:struct<first:string>,address:string>")
+    checkAnswer(query.orderBy("id"),
+      Row("Jane", true) :: Row("John", true) :: Row("Janet", true) :: Row("Jim", true) :: Nil)
   }
 
   testSchemaPruning("select a single complex field array and in clause") {

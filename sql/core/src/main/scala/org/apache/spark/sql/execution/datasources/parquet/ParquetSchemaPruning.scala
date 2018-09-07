@@ -110,7 +110,12 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
     val projectionRootFields = projects.flatMap(getRootFields)
     val filterRootFields = filters.flatMap(getRootFields)
 
-    (projectionRootFields ++ filterRootFields).distinct
+    val (rootFields, optRootFields) = (projectionRootFields ++ filterRootFields)
+      .distinct.partition(_.contentAccessed)
+
+    optRootFields.filter { opt =>
+      !rootFields.exists(_.field.name == opt.field.name)
+    } ++ rootFields
   }
 
   /**
@@ -156,7 +161,7 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
     // in the resulting schema may differ from their ordering in the logical relation's
     // original schema
     val mergedSchema = requestedRootFields
-      .map { case RootField(field, _) => StructType(Array(field)) }
+      .map { case RootField(field, _, _) => StructType(Array(field)) }
       .reduceLeft(_ merge _)
     val dataSchemaFieldNames = fileDataSchema.fieldNames.toSet
     val mergedDataSchema =
@@ -196,7 +201,9 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
    */
   private def getRootFields(expr: Expression): Seq[RootField] = {
     expr match {
-      case IsNotNull(_: Attribute) | IsNull(_: Attribute) => Seq.empty
+      // Those expressions don't really use the nested fields of a root field.
+      case i@(IsNotNull(_: Attribute) | IsNull(_: Attribute)) =>
+        getRootFields(i.children(0)).map(_.copy(contentAccessed = false))
       case att: Attribute =>
         RootField(StructField(att.name, att.dataType, att.nullable), derivedFromAtt = true) :: Nil
       case SelectedField(field) => RootField(field, derivedFromAtt = false) :: Nil
@@ -251,8 +258,9 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
     }
 
   /**
-   * A "root" schema field (aka top-level, no-parent) and whether it was derived from
-   * an attribute or had a proper child.
+   * A "root" schema field (aka top-level, no-parent), whether it was derived from
+   * an attribute or had a proper child, and whether it was accessed with its content.
    */
-  private case class RootField(field: StructField, derivedFromAtt: Boolean)
+  private case class RootField(field: StructField, derivedFromAtt: Boolean,
+                               contentAccessed: Boolean = true)
 }
