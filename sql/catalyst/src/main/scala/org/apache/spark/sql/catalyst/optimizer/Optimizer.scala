@@ -726,10 +726,10 @@ object CollapseRepartition extends Rule[LogicalPlan] {
 object CollapseWindow extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case w1 @ Window(we1, ps1, os1, w2 @ Window(we2, ps2, os2, grandChild))
-      if ps1 == ps2 && os1 == os2 && w1.references.intersect(w2.windowOutputSet).isEmpty &&
-        // This assumes Window contains the same type of window expressions. This is ensured
-        // by ExtractWindowFunctions.
-        WindowFunctionType.functionType(we1.head) == WindowFunctionType.functionType(we2.head) =>
+        if ps1 == ps2 && os1 == os2 && w1.references.intersect(w2.windowOutputSet).isEmpty &&
+          // This assumes Window contains the same type of window expressions. This is ensured
+          // by ExtractWindowFunctions.
+          WindowFunctionType.functionType(we1.head) == WindowFunctionType.functionType(we2.head) =>
       w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
   }
 }
@@ -748,11 +748,11 @@ object TransposeWindow extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case w1 @ Window(we1, ps1, os1, w2 @ Window(we2, ps2, os2, grandChild))
-      if w1.references.intersect(w2.windowOutputSet).isEmpty &&
-         w1.expressions.forall(_.deterministic) &&
-         w2.expressions.forall(_.deterministic) &&
-         compatibleParititions(ps1, ps2) =>
-        Project(w1.output, Window(we2, ps2, os2, Window(we1, ps1, os1, grandChild)))
+        if w1.references.intersect(w2.windowOutputSet).isEmpty &&
+           w1.expressions.forall(_.deterministic) &&
+           w2.expressions.forall(_.deterministic) &&
+           compatibleParititions(ps1, ps2) =>
+      Project(w1.output, Window(we2, ps2, os2, Window(we1, ps1, os1, grandChild)))
   }
 }
 
