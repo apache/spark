@@ -155,6 +155,30 @@ class ParquetSchemaPruningSuite
       Row(null) :: Row(null) :: Nil)
   }
 
+  testSchemaPruning("select a single complex field and in where clause") {
+    val query = sql("select name.first from contacts where name.first = 'Jane'")
+    checkScan(query, "struct<name:struct<first:string>>")
+    checkAnswer(query, Row("Jane") :: Nil)
+  }
+
+  testSchemaPruning("select a single complex field array and in clause") {
+    val query = sql("select friends.middle from contacts where friends.first[0] = 'Susan'")
+    checkScan(query,
+      "struct<friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query.orderBy("id"),
+      Row(Array("Z.")) :: Nil)
+  }
+
+  testSchemaPruning("select a single complex field from a map entry and in clause") {
+    val query =
+      sql("select relatives[\"brother\"].middle from contacts " +
+        "where relatives[\"brother\"].first = 'John'")
+    checkScan(query,
+      "struct<relatives:map<string,struct<first:string,middle:string>>>")
+    checkAnswer(query.orderBy("id"),
+      Row("Y.") :: Nil)
+  }
+
   private def testSchemaPruning(testName: String)(testThunk: => Unit) {
     withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
       test(s"Spark vectorized reader - without partition data column - $testName") {
