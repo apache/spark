@@ -1155,10 +1155,12 @@ class SparkSubmitSuite
     val infixDelimFromFile = s"${delimKey}infixDelimFromFile" -> s"${CR}blah${LF}"
     val nonDelimSpaceFromFile = s"${delimKey}nonDelimSpaceFromFile" -> " blah\f"
 
-    val testProps = Seq(leadingDelimKeyFromFile, trailingDelimKeyFromFile, infixDelimFromFile, nonDelimSpaceFromFile)
+    val testProps = Seq(leadingDelimKeyFromFile, trailingDelimKeyFromFile, infixDelimFromFile,
+      nonDelimSpaceFromFile)
 
     val props = new java.util.Properties()
-    val propsFile = File.createTempFile("test-spark-conf", ".properties", Utils.createTempDir())
+    val propsFile = File.createTempFile("test-spark-conf", ".properties",
+      Utils.createTempDir())
     val propsOutputStream = new FileOutputStream(propsFile)
     try {
       testProps.foreach { case (k, v) => props.put(k, v) }

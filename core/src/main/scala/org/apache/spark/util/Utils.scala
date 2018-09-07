@@ -2052,13 +2052,16 @@ private[spark] object Utils extends Logging {
   }
 
 
-  private[this] val nonSpaceOrNaturalLineDelimiter: Char => Boolean = { ch => ch > ' ' || ch == '\r' || ch == '\n' }
+  private[this] val nonSpaceOrNaturalLineDelimiter: Char => Boolean = {
+    ch => ch > ' ' || ch == '\r' || ch == '\n'
+  }
 
   /**
-   * Implements the same logic as JDK java.lang.String#trim by removing leading and trailing non-printable characters
-   * less or equal to '\u0020' (SPACE) but preserves natural line delimiters according to
-   * [[java.util.Properties]] load method. The natural line delimiters are removed by JDK during load.
-   * Therefore any remaining ones have been specifically provided and escaped by the user, and must not be ignored
+   * Implements the same logic as JDK java.lang.String#trim by removing leading and trailing
+   * non-printable characters less or equal to '\u0020' (SPACE) but preserves natural line
+   * delimiters according to [[java.util.Properties]] load method. The natural line delimiters are
+   * removed by JDK during load. Therefore any remaining ones have been specifically provided and
+   * escaped by the user, and must not be ignored
    *
    * @param str
    * @return the trimmed value of str
