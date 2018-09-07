@@ -15,19 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2;
+package org.apache.spark.ml.source.image
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
-/**
- * An interface for reporting custom metrics from streaming sources and sinks
- */
-@InterfaceStability.Evolving
-public interface CustomMetrics {
+private[image] class ImageOptions(
+    @transient private val parameters: CaseInsensitiveMap[String]) extends Serializable {
+
+  def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
+
   /**
-   * Returns a JSON serialized representation of custom metrics
-   *
-   * @return JSON serialized representation of custom metrics
+   * Whether to drop invalid images. If true, invalid images will be removed, otherwise
+   * invalid images will be returned with empty data and all other field filled with `-1`.
    */
-  String json();
+  val dropInvalid = parameters.getOrElse("dropInvalid", "false").toBoolean
 }
