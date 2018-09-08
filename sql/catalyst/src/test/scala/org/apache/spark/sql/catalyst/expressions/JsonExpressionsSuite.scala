@@ -692,7 +692,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
         |""".stripMargin
     val jsonSchema = new StructType()
       .add("a", LongType, nullable = false)
-      .add("b", StringType, nullable = true)
+      .add("b", StringType, nullable = false)
       .add("c", StringType, nullable = false)
     val output = InternalRow(1L, null, UTF8String.fromString("foo"))
     val expr = JsonToStructs(jsonSchema, Map.empty, Literal.create(input, StringType), gmtId)
