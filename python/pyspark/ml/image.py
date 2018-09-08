@@ -30,6 +30,7 @@ import numpy as np
 from pyspark import SparkContext
 from pyspark.sql.types import Row, _create_row, _parse_datatype_json_string
 from pyspark.sql import DataFrame, SparkSession
+import warnings
 
 __all__ = ["ImageSchema"]
 
@@ -225,7 +226,8 @@ class _ImageSchema(object):
 
         .. versionadded:: 2.3.0
         """
-
+        warnings.warn("`ImageSchema.readImage` is deprecated. " +
+                      "Use `spark.read.format(\"image\").load(path)` instead.")
         spark = SparkSession.builder.getOrCreate()
         image_schema = spark._jvm.org.apache.spark.ml.image.ImageSchema
         jsession = spark._jsparkSession
