@@ -3863,6 +3863,107 @@ class SparkSessionTests(PySparkTestCase):
             spark.stop()
 
 
+class SparkSessionTests2(ReusedSQLTestCase):
+
+    def test_active_session(self):
+        spark = SparkSession.builder \
+            .master("local") \
+            .getOrCreate()
+        try:
+            activeSession = spark.getActiveSession()
+            df = activeSession.createDataFrame([(1, 'Alice')], ['age', 'name'])
+            self.assertEqual(df.collect(), [Row(age=1, name=u'Alice')])
+        finally:
+            spark.stop()
+
+    def test_SparkSession(self):
+        spark = SparkSession.builder \
+            .master("local") \
+            .config("some-config", "v2") \
+            .getOrCreate()
+        try:
+            self.assertEqual(spark.conf.get("some-config"), "v2")
+            self.assertEqual(spark.sparkContext._conf.get("some-config"), "v2")
+            self.assertEqual(spark.version, spark.sparkContext.version)
+            spark.sql("CREATE DATABASE test_db")
+            spark.catalog.setCurrentDatabase("test_db")
+            self.assertEqual(spark.catalog.currentDatabase(), "test_db")
+            spark.sql("CREATE TABLE table1 (name STRING, age INT) USING parquet")
+            self.assertEqual(spark.table("table1").columns, ['name', 'age'])
+            self.assertEqual(spark.range(3).count(), 3)
+        finally:
+            spark.stop()
+
+    def test_global_default_session(self):
+        spark = SparkSession.builder \
+            .master("local") \
+            .getOrCreate()
+        try:
+            self.assertEqual(SparkSession.builder.getOrCreate(), spark)
+        finally:
+            spark.stop()
+
+    def test_default_and_active_session(self):
+        spark = SparkSession.builder \
+            .master("local") \
+            .getOrCreate()
+        activeSession = spark._jvm.SparkSession.getActiveSession()
+        defaultSession = spark._jvm.SparkSession.getDefaultSession()
+        try:
+            self.assertEqual(activeSession, defaultSession)
+        finally:
+            spark.stop()
+
+    def test_config_option_propagated_to_existing_SparkSession(self):
+        session1 = SparkSession.builder \
+            .master("local") \
+            .config("spark-config1", "a") \
+            .getOrCreate()
+        self.assertEqual(session1.conf.get("spark-config1"), "a")
+        session2 = SparkSession.builder \
+            .config("spark-config1", "b") \
+            .getOrCreate()
+        try:
+            self.assertEqual(session1, session2)
+            self.assertEqual(session1.conf.get("spark-config1"), "b")
+        finally:
+            session1.stop()
+
+    def test_newSession(self):
+        session = SparkSession.builder \
+            .master("local") \
+            .getOrCreate()
+        newSession = session.newSession()
+        try:
+            self.assertNotEqual(session, newSession)
+        finally:
+            session.stop()
+            newSession.stop()
+
+    def test_create_new_session_if_old_session_stopped(self):
+        session = SparkSession.builder \
+            .master("local") \
+            .getOrCreate()
+        session.stop()
+        newSession = SparkSession.builder \
+            .master("local") \
+            .getOrCreate()
+        try:
+            self.assertNotEqual(session, newSession)
+        finally:
+            newSession.stop()
+
+    def test_create_SparkContext_then_SparkSession(self):
+        sc = SparkContext('local', 'test')
+        session = SparkSession.builder \
+            .config("key1", "value1") \
+            .getOrCreate()
+        self.assertEqual(session.conf.get("key1"), "value1")
+        self.assertEqual(session.sparkContext, sc)
+        self.assertEqual(sc._conf.get("key1"), "value1")
+        session.stop()
+
+
 class UDFInitializationTests(unittest.TestCase):
     def tearDown(self):
         if SparkSession._instantiatedSession is not None:

@@ -234,6 +234,7 @@ class SparkSession(object):
                 or SparkSession._instantiatedSession._sc._jsc is None:
             SparkSession._instantiatedSession = self
             self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
+            self._jvm.SparkSession.setActiveSession(self._jsparkSession)
 
     def _repr_html_(self):
         return """
@@ -260,10 +261,16 @@ class SparkSession(object):
         """
         Returns the active SparkSession for the current thread, returned by the builder.
         >>> s = spark.getActiveSession()
-        >>> spark._jsparkSession.getDefaultSession().get().equals(s.get())
-        True
+        >>> l = [('Alice', 1)]
+        >>> rdd = s.sparkContext.parallelize(l)
+        >>> df = spark.createDataFrame(rdd, ['name', 'age'])
+        >>> df.collect()
+        [Row(name=u'Alice', age=1)]
         """
-        return self._jsparkSession.getActiveSession()
+        if self._jsparkSession.getActiveSession().isDefined():
+            return self.__class__(self._sc, self._jsparkSession.getActiveSession().get())
+        else:
+            return None
 
     @property
     @since(2.0)
