@@ -40,8 +40,8 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
   override def afterAll(): Unit = {
     try {
       spark.stop()
-    } finally {
       spark = null
+    } finally {
       super.afterAll()
     }
   }
