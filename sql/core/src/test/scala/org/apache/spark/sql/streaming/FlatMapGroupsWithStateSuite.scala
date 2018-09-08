@@ -55,9 +55,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
 
   override def afterAll(): Unit = {
     try {
-      StateStore.stop()
-    } finally {
       super.afterAll()
+    } finally {
+      StateStore.stop()
     }
   }
 

@@ -50,9 +50,9 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
 
   override def afterAll(): Unit = {
     try {
-      Utils.deleteRecursively(new File(tempDir))
-    } finally {
       super.afterAll()
+    } finally {
+      Utils.deleteRecursively(new File(tempDir))
     }
   }
 
