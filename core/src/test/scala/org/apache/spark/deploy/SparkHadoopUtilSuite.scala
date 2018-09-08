@@ -18,68 +18,16 @@
 package org.apache.spark.deploy
 
 import java.io.File
-import java.security.PrivilegedExceptionAction
-
-import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.permission.{FsAction, FsPermission}
-import org.apache.hadoop.security.UserGroupInformation
 import org.scalatest.Matchers
 
 import org.apache.spark.{LocalSparkContext, SparkFunSuite}
 import org.apache.spark.util.Utils
 
 class SparkHadoopUtilSuite extends SparkFunSuite with Matchers with LocalSparkContext{
-  test("check file permission") {
-    import FsAction._
-    val testUser = s"user-${Random.nextInt(100)}"
-    val testGroups = Array(s"group-${Random.nextInt(100)}")
-    val testUgi = UserGroupInformation.createUserForTesting(testUser, testGroups)
-
-    testUgi.doAs(new PrivilegedExceptionAction[Void] {
-      override def run(): Void = {
-        val sparkHadoopUtil = new SparkHadoopUtil
-
-        // If file is owned by user and user has access permission
-        var status = fileStatus(testUser, testGroups.head, READ_WRITE, READ_WRITE, NONE)
-        sparkHadoopUtil.checkAccessPermission(status, READ) should be(true)
-        sparkHadoopUtil.checkAccessPermission(status, WRITE) should be(true)
-
-        // If file is owned by user but user has no access permission
-        status = fileStatus(testUser, testGroups.head, NONE, READ_WRITE, NONE)
-        sparkHadoopUtil.checkAccessPermission(status, READ) should be(false)
-        sparkHadoopUtil.checkAccessPermission(status, WRITE) should be(false)
-
-        val otherUser = s"test-${Random.nextInt(100)}"
-        val otherGroup = s"test-${Random.nextInt(100)}"
-
-        // If file is owned by user's group and user's group has access permission
-        status = fileStatus(otherUser, testGroups.head, NONE, READ_WRITE, NONE)
-        sparkHadoopUtil.checkAccessPermission(status, READ) should be(true)
-        sparkHadoopUtil.checkAccessPermission(status, WRITE) should be(true)
-
-        // If file is owned by user's group but user's group has no access permission
-        status = fileStatus(otherUser, testGroups.head, READ_WRITE, NONE, NONE)
-        sparkHadoopUtil.checkAccessPermission(status, READ) should be(false)
-        sparkHadoopUtil.checkAccessPermission(status, WRITE) should be(false)
-
-        // If file is owned by other user and this user has access permission
-        status = fileStatus(otherUser, otherGroup, READ_WRITE, READ_WRITE, READ_WRITE)
-        sparkHadoopUtil.checkAccessPermission(status, READ) should be(true)
-        sparkHadoopUtil.checkAccessPermission(status, WRITE) should be(true)
-
-        // If file is owned by other user but this user has no access permission
-        status = fileStatus(otherUser, otherGroup, READ_WRITE, READ_WRITE, NONE)
-        sparkHadoopUtil.checkAccessPermission(status, READ) should be(false)
-        sparkHadoopUtil.checkAccessPermission(status, WRITE) should be(false)
-
-        null
-      }
-    })
-  }
-
   test("test expanding glob path") {
     val tmpDir = Utils.createTempDir()
     val rootDir = tmpDir.getCanonicalPath
