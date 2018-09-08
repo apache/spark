@@ -117,9 +117,6 @@ class CSVOptions(
 
   val nullValue = parameters.getOrElse("nullValue", "")
 
-  val emptyValueInRead = parameters.getOrElse("emptyValue", "")
-  val emptyValueInWrite = parameters.getOrElse("emptyValue", "\"\"")
-
   val nanValue = parameters.getOrElse("nanValue", "NaN")
 
   val positiveInf = parameters.getOrElse("positiveInf", "Inf")
@@ -164,6 +161,21 @@ class CSVOptions(
    * If the option is enabled, headers of CSV files will be ignored.
    */
   val enforceSchema = getBool("enforceSchema", default = true)
+
+
+  /**
+   * String representation of an empty value in read and in write.
+   */
+  val emptyValue = parameters.get("emptyValue")
+  /**
+   * The string is returned when CSV reader doesn't have any characters for input value,
+   * or an empty quoted string `""`. Default value is empty string.
+   */
+  val emptyValueInRead = emptyValue.getOrElse("")
+  /**
+   * The value is used instead of an empty string in write. Default value is `""`
+   */
+  val emptyValueInWrite = emptyValue.getOrElse("\"\"")
 
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
