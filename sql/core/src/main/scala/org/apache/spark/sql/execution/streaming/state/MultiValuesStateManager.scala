@@ -24,21 +24,20 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Literal, SpecificInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.execution.streaming.{StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec}
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
+import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.util.NextIterator
 
 /**
- * Helper class to manage state required by a single side of [[StreamingSymmetricHashJoinExec]].
+ * Helper class to manage state which is useful for operations which require to store multiple
+ * values for a key.
  * The interface of this class is basically that of a multi-map:
  * - Get: Returns an iterator of multiple values for given key
  * - Append: Append a new value to the given key
  * - Remove Data by predicate: Drop any state using a predicate condition on keys or values
  *
- * @param joinSide              Defines the join side
  * @param inputValueAttributes  Attributes of the input row which will be stored as value
- * @param joinKeys              Expressions to generate rows that will be used to key the value rows
+ * @param keys              Expressions to generate rows that will be used to key the value rows
  * @param stateInfo             Information about how to retrieve the correct version of state
  * @param storeConf             Configuration for the state store.
  * @param hadoopConf            Hadoop configuration for reading state data from storage
@@ -59,15 +58,15 @@ import org.apache.spark.util.NextIterator
  *          by overwriting with the value of (key, maxIndex), and removing [(key, maxIndex),
  *          decrement corresponding num values in KeyToNumValuesStore
  */
-class SymmetricHashJoinStateManager(
-    val joinSide: JoinSide,
+class MultiValuesStateManager(
+    storeNamePrefix: String,
     inputValueAttributes: Seq[Attribute],
-    joinKeys: Seq[Expression],
+    keys: Seq[Expression],
     stateInfo: Option[StatefulOperatorStateInfo],
     storeConf: StateStoreConf,
     hadoopConf: Configuration) extends Logging {
 
-  import SymmetricHashJoinStateManager._
+  import MultiValuesStateManager._
 
   /*
   =====================================================
@@ -265,7 +264,7 @@ class SymmetricHashJoinStateManager(
   def metrics: StateStoreMetrics = {
     val keyToNumValuesMetrics = keyToNumValues.metrics
     val keyWithIndexToValueMetrics = keyWithIndexToValue.metrics
-    def newDesc(desc: String): String = s"${joinSide.toString.toUpperCase(Locale.ROOT)}: $desc"
+    def newDesc(desc: String): String = s"${storeNamePrefix.toUpperCase(Locale.ROOT)}: $desc"
 
     StateStoreMetrics(
       keyWithIndexToValueMetrics.numKeys,       // represent each buffered row only once
@@ -291,7 +290,7 @@ class SymmetricHashJoinStateManager(
    */
 
   private val keySchema = StructType(
-    joinKeys.zipWithIndex.map { case (k, i) => StructField(s"field$i", k.dataType, k.nullable) })
+    keys.zipWithIndex.map { case (k, i) => StructField(s"field$i", k.dataType, k.nullable) })
   private val keyAttributes = keySchema.toAttributes
   private val keyToNumValues = new KeyToNumValuesStore()
   private val keyWithIndexToValue = new KeyWithIndexToValueStore()
@@ -321,8 +320,8 @@ class SymmetricHashJoinStateManager(
 
     /** Get the StateStore with the given schema */
     protected def getStateStore(keySchema: StructType, valueSchema: StructType): StateStore = {
-      val storeProviderId = StateStoreProviderId(
-        stateInfo.get, TaskContext.getPartitionId(), getStateStoreName(joinSide, stateStoreType))
+      val storeProviderId = StateStoreProviderId(stateInfo.get, TaskContext.getPartitionId(),
+        getStateStoreName(storeNamePrefix, stateStoreType))
       val store = StateStore.get(
         storeProviderId, keySchema, valueSchema, None,
         stateInfo.get.storeVersion, storeConf, hadoopConf)
@@ -380,8 +379,8 @@ class SymmetricHashJoinStateManager(
    * Helper class for representing data returned by [[KeyWithIndexToValueStore]].
    * Designed for object reuse.
    */
-  private case class KeyWithIndexAndValue(
-    var key: UnsafeRow = null, var valueIndex: Long = -1, var value: UnsafeRow = null) {
+  private case class KeyWithIndexAndValue(var key: UnsafeRow = null, var valueIndex: Long = -1,
+                                          var value: UnsafeRow = null) {
     def withNew(newKey: UnsafeRow, newIndex: Long, newValue: UnsafeRow): this.type = {
       this.key = newKey
       this.valueIndex = newIndex
@@ -475,26 +474,18 @@ class SymmetricHashJoinStateManager(
   }
 }
 
-object SymmetricHashJoinStateManager {
+object MultiValuesStateManager {
+  sealed trait StateStoreType
 
-  def allStateStoreNames(joinSides: JoinSide*): Seq[String] = {
-    val allStateStoreTypes: Seq[StateStoreType] = Seq(KeyToNumValuesType, KeyWithIndexToValueType)
-    for (joinSide <- joinSides; stateStoreType <- allStateStoreTypes) yield {
-      getStateStoreName(joinSide, stateStoreType)
-    }
-  }
-
-  private sealed trait StateStoreType
-
-  private case object KeyToNumValuesType extends StateStoreType {
+  case object KeyToNumValuesType extends StateStoreType {
     override def toString(): String = "keyToNumValues"
   }
 
-  private case object KeyWithIndexToValueType extends StateStoreType {
+  case object KeyWithIndexToValueType extends StateStoreType {
     override def toString(): String = "keyWithIndexToValue"
   }
 
-  private def getStateStoreName(joinSide: JoinSide, storeType: StateStoreType): String = {
-    s"$joinSide-$storeType"
+  def getStateStoreName(storeNamePrefix: String, storeType: StateStoreType): String = {
+    s"$storeNamePrefix-$storeType"
   }
 }

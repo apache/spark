@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.execution.streaming.state._
+import org.apache.spark.sql.execution.streaming.state.MultiValuesStateManager.{getStateStoreName, KeyToNumValuesType, KeyWithIndexToValueType, StateStoreType}
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
@@ -200,7 +201,7 @@ case class StreamingSymmetricHashJoinExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val stateStoreCoord = sqlContext.sessionState.streamingQueryManager.stateStoreCoordinator
-    val stateStoreNames = SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
+    val stateStoreNames = allStateStoreNames(LeftSide, RightSide)
     left.execute().stateStoreAwareZipPartitions(
       right.execute(), stateInfo.get, stateStoreNames, stateStoreCoord)(processPartitions)
   }
@@ -394,8 +395,8 @@ case class StreamingSymmetricHashJoinExec(
     val preJoinFilter =
       newPredicate(preJoinFilterExpr.getOrElse(Literal(true)), inputAttributes).eval _
 
-    private val joinStateManager = new SymmetricHashJoinStateManager(
-      joinSide, inputAttributes, joinKeys, stateInfo, storeConf, hadoopConfBcast.value.value)
+    private val joinStateManager = new MultiValuesStateManager(joinSide.toString, inputAttributes,
+      joinKeys, stateInfo, storeConf, hadoopConfBcast.value.value)
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
     private[this] val stateKeyWatermarkPredicateFunc = stateWatermarkPredicate match {
@@ -503,5 +504,12 @@ case class StreamingSymmetricHashJoinExec(
     }
 
     def numUpdatedStateRows: Long = updatedStateRowsCount
+  }
+
+  private def allStateStoreNames(joinSides: JoinSide*): Seq[String] = {
+    val allStateStoreTypes: Seq[StateStoreType] = Seq(KeyToNumValuesType, KeyWithIndexToValueType)
+    for (joinSide <- joinSides; stateStoreType <- allStateStoreTypes) yield {
+      getStateStoreName(joinSide.toString, stateStoreType)
+    }
   }
 }

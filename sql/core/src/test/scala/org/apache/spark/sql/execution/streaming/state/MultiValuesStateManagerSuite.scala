@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types._
 
-class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter {
+class MultiValuesStateManagerSuite extends StreamTest with BeforeAndAfter {
 
   before {
     SparkSession.setActiveSession(spark) // set this before force initializing 'joinExec'
@@ -39,8 +39,8 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
   }
 
 
-  test("SymmetricHashJoinStateManager - all operations") {
-    withJoinStateManager(inputValueAttribs, joinKeyExprs) { manager =>
+  test("MultiValuesStateManager - all operations") {
+    withStateManager(inputValueAttribs, keyExprs) { manager =>
       implicit val mgr = manager
 
       assert(get(20) === Seq.empty)     // initially empty
@@ -106,10 +106,10 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
     .add(StructField("value", BooleanType))
   val inputValueAttribs = inputValueSchema.toAttributes
   val inputValueAttribWithWatermark = inputValueAttribs(0)
-  val joinKeyExprs = Seq[Expression](Literal(false), inputValueAttribWithWatermark, Literal(10.0))
+  val keyExprs = Seq[Expression](Literal(false), inputValueAttribWithWatermark, Literal(10.0))
 
   val inputValueGen = UnsafeProjection.create(inputValueAttribs.map(_.dataType).toArray)
-  val joinKeyGen = UnsafeProjection.create(joinKeyExprs.map(_.dataType).toArray)
+  val keyGen = UnsafeProjection.create(keyExprs.map(_.dataType).toArray)
 
 
   def toInputValue(i: Int): UnsafeRow = {
@@ -117,21 +117,21 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
   }
 
   def toJoinKeyRow(i: Int): UnsafeRow = {
-    joinKeyGen.apply(new GenericInternalRow(Array[Any](false, i, 10.0)))
+    keyGen.apply(new GenericInternalRow(Array[Any](false, i, 10.0)))
   }
 
   def toValueInt(inputValueRow: UnsafeRow): Int = inputValueRow.getInt(0)
 
-  def append(key: Int, value: Int)(implicit manager: SymmetricHashJoinStateManager): Unit = {
+  def append(key: Int, value: Int)(implicit manager: MultiValuesStateManager): Unit = {
     manager.append(toJoinKeyRow(key), toInputValue(value))
   }
 
-  def get(key: Int)(implicit manager: SymmetricHashJoinStateManager): Seq[Int] = {
+  def get(key: Int)(implicit manager: MultiValuesStateManager): Seq[Int] = {
     manager.get(toJoinKeyRow(key)).map(toValueInt).toSeq.sorted
   }
 
   /** Remove keys (and corresponding values) where `time <= threshold` */
-  def removeByKey(threshold: Long)(implicit manager: SymmetricHashJoinStateManager): Unit = {
+  def removeByKey(threshold: Long)(implicit manager: MultiValuesStateManager): Unit = {
     val expr =
       LessThanOrEqual(
         BoundReference(
@@ -142,27 +142,26 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
   }
 
   /** Remove values where `time <= threshold` */
-  def removeByValue(watermark: Long)(implicit manager: SymmetricHashJoinStateManager): Unit = {
+  def removeByValue(watermark: Long)(implicit manager: MultiValuesStateManager): Unit = {
     val expr = LessThanOrEqual(inputValueAttribWithWatermark, Literal(watermark))
     val iter = manager.removeByValueCondition(
       GeneratePredicate.generate(expr, inputValueAttribs).eval _)
     while (iter.hasNext) iter.next()
   }
 
-  def numRows(implicit manager: SymmetricHashJoinStateManager): Long = {
+  def numRows(implicit manager: MultiValuesStateManager): Long = {
     manager.metrics.numKeys
   }
 
-
-  def withJoinStateManager(
-    inputValueAttribs: Seq[Attribute],
-    joinKeyExprs: Seq[Expression])(f: SymmetricHashJoinStateManager => Unit): Unit = {
+  def withStateManager(
+      inputValueAttribs: Seq[Attribute],
+      keyExprs: Seq[Expression])(f: MultiValuesStateManager => Unit): Unit = {
 
     withTempDir { file =>
       val storeConf = new StateStoreConf()
       val stateInfo = StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0, 5)
-      val manager = new SymmetricHashJoinStateManager(
-        LeftSide, inputValueAttribs, joinKeyExprs, Some(stateInfo), storeConf, new Configuration)
+      val manager = new MultiValuesStateManager(LeftSide.toString(), inputValueAttribs, keyExprs,
+        Some(stateInfo), storeConf, new Configuration)
       try {
         f(manager)
       } finally {
