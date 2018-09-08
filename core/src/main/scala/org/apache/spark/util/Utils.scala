@@ -2051,11 +2051,6 @@ private[spark] object Utils extends Logging {
     }
   }
 
-
-  private[this] val nonSpaceOrNaturalLineDelimiter: Char => Boolean = {
-    ch => ch > ' ' || ch == '\r' || ch == '\n'
-  }
-
   /**
    * Implements the same logic as JDK java.lang.String#trim by removing leading and trailing
    * non-printable characters less or equal to '\u0020' (SPACE) but preserves natural line
@@ -2067,6 +2062,10 @@ private[spark] object Utils extends Logging {
    * @return the trimmed value of str
    */
   private[util] def trimExceptCRLF(str: String): String = {
+    val nonSpaceOrNaturalLineDelimiter: Char => Boolean = { ch =>
+      ch > ' ' || ch == '\r' || ch == '\n'
+    }
+
     val firstPos = str.indexWhere(nonSpaceOrNaturalLineDelimiter)
     val lastPos = str.lastIndexWhere(nonSpaceOrNaturalLineDelimiter)
     if (firstPos >= 0 && lastPos >= 0) {
@@ -2087,7 +2086,7 @@ private[spark] object Utils extends Logging {
       val properties = new Properties()
       properties.load(inReader)
       properties.stringPropertyNames().asScala
-        .map(k => (k, trimExceptCRLF(properties.getProperty(k))))
+        .map { k => (k, trimExceptCRLF(properties.getProperty(k))) }
         .toMap
 
     } catch {

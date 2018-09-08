@@ -1150,6 +1150,7 @@ class SparkSubmitSuite
     val LF = "\n"
     val CR = "\r"
 
+    val lineFeedFromCommandLine = s"${delimKey}lineFeedFromCommandLine" -> LF
     val leadingDelimKeyFromFile = s"${delimKey}leadingDelimKeyFromFile" -> s"${LF}blah"
     val trailingDelimKeyFromFile = s"${delimKey}trailingDelimKeyFromFile" -> s"blah${CR}"
     val infixDelimFromFile = s"${delimKey}infixDelimFromFile" -> s"${CR}blah${LF}"
@@ -1171,7 +1172,7 @@ class SparkSubmitSuite
 
     val clArgs = Seq(
       "--class", "org.SomeClass",
-      "--conf", s"${delimKey}=$LF",
+      "--conf", s"${lineFeedFromCommandLine._1}=${lineFeedFromCommandLine._2}",
       "--conf", "spark.master=yarn",
       "--properties-file", propsFile.getPath,
       "thejar.jar")
@@ -1179,10 +1180,14 @@ class SparkSubmitSuite
     val appArgs = new SparkSubmitArguments(clArgs)
     val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
 
-    Seq((delimKey -> LF), leadingDelimKeyFromFile, trailingDelimKeyFromFile, infixDelimFromFile)
-      .foreach {
-        case (k, v) => conf.get(k) should be (v)
-      }
+    Seq(
+      lineFeedFromCommandLine,
+      leadingDelimKeyFromFile,
+      trailingDelimKeyFromFile,
+      infixDelimFromFile
+    ).foreach { case (k, v) =>
+      conf.get(k) should be (v)
+    }
 
     conf.get(nonDelimSpaceFromFile._1) should be ("blah")
   }
