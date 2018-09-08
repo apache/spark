@@ -803,7 +803,7 @@ class HiveDDLSuite
     }
   }
 
-  test("Insert overwrite directory should output correct schema") {
+  test("SPARK-25313 Insert overwrite directory should output correct schema") {
     withSQLConf(CONVERT_METASTORE_PARQUET.key -> "false") {
       withTable("tbl") {
         withView("view1") {
