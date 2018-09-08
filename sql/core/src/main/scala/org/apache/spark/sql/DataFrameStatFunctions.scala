@@ -428,6 +428,22 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   }
 
   /**
+   * (Java-specific) Returns a stratified sample without replacement based on the fraction given
+   * on each stratum.
+   * @param col column that defines strata
+   * @param fractions sampling fraction for each stratum. If a stratum is not specified, we treat
+   *                  its fraction as zero.
+   * @param seed random seed
+   * @tparam T stratum type
+   * @return a new `DataFrame` that represents the stratified sample
+   *
+   * @since 3.0.0
+   */
+  def sampleBy[T](col: Column, fractions: ju.Map[T, jl.Double], seed: Long): DataFrame = {
+    sampleBy(col, fractions.asScala.toMap.asInstanceOf[Map[T, Double]], seed)
+  }
+
+  /**
    * Builds a Count-min Sketch over a specified column.
    *
    * @param colName name of the column over which the sketch is built
