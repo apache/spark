@@ -243,11 +243,14 @@ private[spark] object Utils extends Logging {
   /**
    * Run a segment of code using a different context class loader in the current thread
    */
-  def withContextClassLoader(ctxClassLoader: ClassLoader)(fn: => Unit): Unit = {
+  def withContextClassLoader[T](ctxClassLoader: ClassLoader)(fn: => T): T = {
     val oldClassLoader = getContextOrSparkClassLoader
-    Thread.currentThread().setContextClassLoader(ctxClassLoader)
-    fn
-    Thread.currentThread().setContextClassLoader(oldClassLoader)
+    try {
+      Thread.currentThread().setContextClassLoader(ctxClassLoader)
+      fn
+    } finally {
+      Thread.currentThread().setContextClassLoader(oldClassLoader)
+    }
   }
 
   /**

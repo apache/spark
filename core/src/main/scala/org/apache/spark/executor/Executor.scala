@@ -136,18 +136,18 @@ private[spark] class Executor(
   // for fetching remote cached RDD blocks, so need to make sure it uses the right classloader too.
   env.serializerManager.setDefaultClassLoader(replClassLoader)
 
-  private val plugins: Seq[ExecutorPlugin] = {
+  private val executorPlugins: Seq[ExecutorPlugin] = {
     val pluginNames = conf.get(EXECUTOR_PLUGINS)
     if (pluginNames.nonEmpty) {
       logDebug(s"Initializing the following plugins: ${pluginNames.mkString(", ")}")
 
-      // Before loading the executor plugins, we need to temporarily change the class loader
-      // to one that can discover and load jars passed into Spark using --jars
-      var pluginList: Seq[ExecutorPlugin] = Nil
-      Utils.withContextClassLoader(replClassLoader) {
-        pluginList = Utils.loadExtensions(classOf[ExecutorPlugin], pluginNames, conf)
-        pluginList.foreach(_.init())
-      }
+      // Plugins need to load using a class loader that includes the executor's user classpath
+      val pluginList: Seq[ExecutorPlugin] =
+        Utils.withContextClassLoader(replClassLoader) {
+          val plugins = Utils.loadExtensions(classOf[ExecutorPlugin], pluginNames, conf)
+          plugins.foreach(_.init())
+          plugins
+        }
 
       logDebug("Finished initializing plugins")
       pluginList
@@ -242,14 +242,17 @@ private[spark] class Executor(
 
     // Notify plugins that executor is shutting down so they can terminate cleanly
     Utils.withContextClassLoader(replClassLoader) {
-      plugins.foreach(plugin => {
+      executorPlugins.foreach { plugin =>
         try {
           plugin.shutdown()
         } catch {
           case e: Exception =>
-            logWarning(s"Plugin ${plugin.getClass} failed to shutdown: ${e.getMessage()}")
+            logWarning(
+              s"""Plugin ${plugin.getClass().getCanonicalName()} failed to shutdown:
+                 |${e.toString}
+                 |${e.getStackTrace().mkString("\n")}""".stripMargin)
         }
-      })
+      }
     }
     if (!isLocal) {
       env.stop()

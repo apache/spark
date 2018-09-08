@@ -40,9 +40,7 @@ public interface ExecutorPlugin {
    * Initialize the executor plugin.
    *
    * <p>Each executor will, during its initialization, invoke this method on each
-   * plugin provided in the spark.executor.plugins configuration. These invocations
-   * will occur asynchronously from the executor initialization, but synchronously
-   * with other plugin initialization.</p>
+   * plugin provided in the spark.executor.plugins configuration.</p>
    *
    * <p>Plugins should create threads in their implementation of this method for
    * any polling, blocking, or intensive computation.</p>

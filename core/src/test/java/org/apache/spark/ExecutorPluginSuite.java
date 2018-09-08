@@ -68,7 +68,9 @@ public class ExecutorPluginSuite {
     } catch (Exception e) {
       // We cannot catch ClassNotFoundException directly because Java doesn't think it'll be thrown
       assertTrue(e.toString().startsWith("java.lang.ClassNotFoundException"));
+      return;
     }
+    fail("No exception thrown for nonexistant plugin");
   }
 
   @Test
@@ -99,7 +101,7 @@ public class ExecutorPluginSuite {
     String pluginNames = testPluginName + "," + testBadPluginName + "," + testPluginName;
     SparkConf conf = initializeSparkConf(pluginNames);
     sc = new JavaSparkContext(conf);
-    assertEquals(2, numSuccessfulPlugins);
+    assertEquals(3, numSuccessfulPlugins);
     sc.stop();
     sc = null;
     assertEquals(2, numSuccessfulTerminations);
@@ -109,12 +111,17 @@ public class ExecutorPluginSuite {
     public void init() {
       ExecutorPluginSuite.numSuccessfulPlugins++;
     }
+
     public void shutdown() {
       ExecutorPluginSuite.numSuccessfulTerminations++;
     }
   }
 
   public static class TestBadShutdownPlugin implements ExecutorPlugin {
+    public void init() {
+      ExecutorPluginSuite.numSuccessfulPlugins++;
+    }
+
     public void shutdown() {
       throw new RuntimeException("This plugin will fail to cleanly shut down");
     }
