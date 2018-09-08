@@ -48,11 +48,14 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
   }
 
   override def afterAll(): Unit = {
-    if (testUtils != null) {
-      testUtils.teardown()
-      testUtils = null
+    try {
+      if (testUtils != null) {
+        testUtils.teardown()
+        testUtils = null
+      }
+    } finally {
+      super.afterAll()
     }
-    super.afterAll()
   }
 
   test("batch - write to kafka") {
