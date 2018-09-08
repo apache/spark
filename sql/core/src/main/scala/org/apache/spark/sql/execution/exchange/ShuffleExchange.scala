@@ -259,7 +259,6 @@ object ShuffleExchange {
       //
       // Note that we don't perform local sort if the new partitioning has only 1 partition, under
       // that case all output rows go to the same partition.
-
       val newRdd = if (isRoundRobin && SparkEnv.get.conf.get(SQLConf.SORT_BEFORE_REPARTITION)) {
         rdd.mapPartitionsInternal { iter =>
           val recordComparatorSupplier = new Supplier[RecordComparator] {
