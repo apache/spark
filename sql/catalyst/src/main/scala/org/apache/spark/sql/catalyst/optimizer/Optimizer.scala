@@ -1195,12 +1195,10 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * Generate new left and right child of join by pushing down the side only join filter,
-   * split commonJoinCondition based on the expression can be evaluated within join or not.
-   *
-   * @return (newLeftChild, newRightChild, newJoinCondition, conditionCannotEvaluateWithinJoin)
+   * Generate new join by pushing down the side only join filter, split commonJoinCondition
+   * based on the expression can be evaluated within join or not and return unevaluable part.
    */
-  private def getNewChildAndSplitCondForJoin(
+  private def getNewJoinAndUnevaluableCond(
       join: Join,
       leftJoinConditions: Seq[Expression],
       rightJoinConditions: Seq[Expression],
@@ -1213,7 +1211,13 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     val (newJoinConditions, others) =
       commonJoinCondition.partition(canEvaluateWithinJoin)
     val newJoinCond = newJoinConditions.reduceLeftOption(And)
-    (newLeft, newRight, newJoinCond, others)
+    // need to add cross join when unevaluable condition exists
+    val newJoinType = if (others.nonEmpty) {
+      tryToGetCrossType(commonJoinCondition, join)
+    } else {
+      join.joinType
+    }
+    (Join(newLeft, newRight, newJoinType, newJoinCond), others)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -1270,32 +1274,18 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
       joinType match {
         case LeftSemi =>
-          val (newLeft, newRight, newJoinCond, others) = getNewChildAndSplitCondForJoin(
+          val (join, others) = getNewJoinAndUnevaluableCond(
             j, leftJoinConditions, rightJoinConditions, commonJoinCondition)
-          // need to add cross join when unevaluable condition exists
-          val newJoinType = if (others.nonEmpty) {
-            tryToGetCrossType(commonJoinCondition, j)
-          } else {
-            joinType
-          }
 
-          val join = Join(newLeft, newRight, newJoinType, newJoinCond)
           if (others.nonEmpty) {
-            Project(newLeft.output.map(_.toAttribute), Filter(others.reduceLeft(And), join))
+            Project(join.left.output.map(_.toAttribute), Filter(others.reduceLeft(And), join))
           } else {
             join
           }
         case _: InnerLike =>
-          val (newLeft, newRight, newJoinCond, others) = getNewChildAndSplitCondForJoin(
+          val (join, others) = getNewJoinAndUnevaluableCond(
             j, leftJoinConditions, rightJoinConditions, commonJoinCondition)
-          // only need to add cross join when whole commonJoinCondition are unevaluable
-          val newJoinType = if (commonJoinCondition.nonEmpty && newJoinCond.isEmpty) {
-            tryToGetCrossType(commonJoinCondition, j)
-          } else {
-            joinType
-          }
 
-          val join = Join(newLeft, newRight, newJoinType, newJoinCond)
           if (others.nonEmpty) {
             Filter(others.reduceLeft(And), join)
           } else {
