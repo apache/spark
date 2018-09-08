@@ -137,7 +137,7 @@ object OrcUtils extends Logging {
                 } else {
                   matchedOrcFields.head._2
                 }
-            }.getOrElse(-1)
+              }.getOrElse(-1)
           })
         }
       }
