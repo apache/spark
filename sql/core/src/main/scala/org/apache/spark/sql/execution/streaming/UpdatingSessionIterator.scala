@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package org.apache.spark.sql.execution.streaming
 
 import scala.collection.mutable
 
@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, BindReferences, Cre
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.types.{LongType, TimestampType}
 
+// FIXME: javadoc!!
 class UpdatingSessionIterator(
     iter: Iterator[InternalRow],
     groupWithoutSessionExpressions: Seq[Expression],
