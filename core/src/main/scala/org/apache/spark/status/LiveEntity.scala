@@ -20,11 +20,7 @@ package org.apache.spark.status
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.immutable.{HashSet, TreeSet}
-import scala.collection.mutable.HashMap
-
 import com.google.common.collect.Interners
-
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.scheduler.{AccumulableInfo, StageInfo, TaskInfo}
@@ -33,7 +29,9 @@ import org.apache.spark.storage.RDDInfo
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.AccumulatorContext
 import org.apache.spark.util.collection.OpenHashSet
-import org.apache.spark.util.kvstore.KVStore
+
+import scala.collection.immutable.{HashSet, TreeSet}
+import scala.collection.mutable.HashMap
 
 /**
  * A mutable representation of a live entity in Spark (jobs, stages, tasks, et al). Every live
@@ -120,7 +118,7 @@ private class LiveTask(
     stageAttemptId: Int,
     lastUpdateTime: Option[Long]) extends LiveEntity {
 
-  import LiveEntityHelpers._
+  import org.apache.spark.status.LiveEntityHelpers._
 
   // The task metrics use a special value when no metrics have been reported. The special value is
   // checked when calculating indexed values when writing to the store (see [[TaskDataWrapper]]).
@@ -316,7 +314,7 @@ private class LiveExecutorStageSummary(
     attemptId: Int,
     executorId: String) extends LiveEntity {
 
-  import LiveEntityHelpers._
+  import org.apache.spark.status.LiveEntityHelpers._
 
   var taskTime = 0L
   var succeededTasks = 0
@@ -350,7 +348,7 @@ private class LiveExecutorStageSummary(
 
 private class LiveStage extends LiveEntity {
 
-  import LiveEntityHelpers._
+  import org.apache.spark.status.LiveEntityHelpers._
 
   var jobs = Seq[LiveJob]()
   var jobIds = Set[Int]()
@@ -439,7 +437,7 @@ private class LiveStage extends LiveEntity {
 
 private class LiveRDDPartition(val blockName: String) {
 
-  import LiveEntityHelpers._
+  import org.apache.spark.status.LiveEntityHelpers._
 
   // Pointers used by RDDPartitionSeq.
   @volatile var prev: LiveRDDPartition = null
@@ -470,7 +468,7 @@ private class LiveRDDPartition(val blockName: String) {
 
 private class LiveRDDDistribution(exec: LiveExecutor) {
 
-  import LiveEntityHelpers._
+  import org.apache.spark.status.LiveEntityHelpers._
 
   val executorId = exec.executorId
   var memoryUsed = 0L
@@ -501,7 +499,7 @@ private class LiveRDDDistribution(exec: LiveExecutor) {
 
 private class LiveRDD(val info: RDDInfo) extends LiveEntity {
 
-  import LiveEntityHelpers._
+  import org.apache.spark.status.LiveEntityHelpers._
 
   var storageLevel: String = weakIntern(info.storageLevel.description)
   var memoryUsed = 0L
@@ -511,6 +509,10 @@ private class LiveRDD(val info: RDDInfo) extends LiveEntity {
   private val partitionSeq = new RDDPartitionSeq()
 
   private val distributions = new HashMap[String, LiveRDDDistribution]()
+
+  def isEmpty(): Boolean = {
+    memoryUsed == 0L && diskUsed == 0L && partitions.isEmpty && distributions.isEmpty
+  }
 
   def setStorageLevel(level: String): Unit = {
     this.storageLevel = weakIntern(level)

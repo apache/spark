@@ -686,8 +686,17 @@ private[spark] class AppStatusListener(
   }
 
   override def onUnpersistRDD(event: SparkListenerUnpersistRDD): Unit = {
-    liveRDDs.remove(event.rddId)
-    kvstore.delete(classOf[RDDStorageInfoWrapper], event.rddId)
+    while (true) {
+      liveRDDs.get(event.rddId) match {
+        case Some(rdd) =>
+          if (rdd.isEmpty()) {
+            liveRDDs.remove(event.rddId)
+            kvstore.delete(classOf[RDDStorageInfoWrapper], event.rddId)
+          }
+        case None =>
+          return
+      }
+    }
   }
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
@@ -775,9 +784,21 @@ private[spark] class AppStatusListener(
     val executorId = event.blockUpdatedInfo.blockManagerId.executorId
 
     // Whether values are being added to or removed from the existing accounting.
+    // BlockManager always send empty block status message when user try to remove rdd block,
+    // so we try to get this removed block size from rdd partition to get accurate memory/disk storage size.
     val storageLevel = event.blockUpdatedInfo.storageLevel
-    val diskDelta = event.blockUpdatedInfo.diskSize * (if (storageLevel.useDisk) 1 else -1)
-    val memoryDelta = event.blockUpdatedInfo.memSize * (if (storageLevel.useMemory) 1 else -1)
+    val diskDelta: Long = storageLevel != StorageLevel.NONE match {
+      case true => event.blockUpdatedInfo.diskSize
+      case false => liveRDDs.get(block.rddId).map { rdd =>
+        rdd.partition(block.name).diskUsed * (-1)
+      }.get
+    }
+    val memoryDelta = storageLevel != StorageLevel.NONE match {
+      case true => event.blockUpdatedInfo.memSize
+      case false => liveRDDs.get(block.rddId).map{ rdd =>
+        rdd.partition(block.name).memoryUsed * (-1)
+      }.get
+    }
 
     // Function to apply a delta to a value, but ensure that it doesn't go negative.
     def newValue(old: Long, delta: Long): Long = math.max(0, old + delta)
@@ -875,7 +896,7 @@ private[spark] class AppStatusListener(
     // Finish updating the executor now that we know the delta in the number of blocks.
     maybeExec.foreach { exec =>
       exec.rddBlocks += rddBlocksDelta
-      maybeUpdate(exec, now)
+      update(exec, now)
     }
   }
 
