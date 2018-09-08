@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.json
 
 import java.io.{ByteArrayOutputStream, CharConversionException}
+import java.nio.charset.MalformedInputException
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -402,7 +403,7 @@ class JacksonParser(
         }
       }
     } catch {
-      case e @ (_: RuntimeException | _: JsonProcessingException) =>
+      case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException) =>
         // JSON parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by
         // `columnNameOfCorruptRecord` are set to `null`.

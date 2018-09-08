@@ -24,6 +24,7 @@ import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.config
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ExternalClusterManager
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -1092,7 +1093,7 @@ class ExecutorAllocationManagerSuite
     val maxExecutors = 2
     val conf = new SparkConf()
       .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.shuffle.service.enabled", "true")
+      .set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
       .set("spark.dynamicAllocation.minExecutors", minExecutors.toString)
       .set("spark.dynamicAllocation.maxExecutors", maxExecutors.toString)
       .set("spark.dynamicAllocation.initialExecutors", initialExecutors.toString)
@@ -1375,6 +1376,8 @@ private class DummyLocalSchedulerBackend (sc: SparkContext, sb: SchedulerBackend
   override def reviveOffers(): Unit = sb.reviveOffers()
 
   override def defaultParallelism(): Int = sb.defaultParallelism()
+
+  override def maxNumConcurrentTasks(): Int = sb.maxNumConcurrentTasks()
 
   override def killExecutorsOnHost(host: String): Boolean = {
     false

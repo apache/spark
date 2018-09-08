@@ -22,7 +22,12 @@ secrets to be secure.
 
 For other resource managers, `spark.authenticate.secret` must be configured on each of the nodes.
 This secret will be shared by all the daemons and applications, so this deployment configuration is
-not as secure as the above, especially when considering multi-tenant clusters.
+not as secure as the above, especially when considering multi-tenant clusters.  In this
+configuration, a user with the secret can effectively impersonate any other user.
+
+The Rest Submission Server and the MesosClusterDispatcher do not support authentication.  You should
+ensure that all network access to the REST API & MesosClusterDispatcher (port 6066 and 7077
+respectively by default) are restricted to hosts that are trusted to submit jobs.
 
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
@@ -44,7 +49,7 @@ not as secure as the above, especially when considering multi-tenant clusters.
 
 Spark supports AES-based encryption for RPC connections. For encryption to be enabled, RPC
 authentication must also be enabled and properly configured. AES encryption uses the
-[Apache Commons Crypto](http://commons.apache.org/proper/commons-crypto/) library, and Spark's
+[Apache Commons Crypto](https://commons.apache.org/proper/commons-crypto/) library, and Spark's
 configuration system allows access to that library's configuration for advanced users.
 
 There is also support for SASL-based encryption, although it should be considered deprecated. It
@@ -164,7 +169,7 @@ The following settings cover enabling encryption for data written to disk:
 
 ## Authentication and Authorization
 
-Enabling authentication for the Web UIs is done using [javax servlet filters](http://docs.oracle.com/javaee/6/api/javax/servlet/Filter.html).
+Enabling authentication for the Web UIs is done using [javax servlet filters](https://docs.oracle.com/javaee/6/api/javax/servlet/Filter.html).
 You will need a filter that implements the authentication method you want to deploy. Spark does not
 provide any built-in authentication filters.
 
@@ -487,7 +492,7 @@ distributed with the application using the `--files` command line argument (or t
 configuration should just reference the file name with no absolute path.
 
 Distributing local key stores this way may require the files to be staged in HDFS (or other similar
-distributed file system used by the cluster), so it's recommended that the undelying file system be
+distributed file system used by the cluster), so it's recommended that the underlying file system be
 configured with security in mind (e.g. by enabling authentication and wire encryption).
 
 ### Standalone mode

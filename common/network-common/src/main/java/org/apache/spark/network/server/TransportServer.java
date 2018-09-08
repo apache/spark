@@ -70,11 +70,14 @@ public class TransportServer implements Closeable {
     this.appRpcHandler = appRpcHandler;
     this.bootstraps = Lists.newArrayList(Preconditions.checkNotNull(bootstraps));
 
+    boolean shouldClose = true;
     try {
       init(hostToBind, portToBind);
-    } catch (RuntimeException e) {
-      JavaUtils.closeQuietly(this);
-      throw e;
+      shouldClose = false;
+    } finally {
+      if (shouldClose) {
+        JavaUtils.closeQuietly(this);
+      }
     }
   }
 

@@ -82,6 +82,23 @@ else
     rm "$PYCODESTYLE_REPORT_PATH"
 fi
 
+# stop the build if there are Python syntax errors or undefined names
+flake8 . --count --select=E901,E999,F821,F822,F823 --max-line-length=100 --show-source --statistics
+flake8_status="${PIPESTATUS[0]}"
+
+if [ "$flake8_status" -eq 0 ]; then
+    lint_status=0
+else
+    lint_status=1
+fi
+
+if [ "$lint_status" -ne 0 ]; then
+    echo "flake8 checks failed."
+    exit "$lint_status"
+else
+    echo "flake8 checks passed."
+fi
+
 # Check that the documentation builds acceptably, skip check if sphinx is not installed.
 if hash "$SPHINXBUILD" 2> /dev/null; then
   cd python/docs

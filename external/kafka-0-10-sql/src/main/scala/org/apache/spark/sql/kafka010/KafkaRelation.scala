@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.{util => ju}
 import java.util.UUID
 
 import org.apache.kafka.common.TopicPartition
@@ -117,7 +116,7 @@ private[kafka010] class KafkaRelation(
         DateTimeUtils.fromJavaTimestamp(new java.sql.Timestamp(cr.timestamp)),
         cr.timestampType.id)
     }
-    sqlContext.internalCreateDataFrame(rdd, schema).rdd
+    sqlContext.internalCreateDataFrame(rdd.setName("kafka"), schema).rdd
   }
 
   private def getPartitionOffsets(

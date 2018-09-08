@@ -68,8 +68,16 @@ except ImportError as e:
     # If Arrow version requirement is not satisfied, skip related tests.
     _pyarrow_requirement_message = _exception_message(e)
 
+_test_not_compiled_message = None
+try:
+    from pyspark.sql.utils import require_test_compiled
+    require_test_compiled()
+except Exception as e:
+    _test_not_compiled_message = _exception_message(e)
+
 _have_pandas = _pandas_requirement_message is None
 _have_pyarrow = _pyarrow_requirement_message is None
+_test_compiled = _test_not_compiled_message is None
 
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
@@ -268,6 +276,10 @@ class DataTypeTests(unittest.TestCase):
     def test_struct_field_type_name(self):
         struct_field = StructField("a", IntegerType())
         self.assertRaises(TypeError, struct_field.typeName)
+
+    def test_invalid_create_row(self):
+        row_class = Row("c1", "c2")
+        self.assertRaises(ValueError, lambda: row_class(1, 2, 3))
 
 
 class SQLTests(ReusedSQLTestCase):
@@ -3367,6 +3379,47 @@ class SQLTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(path)
 
+    # SPARK-24721
+    @unittest.skipIf(not _test_compiled, _test_not_compiled_message)
+    def test_datasource_with_udf(self):
+        from pyspark.sql.functions import udf, lit, col
+
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+
+        try:
+            self.spark.range(1).write.mode("overwrite").format('csv').save(path)
+            filesource_df = self.spark.read.option('inferSchema', True).csv(path).toDF('i')
+            datasource_df = self.spark.read \
+                .format("org.apache.spark.sql.sources.SimpleScanSource") \
+                .option('from', 0).option('to', 1).load().toDF('i')
+            datasource_v2_df = self.spark.read \
+                .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+                .load().toDF('i', 'j')
+
+            c1 = udf(lambda x: x + 1, 'int')(lit(1))
+            c2 = udf(lambda x: x + 1, 'int')(col('i'))
+
+            f1 = udf(lambda x: False, 'boolean')(lit(1))
+            f2 = udf(lambda x: False, 'boolean')(col('i'))
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                result = df.withColumn('c', c1)
+                expected = df.withColumn('c', lit(2))
+                self.assertEquals(expected.collect(), result.collect())
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                result = df.withColumn('c', c2)
+                expected = df.withColumn('c', col('i') + 1)
+                self.assertEquals(expected.collect(), result.collect())
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                for f in [f1, f2]:
+                    result = df.filter(f)
+                    self.assertEquals(0, result.count())
+        finally:
+            shutil.rmtree(path)
+
     def test_repr_behaviors(self):
         import re
         pattern = re.compile(r'^ *\|', re.MULTILINE)
@@ -4050,6 +4103,8 @@ class ArrowTests(ReusedSQLTestCase):
     def setUpClass(cls):
         from datetime import date, datetime
         from decimal import Decimal
+        from distutils.version import LooseVersion
+        import pyarrow as pa
         ReusedSQLTestCase.setUpClass()
 
         # Synchronize default timezone between Python and Java
@@ -4077,6 +4132,13 @@ class ArrowTests(ReusedSQLTestCase):
                      date(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
                     (u"c", 3, 30, 0.8, 6.0, Decimal("6.0"),
                      date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
+
+        # TODO: remove version check once minimum pyarrow version is 0.10.0
+        if LooseVersion("0.10.0") <= LooseVersion(pa.__version__):
+            cls.schema.add(StructField("9_binary_t", BinaryType(), True))
+            cls.data[0] = cls.data[0] + (bytearray(b"a"),)
+            cls.data[1] = cls.data[1] + (bytearray(b"bb"),)
+            cls.data[2] = cls.data[2] + (bytearray(b"ccc"),)
 
     @classmethod
     def tearDownClass(cls):
@@ -4115,11 +4177,22 @@ class ArrowTests(ReusedSQLTestCase):
                     self.assertPandasEqual(pdf, pd.DataFrame({u'map': [{u'a': 1}]}))
 
     def test_toPandas_fallback_disabled(self):
+        from distutils.version import LooseVersion
+        import pyarrow as pa
+
         schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, 'Unsupported type'):
                 df.toPandas()
+
+        # TODO: remove BinaryType check once minimum pyarrow version is 0.10.0
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            schema = StructType([StructField("binary", BinaryType(), True)])
+            df = self.spark.createDataFrame([(None,)], schema=schema)
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(Exception, 'Unsupported type.*BinaryType'):
+                    df.toPandas()
 
     def test_null_conversion(self):
         df_null = self.spark.createDataFrame([tuple([None for _ in range(len(self.data[0]))])] +
@@ -4232,19 +4305,22 @@ class ArrowTests(ReusedSQLTestCase):
 
     def test_createDataFrame_with_incorrect_schema(self):
         pdf = self.create_pandas_data_frame()
-        wrong_schema = StructType(list(reversed(self.schema)))
+        fields = list(self.schema)
+        fields[0], fields[7] = fields[7], fields[0]  # swap str with timestamp
+        wrong_schema = StructType(fields)
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, ".*No cast.*string.*timestamp.*"):
                 self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):
         pdf = self.create_pandas_data_frame()
+        new_names = list(map(str, range(len(self.schema.fieldNames()))))
         # Test that schema as a list of column names gets applied
-        df = self.spark.createDataFrame(pdf, schema=list('abcdefgh'))
-        self.assertEquals(df.schema.fieldNames(), list('abcdefgh'))
+        df = self.spark.createDataFrame(pdf, schema=list(new_names))
+        self.assertEquals(df.schema.fieldNames(), new_names)
         # Test that schema as tuple of column names gets applied
-        df = self.spark.createDataFrame(pdf, schema=tuple('abcdefgh'))
-        self.assertEquals(df.schema.fieldNames(), list('abcdefgh'))
+        df = self.spark.createDataFrame(pdf, schema=tuple(new_names))
+        self.assertEquals(df.schema.fieldNames(), new_names)
 
     def test_createDataFrame_column_name_encoding(self):
         import pandas as pd
@@ -4331,12 +4407,21 @@ class ArrowTests(ReusedSQLTestCase):
                     self.assertEqual(df.collect(), [Row(a={u'a': 1})])
 
     def test_createDataFrame_fallback_disabled(self):
+        from distutils.version import LooseVersion
         import pandas as pd
+        import pyarrow as pa
 
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(TypeError, 'Unsupported type'):
                 self.spark.createDataFrame(
                     pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
+
+        # TODO: remove BinaryType check once minimum pyarrow version is 0.10.0
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(TypeError, 'Unsupported type.*BinaryType'):
+                    self.spark.createDataFrame(
+                        pd.DataFrame([[{'a': b'aaa'}]]), "a: binary")
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
@@ -4729,6 +4814,24 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                         bool_f(col('bool')))
         self.assertEquals(df.collect(), res.collect())
 
+    def test_vectorized_udf_null_binary(self):
+        from distutils.version import LooseVersion
+        import pyarrow as pa
+        from pyspark.sql.functions import pandas_udf, col
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(
+                        NotImplementedError,
+                        'Invalid returnType.*scalar Pandas UDF.*BinaryType'):
+                    pandas_udf(lambda x: x, BinaryType())
+        else:
+            data = [(bytearray(b"a"),), (None,), (bytearray(b"bb"),), (bytearray(b"ccc"),)]
+            schema = StructType().add("binary", BinaryType())
+            df = self.spark.createDataFrame(data, schema)
+            str_f = pandas_udf(lambda x: x, BinaryType())
+            res = df.select(str_f(col('binary')))
+            self.assertEquals(df.collect(), res.collect())
+
     def test_vectorized_udf_array_type(self):
         from pyspark.sql.functions import pandas_udf, col
         data = [([1, 2],), ([3, 4],)]
@@ -4834,12 +4937,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                     NotImplementedError,
                     'Invalid returnType.*scalar Pandas UDF.*MapType'):
                 pandas_udf(lambda x: x, MapType(StringType(), IntegerType()))
-
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
-                    NotImplementedError,
-                    'Invalid returnType.*scalar Pandas UDF.*BinaryType'):
-                pandas_udf(lambda x: x, BinaryType())
 
     def test_vectorized_udf_dates(self):
         from pyspark.sql.functions import pandas_udf, col
@@ -5224,6 +5321,51 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             .withColumn('f3_f2_f1', df['v'] + 111)
 
         self.assertEquals(expected.collect(), df1.collect())
+
+    # SPARK-24721
+    @unittest.skipIf(not _test_compiled, _test_not_compiled_message)
+    def test_datasource_with_udf(self):
+        # Same as SQLTests.test_datasource_with_udf, but with Pandas UDF
+        # This needs to a separate test because Arrow dependency is optional
+        import pandas as pd
+        import numpy as np
+        from pyspark.sql.functions import pandas_udf, lit, col
+
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+
+        try:
+            self.spark.range(1).write.mode("overwrite").format('csv').save(path)
+            filesource_df = self.spark.read.option('inferSchema', True).csv(path).toDF('i')
+            datasource_df = self.spark.read \
+                .format("org.apache.spark.sql.sources.SimpleScanSource") \
+                .option('from', 0).option('to', 1).load().toDF('i')
+            datasource_v2_df = self.spark.read \
+                .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+                .load().toDF('i', 'j')
+
+            c1 = pandas_udf(lambda x: x + 1, 'int')(lit(1))
+            c2 = pandas_udf(lambda x: x + 1, 'int')(col('i'))
+
+            f1 = pandas_udf(lambda x: pd.Series(np.repeat(False, len(x))), 'boolean')(lit(1))
+            f2 = pandas_udf(lambda x: pd.Series(np.repeat(False, len(x))), 'boolean')(col('i'))
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                result = df.withColumn('c', c1)
+                expected = df.withColumn('c', lit(2))
+                self.assertEquals(expected.collect(), result.collect())
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                result = df.withColumn('c', c2)
+                expected = df.withColumn('c', col('i') + 1)
+                self.assertEquals(expected.collect(), result.collect())
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                for f in [f1, f2]:
+                    result = df.filter(f)
+                    self.assertEquals(0, result.count())
+        finally:
+            shutil.rmtree(path)
 
 
 @unittest.skipIf(

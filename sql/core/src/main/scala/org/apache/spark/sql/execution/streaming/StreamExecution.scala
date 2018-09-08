@@ -382,7 +382,7 @@ abstract class StreamExecution(
    * Blocks the current thread until processing for data from the given `source` has reached at
    * least the given `Offset`. This method is intended for use primarily when writing tests.
    */
-  private[sql] def awaitOffset(sourceIndex: Int, newOffset: Offset): Unit = {
+  private[sql] def awaitOffset(sourceIndex: Int, newOffset: Offset, timeoutMs: Long): Unit = {
     assertAwaitThread()
     def notDone = {
       val localCommittedOffsets = committedOffsets
@@ -398,7 +398,7 @@ abstract class StreamExecution(
     while (notDone) {
       awaitProgressLock.lock()
       try {
-        awaitProgressLockCondition.await(100, TimeUnit.MILLISECONDS)
+        awaitProgressLockCondition.await(timeoutMs, TimeUnit.MILLISECONDS)
         if (streamDeathCause != null) {
           throw streamDeathCause
         }

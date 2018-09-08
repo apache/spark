@@ -148,7 +148,7 @@ class AvroLogicalTypeSuite extends QueryTest with SharedSQLContext with SQLTestU
     }
   }
 
-  test("Logical type: specify different output timestamp types") {
+  test("Logical type: user specified output schema with different timestamp types") {
     withTempDir { dir =>
       val timestampAvro = timestampFile(dir.getAbsolutePath)
       val df =
@@ -156,13 +156,26 @@ class AvroLogicalTypeSuite extends QueryTest with SharedSQLContext with SQLTestU
 
       val expected = timestampInputData.map(t => Row(new Timestamp(t._1), new Timestamp(t._2)))
 
-      Seq("TIMESTAMP_MILLIS", "TIMESTAMP_MICROS").foreach { timestampType =>
-        withSQLConf(SQLConf.AVRO_OUTPUT_TIMESTAMP_TYPE.key -> timestampType) {
-          withTempPath { path =>
-            df.write.format("avro").save(path.toString)
-            checkAnswer(spark.read.format("avro").load(path.toString), expected)
-          }
-        }
+      val userSpecifiedTimestampSchema = s"""
+      {
+        "namespace": "logical",
+        "type": "record",
+        "name": "test",
+        "fields": [
+          {"name": "timestamp_millis",
+            "type": [{"type": "long","logicalType": "timestamp-micros"}, "null"]},
+          {"name": "timestamp_micros",
+            "type": [{"type": "long","logicalType": "timestamp-millis"}, "null"]}
+        ]
+      }
+    """
+
+      withTempPath { path =>
+        df.write
+          .format("avro")
+          .option("avroSchema", userSpecifiedTimestampSchema)
+          .save(path.toString)
+        checkAnswer(spark.read.format("avro").load(path.toString), expected)
       }
     }
   }
@@ -179,7 +192,7 @@ class AvroLogicalTypeSuite extends QueryTest with SharedSQLContext with SQLTestU
     }
   }
 
-  test("Logical type: user specified schema") {
+  test("Logical type: user specified read schema") {
     withTempDir { dir =>
       val timestampAvro = timestampFile(dir.getAbsolutePath)
       val expected = timestampInputData
@@ -262,6 +275,46 @@ class AvroLogicalTypeSuite extends QueryTest with SharedSQLContext with SQLTestU
 
       withTempPath { path =>
         df.write.format("avro").save(path.toString)
+        checkAnswer(spark.read.format("avro").load(path.toString), expected)
+      }
+    }
+  }
+
+  test("Logical type: write Decimal with BYTES type") {
+    val specifiedSchema = """
+      {
+        "type" : "record",
+        "name" : "topLevelRecord",
+        "namespace" : "topLevelRecord",
+        "fields" : [ {
+          "name" : "bytes",
+          "type" : [ {
+            "type" : "bytes",
+            "namespace" : "topLevelRecord.bytes",
+            "logicalType" : "decimal",
+            "precision" : 4,
+            "scale" : 2
+          }, "null" ]
+        }, {
+          "name" : "fixed",
+          "type" : [ {
+            "type" : "bytes",
+            "logicalType" : "decimal",
+            "precision" : 4,
+            "scale" : 2
+          }, "null" ]
+        } ]
+      }
+    """
+    withTempDir { dir =>
+      val (avroSchema, avroFile) = decimalSchemaAndFile(dir.getAbsolutePath)
+      assert(specifiedSchema != avroSchema)
+      val expected =
+        decimalInputData.map { x => Row(new java.math.BigDecimal(x), new java.math.BigDecimal(x)) }
+      val df = spark.read.format("avro").load(avroFile)
+
+      withTempPath { path =>
+        df.write.format("avro").option("avroSchema", specifiedSchema).save(path.toString)
         checkAnswer(spark.read.format("avro").load(path.toString), expected)
       }
     }

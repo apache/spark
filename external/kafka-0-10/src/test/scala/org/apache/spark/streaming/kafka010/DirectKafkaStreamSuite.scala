@@ -664,7 +664,8 @@ class DirectKafkaStreamSuite
     kafkaStream.stop()
   }
 
-  test("maxMessagesPerPartition with zero offset and rate equal to one") {
+  test("maxMessagesPerPartition with zero offset and rate equal to the specified" +
+    " minimum with default 1") {
     val topic = "backpressure"
     val kafkaParams = getKafkaParams()
     val batchIntervalMilliseconds = 60000
@@ -674,6 +675,8 @@ class DirectKafkaStreamSuite
       .setMaster("local[1]")
       .setAppName(this.getClass.getSimpleName)
       .set("spark.streaming.kafka.maxRatePerPartition", "100")
+      .set("spark.streaming.kafka.minRatePerPartition", "5")
+
 
     // Setup the streaming context
     ssc = new StreamingContext(sparkConf, Milliseconds(batchIntervalMilliseconds))
@@ -704,12 +707,13 @@ class DirectKafkaStreamSuite
     )
     val result = kafkaStream.maxMessagesPerPartition(offsets)
     val expected = Map(
-      new TopicPartition(topic, 0) -> 1L,
+      new TopicPartition(topic, 0) -> 5L,
       new TopicPartition(topic, 1) -> 10L,
       new TopicPartition(topic, 2) -> 20L,
       new TopicPartition(topic, 3) -> 30L
     )
-    assert(result.contains(expected), s"Number of messages per partition must be at least 1")
+    assert(result.contains(expected), s"Number of messages per partition must be at least equal" +
+      s" to the specified minimum")
   }
 
   /** Get the generated offset ranges from the DirectKafkaStream */

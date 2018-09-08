@@ -844,6 +844,23 @@ class FeatureTests(SparkSessionTestCase):
             .select(model_default.getOrDefault(model_default.outputCol)).collect()
         self.assertEqual(len(transformed_list), 5)
 
+    def test_vector_size_hint(self):
+        df = self.spark.createDataFrame(
+            [(0, Vectors.dense([0.0, 10.0, 0.5])),
+             (1, Vectors.dense([1.0, 11.0, 0.5, 0.6])),
+             (2, Vectors.dense([2.0, 12.0]))],
+            ["id", "vector"])
+
+        sizeHint = VectorSizeHint(
+            inputCol="vector",
+            handleInvalid="skip")
+        sizeHint.setSize(3)
+        self.assertEqual(sizeHint.getSize(), 3)
+
+        output = sizeHint.transform(df).head().vector
+        expected = DenseVector([0.0, 10.0, 0.5])
+        self.assertEqual(output, expected)
+
 
 class HasInducedError(Params):
 
@@ -2141,8 +2158,8 @@ class FPGrowthTests(SparkSessionTestCase):
         fpm = fp.fit(self.data)
 
         expected_association_rules = self.spark.createDataFrame(
-            [([3], [1], 1.0), ([2], [1], 1.0)],
-            ["antecedent", "consequent", "confidence"]
+            [([3], [1], 1.0, 1.0), ([2], [1], 1.0, 1.0)],
+            ["antecedent", "consequent", "confidence", "lift"]
         )
         actual_association_rules = fpm.associationRules
 
@@ -2169,7 +2186,7 @@ class FPGrowthTests(SparkSessionTestCase):
 class ImageReaderTest(SparkSessionTestCase):
 
     def test_read_images(self):
-        data_path = 'data/mllib/images/kittens'
+        data_path = 'data/mllib/images/origin/kittens'
         df = ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
         self.assertEqual(df.count(), 4)
         first_row = df.take(1)[0][0]
@@ -2236,7 +2253,7 @@ class ImageReaderTest2(PySparkTestCase):
     def test_read_images_multiple_times(self):
         # This test case is to check if `ImageSchema.readImages` tries to
         # initiate Hive client multiple times. See SPARK-22651.
-        data_path = 'data/mllib/images/kittens'
+        data_path = 'data/mllib/images/origin/kittens'
         ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
         ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
 

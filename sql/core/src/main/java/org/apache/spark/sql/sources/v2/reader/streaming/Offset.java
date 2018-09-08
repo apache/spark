@@ -20,8 +20,8 @@ package org.apache.spark.sql.sources.v2.reader.streaming;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * An abstract representation of progress through a {@link MicroBatchReader} or
- * {@link ContinuousReader}.
+ * An abstract representation of progress through a {@link MicroBatchReadSupport} or
+ * {@link ContinuousReadSupport}.
  * During execution, offsets provided by the data source implementation will be logged and used as
  * restart checkpoints. Each source should provide an offset implementation which the source can use
  * to reconstruct a position in the stream up to which data has been seen/processed.

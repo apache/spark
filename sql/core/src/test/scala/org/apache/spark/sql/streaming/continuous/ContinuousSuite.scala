@@ -41,7 +41,7 @@ class ContinuousSuiteBase extends StreamTest {
       case s: ContinuousExecution =>
         assert(numTriggers >= 2, "must wait for at least 2 triggers to ensure query is initialized")
         val reader = s.lastExecution.executedPlan.collectFirst {
-          case DataSourceV2ScanExec(_, _, _, _, r: RateStreamContinuousReader) => r
+          case DataSourceV2ScanExec(_, _, _, _, r: RateStreamContinuousReadSupport, _) => r
         }.get
 
         val deltaMs = numTriggers * 1000 + 300

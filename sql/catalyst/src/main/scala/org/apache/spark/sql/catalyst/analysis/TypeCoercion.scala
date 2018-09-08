@@ -54,6 +54,7 @@ object TypeCoercion {
       BooleanEquality ::
       FunctionArgumentConversion ::
       ConcatCoercion(conf) ::
+      MapZipWithCoercion ::
       EltCoercion(conf) ::
       CaseWhenCoercion ::
       IfCoercion ::
@@ -759,6 +760,30 @@ object TypeCoercion {
             c.copy(children = newChildren)
         }
       }
+    }
+  }
+
+  /**
+   * Coerces key types of two different [[MapType]] arguments of the [[MapZipWith]] expression
+   * to a common type.
+   */
+  object MapZipWithCoercion extends TypeCoercionRule {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      // Lambda function isn't resolved when the rule is executed.
+      case m @ MapZipWith(left, right, function) if m.arguments.forall(a => a.resolved &&
+          MapType.acceptsType(a.dataType)) && !m.leftKeyType.sameType(m.rightKeyType) =>
+        findWiderTypeForTwo(m.leftKeyType, m.rightKeyType) match {
+          case Some(finalKeyType) if !Cast.forceNullable(m.leftKeyType, finalKeyType) &&
+              !Cast.forceNullable(m.rightKeyType, finalKeyType) =>
+            val newLeft = castIfNotSameType(
+              left,
+              MapType(finalKeyType, m.leftValueType, m.leftValueContainsNull))
+            val newRight = castIfNotSameType(
+              right,
+              MapType(finalKeyType, m.rightValueType, m.rightValueContainsNull))
+            MapZipWith(newLeft, newRight, function)
+          case _ => m
+        }
     }
   }
 

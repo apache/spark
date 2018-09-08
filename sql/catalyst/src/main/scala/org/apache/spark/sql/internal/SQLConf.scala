@@ -82,6 +82,19 @@ object SQLConf {
   /** See [[get]] for more information. */
   def getFallbackConf: SQLConf = fallbackConf.get()
 
+  private lazy val existingConf = new ThreadLocal[SQLConf] {
+    override def initialValue: SQLConf = null
+  }
+
+  def withExistingConf[T](conf: SQLConf)(f: => T): T = {
+    existingConf.set(conf)
+    try {
+      f
+    } finally {
+      existingConf.remove()
+    }
+  }
+
   /**
    * Defines a getter that returns the SQLConf within scope.
    * See [[get]] for more information.
@@ -116,16 +129,24 @@ object SQLConf {
     if (TaskContext.get != null) {
       new ReadOnlySQLConf(TaskContext.get())
     } else {
-      if (Utils.isTesting && SparkContext.getActive.isDefined) {
+      val isSchedulerEventLoopThread = SparkContext.getActive
+        .map(_.dagScheduler.eventProcessLoop.eventThread)
+        .exists(_.getId == Thread.currentThread().getId)
+      if (isSchedulerEventLoopThread) {
         // DAGScheduler event loop thread does not have an active SparkSession, the `confGetter`
-        // will return `fallbackConf` which is unexpected. Here we prevent it from happening.
-        val schedulerEventLoopThread =
-          SparkContext.getActive.get.dagScheduler.eventProcessLoop.eventThread
-        if (schedulerEventLoopThread.getId == Thread.currentThread().getId) {
+        // will return `fallbackConf` which is unexpected. Here we require the caller to get the
+        // conf within `withExistingConf`, otherwise fail the query.
+        val conf = existingConf.get()
+        if (conf != null) {
+          conf
+        } else if (Utils.isTesting) {
           throw new RuntimeException("Cannot get SQLConf inside scheduler event loop thread.")
+        } else {
+          confGetter.get()()
         }
+      } else {
+        confGetter.get()()
       }
-      confGetter.get()()
     }
   }
 
@@ -653,6 +674,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
+    .doc("The maximum number of buckets allowed. Defaults to 100000")
+    .intConf
+    .checkValue(_ > 0, "the value of spark.sql.sources.bucketing.maxBuckets must be larger than 0")
+    .createWithDefault(100000)
+
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
         "explicit CROSS JOIN syntax.")
@@ -887,6 +914,16 @@ object SQLConf {
       "and '0' covers extreme case - disable cache to maximize memory size of executors.")
     .intConf
     .createWithDefault(2)
+
+  val STREAMING_AGGREGATION_STATE_FORMAT_VERSION =
+    buildConf("spark.sql.streaming.aggregation.stateFormatVersion")
+      .internal()
+      .doc("State format version used by streaming aggregation operations in a streaming query. " +
+        "State between versions are tend to be incompatible, so state format version shouldn't " +
+        "be modified after running.")
+      .intConf
+      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
+      .createWithDefault(2)
 
   val UNSUPPORTED_OPERATION_CHECK_ENABLED =
     buildConf("spark.sql.streaming.unsupportedOperationCheck")
@@ -1388,8 +1425,18 @@ object SQLConf {
         "issues. Turn on this config to insert a local sort before actually doing repartition " +
         "to generate consistent repartition results. The performance of repartition() may go " +
         "down since we insert extra local sort before it.")
+        .booleanConf
+        .createWithDefault(true)
+
+  val NESTED_SCHEMA_PRUNING_ENABLED =
+    buildConf("spark.sql.nestedSchemaPruning.enabled")
+      .internal()
+      .doc("Prune nested fields from a logical relation's output which are unnecessary in " +
+        "satisfying a query. This optimization allows columnar file format readers to avoid " +
+        "reading unnecessary nested column data. Currently Parquet is the only data source that " +
+        "implements this optimization.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
@@ -1444,20 +1491,16 @@ object SQLConf {
     .intConf
     .createWithDefault(20)
 
-  object AvroOutputTimestampType extends Enumeration {
-    val TIMESTAMP_MICROS, TIMESTAMP_MILLIS = Value
-  }
-
-  val AVRO_OUTPUT_TIMESTAMP_TYPE = buildConf("spark.sql.avro.outputTimestampType")
-    .doc("Sets which Avro timestamp type to use when Spark writes data to Avro files. " +
-      "TIMESTAMP_MICROS is a logical timestamp type in Avro, which stores number of " +
-      "microseconds from the Unix epoch. TIMESTAMP_MILLIS is also logical, but with " +
-      "millisecond precision, which means Spark has to truncate the microsecond portion of its " +
-      "timestamp value.")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(AvroOutputTimestampType.values.map(_.toString))
-    .createWithDefault(AvroOutputTimestampType.TIMESTAMP_MICROS.toString)
+  val FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT =
+    buildConf("spark.sql.codegen.aggregate.fastHashMap.capacityBit")
+      .internal()
+      .doc("Capacity for the max number of rows to be held in memory " +
+        "by the fast hash aggregate product operator. The bit is not for actual value, " +
+        "but the actual numBuckets is determined by loadFactor " +
+        "(e.g: default bit value 16 , the actual numBuckets is ((1 << 16) / 0.5).")
+      .intConf
+      .checkValue(bit => bit >= 10 && bit <= 30, "The bit value must be in [10, 30].")
+      .createWithDefault(16)
 
   val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
     .doc("Compression codec used in writing of AVRO files. Supported codecs: " +
@@ -1473,6 +1516,13 @@ object SQLConf {
     .intConf
     .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
     .createWithDefault(Deflater.DEFAULT_COMPRESSION)
+
+  val LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED =
+    buildConf("spark.sql.legacy.replaceDatabricksSparkAvro.enabled")
+      .doc("If it is set to true, the data source provider com.databricks.spark.avro is mapped " +
+        "to the built-in but external Avro data source module for backward compatibility.")
+      .booleanConf
+      .createWithDefault(true)
 
   val LEGACY_SETOPS_PRECEDENCE_ENABLED =
     buildConf("spark.sql.legacy.setopsPrecedence.enabled")
@@ -1670,6 +1720,8 @@ class SQLConf extends Serializable with Logging {
 
   def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
 
+  def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
+
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
    * identifiers are equal.
@@ -1756,6 +1808,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_PARALLELISM)
 
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
+
+  def bucketingMaxBuckets: Int = getConf(SQLConf.BUCKETING_MAX_BUCKETS)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
@@ -1872,6 +1926,8 @@ class SQLConf extends Serializable with Logging {
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
 
+  def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
+
   def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 
   def legacySizeOfNull: Boolean = getConf(SQLConf.LEGACY_SIZE_OF_NULL)
@@ -1882,12 +1938,12 @@ class SQLConf extends Serializable with Logging {
 
   def replEagerEvalTruncate: Int = getConf(SQLConf.REPL_EAGER_EVAL_TRUNCATE)
 
-  def avroOutputTimestampType: AvroOutputTimestampType.Value =
-    AvroOutputTimestampType.withName(getConf(SQLConf.AVRO_OUTPUT_TIMESTAMP_TYPE))
-
   def avroCompressionCodec: String = getConf(SQLConf.AVRO_COMPRESSION_CODEC)
 
   def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
+
+  def replaceDatabricksSparkAvroEnabled: Boolean =
+    getConf(SQLConf.LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED)
 
   def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
 

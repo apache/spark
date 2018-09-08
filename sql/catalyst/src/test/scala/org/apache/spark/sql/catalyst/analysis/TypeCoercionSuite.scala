@@ -502,7 +502,11 @@ class TypeCoercionSuite extends AnalysisTest {
     widenTestWithStringPromotion(
       ArrayType(IntegerType, containsNull = false),
       ArrayType(DecimalType.IntDecimal, containsNull = false),
-      Some(ArrayType(DecimalType.IntDecimal, containsNull = true)))
+      Some(ArrayType(DecimalType.IntDecimal, containsNull = false)))
+    widenTestWithStringPromotion(
+      ArrayType(DecimalType(36, 0), containsNull = false),
+      ArrayType(DecimalType(36, 35), containsNull = false),
+      Some(ArrayType(DecimalType(38, 35), containsNull = true)))
 
     // MapType
     widenTestWithStringPromotion(
@@ -524,10 +528,18 @@ class TypeCoercionSuite extends AnalysisTest {
     widenTestWithStringPromotion(
       MapType(StringType, IntegerType, valueContainsNull = false),
       MapType(StringType, DecimalType.IntDecimal, valueContainsNull = false),
-      Some(MapType(StringType, DecimalType.IntDecimal, valueContainsNull = true)))
+      Some(MapType(StringType, DecimalType.IntDecimal, valueContainsNull = false)))
+    widenTestWithStringPromotion(
+      MapType(StringType, DecimalType(36, 0), valueContainsNull = false),
+      MapType(StringType, DecimalType(36, 35), valueContainsNull = false),
+      Some(MapType(StringType, DecimalType(38, 35), valueContainsNull = true)))
     widenTestWithStringPromotion(
       MapType(IntegerType, StringType, valueContainsNull = false),
       MapType(DecimalType.IntDecimal, StringType, valueContainsNull = false),
+      Some(MapType(DecimalType.IntDecimal, StringType, valueContainsNull = false)))
+    widenTestWithStringPromotion(
+      MapType(DecimalType(36, 0), StringType, valueContainsNull = false),
+      MapType(DecimalType(36, 35), StringType, valueContainsNull = false),
       None)
 
     // StructType
@@ -555,7 +567,11 @@ class TypeCoercionSuite extends AnalysisTest {
     widenTestWithStringPromotion(
       new StructType().add("num", IntegerType, nullable = false),
       new StructType().add("num", DecimalType.IntDecimal, nullable = false),
-      Some(new StructType().add("num", DecimalType.IntDecimal, nullable = true)))
+      Some(new StructType().add("num", DecimalType.IntDecimal, nullable = false)))
+    widenTestWithStringPromotion(
+      new StructType().add("num", DecimalType(36, 0), nullable = false),
+      new StructType().add("num", DecimalType(36, 35), nullable = false),
+      Some(new StructType().add("num", DecimalType(38, 35), nullable = true)))
 
     widenTestWithStringPromotion(
       new StructType().add("num", IntegerType),

@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
 import org.apache.spark.sql.execution.datasources.FileFormatWriter
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -41,8 +42,12 @@ trait DataWritingCommand extends Command {
 
   override final def children: Seq[LogicalPlan] = query :: Nil
 
-  // Output columns of the analyzed input query plan
-  def outputColumns: Seq[Attribute]
+  // Output column names of the analyzed input query plan.
+  def outputColumnNames: Seq[String]
+
+  // Output columns of the analyzed input query plan.
+  def outputColumns: Seq[Attribute] =
+    DataWritingCommand.logicalPlanOutputWithNames(query, outputColumnNames)
 
   lazy val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
 
@@ -52,4 +57,36 @@ trait DataWritingCommand extends Command {
   }
 
   def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row]
+}
+
+object DataWritingCommand {
+  /**
+   * Returns output attributes with provided names.
+   * The length of provided names should be the same of the length of [[LogicalPlan.output]].
+   */
+  def logicalPlanOutputWithNames(
+      query: LogicalPlan,
+      names: Seq[String]): Seq[Attribute] = {
+    // Save the output attributes to a variable to avoid duplicated function calls.
+    val outputAttributes = query.output
+    assert(outputAttributes.length == names.length,
+      "The length of provided names doesn't match the length of output attributes.")
+    outputAttributes.zip(names).map { case (attr, outputName) =>
+      attr.withName(outputName)
+    }
+  }
+
+  /**
+   * Returns schema of logical plan with provided names.
+   * The length of provided names should be the same of the length of [[LogicalPlan.schema]].
+   */
+  def logicalPlanSchemaWithNames(
+      query: LogicalPlan,
+      names: Seq[String]): StructType = {
+    assert(query.schema.length == names.length,
+      "The length of provided names doesn't match the length of query schema.")
+    StructType(query.schema.zip(names).map { case (structField, outputName) =>
+      structField.copy(name = outputName)
+    })
+  }
 }
