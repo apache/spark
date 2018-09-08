@@ -1208,8 +1208,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("trimExceptCRLF standalone") {
     val crlfSet = Set("\r", "\n")
-    val nonPrintableButCRLF =
-      (0 to 32).map(_.toChar.toString).toSet -- crlfSet
+    val nonPrintableButCRLF = (0 to 32).map(_.toChar.toString).toSet -- crlfSet
 
     // identity for CRLF
     crlfSet.foreach { s => Utils.trimExceptCRLF(s) === s }
