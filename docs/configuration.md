@@ -188,7 +188,7 @@ of the most common options to set are:
     unless otherwise specified.  If set, PySpark memory for an executor will be
     limited to this amount. If not set, Spark will not limit Python's memory use
     and it is up to the application to avoid exceeding the overhead memory space
-    shared with other non-JVM processes. When PySpark is run in YARN, this memory
+    shared with other non-JVM processes. When PySpark is run in YARN or Kubernetes, this memory
     is added to executor resource requests.
   </td>
 </tr>
