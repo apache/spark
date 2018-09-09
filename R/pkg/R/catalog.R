@@ -69,7 +69,6 @@ createExternalTable <- function(x, ...) {
 #' @param ... additional named parameters as options for the data source.
 #' @return A SparkDataFrame.
 #' @rdname createTable
-#' @seealso \link{createExternalTable}
 #' @examples
 #'\dontrun{
 #' sparkR.session()
