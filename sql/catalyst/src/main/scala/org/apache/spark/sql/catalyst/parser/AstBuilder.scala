@@ -300,8 +300,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       ctx: DropPartitionSpecContext): Seq[Expression] = {
     withOrigin(ctx) {
       ctx.dropPartitionVal().asScala.map { pFilter =>
-        if (pFilter.identifier() == null || pFilter.constant() == null ||
-            pFilter.comparisonOperator() == null) {
+        if (pFilter.constant() == null || pFilter.comparisonOperator() == null) {
           throw new ParseException(s"Invalid partition spec: ${pFilter.getText}", ctx)
         }
         // We cannot use UnresolvedAttribute because resolution is performed after Analysis, when

@@ -681,26 +681,32 @@ class HiveDDLSuite
         sql("ALTER TABLE sales DROP PARTITION (unknown < 'KR')")
       }.getMessage
       assert(m2.contains("unknown is not a valid partition column in table"))
-      intercept[AnalysisException] {
+      val m3 = intercept[AnalysisException] {
         sql("ALTER TABLE sales DROP PARTITION (unknown <=> 'KR')")
-      }
-      intercept[ParseException] {
+      }.getMessage
+      assert(m3.contains("unknown is not a valid partition column in table"))
+      val m4 = intercept[ParseException] {
         sql("ALTER TABLE sales DROP PARTITION (unknown <=> upper('KR'))")
-      }
-      intercept[ParseException] {
+      }.getMessage
+      assert(m4.contains("extraneous input"))
+      val m5 = intercept[ParseException] {
         sql("ALTER TABLE sales DROP PARTITION (country < 'KR', quarter)")
-      }
+      }.getMessage
+      assert(m5.contains("Invalid partition spec: quarter"))
+
       sql(s"ALTER TABLE sales ADD PARTITION (country = 'KR', quarter = '3')")
-      intercept[AnalysisException] {
+      val m6 = intercept[AnalysisException] {
         // The query is not executed because `PARTITION (quarter <= '2')`.
         sql("ALTER TABLE sales DROP PARTITION (quarter <= '4'), PARTITION (quarter <= '2')")
-      }
+      }.getMessage
+      assert(m6.contains("There is no partition for"))
 
       checkAnswer(sql("SHOW PARTITIONS sales"),
         Row("country=KR/quarter=3") :: Nil)
-      intercept[ParseException] {
+      val m7 = intercept[ParseException] {
         sql("ALTER TABLE sales DROP PARTITION ( '4' > quarter)")
-      }
+      }.getMessage
+      assert(m7.contains("mismatched input ''4''"))
       checkAnswer(sql("SHOW PARTITIONS sales"),
         Row("country=KR/quarter=3") :: Nil)
     }
@@ -709,9 +715,10 @@ class HiveDDLSuite
   test("SPARK-14922: Partition filter is not allowed in ADD PARTITION") {
     withTable("sales") {
       sql("CREATE TABLE sales(id INT) PARTITIONED BY (country STRING, quarter STRING)")
-      intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         sql("ALTER TABLE sales ADD PARTITION (country = 'US', quarter < '1')")
       }
+      assert(e.getMessage.contains("extraneous input '<'"))
     }
   }
 

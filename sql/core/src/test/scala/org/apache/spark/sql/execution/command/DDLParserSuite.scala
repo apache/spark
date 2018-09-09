@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
-import org.apache.spark.sql.catalyst.expressions.JsonTuple
+import org.apache.spark.sql.catalyst.expressions.{Expression, JsonTuple}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, InsertIntoDir, LogicalPlan}
@@ -876,6 +876,29 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     comparePlans(parsed1_table, expected1_table)
     comparePlans(parsed2_table, expected2_table)
     comparePlans(parsed1_purge, expected1_purge)
+
+    // SPARK-23866: Support any comparison operator in ALTER TABLE ... DROP PARTITION
+    Seq((">", (a: Expression, b: Expression) => a > b),
+      (">=", (a: Expression, b: Expression) => a >= b),
+      ("<", (a: Expression, b: Expression) => a < b),
+      ("<=", (a: Expression, b: Expression) => a <= b),
+      ("<>", (a: Expression, b: Expression) => a =!= b),
+      ("!=", (a: Expression, b: Expression) => a =!= b),
+      ("<=>", (a: Expression, b: Expression) => a <=> b)).foreach { case (op, predicateGen) =>
+        val genPlan = parser.parsePlan(sql1_table.replace("=", op))
+        val expectedPlan = AlterTableDropPartitionCommand(
+          tableIdent,
+          Seq(
+            Seq(predicateGen('dt.string, "2008-08-08"), predicateGen('country.string, "us")),
+            Seq(predicateGen('dt.string, "2009-09-09"), predicateGen('country.string, "uk"))),
+          ifExists = true,
+          purge = false,
+          retainData = false)
+        comparePlans(genPlan, expectedPlan)
+    }
+
+    // SPARK-23866: Invalid partition specification
+    intercept("ALTER TABLE table_name DROP PARTITION (dt)", "Invalid partition spec:")
   }
 
   test("alter table: archive partition (not supported)") {
