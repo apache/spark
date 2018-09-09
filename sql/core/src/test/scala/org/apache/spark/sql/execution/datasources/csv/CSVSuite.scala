@@ -1699,7 +1699,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     countForMalformedCSV(0, Seq(""))
   }
 
-  test("bad input should not cause NPE") {
+  test("SPARK-25387: bad input should not cause NPE") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     withTempPath { path =>
       val input = spark.createDataset(Seq("\u0000\u0000\u0001234"))
