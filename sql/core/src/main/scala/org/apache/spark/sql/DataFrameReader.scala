@@ -23,8 +23,8 @@ import scala.collection.JavaConverters._
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.univocity.parsers.csv.CsvParser
-import org.apache.spark.Partition
 
+import org.apache.spark.Partition
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
