@@ -2553,7 +2553,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-25368 Incorrect predicate pushdown returns wrong result") {
-    // This test must disable ConvertToLocalRelation in the test cases, see: SPARK-25267
     def check(newCol: Column, filter: Column, result: Seq[Row]): Unit = {
       val df1 = spark.createDataFrame(Seq(
         (1, 1)
