@@ -15,35 +15,40 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions;
+package org.apache.spark.unsafe.memory;
 
-import org.apache.spark.unsafe.Platform;
+import javax.annotation.Nullable;
 
 /**
- * Simulates Hive's hashing function from Hive v1.2.1
- * org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils#hashcode()
+ * A memory location. Tracked either by a memory address (with off-heap allocation),
+ * or by an offset from a JVM object (in-heap allocation).
  */
-public class HiveHasher {
+public class MemoryLocation {
 
-  @Override
-  public String toString() {
-    return HiveHasher.class.getSimpleName();
+  @Nullable
+  Object obj;
+
+  long offset;
+
+  public MemoryLocation(@Nullable Object obj, long offset) {
+    this.obj = obj;
+    this.offset = offset;
   }
 
-  public static int hashInt(int input) {
-    return input;
+  public MemoryLocation() {
+    this(null, 0);
   }
 
-  public static int hashLong(long input) {
-    return (int) ((input >>> 32) ^ input);
+  public void setObjAndOffset(Object newObj, long newOffset) {
+    this.obj = newObj;
+    this.offset = newOffset;
   }
 
-  public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes) {
-    assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
-    int result = 0;
-    for (int i = 0; i < lengthInBytes; i++) {
-      result = (result * 31) + (int) Platform.getByte(base, offset + i);
-    }
-    return result;
+  public final Object getBaseObject() {
+    return obj;
+  }
+
+  public final long getBaseOffset() {
+    return offset;
   }
 }

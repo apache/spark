@@ -81,7 +81,7 @@ public class PlatformUtilSuite {
     MemoryAllocator.HEAP.free(block);
     Assert.assertNull(block.getBaseObject());
     Assert.assertEquals(0, block.getBaseOffset());
-    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, block.getPageNumber());
+    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, block.pageNumber);
   }
 
   @Test
@@ -92,7 +92,7 @@ public class PlatformUtilSuite {
     MemoryAllocator.UNSAFE.free(block);
     Assert.assertNull(block.getBaseObject());
     Assert.assertEquals(0, block.getBaseOffset());
-    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, block.getPageNumber());
+    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, block.pageNumber);
   }
 
   @Test(expected = AssertionError.class)
