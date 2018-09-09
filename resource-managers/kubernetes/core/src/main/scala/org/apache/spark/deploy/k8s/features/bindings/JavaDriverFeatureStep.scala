@@ -19,6 +19,7 @@ package org.apache.spark.deploy.k8s.features.bindings
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata}
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.Config.APP_RESOURCE_TYPE
 import org.apache.spark.deploy.k8s.Constants.SPARK_CONF_PATH
 import org.apache.spark.deploy.k8s.features.KubernetesFeatureConfigStep
 import org.apache.spark.launcher.SparkLauncher
@@ -38,7 +39,8 @@ private[spark] class JavaDriverFeatureStep(
       .build()
     SparkPod(pod.pod, withDriverArgs)
   }
-  override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
+  override def getAdditionalPodSystemProperties(): Map[String, String] =
+    Map(APP_RESOURCE_TYPE.key -> "java")
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 }
