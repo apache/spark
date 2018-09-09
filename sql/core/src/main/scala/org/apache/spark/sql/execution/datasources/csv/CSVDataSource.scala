@@ -34,6 +34,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.csv.{CSVOptions, UnivocityParser}
+import org.apache.spark.sql.catalyst.csv.CSVUtils.filterCommentAndEmpty
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.types.StructType
@@ -247,7 +249,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       val header = makeSafeHeader(firstRow, caseSensitive, parsedOptions)
       val sampled: Dataset[String] = CSVUtils.sample(csv, parsedOptions)
       val tokenRDD = sampled.rdd.mapPartitions { iter =>
-        val filteredLines = CSVUtils.filterCommentAndEmpty(iter, parsedOptions)
+        val filteredLines = filterCommentAndEmpty(iter, parsedOptions)
         val linesWithoutHeader =
           CSVUtils.filterHeaderLine(filteredLines, firstLine, parsedOptions)
         val parser = new CsvParser(parsedOptions.asParserSettings)
