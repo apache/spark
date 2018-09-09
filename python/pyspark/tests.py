@@ -2510,6 +2510,6 @@ class NumPyTests(PySparkTestCase):
 if __name__ == "__main__":
     from pyspark.tests import *
     runner = unishark.BufferedTestRunner(
-        reporters=[unishark.XUnitReporter('target/test-reports/pyspark/{}'.format(
+        reporters=[unishark.XUnitReporter('target/test-reports/pyspark_{}'.format(
             os.path.basename(os.environ.get("PYSPARK_PYTHON", ""))))])
     unittest.main(testRunner=runner, verbosity=2)
