@@ -24,12 +24,14 @@ import org.apache.spark.sql.types._
 class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
+  val noOptions = Map[String, String]()
+
   test("from_csv") {
     val df = Seq("1").toDS()
     val schema = new StructType().add("a", IntegerType)
 
     checkAnswer(
-      df.select(from_csv($"value", schema, Map.empty)),
+      df.select(from_csv($"value", schema, noOptions)),
       Row(Row(1)) :: Nil)
   }
 
@@ -50,7 +52,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
       .add("b", IntegerType)
 
     checkAnswer(
-      df.select(from_csv($"value", schema, Map.empty)),
+      df.select(from_csv($"value", schema, noOptions)),
       Row(Row(1, null)) :: Nil)
   }
 
@@ -59,7 +61,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
     val schema = new StructType().add("a", IntegerType)
 
     checkAnswer(
-      df.select(from_csv($"value", schema, Map.empty)),
+      df.select(from_csv($"value", schema, noOptions)),
       Row(Row(null)) :: Nil)
   }
 
