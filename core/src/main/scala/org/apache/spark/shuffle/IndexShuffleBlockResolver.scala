@@ -20,6 +20,7 @@ package org.apache.spark.shuffle
 import java.io._
 import java.nio.channels.Channels
 import java.nio.file.Files
+import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
@@ -51,6 +52,8 @@ private[spark] class IndexShuffleBlockResolver(
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
+  private val shuffleIdToLocks = new ConcurrentHashMap[Int, Array[Object]]()
+
   def getDataFile(shuffleId: Int, mapId: Int): File = {
     blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
   }
@@ -75,6 +78,13 @@ private[spark] class IndexShuffleBlockResolver(
       if (!file.delete()) {
         logWarning(s"Error deleting index ${file.getPath()}")
       }
+    }
+
+    // This should be called when we unregister shuffle from ShuffleManager, so it's safe to set
+    // null for given shuffleId.
+    val locks = shuffleIdToLocks.get(shuffleId)
+    if (locks != null) {
+      shuffleIdToLocks.put(shuffleId, null)
     }
   }
 
@@ -138,13 +148,22 @@ private[spark] class IndexShuffleBlockResolver(
       mapId: Int,
       lengths: Array[Long],
       dataTmp: File): Unit = {
+    shuffleIdToLocks.putIfAbsent(shuffleId, new Array[Object](lengths.length))
+    val mapLocks = shuffleIdToLocks.get(shuffleId)
+    val lock = mapLocks.synchronized {
+      if (mapLocks(mapId) == null) {
+        mapLocks(mapId) = new Object()
+      }
+      mapLocks(mapId)
+    }
+
     val indexFile = getIndexFile(shuffleId, mapId)
     val indexTmp = Utils.tempFileWith(indexFile)
     try {
       val dataFile = getDataFile(shuffleId, mapId)
-      // There is only one IndexShuffleBlockResolver per executor, this synchronization make sure
-      // the following check and rename are atomic.
-      synchronized {
+      // We need make sure the following check and rename are atomic, and we only need to
+      // synchronized the lock which tied to current shuffleId + mapId
+      lock.synchronized {
         val existingLengths = checkIndexAndDataFile(indexFile, dataFile, lengths.length)
         if (existingLengths != null) {
           // Another attempt for the same task has already written our map outputs successfully,
@@ -223,7 +242,9 @@ private[spark] class IndexShuffleBlockResolver(
     }
   }
 
-  override def stop(): Unit = {}
+  override def stop(): Unit = {
+    shuffleIdToLocks.clear()
+  }
 }
 
 private[spark] object IndexShuffleBlockResolver {
