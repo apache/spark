@@ -1704,6 +1704,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     withTempPath { path =>
       val input = spark.createDataset(Seq("\u0000\u0000\u0001234"))
       checkAnswer(spark.read.schema(schema).csv(input), Row(null))
+      assert(spark.read.csv(input).collect().toSet == Set(Row()))
     }
   }
 }
