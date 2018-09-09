@@ -21,6 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale}
+import java.util.concurrent.Callable
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
@@ -40,7 +41,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * :: DeveloperApi ::
@@ -263,6 +264,41 @@ class SparkHadoopUtil extends Logging {
       }.getOrElse(Seq.empty[Path])
     } else {
       Seq(pattern)
+    }
+  }
+
+  /**
+   * Return all paths represented by the wildcard string. This will be done in main thread by
+   * default while the value of config `spark.sql.sources.parallelGetGlobbedPath.numThreads` > 0,
+   * a local thread pool will expand the globbed paths. The mainly difference between this parallel
+   * mode and `InMemoryFileIndex.listLeafFiles` is we need firstly expand paths represented by
+   * wildcard and then use local thread pool to get the path in parralle.
+   */
+  def getGlobbedPaths(
+      parallelGetGlobbedPathEnabled: Boolean,
+      parallelGetGlobbedPathThreshold: Int,
+      parallelGetGlobbedPathNumThreads: Int,
+      fs: FileSystem,
+      hadoopConf: Configuration,
+      qualified: Path): Seq[Path] = {
+    if (!parallelGetGlobbedPathEnabled) {
+      globPathIfNecessary(fs, qualified)
+    } else {
+      val paths = expandGlobPath(fs, qualified, parallelGetGlobbedPathThreshold)
+      val numThreads =
+        Math.min(paths.size, parallelGetGlobbedPathNumThreads)
+      val threadPool = ThreadUtils.newDaemonCachedThreadPool(
+        "parallel-get-globbed-paths-thread-pool", numThreads)
+      val result = paths.map { path =>
+        threadPool.submit(new Callable[Seq[Path]] {
+          override def call(): Seq[Path] = {
+            val fs = path.getFileSystem(hadoopConf)
+            globPathIfNecessary(fs, path)
+          }
+        })
+      }.flatMap(_.get)
+      threadPool.shutdownNow()
+      result
     }
   }
 

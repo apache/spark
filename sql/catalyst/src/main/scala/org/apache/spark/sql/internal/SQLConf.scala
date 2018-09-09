@@ -1832,9 +1832,6 @@ class SQLConf extends Serializable with Logging {
   def parallelGetGlobbedPathNumThreads: Int =
     getConf(SQLConf.PARALLEL_GET_GLOBBED_PATH_NUM_THREADS)
 
-  def parallelGetGlobbedPathEnabled: Boolean =
-    parallelGetGlobbedPathNumThreads > 0
-
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 
   def bucketingMaxBuckets: Int = getConf(SQLConf.BUCKETING_MAX_BUCKETS)

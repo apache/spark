@@ -97,6 +97,12 @@ case class DataSource(
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
   private val equality = sparkSession.sessionState.conf.resolver
 
+  private val parallelGetGlobbedPathNumThreads =
+    sparkSession.sessionState.conf.parallelGetGlobbedPathNumThreads
+  private val parallelGetGlobbedPathEnabled = parallelGetGlobbedPathNumThreads > 0
+  private val parallelGetGlobbedPathThreshold =
+    sparkSession.sessionState.conf.parallelGetGlobbedPathThreshold
+
   bucketSpec.map { bucket =>
     SchemaUtils.checkColumnNameDuplication(
       bucket.bucketColumnNames, "in the bucket definition", equality)
@@ -544,7 +550,13 @@ case class DataSource(
       val hdfsPath = new Path(path)
       val fs = hdfsPath.getFileSystem(hadoopConf)
       val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      val globPath = DataSource.getGlobbedPaths(sparkSession, fs, hadoopConf, qualified)
+      val globPath = SparkHadoopUtil.get.getGlobbedPaths(
+        parallelGetGlobbedPathEnabled,
+        parallelGetGlobbedPathThreshold,
+        parallelGetGlobbedPathNumThreads,
+        fs,
+        hadoopConf,
+        qualified)
 
       if (checkEmptyGlobPath && globPath.isEmpty) {
         throw new AnalysisException(s"Path does not exist: $qualified")
@@ -733,39 +745,6 @@ object DataSource extends Logging {
            |Datasource does not support writing empty or nested empty schemas.
            |Please make sure the data schema has at least one or more column(s).
          """.stripMargin)
-    }
-  }
-
-  /**
-   * Return all paths represented by the wildcard string.
-   * This will be done in main thread by default while the value of config
-   * `spark.sql.sources.parallelGetGlobbedPath.numThreads` > 0, a local thread
-   * pool will expand the globbed paths.
-   */
-  private def getGlobbedPaths(
-      sparkSession: SparkSession,
-      fs: FileSystem,
-      hadoopConf: Configuration,
-      qualified: Path): Seq[Path] = {
-    if (!sparkSession.sessionState.conf.parallelGetGlobbedPathEnabled) {
-      SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
-    } else {
-      val getGlobbedPathThreshold = sparkSession.sessionState.conf.parallelGetGlobbedPathThreshold
-      val paths = SparkHadoopUtil.get.expandGlobPath(fs, qualified, getGlobbedPathThreshold)
-      val numThreads =
-        Math.min(paths.size, sparkSession.sessionState.conf.parallelGetGlobbedPathNumThreads)
-      val threadPool = ThreadUtils.newDaemonCachedThreadPool(
-        "parallel-get-globbed-paths-thread-pool", numThreads)
-      val result = paths.map { path =>
-        threadPool.submit(new Callable[Seq[Path]] {
-          override def call(): Seq[Path] = {
-            val fs = path.getFileSystem(hadoopConf)
-            SparkHadoopUtil.get.globPathIfNecessary(fs, path)
-          }
-        })
-      }.flatMap(_.get)
-      threadPool.shutdownNow()
-      result
     }
   }
 }
