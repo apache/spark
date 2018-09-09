@@ -1901,6 +1901,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
 ## Upgrading From Spark SQL 2.3.0 to 2.3.1 and above
 
   - As of version 2.3.1 Arrow functionality, including `pandas_udf` and `toPandas()`/`createDataFrame()` with `spark.sql.execution.arrow.enabled` set to `True`, has been marked as experimental. These are still evolving and not currently recommended for use in production.
+  - In version 2.3.1 and earlier, it is possible for PySpark to create a Row object by providing more value than column number through the customized Row class. Since Spark 2.3.3, Spark will confirm value length is less or equal than column length in PySpark. See [SPARK-25072](https://issues.apache.org/jira/browse/SPARK-25072) for details.
 
 ## Upgrading From Spark SQL 2.2 to 2.3
 
