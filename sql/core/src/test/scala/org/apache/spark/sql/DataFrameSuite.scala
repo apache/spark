@@ -2552,4 +2552,21 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-25368 Incorrect predicate pushdown returns wrong result") {
+    def check(newCol: Column, filter: Column, result: Seq[Row]): Unit = {
+      val df1 = spark.createDataFrame(Seq(
+        (1, 1)
+      )).toDF("a", "b").withColumn("c", newCol)
+
+      val df2 = df1.union(df1).withColumn("d", spark_partition_id).filter(filter)
+      checkAnswer(df2, result)
+    }
+
+    check(lit(null).cast("int"), $"c".isNull, Seq(Row(1, 1, null, 0), Row(1, 1, null, 1)))
+    check(lit(null).cast("int"), $"c".isNotNull, Seq())
+    check(lit(2).cast("int"), $"c".isNull, Seq())
+    check(lit(2).cast("int"), $"c".isNotNull, Seq(Row(1, 1, 2, 0), Row(1, 1, 2, 1)))
+    check(lit(2).cast("int"), $"c" === 2, Seq(Row(1, 1, 2, 0), Row(1, 1, 2, 1)))
+    check(lit(2).cast("int"), $"c" =!= 2, Seq())
+  }
 }
