@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
-import java.nio.charset.{Charset, UnsupportedCharsetException}
+import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
@@ -26,18 +26,16 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.util.Properties
-
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.log4j.{AppenderSkeleton, LogManager}
 import org.apache.log4j.spi.LoggingEvent
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, UDT}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.{SQLTestUtils, SharedSQLContext}
 import org.apache.spark.sql.types._
 
 class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with TestCsvData {
@@ -1699,5 +1697,13 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
     checkCount(2)
     countForMalformedCSV(0, Seq(""))
+  }
+
+  test("bad input should not cause NPE") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    withTempPath { path =>
+      val input = spark.createDataset(Seq("\u0000\u0000\u0001234"))
+      checkAnswer(spark.read.schema(schema).csv(input), Row(null))
+    }
   }
 }
