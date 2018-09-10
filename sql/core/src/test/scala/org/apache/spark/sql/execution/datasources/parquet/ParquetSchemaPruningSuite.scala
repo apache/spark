@@ -175,6 +175,12 @@ class ParquetSchemaPruningSuite
     checkScan(query3, "struct<name:struct<first:string>," +
       "employer:struct<company:struct<name:string>>>")
     checkAnswer(query3, Row("Jane") :: Nil)
+
+    val query4 = sql("select name.first, employer.company.name from contacts " +
+      "where employer.company is not null and p = 1")
+    checkScan(query4, "struct<name:struct<first:string>," +
+      "employer:struct<company:struct<name:string>>>")
+    checkAnswer(query4, Row("Jane", "abc") :: Nil)
   }
 
   testSchemaPruning("select a single complex field and is null expression in project") {
