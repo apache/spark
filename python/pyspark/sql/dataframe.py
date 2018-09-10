@@ -883,6 +883,8 @@ class DataFrame(object):
         >>> dataset.sampleBy(col("key"), fractions={2: 1.0}, seed=0).count()
         33
 
+        .. versionchanged:: 3.0
+           Added sampling by a column of :class:`Column`
         """
         if isinstance(col, basestring):
             col = Column(col)
@@ -894,9 +896,9 @@ class DataFrame(object):
             if not isinstance(k, (float, int, long, basestring)):
                 raise ValueError("key must be float, int, long, or string, but got %r" % type(k))
             fractions[k] = float(v)
+        col = col._jc
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
-        return DataFrame(self._jdf.stat()
-                         .sampleBy(col._jc, self._jmap(fractions), seed), self.sql_ctx)
+        return DataFrame(self._jdf.stat().sampleBy(col, self._jmap(fractions), seed), self.sql_ctx)
 
     @since(1.4)
     def randomSplit(self, weights, seed=None):
