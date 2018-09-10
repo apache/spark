@@ -54,6 +54,15 @@ private[spark] class IndexShuffleBlockResolver(
 
   private val shuffleIdToLocks = new ConcurrentHashMap[Int, Array[Object]]()
 
+  /**
+   * This should be call before calling the method of writeIndexFileAndCommit.
+   */
+  def registerShuffle(shuffleId: Int, numMaps: Int): Unit = {
+    shuffleIdToLocks.computeIfAbsent(shuffleId, (_: Int) => {
+      new Array[Object](numMaps)
+    })
+  }
+
   def getDataFile(shuffleId: Int, mapId: Int): File = {
     blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
   }
@@ -80,12 +89,9 @@ private[spark] class IndexShuffleBlockResolver(
       }
     }
 
-    // This should be called when we unregister shuffle from ShuffleManager, so it's safe to set
-    // null for given shuffleId.
-    val locks = shuffleIdToLocks.get(shuffleId)
-    if (locks != null) {
-      shuffleIdToLocks.put(shuffleId, null)
-    }
+    // This should be called when we unregister shuffle from ShuffleManager, so it's safe to remove
+    // directly
+    shuffleIdToLocks.remove(shuffleId)
   }
 
   /**
@@ -148,8 +154,8 @@ private[spark] class IndexShuffleBlockResolver(
       mapId: Int,
       lengths: Array[Long],
       dataTmp: File): Unit = {
-    shuffleIdToLocks.putIfAbsent(shuffleId, new Array[Object](lengths.length))
     val mapLocks = shuffleIdToLocks.get(shuffleId)
+    require(mapLocks != null, "Shuffle should be registered to IndexShuffleBlockResolver first")
     val lock = mapLocks.synchronized {
       if (mapLocks(mapId) == null) {
         mapLocks(mapId) = new Object()
