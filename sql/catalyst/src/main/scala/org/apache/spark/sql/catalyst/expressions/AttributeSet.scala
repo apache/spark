@@ -46,9 +46,7 @@ object AttributeSet {
 
   /** Constructs a new [[AttributeSet]] given a sequence of [[AttributeSet]]s. */
   def fromAttributeSets(sets: Iterable[AttributeSet]): AttributeSet = {
-    val baseSet = sets.foldLeft(new mutable.LinkedHashSet[AttributeEquals]()) {
-      case (agg, set) => agg ++= set.baseSet
-    }
+    val baseSet = sets.foldLeft(new mutable.LinkedHashSet[AttributeEquals]())( _ ++= _.baseSet)
     new AttributeSet(baseSet.toSet)
   }
 }
