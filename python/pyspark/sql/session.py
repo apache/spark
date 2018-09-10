@@ -264,8 +264,8 @@ class SparkSession(object):
         >>> l = [('Alice', 1)]
         >>> rdd = s.sparkContext.parallelize(l)
         >>> df = spark.createDataFrame(rdd, ['name', 'age'])
-        >>> df.collect()
-        [Row(name=u'Alice', age=1)]
+        >>> df.select("age").collect()
+        [Row(age=1)]
         """
         if self._jsparkSession.getActiveSession().isDefined():
             return self.__class__(self._sc, self._jsparkSession.getActiveSession().get())
