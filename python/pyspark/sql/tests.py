@@ -268,10 +268,6 @@ class DataTypeTests(unittest.TestCase):
         struct_field = StructField("a", IntegerType())
         self.assertRaises(TypeError, struct_field.typeName)
 
-    def test_invalid_create_row(self):
-        row_class = Row("c1", "c2")
-        self.assertRaises(ValueError, lambda: row_class(1, 2, 3))
-
 
 class SQLTests(ReusedSQLTestCase):
 
