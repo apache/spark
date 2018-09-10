@@ -19,7 +19,7 @@ package org.apache.spark.streaming.api.java
 
 import java.{lang => jl}
 import java.lang.{Iterable => JIterable}
-import java.util.{List => JList}
+import java.util.{List => JList, Optional}
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
@@ -31,7 +31,7 @@ import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 
 import org.apache.spark.Partitioner
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.api.java.{JavaPairRDD, JavaSparkContext, JavaUtils, Optional}
+import org.apache.spark.api.java.{JavaPairRDD, JavaSparkContext, JavaUtils}
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}

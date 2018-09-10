@@ -31,6 +31,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.*;
 
 import org.apache.spark.Accumulator;
@@ -67,7 +68,6 @@ import org.apache.spark.api.java.JavaFutureAction;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.Optional;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.input.PortableDataStream;
 import org.apache.spark.partial.BoundedDouble;
@@ -476,10 +476,10 @@ public class JavaAPISuite implements Serializable {
       new Tuple2<>(2, 'z'),
       new Tuple2<>(4, 'w')
     ));
-    List<Tuple2<Integer,Tuple2<Integer,Optional<Character>>>> joined =
+    List<Tuple2<Integer,Tuple2<Integer, Optional<Character>>>> joined =
       rdd1.leftOuterJoin(rdd2).collect();
     assertEquals(5, joined.size());
-    Tuple2<Integer,Tuple2<Integer,Optional<Character>>> firstUnmatched =
+    Tuple2<Integer,Tuple2<Integer, Optional<Character>>> firstUnmatched =
       rdd1.leftOuterJoin(rdd2).filter(tup -> !tup._2()._2().isPresent()).first();
     assertEquals(3, firstUnmatched._1().intValue());
   }

@@ -19,6 +19,7 @@ package org.apache.spark.examples.streaming;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 import scala.Tuple2;
@@ -26,7 +27,6 @@ import scala.Tuple2;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.Optional;
 import org.apache.spark.api.java.StorageLevels;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.State;

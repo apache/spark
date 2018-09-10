@@ -19,6 +19,7 @@ package org.apache.spark.api.java
 
 import java.{util => ju}
 import java.util.Map.Entry
+import java.util.Optional
 
 import scala.collection.mutable
 

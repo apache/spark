@@ -19,7 +19,7 @@ package org.apache.spark.api.java
 
 import java.io.Closeable
 import java.util
-import java.util.{Map => JMap}
+import java.util.{Map => JMap, Optional}
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
