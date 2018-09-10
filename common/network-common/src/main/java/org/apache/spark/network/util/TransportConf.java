@@ -297,16 +297,16 @@ public class TransportConf {
    * higher number of shuffler server threads, we are able to reserve some threads for
    * handling other RPC messages, thus making the Client less likely to experience timeout
    * when sending RPC messages to the shuffle server. Default to 0, which is 2*#cores
-   * or io.serverThreads. 10 would mean 10% of 2*#cores or 10% of io.serverThreads
-   * which equals 0.1 * 2*#cores or 0.1 * io.serverThreads.
+   * or io.serverThreads. 90 would mean 90% of 2*#cores or 90% of io.serverThreads
+   * which equals 0.9 * 2*#cores or 0.9 * io.serverThreads.
    */
   public int chunkFetchHandlerThreads() {
-    if(!this.getModuleName().equalsIgnoreCase("shuffle")) {
+    if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
       return 0;
     }
     int chunkFetchHandlerThreadsPercent =
             conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 0);
-    return this.serverThreads() > 0? (this.serverThreads() * chunkFetchHandlerThreadsPercent)/100:
-            (2* NettyRuntime.availableProcessors() * chunkFetchHandlerThreadsPercent)/100;
+    return this.serverThreads() > 0 ? (this.serverThreads() * chunkFetchHandlerThreadsPercent)/100:
+            (2 * NettyRuntime.availableProcessors() * chunkFetchHandlerThreadsPercent)/100;
   }
 }

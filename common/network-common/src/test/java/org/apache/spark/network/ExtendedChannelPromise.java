@@ -26,7 +26,6 @@ import io.netty.channel.DefaultChannelPromise;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 
-
 class ExtendedChannelPromise extends DefaultChannelPromise {
 
   private List<GenericFutureListener<Future<Void>>> listeners = new ArrayList<>();
