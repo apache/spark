@@ -87,6 +87,12 @@ class MultiValuesStateManager(
     keyToNumValues.put(key, numExistingValues + 1)
   }
 
+  def removeKey(key: UnsafeRow): Unit = {
+    val numExistingValues = keyToNumValues.get(key)
+    keyToNumValues.remove(key)
+    (0 until numExistingValues).foreach(keyWithIndexToValue.remove(key, _))
+  }
+
   /**
    * Remove using a predicate on keys.
    *

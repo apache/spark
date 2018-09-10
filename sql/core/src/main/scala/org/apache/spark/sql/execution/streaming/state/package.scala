@@ -79,6 +79,49 @@ package object state {
         indexOrdinal,
         sessionState,
         storeCoordinator)
+  }
+
+  /** Map each partition of an RDD along with data in a [[MultiValuesStateManager]]. */
+  def mapPartitionsWithMultiValuesStateManager[U: ClassTag](
+      sqlContext: SQLContext,
+      stateInfo: StatefulOperatorStateInfo,
+      keySchema: StructType,
+      valueSchema: StructType,
+      indexOrdinal: Option[Int])(
+      storeUpdateFunction: (MultiValuesStateManager, Iterator[T]) => Iterator[U])
+    : MultiValuesStateStoreRDD[T, U] = {
+
+    mapPartitionsWithMultiValuesStateManager(
+      stateInfo,
+      keySchema,
+      valueSchema,
+      indexOrdinal,
+      sqlContext.sessionState,
+      Some(sqlContext.streams.stateStoreCoordinator))(
+      storeUpdateFunction)
+  }
+
+  /** Map each partition of an RDD along with data in a [[MultiValuesStateManager]]. */
+  private[streaming] def mapPartitionsWithMultiValuesStateManager[U: ClassTag](
+      stateInfo: StatefulOperatorStateInfo,
+      keySchema: StructType,
+      valueSchema: StructType,
+      indexOrdinal: Option[Int],
+      sessionState: SessionState,
+      storeCoordinator: Option[StateStoreCoordinatorRef])(
+      storeUpdateFunction: (MultiValuesStateManager, Iterator[T]) => Iterator[U])
+    : MultiValuesStateStoreRDD[T, U] = {
+
+    val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
+    new MultiValuesStateStoreRDD(
+      dataRDD,
+      cleanedF,
+      stateInfo,
+      keySchema,
+      valueSchema,
+      indexOrdinal,
+      sessionState,
+      storeCoordinator)
     }
   }
 }

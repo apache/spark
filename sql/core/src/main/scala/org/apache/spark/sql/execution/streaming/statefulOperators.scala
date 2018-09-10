@@ -21,6 +21,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit._
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -421,6 +422,189 @@ case class StateStoreSaveExec(
     (outputMode.contains(Append) || outputMode.contains(Update)) &&
       eventTimeWatermark.isDefined &&
       newMetadata.batchWatermarkMs > eventTimeWatermark.get
+  }
+}
+
+// FIXME: javadoc!
+// FIXME: keyExpressions shouldn't have 'session': otherwise we should exclude it...
+case class SessionWindowStateStoreRestoreExec(
+    keyExpressions: Seq[Attribute],
+    sessionExpression: Attribute,
+    stateInfo: Option[StatefulOperatorStateInfo],
+    child: SparkPlan)
+  extends UnaryExecNode with StateStoreReader {
+
+  // FIXME: does we really need to have global aggregation from here?
+  require(keyExpressions.nonEmpty, "Key expressions should be presented.")
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val numOutputRows = longMetric("numOutputRows")
+
+    child.execute().mapPartitionsWithMultiValuesStateManager(
+      getStateInfo,
+      keyExpressions.toStructType,
+      child.output.toStructType,
+      indexOrdinal = None,
+      sqlContext.sessionState,
+      Some(sqlContext.streams.stateStoreCoordinator)) { case (stateManager, iter) =>
+
+      new MergingSortWithMultiValuesStateIterator(iter, stateManager, keyExpressions,
+        sessionExpression, child.output).map { row =>
+        numOutputRows += 1
+        row
+      }
+    }
+  }
+
+  override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def requiredChildDistribution: Seq[Distribution] = {
+    ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+  }
+}
+
+/**
+ * For each input tuple, the key is calculated and sessions are being `put` into
+ * the [[MultiValuesStateManager]].
+ */
+case class SessionWindowStateStoreSaveExec(
+    keyExpressions: Seq[Attribute],
+    sessionExpression: Attribute,
+    stateInfo: Option[StatefulOperatorStateInfo] = None,
+    outputMode: Option[OutputMode] = None,
+    eventTimeWatermark: Option[Long] = None,
+    child: SparkPlan)
+  extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
+
+  // FIXME: does we really need to have global aggregation from here?
+  require(keyExpressions.nonEmpty, "Key expressions should be presented.")
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    metrics // force lazy init at driver
+    assert(outputMode.nonEmpty,
+      "Incorrect planning in IncrementalExecution, outputMode has not been set")
+
+    child.execute().mapPartitionsWithMultiValuesStateManager(
+      getStateInfo,
+      keyExpressions.toStructType,
+      child.output.toStructType,
+      indexOrdinal = None,
+      sqlContext.sessionState,
+      Some(sqlContext.streams.stateStoreCoordinator)) { (stateManager, iter) =>
+
+      def evictSessionsByWatermark(manager: MultiValuesStateManager): Iterator[UnsafeRowPair] = {
+        manager.removeByValueCondition { row => watermarkPredicateForData match {
+            case Some(predicate) => predicate.eval(row)
+            case None => false
+          }
+        }
+      }
+
+      val numOutputRows = longMetric("numOutputRows")
+      val numUpdatedStateRows = longMetric("numUpdatedStateRows")
+      val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
+      val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
+      val commitTimeMs = longMetric("commitTimeMs")
+
+      val keyProjection = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+
+      val alreadyRemovedKeys = new mutable.HashSet[UnsafeRow]()
+
+      // assuming late events were dropped from MergingSortWithMultiValuesStateIterator
+      outputMode match {
+        // Update and output only sessions being evicted from the MultiValuesStateManager
+        // Assumption: watermark predicates must be non-empty if append mode is allowed
+        case Some(Append) =>
+          allUpdatesTimeMs += timeTakenMs {
+            while (iter.hasNext) {
+              val row = iter.next().asInstanceOf[UnsafeRow]
+              val keys = keyProjection(row)
+              if (!alreadyRemovedKeys.contains(keys)) {
+                stateManager.removeKey(keys)
+                alreadyRemovedKeys.add(keys)
+              }
+              stateManager.append(keys, row)
+              numUpdatedStateRows += 1
+            }
+          }
+
+          val removalStartTimeNs = System.nanoTime
+
+          val retIter = evictSessionsByWatermark(stateManager).map(_.value)
+
+          CompletionIterator(retIter, {
+            allRemovalsTimeMs += NANOSECONDS.toMillis(System.nanoTime - removalStartTimeNs)
+            commitTimeMs += timeTakenMs { stateManager.commit() }
+            setStoreMetrics(stateManager)
+          })
+
+        // Update and output modified rows from the MultiValuesStateManager.
+        case Some(Update) =>
+
+          // FIXME: it doesn't compare all output rows with current state rows, so all sessions
+          // including previous sessions will be provided
+
+          new NextIterator[InternalRow] {
+            private val updatesStartTimeNs = System.nanoTime
+
+            override protected def getNext(): InternalRow = {
+              if (iter.hasNext) {
+                val row = iter.next().asInstanceOf[UnsafeRow]
+                val keys = keyProjection(row)
+                if (!alreadyRemovedKeys.contains(keys)) {
+                  stateManager.removeKey(keys)
+                  alreadyRemovedKeys.add(keys)
+                }
+                stateManager.append(keys, row)
+                numOutputRows += 1
+                numUpdatedStateRows += 1
+                row
+              } else {
+                finished = true
+                null
+              }
+            }
+
+            override protected def close(): Unit = {
+              allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
+
+              // Remove old aggregates if watermark specified
+              allRemovalsTimeMs += timeTakenMs {
+                evictSessionsByWatermark(stateManager)
+              }
+              commitTimeMs += timeTakenMs { stateManager.commit() }
+              setStoreMetrics(stateManager)
+            }
+          }
+
+        case _ => throw new UnsupportedOperationException(s"Invalid output mode: $outputMode")
+      }
+    }
+  }
+
+  override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def requiredChildDistribution: Seq[Distribution] = {
+    ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+  }
+
+  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+    (outputMode.contains(Append) || outputMode.contains(Update)) &&
+      eventTimeWatermark.isDefined &&
+      newMetadata.batchWatermarkMs > eventTimeWatermark.get
+  }
+
+  protected def setStoreMetrics(manager: MultiValuesStateManager): Unit = {
+    val storeMetrics = manager.metrics
+    longMetric("numTotalStateRows") += storeMetrics.numKeys
+    longMetric("stateMemory") += storeMetrics.memoryUsedBytes
+    storeMetrics.customMetrics.foreach { case (metric, value) =>
+      longMetric(metric.name) += value
+    }
   }
 }
 

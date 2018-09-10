@@ -44,6 +44,13 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     attr => List("aggVal1", "aggVal2").contains(attr.name)
   }
 
+  test("no row") {
+    val iterator = new UpdatingSessionIterator(None.iterator, keysWithoutSessionAttributes,
+      sessionAttribute, valuesAttributes, rowAttributes)
+
+    assert(!iterator.hasNext)
+  }
+
   test("only one row") {
     val rows = List(createRow("a", 1, 100, 110, 10, 1.1))
 
