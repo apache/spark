@@ -2694,6 +2694,8 @@
         <hadoop.version>3.1.0</hadoop.version>
         <curator.version>2.12.0</curator.version>
         <zookeeper.version>3.4.9</zookeeper.version>
+        <fasterxml.jackson.version>2.7.8</fasterxml.jackson.version>
+        <fasterxml.jackson.databind.version>2.7.8</fasterxml.jackson.databind.version>
       </properties>
     </profile>
 
