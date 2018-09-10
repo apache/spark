@@ -2634,6 +2634,7 @@ def sequence(start, stop, step=None):
         return Column(sc._jvm.functions.sequence(
             _to_java_column(start), _to_java_column(stop), _to_java_column(step)))
 
+
 @ignore_unicode_prefix
 @since(3.0)
 def from_csv(col, schema, options={}):
@@ -2655,6 +2656,7 @@ def from_csv(col, schema, options={}):
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.from_csv(_to_java_column(col), schema, options)
     return Column(jc)
+
 
 # ---------------------------- User Defined Function ----------------------------------
 
