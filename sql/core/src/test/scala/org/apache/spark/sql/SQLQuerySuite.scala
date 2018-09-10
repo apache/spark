@@ -22,12 +22,13 @@ import java.net.{MalformedURLException, URL}
 import java.sql.Timestamp
 import java.util.concurrent.atomic.AtomicBoolean
 
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
+
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -35,8 +36,9 @@ import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 
-class SQLQuerySuite extends QueryTest with SharedSQLContext {
+class SQLQuerySuite extends QueryTest with SharedSQLContext with TimeLimits {
   import testImplicits._
+  implicit val defaultSignaler: Signaler = ThreadSignaler
 
   setupTestData()
 
@@ -2857,6 +2859,53 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val ds = List(Foo(Some("bar"))).toDS
     val result = ds.flatMap(_.bar).distinct
     result.rdd.isEmpty
+  }
+
+  test("SPARK-25276: Redundant constrains when using alias to avoid GC overhead exception") {
+    import org.scalatest.time.SpanSugar._
+    failAfter(30 seconds) {
+      withDatabase("spark_25276") {
+        sql("create database spark_25276")
+        sql("use spark_25276")
+
+        val columnCount = 20
+        val tables = Array("tableSpark_25276_0", "tableSpark_25276_1", "tableSpark_25276_2",
+          "tableSpark_25276_3")
+
+        // drop tables
+        tables.foreach(table => sql(s"drop table if exists $table"))
+
+        assert(sql("show tables like 'tableSpark_25276*'").count === 0)
+
+        // create table0
+        sql(s"create table ${tables(0)} (key_id string) using parquet")
+
+        // create table1
+        val table1Columns = (1 to columnCount).map(index => s"a$index string").mkString(",")
+        sql(s"create table ${tables(1)} ($table1Columns) using parquet")
+
+        val otherColumns = (1 to columnCount).map(index =>
+          s"case when a$index is null then '' else cast (a$index as string) end as a$index")
+          .mkString(",")
+        val keyColumnSelection = (1 to columnCount).map(index =>
+          s"case when a$index is null then '' else cast (a$index as string) end , '|~|'")
+          .mkString(",")
+        val keyCol = s"concat($keyColumnSelection)) as key_id"
+        val joinCondition = "left join %s B on A.key_id = B.key_id where B.key_id is null"
+
+        // create table2
+        val createTable2 = "create table %s using parquet as select A.* from " +
+          s"(select $otherColumns, ($keyCol from %s ) A $joinCondition"
+        sql(String.format(createTable2, tables(2), tables(1), tables(0)))
+
+        // create table3
+        val createTable3 = "create table %s using parquet as select A.* from " +
+          s"(select ($keyCol , $otherColumns from %s ) A $joinCondition"
+        sql(String.format(createTable3, tables(3), tables(1), tables(0)))
+
+        assert(sql("show tables like 'tableSpark_25276*'").count === 4)
+      }
+    }
   }
 }
 
