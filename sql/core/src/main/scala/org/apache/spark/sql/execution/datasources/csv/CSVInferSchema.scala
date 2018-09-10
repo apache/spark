@@ -79,8 +79,7 @@ private[csv] object CSVInferSchema {
    * point checking if it is an Int, as the final type must be Double or higher.
    */
   def inferField(typeSoFar: DataType, field: String, options: CSVOptions): DataType = {
-    if (field == null || field.isEmpty || field == options.nullValue ||
-      field == options.emptyValueInRead) {
+    if (field == null || field.isEmpty || field == options.nullValue) {
       typeSoFar
     } else {
       typeSoFar match {
