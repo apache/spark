@@ -17,6 +17,7 @@
 
 package org.apache.spark.util
 
+import java.io.{PipedInputStream, PipedOutputStream}
 import java.util.{Properties, UUID}
 
 import scala.collection.JavaConverters._
@@ -24,6 +25,7 @@ import scala.collection.Map
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import org.apache.commons.io.IOUtils
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
@@ -103,7 +105,24 @@ private[spark] object JsonProtocol {
         stageExecutorMetricsToJson(stageExecutorMetrics)
       case blockUpdate: SparkListenerBlockUpdated =>
         blockUpdateToJson(blockUpdate)
-      case _ => parse(mapper.writeValueAsString(event))
+      case _ =>
+        // Use piped streams to avoid extra memory consumption
+        val outputStream = new PipedOutputStream()
+        val inputStream = new PipedInputStream(outputStream)
+        try {
+          val thread = new Thread("SparkListenerEvent json writer") {
+            override def run(): Unit = {
+              mapper.writeValue(outputStream, event)
+            }
+          }
+          thread.setDaemon(true)
+          thread.start()
+          parse(inputStream)
+        } finally {
+          // close quietly in case Jackson auto closes streams
+          IOUtils.closeQuietly(outputStream)
+          IOUtils.closeQuietly(inputStream)
+        }
     }
   }
 
