@@ -37,7 +37,7 @@ $.extend( $.fn.dataTable.ext.type.order, {
 } );
 
 // This function will only parse the URL under certain format
-// e.g. https://axonitered-jt1.red.ygrid.yahoo.com:50509/history/application_1502220952225_59143/stages/stage/?id=0&attempt=0
+// e.g. https://domain:50509/history/application_1502220952225_59143/stages/stage/?id=0&attempt=0
 function stageEndPoint(appId) {
     var words = document.baseURI.split('/');
     var words2 = document.baseURI.split('?');
