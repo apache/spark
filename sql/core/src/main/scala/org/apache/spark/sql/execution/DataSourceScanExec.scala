@@ -54,7 +54,7 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
   override def simpleString: String = {
     val metadataEntries = metadata.toSeq.sorted.map {
       case (key, value) =>
-        key + ": " + redact(value)
+        key + ": " + StringUtils.abbreviate(redact(value), 100)
     }
     val metadataStr = Utils.truncatedString(metadataEntries, " ", ", ", "")
     s"$nodeNamePrefix$nodeName${Utils.truncatedString(output, "[", ",", "]")}$metadataStr"
