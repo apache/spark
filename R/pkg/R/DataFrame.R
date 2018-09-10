@@ -3905,16 +3905,6 @@ setMethod("rollup",
             groupedData(sgd)
           })
 
-isTypeAllowedForSqlHint <- function(x) {
-  if (is.character(x) || is.numeric(x)) {
-    TRUE
-  } else if (is.list(x)) {
-    all(sapply(x, (function(y) is.character(y) || is.numeric(y))))
-  } else {
-    FALSE
-  }
-}
-
 #' hint
 #'
 #' Specifies execution plan hint and return a new SparkDataFrame.
@@ -3939,7 +3929,15 @@ setMethod("hint",
           signature(x = "SparkDataFrame", name = "character"),
           function(x, name, ...) {
             parameters <- list(...)
-            stopifnot(all(sapply(parameters, isTypeAllowedForSqlHint)))
+            stopifnot(all(sapply(parameters, function(x) {
+              if (is.character(x) || is.numeric(x)) {
+                TRUE
+              } else if (is.list(x)) {
+                all(sapply(x, function(y) { is.character(y) || is.numeric(y) }))
+              } else {
+                FALSE
+              }
+            })))
             jdf <- callJMethod(x@sdf, "hint", name, parameters)
             dataFrame(jdf)
           })
