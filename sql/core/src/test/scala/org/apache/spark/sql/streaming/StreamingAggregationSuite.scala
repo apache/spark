@@ -46,16 +46,7 @@ object FailureSingleton {
   var firstTime = true
 }
 
-class StreamingAggregationSuite extends StateStoreMetricsTest
-    with BeforeAndAfterAll with Assertions {
-
-  override def afterAll(): Unit = {
-    try {
-      super.afterAll()
-    } finally {
-      StateStore.stop()
-    }
-  }
+class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 
   import testImplicits._
 
