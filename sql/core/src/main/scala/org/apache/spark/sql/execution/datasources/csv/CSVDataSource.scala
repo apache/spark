@@ -91,10 +91,9 @@ abstract class CSVDataSource extends Serializable {
       }
 
       row.zipWithIndex.map { case (value, index) =>
-        if (value == null || value.isEmpty || value == options.nullValue ||
-          value == options.emptyValueInRead) {
-          // When there are empty strings or the values set in `nullValue` or in `emptyValue`,
-          // put the index as the suffix.
+        if (value == null || value.isEmpty || value == options.nullValue) {
+          // When there are empty strings or the values set in `nullValue`, put the
+          // index as the suffix.
           s"_c$index"
         } else if (!caseSensitive && duplicates.contains(value.toLowerCase)) {
           // When there are case-insensitive duplicates, put the index as the suffix.
