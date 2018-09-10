@@ -79,6 +79,8 @@ case class StructField(
   /**
    * Returns a string containing a schema in DDL format. For example, the following value:
    * `StructField("eventId", IntegerType)` will be converted to `eventId` INT.
+   *
+   * @since 2.4.0
    */
   def toDDL: String = {
     val comment = getComment()
