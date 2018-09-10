@@ -887,10 +887,6 @@ setGeneric("create_array", function(x, ...) { standardGeneric("create_array") })
 #' @name NULL
 setGeneric("create_map", function(x, ...) { standardGeneric("create_map") })
 
-#' @rdname column_misc_functions
-#' @name NULL
-setGeneric("hash", function(x, ...) { standardGeneric("hash") })
-
 #' @rdname column_window_functions
 #' @name NULL
 setGeneric("cume_dist", function(x = "missing") { standardGeneric("cume_dist") })
@@ -903,6 +899,9 @@ setGeneric("current_date", function(x = "missing") { standardGeneric("current_da
 #' @name NULL
 setGeneric("current_timestamp", function(x = "missing") { standardGeneric("current_timestamp") })
 
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("data_type", function(x) { standardGeneric("data_type") })
 
 #' @rdname column_datetime_diff_functions
 #' @name NULL
@@ -999,6 +998,10 @@ setGeneric("grouping_bit", function(x) { standardGeneric("grouping_bit") })
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("grouping_id", function(x, ...) { standardGeneric("grouping_id") })
+
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("hash", function(x, ...) { standardGeneric("hash") })
 
 #' @rdname column_math_functions
 #' @name NULL
