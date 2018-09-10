@@ -1686,7 +1686,7 @@ def split(str, pattern, limit=-1):
             * ``limit <= 0``: `pattern` will be applied as many times as possible, and the resulting
                               array can be of any size.
 
-    .. versionchanged:: 2.4
+    .. versionchanged:: 3.0
        `split` now takes an optional `limit` field. If not provided, default limit value is -1.
 
     >>> df = spark.createDataFrame([('oneAtwoBthreeC',)], ['s',])
