@@ -1703,11 +1703,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
   test("SPARK-25387: bad input should not cause NPE") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
-    withTempPath { path =>
-      val input = spark.createDataset(Seq("\u0000\u0000\u0001234"))
-      checkAnswer(spark.read.schema(schema).csv(input), Row(null))
-      checkAnswer(spark.read.option("multiLine", true).schema(schema).csv(input), Row(null))
-      assert(spark.read.csv(input).collect().toSet == Set(Row()))
-    }
+    val input = spark.createDataset(Seq("\u0000\u0000\u0001234"))
+
+    checkAnswer(spark.read.schema(schema).csv(input), Row(null))
+    checkAnswer(spark.read.option("multiLine", true).schema(schema).csv(input), Row(null))
+    assert(spark.read.csv(input).collect().toSet == Set(Row()))
   }
 }
