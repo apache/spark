@@ -247,10 +247,7 @@ private[spark] class Executor(
           plugin.shutdown()
         } catch {
           case e: Exception =>
-            logWarning(
-              s"""Plugin ${plugin.getClass().getCanonicalName()} failed to shutdown:
-                 |${e.toString}
-                 |${e.getStackTrace().mkString("\n")}""".stripMargin)
+            logWarning("Plugin " + plugin.getClass().getCanonicalName() + " shutdown failed", e)
         }
       }
     }
