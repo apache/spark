@@ -390,9 +390,9 @@ more entries by increasing these values and restarting the history server.
 
 ### Executor Task Metrics
 
-The REST API exposes the values of the Task Metrics collected by Spark executors at the
-task execution level. The metrics can be used for performance troubleshooting.
-A list of the available metrics with a short description:
+The REST API exposes the values of the Task Metrics collected by Spark executors with the granularity
+of task execution. The metrics can be used for performance troubleshooting and workload characterization.
+A list of the available metrics, with a short description:
 
 <table class="table">
   <tr><th>Spark Executor Task Metric name</th>
@@ -400,23 +400,22 @@ A list of the available metrics with a short description:
   </tr>
   <tr>
     <td>executorRunTime</td>
-    <td>Time the executor spent running this task. This includes time fetching shuffle data.
+    <td>Elapsed time the executor spent running this task. This includes time fetching shuffle data.
     The value is expressed in milliseconds.</td>
   </tr>
   <tr>
-    <td>executorCpuTime
-    <td>CPU Time the executor spent running this task. This includes time fetching shuffle data.
-    The value is expressed in nanoseconds.
+    <td>executorCpuTime</td>
+    <td>CPU time the executor spent running this task. This includes time fetching shuffle data.
+    The value is expressed in nanoseconds.</td>
   </tr>
   <tr>
     <td>executorDeserializeTime</td>
-    <td>Time taken on the executor to deserialize this task.
-    The value is expressed in milliseconds.</td>
+    <td>Elapsed time spent to deserialize this task. The value is expressed in milliseconds.</td>
   </tr>
   <tr>
     <td>executorDeserializeCpuTime</td>
-    <td>CPU Time taken on the executor to deserialize this task.
-     The value is expressed in nanoseconds.</td>
+    <td>CPU time taken on the executor to deserialize this task. The value is expressed
+    in nanoseconds.</td>
   </tr>
   <tr>
     <td>resultSize</td>
@@ -424,13 +423,12 @@ A list of the available metrics with a short description:
   </tr>
   <tr>
     <td>jvmGCTime</td>
-    <td>Amount of time the JVM spent in garbage collection while executing this task.
+    <td>Elapsed time the JVM spent in garbage collection while executing this task.
     The value is expressed in milliseconds.</td>
   </tr>
   <tr>
     <td>resultSerializationTime</td>
-    <td>Amount of time spent serializing the task result.
-    The value is expressed in milliseconds.</td>
+    <td>Elapsed time spent serializing the task result. The value is expressed in milliseconds.</td>
   </tr>
   <tr>
     <td>memoryBytesSpilled</td>
@@ -448,25 +446,22 @@ A list of the available metrics with a short description:
          unsafe operators and ExternalSort.</td>
   </tr>
   <tr>
-    <td>inputMetrics.*
-    </td>
+    <td>inputMetrics.*</td>
     <td>Metrics related to reading data from [[org.apache.spark.rdd.HadoopRDD]] 
-    or from persisted data.
+    or from persisted data.</td>
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.bytesRead</td>
     <td>Total number of bytes read.</td>
   </tr>
   <tr>
-    <td>&nbsp;&nbsp;&nbsp;&nbsp;.recordsRead
-    </td>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.recordsRead</td>
     <td>Total number of records read.</td>
   </tr>
   <tr>
-    <td>outputMetrics.*
-    </td>
-    <td>Metrics related to writing data externally (e.g. to a distributed filesystem), defined only 
-            in tasks with output.            
+    <td>outputMetrics.*</td>
+    <td>Metrics related to writing data externally (e.g. to a distributed filesystem),
+    defined only in tasks with output.</td>            
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.bytesWritten</td>
@@ -490,8 +485,8 @@ A list of the available metrics with a short description:
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.localBlocksFetched</td>
-    <td>Number of local (as opposed to read from a remote executor)
-    blocks fetched in shuffle operations</td>
+    <td>Number of local (as opposed to read from a remote executor) blocks fetched
+    in shuffle operations</td>
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.totalBlocksFetched</td>
@@ -503,8 +498,8 @@ A list of the available metrics with a short description:
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.localBytesRead</td>
-    <td>Number of bytes read in shuffle operations from local disk
-    (as opposed to read from a remote executor)</td>
+    <td>Number of bytes read in shuffle operations from local disk (as opposed to
+    read from a remote executor)</td>
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.totalBytesRead</td>
@@ -538,8 +533,8 @@ A list of the available metrics with a short description:
   </tr>
   <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.writeTime</td>
-    <td>Time spent blocking on writes to disk or buffer cache.
-    The value is expressed in nanoseconds.</td>
+    <td>Time spent blocking on writes to disk or buffer cache. The value is expressed
+     in nanoseconds.</td>
   </tr>
 </table>
 
