@@ -565,7 +565,7 @@ case class JsonToStructs(
     val parsedOptions = new JSONOptions(options, timeZoneId.get)
     val mode = parsedOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
-      throw new AnalysisException(s"from_json() doesn't support the ${mode.name} mode. " +
+      throw new IllegalArgumentException(s"from_json() doesn't support the ${mode.name} mode. " +
         s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
     }
     val rawParser = new JacksonParser(nullableSchema, parsedOptions)

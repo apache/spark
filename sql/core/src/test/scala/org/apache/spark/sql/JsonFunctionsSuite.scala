@@ -563,9 +563,9 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(exception1.contains(
       "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
 
-    val exception2 = intercept[AnalysisException] {
+    val exception2 = intercept[SparkException] {
       df.select(from_json($"value", schema, Map("mode" -> "DROPMALFORMED")))
-        .queryExecution.executedPlan
+        .collect()
     }.getMessage
     assert(exception2.contains(
       "from_json() doesn't support the DROPMALFORMED mode. " +
