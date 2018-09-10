@@ -3720,3 +3720,22 @@ setMethod("current_timestamp",
             jc <- callJStatic("org.apache.spark.sql.functions", "current_timestamp")
             column(jc)
           })
+
+#' @details
+#' \code{from_csv}: Parses a column containing a CSV string into a Column of \code{structType}
+#' with the specified \code{schema}.
+#' If the string is unparseable, the Column will contain the value NA.
+#'
+#' @rdname column_collection_functions
+#' @param schema a DDL-formatted string
+#' @aliases from_csv from_csv,Column,character-method
+#'
+#' @note from_csv since 3.0.0
+setMethod("from_csv", signature(x = "Column", schema = "character"),
+          function(x, schema, ...) {
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "from_csv",
+                              x@jc, schema, options)
+            column(jc)
+          })

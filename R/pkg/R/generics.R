@@ -984,6 +984,10 @@ setGeneric("format_string", function(format, x, ...) { standardGeneric("format_s
 #' @name NULL
 setGeneric("from_json", function(x, schema, ...) { standardGeneric("from_json") })
 
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("from_csv", function(x, schema, ...) { standardGeneric("from_csv") })
+
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("from_unixtime", function(x, ...) { standardGeneric("from_unixtime") })
