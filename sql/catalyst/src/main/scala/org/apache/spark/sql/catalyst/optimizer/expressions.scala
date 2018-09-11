@@ -266,9 +266,18 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case a And b if !a.nullable && !b.nullable &&
           (Not(a).semanticEquals(b) || a.semanticEquals(Not(b))) =>
         FalseLiteral
+      case a And b if Not(a).semanticEquals(b) =>
+        If(IsNull(a), Literal.create(null, a.dataType), FalseLiteral)
+      case a And b if a.semanticEquals(Not(b)) =>
+        If(IsNull(b), Literal.create(null, b.dataType), FalseLiteral)
+
       case a Or b if !a.nullable && !b.nullable &&
           (Not(a).semanticEquals(b) || a.semanticEquals(Not(b))) =>
         TrueLiteral
+      case a Or b if Not(a).semanticEquals(b) =>
+        If(IsNull(a), Literal.create(null, a.dataType), TrueLiteral)
+      case a Or b if a.semanticEquals(Not(b)) =>
+        If(IsNull(b), Literal.create(null, b.dataType), TrueLiteral)
 
       case a And b if a.semanticEquals(b) => a
       case a Or b if a.semanticEquals(b) => a
