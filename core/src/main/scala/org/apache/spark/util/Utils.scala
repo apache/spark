@@ -2052,7 +2052,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Implements the same logic as JDK java.lang.String#trim by removing leading and trailing
+   * Implements the same logic as JDK `java.lang.String#trim` by removing leading and trailing
    * non-printable characters less or equal to '\u0020' (SPACE) but preserves natural line
    * delimiters according to [[java.util.Properties]] load method. The natural line delimiters are
    * removed by JDK during load. Therefore any remaining ones have been specifically provided and
