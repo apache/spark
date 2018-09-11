@@ -564,7 +564,7 @@ class DataStreamReader(OptionUtils):
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
-            enforceSchema=None):
+            enforceSchema=None, emptyValue=None):
         """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -658,6 +658,8 @@ class DataStreamReader(OptionUtils):
                                           the quote character. If None is set, the default value is
                                           escape character when escape and quote characters are
                                           different, ``\0`` otherwise..
+        :param emptyValue: sets the string representation of an empty value. If None is set, it uses
+                           the default value, empty string.
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
@@ -674,7 +676,8 @@ class DataStreamReader(OptionUtils):
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
-            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema)
+            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema,
+            emptyValue=emptyValue)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:
