@@ -33,7 +33,6 @@ import org.apache.spark.storage.RDDInfo
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.AccumulatorContext
 import org.apache.spark.util.collection.OpenHashSet
-import org.apache.spark.util.kvstore.KVStore
 
 /**
  * A mutable representation of a live entity in Spark (jobs, stages, tasks, et al). Every live
@@ -588,8 +587,7 @@ private object LiveEntityHelpers {
       .filter { acc =>
         // We don't need to store internal or SQL accumulables as their values will be shown in
         // other places, so drop them to reduce the memory usage.
-        !acc.internal && (!acc.metadata.isDefined ||
-          acc.metadata.get != Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
+        !acc.internal && acc.metadata != Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER)
       }
       .map { acc =>
         new v1.AccumulableInfo(
