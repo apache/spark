@@ -3728,6 +3728,7 @@ setMethod("current_timestamp",
 #'
 #' @rdname column_collection_functions
 #' @param schema a DDL-formatted string
+#' @param ... options for CSV parser. Supported the same options as for CSV data source
 #' @aliases from_csv from_csv,Column,character-method
 #'
 #' @note from_csv since 3.0.0
