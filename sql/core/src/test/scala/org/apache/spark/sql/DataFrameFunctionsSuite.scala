@@ -465,8 +465,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val funcsMustHaveAtLeastOneArg =
       ("coalesce", (df: DataFrame) => df.select(coalesce())) ::
       ("coalesce", (df: DataFrame) => df.selectExpr("coalesce()")) ::
-      ("named_struct", (df: DataFrame) => df.select(struct())) ::
-      ("named_struct", (df: DataFrame) => df.selectExpr("named_struct()")) ::
       ("hash", (df: DataFrame) => df.select(hash())) ::
       ("hash", (df: DataFrame) => df.selectExpr("hash()")) :: Nil
     funcsMustHaveAtLeastOneArg.foreach { case (name, func) =>

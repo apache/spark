@@ -305,10 +305,7 @@ trait CreateNamedStructLike extends Expression {
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.length < 1) {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to function $prettyName requires at least one argument")
-    } else if (children.size % 2 != 0) {
+    if (children.size % 2 != 0) {
       TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
     } else {
       val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
