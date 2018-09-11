@@ -48,6 +48,14 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     testRelation.output, Seq(Row(1, 2, 3, "abc"))
   )
 
+  val testNotnullableRelation = LocalRelation('a.int.notNull, 'b.int.notNull, 'c.int.notNull,
+    'd.string.notNull, 'e.boolean.notNull, 'f.boolean.notNull, 'g.boolean.notNull,
+    'h.boolean.notNull)
+
+  val testNotnullableRelationWithData = LocalRelation.fromExternalRows(
+    testNotnullableRelation.output, Seq(Row(1, 2, 3, "abc"))
+  )
+
   private def checkCondition(input: Expression, expected: LogicalPlan): Unit = {
     val plan = testRelationWithData.where(input).analyze
     val actual = Optimize.execute(plan)
@@ -59,6 +67,13 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     val actual = Optimize.execute(plan)
     val correctAnswer = testRelation.where(expected).analyze
     comparePlans(actual, correctAnswer)
+  }
+
+  private def checkConditionInNotNullableRelation(
+      input: Expression, expected: LogicalPlan): Unit = {
+    val plan = testNotnullableRelationWithData.where(input).analyze
+    val actual = Optimize.execute(plan)
+    comparePlans(actual, expected)
   }
 
   test("a && a => a") {
@@ -174,10 +189,26 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
   }
 
   test("Complementation Laws") {
-    checkCondition('a && !'a, testRelation)
-    checkCondition(!'a && 'a, testRelation)
+    checkConditionInNotNullableRelation('e && !'e, testNotnullableRelation)
+    checkConditionInNotNullableRelation(!'e && 'e, testNotnullableRelation)
 
-    checkCondition('a || !'a, testRelationWithData)
-    checkCondition(!'a || 'a, testRelationWithData)
+    checkConditionInNotNullableRelation('e || !'e, testNotnullableRelationWithData)
+    checkConditionInNotNullableRelation(!'e || 'e, testNotnullableRelationWithData)
+  }
+
+  test("Complementation Laws - null handling") {
+    checkCondition('e && !'e, testRelationWithData.where('e && !'e).analyze)
+    checkCondition(!'e && 'e, testRelationWithData.where(!'e && 'e).analyze)
+
+    checkCondition('e || !'e, testRelationWithData.where('e || !'e).analyze)
+    checkCondition(!'e || 'e, testRelationWithData.where(!'e || 'e).analyze)
+  }
+
+  test("Complementation Laws - negative case") {
+    checkCondition('e && !'f, testRelationWithData.where('e && !'f).analyze)
+    checkCondition(!'f && 'e, testRelationWithData.where(!'f && 'e).analyze)
+
+    checkCondition('e || !'f, testRelationWithData.where('e || !'f).analyze)
+    checkCondition(!'f || 'e, testRelationWithData.where(!'f || 'e).analyze)
   }
 }

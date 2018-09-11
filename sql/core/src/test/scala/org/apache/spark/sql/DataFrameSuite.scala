@@ -2569,4 +2569,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     check(lit(2).cast("int"), $"c" === 2, Seq(Row(1, 1, 2, 0), Row(1, 1, 2, 1)))
     check(lit(2).cast("int"), $"c" =!= 2, Seq())
   }
+
+  test("SPARK-25402 Null handling in BooleanSimplification") {
+    val schema = StructType.fromDDL("a boolean, b int")
+    val rows = Seq(Row(null, 1))
+
+    val rdd = sparkContext.parallelize(rows)
+    val df = spark.createDataFrame(rdd, schema)
+
+    checkAnswer(df.where("(NOT a) OR a"), Seq.empty)
+  }
 }
