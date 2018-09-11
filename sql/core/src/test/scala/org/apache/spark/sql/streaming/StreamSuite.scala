@@ -1033,7 +1033,7 @@ class StreamSuite extends StreamTest {
   test("is_continuous_processing property should be false for microbatch processing") {
     val input = MemoryStream[Int]
     val df = input.toDS()
-      .map(i => TaskContext.get().getLocalProperty(ContinuousExecution.IS_CONTINUOUS_PROCESSING))
+      .map(i => TaskContext.get().getLocalProperty(StreamExecution.IS_CONTINUOUS_PROCESSING))
     testStream(df) (
       AddData(input, 1),
       CheckAnswer("false")
@@ -1042,9 +1042,8 @@ class StreamSuite extends StreamTest {
 
   test("is_continuous_processing property should be true for continuous processing") {
     val input = ContinuousMemoryStream[Int]
-    var x: String = ""
     val stream = input.toDS()
-      .map(i => TaskContext.get().getLocalProperty(ContinuousExecution.IS_CONTINUOUS_PROCESSING))
+      .map(i => TaskContext.get().getLocalProperty(StreamExecution.IS_CONTINUOUS_PROCESSING))
       .writeStream.format("memory")
       .queryName("output")
       .trigger(Trigger.Continuous("1 seconds"))

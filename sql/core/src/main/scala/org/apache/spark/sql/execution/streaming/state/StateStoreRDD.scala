@@ -23,7 +23,8 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, EpochTracker}
+import org.apache.spark.sql.execution.streaming.StreamExecution
+import org.apache.spark.sql.execution.streaming.continuous.EpochTracker
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
@@ -74,7 +75,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
 
     // If we're in continuous processing mode, we should get the store version for the current
     // epoch rather than the one at planning time.
-    val isContinuous = Option(ctxt.getLocalProperty(ContinuousExecution.IS_CONTINUOUS_PROCESSING))
+    val isContinuous = Option(ctxt.getLocalProperty(StreamExecution.IS_CONTINUOUS_PROCESSING))
       .map(_.toBoolean)
     val currentVersion = if (isContinuous.contains(true)) {
       val epoch = EpochTracker.getCurrentEpoch

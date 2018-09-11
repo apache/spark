@@ -210,7 +210,7 @@ class ContinuousExecution(
     }.head
 
     sparkSessionForQuery.sparkContext.setLocalProperty(
-      ContinuousExecution.IS_CONTINUOUS_PROCESSING, true.toString)
+      StreamExecution.IS_CONTINUOUS_PROCESSING, true.toString)
     sparkSessionForQuery.sparkContext.setLocalProperty(
       ContinuousExecution.START_EPOCH_KEY, currentBatchId.toString)
     // Add another random ID on top of the run ID, to distinguish epoch coordinators across
@@ -393,7 +393,6 @@ class ContinuousExecution(
 }
 
 object ContinuousExecution {
-  val IS_CONTINUOUS_PROCESSING = "__is_continuous_processing"
   val START_EPOCH_KEY = "__continuous_start_epoch"
   val EPOCH_COORDINATOR_ID_KEY = "__epoch_coordinator_id"
   val EPOCH_INTERVAL_KEY = "__continuous_epoch_interval"

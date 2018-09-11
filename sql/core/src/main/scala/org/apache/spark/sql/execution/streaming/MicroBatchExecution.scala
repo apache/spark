@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentBatchTimestamp, 
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, WriteToDataSourceV2}
-import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWritSupport, RateControlMicroBatchReadSupport}
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset => OffsetV2}
@@ -513,7 +512,7 @@ class MicroBatchExecution(
     sparkSessionToRunBatch.sparkContext.setLocalProperty(
       MicroBatchExecution.BATCH_ID_KEY, currentBatchId.toString)
     sparkSessionToRunBatch.sparkContext.setLocalProperty(
-      ContinuousExecution.IS_CONTINUOUS_PROCESSING, false.toString)
+      StreamExecution.IS_CONTINUOUS_PROCESSING, false.toString)
 
     reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
