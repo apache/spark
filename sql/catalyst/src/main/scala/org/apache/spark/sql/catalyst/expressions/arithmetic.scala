@@ -315,6 +315,27 @@ case class Divide(left: Expression, right: Expression) extends DivModLike {
 }
 
 @ExpressionDescription(
+  usage = "a _FUNC_ b - Divides a by b.",
+  examples = """
+    Examples:
+      > SELECT 3 _FUNC_ 2;
+       1
+  """,
+  since = "3.0.0")
+case class IntegralDivide(left: Expression, right: Expression) extends DivModLike {
+
+  override def inputType: AbstractDataType = IntegralType
+
+  override def symbol: String = "/"
+  override def sqlOperator: String = "div"
+
+  private lazy val div: (Any, Any) => Any = dataType match {
+    case i: IntegralType => i.integral.asInstanceOf[Integral[Any]].quot
+  }
+  override def evalOperation(left: Any, right: Any): Any = div(left, right)
+}
+
+@ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns the remainder after `expr1`/`expr2`.",
   examples = """
     Examples:

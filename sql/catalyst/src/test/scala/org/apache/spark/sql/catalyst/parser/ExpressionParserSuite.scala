@@ -203,7 +203,7 @@ class ExpressionParserSuite extends PlanTest {
     // Simple operations
     assertEqual("a * b", 'a * 'b)
     assertEqual("a / b", 'a / 'b)
-    assertEqual("a DIV b", ('a / 'b).cast(LongType))
+    assertEqual("a DIV b", 'a div 'b)
     assertEqual("a % b", 'a % 'b)
     assertEqual("a + b", 'a + 'b)
     assertEqual("a - b", 'a - 'b)
@@ -214,7 +214,7 @@ class ExpressionParserSuite extends PlanTest {
     // Check precedences
     assertEqual(
       "a * t | b ^ c & d - e + f % g DIV h / i * k",
-      'a * 't | ('b ^ ('c & ('d - 'e + (('f % 'g / 'h).cast(LongType) / 'i * 'k)))))
+      'a * 't | ('b ^ ('c & ('d - 'e + (('f % 'g div 'h) / 'i * 'k)))))
   }
 
   test("unary arithmetic expressions") {
