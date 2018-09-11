@@ -124,6 +124,8 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       handle: ShuffleHandle,
       mapId: Int,
       context: TaskContext): ShuffleWriter[K, V] = {
+    shuffleBlockResolver.registerShuffle(handle.shuffleId,
+      handle.asInstanceOf[BaseShuffleHandle[_, _, _]].numMaps)
     numMapsForShuffle.putIfAbsent(
       handle.shuffleId, handle.asInstanceOf[BaseShuffleHandle[_, _, _]].numMaps)
     val env = SparkEnv.get
