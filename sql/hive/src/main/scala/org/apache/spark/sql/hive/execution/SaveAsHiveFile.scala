@@ -51,7 +51,6 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       hadoopConf: Configuration,
       fileSinkConf: FileSinkDesc,
       outputLocation: String,
-      allColumns: Seq[Attribute],
       customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty,
       partitionAttributes: Seq[Attribute] = Nil): Set[String] = {
 
@@ -90,7 +89,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       fileFormat = new HiveFileFormat(fileSinkConf),
       committer = committer,
       outputSpec =
-        FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations, allColumns),
+        FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations, outputColumns),
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = None,

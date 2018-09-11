@@ -66,7 +66,7 @@ case class InsertIntoHiveDirCommand(
       identifier = TableIdentifier(storage.locationUri.get.toString, Some("default")),
       tableType = org.apache.spark.sql.catalyst.catalog.CatalogTableType.VIEW,
       storage = storage,
-      schema = query.schema
+      schema = outputColumns.toStructType
     ))
     hiveTable.getMetadata.put(serdeConstants.SERIALIZATION_LIB,
       storage.serde.getOrElse(classOf[LazySimpleSerDe].getName))
@@ -104,8 +104,7 @@ case class InsertIntoHiveDirCommand(
         plan = child,
         hadoopConf = hadoopConf,
         fileSinkConf = fileSinkConf,
-        outputLocation = tmpPath.toString,
-        allColumns = outputColumns)
+        outputLocation = tmpPath.toString)
 
       val fs = writeToPath.getFileSystem(hadoopConf)
       if (overwrite && fs.exists(writeToPath)) {
