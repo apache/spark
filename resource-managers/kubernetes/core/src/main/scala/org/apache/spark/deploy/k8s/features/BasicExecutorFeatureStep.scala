@@ -24,7 +24,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTIONS, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD}
+import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTIONS, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD, PYSPARK_EXECUTOR_MEMORY}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
@@ -58,6 +58,16 @@ private[spark] class BasicExecutorFeatureStep(
       (kubernetesConf.get(MEMORY_OVERHEAD_FACTOR) * executorMemoryMiB).toInt,
       MEMORY_OVERHEAD_MIN_MIB))
   private val executorMemoryWithOverhead = executorMemoryMiB + memoryOverheadMiB
+  private val executorMemoryTotal = kubernetesConf.sparkConf
+    .getOption(APP_RESOURCE_TYPE.key).map{ res =>
+      val additionalPySparkMemory = res match {
+        case "python" =>
+          kubernetesConf.sparkConf
+            .get(PYSPARK_EXECUTOR_MEMORY).map(_.toInt).getOrElse(0)
+        case _ => 0
+      }
+    executorMemoryWithOverhead + additionalPySparkMemory
+  }.getOrElse(executorMemoryWithOverhead)
 
   private val executorCores = kubernetesConf.sparkConf.getInt("spark.executor.cores", 1)
   private val executorCoresRequest =
@@ -76,7 +86,7 @@ private[spark] class BasicExecutorFeatureStep(
     // executorId
     val hostname = name.substring(Math.max(0, name.length - 63))
     val executorMemoryQuantity = new QuantityBuilder(false)
-      .withAmount(s"${executorMemoryWithOverhead}Mi")
+      .withAmount(s"${executorMemoryTotal}Mi")
       .build()
     val executorCpuQuantity = new QuantityBuilder(false)
       .withAmount(executorCoresRequest)

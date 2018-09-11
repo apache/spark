@@ -225,6 +225,22 @@ private[spark] object Config extends Logging {
         "Ensure that major Python version is either Python2 or Python3")
       .createWithDefault("2")
 
+  val APP_RESOURCE_TYPE =
+    ConfigBuilder("spark.kubernetes.resource.type")
+      .doc("This sets the resource type internally")
+      .internal()
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_LOCAL_DIRS_TMPFS =
+    ConfigBuilder("spark.kubernetes.local.dirs.tmpfs")
+      .doc("If set to true then emptyDir volumes created to back SPARK_LOCAL_DIRS will have " +
+        "their medium set to Memory so that they will be created as tmpfs (i.e. RAM) backed " +
+        "volumes. This may improve performance but scratch space usage will count towards " +
+        "your pods memory limit so you may wish to request more memory.")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 

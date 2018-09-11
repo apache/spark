@@ -85,14 +85,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
 
     val df5 = Seq((Seq("a", null), Seq(1, 2))).toDF("k", "v")
-    intercept[RuntimeException] {
+    val msg1 = intercept[Exception] {
       df5.select(map_from_arrays($"k", $"v")).collect
-    }
+    }.getMessage
+    assert(msg1.contains("Cannot use null as map key!"))
 
     val df6 = Seq((Seq(1, 2), Seq("a"))).toDF("k", "v")
-    intercept[RuntimeException] {
+    val msg2 = intercept[Exception] {
       df6.select(map_from_arrays($"k", $"v")).collect
-    }
+    }.getMessage
+    assert(msg2.contains("The given two arrays should have the same length"))
   }
 
   test("struct with column name") {
@@ -2377,7 +2379,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(ex2.getMessage.contains(
       "The number of lambda function arguments '3' does not match"))
 
-    val ex3 = intercept[RuntimeException] {
+    val ex3 = intercept[Exception] {
       dfExample1.selectExpr("transform_keys(i, (k, v) -> v)").show()
     }
     assert(ex3.getMessage.contains("Cannot use null as map key!"))
@@ -2675,8 +2677,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val funcsMustHaveAtLeastOneArg =
       ("coalesce", (df: DataFrame) => df.select(coalesce())) ::
       ("coalesce", (df: DataFrame) => df.selectExpr("coalesce()")) ::
-      ("named_struct", (df: DataFrame) => df.select(struct())) ::
-      ("named_struct", (df: DataFrame) => df.selectExpr("named_struct()")) ::
       ("hash", (df: DataFrame) => df.select(hash())) ::
       ("hash", (df: DataFrame) => df.selectExpr("hash()")) :: Nil
     funcsMustHaveAtLeastOneArg.foreach { case (name, func) =>
@@ -2697,7 +2697,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-24734: Fix containsNull of Concat for array type") {
     val df = Seq((Seq(1), Seq[Integer](null), Seq("a", "b"))).toDF("k1", "k2", "v")
-    val ex = intercept[RuntimeException] {
+    val ex = intercept[Exception] {
       df.select(map_from_arrays(concat($"k1", $"k2"), $"v")).show()
     }
     assert(ex.getMessage.contains("Cannot use null as map key"))

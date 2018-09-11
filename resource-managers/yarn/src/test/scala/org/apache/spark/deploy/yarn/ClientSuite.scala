@@ -191,7 +191,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     appContext.getQueue should be ("staging-queue")
     appContext.getAMContainerSpec should be (containerLaunchContext)
     appContext.getApplicationType should be ("SPARK")
-    appContext.getClass.getMethods.filter(_.getName.equals("getApplicationTags")).foreach{ method =>
+    appContext.getClass.getMethods.filter(_.getName == "getApplicationTags").foreach { method =>
       val tags = method.invoke(appContext).asInstanceOf[java.util.Set[String]]
       tags should contain allOf ("tag1", "dup", "tag2", "multi word")
       tags.asScala.count(_.nonEmpty) should be (4)

@@ -365,6 +365,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * `StructType(Seq(StructField("eventId", IntegerType), StructField("s", StringType)))`
    * will be converted to `eventId` INT, `s` STRING.
    * The returned DDL schema can be used in a table creation.
+   *
+   * @since 2.4.0
    */
   def toDDL: String = fields.map(_.toDDL).mkString(",")
 
@@ -441,6 +443,8 @@ object StructType extends AbstractDataType {
   /**
    * Creates StructType for a given DDL-formatted string, which is a comma separated list of field
    * definitions, e.g., a INT, b STRING.
+   *
+   * @since 2.2.0
    */
   def fromDDL(ddl: String): StructType = CatalystSqlParser.parseTableSchema(ddl)
 

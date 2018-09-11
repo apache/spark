@@ -2289,13 +2289,11 @@ def from_json(col, schema, options={}):
 @since(2.1)
 def to_json(col, options={}):
     """
-    Converts a column containing a :class:`StructType`, :class:`ArrayType` of
-    :class:`StructType`\\s, a :class:`MapType` or :class:`ArrayType` of :class:`MapType`\\s
+    Converts a column containing a :class:`StructType`, :class:`ArrayType` or a :class:`MapType`
     into a JSON string. Throws an exception, in the case of an unsupported type.
 
-    :param col: name of column containing the struct, array of the structs, the map or
-        array of the maps.
-    :param options: options to control converting. accepts the same options as the json datasource
+    :param col: name of column containing a struct, an array or a map.
+    :param options: options to control converting. accepts the same options as the JSON datasource
 
     >>> from pyspark.sql import Row
     >>> from pyspark.sql.types import *
@@ -2315,6 +2313,10 @@ def to_json(col, options={}):
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_json(df.value).alias("json")).collect()
     [Row(json=u'[{"name":"Alice"},{"name":"Bob"}]')]
+    >>> data = [(1, ["Alice", "Bob"])]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(to_json(df.value).alias("json")).collect()
+    [Row(json=u'["Alice","Bob"]')]
     """
 
     sc = SparkContext._active_spark_context
@@ -2718,8 +2720,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     1. SCALAR
 
        A scalar UDF defines a transformation: One or more `pandas.Series` -> A `pandas.Series`.
-       The returnType should be a primitive data type, e.g., :class:`DoubleType`.
        The length of the returned `pandas.Series` must be of the same as the input `pandas.Series`.
+
+       :class:`MapType`, :class:`StructType` are currently not supported as output types.
 
        Scalar UDFs are used with :meth:`pyspark.sql.DataFrame.withColumn` and
        :meth:`pyspark.sql.DataFrame.select`.
@@ -2781,14 +2784,14 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        +---+-------------------+
 
        Alternatively, the user can define a function that takes two arguments.
-       In this case, the grouping key will be passed as the first argument and the data will
-       be passed as the second argument. The grouping key will be passed as a tuple of numpy
+       In this case, the grouping key(s) will be passed as the first argument and the data will
+       be passed as the second argument. The grouping key(s) will be passed as a tuple of numpy
        data types, e.g., `numpy.int32` and `numpy.float64`. The data will still be passed in
        as a `pandas.DataFrame` containing all columns from the original Spark DataFrame.
-       This is useful when the user does not want to hardcode grouping key in the function.
+       This is useful when the user does not want to hardcode grouping key(s) in the function.
 
-       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> import pandas as pd  # doctest: +SKIP
+       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> df = spark.createDataFrame(
        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
        ...     ("id", "v"))  # doctest: +SKIP
@@ -2804,6 +2807,22 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        |  1|1.5|
        |  2|6.0|
        +---+---+
+       >>> @pandas_udf(
+       ...    "id long, `ceil(v / 2)` long, v double",
+       ...    PandasUDFType.GROUPED_MAP)  # doctest: +SKIP
+       >>> def sum_udf(key, pdf):
+       ...     # key is a tuple of two numpy.int64s, which is the values
+       ...     # of 'id' and 'ceil(df.v / 2)' for the current group
+       ...     return pd.DataFrame([key + (pdf.v.sum(),)])
+       >>> df.groupby(df.id, ceil(df.v / 2)).apply(sum_udf).show()  # doctest: +SKIP
+       +---+-----------+----+
+       | id|ceil(v / 2)|   v|
+       +---+-----------+----+
+       |  2|          5|10.0|
+       |  1|          1| 3.0|
+       |  2|          3| 5.0|
+       |  2|          2| 3.0|
+       +---+-----------+----+
 
        .. note:: If returning a new `pandas.DataFrame` constructed with a dictionary, it is
            recommended to explicitly index the columns by name to ensure the positions are correct,
