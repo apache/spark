@@ -185,7 +185,7 @@ class ParquetSchemaPruningSuite
     checkAnswer(query4, Row("Jane", "abc") :: Nil)
   }
 
-  testSchemaPruning("select nullable complex field and having is null predicate") {
+  testSchemaPruning("select nullable complex field and having is not null predicate") {
     val query = sql("select employer.company from contacts " +
       "where employer is not null and p = 1")
     checkScan(query, "struct<employer:struct<company:struct<name:string,address:string>>>")
@@ -300,10 +300,7 @@ class ParquetSchemaPruningSuite
 
   testMixedCasePruning("filter with different-case column names") {
     val query = sql("select id from mixedcase where Col2.b = 2")
-    // Pruning with filters is currently unsupported. As-is, the file reader will read the id column
-    // and the entire coL2 struct. Once pruning with filters has been implemented we can uncomment
-    // this line
-    // checkScan(query, "struct<id:int,coL2:struct<B:int>>")
+    checkScan(query, "struct<id:int,coL2:struct<B:int>>")
     checkAnswer(query.orderBy("id"), Row(1) :: Nil)
   }
 
