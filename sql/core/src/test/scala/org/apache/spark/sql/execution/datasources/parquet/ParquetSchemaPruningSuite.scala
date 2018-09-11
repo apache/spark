@@ -50,12 +50,14 @@ class ParquetSchemaPruningSuite
   val johnDoe = FullName("John", "Y.", "Doe")
   val susanSmith = FullName("Susan", "Z.", "Smith")
 
-  val company = Employer(0, Company("abc", "123 Business Street"))
+  val employer = Employer(0, Company("abc", "123 Business Street"))
+  val employerWithNullCompany = Employer(1, null)
 
   private val contacts =
     Contact(0, janeDoe, "123 Main Street", 1, friends = Array(susanSmith),
-      relatives = Map("brother" -> johnDoe), employer = company) ::
-    Contact(1, johnDoe, "321 Wall Street", 3, relatives = Map("sister" -> janeDoe)) :: Nil
+      relatives = Map("brother" -> johnDoe), employer = employer) ::
+    Contact(1, johnDoe, "321 Wall Street", 3, relatives = Map("sister" -> janeDoe),
+      employer = employerWithNullCompany) :: Nil
 
   case class Name(first: String, last: String)
   case class BriefContact(id: Int, name: Name, address: String)
@@ -181,6 +183,13 @@ class ParquetSchemaPruningSuite
     checkScan(query4, "struct<name:struct<first:string>," +
       "employer:struct<company:struct<name:string>>>")
     checkAnswer(query4, Row("Jane", "abc") :: Nil)
+  }
+
+  testSchemaPruning("select nullable complex field and having is null predicate") {
+    val query = sql("select employer.company from contacts " +
+      "where employer is not null and p = 1")
+    checkScan(query, "struct<employer:struct<company:struct<name:string,address:string>>>")
+    checkAnswer(query, Row(Row("abc", "123 Business Street")) :: Row(null) :: Nil)
   }
 
   testSchemaPruning("select a single complex field and is null expression in project") {
