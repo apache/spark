@@ -21,11 +21,11 @@ import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.sources.Filter;
 
 /**
- * A mix-in interface for {@link ScanConfigBuilder}. Data sources can implement this interface to
- * push down filters to the data source and reduce the size of the data to be read.
+ * A mix-in interface for {@link DataSourceReader}. Data source readers can implement this
+ * interface to push down filters to the data source and reduce the size of the data to be read.
  */
 @InterfaceStability.Evolving
-public interface SupportsPushDownFilters extends ScanConfigBuilder {
+public interface SupportsPushDownFilters extends DataSourceReader {
 
   /**
    * Pushes down filters, and returns filters that need to be evaluated after scanning.

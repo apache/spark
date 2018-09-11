@@ -21,6 +21,8 @@ import java.{util => ju}
 import java.io._
 import java.nio.charset.StandardCharsets
 
+import scala.collection.JavaConverters._
+
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark.SparkEnv
@@ -29,17 +31,16 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset, SimpleStreamingScanConfig, SimpleStreamingScanConfigBuilder}
-import org.apache.spark.sql.execution.streaming.sources.RateControlMicroBatchReadSupport
+import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
 import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset}
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.UninterruptibleThread
 
 /**
- * A [[MicroBatchReadSupport]] that reads data from Kafka.
+ * A [[MicroBatchReader]] that reads data from Kafka.
  *
  * The [[KafkaSourceOffset]] is the custom [[Offset]] defined for this source that contains
  * a map of TopicPartition -> offset. Note that this offset is 1 + (available offset). For
@@ -54,13 +55,17 @@ import org.apache.spark.util.UninterruptibleThread
  * To avoid this issue, you should make sure stopping the query before stopping the Kafka brokers
  * and not use wrong broker addresses.
  */
-private[kafka010] class KafkaMicroBatchReadSupport(
+private[kafka010] class KafkaMicroBatchReader(
     kafkaOffsetReader: KafkaOffsetReader,
     executorKafkaParams: ju.Map[String, Object],
     options: DataSourceOptions,
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
-    failOnDataLoss: Boolean) extends RateControlMicroBatchReadSupport with Logging {
+    failOnDataLoss: Boolean)
+  extends MicroBatchReader with Logging {
+
+  private var startPartitionOffsets: PartitionOffsetMap = _
+  private var endPartitionOffsets: PartitionOffsetMap = _
 
   private val pollTimeoutMs = options.getLong(
     "kafkaConsumer.pollTimeoutMs",
@@ -70,40 +75,34 @@ private[kafka010] class KafkaMicroBatchReadSupport(
     Option(options.get("maxOffsetsPerTrigger").orElse(null)).map(_.toLong)
 
   private val rangeCalculator = KafkaOffsetRangeCalculator(options)
-
-  private var endPartitionOffsets: KafkaSourceOffset = _
-
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
    * called in StreamExecutionThread. Otherwise, interrupting a thread while running
    * `KafkaConsumer.poll` may hang forever (KAFKA-1894).
    */
-  override def initialOffset(): Offset = {
-    KafkaSourceOffset(getOrCreateInitialPartitionOffsets())
+  private lazy val initialPartitionOffsets = getOrCreateInitialPartitionOffsets()
+
+  override def setOffsetRange(start: ju.Optional[Offset], end: ju.Optional[Offset]): Unit = {
+    // Make sure initialPartitionOffsets is initialized
+    initialPartitionOffsets
+
+    startPartitionOffsets = Option(start.orElse(null))
+        .map(_.asInstanceOf[KafkaSourceOffset].partitionToOffsets)
+        .getOrElse(initialPartitionOffsets)
+
+    endPartitionOffsets = Option(end.orElse(null))
+        .map(_.asInstanceOf[KafkaSourceOffset].partitionToOffsets)
+        .getOrElse {
+          val latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets()
+          maxOffsetsPerTrigger.map { maxOffsets =>
+            rateLimit(maxOffsets, startPartitionOffsets, latestPartitionOffsets)
+          }.getOrElse {
+            latestPartitionOffsets
+          }
+        }
   }
 
-  override def latestOffset(start: Offset): Offset = {
-    val startPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
-    val latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets()
-    endPartitionOffsets = KafkaSourceOffset(maxOffsetsPerTrigger.map { maxOffsets =>
-      rateLimit(maxOffsets, startPartitionOffsets, latestPartitionOffsets)
-    }.getOrElse {
-      latestPartitionOffsets
-    })
-    endPartitionOffsets
-  }
-
-  override def fullSchema(): StructType = KafkaOffsetReader.kafkaSchema
-
-  override def newScanConfigBuilder(start: Offset, end: Offset): ScanConfigBuilder = {
-    new SimpleStreamingScanConfigBuilder(fullSchema(), start, Some(end))
-  }
-
-  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
-    val sc = config.asInstanceOf[SimpleStreamingScanConfig]
-    val startPartitionOffsets = sc.start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
-    val endPartitionOffsets = sc.end.get.asInstanceOf[KafkaSourceOffset].partitionToOffsets
-
+  override def planInputPartitions(): ju.List[InputPartition[InternalRow]] = {
     // Find the new partitions, and get their earliest offsets
     val newPartitions = endPartitionOffsets.keySet.diff(startPartitionOffsets.keySet)
     val newPartitionInitialOffsets = kafkaOffsetReader.fetchEarliestOffsets(newPartitions.toSeq)
@@ -145,18 +144,25 @@ private[kafka010] class KafkaMicroBatchReadSupport(
 
     // Generate factories based on the offset ranges
     offsetRanges.map { range =>
-      KafkaMicroBatchInputPartition(
-        range, executorKafkaParams, pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer)
-    }.toArray
+      new KafkaMicroBatchInputPartition(
+        range, executorKafkaParams, pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer
+      ): InputPartition[InternalRow]
+    }.asJava
   }
 
-  override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
-    KafkaMicroBatchReaderFactory
+  override def getStartOffset: Offset = {
+    KafkaSourceOffset(startPartitionOffsets)
+  }
+
+  override def getEndOffset: Offset = {
+    KafkaSourceOffset(endPartitionOffsets)
   }
 
   override def deserializeOffset(json: String): Offset = {
     KafkaSourceOffset(JsonUtils.partitionOffsets(json))
   }
+
+  override def readSchema(): StructType = KafkaOffsetReader.kafkaSchema
 
   override def commit(end: Offset): Unit = {}
 
@@ -300,23 +306,22 @@ private[kafka010] case class KafkaMicroBatchInputPartition(
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean,
-    reuseKafkaConsumer: Boolean) extends InputPartition
+    reuseKafkaConsumer: Boolean) extends InputPartition[InternalRow] {
 
-private[kafka010] object KafkaMicroBatchReaderFactory extends PartitionReaderFactory {
-  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
-    val p = partition.asInstanceOf[KafkaMicroBatchInputPartition]
-    KafkaMicroBatchPartitionReader(p.offsetRange, p.executorKafkaParams, p.pollTimeoutMs,
-      p.failOnDataLoss, p.reuseKafkaConsumer)
-  }
+  override def preferredLocations(): Array[String] = offsetRange.preferredLoc.toArray
+
+  override def createPartitionReader(): InputPartitionReader[InternalRow] =
+    new KafkaMicroBatchInputPartitionReader(offsetRange, executorKafkaParams, pollTimeoutMs,
+      failOnDataLoss, reuseKafkaConsumer)
 }
 
-/** A [[PartitionReader]] for reading Kafka data in a micro-batch streaming query. */
-private[kafka010] case class KafkaMicroBatchPartitionReader(
+/** A [[InputPartitionReader]] for reading Kafka data in a micro-batch streaming query. */
+private[kafka010] case class KafkaMicroBatchInputPartitionReader(
     offsetRange: KafkaOffsetRange,
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean,
-    reuseKafkaConsumer: Boolean) extends PartitionReader[InternalRow] with Logging {
+    reuseKafkaConsumer: Boolean) extends InputPartitionReader[InternalRow] with Logging {
 
   private val consumer = KafkaDataConsumer.acquire(
     offsetRange.topicPartition, executorKafkaParams, reuseKafkaConsumer)

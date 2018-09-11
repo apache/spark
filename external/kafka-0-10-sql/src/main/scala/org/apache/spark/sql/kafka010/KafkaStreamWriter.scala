@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.kafka010.KafkaWriter.validateQuery
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWriteSupport}
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -33,20 +33,20 @@ import org.apache.spark.sql.types.StructType
 case object KafkaWriterCommitMessage extends WriterCommitMessage
 
 /**
- * A [[StreamingWriteSupport]] for Kafka writing. Responsible for generating the writer factory.
+ * A [[StreamWriter]] for Kafka writing. Responsible for generating the writer factory.
  *
  * @param topic The topic this writer is responsible for. If None, topic will be inferred from
  *              a `topic` field in the incoming data.
  * @param producerParams Parameters for Kafka producers in each task.
  * @param schema The schema of the input data.
  */
-class KafkaStreamingWriteSupport(
+class KafkaStreamWriter(
     topic: Option[String], producerParams: Map[String, String], schema: StructType)
-  extends StreamingWriteSupport {
+  extends StreamWriter {
 
   validateQuery(schema.toAttributes, producerParams.toMap[String, Object].asJava, topic)
 
-  override def createStreamingWriterFactory(): KafkaStreamWriterFactory =
+  override def createWriterFactory(): KafkaStreamWriterFactory =
     KafkaStreamWriterFactory(topic, producerParams, schema)
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
@@ -63,9 +63,9 @@ class KafkaStreamingWriteSupport(
  */
 case class KafkaStreamWriterFactory(
     topic: Option[String], producerParams: Map[String, String], schema: StructType)
-  extends StreamingDataWriterFactory {
+  extends DataWriterFactory[InternalRow] {
 
-  override def createWriter(
+  override def createDataWriter(
       partitionId: Int,
       taskId: Long,
       epochId: Long): DataWriter[InternalRow] = {

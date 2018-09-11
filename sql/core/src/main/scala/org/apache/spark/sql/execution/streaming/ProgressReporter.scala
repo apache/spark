@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalP
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExec
-import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReadSupport
+import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.util.Clock
@@ -251,7 +251,7 @@ trait ProgressReporter extends Logging {
       // Check whether the streaming query's logical plan has only V2 data sources
       val allStreamingLeaves =
         logicalPlan.collect { case s: StreamingExecutionRelation => s }
-      allStreamingLeaves.forall { _.source.isInstanceOf[MicroBatchReadSupport] }
+      allStreamingLeaves.forall { _.source.isInstanceOf[MicroBatchReader] }
     }
 
     if (onlyDataSourceV2Sources) {
@@ -278,7 +278,7 @@ trait ProgressReporter extends Logging {
         new IdentityHashMap[DataSourceV2ScanExec, DataSourceV2ScanExec]()
 
       lastExecution.executedPlan.collectLeaves().foreach {
-        case s: DataSourceV2ScanExec if s.readSupport.isInstanceOf[BaseStreamingSource] =>
+        case s: DataSourceV2ScanExec if s.reader.isInstanceOf[BaseStreamingSource] =>
           uniqueStreamingExecLeavesMap.put(s, s)
         case _ =>
       }
@@ -286,7 +286,7 @@ trait ProgressReporter extends Logging {
       val sourceToInputRowsTuples =
         uniqueStreamingExecLeavesMap.values.asScala.map { execLeaf =>
           val numRows = execLeaf.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
-          val source = execLeaf.readSupport.asInstanceOf[BaseStreamingSource]
+          val source = execLeaf.reader.asInstanceOf[BaseStreamingSource]
           source -> numRows
         }.toSeq
       logDebug("Source -> # input rows\n\t" + sourceToInputRowsTuples.mkString("\n\t"))
