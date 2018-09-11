@@ -213,7 +213,7 @@ class ParquetSchemaPruningSuite
     MixedCase(1, "r1c1", MixedCaseColumn("123", 2)) ::
     Nil
 
-  testMixedCasePruning("select with exact column names") {
+  testExactCasePruning("select with exact column names") {
     val query = sql("select CoL1, coL2.B from mixedcase")
     checkScan(query, "struct<CoL1:string,coL2:struct<B:int>>")
     checkAnswer(query.orderBy("id"),
@@ -249,13 +249,23 @@ class ParquetSchemaPruningSuite
     checkAnswer(query.orderBy("id"), Row(1) :: Nil)
   }
 
-  private def testMixedCasePruning(testName: String)(testThunk: => Unit) {
+  private def testExactCasePruning(testName: String)(testThunk: => Unit) {
     test(s"Spark vectorized reader - case-sensitive parser - mixed-case schema - $testName") {
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
         SQLConf.CASE_SENSITIVE.key -> "true") {
         withMixedCaseData(testThunk)
       }
     }
+    test(s"Parquet-mr reader - case-sensitive parser - mixed-case schema - $testName") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
+        SQLConf.CASE_SENSITIVE.key -> "true") {
+        withMixedCaseData(testThunk)
+      }
+    }
+    testMixedCasePruning(testName)(testThunk)
+  }
+
+  private def testMixedCasePruning(testName: String)(testThunk: => Unit) {
     test(s"Parquet-mr reader - case-insensitive parser - mixed-case schema - $testName") {
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
         SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -265,12 +275,6 @@ class ParquetSchemaPruningSuite
     test(s"Spark vectorized reader - case-insensitive parser - mixed-case schema - $testName") {
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
         SQLConf.CASE_SENSITIVE.key -> "false") {
-        withMixedCaseData(testThunk)
-      }
-    }
-    test(s"Parquet-mr reader - case-sensitive parser - mixed-case schema - $testName") {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
-        SQLConf.CASE_SENSITIVE.key -> "true") {
         withMixedCaseData(testThunk)
       }
     }
