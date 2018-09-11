@@ -156,20 +156,24 @@ class ParquetSchemaPruningSuite
   }
 
   private def testSchemaPruning(testName: String)(testThunk: => Unit) {
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-      test(s"Spark vectorized reader - without partition data column - $testName") {
+    test(s"Spark vectorized reader - without partition data column - $testName") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
         withContacts(testThunk)
       }
-      test(s"Spark vectorized reader - with partition data column - $testName") {
+    }
+    test(s"Spark vectorized reader - with partition data column - $testName") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
         withContactsWithDataPartitionColumn(testThunk)
       }
     }
 
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-      test(s"Parquet-mr reader - without partition data column - $testName") {
+    test(s"Parquet-mr reader - without partition data column - $testName") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         withContacts(testThunk)
       }
-      test(s"Parquet-mr reader - with partition data column - $testName") {
+    }
+    test(s"Parquet-mr reader - with partition data column - $testName") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         withContactsWithDataPartitionColumn(testThunk)
       }
     }
@@ -246,27 +250,27 @@ class ParquetSchemaPruningSuite
   }
 
   private def testMixedCasePruning(testName: String)(testThunk: => Unit) {
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
-      SQLConf.CASE_SENSITIVE.key -> "true") {
-      test(s"Spark vectorized reader - case-sensitive parser - mixed-case schema - $testName") {
-          withMixedCaseData(testThunk)
-      }
-    }
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
-      SQLConf.CASE_SENSITIVE.key -> "false") {
-      test(s"Parquet-mr reader - case-insensitive parser - mixed-case schema - $testName") {
+    test(s"Spark vectorized reader - case-sensitive parser - mixed-case schema - $testName") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "true") {
         withMixedCaseData(testThunk)
       }
     }
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
-      SQLConf.CASE_SENSITIVE.key -> "false") {
-      test(s"Spark vectorized reader - case-insensitive parser - mixed-case schema - $testName") {
-          withMixedCaseData(testThunk)
+    test(s"Parquet-mr reader - case-insensitive parser - mixed-case schema - $testName") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
+        SQLConf.CASE_SENSITIVE.key -> "false") {
+        withMixedCaseData(testThunk)
       }
     }
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
-      SQLConf.CASE_SENSITIVE.key -> "true") {
-      test(s"Parquet-mr reader - case-sensitive parser - mixed-case schema - $testName") {
+    test(s"Spark vectorized reader - case-insensitive parser - mixed-case schema - $testName") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "false") {
+        withMixedCaseData(testThunk)
+      }
+    }
+    test(s"Parquet-mr reader - case-sensitive parser - mixed-case schema - $testName") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
+        SQLConf.CASE_SENSITIVE.key -> "true") {
         withMixedCaseData(testThunk)
       }
     }
