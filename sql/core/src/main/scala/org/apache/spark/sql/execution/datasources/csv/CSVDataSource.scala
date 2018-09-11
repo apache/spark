@@ -240,27 +240,25 @@ object TextInputCSVDataSource extends CSVDataSource {
       sparkSession: SparkSession,
       csv: Dataset[String],
       maybeFirstLine: Option[String],
-      parsedOptions: CSVOptions): StructType = maybeFirstLine match {
-    case Some(firstLine) =>
-      val firstRow = new CsvParser(parsedOptions.asParserSettings).parseLine(firstLine)
-      if (firstRow != null) {
+      parsedOptions: CSVOptions): StructType = {
+    val csvParser = new CsvParser(parsedOptions.asParserSettings)
+    maybeFirstLine.map(csvParser.parseLine(_)) match {
+      case Some(firstRow) if firstRow != null =>
         val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
         val header = makeSafeHeader(firstRow, caseSensitive, parsedOptions)
         val sampled: Dataset[String] = CSVUtils.sample(csv, parsedOptions)
         val tokenRDD = sampled.rdd.mapPartitions { iter =>
           val filteredLines = CSVUtils.filterCommentAndEmpty(iter, parsedOptions)
           val linesWithoutHeader =
-            CSVUtils.filterHeaderLine(filteredLines, firstLine, parsedOptions)
+            CSVUtils.filterHeaderLine(filteredLines, maybeFirstLine.get, parsedOptions)
           val parser = new CsvParser(parsedOptions.asParserSettings)
           linesWithoutHeader.map(parser.parseLine)
         }
         CSVInferSchema.infer(tokenRDD, header, parsedOptions)
-      } else {
+      case _ =>
+        // If the first line could not be read, just return the empty schema.
         StructType(Nil)
-      }
-    case None =>
-      // If the first line could not be read, just return the empty schema.
-      StructType(Nil)
+    }
   }
 
   private def createBaseDataset(
