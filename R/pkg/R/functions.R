@@ -3740,3 +3740,4 @@ setMethod("from_csv", signature(x = "Column", schema = "character"),
                               x@jc, schema, options)
             column(jc)
           })
+
