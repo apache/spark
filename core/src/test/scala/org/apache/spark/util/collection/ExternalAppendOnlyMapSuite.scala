@@ -17,8 +17,6 @@
 
 package org.apache.spark.util.collection
 
-import java.util.Objects
-
 import scala.collection.mutable.ArrayBuffer
 import scala.ref.WeakReference
 
@@ -509,7 +507,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     .sorted
 
     assert(it.isEmpty)
-    assert(keys == (0 until 100))
+    assert(keys == (0 until 100).toList)
 
     assert(map.numSpills == 0)
     // these asserts try to show that we're no longer holding references to the underlying map.

@@ -175,7 +175,7 @@ private[spark] object ClosureCleaner extends Logging {
       closure.getClass.isSynthetic &&
         closure
           .getClass
-          .getInterfaces.exists(_.getName.equals("scala.Serializable"))
+          .getInterfaces.exists(_.getName == "scala.Serializable")
 
     if (isClosureCandidate) {
       try {
