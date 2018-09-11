@@ -575,7 +575,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, _: Distinct) => p
     // Eliminate unneeded attributes from children of Union.
     case p @ Project(_, u: Union) =>
-      if ((u.outputSet -- p.references).nonEmpty) {
+      if (!u.outputSet.subsetOf(p.references)) {
         val firstChild = u.children.head
         val newOutput = prunedChild(firstChild, p.references).output
         // pruning the columns of all children based on the pruned first child.
@@ -607,7 +607,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // for all other logical plans that inherits the output from it's children
     case p @ Project(_, child) =>
       val required = child.references ++ p.references
-      if ((child.inputSet -- required).nonEmpty) {
+      if (!child.inputSet.subsetOf(required)) {
         val newChildren = child.children.map(c => prunedChild(c, required))
         p.copy(child = child.withNewChildren(newChildren))
       } else {
@@ -617,7 +617,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
   /** Applies a projection only when the child is producing unnecessary attributes */
   private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =
-    if ((c.outputSet -- allReferences.filter(c.outputSet.contains)).nonEmpty) {
+    if (!c.outputSet.subsetOf(allReferences)) {
       Project(c.output.filter(allReferences.contains), c)
     } else {
       c
