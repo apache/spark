@@ -196,10 +196,10 @@ NULL
 #'          \item \code{array_position}: a value to locate in the given array.
 #'          \item \code{array_remove}: a value to remove in the given array.
 #'          }
-#' @param ... additional argument(s). In \code{to_json} and \code{from_json}, this contains
-#'            additional named properties to control how it is converted, accepts the same
-#'            options as the JSON data source.  In \code{arrays_zip}, this contains additional
-#'            Columns of arrays to be merged.
+#' @param ... additional argument(s). In \code{to_json}, \code{from_json} and \code{from_csv},
+#'            this contains additional named properties to control how it is converted, accepts
+#'            the same options as the JSON and CSV data source.  In \code{arrays_zip},
+#'            this contains additional Columns of arrays to be merged.
 #' @name column_collection_functions
 #' @rdname column_collection_functions
 #' @family collection functions
