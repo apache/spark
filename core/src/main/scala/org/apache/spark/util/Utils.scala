@@ -19,7 +19,6 @@ package org.apache.spark.util
 
 import java.io._
 import java.lang.{Byte => JByte}
-import java.lang.InternalError
 import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
 import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
@@ -2052,6 +2051,30 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /**
+   * Implements the same logic as JDK `java.lang.String#trim` by removing leading and trailing
+   * non-printable characters less or equal to '\u0020' (SPACE) but preserves natural line
+   * delimiters according to [[java.util.Properties]] load method. The natural line delimiters are
+   * removed by JDK during load. Therefore any remaining ones have been specifically provided and
+   * escaped by the user, and must not be ignored
+   *
+   * @param str
+   * @return the trimmed value of str
+   */
+  private[util] def trimExceptCRLF(str: String): String = {
+    val nonSpaceOrNaturalLineDelimiter: Char => Boolean = { ch =>
+      ch > ' ' || ch == '\r' || ch == '\n'
+    }
+
+    val firstPos = str.indexWhere(nonSpaceOrNaturalLineDelimiter)
+    val lastPos = str.lastIndexWhere(nonSpaceOrNaturalLineDelimiter)
+    if (firstPos >= 0 && lastPos >= 0) {
+      str.substring(firstPos, lastPos + 1)
+    } else {
+      ""
+    }
+  }
+
   /** Load properties present in the given file. */
   def getPropertiesFromFile(filename: String): Map[String, String] = {
     val file = new File(filename)
@@ -2062,8 +2085,10 @@ private[spark] object Utils extends Logging {
     try {
       val properties = new Properties()
       properties.load(inReader)
-      properties.stringPropertyNames().asScala.map(
-        k => (k, properties.getProperty(k).trim)).toMap
+      properties.stringPropertyNames().asScala
+        .map { k => (k, trimExceptCRLF(properties.getProperty(k))) }
+        .toMap
+
     } catch {
       case e: IOException =>
         throw new SparkException(s"Failed when loading Spark properties from $filename", e)
