@@ -188,6 +188,7 @@ NULL
 #'          \item \code{to_json}: it is the column containing the struct, array of the structs,
 #'              the map or array of maps.
 #'          \item \code{from_json}: it is the column containing the JSON string.
+#'          \item \code{from_csv}: it is the column containing the CSV string.
 #'          }
 #' @param y Column to compute on.
 #' @param value A value to compute on.
@@ -2203,6 +2204,25 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructType")
           })
 
 #' @details
+#' \code{from_csv}: Parses a column containing a CSV string into a Column of \code{structType}
+#' with the specified \code{schema}.
+#' If the string is unparseable, the Column will contain the value NA.
+#'
+#' @rdname column_collection_functions
+#' @param schema a DDL-formatted string
+#' @aliases from_csv from_csv,Column,character-method
+#'
+#' @note from_csv since 3.0.0
+setMethod("from_csv", signature(x = "Column", schema = "character"),
+          function(x, schema, ...) {
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "from_csv",
+                              x@jc, schema, options)
+            column(jc)
+          })
+
+#' @details
 #' \code{from_utc_timestamp}: Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a
 #' time in UTC, and renders that time as a timestamp in the given time zone. For example, 'GMT+1'
 #' would yield '2017-07-14 03:40:00.0'.
@@ -3720,24 +3740,3 @@ setMethod("current_timestamp",
             jc <- callJStatic("org.apache.spark.sql.functions", "current_timestamp")
             column(jc)
           })
-
-#' @details
-#' \code{from_csv}: Parses a column containing a CSV string into a Column of \code{structType}
-#' with the specified \code{schema}.
-#' If the string is unparseable, the Column will contain the value NA.
-#'
-#' @rdname column_collection_functions
-#' @param schema a DDL-formatted string
-#' @param ... options for CSV parser. Supported the same options as for CSV data source
-#' @aliases from_csv from_csv,Column,character-method
-#'
-#' @note from_csv since 3.0.0
-setMethod("from_csv", signature(x = "Column", schema = "character"),
-          function(x, schema, ...) {
-            options <- varargsToStrEnv(...)
-            jc <- callJStatic("org.apache.spark.sql.functions",
-                              "from_csv",
-                              x@jc, schema, options)
-            column(jc)
-          })
-
