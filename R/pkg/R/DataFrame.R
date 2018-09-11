@@ -3929,11 +3929,11 @@ setMethod("hint",
           signature(x = "SparkDataFrame", name = "character"),
           function(x, name, ...) {
             parameters <- list(...)
-            stopifnot(all(sapply(parameters, function(x) {
-              if (is.character(x) || is.numeric(x)) {
+            stopifnot(all(sapply(parameters, function(y) {
+              if (is.character(y) || is.numeric(y)) {
                 TRUE
-              } else if (is.list(x)) {
-                all(sapply(x, function(y) { is.character(y) || is.numeric(y) }))
+              } else if (is.list(y)) {
+                all(sapply(y, function(z) { is.character(z) || is.numeric(z) }))
               } else {
                 FALSE
               }
