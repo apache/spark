@@ -541,6 +541,10 @@ private class LiveRDD(val info: RDDInfo) extends LiveEntity {
     distributions.get(exec.executorId)
   }
 
+  def getPartitions(): scala.collection.Map[String, LiveRDDPartition] = partitions
+
+  def getDistributions(): scala.collection.Map[String, LiveRDDDistribution] = distributions
+
   override protected def doUpdate(): Any = {
     val dists = if (distributions.nonEmpty) {
       Some(distributions.values.map(_.toApi()).toSeq)
