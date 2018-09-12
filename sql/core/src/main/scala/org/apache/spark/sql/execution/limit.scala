@@ -98,7 +98,8 @@ case class LocalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode wi
 /**
  * Take the `limit` elements of the child output.
  */
-case class GlobalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
+case class GlobalLimitExec(limit: Int, child: SparkPlan,
+                           orderedLimit: Boolean = false) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
 
@@ -126,7 +127,9 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
     // When enabled, Spark goes to take rows at each partition repeatedly until reaching
     // limit number. When disabled, Spark takes all rows at first partition, then rows
     // at second partition ..., until reaching limit number.
-    val flatGlobalLimit = sqlContext.conf.limitFlatGlobalLimit
+    // The optimization is disabled when it is needed to keep the original order of rows
+    // before global sort, e.g., select * from table order by col limit 10.
+    val flatGlobalLimit = sqlContext.conf.limitFlatGlobalLimit && !orderedLimit
 
     val shuffled = new ShuffledRowRDD(shuffleDependency)
 

@@ -31,7 +31,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
-import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{FilterExec, QueryExecution, TakeOrderedAndProjectExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
@@ -2549,6 +2549,26 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val df = spark.read.json(path.getCanonicalPath)
       assert(df.columns === Array("i", "p"))
       assert(numJobs == 1)
+    }
+  }
+
+  test("SPARK-25352: Ordered global limit when more than topKSortFallbackThreshold ") {
+    withSQLConf(SQLConf.LIMIT_FLAT_GLOBAL_LIMIT.key -> "true") {
+      val baseDf = spark.range(1000).toDF.repartition(3).sort("id")
+
+      withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "100") {
+        val expected = baseDf.limit(99)
+        val takeOrderedNode1 = expected.queryExecution.executedPlan
+          .find(_.isInstanceOf[TakeOrderedAndProjectExec])
+        assert(takeOrderedNode1.isDefined)
+
+        val result = baseDf.limit(100)
+        val takeOrderedNode2 = result.queryExecution.executedPlan
+          .find(_.isInstanceOf[TakeOrderedAndProjectExec])
+        assert(takeOrderedNode2.isEmpty)
+
+        checkAnswer(expected, result.collect().take(99))
+      }
     }
   }
 
