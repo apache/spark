@@ -1046,6 +1046,31 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
 
     checkAnswer(
+      df.selectExpr("array_position(array(1), 1.23D)"),
+      Seq(Row(0L), Row(0L))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_position(array(1), 1.0D)"),
+      Seq(Row(1L), Row(1L))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_position(array(1.23D), 1)"),
+      Seq(Row(0L), Row(0L))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_position(array(array(1)), array(1.0D))"),
+      Seq(Row(1L), Row(1L))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_position(array(array(1)), array(1.23D))"),
+      Seq(Row(0L), Row(0L))
+    )
+
+    checkAnswer(
       df.selectExpr("array_position(array(array(1), null)[0], 1)"),
       Seq(Row(1L), Row(1L))
     )
@@ -1054,10 +1079,25 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(1L), Row(1L))
     )
 
-    val e = intercept[AnalysisException] {
+    val e1 = intercept[AnalysisException] {
       Seq(("a string element", "a")).toDF().selectExpr("array_position(_1, _2)")
     }
-    assert(e.message.contains("argument 1 requires array type, however, '`_1`' is of string type"))
+    val errorMsg1 =
+      s"""
+         |Input to function array_position should have been array followed by a
+         |value with same element type, but it's [string, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e1.message.contains(errorMsg1))
+
+    val e2 = intercept[AnalysisException] {
+        df.selectExpr("array_position(array(1), '1')")
+    }
+    val errorMsg2 =
+      s"""
+         |Input to function array_position should have been array followed by a
+         |value with same element type, but it's [array<int>, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e2.message.contains(errorMsg2))
   }
 
   test("element_at function") {
