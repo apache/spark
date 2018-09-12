@@ -43,7 +43,7 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
 
   test("streaming writer") {
     val sink = new MemorySinkV2
-    val writeSupport = new MemoryStreamingWriteSupport(
+    val writeSupport = new MemoryStreamWriter(
       sink, OutputMode.Append(), new StructType().add("i", "int"))
     writeSupport.commit(0,
       Array(

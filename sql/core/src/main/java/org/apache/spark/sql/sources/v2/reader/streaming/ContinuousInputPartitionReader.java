@@ -15,26 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.sources.v2.reader.streaming;
 
-import org.apache.spark.sql.sources.v2.reader.{ScanConfig, ScanConfigBuilder}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.sources.v2.reader.InputPartitionReader;
 
 /**
- * A very simple [[ScanConfigBuilder]] implementation that creates a simple [[ScanConfig]] to
- * carry schema and offsets for streaming data sources.
+ * A variation on {@link InputPartitionReader} for use with streaming in continuous processing mode.
  */
-class SimpleStreamingScanConfigBuilder(
-    schema: StructType,
-    start: Offset,
-    end: Option[Offset] = None)
-  extends ScanConfigBuilder {
-
-  override def build(): ScanConfig = SimpleStreamingScanConfig(schema, start, end)
+@InterfaceStability.Evolving
+public interface ContinuousInputPartitionReader<T> extends InputPartitionReader<T> {
+    /**
+     * Get the offset of the current record, or the start offset if no records have been read.
+     *
+     * The execution engine will call this method along with get() to keep track of the current
+     * offset. When an epoch ends, the offset of the previous record in each partition will be saved
+     * as a restart checkpoint.
+     */
+    PartitionOffset getOffset();
 }
-
-case class SimpleStreamingScanConfig(
-    readSchema: StructType,
-    start: Offset,
-    end: Option[Offset])
-  extends ScanConfig

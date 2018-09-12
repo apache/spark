@@ -20,9 +20,10 @@ package org.apache.spark.sql.execution.streaming.continuous
 import java.io.{BufferedReader, InputStreamReader, IOException}
 import java.net.Socket
 import java.sql.Timestamp
-import java.util.Calendar
+import java.util.{Calendar, List => JList}
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 
 import org.json4s.{DefaultFormats, NoTypeHints}
@@ -33,26 +34,24 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.streaming.{Offset => _, _}
+import org.apache.spark.sql.execution.streaming.{ContinuousRecordEndpoint, ContinuousRecordPartitionOffset, GetRecord}
 import org.apache.spark.sql.execution.streaming.sources.TextSocketReader
 import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming._
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousInputPartitionReader, ContinuousReader, Offset, PartitionOffset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.RpcUtils
 
 
 /**
- * A ContinuousReadSupport that reads text lines through a TCP socket, designed only for tutorials
- * and debugging. This ContinuousReadSupport will *not* work in production applications due to
- * multiple reasons, including no support for fault recovery.
+ * A ContinuousReader that reads text lines through a TCP socket, designed only for tutorials and
+ * debugging. This ContinuousReader will *not* work in production applications due to multiple
+ * reasons, including no support for fault recovery.
  *
  * The driver maintains a socket connection to the host-port, keeps the received messages in
  * buckets and serves the messages to the executors via a RPC endpoint.
  */
-class TextSocketContinuousReadSupport(options: DataSourceOptions)
-  extends ContinuousReadSupport with Logging {
-
+class TextSocketContinuousReader(options: DataSourceOptions) extends ContinuousReader with Logging {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
   private val host: String = options.get("host").get()
@@ -74,8 +73,7 @@ class TextSocketContinuousReadSupport(options: DataSourceOptions)
   @GuardedBy("this")
   private var currentOffset: Int = -1
 
-  // Exposed for tests.
-  private[spark] var startOffset: TextSocketOffset = _
+  private var startOffset: TextSocketOffset = _
 
   private val recordEndpoint = new ContinuousRecordEndpoint(buckets, this)
   @volatile private var endpointRef: RpcEndpointRef = _
@@ -96,16 +94,16 @@ class TextSocketContinuousReadSupport(options: DataSourceOptions)
     TextSocketOffset(Serialization.read[List[Int]](json))
   }
 
-  override def initialOffset(): Offset = {
-    startOffset = TextSocketOffset(List.fill(numPartitions)(0))
-    startOffset
+  override def setStartOffset(offset: java.util.Optional[Offset]): Unit = {
+    this.startOffset = offset
+      .orElse(TextSocketOffset(List.fill(numPartitions)(0)))
+      .asInstanceOf[TextSocketOffset]
+    recordEndpoint.setStartOffsets(startOffset.offsets)
   }
 
-  override def newScanConfigBuilder(start: Offset): ScanConfigBuilder = {
-    new SimpleStreamingScanConfigBuilder(fullSchema(), start)
-  }
+  override def getStartOffset: Offset = startOffset
 
-  override def fullSchema(): StructType = {
+  override def readSchema(): StructType = {
     if (includeTimestamp) {
       TextSocketReader.SCHEMA_TIMESTAMP
     } else {
@@ -113,10 +111,8 @@ class TextSocketContinuousReadSupport(options: DataSourceOptions)
     }
   }
 
-  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
-    val startOffset = config.asInstanceOf[SimpleStreamingScanConfig]
-      .start.asInstanceOf[TextSocketOffset]
-    recordEndpoint.setStartOffsets(startOffset.offsets)
+  override def planInputPartitions(): JList[InputPartition[InternalRow]] = {
+
     val endpointName = s"TextSocketContinuousReaderEndpoint-${java.util.UUID.randomUUID()}"
     endpointRef = recordEndpoint.rpcEnv.setupEndpoint(endpointName, recordEndpoint)
 
@@ -136,13 +132,10 @@ class TextSocketContinuousReadSupport(options: DataSourceOptions)
 
     startOffset.offsets.zipWithIndex.map {
       case (offset, i) =>
-        TextSocketContinuousInputPartition(endpointName, i, offset, includeTimestamp)
-    }.toArray
-  }
+        TextSocketContinuousInputPartition(
+          endpointName, i, offset, includeTimestamp): InputPartition[InternalRow]
+    }.asJava
 
-  override def createContinuousReaderFactory(
-      config: ScanConfig): ContinuousPartitionReaderFactory = {
-    TextSocketReaderFactory
   }
 
   override def commit(end: Offset): Unit = synchronized {
@@ -197,7 +190,7 @@ class TextSocketContinuousReadSupport(options: DataSourceOptions)
               logWarning(s"Stream closed by $host:$port")
               return
             }
-            TextSocketContinuousReadSupport.this.synchronized {
+            TextSocketContinuousReader.this.synchronized {
               currentOffset += 1
               val newData = (line,
                 Timestamp.valueOf(
@@ -228,30 +221,25 @@ case class TextSocketContinuousInputPartition(
     driverEndpointName: String,
     partitionId: Int,
     startOffset: Int,
-    includeTimestamp: Boolean) extends InputPartition
+    includeTimestamp: Boolean)
+extends InputPartition[InternalRow] {
 
-
-object TextSocketReaderFactory extends ContinuousPartitionReaderFactory {
-
-  override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
-    val p = partition.asInstanceOf[TextSocketContinuousInputPartition]
-    new TextSocketContinuousPartitionReader(
-      p.driverEndpointName, p.partitionId, p.startOffset, p.includeTimestamp)
-  }
+  override def createPartitionReader(): InputPartitionReader[InternalRow] =
+    new TextSocketContinuousInputPartitionReader(driverEndpointName, partitionId, startOffset,
+      includeTimestamp)
 }
-
 
 /**
  * Continuous text socket input partition reader.
  *
  * Polls the driver endpoint for new records.
  */
-class TextSocketContinuousPartitionReader(
+class TextSocketContinuousInputPartitionReader(
     driverEndpointName: String,
     partitionId: Int,
     startOffset: Int,
     includeTimestamp: Boolean)
-  extends ContinuousPartitionReader[InternalRow] {
+  extends ContinuousInputPartitionReader[InternalRow] {
 
   private val endpoint = RpcUtils.makeDriverRef(
     driverEndpointName,
