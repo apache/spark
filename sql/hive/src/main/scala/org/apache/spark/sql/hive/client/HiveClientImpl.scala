@@ -466,7 +466,7 @@ private[hive] class HiveClientImpl(
         // For EXTERNAL_TABLE, the table properties has a particular field "EXTERNAL". This is added
         // in the function toHiveTable.
         properties = filteredProperties,
-        stats = readHiveStats(properties, Option(h.getSerializationLib)),
+        stats = readHiveStats(properties),
         comment = comment,
         // In older versions of Spark(before 2.2.0), we expand the view original text and
         // store that into `viewExpandedText`, that should be used in view resolution.
@@ -1035,17 +1035,14 @@ private[hive] object HiveClientImpl {
       createTime = apiPartition.getCreateTime.toLong * 1000,
       lastAccessTime = apiPartition.getLastAccessTime.toLong * 1000,
       parameters = properties,
-      stats = readHiveStats(properties,
-        Option(apiPartition.getSd.getSerdeInfo.getSerializationLib)))
+      stats = readHiveStats(properties))
   }
 
   /**
    * Reads statistics from Hive.
    * Note that this statistics could be overridden by Spark's statistics if that's available.
    */
-  private def readHiveStats(
-          properties: Map[String, String],
-          serde: Option[String] = None): Option[CatalogStatistics] = {
+  private def readHiveStats(properties: Map[String, String]): Option[CatalogStatistics] = {
     val totalSize = properties.get(StatsSetupConst.TOTAL_SIZE).map(BigInt(_))
     val rawDataSize = properties.get(StatsSetupConst.RAW_DATA_SIZE).map(BigInt(_))
     val rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_))
