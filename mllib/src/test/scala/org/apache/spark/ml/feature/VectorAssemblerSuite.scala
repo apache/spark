@@ -149,10 +149,8 @@ class VectorAssemblerSuite
   }
 
   test("SPARK-25371: VectorAssembler with empty inputCols") {
-    val inputDF = Seq(
-      (1, Vectors.dense(1.0, 2.0)), (2, Vectors.sparse(2, Array(1), Array(3.0)))).toDF("i", "v")
     val vectorAssembler = new VectorAssembler().setInputCols(Array()).setOutputCol("a")
-    val output = vectorAssembler.transform(inputDF)
+    val output = vectorAssembler.transform(Seq(1).toDF("x"))
     assert(output.select("a").limit(1).collect().head == Row(Vectors.sparse(0, Seq.empty)))
   }
 }
