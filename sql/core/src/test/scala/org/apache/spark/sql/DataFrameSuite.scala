@@ -1789,4 +1789,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("SPARK-22469: compare string with decimal") {
     checkAnswer(Seq("1.5").toDF("s").filter("s > 0.5"), Row("1.5"))
   }
+
+  test("SPARK-25402 Null handling in BooleanSimplification") {
+    val schema = StructType.fromDDL("a boolean, b int")
+    val rows = Seq(Row(null, 1))
+
+    val rdd = sparkContext.parallelize(rows)
+    val df = spark.createDataFrame(rdd, schema)
+
+    checkAnswer(df.where("(NOT a) OR a"), Seq.empty)
+  }
 }
