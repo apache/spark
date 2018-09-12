@@ -38,6 +38,7 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
       Batch("Constant Folding", FixedPoint(50),
         NullPropagation,
         ConstantFolding,
+        SimplifyConditionals,
         BooleanSimplification,
         PruneFilters) :: Nil
   }
