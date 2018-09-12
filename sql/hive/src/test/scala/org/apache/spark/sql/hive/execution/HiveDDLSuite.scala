@@ -2348,4 +2348,18 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("SPARK-25271: Hive ctas commands should use data source if it is convertible") {
+    withSQLConf(CONVERT_METASTORE_PARQUET.key -> "true") {
+      withTable("t") {
+        val df = sql("CREATE TABLE t STORED AS PARQUET AS SELECT 1")
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(DDLUtils.isHiveTable(table))
+        val command = df.queryExecution.analyzed.collect {
+          case c: CreateHiveTableAsSelectCommand => c
+        }
+        assert(command.size == 1 && command(0).useHiveSerde == false)
+      }
+    }
+  }
 }

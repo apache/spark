@@ -34,11 +34,16 @@ import org.apache.spark.sql.types._
  * @param tableDesc the metadata of the table to be created.
  * @param mode the data writing mode
  * @param query an optional logical plan representing data to write into the created table.
+ * @param useExternalSerde whether to use external serde to write data, e.g., Hive Serde. Currently
+ *                         this is only used by Hive. When we are planing `CreateTable`, and a Hive
+  *                        table to be created can be converted to data source table, we set this
+  *                        to false so later we know we can use data source writer to write data.
  */
 case class CreateTable(
     tableDesc: CatalogTable,
     mode: SaveMode,
-    query: Option[LogicalPlan]) extends LogicalPlan {
+    query: Option[LogicalPlan],
+    useExternalSerde: Boolean = false) extends LogicalPlan {
   assert(tableDesc.provider.isDefined, "The table to be created must have a provider.")
 
   if (query.isEmpty) {

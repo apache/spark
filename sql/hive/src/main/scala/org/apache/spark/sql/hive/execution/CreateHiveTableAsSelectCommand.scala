@@ -21,10 +21,11 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.command.DataWritingCommand
+import org.apache.spark.sql.execution.command.{DataWritingCommand, DDLUtils}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
+import org.apache.spark.sql.hive.HiveSessionCatalog
 
 
 /**
@@ -33,12 +34,14 @@ import org.apache.spark.sql.execution.command.DataWritingCommand
  * @param tableDesc the Table Describe, which may contain serde, storage handler etc.
  * @param query the query whose result will be insert into the new relation
  * @param mode SaveMode
+ * @param useHiveSerde whether to use Hive Serde to write data.
  */
 case class CreateHiveTableAsSelectCommand(
     tableDesc: CatalogTable,
     query: LogicalPlan,
     outputColumnNames: Seq[String],
-    mode: SaveMode)
+    mode: SaveMode,
+    useHiveSerde: Boolean)
   extends DataWritingCommand {
 
   private val tableIdentifier = tableDesc.identifier
@@ -57,13 +60,17 @@ case class CreateHiveTableAsSelectCommand(
         return Seq.empty
       }
 
-      InsertIntoHiveTable(
-        tableDesc,
-        Map.empty,
-        query,
-        overwrite = false,
-        ifPartitionNotExists = false,
-        outputColumnNames = outputColumnNames).run(sparkSession, child)
+      if (useHiveSerde) {
+        InsertIntoHiveTable(
+          tableDesc,
+          Map.empty,
+          query,
+          overwrite = false,
+          ifPartitionNotExists = false,
+          outputColumnNames = outputColumnNames).run(sparkSession, child)
+      } else {
+        getHadoopFsRelationCommand(sparkSession, tableDesc, mode).run(sparkSession, child)
+      }
     } else {
       // TODO ideally, we should get the output data ready first and then
       // add the relation into catalog, just in case of failure occurs while data
@@ -75,15 +82,20 @@ case class CreateHiveTableAsSelectCommand(
       try {
         // Read back the metadata of the table which was created just now.
         val createdTableMeta = catalog.getTableMetadata(tableDesc.identifier)
-        // For CTAS, there is no static partition values to insert.
-        val partition = createdTableMeta.partitionColumnNames.map(_ -> None).toMap
-        InsertIntoHiveTable(
-          createdTableMeta,
-          partition,
-          query,
-          overwrite = true,
-          ifPartitionNotExists = false,
-          outputColumnNames = outputColumnNames).run(sparkSession, child)
+        if (useHiveSerde) {
+          // For CTAS, there is no static partition values to insert.
+          val partition = createdTableMeta.partitionColumnNames.map(_ -> None).toMap
+          InsertIntoHiveTable(
+            createdTableMeta,
+            partition,
+            query,
+            overwrite = true,
+            ifPartitionNotExists = false,
+            outputColumnNames = outputColumnNames).run(sparkSession, child)
+        } else {
+          getHadoopFsRelationCommand(sparkSession, createdTableMeta, SaveMode.Overwrite)
+            .run(sparkSession, child)
+        }
       } catch {
         case NonFatal(e) =>
           // drop the created table.
@@ -93,6 +105,32 @@ case class CreateHiveTableAsSelectCommand(
     }
 
     Seq.empty[Row]
+  }
+
+  // Converts Hive table to data source one and returns an `InsertIntoHadoopFsRelationCommand`
+  // used to write data into it.
+  private def getHadoopFsRelationCommand(sparkSession: SparkSession, tableDesc: CatalogTable,
+      mode: SaveMode): InsertIntoHadoopFsRelationCommand = {
+    val hiveTable = DDLUtils.readHiveTable(tableDesc)
+    val hadoopRelation = sparkSession.sessionState.catalog.asInstanceOf[HiveSessionCatalog]
+      .metastoreCatalog.convert(hiveTable) match {
+        case LogicalRelation(t: HadoopFsRelation, _, _, _) => t
+        case _ => throw new AnalysisException(s"$tableIdentifier should be converted to " +
+          "HadoopFsRelation.")
+    }
+    InsertIntoHadoopFsRelationCommand(
+      hadoopRelation.location.rootPaths.head,
+      Map.empty, // We don't support to convert partitioned table.
+      false,
+      Seq.empty, // We don't support to convert partitioned table.
+      hadoopRelation.bucketSpec,
+      hadoopRelation.fileFormat,
+      hadoopRelation.options,
+      query,
+      mode,
+      Some(tableDesc),
+      Some(hadoopRelation.location),
+      query.output.map(_.name))
   }
 
   override def argString: String = {

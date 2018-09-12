@@ -46,7 +46,7 @@ class SparkSqlParserSuite extends AnalysisTest {
    */
   override def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     plan match {
-      case CreateTable(tableDesc, mode, query) =>
+      case CreateTable(tableDesc, mode, query, _) =>
         val newTableDesc = tableDesc.copy(createTime = -1L)
         CreateTable(newTableDesc, mode, query)
       case _ => plan // Don't transform
