@@ -735,6 +735,44 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_contains(array(1, null), array(1, null)[0])"),
       Seq(Row(true), Row(true))
     )
+
+    checkAnswer(
+      df.selectExpr("array_contains(array(1), 1.23D)"),
+      Seq(Row(false), Row(false))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_contains(array(1), 1.0D)"),
+      Seq(Row(true), Row(true))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_contains(array(1.0D), 1)"),
+      Seq(Row(true), Row(true))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_contains(array(1.23D), 1)"),
+      Seq(Row(false), Row(false))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_contains(array(array(1)), array(1.0D))"),
+      Seq(Row(true), Row(true))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_contains(array(array(1)), array(1.23D))"),
+      Seq(Row(false), Row(false))
+    )
+
+    intercept[AnalysisException] {
+      df.selectExpr("array_contains(array(1), 1.23)")
+    }
+
+    intercept[AnalysisException] {
+      df.selectExpr("array_contains(array(1), 'foo')")
+    }
   }
 
   test("arrays_overlap function") {
