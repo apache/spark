@@ -88,10 +88,10 @@ filtered_commits = []
 
 
 def is_release(commit_title):
-    return re.findall(r"\[release\]", commit_title.lower()) or \
-        "preparing spark release" in commit_title.lower() or \
-        "preparing development version" in commit_title.lower() or \
-        "CHANGES.txt" in commit_title
+    return ("[release]" in commit_title.lower() or
+            "preparing spark release" in commit_title.lower() or
+            "preparing development version" in commit_title.lower() or
+            "CHANGES.txt" in commit_title)
 
 
 def is_maintenance(commit_title):
