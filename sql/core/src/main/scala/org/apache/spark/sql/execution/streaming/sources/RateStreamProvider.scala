@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
+import java.util.Optional
+
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousReadSupport
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousReader
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReader, MicroBatchReader}
 import org.apache.spark.sql.types._
 
 /**
@@ -39,12 +42,13 @@ import org.apache.spark.sql.types._
  *    be resource constrained, and `numPartitions` can be tweaked to help reach the desired speed.
  */
 class RateStreamProvider extends DataSourceV2
-  with MicroBatchReadSupportProvider with ContinuousReadSupportProvider with DataSourceRegister {
+  with MicroBatchReadSupport with ContinuousReadSupport with DataSourceRegister {
   import RateStreamProvider._
 
-  override def createMicroBatchReadSupport(
+  override def createMicroBatchReader(
+      schema: Optional[StructType],
       checkpointLocation: String,
-      options: DataSourceOptions): MicroBatchReadSupport = {
+      options: DataSourceOptions): MicroBatchReader = {
       if (options.get(ROWS_PER_SECOND).isPresent) {
       val rowsPerSecond = options.get(ROWS_PER_SECOND).get().toLong
       if (rowsPerSecond <= 0) {
@@ -70,14 +74,17 @@ class RateStreamProvider extends DataSourceV2
       }
     }
 
-    new RateStreamMicroBatchReadSupport(options, checkpointLocation)
+    if (schema.isPresent) {
+      throw new AnalysisException("The rate source does not support a user-specified schema.")
+    }
+
+    new RateStreamMicroBatchReader(options, checkpointLocation)
   }
 
-  override def createContinuousReadSupport(
+  override def createContinuousReader(
+     schema: Optional[StructType],
      checkpointLocation: String,
-     options: DataSourceOptions): ContinuousReadSupport = {
-    new RateStreamContinuousReadSupport(options)
-  }
+     options: DataSourceOptions): ContinuousReader = new RateStreamContinuousReader(options)
 
   override def shortName(): String = "rate"
 }

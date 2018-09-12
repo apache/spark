@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.{util => ju}
+import java.util.Optional
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.util.control.NonFatal
 
@@ -31,8 +34,8 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset => OffsetV2}
+import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -64,7 +67,7 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Bas
     addData(data.toTraversable)
   }
 
-  def fullSchema(): StructType = encoder.schema
+  def readSchema(): StructType = encoder.schema
 
   protected def logicalPlan: LogicalPlan
 
@@ -77,7 +80,7 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Bas
  * available.
  */
 case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
-    extends MemoryStreamBase[A](sqlContext) with MicroBatchReadSupport with Logging {
+    extends MemoryStreamBase[A](sqlContext) with MicroBatchReader with Logging {
 
   protected val logicalPlan: LogicalPlan =
     StreamingExecutionRelation(this, attributes)(sqlContext.sparkSession)
@@ -119,22 +122,24 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   override def toString: String = s"MemoryStream[${Utils.truncatedString(output, ",")}]"
 
+  override def setOffsetRange(start: Optional[OffsetV2], end: Optional[OffsetV2]): Unit = {
+    synchronized {
+      startOffset = start.orElse(LongOffset(-1)).asInstanceOf[LongOffset]
+      endOffset = end.orElse(currentOffset).asInstanceOf[LongOffset]
+    }
+  }
+
   override def deserializeOffset(json: String): OffsetV2 = LongOffset(json.toLong)
 
-  override def initialOffset: OffsetV2 = LongOffset(-1)
-
-  override def latestOffset(): OffsetV2 = {
-    if (currentOffset.offset == -1) null else currentOffset
+  override def getStartOffset: OffsetV2 = synchronized {
+    if (startOffset.offset == -1) null else startOffset
   }
 
-  override def newScanConfigBuilder(start: OffsetV2, end: OffsetV2): ScanConfigBuilder = {
-    new SimpleStreamingScanConfigBuilder(fullSchema(), start, Some(end))
+  override def getEndOffset: OffsetV2 = synchronized {
+    if (endOffset.offset == -1) null else endOffset
   }
 
-  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
-    val sc = config.asInstanceOf[SimpleStreamingScanConfig]
-    val startOffset = sc.start.asInstanceOf[LongOffset]
-    val endOffset = sc.end.get.asInstanceOf[LongOffset]
+  override def planInputPartitions(): ju.List[InputPartition[InternalRow]] = {
     synchronized {
       // Compute the internal batch numbers to fetch: [startOrdinal, endOrdinal)
       val startOrdinal = startOffset.offset.toInt + 1
@@ -151,13 +156,9 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       logDebug(generateDebugString(newBlocks.flatten, startOrdinal, endOrdinal))
 
       newBlocks.map { block =>
-        new MemoryStreamInputPartition(block)
-      }.toArray
+        new MemoryStreamInputPartition(block): InputPartition[InternalRow]
+      }.asJava
     }
-  }
-
-  override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
-    MemoryStreamReaderFactory
   }
 
   private def generateDebugString(
@@ -200,12 +201,10 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 }
 
 
-class MemoryStreamInputPartition(val records: Array[UnsafeRow]) extends InputPartition
-
-object MemoryStreamReaderFactory extends PartitionReaderFactory {
-  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
-    val records = partition.asInstanceOf[MemoryStreamInputPartition].records
-    new PartitionReader[InternalRow] {
+class MemoryStreamInputPartition(records: Array[UnsafeRow])
+  extends InputPartition[InternalRow] {
+  override def createPartitionReader(): InputPartitionReader[InternalRow] = {
+    new InputPartitionReader[InternalRow] {
       private var currentIndex = -1
 
       override def next(): Boolean = {

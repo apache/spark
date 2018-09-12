@@ -17,22 +17,24 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
+import scala.collection.JavaConverters._
+
 import org.json4s.DefaultFormats
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.streaming.{RateStreamOffset, SimpleStreamingScanConfig, SimpleStreamingScanConfigBuilder, ValueRunTimeMsPair}
+import org.apache.spark.sql.execution.streaming.{RateStreamOffset, ValueRunTimeMsPair}
 import org.apache.spark.sql.execution.streaming.sources.RateStreamProvider
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming._
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousInputPartitionReader, ContinuousReader, Offset, PartitionOffset}
 import org.apache.spark.sql.types.StructType
 
 case class RateStreamPartitionOffset(
    partition: Int, currentValue: Long, currentTimeMs: Long) extends PartitionOffset
 
-class RateStreamContinuousReadSupport(options: DataSourceOptions) extends ContinuousReadSupport {
+class RateStreamContinuousReader(options: DataSourceOptions) extends ContinuousReader {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
   val creationTime = System.currentTimeMillis()
@@ -54,18 +56,18 @@ class RateStreamContinuousReadSupport(options: DataSourceOptions) extends Contin
     RateStreamOffset(Serialization.read[Map[Int, ValueRunTimeMsPair]](json))
   }
 
-  override def fullSchema(): StructType = RateStreamProvider.SCHEMA
+  override def readSchema(): StructType = RateStreamProvider.SCHEMA
 
-  override def newScanConfigBuilder(start: Offset): ScanConfigBuilder = {
-    new SimpleStreamingScanConfigBuilder(fullSchema(), start)
+  private var offset: Offset = _
+
+  override def setStartOffset(offset: java.util.Optional[Offset]): Unit = {
+    this.offset = offset.orElse(createInitialOffset(numPartitions, creationTime))
   }
 
-  override def initialOffset: Offset = createInitialOffset(numPartitions, creationTime)
+  override def getStartOffset(): Offset = offset
 
-  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
-    val startOffset = config.asInstanceOf[SimpleStreamingScanConfig].start
-
-    val partitionStartMap = startOffset match {
+  override def planInputPartitions(): java.util.List[InputPartition[InternalRow]] = {
+    val partitionStartMap = offset match {
       case off: RateStreamOffset => off.partitionToValueAndRunTimeMs
       case off =>
         throw new IllegalArgumentException(
@@ -88,12 +90,8 @@ class RateStreamContinuousReadSupport(options: DataSourceOptions) extends Contin
         i,
         numPartitions,
         perPartitionRate)
-    }.toArray
-  }
-
-  override def createContinuousReaderFactory(
-      config: ScanConfig): ContinuousPartitionReaderFactory = {
-    RateStreamContinuousReaderFactory
+        .asInstanceOf[InputPartition[InternalRow]]
+    }.asJava
   }
 
   override def commit(end: Offset): Unit = {}
@@ -120,23 +118,33 @@ case class RateStreamContinuousInputPartition(
     partitionIndex: Int,
     increment: Long,
     rowsPerSecond: Double)
-  extends InputPartition
+  extends ContinuousInputPartition[InternalRow] {
 
-object RateStreamContinuousReaderFactory extends ContinuousPartitionReaderFactory {
-  override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
-    val p = partition.asInstanceOf[RateStreamContinuousInputPartition]
-    new RateStreamContinuousPartitionReader(
-      p.startValue, p.startTimeMs, p.partitionIndex, p.increment, p.rowsPerSecond)
+  override def createContinuousReader(
+      offset: PartitionOffset): InputPartitionReader[InternalRow] = {
+    val rateStreamOffset = offset.asInstanceOf[RateStreamPartitionOffset]
+    require(rateStreamOffset.partition == partitionIndex,
+      s"Expected partitionIndex: $partitionIndex, but got: ${rateStreamOffset.partition}")
+    new RateStreamContinuousInputPartitionReader(
+      rateStreamOffset.currentValue,
+      rateStreamOffset.currentTimeMs,
+      partitionIndex,
+      increment,
+      rowsPerSecond)
   }
+
+  override def createPartitionReader(): InputPartitionReader[InternalRow] =
+    new RateStreamContinuousInputPartitionReader(
+      startValue, startTimeMs, partitionIndex, increment, rowsPerSecond)
 }
 
-class RateStreamContinuousPartitionReader(
+class RateStreamContinuousInputPartitionReader(
     startValue: Long,
     startTimeMs: Long,
     partitionIndex: Int,
     increment: Long,
     rowsPerSecond: Double)
-  extends ContinuousPartitionReader[InternalRow] {
+  extends ContinuousInputPartitionReader[InternalRow] {
   private var nextReadTime: Long = startTimeMs
   private val readTimeIncrement: Long = (1000 / rowsPerSecond).toLong
 

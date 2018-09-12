@@ -27,21 +27,21 @@ import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelat
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2.{BatchReadSupportProvider, BatchWriteSupportProvider, DataSourceOptions, DataSourceV2}
-import org.apache.spark.sql.sources.v2.reader.{BatchReadSupport, ReadSupport, ScanConfigBuilder, SupportsReportStatistics}
-import org.apache.spark.sql.sources.v2.writer.BatchWriteSupport
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, ReadSupport, WriteSupport}
+import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, SupportsReportStatistics}
+import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
 import org.apache.spark.sql.types.StructType
 
 /**
  * A logical plan representing a data source v2 scan.
  *
  * @param source An instance of a [[DataSourceV2]] implementation.
- * @param options The options for this scan. Used to create fresh [[BatchWriteSupport]].
- * @param userSpecifiedSchema The user-specified schema for this scan.
+ * @param options The options for this scan. Used to create fresh [[DataSourceReader]].
+ * @param userSpecifiedSchema The user-specified schema for this scan. Used to create fresh
+ *                            [[DataSourceReader]].
  */
 case class DataSourceV2Relation(
     source: DataSourceV2,
-    readSupport: BatchReadSupport,
     output: Seq[AttributeReference],
     options: Map[String, String],
     tableIdent: Option[TableIdentifier] = None,
@@ -58,12 +58,13 @@ case class DataSourceV2Relation(
 
   override def simpleString: String = "RelationV2 " + metadataString
 
-  def newWriteSupport(): BatchWriteSupport = source.createWriteSupport(options, schema)
+  def newReader(): DataSourceReader = source.createReader(options, userSpecifiedSchema)
 
-  override def computeStats(): Statistics = readSupport match {
+  def newWriter(): DataSourceWriter = source.createWriter(options, schema)
+
+  override def computeStats(): Statistics = newReader match {
     case r: SupportsReportStatistics =>
-      val statistics = r.estimateStatistics(readSupport.newScanConfigBuilder().build())
-      Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
+      Statistics(sizeInBytes = r.estimateStatistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
@@ -84,8 +85,7 @@ case class StreamingDataSourceV2Relation(
     output: Seq[AttributeReference],
     source: DataSourceV2,
     options: Map[String, String],
-    readSupport: ReadSupport,
-    scanConfigBuilder: ScanConfigBuilder)
+    reader: DataSourceReader)
   extends LeafNode with MultiInstanceRelation with DataSourceV2StringFormat {
 
   override def isStreaming: Boolean = true
@@ -99,8 +99,7 @@ case class StreamingDataSourceV2Relation(
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
     case other: StreamingDataSourceV2Relation =>
-      output == other.output && readSupport.getClass == other.readSupport.getClass &&
-        options == other.options
+      output == other.output && reader.getClass == other.reader.getClass && options == other.options
     case _ => false
   }
 
@@ -108,10 +107,9 @@ case class StreamingDataSourceV2Relation(
     Seq(output, source, options).hashCode()
   }
 
-  override def computeStats(): Statistics = readSupport match {
+  override def computeStats(): Statistics = reader match {
     case r: SupportsReportStatistics =>
-      val statistics = r.estimateStatistics(scanConfigBuilder.build())
-      Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
+      Statistics(sizeInBytes = r.estimateStatistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
@@ -119,19 +117,19 @@ case class StreamingDataSourceV2Relation(
 
 object DataSourceV2Relation {
   private implicit class SourceHelpers(source: DataSourceV2) {
-    def asReadSupportProvider: BatchReadSupportProvider = {
+    def asReadSupport: ReadSupport = {
       source match {
-        case provider: BatchReadSupportProvider =>
-          provider
+        case support: ReadSupport =>
+          support
         case _ =>
           throw new AnalysisException(s"Data source is not readable: $name")
       }
     }
 
-    def asWriteSupportProvider: BatchWriteSupportProvider = {
+    def asWriteSupport: WriteSupport = {
       source match {
-        case provider: BatchWriteSupportProvider =>
-          provider
+        case support: WriteSupport =>
+          support
         case _ =>
           throw new AnalysisException(s"Data source is not writable: $name")
       }
@@ -146,26 +144,23 @@ object DataSourceV2Relation {
       }
     }
 
-    def createReadSupport(
+    def createReader(
         options: Map[String, String],
-        userSpecifiedSchema: Option[StructType]): BatchReadSupport = {
+        userSpecifiedSchema: Option[StructType]): DataSourceReader = {
       val v2Options = new DataSourceOptions(options.asJava)
       userSpecifiedSchema match {
         case Some(s) =>
-          asReadSupportProvider.createBatchReadSupport(s, v2Options)
+          asReadSupport.createReader(s, v2Options)
         case _ =>
-          asReadSupportProvider.createBatchReadSupport(v2Options)
+          asReadSupport.createReader(v2Options)
       }
     }
 
-    def createWriteSupport(
+    def createWriter(
         options: Map[String, String],
-        schema: StructType): BatchWriteSupport = {
-      asWriteSupportProvider.createBatchWriteSupport(
-        UUID.randomUUID().toString,
-        schema,
-        SaveMode.Append,
-        new DataSourceOptions(options.asJava)).get
+        schema: StructType): DataSourceWriter = {
+      val v2Options = new DataSourceOptions(options.asJava)
+      asWriteSupport.createWriter(UUID.randomUUID.toString, schema, SaveMode.Append, v2Options).get
     }
   }
 
@@ -174,16 +169,15 @@ object DataSourceV2Relation {
       options: Map[String, String],
       tableIdent: Option[TableIdentifier] = None,
       userSpecifiedSchema: Option[StructType] = None): DataSourceV2Relation = {
-    val readSupport = source.createReadSupport(options, userSpecifiedSchema)
-    val output = readSupport.fullSchema().toAttributes
+    val reader = source.createReader(options, userSpecifiedSchema)
     val ident = tableIdent.orElse(tableFromOptions(options))
     DataSourceV2Relation(
-      source, readSupport, output, options, ident, userSpecifiedSchema)
+      source, reader.readSchema().toAttributes, options, ident, userSpecifiedSchema)
   }
 
   private def tableFromOptions(options: Map[String, String]): Option[TableIdentifier] = {
     options
-      .get(DataSourceOptions.TABLE_KEY)
-      .map(TableIdentifier(_, options.get(DataSourceOptions.DATABASE_KEY)))
+        .get(DataSourceOptions.TABLE_KEY)
+        .map(TableIdentifier(_, options.get(DataSourceOptions.DATABASE_KEY)))
   }
 }
