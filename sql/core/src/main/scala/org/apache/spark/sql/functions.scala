@@ -2567,23 +2567,11 @@ object functions {
    *              a Java regular expression.
    * @param limit an integer expression which controls the number of times the regex is applied.
    *        <ul>
-   *          <li>limit greater than 0
-   *            <ul>
-   *              <li>
-   *                The resulting array's length will not be more than limit,
-   *                and the resulting array's last entry will contain all input
-   *                beyond the last matched regex.
-   *             </li>
-   *            </ul>
-   *          </li>
-   *          <li>limit less than or equal to 0
-   *            <ul>
-   *              <li>
-   *                `regex` will be applied as many times as possible,
-   *                and the resulting array can be of any size.
-   *              </li>
-   *            </ul>
-   *          </li>
+   *          <li>limit greater than 0: The resulting array's length will not be more than limit,
+   *          and the resulting array's last entry will contain all input beyond the last
+   *          matched regex.</li>
+   *          <li>limit less than or equal to 0: `regex` will be applied as many times as
+   *          possible, and the resulting array can be of any size.</li>
    *        </ul>
    *
    * @group string_funcs
