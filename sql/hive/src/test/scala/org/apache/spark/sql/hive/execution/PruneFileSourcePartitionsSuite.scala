@@ -100,7 +100,6 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
       sql(s"ANALYZE TABLE tbl COMPUTE STATISTICS")
 
       val df1 = sql("SELECT * FROM tbl WHERE p = 1")
-
       val sizes1 = df1.queryExecution.optimizedPlan.collect {
         case relation: LogicalRelation => relation.catalogTable.get.stats.get.sizeInBytes
       }
@@ -110,7 +109,6 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
       sql("REFRESH TABLE TBL")
 
       val df2 = sql("SELECT * FROM tbl WHERE p = 1")
-
       val sizes2 = df2.queryExecution.optimizedPlan.collect {
         case relation: LogicalRelation => relation.catalogTable.get.stats.get.sizeInBytes
       }

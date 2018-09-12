@@ -269,14 +269,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val SIZE_DESER_FACTOR = buildConf("spark.sql.statistics.deserialization.factor")
-    .doc("In the absence of uncompressed/raw data size, total file size will be used for " +
-      "statistics annotation. But the file may be compressed, encoded and serialized which may " +
-      "be lesser in size than the actual uncompressed/raw data size. This factor will be " +
-      "multiplied to file size to estimate the raw data size. ")
-    .doubleConf
-    .createWithDefault(1.0)
-
   val IGNORE_RAWDATASIZE = buildConf("spark.sql.statistics.ignoreRawDataSize")
     .doc("Currently, the rawDataSize property of Hive tables is incorrect due to HIVE-20079. " +
       "When this setting is true, Spark will not use the rawDataSize property when calculating " +
@@ -2019,8 +2011,6 @@ class SQLConf extends Serializable with Logging {
   def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
 
   def integralDivideReturnLong: Boolean = getConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG)
-
-  def sizeDeserializationFactor: Double = getConf(SQLConf.SIZE_DESER_FACTOR)
 
   def ignoreRawDataSize: Boolean = getConf(SQLConf.IGNORE_RAWDATASIZE)
 
