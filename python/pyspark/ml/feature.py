@@ -303,7 +303,7 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
 
 
 class BucketedRandomProjectionLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
-    """
+    r"""
     .. note:: Experimental
 
     Model fitted by :py:class:`BucketedRandomProjectionLSH`, where multiple random vectors are
@@ -1353,7 +1353,7 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
 
 
 class MinHashLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
-    """
+    r"""
     .. note:: Experimental
 
     Model produced by :py:class:`MinHashLSH`, where where multiple hash functions are stored. Each
