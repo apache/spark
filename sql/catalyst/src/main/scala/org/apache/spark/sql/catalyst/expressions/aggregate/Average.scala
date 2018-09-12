@@ -36,7 +36,13 @@ abstract class AverageLike(child: Expression) extends DeclarativeAggregate {
   }
 
   private lazy val sumDataType = child.dataType match {
-    case _ @ DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s)
+    /*
+     * In case of sum of decimal ( assuming another decimal of same precision and scale)
+     * Refer : org.apache.spark.sql.catalyst.analysis.DecimalPrecision
+     * Precision : max(s1, s2) + max(p1 - s1, p2 - s2) + 1
+     * Scale : max(s1, s2)
+     */
+    case _ @ DecimalType.Fixed(p, s) => DecimalType.adjustPrecisionScale(s + (p - s) + 1, s)
     case _ => DoubleType
   }
 
