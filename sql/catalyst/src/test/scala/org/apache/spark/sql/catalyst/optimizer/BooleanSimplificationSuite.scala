@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.BooleanType
 
 class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
@@ -37,6 +38,7 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
       Batch("Constant Folding", FixedPoint(50),
         NullPropagation,
         ConstantFolding,
+        SimplifyConditionals,
         BooleanSimplification,
         PruneFilters) :: Nil
   }
@@ -46,6 +48,14 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
   val testRelationWithData = LocalRelation.fromExternalRows(
     testRelation.output, Seq(Row(1, 2, 3, "abc"))
+  )
+
+  val testNotNullableRelation = LocalRelation('a.int.notNull, 'b.int.notNull, 'c.int.notNull,
+    'd.string.notNull, 'e.boolean.notNull, 'f.boolean.notNull, 'g.boolean.notNull,
+    'h.boolean.notNull)
+
+  val testNotNullableRelationWithData = LocalRelation.fromExternalRows(
+    testNotNullableRelation.output, Seq(Row(1, 2, 3, "abc"))
   )
 
   private def checkCondition(input: Expression, expected: LogicalPlan): Unit = {
@@ -59,6 +69,13 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     val actual = Optimize.execute(plan)
     val correctAnswer = testRelation.where(expected).analyze
     comparePlans(actual, correctAnswer)
+  }
+
+  private def checkConditionInNotNullableRelation(
+      input: Expression, expected: LogicalPlan): Unit = {
+    val plan = testNotNullableRelationWithData.where(input).analyze
+    val actual = Optimize.execute(plan)
+    comparePlans(actual, expected)
   }
 
   test("a && a => a") {
@@ -174,10 +191,30 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
   }
 
   test("Complementation Laws") {
-    checkCondition('a && !'a, testRelation)
-    checkCondition(!'a && 'a, testRelation)
+    checkConditionInNotNullableRelation('e && !'e, testNotNullableRelation)
+    checkConditionInNotNullableRelation(!'e && 'e, testNotNullableRelation)
 
-    checkCondition('a || !'a, testRelationWithData)
-    checkCondition(!'a || 'a, testRelationWithData)
+    checkConditionInNotNullableRelation('e || !'e, testNotNullableRelationWithData)
+    checkConditionInNotNullableRelation(!'e || 'e, testNotNullableRelationWithData)
+  }
+
+  test("Complementation Laws - null handling") {
+    checkCondition('e && !'e,
+      testRelationWithData.where(If('e.isNull, Literal.create(null, BooleanType), false)).analyze)
+    checkCondition(!'e && 'e,
+      testRelationWithData.where(If('e.isNull, Literal.create(null, BooleanType), false)).analyze)
+
+    checkCondition('e || !'e,
+      testRelationWithData.where(If('e.isNull, Literal.create(null, BooleanType), true)).analyze)
+    checkCondition(!'e || 'e,
+      testRelationWithData.where(If('e.isNull, Literal.create(null, BooleanType), true)).analyze)
+  }
+
+  test("Complementation Laws - negative case") {
+    checkCondition('e && !'f, testRelationWithData.where('e && !'f).analyze)
+    checkCondition(!'f && 'e, testRelationWithData.where(!'f && 'e).analyze)
+
+    checkCondition('e || !'f, testRelationWithData.where('e || !'f).analyze)
+    checkCondition(!'f || 'e, testRelationWithData.where(!'f || 'e).analyze)
   }
 }
