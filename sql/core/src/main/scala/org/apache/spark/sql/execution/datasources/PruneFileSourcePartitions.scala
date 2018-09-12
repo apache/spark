@@ -80,14 +80,11 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
   }
 
   private def calcPartSize(catalogTable: Option[CatalogTable], sizeInBytes: Long): Long = {
-    val conf: SQLConf = SQLConf.get
-    val factor = conf.sizeDeserializationFactor
-    if (catalogTable.isDefined && factor != 1.0 &&
-      // TODO: The serde check should be in a utility function, since it is also checked elsewhere
-      catalogTable.get.storage.serde.exists(s => s.contains("Parquet") || s.contains("Orc"))) {
-      (sizeInBytes.toLong * factor).toLong
+    val factor = if (catalogTable.isDefined) {
+      catalogTable.get.properties.get("deserFactor").getOrElse("1.0").toDouble
     } else {
-      sizeInBytes
+      1.0
     }
+    (sizeInBytes.toLong * factor).toLong
   }
 }

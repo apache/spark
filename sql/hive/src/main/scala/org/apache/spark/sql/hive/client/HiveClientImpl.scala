@@ -1060,18 +1060,13 @@ private[hive] object HiveClientImpl {
     // return None.
     // In Hive, when statistics gathering is disabled, `rawDataSize` and `numRows` is always
     // zero after INSERT command. So they are used here only if they are larger than zero.
-    val sqlConf = SQLConf.get
-    val factor = sqlConf.sizeDeserializationFactor
-    val adjustedSize = if (totalSize.isDefined && serde.isDefined && factor != 1.0D) {
-      // TODO: The serde check should be in a utility function, since it is also checked elsewhere
-      if (serde.get.contains("Parquet") || serde.get.contains("Orc")) {
-        Some(BigInt((totalSize.get.toLong * factor).toLong))
-      } else {
-        totalSize
-      }
+    val factor = properties.get("deserFactor").getOrElse("1.0").toDouble
+    val adjustedSize = if (totalSize.isDefined && factor != 1.0D) {
+      Some(BigInt((totalSize.get.toLong * factor).toLong))
     } else {
       totalSize
     }
+    val sqlConf = SQLConf.get
     if (adjustedSize.isDefined && adjustedSize.get > 0L) {
       Some(CatalogStatistics(sizeInBytes = adjustedSize.get, rowCount = rowCount.filter(_ > 0)))
     } else if (rawDataSize.isDefined && rawDataSize.get > 0 && !sqlConf.ignoreRawDataSize) {

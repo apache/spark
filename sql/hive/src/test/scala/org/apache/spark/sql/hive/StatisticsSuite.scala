@@ -1383,28 +1383,20 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   }
 
   test("Test deserialization factor") {
-    val formats = Seq("parquet", "orc", "textfile")
     val factor = 10
-    formats.foreach { format =>
-      val tableName = s"${format}SizeTest"
-      val tableNameAdj = s"${tableName}Adj"
-      withTable(tableName, tableNameAdj) {
-        sql(s"CREATE TABLE $tableName STORED AS $format AS SELECT * FROM SRC")
-        val relationStats = spark.table(tableName).queryExecution.optimizedPlan.stats
-        val sizeInBytes = relationStats.sizeInBytes
+    val tableName = s"sizeTest"
+    val tableNameAdj = s"${tableName}Adj"
+    withTable(tableName, tableNameAdj) {
+      sql(s"CREATE TABLE $tableName STORED AS PARQUET AS SELECT * FROM SRC")
+      val relationStats = spark.table(tableName).queryExecution.optimizedPlan.stats
+      val sizeInBytes = relationStats.sizeInBytes
 
-        // test deserialization factor on non-partitioned table
-        withSQLConf(("spark.sql.statistics.deserialization.factor", factor.toString)) {
-          sql(s"CREATE TABLE $tableNameAdj STORED AS $format AS SELECT * FROM SRC")
-          val relationStats = spark.table(tableNameAdj).queryExecution.optimizedPlan.stats
-          val expectedSizeInBytes = if (format != "textfile") {
-            sizeInBytes * factor
-          } else {
-            sizeInBytes
-          }
-          assert(relationStats.sizeInBytes == expectedSizeInBytes)
-        }
-      }
+      // test deserialization factor on non-partitioned table
+      sql(s"CREATE TABLE $tableNameAdj STORED AS PARQUET AS SELECT * FROM SRC")
+      sql(s"ALTER TABLE $tableNameAdj SET TBLPROPERTIES('deserFactor'='$factor')")
+      val relationStats2 = spark.table(tableNameAdj).queryExecution.optimizedPlan.stats
+      val expectedSizeInBytes = sizeInBytes * factor
+      assert(relationStats2.sizeInBytes == expectedSizeInBytes)
     }
   }
 
