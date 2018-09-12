@@ -1192,6 +1192,25 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       }
     }
   }
+
+  test("SPARK-25413 Test scale and precision") {
+    val expected = new java.math.BigDecimal("37800224355780013.7598204253756364")
+    sql("create table if not exists table1(salary decimal(31,12))")
+    sql("insert into table1 values(12345678901234510.1234567890123)")
+    sql("insert into table1 values(12345678901234520.1234567890123)")
+    sql("insert into table1 values(12345678901234530.1234567890123)")
+    sql("insert into table1 values(12345678901234560.1234567890123)")
+    sql("insert into table1 values(22345678901234560.1234567890123)")
+    sql("insert into table1 values(32345678901234560.1234567890123)")
+    sql("insert into table1 values(42345678901234560.1234567890123)")
+    sql("insert into table1 values(52345678901234560.1234567890123)")
+    sql("insert into table1 values(62345678901234560.1234567890123)")
+    sql("insert into table1 values(72345678901234560.1234567890123)")
+    sql("insert into table1 values(82345678901234560.1234567890123)")
+    assert(sql("select avg(salary)+10 from table1")
+      .first()
+      .getAs[java.math.BigDecimal](0).equals(expected))
+  }
 }
 
 // for SPARK-2180 test
