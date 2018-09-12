@@ -1694,10 +1694,10 @@ def regexp_extract(str, pattern, idx):
     If the regex did not match, or the specified group did not match, an empty string is returned.
 
     >>> df = spark.createDataFrame([('100-200',)], ['str'])
-    >>> df.select(regexp_extract('str', '(\d+)-(\d+)', 1).alias('d')).collect()
+    >>> df.select(regexp_extract('str', r'(\d+)-(\d+)', 1).alias('d')).collect()
     [Row(d=u'100')]
     >>> df = spark.createDataFrame([('foo',)], ['str'])
-    >>> df.select(regexp_extract('str', '(\d+)', 1).alias('d')).collect()
+    >>> df.select(regexp_extract('str', r'(\d+)', 1).alias('d')).collect()
     [Row(d=u'')]
     >>> df = spark.createDataFrame([('aaaac',)], ['str'])
     >>> df.select(regexp_extract('str', '(a+)(b)?(c)', 2).alias('d')).collect()
@@ -1714,7 +1714,7 @@ def regexp_replace(str, pattern, replacement):
     """Replace all substrings of the specified string value that match regexp with rep.
 
     >>> df = spark.createDataFrame([('100-200',)], ['str'])
-    >>> df.select(regexp_replace('str', '(\\d+)', '--').alias('d')).collect()
+    >>> df.select(regexp_replace('str', r'(\d+)', '--').alias('d')).collect()
     [Row(d=u'-----')]
     """
     sc = SparkContext._active_spark_context

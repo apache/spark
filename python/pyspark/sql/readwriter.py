@@ -519,8 +519,8 @@ class DataFrameReader(OptionUtils):
 
         If both ``column`` and ``predicates`` are specified, ``column`` will be used.
 
-        .. note:: Don't create too many partitions in parallel on a large cluster; \
-        otherwise Spark might crash your external database systems.
+        .. note:: Don't create too many partitions in parallel on a large cluster;
+            otherwise Spark might crash your external database systems.
 
         :param url: a JDBC URL of the form ``jdbc:subprotocol:subname``
         :param table: the name of the table
@@ -962,8 +962,8 @@ class DataFrameWriter(OptionUtils):
     def jdbc(self, url, table, mode=None, properties=None):
         """Saves the content of the :class:`DataFrame` to an external database table via JDBC.
 
-        .. note:: Don't create too many partitions in parallel on a large cluster; \
-        otherwise Spark might crash your external database systems.
+        .. note:: Don't create too many partitions in parallel on a large cluster;
+            otherwise Spark might crash your external database systems.
 
         :param url: a JDBC URL of the form ``jdbc:subprotocol:subname``
         :param table: Name of the table in the external database.

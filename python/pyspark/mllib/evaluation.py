@@ -119,7 +119,7 @@ class RegressionMetrics(JavaModelWrapper):
     def explainedVariance(self):
         r"""
         Returns the explained variance regression score.
-        explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
+        explainedVariance = :math:`1 - \frac{variance(y - \hat{y})}{variance(y)}`
         """
         return self.call("explainedVariance")
 
