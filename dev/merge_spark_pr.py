@@ -403,7 +403,7 @@ def standardize_jira_ref(text):
 
     # Extract spark component(s):
     # Look for alphanumeric chars, spaces, dashes, periods, and/or commas
-    pattern = re.compile(r'(\[[\w\s,-\.]+\])', re.IGNORECASE)
+    pattern = re.compile(r'(\[[\w\s,.-]+\])', re.IGNORECASE)
     for component in pattern.findall(text):
         components.append(component.upper())
         text = text.replace(component, '')

@@ -67,7 +67,7 @@ print("JIRA server: %s" % JIRA_API_BASE)
 print("Release tag: %s" % RELEASE_TAG)
 print("Previous release tag: %s" % PREVIOUS_RELEASE_TAG)
 print("Number of commits in this range: %s" % len(new_commits))
-print
+print("")
 
 
 def print_indented(_list):
