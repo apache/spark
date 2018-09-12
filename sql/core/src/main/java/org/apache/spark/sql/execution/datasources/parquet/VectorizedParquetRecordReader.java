@@ -116,6 +116,11 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   private final MemoryMode MEMORY_MODE;
 
+  /**
+   * The columns of requested schema
+   */
+  private List<ColumnDescriptor> requestedColumns = null;
+
   public VectorizedParquetRecordReader(TimeZone convertTz, boolean useOffHeap, int capacity) {
     this.convertTz = convertTz;
     MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
@@ -154,8 +159,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   @Override
   public boolean nextKeyValue() throws IOException {
-    resultBatch();
-
     if (returnColumnarBatch) return nextBatch();
 
     if (batchIdx >= numBatched) {
@@ -248,12 +251,14 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * Advances to the next batch of rows. Returns false if there are no more.
    */
   public boolean nextBatch() throws IOException {
+    if (columnarBatch == null) initBatch();
+    if (rowsReturned >= totalRowCount) return false;
+
     for (WritableColumnVector vector : columnVectors) {
       vector.reset();
     }
     columnarBatch.setNumRows(0);
-    if (rowsReturned >= totalRowCount) return false;
-    checkEndOfRowGroup();
+    if (rowsReturned == totalCountLoadedSoFar) checkEndOfRowGroup();
 
     int num = (int) Math.min((long) capacity, totalCountLoadedSoFar - rowsReturned);
     for (int i = 0; i < columnReaders.length; ++i) {
@@ -297,19 +302,18 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   }
 
   private void checkEndOfRowGroup() throws IOException {
-    if (rowsReturned != totalCountLoadedSoFar) return;
     PageReadStore pages = reader.readNextRowGroup();
     if (pages == null) {
       throw new IOException("expecting more rows but reached last block. Read "
           + rowsReturned + " out of " + totalRowCount);
     }
-    List<ColumnDescriptor> columns = requestedSchema.getColumns();
+    if (requestedColumns == null) requestedColumns = requestedSchema.getColumns();
     List<Type> types = requestedSchema.asGroupType().getFields();
-    columnReaders = new VectorizedColumnReader[columns.size()];
-    for (int i = 0; i < columns.size(); ++i) {
+    columnReaders = new VectorizedColumnReader[requestedColumns.size()];
+    for (int i = 0; i < requestedColumns.size(); ++i) {
       if (missingColumns[i]) continue;
-      columnReaders[i] = new VectorizedColumnReader(columns.get(i), types.get(i).getOriginalType(),
-        pages.getPageReader(columns.get(i)), convertTz);
+      columnReaders[i] = new VectorizedColumnReader(requestedColumns.get(i),
+        types.get(i).getOriginalType(), pages.getPageReader(requestedColumns.get(i)), convertTz);
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }
