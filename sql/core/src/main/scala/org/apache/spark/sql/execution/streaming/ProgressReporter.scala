@@ -255,12 +255,23 @@ trait ProgressReporter extends Logging {
     }
 
     if (onlyDataSourceV2Sources) {
-      val sourceToInputRowsTuples = lastExecution.executedPlan.collect {
+      // Multiple DataSourceV2ScanExec instance may refer to the same source (can happen with
+      // self-unions or self-joins). Here we create an IdentityHashMap to only count the input
+      // rows for each unique source.
+      val sourceToInputRows = new IdentityHashMap[BaseStreamingSource, Long]
+      lastExecution.executedPlan.foreach {
         case s: DataSourceV2ScanExec if s.readSupport.isInstanceOf[BaseStreamingSource] =>
           val numRows = s.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
           val source = s.readSupport.asInstanceOf[BaseStreamingSource]
-          source -> numRows
+          if (sourceToInputRows.containsKey(source)) {
+            assert(sourceToInputRows.get(source) == numRows)
+          } else {
+            sourceToInputRows.put(source, numRows)
+          }
+
+        case _ =>
       }
+      val sourceToInputRowsTuples = sourceToInputRows.asScala.toSeq
       logDebug("Source -> # input rows\n\t" + sourceToInputRowsTuples.mkString("\n\t"))
       sumRows(sourceToInputRowsTuples)
     } else {

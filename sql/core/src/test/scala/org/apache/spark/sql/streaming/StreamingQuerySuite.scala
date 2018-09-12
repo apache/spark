@@ -517,9 +517,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery { q =>
         val lastProgress = getLastProgressWithData(q)
         assert(lastProgress.nonEmpty)
-        assert(lastProgress.get.numInputRows == 6)
+        assert(lastProgress.get.numInputRows == 3)
         assert(lastProgress.get.sources.length == 1)
-        assert(lastProgress.get.sources(0).numInputRows == 6)
+        assert(lastProgress.get.sources(0).numInputRows == 3)
         true
       }
     )
