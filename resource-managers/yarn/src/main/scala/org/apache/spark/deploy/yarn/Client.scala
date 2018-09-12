@@ -695,7 +695,7 @@ private[spark] class Client(
     }
 
     val confDirsEnvKeys = Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR")
-    val configDirProp = sparkConf.getOption("spark.hadoop.conf.dir")
+    val configDirProp = sparkConf.getOption("spark.yarn.conf.dir")
 
     val confDirPaths = (confDirsEnvKeys.map(sys.env.get) :+ configDirProp).flatMap(_.toList)
     confDirPaths.foreach { path =>
