@@ -68,22 +68,42 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object SpecialLimits extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ReturnAnswer(rootPlan) => rootPlan match {
-        case Limit(IntegerLiteral(limit), Sort(order, true, child))
-            if limit < conf.topKSortFallbackThreshold =>
-          TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
-        case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
-            if limit < conf.topKSortFallbackThreshold =>
-          TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
+        case Limit(IntegerLiteral(limit), s@Sort(order, true, child)) =>
+          if (limit < conf.topKSortFallbackThreshold) {
+            TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
+          } else {
+            GlobalLimitExec(limit,
+              LocalLimitExec(limit, planLater(s)),
+              orderedLimit = true) :: Nil
+          }
+        case Limit(IntegerLiteral(limit), p@Project(projectList, Sort(order, true, child))) =>
+          if (limit < conf.topKSortFallbackThreshold) {
+            TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
+          } else {
+            GlobalLimitExec(limit,
+              LocalLimitExec(limit, planLater(p)),
+              orderedLimit = true) :: Nil
+          }
         case Limit(IntegerLiteral(limit), child) =>
           CollectLimitExec(limit, planLater(child)) :: Nil
         case other => planLater(other) :: Nil
       }
-      case Limit(IntegerLiteral(limit), Sort(order, true, child))
-          if limit < conf.topKSortFallbackThreshold =>
-        TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
-      case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
-          if limit < conf.topKSortFallbackThreshold =>
-        TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
+      case Limit(IntegerLiteral(limit), s@Sort(order, true, child)) =>
+        if (limit < conf.topKSortFallbackThreshold) {
+          TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
+        } else {
+          GlobalLimitExec(limit,
+            LocalLimitExec(limit, planLater(s)),
+            orderedLimit = true) :: Nil
+        }
+      case Limit(IntegerLiteral(limit), p@Project(projectList, Sort(order, true, child))) =>
+        if (limit < conf.topKSortFallbackThreshold) {
+          TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
+        } else {
+          GlobalLimitExec(limit,
+            LocalLimitExec(limit, planLater(p)),
+            orderedLimit = true) :: Nil
+        }
       case _ => Nil
     }
   }
