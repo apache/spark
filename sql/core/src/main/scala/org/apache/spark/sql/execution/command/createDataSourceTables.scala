@@ -19,9 +19,10 @@ package org.apache.spark.sql.execution.command
 
 import java.net.URI
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources._
@@ -221,4 +222,6 @@ case class CreateDataSourceTableAsSelectCommand(
         throw ex
     }
   }
+
+  override def outputPath: Option[Path] = table.storage.locationUri.map(new Path(_))
 }

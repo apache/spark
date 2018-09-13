@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.execution.command.{DataWritingCommand, DataWritingCommandExec}
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.metric.SQLMetricInfo
 
@@ -60,6 +61,7 @@ private[execution] object SparkPlanInfo {
     // dump the file scan metadata (e.g file path) to event log
     val metadata = plan match {
       case fileScan: FileSourceScanExec => fileScan.metadata
+      case writing: DataWritingCommandExec => writing.metadata
       case _ => Map[String, String]()
     }
     new SparkPlanInfo(plan.nodeName, plan.simpleString, children.map(fromSparkPlan),

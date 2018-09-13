@@ -121,6 +121,22 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
   protected override def doExecute(): RDD[InternalRow] = {
     sqlContext.sparkContext.parallelize(sideEffectResult, 1)
   }
+
+  // Metadata that describes more details of this writing.
+  lazy val metadata: Map[String, String] = {
+    def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
+    val outputPath = cmd.outputPath match {
+      case Some(path) if path != null => path.toString
+      case _ => ""
+    }
+    val columnNames = cmd.outputColumnNames
+    val metadata =
+      Map(
+        "OutputColumnNames" -> seqToString(columnNames),
+        "OutputPath" -> outputPath
+      )
+    metadata
+  }
 }
 
 /**

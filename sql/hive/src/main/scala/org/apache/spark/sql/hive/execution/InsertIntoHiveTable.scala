@@ -264,4 +264,6 @@ case class InsertIntoHiveTable(
         isSrcLocal = false)
     }
   }
+
+  override def outputPath: Option[Path] = table.storage.locationUri.map(new Path(_))
 }
