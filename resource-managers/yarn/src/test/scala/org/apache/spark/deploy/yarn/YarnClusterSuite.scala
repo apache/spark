@@ -168,8 +168,9 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val finalState = runSpark(false,
       mainClassName(YarnClusterDriverUseSparkHadoopUtilConf.getClass),
       appArgs = Seq("key=value", "spark.test.key=testvalue", result.getAbsolutePath()),
-      extraConf = Map("spark.hadoop.key" -> "value"),
-      extraEnv = Map("SPARK_TEST_HADOOP_CONF_DIR" -> customConf.getAbsolutePath()))
+      extraConf = Map(
+        "spark.hadoop.key" -> "value",
+        "spark.yarn.conf.dir" -> customConf.getAbsolutePath))
     checkResult(finalState, result)
   }
 
