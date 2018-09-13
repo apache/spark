@@ -438,7 +438,7 @@ case class SessionWindowStateStoreRestoreExec(
   extends UnaryExecNode with StateStoreReader with WatermarkSupport {
 
   // FIXME: does we really need to have global aggregation from here?
-  // yes... it even has a case which session is only key
+  // FIXME: yes... it even has a case which session is only key
   require(keyExpressions.nonEmpty, "Key expressions should be presented.")
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -452,14 +452,7 @@ case class SessionWindowStateStoreRestoreExec(
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { case (stateManager, iter) =>
 
-      // FIXME: would we want to break down into two multiple physical plans?
-      //
-      //      new MergingSortWithMultiValuesStateIterator(iter, stateManager, keyExpressions,
-      //        sessionExpression, child.output).map { row =>
-      //        numOutputRows += 1
-      //        row
-      //      }
-
+      // FIXME: remove
       val debugPartitionId = TaskContext.get().partitionId()
 
       val debugIter = iter.map { row =>
@@ -476,7 +469,19 @@ case class SessionWindowStateStoreRestoreExec(
         row
       }
 
-      val mergedIter = new MergingSortWithMultiValuesStateIterator(debugIter, stateManager,
+      // We need to filter out outdated inputs
+      val filteredIterator = watermarkPredicateForData match {
+        case Some(predicate) => debugIter.filter((row: InternalRow) => {
+          val pr = !predicate.eval(row)
+          if (!pr) {
+            logWarning(s"DEBUG - evicting input due to watermark... $row")
+          }
+          pr
+        })
+        case None => debugIter
+      }
+
+      val mergedIter = new MergingSortWithMultiValuesStateIterator(filteredIterator, stateManager,
         keyExpressions, sessionExpression, watermarkPredicateForData, child.output)
 
       val debugMergedIter = mergedIter.map { row =>
@@ -585,6 +590,7 @@ case class SessionWindowStateStoreSaveExec(
             while (iter.hasNext) {
               val row = iter.next().asInstanceOf[UnsafeRow]
               val keys = keyProjection(row)
+
               if (!alreadyRemovedKeys.contains(keys)) {
                 logWarning(s"DEBUG: partitionId $debugPartitionId - removing key ${keys} ...")
                 stateManager.removeKey(keys)
@@ -594,7 +600,6 @@ case class SessionWindowStateStoreSaveExec(
               val sessionProjection = GenerateUnsafeProjection.generate(
                 Seq(sessionExpression), child.output)
               val rowProjection = GenerateUnsafeProjection.generate(child.output, child.output)
-
               logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - keys ${keyProjection(row)}")
               logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - session ${sessionProjection(row)}")
               logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - row (proj) ${rowProjection(row)}")

@@ -57,6 +57,7 @@ import org.apache.spark.util.NextIterator
  *          the predicate, delete corresponding (key, indexToDelete) from KeyWithIndexToValueStore
  *          by overwriting with the value of (key, maxIndex), and removing [(key, maxIndex),
  *          decrement corresponding num values in KeyToNumValuesStore
+ *          (the operation doesn't guarantee stable ordering once value is removed)
  */
 class MultiValuesStateManager(
     storeNamePrefix: String,
@@ -160,8 +161,7 @@ class MultiValuesStateManager(
    * This implies the iterator must be consumed fully without any other operations on this manager
    * or the underlying store being interleaved.
    *
-   * NOTE: if any value is remove for the key, the order of values will be non-deterministic.
-   * It doesn't keep the order stable when removing value for gaining performance.
+   * NOTE: It doesn't keep order of values being stable when removing one for performance gain.
    */
   def removeByValueCondition(removalCondition: UnsafeRow => Boolean): Iterator[UnsafeRowPair] = {
     new NextIterator[UnsafeRowPair] {

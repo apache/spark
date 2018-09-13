@@ -30,8 +30,6 @@ class MergingSortWithMultiValuesStateIterator(
     watermarkPredicateForData: Option[Predicate],
     inputSchema: Seq[Attribute]) extends Iterator[InternalRow] {
 
-  // FIXME: handle watermark in input rows, not from state
-
   private case class SessionRowInformation(keys: UnsafeRow, sessionStart: Long, sessionEnd: Long,
                                            row: InternalRow)
 
@@ -56,20 +54,9 @@ class MergingSortWithMultiValuesStateIterator(
   private var currentStateIter: Iterator[InternalRow] = _
   private var currentStateFetchedKey: UnsafeRow = _
 
-  private val baseIterator = watermarkPredicateForData match {
-    case Some(predicate) => iter.filter((row: InternalRow) => {
-      val pr = !predicate.eval(row)
-      if (!pr) {
-        System.err.println(s"DEBUG - evicting input due to watermark... $row")
-      }
-      pr
-    })
-    case None => iter
-  }
-
   override def hasNext: Boolean = {
     currentRow != null || currentStateRow != null ||
-      (currentStateIter != null && currentStateIter.hasNext) || baseIterator.hasNext
+      (currentStateIter != null && currentStateIter.hasNext) || iter.hasNext
   }
 
   override def next(): InternalRow = {
@@ -121,8 +108,8 @@ class MergingSortWithMultiValuesStateIterator(
   }
 
   private def mayFillCurrentRow(): Unit = {
-    if (baseIterator.hasNext) {
-      currentRow = SessionRowInformation.of(baseIterator.next())
+    if (iter.hasNext) {
+      currentRow = SessionRowInformation.of(iter.next())
       System.err.println(s"DEBUG - filling current row... current row: $currentRow")
     }
   }
@@ -135,6 +122,10 @@ class MergingSortWithMultiValuesStateIterator(
       currentStateIter = null
 
       if (currentRow != null && currentRow.keys != currentStateFetchedKey) {
+
+        // This is necessary because MultiValuesStateManager doesn't guarantee stable ordering
+        // The number of values for the given key is expected to be likely small,
+        // so sorting it here doesn't hurt.
         val unsortedIter = stateManager.get(currentRow.keys)
         currentStateIter = unsortedIter.toList.sortWith((row1, row2) => {
           val rowInfo1 = SessionRowInformation.of(row1)
@@ -146,9 +137,9 @@ class MergingSortWithMultiValuesStateIterator(
         currentStateFetchedKey = currentRow.keys
         if (currentStateIter.hasNext) {
           currentStateRow = SessionRowInformation.of(currentStateIter.next())
-          System.err.println(s"DEBUG: WARN - read data ${currentStateRow.row} from state for key ${currentRow.keys}")
+          System.err.println(s"DEBUG: read data ${currentStateRow.row} from state for key ${currentRow.keys}")
         } else {
-          System.err.println(s"DEBUG: WARN - no state data for key ${currentRow.keys}")
+          System.err.println(s"DEBUG: no state data for key ${currentRow.keys}")
         }
       }
     }

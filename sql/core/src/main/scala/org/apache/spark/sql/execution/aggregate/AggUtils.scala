@@ -115,6 +115,8 @@ object AggUtils {
     finalAggregate :: Nil
   }
 
+  // FIXME: distinct in session makes sense?
+
   def planAggregateWithOneDistinct(
       groupingExpressions: Seq[NamedExpression],
       functionsWithDistinct: Seq[AggregateExpression],
@@ -338,16 +340,19 @@ object AggUtils {
     finalAndCompleteAggregate :: Nil
   }
 
-  // FIXME: change!
   /**
-   * Plans a streaming aggregation using the following progression:
+   * Plans a streaming session aggregation using the following progression:
    *
-   *  - Partial Aggregation
-   *  - Shuffle
-   *  - Partial Merge (now there is at most 1 tuple per group)
-   *  - StateStoreRestore (now there is 1 tuple from this batch + optionally one from the previous)
-   *  - PartialMerge (now there is at most 1 tuple per group)
-   *  - StateStoreSave (saves the tuple for the next batch)
+   *  - Partial Merge (group: all keys)
+   *    - all tuples will have aggregated columns with initial value
+   *  - Shuffle & Sort (distribution: keys "without" session, sort: all keys)
+   *  - SessionWindowStateStoreRestore (group: keys "without" session)
+   *    - merge input tuples with stored tuples (sessions) respecting sort order
+   *    - calculate session among tuples, and update all tuples to get correct session range
+   *  - PartialMerge (group: all keys)
+   *    - now there is at most 1 tuple per group
+   *  - SessionWindowStateStoreSave (group: keys "without" session)
+   *    - saves tuple(s) for the next batch (multiple sessions could co-exist at the same time)
    *  - Complete (output the current result of the aggregation)
    */
   def planStreamingAggregationForSession(
@@ -365,6 +370,9 @@ object AggUtils {
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
+    // we don't do partial aggregate here, because it requires additional shuffle
+    // and there will be less rows which have same session start
+    // here doing partial merge is to have aggregated columns with default value for each row
     val partialAggregate: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
@@ -377,7 +385,7 @@ object AggUtils {
         child = child)
     }
 
-    // shuffle & sort happens here
+    // shuffle & sort happens here: most of details are also handled in this physical plan
     val restored = SessionWindowStateStoreRestoreExec(groupingWithoutSessionAttributes,
       sessionExpression.toAttribute, stateInfo = None, eventTimeWatermark = None, partialAggregate)
 
