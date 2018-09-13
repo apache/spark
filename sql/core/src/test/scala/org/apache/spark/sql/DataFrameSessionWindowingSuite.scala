@@ -29,8 +29,6 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
 
   import testImplicits._
 
-  // FIXME: session window
-
   test("simple session window with record at window start") {
     val df = Seq(
       ("2016-03-27 19:39:30", 1, "a")).toDF("time", "value", "id")
@@ -52,7 +50,8 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
       ("2016-03-27 19:39:56", 2, "a"),
       ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
 
-    // session window handles sorting while applying group by
+    // session window handles sort while applying group by
+    // whereas time window doesn't
 
     checkAnswer(
       df.groupBy(session($"time", "10 seconds"))
@@ -60,6 +59,36 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
         .orderBy($"session.start".asc)
         .select("counts"),
       Seq(Row(2), Row(1))
+    )
+  }
+
+  test("session window groupBy with multiple keys statement") {
+    val df = Seq(
+      ("2016-03-27 19:39:34", 1, "a"),
+      ("2016-03-27 19:39:39", 1, "a"),
+      ("2016-03-27 19:39:56", 2, "a"),
+      ("2016-03-27 19:40:04", 2, "a"),
+      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
+
+    // session window handles sort while applying group by
+    // whereas time window doesn't
+
+    // expected sessions
+    // key "a" => (19:39:34 ~ 19:39:49) (19:39:56 ~ 19:40:14)
+    // key "b" => (19:39:27 ~ 19:39:37)
+
+    checkAnswer(
+      df.groupBy(session($"time", "10 seconds"), 'id)
+        .agg(count("*").as("counts"), sum("value").as("sum"))
+        .orderBy($"session.start".asc)
+        .selectExpr("CAST(session.start AS STRING)", "CAST(session.end AS STRING)", "id",
+          "counts", "sum"),
+
+      Seq(
+        Row("2016-03-27 19:39:27", "2016-03-27 19:39:37", "b", 1, 4),
+        Row("2016-03-27 19:39:34", "2016-03-27 19:39:49", "a", 2, 2),
+        Row("2016-03-27 19:39:56", "2016-03-27 19:40:14", "a", 2, 4)
+      )
     )
   }
 
