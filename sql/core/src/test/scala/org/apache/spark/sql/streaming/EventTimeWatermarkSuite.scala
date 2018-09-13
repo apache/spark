@@ -290,10 +290,6 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
     testStream(windowedAggregation)(
       AddData(inputData, 10, 11), // sessions: key 1 => (10,16)
-      AssertOnQuery(execution => {
-        execution.explain(true)
-        true
-      }),
       CheckNewAnswer(),
       AddData(inputData, 17),
       // Advance watermark to 7 seconds
@@ -332,10 +328,6 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
     testStream(windowedAggregation)(
       AddData(inputData, 10, 11), // sessions: (10,16)
-      AssertOnQuery(execution => {
-        execution.explain(true)
-        true
-      }),
       CheckNewAnswer(),
       AddData(inputData, 17),
       // Advance watermark to 7 seconds
@@ -373,15 +365,10 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
         $"session".getField("end").cast("long").as[Long], $"count".as[Long], $"sum".as[Long])
 
     testStream(windowedAggregation, OutputMode.Update())(
-
       AddData(inputData, 10, 11),
       // Advance watermark to 1 seconds
       // sessions: key 1 => (10,16)
       CheckNewAnswer((1, 10, 16, 2, 21)),
-      AssertOnQuery(execution => {
-        execution.explain(true)
-        true
-      }),
       AddData(inputData, 17),
       // Advance watermark to 7 seconds
       // sessions: key 1 => (10,16), (17,22)
@@ -423,10 +410,6 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       // Advance watermark to 1 seconds
       // sessions: (10,16)
       CheckNewAnswer((10, 16, 2, 21)),
-      AssertOnQuery(execution => {
-        execution.explain(true)
-        true
-      }),
       AddData(inputData, 17),
       // Advance watermark to 7 seconds
       // sessions: (10,16), (17,22)
