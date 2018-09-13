@@ -60,6 +60,8 @@ case class SessionWindow(timeColumn: Expression, gapDuration: Long) extends Unar
 }
 
 object SessionWindow {
+  val marker = "spark.sessionWindow"
+
   /**
    * Parses the interval string for a valid time duration. CalendarInterval expects interval
    * strings to start with the string `interval`. For usability, we prepend `interval` to the string

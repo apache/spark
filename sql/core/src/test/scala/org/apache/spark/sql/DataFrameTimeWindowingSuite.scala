@@ -354,21 +354,4 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
       )
     }
   }
-
-  // TODO: we can add session window tests when session window is enabled for batch
-
-  test("Session window in batch query throws nice exception") {
-    val df = Seq(
-      ("2016-03-27 19:39:30", 1, "a")).toDF("time", "value", "id")
-
-    val e = intercept[AnalysisException] {
-      df.groupBy(session($"time", "10 seconds"))
-        .agg(count("*").as("counts"))
-        .orderBy($"session.start".asc)
-        .select($"session.start".cast("string"), $"session.end".cast("string"), $"counts")
-    }
-
-    assert(e.getMessage.contains("Session window is not supported for batch query"))
-  }
-
 }
