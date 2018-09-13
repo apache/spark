@@ -482,7 +482,10 @@ case class SessionWindowStateStoreRestoreExec(
       }
 
       val mergedIter = new MergingSortWithMultiValuesStateIterator(filteredIterator, stateManager,
-        keyExpressions, sessionExpression, watermarkPredicateForData, child.output)
+        keyExpressions, sessionExpression, watermarkPredicateForData, child.output).map { row =>
+        numOutputRows += 1
+        row
+      }
 
       val debugMergedIter = mergedIter.map { row =>
         val keysProjection = GenerateUnsafeProjection.generate(keyExpressions, child.output)
@@ -498,22 +501,7 @@ case class SessionWindowStateStoreRestoreExec(
         row
       }
 
-      new UpdatingSessionIterator(debugMergedIter, keyExpressions, sessionExpression,
-        child.output).map { row =>
-        numOutputRows += 1
-
-        val keysProjection = GenerateUnsafeProjection.generate(keyExpressions, child.output)
-        val sessionProjection = GenerateUnsafeProjection.generate(
-          Seq(sessionExpression), child.output)
-        val rowProjection = GenerateUnsafeProjection.generate(child.output, child.output)
-
-        logWarning(s"DEBUG: partitionId $debugPartitionId - updated session row - keys ${keysProjection(row)}")
-        logWarning(s"DEBUG: partitionId $debugPartitionId - updated session row - session ${sessionProjection(row)}")
-        logWarning(s"DEBUG: partitionId $debugPartitionId - updated session row - row (proj) ${rowProjection(row)}")
-        logWarning(s"DEBUG: partitionId $debugPartitionId - updated session row - row ${row}")
-
-        row
-      }
+      debugMergedIter
     }
   }
 

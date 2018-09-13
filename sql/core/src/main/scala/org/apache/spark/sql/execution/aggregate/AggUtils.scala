@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.streaming.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec, StateStoreRestoreExec, StateStoreSaveExec}
+import org.apache.spark.sql.execution.streaming._
 
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
@@ -114,8 +114,6 @@ object AggUtils {
 
     finalAggregate :: Nil
   }
-
-  // FIXME: distinct in session makes sense?
 
   def planAggregateWithOneDistinct(
       groupingExpressions: Seq[NamedExpression],
@@ -348,7 +346,9 @@ object AggUtils {
    *  - Shuffle & Sort (distribution: keys "without" session, sort: all keys)
    *  - SessionWindowStateStoreRestore (group: keys "without" session)
    *    - merge input tuples with stored tuples (sessions) respecting sort order
+   *  - UpdatingSessionExec
    *    - calculate session among tuples, and update all tuples to get correct session range
+   *    - NOTE: it leverages the fact that the output of SessionWindowStateStoreRestore is sorted
    *  - PartialMerge (group: all keys)
    *    - now there is at most 1 tuple per group
    *  - SessionWindowStateStoreSave (group: keys "without" session)
@@ -389,6 +389,10 @@ object AggUtils {
     val restored = SessionWindowStateStoreRestoreExec(groupingWithoutSessionAttributes,
       sessionExpression.toAttribute, stateInfo = None, eventTimeWatermark = None, partialAggregate)
 
+    val updatedSession = UpdatingSessionExec(groupingWithoutSessionAttributes,
+      sessionExpression.toAttribute, optRequiredChildDistribution = None,
+      optRequiredChildOrdering = None, restored)
+
     val partialMerged: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
@@ -401,7 +405,7 @@ object AggUtils {
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = groupingAttributes ++
             aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-        child = restored)
+        child = updatedSession)
     }
 
     // Note: stateId and returnAllStates are filled in later with preparation rules

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, BindReferences, CreateNamedStruct, Expression, Literal, PreciseTimestampConversion, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.types.{LongType, TimestampType}
 
@@ -47,7 +47,7 @@ class UpdatingSessionIterator(
 
   val processedKeys: mutable.HashSet[InternalRow] = new mutable.HashSet[InternalRow]()
 
-  // FIXME: data loss seen... one data from input and one data from state
+  // FIXME: check whether it can be run with such situation: empty groupWithoutSessionExpressions
 
   override def hasNext: Boolean = {
     assertIteratorNotCorrupted()
@@ -190,8 +190,6 @@ class UpdatingSessionIterator(
     } else {
       returnRowsIter = returnRows.iterator
     }
-
-    //returnRowsIter = returnRows.iterator
 
     // FIXME: DEBUG
     val (rIter, tmpReturnRowsIter) = returnRowsIter.duplicate
