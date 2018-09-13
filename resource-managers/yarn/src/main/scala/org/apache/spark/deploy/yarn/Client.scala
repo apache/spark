@@ -697,7 +697,7 @@ private[spark] class Client(
     val confDirsEnvKeys = Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR")
     val confDirProp = sparkConf.getOption("spark.yarn.conf.dir")
 
-    val confDirPaths = (confDirsEnvKeys.map(sys.env.get) :+ confDirProp).flatMap(_.toList)
+    val confDirPaths = (confDirsEnvKeys.map(sys.env.get) :+ confDirProp).flatten
     confDirPaths.foreach { path =>
       logDebug("Reading config files from " + path)
       val dir = new File(path)
