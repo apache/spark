@@ -30,7 +30,7 @@ import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.functions.{count, session, window}
+import org.apache.spark.sql.functions.{count, session, sum, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.util.Utils
@@ -284,9 +284,9 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       .withColumn("eventTime", $"value".cast("timestamp"))
       .withWatermark("eventTime", "10 seconds")
       .groupBy(session($"eventTime", "5 seconds") as 'session, 'valuegroup)
-      .agg(count("*") as 'count)
+      .agg(count("*") as 'count, sum("value") as 'sum)
       .select($"valuegroup", $"session".getField("start").cast("long").as[Long],
-        $"session".getField("end").cast("long").as[Long], $"count".as[Long])
+        $"session".getField("end").cast("long").as[Long], $"count".as[Long], $"sum".as[Long])
 
     testStream(windowedAggregation)(
       AddData(inputData, 10, 11), // sessions: key 1 => (10,16)
@@ -307,14 +307,14 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       // Advance watermark to 25 seconds
       // sessions: key 1 => (10,16), (17,22) / key 2 => (25,30) / key 3 => (35,40)
       // evicts: key 1 => (10,16), (17,22)
-      CheckNewAnswer((1, 10, 16, 2), (1, 17, 22, 1)),
+      CheckNewAnswer((1, 10, 16, 2, 21), (1, 17, 22, 1, 17)),
       AddData(inputData, 10),   // Should not emit anything as data less than watermark
       CheckNewAnswer(),
       AddData(inputData, 40),
       // Advance watermark to 30 seconds
       // sessions: key 2 => (25,30) / key 3 => (35,45)
       // evicts: key 2 => (25,30)
-      CheckNewAnswer((2, 25, 30, 1))
+      CheckNewAnswer((2, 25, 30, 1, 25))
     )
   }
 
@@ -326,9 +326,9 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       .withColumn("eventTime", $"value".cast("timestamp"))
       .withWatermark("eventTime", "10 seconds")
       .groupBy(session($"eventTime", "5 seconds") as 'session)
-      .agg(count("*") as 'count)
+      .agg(count("*") as 'count, sum("value") as 'sum)
       .select($"session".getField("start").cast("long").as[Long],
-        $"session".getField("end").cast("long").as[Long], $"count".as[Long])
+        $"session".getField("end").cast("long").as[Long], $"count".as[Long], $"sum".as[Long])
 
     testStream(windowedAggregation)(
       AddData(inputData, 10, 11), // sessions: (10,16)
@@ -349,14 +349,14 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       // Advance watermark to 25 seconds
       // sessions: (10,16), (17,22), (25,30), (35,40)
       // evicts: (10,16), (17,22)
-      CheckNewAnswer((10, 16, 2), (17, 22, 1)),
+      CheckNewAnswer((10, 16, 2, 21), (17, 22, 1, 17)),
       AddData(inputData, 10),   // Should not emit anything as data less than watermark
       CheckNewAnswer(),
       AddData(inputData, 40),
       // Advance watermark to 30 seconds
       // sessions: (25,30) / (35,45)
       // evicts: (25,30)
-      CheckNewAnswer((25, 30, 1))
+      CheckNewAnswer((25, 30, 1, 25))
     )
   }
 
@@ -368,16 +368,16 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       .withColumn("eventTime", $"value".cast("timestamp"))
       .withWatermark("eventTime", "10 seconds")
       .groupBy(session($"eventTime", "5 seconds") as 'session, 'valuegroup)
-      .agg(count("*") as 'count)
+      .agg(count("*") as 'count, sum("value") as 'sum)
       .select($"valuegroup", $"session".getField("start").cast("long").as[Long],
-        $"session".getField("end").cast("long").as[Long], $"count".as[Long])
+        $"session".getField("end").cast("long").as[Long], $"count".as[Long], $"sum".as[Long])
 
     testStream(windowedAggregation, OutputMode.Update())(
 
       AddData(inputData, 10, 11),
       // Advance watermark to 1 seconds
       // sessions: key 1 => (10,16)
-      CheckNewAnswer((1, 10, 16, 2)),
+      CheckNewAnswer((1, 10, 16, 2, 21)),
       AssertOnQuery(execution => {
         execution.explain(true)
         true
@@ -386,22 +386,22 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       // Advance watermark to 7 seconds
       // sessions: key 1 => (10,16), (17,22)
       // FIXME: subtract with previous state? or leave it as it is?
-      CheckNewAnswer((1, 10, 16, 2), (1, 17, 22, 1)),
+      CheckNewAnswer((1, 10, 16, 2, 21), (1, 17, 22, 1, 17)),
       AddData(inputData, 25),
       // Advance watermark to 15 seconds
       // sessions: key 1 => (10,16), (17,22) / key 2 => (25,30)
-      CheckNewAnswer((2, 25, 30, 1)),
+      CheckNewAnswer((2, 25, 30, 1, 25)),
       AddData(inputData, 35),
       // Advance watermark to 25 seconds
       // sessions: key 1 => (10,16), (17,22) / key 2 => (25,30) / key 3 => (35,40)
       // evicts: key 1 => (10,16), (17,22)
-      CheckNewAnswer((3, 35, 40, 1)),
+      CheckNewAnswer((3, 35, 40, 1, 35)),
       AddData(inputData, 10),   // Should not emit anything as data less than watermark
       CheckNewAnswer(),
       AddData(inputData, 40),
       // Advance watermark to 30 seconds
       // sessions: key 2 => (25,30) / key 3 => (35,40) / key 4 => (40, 45)
-      CheckNewAnswer((4, 40, 45, 1))
+      CheckNewAnswer((4, 40, 45, 1, 40))
     )
   }
 
@@ -413,16 +413,16 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       .withColumn("eventTime", $"value".cast("timestamp"))
       .withWatermark("eventTime", "10 seconds")
       .groupBy(session($"eventTime", "5 seconds") as 'session)
-      .agg(count("*") as 'count)
+      .agg(count("*") as 'count, sum("value") as 'sum)
       .select($"session".getField("start").cast("long").as[Long],
-        $"session".getField("end").cast("long").as[Long], $"count".as[Long])
+        $"session".getField("end").cast("long").as[Long], $"count".as[Long], $"sum".as[Long])
 
     testStream(windowedAggregation, OutputMode.Update())(
 
       AddData(inputData, 10, 11),
       // Advance watermark to 1 seconds
       // sessions: (10,16)
-      CheckNewAnswer((10, 16, 2)),
+      CheckNewAnswer((10, 16, 2, 21)),
       AssertOnQuery(execution => {
         execution.explain(true)
         true
@@ -431,22 +431,22 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       // Advance watermark to 7 seconds
       // sessions: (10,16), (17,22)
       // FIXME: subtract with previous state? or leave it as it is?
-      CheckNewAnswer((10, 16, 2), (17, 22, 1)),
+      CheckNewAnswer((10, 16, 2, 21), (17, 22, 1, 17)),
       AddData(inputData, 25),
       // Advance watermark to 15 seconds
       // sessions: (10,16), (17,22), (25,30)
-      CheckNewAnswer((10, 16, 2), (17, 22, 1), (25, 30, 1)),
+      CheckNewAnswer((10, 16, 2, 21), (17, 22, 1, 17), (25, 30, 1, 25)),
       AddData(inputData, 35),
       // Advance watermark to 25 seconds
       // sessions: (10,16), (17,22), (25,30), (35,40)
       // evicts: (10,16), (17,22)
-      CheckNewAnswer((10, 16, 2), (17, 22, 1), (25, 30, 1), (35, 40, 1)),
+      CheckNewAnswer((10, 16, 2, 21), (17, 22, 1, 17), (25, 30, 1, 25), (35, 40, 1, 35)),
       AddData(inputData, 10),   // Should not emit anything as data less than watermark
       CheckNewAnswer(),
       AddData(inputData, 40),
       // Advance watermark to 30 seconds
       // sessions: (25,30), (35,45)
-      CheckNewAnswer((25, 30, 1), (35, 45, 2))
+      CheckNewAnswer((25, 30, 1, 25), (35, 45, 2, 75))
     )
   }
 

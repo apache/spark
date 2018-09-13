@@ -77,7 +77,10 @@ class UpdatingSessionIterator(
 
     var exitCondition = false
     while (iter.hasNext && !exitCondition) {
-      val row = iter.next()
+      // we are going to modify the row, so we should make sure multiple objects are not
+      // referencing same memory, which could be possible when optimizing iterator
+      // without this, multiple rows in same key will be returned with same content
+      val row = iter.next().copy()
 
       val keysProjection = GenerateUnsafeProjection.generate(groupWithoutSessionExpressions,
         inputSchema)
@@ -103,6 +106,9 @@ class UpdatingSessionIterator(
           // expanding session length if needed
           expandEndOfCurrentSession(sessionEnd)
           currentRows += row
+
+          System.err.println(s"DEBUG: - adding row: $row / currentRows: $currentRows")
+
         } else {
           closeCurrentSession(keyChanged = false)
           startNewSession(row, keys, sessionStart, sessionEnd)
@@ -159,29 +165,29 @@ class UpdatingSessionIterator(
       s"currentRows: $currentRows / currentSessionStart: $currentSessionStart / " +
       s"currentSessionEnd: $currentSessionEnd")
 
+    val sessionStruct = CreateNamedStruct(
+      Literal("start") ::
+        PreciseTimestampConversion(
+          Literal(currentSessionStart, LongType), LongType, TimestampType) ::
+        Literal("end") ::
+        PreciseTimestampConversion(
+          Literal(currentSessionEnd, LongType), LongType, TimestampType) ::
+        Nil)
+
+    val convertedAllExpressions = inputSchema.map { x =>
+      BindReferences.bindReference[Expression](x, inputSchema)
+    }
+
+    val newSchemaExpressions = convertedAllExpressions.indices.map { idx =>
+      if (idx == sessionIndex) {
+        sessionStruct
+      } else {
+        convertedAllExpressions(idx)
+      }
+    }
+
     val returnRows = currentRows.map { internalRow =>
-      val sessionStruct = CreateNamedStruct(
-        Literal("start") ::
-          PreciseTimestampConversion(
-            Literal(currentSessionStart, LongType), LongType, TimestampType) ::
-          Literal("end") ::
-          PreciseTimestampConversion(
-            Literal(currentSessionEnd, LongType), LongType, TimestampType) ::
-          Nil)
-
-      val convertedAllExpressions = inputSchema.map { x =>
-        BindReferences.bindReference[Expression](x, inputSchema)
-      }
-
-      val newSchemaExpressions = convertedAllExpressions.indices.map { idx =>
-        if (idx == sessionIndex) {
-          sessionStruct
-        } else {
-          convertedAllExpressions(idx)
-        }
-      }
-
-      val proj = GenerateUnsafeProjection.generate(newSchemaExpressions, inputSchema)
+      val proj = UnsafeProjection.create(newSchemaExpressions, inputSchema)
       proj(internalRow)
     }.toList
 
