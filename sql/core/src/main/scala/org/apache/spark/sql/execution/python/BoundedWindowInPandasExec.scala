@@ -257,10 +257,23 @@ case class BoundedWindowInPandasExec(
   protected override def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute()
 
+    def beginOffsetIndex(frameIndex: Int) = frameIndex * 2
+    def endOffsetIndex(frameIndex: Int) = frameIndex * 2 + 1
+
     // Unwrap the expressions and factories from the map.
-    val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
+    val expressionsWithFrameIndex =
+      windowFrameExpressionFactoryPairs.map(_._1).zipWithIndex.flatMap {
+        case (buffer, frameIndex) => buffer.map( expr => (expr, frameIndex))
+      }
+
+    val expressions = expressionsWithFrameIndex.map(_._1)
+    val expressionIndexToFrameIndex =
+      expressionsWithFrameIndex.map(_._2).zipWithIndex.map(_.swap).toMap
 
     val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
+
+    val numFrames = factories.length
+
     val inMemoryThreshold = sqlContext.conf.windowExecBufferInMemoryThreshold
     val spillThreshold = sqlContext.conf.windowExecBufferSpillThreshold
 
@@ -270,67 +283,67 @@ case class BoundedWindowInPandasExec(
     val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
     // Extract window expressions and window functions
-    val windowExpressions = windowExpression.flatMap(_.collect { case e: WindowExpression => e })
+    val windowExpressions = expressions.flatMap(_.collect { case e: WindowExpression => e })
     val udfExpressions = windowExpressions.map(_.windowFunction.asInstanceOf[PythonUDF])
 
-    println("expressions: " + expressions)
-    println("windowExpression: " + windowExpressions)
-    println("udfExpressions: " + udfExpressions)
-
+    // We shouldn't be chaining anything here.
+    // All chained python functions should only contain one function.
     val (pyFuncs, inputs) = udfExpressions.map(collectFunctions).unzip
+    require(pyFuncs.length == expressions.length)
 
     // Filter child output attributes down to only those that are UDF inputs.
     // Also eliminate duplicate UDF inputs.
-    val allInputs = new ArrayBuffer[Expression]
-    val dataTypes = new ArrayBuffer[DataType]
+    val dataInputs = new ArrayBuffer[Expression]
+    val dataInputTypes = new ArrayBuffer[DataType]
     val argOffsets = inputs.map { input =>
       input.map { e =>
-        if (allInputs.exists(_.semanticEquals(e))) {
-          allInputs.indexWhere(_.semanticEquals(e))
+        if (dataInputs.exists(_.semanticEquals(e))) {
+          dataInputs.indexWhere(_.semanticEquals(e))
         } else {
-          allInputs += e
-          dataTypes += e.dataType
-          allInputs.length - 1
+          dataInputs += e
+          dataInputTypes += e.dataType
+          dataInputs.length - 1
         }
       }.toArray
     }.toArray
 
-    // Add index columns and adjust argOffsets by 2 (begin and end indices)
-    // TODO: Handle multiple window frames
-    // TODO: Handle short circuit code path for unbounded window
-    allInputs.prependAll(Seq(
-      BoundReference(0, IntegerType, true),
-      BoundReference(1, IntegerType, true)))
-    dataTypes.prependAll(
-      Seq(IntegerType, IntegerType))
-    for (i <- argOffsets.indices) {
-      argOffsets(i) = Array(0, 1) ++ argOffsets(i).map(_ + 2)
+    // Add window indices to allInputs, dataTypes and argOffsets
+    // We also deduplicate window indices so window frames that are identical can
+    // share the same window index columns
+    val indiceInputs = factories.indices.flatMap {frameIndex =>
+      Seq(
+        BoundReference(beginOffsetIndex(frameIndex), IntegerType, nullable = false),
+        BoundReference(endOffsetIndex(frameIndex), IntegerType, nullable = false)
+      )
     }
 
-    println("allInputs: " + allInputs)
-    println("argOffsets: " + argOffsets.deep)
+    pyFuncs.indices.foreach { exprIndex =>
+      val frameIndex = expressionIndexToFrameIndex(exprIndex)
+      argOffsets(exprIndex) =
+        Array(beginOffsetIndex(frameIndex), endOffsetIndex(frameIndex)) ++
+          argOffsets(exprIndex).map(_ + indiceInputs.length)
+    }
 
+    val allInputs = indiceInputs ++ dataInputs
+    val allInputTypes = allInputs.map(_.dataType)
 
+    // TODO: Handle short circuit code path for unbounded window
     // Schema of input rows to the python runner
-    val windowInputSchema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
-      StructField(s"_$i", dt)
-    })
-
-    println("window input schema: " + windowInputSchema)
-
+    val windowInputSchema = StructType(
+      allInputTypes.zipWithIndex.map { case (dt, i) =>
+        StructField(s"_$i", dt)
+      }
+    )
     // Start processing.
     child.execute().mapPartitions { iter =>
       val context = TaskContext.get()
 
       // Get all relevant projections.
       val resultProj = createResultProjection(expressions)
-      val inputSchemaWithIndex: Seq[Attribute] = Seq(
-        AttributeReference("begin_index", IntegerType)(),
-        AttributeReference("end_index", IntegerType)()
-      ) ++ child.output
       val pythonInputProj = UnsafeProjection.create(
         allInputs,
-        inputSchemaWithIndex)
+        indiceInputs.map(ref => AttributeReference("i", ref.dataType)()) ++ child.output
+      )
       val grouping = UnsafeProjection.create(partitionSpec, child.output)
 
       // The queue used to buffer input rows so we can drain it to
@@ -366,10 +379,10 @@ case class BoundedWindowInPandasExec(
           new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
         var bufferIterator: Iterator[UnsafeRow] = _
 
-        val indexRow = new SpecificInternalRow(Seq(IntegerType, IntegerType))
+        val indexRow = new SpecificInternalRow(Array.fill(numFrames * 2)(IntegerType))
 
         val frames = factories.map(_(indexRow))
-        val numFrames = frames.length
+
         private[this] def fetchNextPartition() {
           // Collect all the rows in the current partition.
           // Before we start to fetch new input rows, make a copy of nextGroup.
@@ -414,16 +427,12 @@ case class BoundedWindowInPandasExec(
               var i = 0
               while (i < numFrames) {
                 frames(i).write(rowIndex, current)
-                indexRow.setInt(2 * i + 0, frames(i).currentLowIndex())
-                indexRow.setInt(2 * i + 1, frames(i).currentHighIndex())
+                indexRow.setInt(beginOffsetIndex(i), frames(i).currentLowIndex())
+                indexRow.setInt(endOffsetIndex(i), frames(i).currentHighIndex())
                 i += 1
               }
 
               val r = pythonInputProj(join(indexRow, current))
-              // println(r.numFields())
-              // println(r.getInt(0))
-              // println(r.getInt(1))
-              // println(r.getDouble(2))
               r
           }
         }
