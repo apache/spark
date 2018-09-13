@@ -307,10 +307,20 @@ trait ProgressReporter extends Logging {
         val execLeafToSource = allLogicalPlanLeaves.zip(allExecPlanLeaves).flatMap {
           case (lp, ep) => logicalPlanLeafToSource.get(lp).map { source => ep -> source }
         }
-        val sourceToInputRowsTuples = execLeafToSource.map { case (execLeaf, source) =>
+        // Multiple leaf physical nodes may refer to the same source (can happen with
+        // self-unions or self-joins). Here we create an IdentityHashMap to only count the input
+        // rows for each unique source.
+        val sourceToInputRows = new IdentityHashMap[BaseStreamingSource, Long]
+
+        execLeafToSource.map { case (execLeaf, source) =>
           val numRows = execLeaf.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
-          source -> numRows
+          if (sourceToInputRows.containsKey(source)) {
+            assert(sourceToInputRows.get(source) == numRows)
+          } else {
+            sourceToInputRows.put(source, numRows)
+          }
         }
+        val sourceToInputRowsTuples = sourceToInputRows.asScala.toSeq
         sumRows(sourceToInputRowsTuples)
       } else {
         if (!metricWarningLogged) {
