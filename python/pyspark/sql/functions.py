@@ -1711,7 +1711,7 @@ def regexp_extract(str, pattern, idx):
 @ignore_unicode_prefix
 @since(1.5)
 def regexp_replace(str, pattern, replacement):
-    """Replace all substrings of the specified string value that match regexp with rep.
+    r"""Replace all substrings of the specified string value that match regexp with rep.
 
     >>> df = spark.createDataFrame([('100-200',)], ['str'])
     >>> df.select(regexp_replace('str', r'(\d+)', '--').alias('d')).collect()

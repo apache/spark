@@ -116,7 +116,7 @@ def run_tests(tests_timeout):
 
     failure_note_by_errcode = {
         # error to denote run-tests script failures:
-        1: 'executing the `dev/run-tests` script',  # noqa: W605
+        1: 'executing the `dev/run-tests` script',
         ERROR_CODES["BLOCK_GENERAL"]: 'some tests',
         ERROR_CODES["BLOCK_RAT"]: 'RAT tests',
         ERROR_CODES["BLOCK_SCALA_STYLE"]: 'Scala style tests',
