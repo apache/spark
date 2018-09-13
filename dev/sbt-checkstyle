@@ -21,6 +21,7 @@
 # with failure (either resolution or compilation); the "q" makes SBT quit.
 ERRORS=$(echo -e "q\n" \
     | build/sbt \
+        -Phadoop-palantir \
         -Pkinesis-asl \
         -Pmesos \
         -Pkafka-0-8 \
