@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.integrationtest
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{Pod, Secret, SecretBuilder}
+import io.fabric8.kubernetes.api.model.{Pod, SecretBuilder}
 import org.apache.commons.codec.binary.Base64
 import org.apache.commons.io.output.ByteArrayOutputStream
 import org.scalatest.concurrent.Eventually
@@ -53,7 +53,6 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
       .delete()
   }
 
-  // TODO: [SPARK-25291] This test is flaky with regards to memory of executors
   test("Run SparkPi with env and mount secrets.", k8sTestTag) {
     createTestSecret()
     sparkAppConf
