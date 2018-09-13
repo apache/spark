@@ -437,10 +437,6 @@ case class SessionWindowStateStoreRestoreExec(
     child: SparkPlan)
   extends UnaryExecNode with StateStoreReader with WatermarkSupport {
 
-  // FIXME: does we really need to have global aggregation from here?
-  // FIXME: yes... it even has a case which session is only key
-  require(keyExpressions.nonEmpty, "Key expressions should be presented.")
-
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
@@ -510,7 +506,11 @@ case class SessionWindowStateStoreRestoreExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+    if (keyExpressions.isEmpty) {
+      AllTuples :: Nil
+    } else {
+      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+    }
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
@@ -530,9 +530,6 @@ case class SessionWindowStateStoreSaveExec(
     eventTimeWatermark: Option[Long] = None,
     child: SparkPlan)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
-
-  // FIXME: does we really need to have global aggregation from here?
-  require(keyExpressions.nonEmpty, "Key expressions should be presented.")
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
@@ -647,7 +644,10 @@ case class SessionWindowStateStoreSaveExec(
 
               // Remove old aggregates if watermark specified
               allRemovalsTimeMs += timeTakenMs {
-                evictSessionsByWatermark(stateManager)
+                // fully consume iterator to let removal take effect
+                evictSessionsByWatermark(stateManager).map { rowPair =>
+                  System.err.println(s"DEBUG: evicting row ${rowPair.value}")
+                }.toList
               }
               commitTimeMs += timeTakenMs { stateManager.commit() }
               setStoreMetrics(stateManager)
@@ -664,7 +664,11 @@ case class SessionWindowStateStoreSaveExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+    if (keyExpressions.isEmpty) {
+      AllTuples :: Nil
+    } else {
+      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+    }
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -289,6 +289,61 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     intercept[IllegalStateException] {
       iterator.next()
     }
+  }
+
+  test("no key") {
+    val noKeyRowSchema = new StructType()
+      .add("session", new StructType().add("start", LongType).add("end", LongType))
+      .add("aggVal1", LongType).add("aggVal2", DoubleType)
+    val noKeyRowAttributes = noKeyRowSchema.toAttributes
+
+    val noKeySessionAttribute = noKeyRowAttributes.filter(attr => attr.name == "session").head
+
+    def createNoKeyRow(sessionStart: Long, sessionEnd: Long,
+                       aggVal1: Long, aggVal2: Double): UnsafeRow = {
+      val genericRow = new GenericInternalRow(4)
+      val session: Array[Any] = new Array[Any](2)
+      session(0) = sessionStart
+      session(1) = sessionEnd
+
+      val sessionRow = new GenericInternalRow(session)
+      genericRow.update(0, sessionRow)
+
+      genericRow.setLong(1, aggVal1)
+      genericRow.setDouble(2, aggVal2)
+
+      val rowProjection = GenerateUnsafeProjection.generate(noKeyRowAttributes, noKeyRowAttributes)
+      rowProjection(genericRow)
+    }
+
+    def assertNoKeyRowsEqualsWithNewSession(expectedRow: InternalRow, retRow: InternalRow,
+                                            newSessionStart: Long, newSessionEnd: Long): Unit = {
+      assert(retRow.getStruct(0, 2).getLong(0) == newSessionStart)
+      assert(retRow.getStruct(0, 2).getLong(1) == newSessionEnd)
+      assert(retRow.getLong(1) === expectedRow.getLong(1))
+      assert(doubleEquals(retRow.getDouble(2), expectedRow.getDouble(2)))
+    }
+
+    val row1 = createNoKeyRow(100, 110, 10, 1.1)
+    val row2 = createNoKeyRow(100, 110, 20, 1.2)
+    val row3 = createNoKeyRow(105, 115, 30, 1.3)
+    val row4 = createNoKeyRow(113, 123, 40, 1.4)
+    val rows = List(row1, row2, row3, row4)
+
+    val iterator = new UpdatingSessionIterator(rows.iterator, Seq.empty[Attribute],
+      noKeySessionAttribute, noKeyRowAttributes)
+
+    val retRows = rows.indices.map { _ =>
+      assert(iterator.hasNext)
+      iterator.next()
+    }
+
+    retRows.zip(rows).foreach { case (retRow, expectedRow) =>
+      // session being expanded to (100 ~ 123)
+      assertNoKeyRowsEqualsWithNewSession(expectedRow, retRow, 100, 123)
+    }
+
+    assert(iterator.hasNext === false)
   }
 
   private def createRow(key1: String, key2: Int, sessionStart: Long, sessionEnd: Long,

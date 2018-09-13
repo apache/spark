@@ -318,6 +318,48 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     )
   }
 
+  test("append mode - session - no key") {
+    val inputData = MemoryStream[Int]
+
+    val windowedAggregation = inputData.toDF()
+      .selectExpr("*")
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(session($"eventTime", "5 seconds") as 'session)
+      .agg(count("*") as 'count)
+      .select($"session".getField("start").cast("long").as[Long],
+        $"session".getField("end").cast("long").as[Long], $"count".as[Long])
+
+    testStream(windowedAggregation)(
+      AddData(inputData, 10, 11), // sessions: (10,16)
+      AssertOnQuery(execution => {
+        execution.explain(true)
+        true
+      }),
+      CheckNewAnswer(),
+      AddData(inputData, 17),
+      // Advance watermark to 7 seconds
+      // sessions: (10,16), (17,23)
+      CheckNewAnswer(),
+      AddData(inputData, 25),
+      // Advance watermark to 15 seconds
+      // sessions: (10,16), (17,23), (25,30)
+      CheckNewAnswer(),
+      AddData(inputData, 35),
+      // Advance watermark to 25 seconds
+      // sessions: (10,16), (17,22), (25,30), (35,40)
+      // evicts: (10,16), (17,22)
+      CheckNewAnswer((10, 16, 2), (17, 22, 1)),
+      AddData(inputData, 10),   // Should not emit anything as data less than watermark
+      CheckNewAnswer(),
+      AddData(inputData, 40),
+      // Advance watermark to 30 seconds
+      // sessions: (25,30) / (35,45)
+      // evicts: (25,30)
+      CheckNewAnswer((25, 30, 1))
+    )
+  }
+
   test("update mode - session") {
     val inputData = MemoryStream[Int]
 
@@ -342,23 +384,69 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       }),
       AddData(inputData, 17),
       // Advance watermark to 7 seconds
-      // sessions: key 1 => (10,16), (17,23)
+      // sessions: key 1 => (10,16), (17,22)
       // FIXME: subtract with previous state? or leave it as it is?
       CheckNewAnswer((1, 10, 16, 2), (1, 17, 22, 1)),
       AddData(inputData, 25),
       // Advance watermark to 15 seconds
-      // sessions: key 1 => (10,20) / key 2 => (25,30)
+      // sessions: key 1 => (10,16), (17,22) / key 2 => (25,30)
       CheckNewAnswer((2, 25, 30, 1)),
       AddData(inputData, 35),
       // Advance watermark to 25 seconds
-      // sessions: key 1 => (10,20) / key 2 => (25,30) / key 3 => (35,40)
+      // sessions: key 1 => (10,16), (17,22) / key 2 => (25,30) / key 3 => (35,40)
+      // evicts: key 1 => (10,16), (17,22)
       CheckNewAnswer((3, 35, 40, 1)),
       AddData(inputData, 10),   // Should not emit anything as data less than watermark
       CheckNewAnswer(),
       AddData(inputData, 40),
       // Advance watermark to 30 seconds
-      // sessions: key 1 => (10,20) / key 2 => (25,30) / key 3 => (35,45)
+      // sessions: key 2 => (25,30) / key 3 => (35,40) / key 4 => (40, 45)
       CheckNewAnswer((4, 40, 45, 1))
+    )
+  }
+
+  test("update mode - session - no key") {
+    val inputData = MemoryStream[Int]
+
+    val windowedAggregation = inputData.toDF()
+      .selectExpr("*")
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(session($"eventTime", "5 seconds") as 'session)
+      .agg(count("*") as 'count)
+      .select($"session".getField("start").cast("long").as[Long],
+        $"session".getField("end").cast("long").as[Long], $"count".as[Long])
+
+    testStream(windowedAggregation, OutputMode.Update())(
+
+      AddData(inputData, 10, 11),
+      // Advance watermark to 1 seconds
+      // sessions: (10,16)
+      CheckNewAnswer((10, 16, 2)),
+      AssertOnQuery(execution => {
+        execution.explain(true)
+        true
+      }),
+      AddData(inputData, 17),
+      // Advance watermark to 7 seconds
+      // sessions: (10,16), (17,22)
+      // FIXME: subtract with previous state? or leave it as it is?
+      CheckNewAnswer((10, 16, 2), (17, 22, 1)),
+      AddData(inputData, 25),
+      // Advance watermark to 15 seconds
+      // sessions: (10,16), (17,22), (25,30)
+      CheckNewAnswer((10, 16, 2), (17, 22, 1), (25, 30, 1)),
+      AddData(inputData, 35),
+      // Advance watermark to 25 seconds
+      // sessions: (10,16), (17,22), (25,30), (35,40)
+      // evicts: (10,16), (17,22)
+      CheckNewAnswer((10, 16, 2), (17, 22, 1), (25, 30, 1), (35, 40, 1)),
+      AddData(inputData, 10),   // Should not emit anything as data less than watermark
+      CheckNewAnswer(),
+      AddData(inputData, 40),
+      // Advance watermark to 30 seconds
+      // sessions: (25,30), (35,45)
+      CheckNewAnswer((25, 30, 1), (35, 45, 2))
     )
   }
 

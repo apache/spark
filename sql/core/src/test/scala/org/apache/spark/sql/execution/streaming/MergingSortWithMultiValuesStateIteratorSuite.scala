@@ -49,8 +49,6 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
     attr => List("aggVal1", "aggVal2").contains(attr.name)
   }
 
-  // FIXME: add test for watermark
-
   test("no row in input data") {
     withStateManager(rowAttributes, keysWithoutSessionAttributes) { manager =>
       val iterator = new MergingSortWithMultiValuesStateIterator(None.iterator,
@@ -143,6 +141,67 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
       expectedRowSequence.foreach { row =>
         assert(iterator.hasNext)
         assertRowsEquals(row, iterator.next())
+      }
+
+      assert(!iterator.hasNext)
+    }
+  }
+
+  test("no keys in input data and state") {
+    val noKeyRowSchema = new StructType()
+      .add("session", new StructType().add("start", LongType).add("end", LongType))
+      .add("aggVal1", LongType).add("aggVal2", DoubleType)
+    val noKeyRowAttributes = noKeyRowSchema.toAttributes
+
+    val noKeySessionAttribute = noKeyRowAttributes.filter(attr => attr.name == "session").head
+
+    def createNoKeyRow(sessionStart: Long, sessionEnd: Long,
+                       aggVal1: Long, aggVal2: Double): UnsafeRow = {
+      val genericRow = new GenericInternalRow(4)
+      val session: Array[Any] = new Array[Any](2)
+      session(0) = sessionStart
+      session(1) = sessionEnd
+
+      val sessionRow = new GenericInternalRow(session)
+      genericRow.update(0, sessionRow)
+
+      genericRow.setLong(1, aggVal1)
+      genericRow.setDouble(2, aggVal2)
+
+      val rowProjection = GenerateUnsafeProjection.generate(noKeyRowAttributes, noKeyRowAttributes)
+      rowProjection(genericRow)
+    }
+
+    def assertNoKeyRowsEquals(expectedRow: InternalRow, retRow: InternalRow): Unit = {
+      assert(retRow.getStruct(0, 2).getLong(0) == expectedRow.getStruct(0, 2).getLong(0))
+      assert(retRow.getStruct(0, 2).getLong(1) == expectedRow.getStruct(0, 2).getLong(1))
+      assert(retRow.getLong(1) === expectedRow.getLong(1))
+      assert(doubleEquals(retRow.getDouble(2), expectedRow.getDouble(2)))
+    }
+
+    def appendNoKeyRowToStateManager(manager: MultiValuesStateManager, rows: UnsafeRow*): Unit = {
+      rows.foreach(row => manager.append(new UnsafeRow(0), row))
+    }
+
+    withStateManager(noKeyRowAttributes, Seq.empty[Attribute]) { manager =>
+      // only input data
+      val row1 = createNoKeyRow(100, 110, 10, 1.1)
+      val row2 = createNoKeyRow(100, 110, 20, 1.2)
+
+      val srow1 = createNoKeyRow(55, 85, 50, 2.5)
+      val srow2 = createNoKeyRow(105, 140, 30, 2.0)
+      appendNoKeyRowToStateManager(manager, srow1, srow2)
+
+      val rows = List(row1, row2)
+
+      val expectedRowSequence = List(srow1, row1, row2, srow2)
+
+      val iterator = new MergingSortWithMultiValuesStateIterator(rows.iterator,
+        manager, Seq.empty[Attribute], noKeySessionAttribute, None, noKeyRowAttributes)
+
+      expectedRowSequence.foreach { row =>
+        assert(iterator.hasNext)
+        assertNoKeyRowsEquals(row, iterator.next())
       }
 
       assert(!iterator.hasNext)
