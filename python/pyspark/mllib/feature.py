@@ -59,7 +59,7 @@ class VectorTransformer(object):
 
 
 class Normalizer(VectorTransformer):
-    """
+    r"""
     Normalizes samples individually to unit L\ :sup:`p`\  norm
 
     For any 1 <= `p` < float('inf'), normalizes samples using

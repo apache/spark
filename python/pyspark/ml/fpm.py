@@ -158,7 +158,7 @@ class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
                HasMinSupport, HasNumPartitions, HasMinConfidence,
                JavaMLWritable, JavaMLReadable):
 
-    """
+    r"""
     .. note:: Experimental
 
     A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
