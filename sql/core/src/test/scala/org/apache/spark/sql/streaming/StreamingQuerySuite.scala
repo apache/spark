@@ -460,9 +460,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("value")
 
     val progress = getFirstProgress(streamingInputDF.join(streamingInputDF, "value"))
-    assert(progress.numInputRows === 20) // data is read multiple times in self-joins
+    assert(progress.numInputRows === 10)
     assert(progress.sources.size === 1)
-    assert(progress.sources(0).numInputRows === 20)
+    assert(progress.sources(0).numInputRows === 10)
   }
 
   test("input row calculation with mixed batch and streaming V1 sources") {
