@@ -1348,7 +1348,7 @@ case class ArrayContains(left: Expression, right: Expression)
       case (_, NullType) =>
         TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
       case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
-        TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
+        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
       case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
         s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
         s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
