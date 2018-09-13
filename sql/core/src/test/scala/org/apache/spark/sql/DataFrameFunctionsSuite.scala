@@ -766,13 +766,25 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(false), Row(false))
     )
 
-    intercept[AnalysisException] {
+    val e1 = intercept[AnalysisException] {
       df.selectExpr("array_contains(array(1), 1.23)")
     }
+    val errorMsg1 =
+      s"""
+         |Input to function array_contains should have been array followed by a
+         |value with same element type, but it's [array<int>, decimal(3,2)].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e1.message.contains(errorMsg1))
 
-    intercept[AnalysisException] {
+    val e2 = intercept[AnalysisException] {
       df.selectExpr("array_contains(array(1), 'foo')")
     }
+    val errorMsg2 =
+      s"""
+         |Input to function array_contains should have been array followed by a
+         |value with same element type, but it's [array<int>, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e2.message.contains(errorMsg2))
   }
 
   test("arrays_overlap function") {

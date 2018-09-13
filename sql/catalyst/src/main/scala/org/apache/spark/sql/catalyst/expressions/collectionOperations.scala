@@ -1355,7 +1355,6 @@ case class ArrayContains(left: Expression, right: Expression)
     }
   }
 
-
   override def nullable: Boolean = {
     left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].containsNull
   }
