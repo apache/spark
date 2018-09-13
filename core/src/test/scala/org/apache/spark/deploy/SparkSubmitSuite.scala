@@ -1144,6 +1144,53 @@ class SparkSubmitSuite
     conf1.get(PY_FILES.key) should be (s"s3a://${pyFile.getAbsolutePath}")
     conf1.get("spark.submit.pyFiles") should (startWith("/"))
   }
+
+  test("handles natural line delimiters in --properties-file and --conf uniformly") {
+    val delimKey = "spark.my.delimiter."
+    val LF = "\n"
+    val CR = "\r"
+
+    val lineFeedFromCommandLine = s"${delimKey}lineFeedFromCommandLine" -> LF
+    val leadingDelimKeyFromFile = s"${delimKey}leadingDelimKeyFromFile" -> s"${LF}blah"
+    val trailingDelimKeyFromFile = s"${delimKey}trailingDelimKeyFromFile" -> s"blah${CR}"
+    val infixDelimFromFile = s"${delimKey}infixDelimFromFile" -> s"${CR}blah${LF}"
+    val nonDelimSpaceFromFile = s"${delimKey}nonDelimSpaceFromFile" -> " blah\f"
+
+    val testProps = Seq(leadingDelimKeyFromFile, trailingDelimKeyFromFile, infixDelimFromFile,
+      nonDelimSpaceFromFile)
+
+    val props = new java.util.Properties()
+    val propsFile = File.createTempFile("test-spark-conf", ".properties",
+      Utils.createTempDir())
+    val propsOutputStream = new FileOutputStream(propsFile)
+    try {
+      testProps.foreach { case (k, v) => props.put(k, v) }
+      props.store(propsOutputStream, "test whitespace")
+    } finally {
+      propsOutputStream.close()
+    }
+
+    val clArgs = Seq(
+      "--class", "org.SomeClass",
+      "--conf", s"${lineFeedFromCommandLine._1}=${lineFeedFromCommandLine._2}",
+      "--conf", "spark.master=yarn",
+      "--properties-file", propsFile.getPath,
+      "thejar.jar")
+
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
+
+    Seq(
+      lineFeedFromCommandLine,
+      leadingDelimKeyFromFile,
+      trailingDelimKeyFromFile,
+      infixDelimFromFile
+    ).foreach { case (k, v) =>
+      conf.get(k) should be (v)
+    }
+
+    conf.get(nonDelimSpaceFromFile._1) should be ("blah")
+  }
 }
 
 object SparkSubmitSuite extends SparkFunSuite with TimeLimits {

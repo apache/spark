@@ -529,6 +529,7 @@ abstract class StreamExecution(
 
 object StreamExecution {
   val QUERY_ID_KEY = "sql.streaming.queryId"
+  val IS_CONTINUOUS_PROCESSING = "__is_continuous_processing"
 
   def isInterruptionException(e: Throwable): Boolean = e match {
     // InterruptedIOException - thrown when an I/O operation is interrupted

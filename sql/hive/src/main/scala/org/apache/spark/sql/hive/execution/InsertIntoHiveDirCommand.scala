@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.hive.client.HiveClientImpl
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Command for writing the results of `query` to file system.
@@ -61,6 +62,10 @@ case class InsertIntoHiveDirCommand(
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     assert(storage.locationUri.nonEmpty)
+    SchemaUtils.checkColumnNameDuplication(
+      outputColumnNames,
+      s"when inserting into ${storage.locationUri.get}",
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val hiveTable = HiveClientImpl.toHiveTable(CatalogTable(
       identifier = TableIdentifier(storage.locationUri.get.toString, Some("default")),

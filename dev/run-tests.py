@@ -169,7 +169,7 @@ def determine_java_version(java_exe):
     # find raw version string, eg 'java version "1.8.0_25"'
     raw_version_str = next(x for x in raw_output_lines if " version " in x)
 
-    match = re.search('(\d+)\.(\d+)\.(\d+)', raw_version_str)
+    match = re.search(r'(\d+)\.(\d+)\.(\d+)', raw_version_str)
 
     major = int(match.group(1))
     minor = int(match.group(2))

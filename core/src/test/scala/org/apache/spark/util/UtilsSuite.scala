@@ -1205,6 +1205,34 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.stringHalfWidth("\u0967\u0968\u0969") == 3)
     // scalastyle:on nonascii
   }
+
+  test("trimExceptCRLF standalone") {
+    val crlfSet = Set("\r", "\n")
+    val nonPrintableButCRLF = (0 to 32).map(_.toChar.toString).toSet -- crlfSet
+
+    // identity for CRLF
+    crlfSet.foreach { s => Utils.trimExceptCRLF(s) === s }
+
+    // empty for other non-printables
+    nonPrintableButCRLF.foreach { s => assert(Utils.trimExceptCRLF(s) === "") }
+
+    // identity for a printable string
+    assert(Utils.trimExceptCRLF("a") === "a")
+
+    // identity for strings with CRLF
+    crlfSet.foreach { s =>
+      assert(Utils.trimExceptCRLF(s"${s}a") === s"${s}a")
+      assert(Utils.trimExceptCRLF(s"a${s}") === s"a${s}")
+      assert(Utils.trimExceptCRLF(s"b${s}b") === s"b${s}b")
+    }
+
+    // trim nonPrintableButCRLF except when inside a string
+    nonPrintableButCRLF.foreach { s =>
+      assert(Utils.trimExceptCRLF(s"${s}a") === "a")
+      assert(Utils.trimExceptCRLF(s"a${s}") === "a")
+      assert(Utils.trimExceptCRLF(s"b${s}b") === s"b${s}b")
+    }
+  }
 }
 
 private class SimpleExtension
