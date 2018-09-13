@@ -3262,6 +3262,13 @@ object functions {
     window(timeColumn, windowDuration, windowDuration, "0 second")
   }
 
+  // FIXME: javadoc!
+  def session(timeColumn: Column, gapDuration: String): Column = {
+    withExpr {
+      SessionWindow(timeColumn.expr, gapDuration)
+    }.as("session")
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
   //////////////////////////////////////////////////////////////////////////////////////////////

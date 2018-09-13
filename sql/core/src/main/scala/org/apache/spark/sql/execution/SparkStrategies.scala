@@ -329,14 +329,29 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             "Streaming aggregation doesn't support group aggregate pandas UDF")
         }
 
-        val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
+        val sessionWindowOption = namedGroupingExpressions.find { p =>
+          p.name == "session" && p.dataType.isInstanceOf[StructType]
+        }
 
-        aggregate.AggUtils.planStreamingAggregation(
-          namedGroupingExpressions,
-          aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
-          rewrittenResultExpressions,
-          stateVersion,
-          planLater(child))
+        sessionWindowOption match {
+          case Some(sessionWindow) =>
+            aggregate.AggUtils.planStreamingAggregationForSession(
+              namedGroupingExpressions,
+              sessionWindow,
+              aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
+              rewrittenResultExpressions,
+              planLater(child))
+
+          case None =>
+            val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
+
+            aggregate.AggUtils.planStreamingAggregation(
+              namedGroupingExpressions,
+              aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
+              rewrittenResultExpressions,
+              stateVersion,
+              planLater(child))
+        }
 
       case _ => Nil
     }

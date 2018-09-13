@@ -90,7 +90,7 @@ class MultiValuesStateManager(
   def removeKey(key: UnsafeRow): Unit = {
     val numExistingValues = keyToNumValues.get(key)
     keyToNumValues.remove(key)
-    (0 until numExistingValues).foreach(keyWithIndexToValue.remove(key, _))
+    (0L until numExistingValues).foreach(keyWithIndexToValue.remove(key, _))
   }
 
   /**
@@ -159,6 +159,9 @@ class MultiValuesStateManager(
    *
    * This implies the iterator must be consumed fully without any other operations on this manager
    * or the underlying store being interleaved.
+   *
+   * NOTE: if any value is remove for the key, the order of values will be non-deterministic.
+   * It doesn't keep the order stable when removing value for gaining performance.
    */
   def removeByValueCondition(removalCondition: UnsafeRow => Boolean): Iterator[UnsafeRowPair] = {
     new NextIterator[UnsafeRowPair] {
@@ -312,6 +315,8 @@ class MultiValuesStateManager(
 
     def commit(): Unit = {
       stateStore.commit()
+      // FIXME: DEBUG
+      logInfo("Committed, metrics = " + stateStore.metrics)
       logDebug("Committed, metrics = " + stateStore.metrics)
     }
 

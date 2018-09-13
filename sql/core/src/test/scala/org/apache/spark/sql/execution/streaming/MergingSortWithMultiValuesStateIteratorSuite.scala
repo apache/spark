@@ -49,10 +49,12 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
     attr => List("aggVal1", "aggVal2").contains(attr.name)
   }
 
+  // FIXME: add test for watermark
+
   test("no row in input data") {
     withStateManager(rowAttributes, keysWithoutSessionAttributes) { manager =>
       val iterator = new MergingSortWithMultiValuesStateIterator(None.iterator,
-        manager, keysWithoutSessionAttributes, sessionAttribute, rowAttributes)
+        manager, keysWithoutSessionAttributes, sessionAttribute, None, rowAttributes)
 
       assert(!iterator.hasNext)
     }
@@ -65,7 +67,7 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
       appendRowToStateManager(manager, srow11, srow12)
 
       val iterator = new MergingSortWithMultiValuesStateIterator(None.iterator,
-        manager, keysWithoutSessionAttributes, sessionAttribute, rowAttributes)
+        manager, keysWithoutSessionAttributes, sessionAttribute, None, rowAttributes)
 
       assert(!iterator.hasNext)
     }
@@ -80,7 +82,7 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
       val rows = List(row1, row2, row3, row4)
 
       val iterator = new MergingSortWithMultiValuesStateIterator(rows.iterator,
-        manager, keysWithoutSessionAttributes, sessionAttribute, rowAttributes)
+        manager, keysWithoutSessionAttributes, sessionAttribute, None, rowAttributes)
 
       rows.foreach { row =>
         assert(iterator.hasNext)
@@ -136,7 +138,7 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
         row31, row32, row41, row42, srow41, srow42, srow51, row51, srow52, row52, srow53)
 
       val iterator = new MergingSortWithMultiValuesStateIterator(rows.iterator,
-        manager, keysWithoutSessionAttributes, sessionAttribute, rowAttributes)
+        manager, keysWithoutSessionAttributes, sessionAttribute, None, rowAttributes)
 
       expectedRowSequence.foreach { row =>
         assert(iterator.hasNext)

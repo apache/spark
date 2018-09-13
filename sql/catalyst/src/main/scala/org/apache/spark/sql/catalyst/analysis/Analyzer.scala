@@ -181,6 +181,7 @@ class Analyzer(
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       TimeWindowing ::
+      SessionWindowing ::
       ResolveInlineTables(conf) ::
       ResolveHigherOrderFunctions(catalog) ::
       ResolveLambdaVariables(conf) ::
@@ -2714,6 +2715,70 @@ object TimeWindowing extends Rule[LogicalPlan] {
         }
       } else if (numWindowExpr > 1) {
         p.failAnalysis("Multiple time window expressions would result in a cartesian product " +
+          "of rows, therefore they are currently not supported.")
+      } else {
+        p // Return unchanged. Analyzer will throw exception later
+      }
+  }
+}
+
+// FIXME: javadoc
+object SessionWindowing extends Rule[LogicalPlan] {
+  import org.apache.spark.sql.catalyst.dsl.expressions._
+
+  private final val SESSION_COL_NAME = "session"
+  private final val SESSION_START = "start"
+  private final val SESSION_END = "end"
+
+  // FIXME: javadoc
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    case p: LogicalPlan if p.children.size == 1 =>
+      val child = p.children.head
+      val sessionExpressions =
+        p.expressions.flatMap(_.collect { case s: SessionWindow => s }).toSet
+
+      // FIXME: we would want to also couple window and session on restriction
+      val numSessionExpr = sessionExpressions.size
+      // Only support a single session expression for now
+      if (numSessionExpr == 1 &&
+          sessionExpressions.head.timeColumn.resolved &&
+          sessionExpressions.head.checkInputDataTypes().isSuccess) {
+
+        val session = sessionExpressions.head
+
+        val metadata = session.timeColumn match {
+          case a: Attribute => a.metadata
+          case _ => Metadata.empty
+        }
+
+        val sessionAttr = AttributeReference(
+          SESSION_COL_NAME, session.dataType, metadata = metadata)()
+
+        val sessionStart = PreciseTimestampConversion(session.timeColumn, TimestampType, LongType)
+        val sessionEnd = sessionStart + session.gapDuration
+
+        val literalSessionStruct = CreateNamedStruct(
+          Literal(SESSION_START) ::
+            PreciseTimestampConversion(sessionStart, LongType, TimestampType) ::
+            Literal(SESSION_END) ::
+            PreciseTimestampConversion(sessionEnd, LongType, TimestampType) ::
+            Nil)
+
+        val sessionStruct = Alias(literalSessionStruct, SESSION_COL_NAME)(
+          exprId = sessionAttr.exprId, explicitMetadata = Some(metadata))
+
+        val replacedPlan = p transformExpressions {
+          case s: SessionWindow => sessionAttr
+        }
+
+        // For backwards compatibility we add a filter to filter out nulls
+        val filterExpr = IsNotNull(session.timeColumn)
+
+        replacedPlan.withNewChildren(
+          Filter(filterExpr,
+            Project(sessionStruct +: child.output, child)) :: Nil)
+      } else if (numSessionExpr > 1) {
+        p.failAnalysis("Multiple time session expressions would result in a cartesian product " +
           "of rows, therefore they are currently not supported.")
       } else {
         p // Return unchanged. Analyzer will throw exception later

@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateStoreSaveExec}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.streaming.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec, StateStoreRestoreExec, StateStoreSaveExec}
 
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
@@ -319,6 +318,94 @@ object AggUtils {
         eventTimeWatermark = None,
         stateFormatVersion = stateFormatVersion,
         partialMerged2)
+
+    val finalAndCompleteAggregate: SparkPlan = {
+      val finalAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Final))
+      // The attributes of the final aggregation buffer, which is presented as input to the result
+      // projection:
+      val finalAggregateAttributes = finalAggregateExpressions.map(_.resultAttribute)
+
+      createAggregate(
+        requiredChildDistributionExpressions = Some(groupingAttributes),
+        groupingExpressions = groupingAttributes,
+        aggregateExpressions = finalAggregateExpressions,
+        aggregateAttributes = finalAggregateAttributes,
+        initialInputBufferOffset = groupingAttributes.length,
+        resultExpressions = resultExpressions,
+        child = saved)
+    }
+
+    finalAndCompleteAggregate :: Nil
+  }
+
+  // FIXME: change!
+  /**
+   * Plans a streaming aggregation using the following progression:
+   *
+   *  - Partial Aggregation
+   *  - Shuffle
+   *  - Partial Merge (now there is at most 1 tuple per group)
+   *  - StateStoreRestore (now there is 1 tuple from this batch + optionally one from the previous)
+   *  - PartialMerge (now there is at most 1 tuple per group)
+   *  - StateStoreSave (saves the tuple for the next batch)
+   *  - Complete (output the current result of the aggregation)
+   */
+  def planStreamingAggregationForSession(
+      groupingExpressions: Seq[NamedExpression],
+      sessionExpression: NamedExpression,
+      functionsWithoutDistinct: Seq[AggregateExpression],
+      resultExpressions: Seq[NamedExpression],
+      child: SparkPlan): Seq[SparkPlan] = {
+
+    val groupWithoutSessionExpression = groupingExpressions.filterNot { p =>
+      p.semanticEquals(sessionExpression)
+    }
+
+    val groupingWithoutSessionAttributes = groupWithoutSessionExpression.map(_.toAttribute)
+
+    val groupingAttributes = groupingExpressions.map(_.toAttribute)
+
+    val partialAggregate: SparkPlan = {
+      val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
+      val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
+      createAggregate(
+        groupingExpressions = groupingExpressions,
+        aggregateExpressions = aggregateExpressions,
+        aggregateAttributes = aggregateAttributes,
+        resultExpressions = groupingAttributes ++
+          aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
+        child = child)
+    }
+
+    // shuffle & sort happens here
+    val restored = SessionWindowStateStoreRestoreExec(groupingWithoutSessionAttributes,
+      sessionExpression.toAttribute, stateInfo = None, eventTimeWatermark = None, partialAggregate)
+
+    val partialMerged: SparkPlan = {
+      val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
+      val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
+      createAggregate(
+        requiredChildDistributionExpressions =
+            Some(groupingAttributes),
+        groupingExpressions = groupingAttributes,
+        aggregateExpressions = aggregateExpressions,
+        aggregateAttributes = aggregateAttributes,
+        initialInputBufferOffset = groupingAttributes.length,
+        resultExpressions = groupingAttributes ++
+            aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
+        child = restored)
+    }
+
+    // Note: stateId and returnAllStates are filled in later with preparation rules
+    // in IncrementalExecution.
+    val saved =
+      SessionWindowStateStoreSaveExec(
+        groupingWithoutSessionAttributes,
+        sessionExpression.toAttribute,
+        stateInfo = None,
+        outputMode = None,
+        eventTimeWatermark = None,
+        partialMerged)
 
     val finalAndCompleteAggregate: SparkPlan = {
       val finalAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Final))

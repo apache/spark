@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, Predicate}
 import org.apache.spark.sql.execution.streaming.state.MultiValuesStateManager
 
 class MergingSortWithMultiValuesStateIterator(
@@ -27,6 +27,7 @@ class MergingSortWithMultiValuesStateIterator(
     stateManager: MultiValuesStateManager,
     groupWithoutSessionExpressions: Seq[Expression],
     sessionExpression: Expression,
+    watermarkPredicateForData: Option[Predicate],
     inputSchema: Seq[Attribute]) extends Iterator[InternalRow] {
 
   // FIXME: handle watermark in input rows, not from state
@@ -55,9 +56,20 @@ class MergingSortWithMultiValuesStateIterator(
   private var currentStateIter: Iterator[InternalRow] = _
   private var currentStateFetchedKey: UnsafeRow = _
 
+  private val baseIterator = watermarkPredicateForData match {
+    case Some(predicate) => iter.filter((row: InternalRow) => {
+      val pr = !predicate.eval(row)
+      if (!pr) {
+        System.err.println(s"DEBUG - evicting input due to watermark... $row")
+      }
+      pr
+    })
+    case None => iter
+  }
+
   override def hasNext: Boolean = {
     currentRow != null || currentStateRow != null ||
-      (currentStateIter != null && currentStateIter.hasNext) || iter.hasNext
+      (currentStateIter != null && currentStateIter.hasNext) || baseIterator.hasNext
   }
 
   override def next(): InternalRow = {
@@ -85,6 +97,7 @@ class MergingSortWithMultiValuesStateIterator(
           // state row cannot advance to row in input, so state row should be lower
           false
         } else {
+          System.err.println(s"DEBUG: WARN - comparing row ${currentRow} and state row ${currentStateRow}")
           currentRow.sessionStart < currentStateRow.sessionStart
         }
       }
@@ -94,36 +107,48 @@ class MergingSortWithMultiValuesStateIterator(
       if (returnCurrentRow) {
         val toRet = currentRow
         currentRow = null
-        mayFillCurrentRow()
         toRet
       } else {
         val toRet = currentStateRow
         currentStateRow = null
-        mayFillCurrentStateRow()
         toRet
       }
     }
+
+    System.err.println(s"DEBUG: WARN - returning row ${ret.row} for iterator")
 
     ret.row
   }
 
   private def mayFillCurrentRow(): Unit = {
-    if (iter.hasNext) {
-      currentRow = SessionRowInformation.of(iter.next())
+    if (baseIterator.hasNext) {
+      currentRow = SessionRowInformation.of(baseIterator.next())
+      System.err.println(s"DEBUG - filling current row... current row: $currentRow")
     }
   }
 
   private def mayFillCurrentStateRow(): Unit = {
     if (currentStateIter != null && currentStateIter.hasNext) {
       currentStateRow = SessionRowInformation.of(currentStateIter.next())
+      System.err.println(s"DEBUG - filling state row... current state row: $currentStateRow")
     } else {
       currentStateIter = null
 
       if (currentRow != null && currentRow.keys != currentStateFetchedKey) {
-        currentStateIter = stateManager.get(currentRow.keys)
+        val unsortedIter = stateManager.get(currentRow.keys)
+        currentStateIter = unsortedIter.toList.sortWith((row1, row2) => {
+          val rowInfo1 = SessionRowInformation.of(row1)
+          val rowInfo2 = SessionRowInformation.of(row2)
+          // here sorting is based on the fact that keys are same
+          rowInfo1.sessionStart.compareTo(rowInfo2.sessionStart) < 0
+        }).iterator
+
         currentStateFetchedKey = currentRow.keys
         if (currentStateIter.hasNext) {
           currentStateRow = SessionRowInformation.of(currentStateIter.next())
+          System.err.println(s"DEBUG: WARN - read data ${currentStateRow.row} from state for key ${currentRow.keys}")
+        } else {
+          System.err.println(s"DEBUG: WARN - no state data for key ${currentRow.keys}")
         }
       }
     }

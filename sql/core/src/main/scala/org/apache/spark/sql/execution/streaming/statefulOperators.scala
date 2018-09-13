@@ -23,6 +23,8 @@ import java.util.concurrent.TimeUnit._
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import org.apache.spark.TaskContext
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -431,10 +433,12 @@ case class SessionWindowStateStoreRestoreExec(
     keyExpressions: Seq[Attribute],
     sessionExpression: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo],
+    eventTimeWatermark: Option[Long],
     child: SparkPlan)
-  extends UnaryExecNode with StateStoreReader {
+  extends UnaryExecNode with StateStoreReader with WatermarkSupport {
 
   // FIXME: does we really need to have global aggregation from here?
+  // yes... it even has a case which session is only key
   require(keyExpressions.nonEmpty, "Key expressions should be presented.")
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -448,9 +452,61 @@ case class SessionWindowStateStoreRestoreExec(
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { case (stateManager, iter) =>
 
-      new MergingSortWithMultiValuesStateIterator(iter, stateManager, keyExpressions,
-        sessionExpression, child.output).map { row =>
+      // FIXME: would we want to break down into two multiple physical plans?
+      //
+      //      new MergingSortWithMultiValuesStateIterator(iter, stateManager, keyExpressions,
+      //        sessionExpression, child.output).map { row =>
+      //        numOutputRows += 1
+      //        row
+      //      }
+
+      val debugPartitionId = TaskContext.get().partitionId()
+
+      val debugIter = iter.map { row =>
+        val keysProjection = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+        val sessionProjection = GenerateUnsafeProjection.generate(
+          Seq(sessionExpression), child.output)
+        val rowProjection = GenerateUnsafeProjection.generate(child.output, child.output)
+
+        logWarning(s"DEBUG: partitionId $debugPartitionId - input row - keys ${keysProjection(row)}")
+        logWarning(s"DEBUG: partitionId $debugPartitionId - input row - session ${sessionProjection(row)}")
+        logWarning(s"DEBUG: partitionId $debugPartitionId - input row - row (proj) ${rowProjection(row)}")
+        logWarning(s"DEBUG: partitionId $debugPartitionId - input row - row $row")
+
+        row
+      }
+
+      val mergedIter = new MergingSortWithMultiValuesStateIterator(debugIter, stateManager,
+        keyExpressions, sessionExpression, watermarkPredicateForData, child.output)
+
+      val debugMergedIter = mergedIter.map { row =>
+        val keysProjection = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+        val sessionProjection = GenerateUnsafeProjection.generate(
+          Seq(sessionExpression), child.output)
+        val rowProjection = GenerateUnsafeProjection.generate(child.output, child.output)
+
+        logWarning(s"DEBUG: partitionId $debugPartitionId - merged row - keys ${keysProjection(row)}")
+        logWarning(s"DEBUG: partitionId $debugPartitionId - merged row - session ${sessionProjection(row)}")
+        logWarning(s"DEBUG: partitionId $debugPartitionId - merged row - row (proj) ${rowProjection(row)}")
+        logWarning(s"DEBUG: partitionId $debugPartitionId - merged row - row ${row}")
+
+        row
+      }
+
+      new UpdatingSessionIterator(debugMergedIter, keyExpressions, sessionExpression,
+        child.output).map { row =>
         numOutputRows += 1
+
+        val keysProjection = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+        val sessionProjection = GenerateUnsafeProjection.generate(
+          Seq(sessionExpression), child.output)
+        val rowProjection = GenerateUnsafeProjection.generate(child.output, child.output)
+
+        logWarning(s"DEBUG: partitionId $debugPartitionId - updated session row - keys ${keysProjection(row)}")
+        logWarning(s"DEBUG: partitionId $debugPartitionId - updated session row - session ${sessionProjection(row)}")
+        logWarning(s"DEBUG: partitionId $debugPartitionId - updated session row - row (proj) ${rowProjection(row)}")
+        logWarning(s"DEBUG: partitionId $debugPartitionId - updated session row - row ${row}")
+
         row
       }
     }
@@ -462,6 +518,10 @@ case class SessionWindowStateStoreRestoreExec(
 
   override def requiredChildDistribution: Seq[Distribution] = {
     ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+  }
+
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
+    Seq((keyExpressions ++ Seq(sessionExpression)).map(SortOrder(_, Ascending)))
   }
 }
 
@@ -508,9 +568,13 @@ case class SessionWindowStateStoreSaveExec(
       val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
       val commitTimeMs = longMetric("commitTimeMs")
 
-      val keyProjection = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+      val keyProjection = GenerateUnsafeProjection.generate(keyExpressions,
+        child.output)
 
       val alreadyRemovedKeys = new mutable.HashSet[UnsafeRow]()
+
+      // FIXME: DEBUG
+      val debugPartitionId = TaskContext.get().partitionId()
 
       // assuming late events were dropped from MergingSortWithMultiValuesStateIterator
       outputMode match {
@@ -522,20 +586,38 @@ case class SessionWindowStateStoreSaveExec(
               val row = iter.next().asInstanceOf[UnsafeRow]
               val keys = keyProjection(row)
               if (!alreadyRemovedKeys.contains(keys)) {
+                logWarning(s"DEBUG: partitionId $debugPartitionId - removing key ${keys} ...")
                 stateManager.removeKey(keys)
                 alreadyRemovedKeys.add(keys)
               }
+
+              val sessionProjection = GenerateUnsafeProjection.generate(
+                Seq(sessionExpression), child.output)
+              val rowProjection = GenerateUnsafeProjection.generate(child.output, child.output)
+
+              logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - keys ${keyProjection(row)}")
+              logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - session ${sessionProjection(row)}")
+              logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - row (proj) ${rowProjection(row)}")
+              logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - row ${row}")
+
+              logWarning(s"DEBUG: partitionId $debugPartitionId - adding row for key ${keys} row ${row} ...")
               stateManager.append(keys, row)
               numUpdatedStateRows += 1
             }
+
+            logWarning(s"DEBUG: partitionId $debugPartitionId - finished iterating...")
           }
 
           val removalStartTimeNs = System.nanoTime
 
-          val retIter = evictSessionsByWatermark(stateManager).map(_.value)
+          val retIter = evictSessionsByWatermark(stateManager).map(_.value).map { row =>
+            logWarning(s"DEBUG: partitionId $debugPartitionId - evicting row ${row} ...")
+            row
+          }
 
-          CompletionIterator(retIter, {
+          CompletionIterator[InternalRow, Iterator[InternalRow]](retIter, {
             allRemovalsTimeMs += NANOSECONDS.toMillis(System.nanoTime - removalStartTimeNs)
+            logWarning(s"DEBUG: partitionId $debugPartitionId - committing...")
             commitTimeMs += timeTakenMs { stateManager.commit() }
             setStoreMetrics(stateManager)
           })
@@ -590,6 +672,10 @@ case class SessionWindowStateStoreSaveExec(
 
   override def requiredChildDistribution: Seq[Distribution] = {
     ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+  }
+
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
+    Seq((keyExpressions ++ Seq(sessionExpression)).map(SortOrder(_, Ascending)))
   }
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {

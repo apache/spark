@@ -46,7 +46,7 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
 
   test("no row") {
     val iterator = new UpdatingSessionIterator(None.iterator, keysWithoutSessionAttributes,
-      sessionAttribute, valuesAttributes, rowAttributes)
+      sessionAttribute, rowAttributes)
 
     assert(!iterator.hasNext)
   }
@@ -55,7 +55,7 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     val rows = List(createRow("a", 1, 100, 110, 10, 1.1))
 
     val iterator = new UpdatingSessionIterator(rows.iterator, keysWithoutSessionAttributes,
-      sessionAttribute, valuesAttributes, rowAttributes)
+      sessionAttribute, rowAttributes)
 
     assert(iterator.hasNext)
 
@@ -73,7 +73,7 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     val rows = List(row1, row2, row3, row4)
 
     val iterator = new UpdatingSessionIterator(rows.iterator, keysWithoutSessionAttributes,
-      sessionAttribute, valuesAttributes, rowAttributes)
+      sessionAttribute, rowAttributes)
 
     val retRows = rows.indices.map { _ =>
       assert(iterator.hasNext)
@@ -104,7 +104,7 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     val rowsAll = rows1 ++ rows2
 
     val iterator = new UpdatingSessionIterator(rowsAll.iterator, keysWithoutSessionAttributes,
-      sessionAttribute, valuesAttributes, rowAttributes)
+      sessionAttribute, rowAttributes)
 
     val retRows1 = rows1.indices.map { _ =>
       assert(iterator.hasNext)
@@ -140,7 +140,7 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     val rowsAll = rows1 ++ rows2
 
     val iterator = new UpdatingSessionIterator(rowsAll.iterator, keysWithoutSessionAttributes,
-      sessionAttribute, valuesAttributes, rowAttributes)
+      sessionAttribute, rowAttributes)
 
     val retRows1 = rows1.indices.map { _ =>
       assert(iterator.hasNext)
@@ -185,7 +185,7 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     val rowsAll = rows1 ++ rows2 ++ rows3 ++ rows4
 
     val iterator = new UpdatingSessionIterator(rowsAll.iterator, keysWithoutSessionAttributes,
-      sessionAttribute, valuesAttributes, rowAttributes)
+      sessionAttribute, rowAttributes)
 
     val retRows1 = rows1.indices.map { _ =>
       assert(iterator.hasNext)
@@ -238,7 +238,7 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     val rows = List(row1, row2, row3, row4)
 
     val iterator = new UpdatingSessionIterator(rows.iterator, keysWithoutSessionAttributes,
-      sessionAttribute, valuesAttributes, rowAttributes)
+      sessionAttribute, rowAttributes)
 
     // UpdatingSessionIterator can't detect error on hasNext
     assert(iterator.hasNext)
@@ -265,7 +265,7 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     val rows = List(row1, row2, row3)
 
     val iterator = new UpdatingSessionIterator(rows.iterator, keysWithoutSessionAttributes,
-      sessionAttribute, valuesAttributes, rowAttributes)
+      sessionAttribute, rowAttributes)
 
     // UpdatingSessionIterator can't detect error on hasNext
     assert(iterator.hasNext)

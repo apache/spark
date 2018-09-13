@@ -30,7 +30,7 @@ import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.functions.{count, window, session}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.util.Utils
@@ -273,6 +273,92 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       AddData(inputData, 10),   // Should not emit anything as data less than watermark
       CheckNewAnswer(),
       assertNumStateRows(2)
+    )
+  }
+
+  test("append mode - session") {
+    val inputData = MemoryStream[Int]
+
+    val windowedAggregation = inputData.toDF()
+      .selectExpr("*", "CAST(value / 10 AS INT) AS valuegroup")
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(session($"eventTime", "5 seconds") as 'session, 'valuegroup)
+      .agg(count("*") as 'count)
+      .select($"valuegroup", $"session".getField("start").cast("long").as[Long],
+        $"session".getField("end").cast("long").as[Long], $"count".as[Long])
+
+    testStream(windowedAggregation)(
+      AddData(inputData, 10, 11), // sessions: key 1 => (10,16)
+      AssertOnQuery(execution => {
+        execution.explain(true)
+        true
+      }),
+      CheckNewAnswer(),
+      AddData(inputData, 17),
+      // Advance watermark to 7 seconds
+      // sessions: key 1 => (10,16), (17,23)
+      CheckNewAnswer(),
+      AddData(inputData, 25),
+      // Advance watermark to 15 seconds
+      // sessions: key 1 => (10,16), (17,23) / key 2 => (25,30)
+      CheckNewAnswer(),
+      AddData(inputData, 35),
+      // Advance watermark to 25 seconds
+      // sessions: key 1 => (10,16), (17,22) / key 2 => (25,30) / key 3 => (35,40)
+      // evicts: key 1 => (10,16), (17,22)
+      CheckNewAnswer((1, 10, 16, 2), (1, 17, 22, 1)),
+      AddData(inputData, 10),   // Should not emit anything as data less than watermark
+      CheckNewAnswer(),
+      AddData(inputData, 40),
+      // Advance watermark to 30 seconds
+      // sessions: key 2 => (25,30) / key 3 => (35,45)
+      // evicts: key 2 => (25,30)
+      CheckNewAnswer((2, 25, 30, 1))
+    )
+  }
+
+  test("update mode - session") {
+    val inputData = MemoryStream[Int]
+
+    val windowedAggregation = inputData.toDF()
+      .selectExpr("*", "CAST(value / 10 AS INT) AS valuegroup")
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(session($"eventTime", "5 seconds") as 'session, 'valuegroup)
+      .agg(count("*") as 'count)
+      .select($"valuegroup", $"session".getField("start").cast("long").as[Long],
+        $"session".getField("end").cast("long").as[Long], $"count".as[Long])
+
+    testStream(windowedAggregation, OutputMode.Update())(
+
+      AddData(inputData, 10, 11),
+      // Advance watermark to 1 seconds
+      // sessions: key 1 => (10,16)
+      CheckNewAnswer((1, 10, 16, 2)),
+      AssertOnQuery(execution => {
+        execution.explain(true)
+        true
+      }),
+      AddData(inputData, 17),
+      // Advance watermark to 7 seconds
+      // sessions: key 1 => (10,16), (17,23)
+      // FIXME: subtract with previous state? or leave it as it is?
+      CheckNewAnswer((1, 10, 16, 2), (1, 17, 22, 1)),
+      AddData(inputData, 25),
+      // Advance watermark to 15 seconds
+      // sessions: key 1 => (10,20) / key 2 => (25,30)
+      CheckNewAnswer((2, 25, 30, 1)),
+      AddData(inputData, 35),
+      // Advance watermark to 25 seconds
+      // sessions: key 1 => (10,20) / key 2 => (25,30) / key 3 => (35,40)
+      CheckNewAnswer((3, 35, 40, 1)),
+      AddData(inputData, 10),   // Should not emit anything as data less than watermark
+      CheckNewAnswer(),
+      AddData(inputData, 40),
+      // Advance watermark to 30 seconds
+      // sessions: key 1 => (10,20) / key 2 => (25,30) / key 3 => (35,45)
+      CheckNewAnswer((4, 40, 45, 1))
     )
   }
 

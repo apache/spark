@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BindReferences, CreateNamedStruct, Expression, Literal, PreciseTimestampConversion, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, BindReferences, CreateNamedStruct, Expression, Literal, PreciseTimestampConversion, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.types.{LongType, TimestampType}
 
@@ -29,8 +29,12 @@ class UpdatingSessionIterator(
     iter: Iterator[InternalRow],
     groupWithoutSessionExpressions: Seq[Expression],
     sessionExpression: Expression,
-    aggregateExpressions: Seq[Expression],
     inputSchema: Seq[Attribute]) extends Iterator[InternalRow] {
+
+  val sessionIndex = inputSchema.indexOf(sessionExpression)
+
+  val valuesExpressions: Seq[Attribute] = inputSchema.diff(groupWithoutSessionExpressions)
+    .diff(Seq(sessionExpression))
 
   var currentKeys: InternalRow = _
   var currentSessionStart: Long = Long.MaxValue
@@ -42,6 +46,8 @@ class UpdatingSessionIterator(
   var errorOnIterator: Boolean = false
 
   val processedKeys: mutable.HashSet[InternalRow] = new mutable.HashSet[InternalRow]()
+
+  // FIXME: data loss seen... one data from input and one data from state
 
   override def hasNext: Boolean = {
     assertIteratorNotCorrupted()
@@ -61,6 +67,11 @@ class UpdatingSessionIterator(
     assertIteratorNotCorrupted()
 
     if (returnRowsIter != null && returnRowsIter.hasNext) {
+      System.err.println(s"DEBUG: has remaining returnRowsIter - not going into loop - " +
+        s"current session - currentKeys: $currentKeys / " +
+        s"currentRows: $currentRows / currentSessionStart: $currentSessionStart / " +
+        s"currentSessionEnd: $currentSessionEnd")
+
       return returnRowsIter.next()
     }
 
@@ -105,6 +116,10 @@ class UpdatingSessionIterator(
       closeCurrentSession(keyChanged = false)
     }
 
+    System.err.println(s"DEBUG: end of loop - current session - currentKeys: $currentKeys / " +
+      s"currentRows: $currentRows / currentSessionStart: $currentSessionStart / " +
+      s"currentSessionEnd: $currentSessionEnd")
+
     // here returnRowsIter should be able to provide at least one row
     require(returnRowsIter != null && returnRowsIter.hasNext)
 
@@ -128,6 +143,10 @@ class UpdatingSessionIterator(
     currentSessionEnd = sessionEnd
     currentRows.clear()
     currentRows += row
+
+    System.err.println(s"DEBUG: started new session - currentKeys: $currentKeys / " +
+      s"currentRows: $currentRows / currentSessionStart: $currentSessionStart / " +
+      s"currentSessionEnd: $currentSessionEnd")
   }
 
   private def handleBrokenPreconditionForSort(): Unit = {
@@ -136,12 +155,9 @@ class UpdatingSessionIterator(
   }
 
   private def closeCurrentSession(keyChanged: Boolean): Unit = {
-    val convertedGroupWithoutSessionExpressions = groupWithoutSessionExpressions.map { x =>
-      BindReferences.bindReference[Expression](x, inputSchema)
-    }
-    val convertedAggregateExpressions = aggregateExpressions.map {
-      x => BindReferences.bindReference[Expression](x, inputSchema)
-    }
+    System.err.println(s"DEBUG: closing current session - currentKeys: $currentKeys / " +
+      s"currentRows: $currentRows / currentSessionStart: $currentSessionStart / " +
+      s"currentSessionEnd: $currentSessionEnd")
 
     val returnRows = currentRows.map { internalRow =>
       val sessionStruct = CreateNamedStruct(
@@ -153,14 +169,34 @@ class UpdatingSessionIterator(
             Literal(currentSessionEnd, LongType), LongType, TimestampType) ::
           Nil)
 
-      val valueExpressions = convertedGroupWithoutSessionExpressions ++ Seq(sessionStruct) ++
-        convertedAggregateExpressions
+      val convertedAllExpressions = inputSchema.map { x =>
+        BindReferences.bindReference[Expression](x, inputSchema)
+      }
 
-      val proj = GenerateUnsafeProjection.generate(valueExpressions, inputSchema)
+      val newSchemaExpressions = convertedAllExpressions.indices.map { idx =>
+        if (idx == sessionIndex) {
+          sessionStruct
+        } else {
+          convertedAllExpressions(idx)
+        }
+      }
+
+      val proj = GenerateUnsafeProjection.generate(newSchemaExpressions, inputSchema)
       proj(internalRow)
     }.toList
 
-    returnRowsIter = returnRows.iterator
+    if (returnRowsIter != null && returnRowsIter.hasNext) {
+      returnRowsIter = returnRowsIter ++ returnRows.iterator
+    } else {
+      returnRowsIter = returnRows.iterator
+    }
+
+    //returnRowsIter = returnRows.iterator
+
+    // FIXME: DEBUG
+    val (rIter, tmpReturnRowsIter) = returnRowsIter.duplicate
+    returnRowsIter = rIter
+    System.err.println(s"DEBUG: closing current session - return rows iter will return: ${tmpReturnRowsIter.toList}")
 
     if (keyChanged) processedKeys.add(currentKeys)
 
