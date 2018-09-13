@@ -277,6 +277,13 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val APP_RESOURCE_TYPE =
+    ConfigBuilder("spark.kubernetes.resource.type")
+      .doc("This sets the resource type internally")
+      .internal()
+      .stringConf
+      .createOptional
+
   val KUBERNETES_LOCAL_DIRS_TMPFS =
     ConfigBuilder("spark.kubernetes.local.dirs.tmpfs")
       .doc("If set to true then emptyDir volumes created to back SPARK_LOCAL_DIRS will have " +

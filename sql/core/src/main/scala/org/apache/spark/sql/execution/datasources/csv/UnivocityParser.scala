@@ -216,7 +216,12 @@ class UnivocityParser(
   }
 
   private def convert(tokens: Array[String]): InternalRow = {
-    if (tokens.length != parsedSchema.length) {
+    if (tokens == null) {
+      throw BadRecordException(
+        () => getCurrentInput,
+        () => None,
+        new RuntimeException("Malformed CSV record"))
+    } else if (tokens.length != parsedSchema.length) {
       // If the number of tokens doesn't match the schema, we should treat it as a malformed record.
       // However, we still have chance to parse some of the tokens, by adding extra null tokens in
       // the tail if the number is smaller, or by dropping extra tokens if the number is larger.

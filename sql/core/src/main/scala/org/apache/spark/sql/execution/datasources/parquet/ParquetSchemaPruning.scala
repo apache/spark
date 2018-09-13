@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -110,7 +110,17 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
     val projectionRootFields = projects.flatMap(getRootFields)
     val filterRootFields = filters.flatMap(getRootFields)
 
-    (projectionRootFields ++ filterRootFields).distinct
+    // Kind of expressions don't need to access any fields of a root fields, e.g., `IsNotNull`.
+    // For them, if there are any nested fields accessed in the query, we don't need to add root
+    // field access of above expressions.
+    // For example, for a query `SELECT name.first FROM contacts WHERE name IS NOT NULL`,
+    // we don't need to read nested fields of `name` struct other than `first` field.
+    val (rootFields, optRootFields) = (projectionRootFields ++ filterRootFields)
+      .distinct.partition(_.contentAccessed)
+
+    optRootFields.filter { opt =>
+      !rootFields.exists(_.field.name == opt.field.name)
+    } ++ rootFields
   }
 
   /**
@@ -156,7 +166,7 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
     // in the resulting schema may differ from their ordering in the logical relation's
     // original schema
     val mergedSchema = requestedRootFields
-      .map { case RootField(field, _) => StructType(Array(field)) }
+      .map { case root: RootField => StructType(Array(root.field)) }
       .reduceLeft(_ merge _)
     val dataSchemaFieldNames = fileDataSchema.fieldNames.toSet
     val mergedDataSchema =
@@ -199,6 +209,15 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
       case att: Attribute =>
         RootField(StructField(att.name, att.dataType, att.nullable), derivedFromAtt = true) :: Nil
       case SelectedField(field) => RootField(field, derivedFromAtt = false) :: Nil
+      // Root field accesses by `IsNotNull` and `IsNull` are special cases as the expressions
+      // don't actually use any nested fields. These root field accesses might be excluded later
+      // if there are any nested fields accesses in the query plan.
+      case IsNotNull(SelectedField(field)) =>
+        RootField(field, derivedFromAtt = false, contentAccessed = false) :: Nil
+      case IsNull(SelectedField(field)) =>
+        RootField(field, derivedFromAtt = false, contentAccessed = false) :: Nil
+      case IsNotNull(_: Attribute) | IsNull(_: Attribute) =>
+        expr.children.flatMap(getRootFields).map(_.copy(contentAccessed = false))
       case _ =>
         expr.children.flatMap(getRootFields)
     }
@@ -250,8 +269,11 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
     }
 
   /**
-   * A "root" schema field (aka top-level, no-parent) and whether it was derived from
-   * an attribute or had a proper child.
+   * This represents a "root" schema field (aka top-level, no-parent). `field` is the
+   * `StructField` for field name and datatype. `derivedFromAtt` indicates whether it
+   * was derived from an attribute or had a proper child. `contentAccessed` means whether
+   * it was accessed with its content by the expressions refer it.
    */
-  private case class RootField(field: StructField, derivedFromAtt: Boolean)
+  private case class RootField(field: StructField, derivedFromAtt: Boolean,
+    contentAccessed: Boolean = true)
 }

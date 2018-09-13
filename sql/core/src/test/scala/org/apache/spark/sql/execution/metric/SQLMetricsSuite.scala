@@ -497,6 +497,19 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     }
   }
 
+  test("SPARK-25278: output metrics are wrong for plans repeated in the query") {
+    val name = "demo_view"
+    withView(name) {
+      sql(s"CREATE OR REPLACE VIEW $name AS VALUES 1,2")
+      val view = spark.table(name)
+      val union = view.union(view)
+      testSparkPlanMetrics(union, 1, Map(
+        0L -> ("Union" -> Map()),
+        1L -> ("LocalTableScan" -> Map("number of output rows" -> 2L)),
+        2L -> ("LocalTableScan" -> Map("number of output rows" -> 2L))))
+    }
+  }
+
   test("writing data out metrics: parquet") {
     testMetricsNonDynamicPartition("parquet", "t1")
   }

@@ -46,7 +46,7 @@ class SQLJsonProtocolSuite extends SparkFunSuite {
       """.stripMargin
     val reconstructedEvent = JsonProtocol.sparkEventFromJson(parse(SQLExecutionStartJsonString))
     val expectedEvent = SparkListenerSQLExecutionStart(0, "test desc", "test detail", "test plan",
-      new SparkPlanInfo("TestNode", "test string", Nil, Nil), 0)
+      new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil), 0)
     assert(reconstructedEvent == expectedEvent)
   }
 }

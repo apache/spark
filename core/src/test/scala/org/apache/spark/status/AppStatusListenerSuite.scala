@@ -882,10 +882,39 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(dist.memoryRemaining === maxMemory - rdd2b1.memSize - rdd1b2.memSize )
     }
 
+    // Add block1 of rdd1 back to bm 1.
+    listener.onBlockUpdated(SparkListenerBlockUpdated(
+      BlockUpdatedInfo(bm1, rdd1b1.blockId, level, rdd1b1.memSize, rdd1b1.diskSize)))
+
+    check[ExecutorSummaryWrapper](bm1.executorId) { exec =>
+      assert(exec.info.rddBlocks === 3L)
+      assert(exec.info.memoryUsed === rdd1b1.memSize + rdd1b2.memSize + rdd2b1.memSize)
+      assert(exec.info.diskUsed === rdd1b1.diskSize + rdd1b2.diskSize + rdd2b1.diskSize)
+    }
+
     // Unpersist RDD1.
     listener.onUnpersistRDD(SparkListenerUnpersistRDD(rdd1b1.rddId))
     intercept[NoSuchElementException] {
       check[RDDStorageInfoWrapper](rdd1b1.rddId) { _ => () }
+    }
+
+    // executor1 now only contains block1 from rdd2.
+    check[ExecutorSummaryWrapper](bm1.executorId) { exec =>
+      assert(exec.info.rddBlocks === 1L)
+      assert(exec.info.memoryUsed === rdd2b1.memSize)
+      assert(exec.info.diskUsed === rdd2b1.diskSize)
+    }
+
+    // Unpersist RDD2.
+    listener.onUnpersistRDD(SparkListenerUnpersistRDD(rdd2b1.rddId))
+    intercept[NoSuchElementException] {
+      check[RDDStorageInfoWrapper](rdd2b1.rddId) { _ => () }
+    }
+
+    check[ExecutorSummaryWrapper](bm1.executorId) { exec =>
+      assert(exec.info.rddBlocks === 0L)
+      assert(exec.info.memoryUsed === 0)
+      assert(exec.info.diskUsed === 0)
     }
 
     // Update a StreamBlock.

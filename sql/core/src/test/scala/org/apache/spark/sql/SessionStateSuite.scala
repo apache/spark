@@ -41,13 +41,16 @@ class SessionStateSuite extends SparkFunSuite {
   }
 
   override def afterAll(): Unit = {
-    if (activeSession != null) {
-      activeSession.stop()
-      activeSession = null
-      SparkSession.clearActiveSession()
-      SparkSession.clearDefaultSession()
+    try {
+      if (activeSession != null) {
+        activeSession.stop()
+        activeSession = null
+        SparkSession.clearActiveSession()
+        SparkSession.clearDefaultSession()
+      }
+    } finally {
+      super.afterAll()
     }
-    super.afterAll()
   }
 
   test("fork new session and inherit RuntimeConfig options") {

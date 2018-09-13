@@ -46,10 +46,13 @@ class UISeleniumSuite
   }
 
   override def afterAll(): Unit = {
-    if (webDriver != null) {
-      webDriver.quit()
+    try {
+      if (webDriver != null) {
+        webDriver.quit()
+      }
+    } finally {
+      super.afterAll()
     }
-    super.afterAll()
   }
 
   override protected def serverStartCommand(port: Int) = {

@@ -1202,21 +1202,21 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
     .. note:: Experimental
 
     Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
-    <a href=http://www.icml2010.org/papers/387.pdf>Lin and Cohen</a>. From the abstract:
+    `Lin and Cohen <http://www.icml2010.org/papers/387.pdf>`_. From the abstract:
     PIC finds a very low-dimensional embedding of a dataset using truncated power
     iteration on a normalized pair-wise similarity matrix of the data.
 
     This class is not yet an Estimator/Transformer, use :py:func:`assignClusters` method
     to run the PowerIterationClustering algorithm.
 
-    .. seealso:: `Wikipedia on Spectral clustering \
-    <http://en.wikipedia.org/wiki/Spectral_clustering>`_
+    .. seealso:: `Wikipedia on Spectral clustering
+        <http://en.wikipedia.org/wiki/Spectral_clustering>`_
 
-   >>> data = [(1, 0, 0.5), \
-               (2, 0, 0.5), (2, 1, 0.7), \
-               (3, 0, 0.5), (3, 1, 0.7), (3, 2, 0.9), \
-               (4, 0, 0.5), (4, 1, 0.7), (4, 2, 0.9), (4, 3, 1.1), \
-               (5, 0, 0.5), (5, 1, 0.7), (5, 2, 0.9), (5, 3, 1.1), (5, 4, 1.3)]
+    >>> data = [(1, 0, 0.5),
+    ...         (2, 0, 0.5), (2, 1, 0.7),
+    ...         (3, 0, 0.5), (3, 1, 0.7), (3, 2, 0.9),
+    ...         (4, 0, 0.5), (4, 1, 0.7), (4, 2, 0.9), (4, 3, 1.1),
+    ...         (5, 0, 0.5), (5, 1, 0.7), (5, 2, 0.9), (5, 3, 1.1), (5, 4, 1.3)]
     >>> df = spark.createDataFrame(data).toDF("src", "dst", "weight")
     >>> pic = PowerIterationClustering(k=2, maxIter=40, weightCol="weight")
     >>> assignments = pic.assignClusters(df)
