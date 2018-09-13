@@ -59,11 +59,11 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     )
   }
 
-  ignore("from_csv bad UTF-8") {
+  test("from_csv bad UTF-8") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
       CsvToStructs(schema, Map.empty, Literal(badCsv), gmtId),
-      null)
+      InternalRow(null))
   }
 
   test("from_csv with timestamp") {
