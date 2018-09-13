@@ -402,7 +402,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     growPointerArrayIfNecessary();
     int uaoSize = UnsafeAlignedOffset.getUaoSize();
-    // Need 4 bytes to store the record length.
+    // Need 4 or 8 bytes to store the record length.
     final int required = length + uaoSize;
     acquireNewPageIfNecessary(required);
 
@@ -544,7 +544,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           // is accessing the current record. We free this page in that caller's next loadNext()
           // call.
           for (MemoryBlock page : allocatedPages) {
-            if (!loaded || page.getPageNumber() !=
+            if (!loaded || page.pageNumber !=
                     ((UnsafeInMemorySorter.SortedIterator)upstream).getCurrentPageNumber()) {
               released += page.size();
               freePage(page);

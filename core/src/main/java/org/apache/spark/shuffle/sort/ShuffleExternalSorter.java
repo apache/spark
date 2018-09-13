@@ -43,6 +43,7 @@ import org.apache.spark.storage.DiskBlockObjectWriter;
 import org.apache.spark.storage.FileSegment;
 import org.apache.spark.storage.TempShuffleBlockId;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.UnsafeAlignedOffset;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.Utils;
@@ -184,6 +185,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       blockManager.getDiskWriter(blockId, file, ser, fileBufferSizeBytes, writeMetricsToUse);
 
     int currentPartition = -1;
+    final int uaoSize = UnsafeAlignedOffset.getUaoSize();
     while (sortedRecords.hasNext()) {
       sortedRecords.loadNext();
       final int partition = sortedRecords.packedRecordPointer.getPartitionId();
@@ -200,8 +202,8 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       final long recordPointer = sortedRecords.packedRecordPointer.getRecordPointer();
       final Object recordPage = taskMemoryManager.getPage(recordPointer);
       final long recordOffsetInPage = taskMemoryManager.getOffsetInPage(recordPointer);
-      int dataRemaining = Platform.getInt(recordPage, recordOffsetInPage);
-      long recordReadPosition = recordOffsetInPage + 4; // skip over record length
+      int dataRemaining = UnsafeAlignedOffset.getSize(recordPage, recordOffsetInPage);
+      long recordReadPosition = recordOffsetInPage + uaoSize; // skip over record length
       while (dataRemaining > 0) {
         final int toTransfer = Math.min(diskWriteBufferSize, dataRemaining);
         Platform.copyMemory(
@@ -389,15 +391,16 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     }
 
     growPointerArrayIfNecessary();
-    // Need 4 bytes to store the record length.
-    final int required = length + 4;
+    final int uaoSize = UnsafeAlignedOffset.getUaoSize();
+    // Need 4 or 8 bytes to store the record length.
+    final int required = length + uaoSize;
     acquireNewPageIfNecessary(required);
 
     assert(currentPage != null);
     final Object base = currentPage.getBaseObject();
     final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
-    Platform.putInt(base, pageCursor, length);
-    pageCursor += 4;
+    UnsafeAlignedOffset.putSize(base, pageCursor, length);
+    pageCursor += uaoSize;
     Platform.copyMemory(recordBase, recordOffset, base, pageCursor, length);
     pageCursor += length;
     inMemSorter.insertRecord(recordAddress, partitionId);

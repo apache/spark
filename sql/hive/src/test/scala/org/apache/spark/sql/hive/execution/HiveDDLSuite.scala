@@ -60,7 +60,8 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
   protected override def generateTable(
       catalog: SessionCatalog,
       name: TableIdentifier,
-      isDataSource: Boolean): CatalogTable = {
+      isDataSource: Boolean,
+      partitionCols: Seq[String] = Seq("a", "b")): CatalogTable = {
     val storage =
       if (isDataSource) {
         val serde = HiveSerDe.sourceToSerDe("parquet")
@@ -84,17 +85,17 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     val metadata = new MetadataBuilder()
       .putString("key", "value")
       .build()
+    val schema = new StructType()
+      .add("col1", "int", nullable = true, metadata = metadata)
+      .add("col2", "string")
     CatalogTable(
       identifier = name,
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
-      schema = new StructType()
-        .add("col1", "int", nullable = true, metadata = metadata)
-        .add("col2", "string")
-        .add("a", "int")
-        .add("b", "int"),
+      schema = schema.copy(
+        fields = schema.fields ++ partitionCols.map(StructField(_, IntegerType))),
       provider = if (isDataSource) Some("parquet") else Some("hive"),
-      partitionColumnNames = Seq("a", "b"),
+      partitionColumnNames = partitionCols,
       createTime = 0L,
       createVersion = org.apache.spark.SPARK_VERSION,
       tracksPartitionsInCatalog = true)
@@ -750,6 +751,73 @@ class HiveDDLSuite
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
         assert(!catalog.tableExists(TableIdentifier(newViewName)))
+      }
+    }
+  }
+
+  test("Insert overwrite Hive table should output correct schema") {
+    withSQLConf(CONVERT_METASTORE_PARQUET.key -> "false") {
+      withTable("tbl", "tbl2") {
+        withView("view1") {
+          spark.sql("CREATE TABLE tbl(id long)")
+          spark.sql("INSERT OVERWRITE TABLE tbl VALUES 4")
+          spark.sql("CREATE VIEW view1 AS SELECT id FROM tbl")
+          withTempPath { path =>
+            sql(
+              s"""
+                |CREATE TABLE tbl2(ID long) USING hive
+                |OPTIONS(fileFormat 'parquet')
+                |LOCATION '${path.toURI}'
+              """.stripMargin)
+            spark.sql("INSERT OVERWRITE TABLE tbl2 SELECT ID FROM view1")
+            val expectedSchema = StructType(Seq(StructField("ID", LongType, true)))
+            assert(spark.read.parquet(path.toString).schema == expectedSchema)
+            checkAnswer(spark.table("tbl2"), Seq(Row(4)))
+          }
+        }
+      }
+    }
+  }
+
+  test("Create Hive table as select should output correct schema") {
+    withSQLConf(CONVERT_METASTORE_PARQUET.key -> "false") {
+      withTable("tbl", "tbl2") {
+        withView("view1") {
+          spark.sql("CREATE TABLE tbl(id long)")
+          spark.sql("INSERT OVERWRITE TABLE tbl VALUES 4")
+          spark.sql("CREATE VIEW view1 AS SELECT id FROM tbl")
+          withTempPath { path =>
+            sql(
+              s"""
+                |CREATE TABLE tbl2 USING hive
+                |OPTIONS(fileFormat 'parquet')
+                |LOCATION '${path.toURI}'
+                |AS SELECT ID FROM view1
+              """.stripMargin)
+            val expectedSchema = StructType(Seq(StructField("ID", LongType, true)))
+            assert(spark.read.parquet(path.toString).schema == expectedSchema)
+            checkAnswer(spark.table("tbl2"), Seq(Row(4)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-25313 Insert overwrite directory should output correct schema") {
+    withSQLConf(CONVERT_METASTORE_PARQUET.key -> "false") {
+      withTable("tbl") {
+        withView("view1") {
+          spark.sql("CREATE TABLE tbl(id long)")
+          spark.sql("INSERT OVERWRITE TABLE tbl VALUES 4")
+          spark.sql("CREATE VIEW view1 AS SELECT id FROM tbl")
+          withTempPath { path =>
+            spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
+              "STORED AS PARQUET SELECT ID FROM view1")
+            val expectedSchema = StructType(Seq(StructField("ID", LongType, true)))
+            assert(spark.read.parquet(path.toString).schema == expectedSchema)
+            checkAnswer(spark.read.parquet(path.toString), Seq(Row(4)))
+          }
+        }
       }
     }
   }

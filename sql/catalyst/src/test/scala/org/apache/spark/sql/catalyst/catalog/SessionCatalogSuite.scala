@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -537,11 +537,11 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       val view = View(desc = metadata, output = metadata.schema.toAttributes,
         child = CatalystSqlParser.parsePlan(metadata.viewText.get))
       comparePlans(catalog.lookupRelation(TableIdentifier("view1", Some("db3"))),
-        SubqueryAlias("view1", view))
+        SubqueryAlias("view1", "db3", view))
       // Look up a view using current database of the session catalog.
       catalog.setCurrentDatabase("db3")
       comparePlans(catalog.lookupRelation(TableIdentifier("view1")),
-        SubqueryAlias("view1", view))
+        SubqueryAlias("view1", "db3", view))
     }
   }
 

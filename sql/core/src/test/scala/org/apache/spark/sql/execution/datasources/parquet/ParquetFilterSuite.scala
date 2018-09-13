@@ -25,6 +25,7 @@ import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Operato
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -60,7 +61,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   private lazy val parquetFilters =
     new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
       conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
-      conf.parquetFilterPushDownInFilterThreshold)
+      conf.parquetFilterPushDownInFilterThreshold, conf.caseSensitiveAnalysis)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -1017,6 +1018,118 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           assert(df.where("a in(null)").count() === 0)
           assert(df.where("a = null").count() === 0)
           assert(df.where("a is null").count() === 1)
+        }
+      }
+    }
+  }
+
+  test("SPARK-25207: Case-insensitive field resolution for pushdown when reading parquet") {
+    def createParquetFilter(caseSensitive: Boolean): ParquetFilters = {
+      new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
+        conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
+        conf.parquetFilterPushDownInFilterThreshold, caseSensitive)
+    }
+    val caseSensitiveParquetFilters = createParquetFilter(caseSensitive = true)
+    val caseInsensitiveParquetFilters = createParquetFilter(caseSensitive = false)
+
+    def testCaseInsensitiveResolution(
+        schema: StructType,
+        expected: FilterPredicate,
+        filter: sources.Filter): Unit = {
+      val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
+
+      assertResult(Some(expected)) {
+        caseInsensitiveParquetFilters.createFilter(parquetSchema, filter)
+      }
+      assertResult(None) {
+        caseSensitiveParquetFilters.createFilter(parquetSchema, filter)
+      }
+    }
+
+    val schema = StructType(Seq(StructField("cint", IntegerType)))
+
+    testCaseInsensitiveResolution(
+      schema, FilterApi.eq(intColumn("cint"), null.asInstanceOf[Integer]), sources.IsNull("CINT"))
+
+    testCaseInsensitiveResolution(
+      schema,
+      FilterApi.notEq(intColumn("cint"), null.asInstanceOf[Integer]),
+      sources.IsNotNull("CINT"))
+
+    testCaseInsensitiveResolution(
+      schema, FilterApi.eq(intColumn("cint"), 1000: Integer), sources.EqualTo("CINT", 1000))
+
+    testCaseInsensitiveResolution(
+      schema,
+      FilterApi.notEq(intColumn("cint"), 1000: Integer),
+      sources.Not(sources.EqualTo("CINT", 1000)))
+
+    testCaseInsensitiveResolution(
+      schema, FilterApi.eq(intColumn("cint"), 1000: Integer), sources.EqualNullSafe("CINT", 1000))
+
+    testCaseInsensitiveResolution(
+      schema,
+      FilterApi.notEq(intColumn("cint"), 1000: Integer),
+      sources.Not(sources.EqualNullSafe("CINT", 1000)))
+
+    testCaseInsensitiveResolution(
+      schema,
+      FilterApi.lt(intColumn("cint"), 1000: Integer), sources.LessThan("CINT", 1000))
+
+    testCaseInsensitiveResolution(
+      schema,
+      FilterApi.ltEq(intColumn("cint"), 1000: Integer),
+      sources.LessThanOrEqual("CINT", 1000))
+
+    testCaseInsensitiveResolution(
+      schema, FilterApi.gt(intColumn("cint"), 1000: Integer), sources.GreaterThan("CINT", 1000))
+
+    testCaseInsensitiveResolution(
+      schema,
+      FilterApi.gtEq(intColumn("cint"), 1000: Integer),
+      sources.GreaterThanOrEqual("CINT", 1000))
+
+    testCaseInsensitiveResolution(
+      schema,
+      FilterApi.or(
+        FilterApi.eq(intColumn("cint"), 10: Integer),
+        FilterApi.eq(intColumn("cint"), 20: Integer)),
+      sources.In("CINT", Array(10, 20)))
+
+    val dupFieldSchema = StructType(
+      Seq(StructField("cint", IntegerType), StructField("cINT", IntegerType)))
+    val dupParquetSchema = new SparkToParquetSchemaConverter(conf).convert(dupFieldSchema)
+    assertResult(None) {
+      caseInsensitiveParquetFilters.createFilter(
+        dupParquetSchema, sources.EqualTo("CINT", 1000))
+    }
+  }
+
+  test("SPARK-25207: exception when duplicate fields in case-insensitive mode") {
+    withTempPath { dir =>
+      val count = 10
+      val tableName = "spark_25207"
+      val tableDir = dir.getAbsoluteFile + "/table"
+      withTable(tableName) {
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          spark.range(count).selectExpr("id as A", "id as B", "id as b")
+            .write.mode("overwrite").parquet(tableDir)
+        }
+        sql(
+          s"""
+             |CREATE TABLE $tableName (A LONG, B LONG) USING PARQUET LOCATION '$tableDir'
+           """.stripMargin)
+
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+          val e = intercept[SparkException] {
+            sql(s"select a from $tableName where b > 0").collect()
+          }
+          assert(e.getCause.isInstanceOf[RuntimeException] && e.getCause.getMessage.contains(
+            """Found duplicate field(s) "B": [B, b] in case-insensitive mode"""))
+        }
+
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          checkAnswer(sql(s"select A from $tableName where B > 0"), (1 until count).map(Row(_)))
         }
       }
     }

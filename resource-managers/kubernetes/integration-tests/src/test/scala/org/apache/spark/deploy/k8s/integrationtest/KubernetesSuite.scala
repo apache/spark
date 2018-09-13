@@ -38,15 +38,28 @@ private[spark] class KubernetesSuite extends SparkFunSuite
 
   import KubernetesSuite._
 
-  protected var testBackend: IntegrationTestBackend = _
-  protected var sparkHomeDir: Path = _
+  private var sparkHomeDir: Path = _
+  private var pyImage: String = _
+  private var rImage: String = _
+
   protected var image: String = _
-  protected var pyImage: String = _
+  protected var testBackend: IntegrationTestBackend = _
   protected var driverPodName: String = _
   protected var kubernetesTestComponents: KubernetesTestComponents = _
   protected var sparkAppConf: SparkAppConf = _
   protected var containerLocalSparkDistroExamplesJar: String = _
   protected var appLocator: String = _
+
+  // Default memory limit is 1024M + 384M (minimum overhead constant)
+  private val baseMemory = s"${1024 + 384}Mi"
+  protected val memOverheadConstant = 0.8
+  private val standardNonJVMMemory = s"${(1024 + 0.4*1024).toInt}Mi"
+  protected val additionalMemory = 200
+  // 209715200 is 200Mi
+  protected val additionalMemoryInBytes = 209715200
+  private val extraDriverTotalMemory = s"${(1024 + memOverheadConstant*1024).toInt}Mi"
+  private val extraExecTotalMemory =
+    s"${(1024 + memOverheadConstant*1024 + additionalMemory).toInt}Mi"
 
   override def beforeAll(): Unit = {
     // The scalatest-maven-plugin gives system properties that are referenced but not set null
@@ -67,6 +80,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     val imageRepo = getTestImageRepo
     image = s"$imageRepo/spark:$imageTag"
     pyImage = s"$imageRepo/spark-py:$imageTag"
+    rImage = s"$imageRepo/spark-r:$imageTag"
 
     val sparkDistroExamplesJarFile: File = sparkHomeDir.resolve(Paths.get("examples", "jars"))
       .toFile
@@ -230,6 +244,8 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     assert(driverPod.getMetadata.getName === driverPodName)
     assert(driverPod.getSpec.getContainers.get(0).getImage === image)
     assert(driverPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-driver")
+    assert(driverPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
+      === baseMemory)
   }
 
 
@@ -237,16 +253,48 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     assert(driverPod.getMetadata.getName === driverPodName)
     assert(driverPod.getSpec.getContainers.get(0).getImage === pyImage)
     assert(driverPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-driver")
+    assert(driverPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
+      === standardNonJVMMemory)
   }
+
+  protected def doBasicDriverRPodCheck(driverPod: Pod): Unit = {
+    assert(driverPod.getMetadata.getName === driverPodName)
+    assert(driverPod.getSpec.getContainers.get(0).getImage === rImage)
+    assert(driverPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-driver")
+    assert(driverPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
+      === standardNonJVMMemory)
+  }
+
 
   protected def doBasicExecutorPodCheck(executorPod: Pod): Unit = {
     assert(executorPod.getSpec.getContainers.get(0).getImage === image)
     assert(executorPod.getSpec.getContainers.get(0).getName === "executor")
+    assert(executorPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
+      === baseMemory)
   }
 
   protected def doBasicExecutorPyPodCheck(executorPod: Pod): Unit = {
     assert(executorPod.getSpec.getContainers.get(0).getImage === pyImage)
     assert(executorPod.getSpec.getContainers.get(0).getName === "executor")
+    assert(executorPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
+      === standardNonJVMMemory)
+  }
+
+  protected def doBasicExecutorRPodCheck(executorPod: Pod): Unit = {
+    assert(executorPod.getSpec.getContainers.get(0).getImage === rImage)
+    assert(executorPod.getSpec.getContainers.get(0).getName === "executor")
+    assert(executorPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
+      === standardNonJVMMemory)
+  }
+
+  protected def doDriverMemoryCheck(driverPod: Pod): Unit = {
+    assert(driverPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
+      === extraDriverTotalMemory)
+  }
+
+  protected def doExecutorMemoryCheck(executorPod: Pod): Unit = {
+    assert(executorPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
+      === extraExecTotalMemory)
   }
 
   protected def checkCustomSettings(pod: Pod): Unit = {

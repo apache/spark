@@ -24,29 +24,71 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.sources.GreaterThan;
+import org.apache.spark.sql.sources.v2.BatchReadSupportProvider;
 import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
-import org.apache.spark.sql.sources.v2.ReadSupport;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.StructType;
 
-public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
+public class JavaAdvancedDataSourceV2 implements DataSourceV2, BatchReadSupportProvider {
 
-  public class Reader implements DataSourceReader, SupportsPushDownRequiredColumns,
-    SupportsPushDownFilters {
+  public class ReadSupport extends JavaSimpleReadSupport {
+    @Override
+    public ScanConfigBuilder newScanConfigBuilder() {
+      return new AdvancedScanConfigBuilder();
+    }
+
+    @Override
+    public InputPartition[] planInputPartitions(ScanConfig config) {
+      Filter[] filters = ((AdvancedScanConfigBuilder) config).filters;
+      List<InputPartition> res = new ArrayList<>();
+
+      Integer lowerBound = null;
+      for (Filter filter : filters) {
+        if (filter instanceof GreaterThan) {
+          GreaterThan f = (GreaterThan) filter;
+          if ("i".equals(f.attribute()) && f.value() instanceof Integer) {
+            lowerBound = (Integer) f.value();
+            break;
+          }
+        }
+      }
+
+      if (lowerBound == null) {
+        res.add(new JavaRangeInputPartition(0, 5));
+        res.add(new JavaRangeInputPartition(5, 10));
+      } else if (lowerBound < 4) {
+        res.add(new JavaRangeInputPartition(lowerBound + 1, 5));
+        res.add(new JavaRangeInputPartition(5, 10));
+      } else if (lowerBound < 9) {
+        res.add(new JavaRangeInputPartition(lowerBound + 1, 10));
+      }
+
+      return res.stream().toArray(InputPartition[]::new);
+    }
+
+    @Override
+    public PartitionReaderFactory createReaderFactory(ScanConfig config) {
+      StructType requiredSchema = ((AdvancedScanConfigBuilder) config).requiredSchema;
+      return new AdvancedReaderFactory(requiredSchema);
+    }
+  }
+
+  public static class AdvancedScanConfigBuilder implements ScanConfigBuilder, ScanConfig,
+    SupportsPushDownFilters, SupportsPushDownRequiredColumns {
 
     // Exposed for testing.
     public StructType requiredSchema = new StructType().add("i", "int").add("j", "int");
     public Filter[] filters = new Filter[0];
 
     @Override
-    public StructType readSchema() {
-      return requiredSchema;
+    public void pruneColumns(StructType requiredSchema) {
+      this.requiredSchema = requiredSchema;
     }
 
     @Override
-    public void pruneColumns(StructType requiredSchema) {
-      this.requiredSchema = requiredSchema;
+    public StructType readSchema() {
+      return requiredSchema;
     }
 
     @Override
@@ -79,79 +121,54 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<InputPartition<InternalRow>> planInputPartitions() {
-      List<InputPartition<InternalRow>> res = new ArrayList<>();
-
-      Integer lowerBound = null;
-      for (Filter filter : filters) {
-        if (filter instanceof GreaterThan) {
-          GreaterThan f = (GreaterThan) filter;
-          if ("i".equals(f.attribute()) && f.value() instanceof Integer) {
-            lowerBound = (Integer) f.value();
-            break;
-          }
-        }
-      }
-
-      if (lowerBound == null) {
-        res.add(new JavaAdvancedInputPartition(0, 5, requiredSchema));
-        res.add(new JavaAdvancedInputPartition(5, 10, requiredSchema));
-      } else if (lowerBound < 4) {
-        res.add(new JavaAdvancedInputPartition(lowerBound + 1, 5, requiredSchema));
-        res.add(new JavaAdvancedInputPartition(5, 10, requiredSchema));
-      } else if (lowerBound < 9) {
-        res.add(new JavaAdvancedInputPartition(lowerBound + 1, 10, requiredSchema));
-      }
-
-      return res;
+    public ScanConfig build() {
+      return this;
     }
   }
 
-  static class JavaAdvancedInputPartition implements InputPartition<InternalRow>,
-      InputPartitionReader<InternalRow> {
-    private int start;
-    private int end;
-    private StructType requiredSchema;
+  static class AdvancedReaderFactory implements PartitionReaderFactory {
+    StructType requiredSchema;
 
-    JavaAdvancedInputPartition(int start, int end, StructType requiredSchema) {
-      this.start = start;
-      this.end = end;
+    AdvancedReaderFactory(StructType requiredSchema) {
       this.requiredSchema = requiredSchema;
     }
 
     @Override
-    public InputPartitionReader<InternalRow> createPartitionReader() {
-      return new JavaAdvancedInputPartition(start - 1, end, requiredSchema);
-    }
+    public PartitionReader<InternalRow> createReader(InputPartition partition) {
+      JavaRangeInputPartition p = (JavaRangeInputPartition) partition;
+      return new PartitionReader<InternalRow>() {
+        private int current = p.start - 1;
 
-    @Override
-    public boolean next() {
-      start += 1;
-      return start < end;
-    }
-
-    @Override
-    public InternalRow get() {
-      Object[] values = new Object[requiredSchema.size()];
-      for (int i = 0; i < values.length; i++) {
-        if ("i".equals(requiredSchema.apply(i).name())) {
-          values[i] = start;
-        } else if ("j".equals(requiredSchema.apply(i).name())) {
-          values[i] = -start;
+        @Override
+        public boolean next() throws IOException {
+          current += 1;
+          return current < p.end;
         }
-      }
-      return new GenericInternalRow(values);
-    }
 
-    @Override
-    public void close() throws IOException {
+        @Override
+        public InternalRow get() {
+          Object[] values = new Object[requiredSchema.size()];
+          for (int i = 0; i < values.length; i++) {
+            if ("i".equals(requiredSchema.apply(i).name())) {
+              values[i] = current;
+            } else if ("j".equals(requiredSchema.apply(i).name())) {
+              values[i] = -current;
+            }
+          }
+          return new GenericInternalRow(values);
+        }
 
+        @Override
+        public void close() throws IOException {
+
+        }
+      };
     }
   }
 
 
   @Override
-  public DataSourceReader createReader(DataSourceOptions options) {
-    return new Reader();
+  public BatchReadSupport createBatchReadSupport(DataSourceOptions options) {
+    return new ReadSupport();
   }
 }

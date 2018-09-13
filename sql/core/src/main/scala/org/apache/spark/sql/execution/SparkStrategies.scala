@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableS
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlanV2
 import org.apache.spark.sql.internal.SQLConf
@@ -67,22 +68,42 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object SpecialLimits extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ReturnAnswer(rootPlan) => rootPlan match {
-        case Limit(IntegerLiteral(limit), Sort(order, true, child))
-            if limit < conf.topKSortFallbackThreshold =>
-          TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
-        case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
-            if limit < conf.topKSortFallbackThreshold =>
-          TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
+        case Limit(IntegerLiteral(limit), s@Sort(order, true, child)) =>
+          if (limit < conf.topKSortFallbackThreshold) {
+            TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
+          } else {
+            GlobalLimitExec(limit,
+              LocalLimitExec(limit, planLater(s)),
+              orderedLimit = true) :: Nil
+          }
+        case Limit(IntegerLiteral(limit), p@Project(projectList, Sort(order, true, child))) =>
+          if (limit < conf.topKSortFallbackThreshold) {
+            TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
+          } else {
+            GlobalLimitExec(limit,
+              LocalLimitExec(limit, planLater(p)),
+              orderedLimit = true) :: Nil
+          }
         case Limit(IntegerLiteral(limit), child) =>
           CollectLimitExec(limit, planLater(child)) :: Nil
         case other => planLater(other) :: Nil
       }
-      case Limit(IntegerLiteral(limit), Sort(order, true, child))
-          if limit < conf.topKSortFallbackThreshold =>
-        TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
-      case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
-          if limit < conf.topKSortFallbackThreshold =>
-        TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
+      case Limit(IntegerLiteral(limit), s@Sort(order, true, child)) =>
+        if (limit < conf.topKSortFallbackThreshold) {
+          TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
+        } else {
+          GlobalLimitExec(limit,
+            LocalLimitExec(limit, planLater(s)),
+            orderedLimit = true) :: Nil
+        }
+      case Limit(IntegerLiteral(limit), p@Project(projectList, Sort(order, true, child))) =>
+        if (limit < conf.topKSortFallbackThreshold) {
+          TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
+        } else {
+          GlobalLimitExec(limit,
+            LocalLimitExec(limit, planLater(p)),
+            orderedLimit = true) :: Nil
+        }
       case _ => Nil
     }
   }
@@ -328,10 +349,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             "Streaming aggregation doesn't support group aggregate pandas UDF")
         }
 
+        val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
+
         aggregate.AggUtils.planStreamingAggregation(
           namedGroupingExpressions,
           aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
           rewrittenResultExpressions,
+          stateVersion,
           planLater(child))
 
       case _ => Nil
@@ -509,6 +533,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, None, stateEnc, stateVersion,
           outputMode, timeout, batchTimestampMs = None, eventTimeWatermark = None, planLater(child))
         execPlan :: Nil
+      case _ =>
+        Nil
+    }
+  }
+
+  /**
+   * Strategy to convert EvalPython logical operator to physical operator.
+   */
+  object PythonEvals extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case ArrowEvalPython(udfs, output, child) =>
+        ArrowEvalPythonExec(udfs, output, planLater(child)) :: Nil
+      case BatchEvalPython(udfs, output, child) =>
+        BatchEvalPythonExec(udfs, output, planLater(child)) :: Nil
       case _ =>
         Nil
     }

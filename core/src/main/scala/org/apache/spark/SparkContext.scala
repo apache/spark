@@ -213,6 +213,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
   private var _statusStore: AppStatusStore = _
+  private var _heartbeater: Heartbeater = _
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -495,6 +496,11 @@ class SparkContext(config: SparkConf) extends Logging {
     _taskScheduler = ts
     _dagScheduler = new DAGScheduler(this)
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
+
+    // create and start the heartbeater for collecting memory metrics
+    _heartbeater = new Heartbeater(env.memoryManager, reportHeartBeat, "driver-heartbeater",
+      conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
+    _heartbeater.start()
 
     // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
     // constructor
@@ -1603,6 +1609,15 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * Get the max number of tasks that can be concurrent launched currently.
+   * Note that please don't cache the value returned by this method, because the number can change
+   * due to add/remove executors.
+   *
+   * @return The max number of tasks that can be concurrent launched currently.
+   */
+  private[spark] def maxNumConcurrentTasks(): Int = schedulerBackend.maxNumConcurrentTasks()
+
+  /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
    * to help it make decisions.
    * @param numExecutors The total number of executors we'd like to have. The cluster manager
@@ -1949,6 +1964,12 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     Utils.tryLogNonFatalError {
       _eventLogger.foreach(_.stop())
+    }
+    if (_heartbeater != null) {
+      Utils.tryLogNonFatalError {
+        _heartbeater.stop()
+      }
+      _heartbeater = null
     }
     if (env != null && _heartbeatReceiver != null) {
       Utils.tryLogNonFatalError {
@@ -2418,6 +2439,14 @@ class SparkContext(config: SparkConf) extends Logging {
       val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
       listenerBus.post(environmentUpdate)
     }
+  }
+
+  /** Reports heartbeat metrics for the driver. */
+  private def reportHeartBeat(): Unit = {
+    val driverUpdates = _heartbeater.getCurrentMetrics()
+    val accumUpdates = new Array[(Long, Int, Int, Seq[AccumulableInfo])](0)
+    listenerBus.post(SparkListenerExecutorMetricsUpdate("driver", accumUpdates,
+      Some(driverUpdates)))
   }
 
   // In order to prevent multiple SparkContexts from being active at the same time, mark this

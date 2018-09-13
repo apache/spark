@@ -702,3 +702,37 @@ Parquet Vectorized (Pushdown)               11766 / 11927          1.3         7
 Native ORC Vectorized                       12101 / 12301          1.3         769.3       1.0X
 Native ORC Vectorized (Pushdown)            11983 / 12651          1.3         761.9       1.0X
 
+
+================================================================================================
+Pushdown benchmark with many filters
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_181-b13 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4770HQ CPU @ 2.20GHz
+
+Select 1 row with 1 filters:             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Parquet Vectorized                             158 /  182          0.0   158442969.0       1.0X
+Parquet Vectorized (Pushdown)                  150 /  158          0.0   149718289.0       1.1X
+Native ORC Vectorized                          141 /  148          0.0   141259852.0       1.1X
+Native ORC Vectorized (Pushdown)               142 /  147          0.0   142016472.0       1.1X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_181-b13 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4770HQ CPU @ 2.20GHz
+
+Select 1 row with 250 filters:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Parquet Vectorized                            1013 / 1026          0.0  1013194322.0       1.0X
+Parquet Vectorized (Pushdown)                 1326 / 1332          0.0  1326301956.0       0.8X
+Native ORC Vectorized                         1005 / 1010          0.0  1005266379.0       1.0X
+Native ORC Vectorized (Pushdown)              1068 / 1071          0.0  1067964993.0       0.9X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_181-b13 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4770HQ CPU @ 2.20GHz
+
+Select 1 row with 500 filters:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Parquet Vectorized                            3598 / 3614          0.0  3598001202.0       1.0X
+Parquet Vectorized (Pushdown)                 4282 / 4333          0.0  4281849770.0       0.8X
+Native ORC Vectorized                         3594 / 3619          0.0  3593551548.0       1.0X
+Native ORC Vectorized (Pushdown)              3834 / 3840          0.0  3834240570.0       0.9X

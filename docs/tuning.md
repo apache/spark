@@ -35,7 +35,7 @@ in your operations) and performance. It provides two serialization libraries:
   Java serialization is flexible but often quite slow, and leads to large
   serialized formats for many classes.
 * [Kryo serialization](https://github.com/EsotericSoftware/kryo): Spark can also use
-  the Kryo library (version 2) to serialize objects more quickly. Kryo is significantly
+  the Kryo library (version 4) to serialize objects more quickly. Kryo is significantly
   faster and more compact than Java serialization (often as much as 10x), but does not support all
   `Serializable` types and requires you to *register* the classes you'll use in the program in advance
   for best performance.

@@ -31,7 +31,8 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       .setAppName("test-cluster")
     sc = new SparkContext(conf)
     val rdd = sc.makeRDD(1 to 10, 4)
-    val rdd2 = rdd.barrier().mapPartitions { (it, context) =>
+    val rdd2 = rdd.barrier().mapPartitions { it =>
+      val context = BarrierTaskContext.get()
       // Sleep for a random time before global sync.
       Thread.sleep(Random.nextInt(1000))
       context.barrier()
@@ -49,7 +50,8 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       .setAppName("test-cluster")
     sc = new SparkContext(conf)
     val rdd = sc.makeRDD(1 to 10, 4)
-    val rdd2 = rdd.barrier().mapPartitions { (it, context) =>
+    val rdd2 = rdd.barrier().mapPartitions { it =>
+      val context = BarrierTaskContext.get()
       // Sleep for a random time before global sync.
       Thread.sleep(Random.nextInt(1000))
       context.barrier()
@@ -79,7 +81,8 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       .setAppName("test-cluster")
     sc = new SparkContext(conf)
     val rdd = sc.makeRDD(1 to 10, 4)
-    val rdd2 = rdd.barrier().mapPartitions { (it, context) =>
+    val rdd2 = rdd.barrier().mapPartitions { it =>
+      val context = BarrierTaskContext.get()
       // Task 3 shall sleep 2000ms to ensure barrier() call timeout
       if (context.taskAttemptId == 3) {
         Thread.sleep(2000)
@@ -103,7 +106,8 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       .setAppName("test-cluster")
     sc = new SparkContext(conf)
     val rdd = sc.makeRDD(1 to 10, 4)
-    val rdd2 = rdd.barrier().mapPartitions { (it, context) =>
+    val rdd2 = rdd.barrier().mapPartitions { it =>
+      val context = BarrierTaskContext.get()
       if (context.taskAttemptId != 0) {
         context.barrier()
       }
@@ -125,7 +129,8 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       .setAppName("test-cluster")
     sc = new SparkContext(conf)
     val rdd = sc.makeRDD(1 to 10, 4)
-    val rdd2 = rdd.barrier().mapPartitions { (it, context) =>
+    val rdd2 = rdd.barrier().mapPartitions { it =>
+      val context = BarrierTaskContext.get()
       try {
         if (context.taskAttemptId == 0) {
           // Due to some non-obvious reason, the code can trigger an Exception and skip the

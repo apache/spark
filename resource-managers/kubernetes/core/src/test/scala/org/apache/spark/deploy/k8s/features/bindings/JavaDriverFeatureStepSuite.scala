@@ -56,6 +56,5 @@ class JavaDriverFeatureStepSuite extends SparkFunSuite {
       "--properties-file", SPARK_CONF_PATH,
       "--class", "test-class",
       "spark-internal", "5 7"))
-
   }
 }

@@ -203,19 +203,11 @@ class UnivocityParser(
     }
   }
 
-  private val doParse = if (requiredSchema.nonEmpty) {
-    (input: String) => convert(tokenizer.parseLine(input))
-  } else {
-    // If `columnPruning` enabled and partition attributes scanned only,
-    // `schema` gets empty.
-    (_: String) => InternalRow.empty
-  }
-
   /**
    * Parses a single CSV string and turns it into either one resulting row or no row (if the
    * the record is malformed).
    */
-  def parse(input: String): InternalRow = doParse(input)
+  def parse(input: String): InternalRow = convert(tokenizer.parseLine(input))
 
   private val getToken = if (options.columnPruning) {
     (tokens: Array[String], index: Int) => tokens(index)
@@ -224,7 +216,12 @@ class UnivocityParser(
   }
 
   private def convert(tokens: Array[String]): InternalRow = {
-    if (tokens.length != parsedSchema.length) {
+    if (tokens == null) {
+      throw BadRecordException(
+        () => getCurrentInput,
+        () => None,
+        new RuntimeException("Malformed CSV record"))
+    } else if (tokens.length != parsedSchema.length) {
       // If the number of tokens doesn't match the schema, we should treat it as a malformed record.
       // However, we still have chance to parse some of the tokens, by adding extra null tokens in
       // the tail if the number is smaller, or by dropping extra tokens if the number is larger.
@@ -293,7 +290,8 @@ private[csv] object UnivocityParser {
       input => Seq(parser.convert(input)),
       parser.options.parseMode,
       schema,
-      parser.options.columnNameOfCorruptRecord)
+      parser.options.columnNameOfCorruptRecord,
+      parser.options.multiLine)
     convertStream(inputStream, shouldDropHeader, tokenizer, checkHeader) { tokens =>
       safeParser.parse(tokens)
     }.flatten
@@ -341,7 +339,8 @@ private[csv] object UnivocityParser {
       input => Seq(parser.parse(input)),
       parser.options.parseMode,
       schema,
-      parser.options.columnNameOfCorruptRecord)
+      parser.options.columnNameOfCorruptRecord,
+      parser.options.multiLine)
     filteredLines.flatMap(safeParser.parse)
   }
 }

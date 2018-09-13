@@ -24,6 +24,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.KubernetesUtils._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorExited
 import org.apache.spark.util.Utils
@@ -151,13 +152,15 @@ private[spark] class ExecutorPodsLifecycleManager(
 
   private def exitReasonMessage(podState: FinalPodState, execId: Long, exitCode: Int) = {
     val pod = podState.pod
+    val reason = Option(pod.getStatus.getReason)
+    val message = Option(pod.getStatus.getMessage)
     s"""
        |The executor with id $execId exited with exit code $exitCode.
-       |The API gave the following brief reason: ${pod.getStatus.getReason}
-       |The API gave the following message: ${pod.getStatus.getMessage}
+       |The API gave the following brief reason: ${reason.getOrElse("N/A")}
+       |The API gave the following message: ${message.getOrElse("N/A")}
        |The API gave the following container statuses:
        |
-       |${pod.getStatus.getContainerStatuses.asScala.map(_.toString).mkString("\n===\n")}
+       |${containersDescription(pod)}
       """.stripMargin
   }
 

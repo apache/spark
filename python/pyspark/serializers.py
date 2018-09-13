@@ -185,27 +185,31 @@ class FramedSerializer(Serializer):
         raise NotImplementedError
 
 
-class ArrowSerializer(FramedSerializer):
+class ArrowStreamSerializer(Serializer):
     """
-    Serializes bytes as Arrow data with the Arrow file format.
+    Serializes Arrow record batches as a stream.
     """
 
-    def dumps(self, batch):
+    def dump_stream(self, iterator, stream):
         import pyarrow as pa
-        import io
-        sink = io.BytesIO()
-        writer = pa.RecordBatchFileWriter(sink, batch.schema)
-        writer.write_batch(batch)
-        writer.close()
-        return sink.getvalue()
+        writer = None
+        try:
+            for batch in iterator:
+                if writer is None:
+                    writer = pa.RecordBatchStreamWriter(stream, batch.schema)
+                writer.write_batch(batch)
+        finally:
+            if writer is not None:
+                writer.close()
 
-    def loads(self, obj):
+    def load_stream(self, stream):
         import pyarrow as pa
-        reader = pa.RecordBatchFileReader(pa.BufferReader(obj))
-        return reader.read_all()
+        reader = pa.open_stream(stream)
+        for batch in reader:
+            yield batch
 
     def __repr__(self):
-        return "ArrowSerializer"
+        return "ArrowStreamSerializer"
 
 
 def _create_batch(series, timezone):
@@ -229,12 +233,14 @@ def _create_batch(series, timezone):
     def create_array(s, t):
         mask = s.isnull()
         # Ensure timestamp series are in expected form for Spark internal representation
+        # TODO: maybe don't need None check anymore as of Arrow 0.9.1
         if t is not None and pa.types.is_timestamp(t):
             s = _check_series_convert_timestamps_internal(s.fillna(0), timezone)
             # TODO: need cast after Arrow conversion, ns values cause error with pandas 0.19.2
             return pa.Array.from_pandas(s, mask=mask).cast(t, safe=False)
         elif t is not None and pa.types.is_string(t) and sys.version < '3':
             # TODO: need decode before converting to Arrow in Python 2
+            # TODO: don't need as of Arrow 0.9.1
             return pa.Array.from_pandas(s.apply(
                 lambda v: v.decode("utf-8") if isinstance(v, str) else v), mask=mask, type=t)
         elif t is not None and pa.types.is_decimal(t) and \
@@ -711,6 +717,13 @@ def read_int(stream):
 
 def write_int(value, stream):
     stream.write(struct.pack("!i", value))
+
+
+def read_bool(stream):
+    length = stream.read(1)
+    if not length:
+        raise EOFError
+    return struct.unpack("!?", length)[0]
 
 
 def write_with_length(obj, stream):

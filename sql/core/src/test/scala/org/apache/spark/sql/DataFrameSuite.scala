@@ -27,10 +27,11 @@ import scala.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
-import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{FilterExec, QueryExecution, TakeOrderedAndProjectExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
@@ -39,6 +40,7 @@ import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContex
 import org.apache.spark.sql.test.SQLTestData.{NullInts, NullStrings, TestData2}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+import org.apache.spark.util.random.XORShiftRandom
 
 class DataFrameSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -1728,10 +1730,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-9083: sort with non-deterministic expressions") {
-    import org.apache.spark.util.random.XORShiftRandom
-
     val seed = 33
-    val df = (1 to 100).map(Tuple1.apply).toDF("i")
+    val df = (1 to 100).map(Tuple1.apply).toDF("i").repartition(1)
     val random = new XORShiftRandom(seed)
     val expected = (1 to 100).map(_ -> random.nextDouble()).sortBy(_._2).map(_._1)
     val actual = df.sort(rand(seed)).collect().map(_.getInt(0))
@@ -2527,5 +2527,76 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val aggPlusFilter2 = df.groupBy(col("name")).agg(count(col("name"))).filter(col("name") === 0)
       checkAnswer(aggPlusFilter1, aggPlusFilter2.collect())
     }
+  }
+
+  test("SPARK-25159: json schema inference should only trigger one job") {
+    withTempPath { path =>
+      // This test is to prove that the `JsonInferSchema` does not use `RDD#toLocalIterator` which
+      // triggers one Spark job per RDD partition.
+      Seq(1 -> "a", 2 -> "b").toDF("i", "p")
+        // The data set has 2 partitions, so Spark will write at least 2 json files.
+        // Use a non-splittable compression (gzip), to make sure the json scan RDD has at least 2
+        // partitions.
+        .write.partitionBy("p").option("compression", "gzip").json(path.getCanonicalPath)
+
+      var numJobs = 0
+      sparkContext.addSparkListener(new SparkListener {
+        override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+          numJobs += 1
+        }
+      })
+
+      val df = spark.read.json(path.getCanonicalPath)
+      assert(df.columns === Array("i", "p"))
+      assert(numJobs == 1)
+    }
+  }
+
+  test("SPARK-25352: Ordered global limit when more than topKSortFallbackThreshold ") {
+    withSQLConf(SQLConf.LIMIT_FLAT_GLOBAL_LIMIT.key -> "true") {
+      val baseDf = spark.range(1000).toDF.repartition(3).sort("id")
+
+      withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "100") {
+        val expected = baseDf.limit(99)
+        val takeOrderedNode1 = expected.queryExecution.executedPlan
+          .find(_.isInstanceOf[TakeOrderedAndProjectExec])
+        assert(takeOrderedNode1.isDefined)
+
+        val result = baseDf.limit(100)
+        val takeOrderedNode2 = result.queryExecution.executedPlan
+          .find(_.isInstanceOf[TakeOrderedAndProjectExec])
+        assert(takeOrderedNode2.isEmpty)
+
+        checkAnswer(expected, result.collect().take(99))
+      }
+    }
+  }
+
+  test("SPARK-25368 Incorrect predicate pushdown returns wrong result") {
+    def check(newCol: Column, filter: Column, result: Seq[Row]): Unit = {
+      val df1 = spark.createDataFrame(Seq(
+        (1, 1)
+      )).toDF("a", "b").withColumn("c", newCol)
+
+      val df2 = df1.union(df1).withColumn("d", spark_partition_id).filter(filter)
+      checkAnswer(df2, result)
+    }
+
+    check(lit(null).cast("int"), $"c".isNull, Seq(Row(1, 1, null, 0), Row(1, 1, null, 1)))
+    check(lit(null).cast("int"), $"c".isNotNull, Seq())
+    check(lit(2).cast("int"), $"c".isNull, Seq())
+    check(lit(2).cast("int"), $"c".isNotNull, Seq(Row(1, 1, 2, 0), Row(1, 1, 2, 1)))
+    check(lit(2).cast("int"), $"c" === 2, Seq(Row(1, 1, 2, 0), Row(1, 1, 2, 1)))
+    check(lit(2).cast("int"), $"c" =!= 2, Seq())
+  }
+
+  test("SPARK-25402 Null handling in BooleanSimplification") {
+    val schema = StructType.fromDDL("a boolean, b int")
+    val rows = Seq(Row(null, 1))
+
+    val rdd = sparkContext.parallelize(rows)
+    val df = spark.createDataFrame(rdd, schema)
+
+    checkAnswer(df.where("(NOT a) OR a"), Seq.empty)
   }
 }

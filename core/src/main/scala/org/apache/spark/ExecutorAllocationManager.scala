@@ -25,7 +25,7 @@ import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.scheduler._
@@ -212,7 +212,7 @@ private[spark] class ExecutorAllocationManager(
     }
     // Require external shuffle service for dynamic allocation
     // Otherwise, we may lose shuffle files when killing executors
-    if (!conf.getBoolean("spark.shuffle.service.enabled", false) && !testing) {
+    if (!conf.get(config.SHUFFLE_SERVICE_ENABLED) && !testing) {
       throw new SparkException("Dynamic allocation of executors requires the external " +
         "shuffle service. You may enable this through spark.shuffle.service.enabled.")
     }

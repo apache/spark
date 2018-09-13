@@ -108,7 +108,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
         "spark.executor.cores" -> "1",
         "spark.executor.memory" -> "512m",
         "spark.executor.instances" -> "2",
-        // Sending some senstive information, which we'll make sure gets redacted
+        // Sending some sensitive information, which we'll make sure gets redacted
         "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD,
         "spark.yarn.appMasterEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD
       ))
@@ -282,13 +282,15 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val mod2Archive = TestUtils.createJarWithFiles(Map("mod2.py" -> TEST_PYMODULE), moduleDir)
     val pyFiles = Seq(pyModule.getAbsolutePath(), mod2Archive.getPath()).mkString(",")
     val result = File.createTempFile("result", null, tempDir)
+    val outFile = Some(File.createTempFile("stdout", null, tempDir))
 
     val finalState = runSpark(clientMode, primaryPyFile.getAbsolutePath(),
       sparkArgs = Seq("--py-files" -> pyFiles),
       appArgs = Seq(result.getAbsolutePath()),
       extraEnv = extraEnvVars,
-      extraConf = extraConf)
-    checkResult(finalState, result)
+      extraConf = extraConf,
+      outFile = outFile)
+    checkResult(finalState, result, outFile = outFile)
   }
 
   private def testUseClassPathFirst(clientMode: Boolean): Unit = {
