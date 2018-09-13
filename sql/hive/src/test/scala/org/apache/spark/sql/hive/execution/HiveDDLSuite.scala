@@ -72,7 +72,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
           outputFormat = serde.get.outputFormat,
           serde = serde.get.serde,
           compressed = false,
-          properties = Map("serialization.format" -> "1"))
+          properties = Map.empty)
       } else {
         CatalogStorageFormat(
           locationUri = Some(catalog.defaultTablePath(name)),
