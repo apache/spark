@@ -1056,6 +1056,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
 
     checkAnswer(
+      df.selectExpr("array_position(array(1.D), 1)"),
+      Seq(Row(1L), Row(1L))
+    )
+
+    checkAnswer(
       df.selectExpr("array_position(array(1.23D), 1)"),
       Seq(Row(0L), Row(0L))
     )
