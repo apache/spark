@@ -32,16 +32,16 @@ public interface DownloadFile {
    * @return  <code>true</code> if and only if the file or directory is
    *          successfully deleted; <code>false</code> otherwise
    */
-  public boolean delete();
+  boolean delete();
 
   /**
    * A channel for writing data to the file.  This special channel allows access to the data for
    * reading, after the channel is closed, via {@link DownloadFileWritableChannel#closeAndRead()}.
    */
-  public DownloadFileWritableChannel openForWriting() throws IOException;
+  DownloadFileWritableChannel openForWriting() throws IOException;
 
   /**
    * The path of the file, intended only for debug purposes.
    */
-  public String path();
+  String path();
 }
