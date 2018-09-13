@@ -45,18 +45,12 @@ case class RunningCount(count: Long)
 
 case class Result(key: Long, count: Int)
 
-class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
-    with BeforeAndAfterAll {
+class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
   import testImplicits._
   import GroupStateImpl._
   import GroupStateTimeout._
   import FlatMapGroupsWithStateSuite._
-
-  override def afterAll(): Unit = {
-    super.afterAll()
-    StateStore.stop()
-  }
 
   test("GroupState - get, exists, update, remove") {
     var state: GroupStateImpl[String] = null

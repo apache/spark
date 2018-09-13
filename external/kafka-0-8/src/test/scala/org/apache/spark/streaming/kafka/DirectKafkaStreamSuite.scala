@@ -57,14 +57,19 @@ class DirectKafkaStreamSuite
   private var kafkaTestUtils: KafkaTestUtils = _
 
   override def beforeAll {
+    super.beforeAll()
     kafkaTestUtils = new KafkaTestUtils
     kafkaTestUtils.setup()
   }
 
   override def afterAll {
-    if (kafkaTestUtils != null) {
-      kafkaTestUtils.teardown()
-      kafkaTestUtils = null
+    try {
+      if (kafkaTestUtils != null) {
+        kafkaTestUtils.teardown()
+        kafkaTestUtils = null
+      }
+    } finally {
+      super.afterAll()
     }
   }
 

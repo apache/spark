@@ -35,19 +35,26 @@ class KafkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter
   private var kafkaTestUtils: KafkaTestUtils = _
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     kafkaTestUtils = new KafkaTestUtils
     kafkaTestUtils.setup()
   }
 
   override def afterAll(): Unit = {
-    if (ssc != null) {
-      ssc.stop()
-      ssc = null
-    }
-
-    if (kafkaTestUtils != null) {
-      kafkaTestUtils.teardown()
-      kafkaTestUtils = null
+    try {
+      try {
+        if (ssc != null) {
+          ssc.stop()
+          ssc = null
+        }
+      } finally {
+        if (kafkaTestUtils != null) {
+          kafkaTestUtils.teardown()
+          kafkaTestUtils = null
+        }
+      }
+    } finally {
+      super.afterAll()
     }
   }
 
