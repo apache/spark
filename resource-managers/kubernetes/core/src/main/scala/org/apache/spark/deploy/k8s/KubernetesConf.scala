@@ -24,6 +24,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
+import org.apache.spark.deploy.k8s.submit.KubernetesClientApplication._
 import org.apache.spark.internal.config.ConfigEntry
 
 
@@ -220,10 +221,20 @@ private[spark] object KubernetesConf {
     val executorVolumes = KubernetesVolumeUtils.parseVolumesWithPrefix(
       sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX).map(_.get)
 
+    // If no prefix is defined then we are in pure client mode
+    // (not the one used by cluster mode inside the container)
+    val appResourceNamePrefix = {
+      if (sparkConf.getOption(KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key).isEmpty) {
+        getResourceNamePrefix(getAppName(sparkConf))
+      } else {
+        sparkConf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
+      }
+    }
+
     KubernetesConf(
       sparkConf.clone(),
       KubernetesExecutorSpecificConf(executorId, driverPod),
-      sparkConf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX),
+      appResourceNamePrefix,
       appId,
       executorLabels,
       executorAnnotations,
