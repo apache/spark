@@ -2650,7 +2650,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
       }).toSet.size
 
       // Only support a single window expression for now
-      if (numWindowExpr == 1 &&
+      if (numWindowExpr == 1 && windowExpressions.nonEmpty &&
           windowExpressions.head.timeColumn.resolved &&
           windowExpressions.head.checkInputDataTypes().isSuccess) {
 
@@ -2718,8 +2718,8 @@ object TimeWindowing extends Rule[LogicalPlan] {
           renamedPlan.withNewChildren(substitutedPlan :: Nil)
         }
       } else if (numWindowExpr > 1) {
-        p.failAnalysis("Multiple time/session window expressions would result in a cartesian product " +
-          "of rows, therefore they are currently not supported.")
+        p.failAnalysis("Multiple time/session window expressions would result in a cartesian " +
+          "product of rows, therefore they are currently not supported.")
       } else {
         p // Return unchanged. Analyzer will throw exception later
       }
@@ -2747,9 +2747,14 @@ object SessionWindowing extends Rule[LogicalPlan] {
       }).toSet.size
 
       // Only support a single session expression for now
-      if (numWindowExpr == 1 &&
+      if (numWindowExpr == 1 && sessionExpressions.nonEmpty &&
           sessionExpressions.head.timeColumn.resolved &&
           sessionExpressions.head.checkInputDataTypes().isSuccess) {
+
+        // FIXME: where it needs to place the check? In UnsupportedOperationsSuite?
+        if (!p.isStreaming) {
+          p.failAnalysis("Session window is not supported for batch query as of now.")
+        }
 
         val session = sessionExpressions.head
 
