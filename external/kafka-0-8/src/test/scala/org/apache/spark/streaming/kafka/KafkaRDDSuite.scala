@@ -35,20 +35,27 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
   private var sc: SparkContext = _
 
   override def beforeAll {
+    super.beforeAll()
     sc = new SparkContext(sparkConf)
     kafkaTestUtils = new KafkaTestUtils
     kafkaTestUtils.setup()
   }
 
   override def afterAll {
-    if (sc != null) {
-      sc.stop
-      sc = null
-    }
-
-    if (kafkaTestUtils != null) {
-      kafkaTestUtils.teardown()
-      kafkaTestUtils = null
+    try {
+      try {
+        if (sc != null) {
+          sc.stop
+          sc = null
+        }
+      } finally {
+        if (kafkaTestUtils != null) {
+          kafkaTestUtils.teardown()
+          kafkaTestUtils = null
+        }
+      }
+    } finally {
+      super.afterAll()
     }
   }
 
