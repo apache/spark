@@ -43,10 +43,11 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
         PruneFilters(conf)) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string)
+  val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string,
+    'e.boolean, 'f.boolean, 'g.boolean, 'h.boolean)
 
   val testRelationWithData = LocalRelation.fromExternalRows(
-    testRelation.output, Seq(Row(1, 2, 3, "abc"))
+    testRelation.output, Seq(Row(1, 2, 3, "abc", true, null, true, null))
   )
 
   val testNotNullableRelation = LocalRelation('a.int.notNull, 'b.int.notNull, 'c.int.notNull,
@@ -54,7 +55,7 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     'h.boolean.notNull)
 
   val testNotNullableRelationWithData = LocalRelation.fromExternalRows(
-    testNotNullableRelation.output, Seq(Row(1, 2, 3, "abc"))
+    testNotNullableRelation.output, Seq(Row(1, 2, 3, "abc", true, false, true, false))
   )
 
   private def checkCondition(input: Expression, expected: LogicalPlan): Unit = {
