@@ -1154,14 +1154,12 @@ class FilterPushdownSuite extends PlanTest {
       "x.a".attr === Rand(10) && "y.b".attr === 5))
     val correctAnswer =
       x.where("x.a".attr === 5).join(y.where("y.a".attr === 5 && "y.b".attr === 5),
-        joinType = Cross).where("x.a".attr === Rand(10))
+        condition = Some("x.a".attr === Rand(10)))
 
     // CheckAnalysis will ensure nondeterministic expressions not appear in join condition.
     // TODO support nondeterministic expressions in join condition.
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
-        checkAnalysis = false)
-    }
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
+      checkAnalysis = false)
   }
 
   test("join condition pushdown: deterministic and non-deterministic in left semi join") {

@@ -1210,14 +1210,14 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
       reduceLeftOption(And).map(Filter(_, join.right)).getOrElse(join.right)
     val (newJoinConditions, others) =
       commonJoinCondition.partition(canEvaluateWithinJoin)
-    val newJoinCond = newJoinConditions.reduceLeftOption(And)
     // need to add cross join when unevaluable condition exists
-    val newJoinType = if (others.nonEmpty) {
-      tryToGetCrossType(commonJoinCondition, join)
+    val pythonUDFExist = others.exists(_.find(_.isInstanceOf[PythonUDF]).isDefined)
+    val (newJoinType, newJoinCond) = if (pythonUDFExist) {
+      (tryToGetCrossType(commonJoinCondition, join), newJoinConditions.reduceLeftOption(And))
     } else {
-      join.joinType
+      (join.joinType, commonJoinCondition.reduceLeftOption(And))
     }
-    (Join(newLeft, newRight, newJoinType, newJoinCond), others)
+    (Join(newLeft, newRight, newJoinType, newJoinCond), pythonUDFExist, others)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -1274,19 +1274,19 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
       joinType match {
         case LeftSemi =>
-          val (join, others) = getNewJoinAndUnevaluableCond(
+          val (join, crossAdded, others) = getNewJoinAndUnevaluableCond(
             j, leftJoinConditions, rightJoinConditions, commonJoinCondition)
 
-          if (others.nonEmpty) {
+          if (crossAdded) {
             Project(join.left.output.map(_.toAttribute), Filter(others.reduceLeft(And), join))
           } else {
             join
           }
         case _: InnerLike =>
-          val (join, others) = getNewJoinAndUnevaluableCond(
+          val (join, crossAdded, others) = getNewJoinAndUnevaluableCond(
             j, leftJoinConditions, rightJoinConditions, commonJoinCondition)
 
-          if (others.nonEmpty) {
+          if (crossAdded) {
             Filter(others.reduceLeft(And), join)
           } else {
             join
