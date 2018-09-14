@@ -429,63 +429,30 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               "Spark user mailing list.")
         }
 
-        val sessionWindowOption = groupingExpressions.find { p =>
-          p.metadata.contains(SessionWindow.marker)
-        }
+        val aggregateOperator =
+          if (functionsWithDistinct.isEmpty) {
+            aggregate.AggUtils.planAggregateWithoutDistinct(
+              groupingExpressions,
+              aggregateExpressions,
+              resultExpressions,
+              planLater(child))
+          } else {
+            aggregate.AggUtils.planAggregateWithOneDistinct(
+              groupingExpressions,
+              functionsWithDistinct,
+              functionsWithoutDistinct,
+              resultExpressions,
+              planLater(child))
+          }
 
-        sessionWindowOption match {
-          case Some(sessionWindow) =>
-            val aggregateOperator =
-              if (functionsWithDistinct.isEmpty) {
-                aggregate.AggUtils.planSessionAggregateWithoutDistinct(
-                  groupingExpressions,
-                  sessionWindow,
-                  aggregateExpressions,
-                  resultExpressions,
-                  planLater(child))
-              } else {
-                aggregate.AggUtils.planSessionAggregateWithOneDistinct(
-                  groupingExpressions,
-                  sessionWindow,
-                  functionsWithDistinct,
-                  functionsWithoutDistinct,
-                  resultExpressions,
-                  planLater(child))
-              }
-
-            aggregateOperator
-
-          case None =>
-            val aggregateOperator =
-              if (functionsWithDistinct.isEmpty) {
-                aggregate.AggUtils.planAggregateWithoutDistinct(
-                  groupingExpressions,
-                  aggregateExpressions,
-                  resultExpressions,
-                  planLater(child))
-              } else {
-                aggregate.AggUtils.planAggregateWithOneDistinct(
-                  groupingExpressions,
-                  functionsWithDistinct,
-                  functionsWithoutDistinct,
-                  resultExpressions,
-                  planLater(child))
-              }
-
-            aggregateOperator
-        }
+        aggregateOperator
 
       case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
         if aggExpressions.forall(expr => expr.isInstanceOf[PythonUDF]) =>
         val udfExpressions = aggExpressions.map(expr => expr.asInstanceOf[PythonUDF])
 
-        val sessionWindowOption = groupingExpressions.find { p =>
-          p.metadata.contains(SessionWindow.marker)
-        }
-
         Seq(execution.python.AggregateInPandasExec(
           groupingExpressions,
-          sessionWindowOption,
           udfExpressions,
           resultExpressions,
           planLater(child)))

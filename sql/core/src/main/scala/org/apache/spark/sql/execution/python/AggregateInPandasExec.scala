@@ -43,7 +43,6 @@ import org.apache.spark.util.Utils
  */
 case class AggregateInPandasExec(
     groupingExpressions: Seq[NamedExpression],
-    optSessionExpression: Option[NamedExpression],
     udfExpressions: Seq[PythonUDF],
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
@@ -55,7 +54,11 @@ case class AggregateInPandasExec(
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
-  val groupingWithoutSessionExpressions = optSessionExpression match {
+  val sessionWindowOption = groupingExpressions.find { p =>
+    p.metadata.contains(SessionWindow.marker)
+  }
+
+  val groupingWithoutSessionExpressions = sessionWindowOption match {
     case Some(sessionExpression) =>
       groupingExpressions.filterNot { p => p.semanticEquals(sessionExpression) }
 
@@ -70,7 +73,7 @@ case class AggregateInPandasExec(
     }
   }
 
-  override def requiredChildOrdering: Seq[Seq[SortOrder]] = optSessionExpression match {
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] = sessionWindowOption match {
     case Some(sessionExpression) =>
       Seq((groupingWithoutSessionExpressions ++ Seq(sessionExpression))
         .map(SortOrder(_, Ascending)))
@@ -120,13 +123,7 @@ case class AggregateInPandasExec(
     })
 
     inputRDD.mapPartitionsInternal { iter =>
-      val newIter = optSessionExpression match {
-        case Some(sessionExpression) =>
-          new UpdatingSessionIterator(iter, groupingWithoutSessionExpressions, sessionExpression,
-            child.output)
-
-        case None => iter
-      }
+      val newIter: Iterator[InternalRow] = mayAppendUpdatingSessionIterator(iter)
 
       val prunedProj = UnsafeProjection.create(allInputs, child.output)
 
@@ -174,5 +171,18 @@ case class AggregateInPandasExec(
         resultProj(joinedRow)
       }
     }
+  }
+
+  private def mayAppendUpdatingSessionIterator(iter: Iterator[InternalRow])
+    : Iterator[InternalRow] = {
+    val newIter = sessionWindowOption match {
+      case Some(sessionExpression) =>
+        new UpdatingSessionIterator(iter, groupingWithoutSessionExpressions, sessionExpression,
+          child.output)
+
+      case None => iter
+    }
+
+    newIter
   }
 }
