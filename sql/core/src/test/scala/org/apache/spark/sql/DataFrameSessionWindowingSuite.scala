@@ -92,6 +92,36 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
     )
   }
 
+  test("session window groupBy with multiple keys statement - keys overlapped with sessions") {
+    val df = Seq(
+      ("2016-03-27 19:39:34", 1, "a"),
+      ("2016-03-27 19:39:39", 1, "b"),
+      ("2016-03-27 19:39:40", 2, "a"),
+      ("2016-03-27 19:39:45", 2, "b"),
+      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
+
+    // session window handles sort while applying group by
+    // whereas time window doesn't
+
+    // expected sessions
+    // a => (19:39:34 ~ 19:39:50)
+    // b => (19:39:27 ~ 19:39:37), (19:39:39 ~ 19:39:55)
+
+    checkAnswer(
+      df.groupBy(session($"time", "10 seconds"), 'id)
+        .agg(count("*").as("counts"), sum("value").as("sum"))
+        .orderBy($"session.start".asc)
+        .selectExpr("CAST(session.start AS STRING)", "CAST(session.end AS STRING)", "id",
+          "counts", "sum"),
+
+      Seq(
+        Row("2016-03-27 19:39:27", "2016-03-27 19:39:37", "b", 1, 4),
+        Row("2016-03-27 19:39:34", "2016-03-27 19:39:50", "a", 2, 3),
+        Row("2016-03-27 19:39:39", "2016-03-27 19:39:55", "b", 2, 3)
+      )
+    )
+  }
+
   test("session window with multi-column projection") {
     val df = Seq(
         ("2016-03-27 19:39:34", 1, "a"),
