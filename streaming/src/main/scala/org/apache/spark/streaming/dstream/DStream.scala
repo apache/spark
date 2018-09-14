@@ -108,7 +108,8 @@ abstract class DStream[T: ClassTag] (
   private[streaming] def isInitialized = zeroTime != null
 
   // Duration for which the DStream requires its parent DStream to remember each RDD created
-  private[streaming] def parentRememberDuration = rememberDuration
+  private[streaming] def parentRememberDuration =
+    if (checkpointDuration == null) rememberDuration else null
 
   /** Return the StreamingContext associated with this DStream */
   def context: StreamingContext = ssc
