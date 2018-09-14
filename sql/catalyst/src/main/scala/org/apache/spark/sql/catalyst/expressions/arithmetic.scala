@@ -325,13 +325,18 @@ case class Divide(left: Expression, right: Expression) extends DivModLike {
 case class IntegralDivide(left: Expression, right: Expression) extends DivModLike {
 
   override def inputType: AbstractDataType = IntegralType
+  override def dataType: DataType = LongType
 
   override def symbol: String = "/"
   override def sqlOperator: String = "div"
 
-  private lazy val div: (Any, Any) => Any = dataType match {
-    case i: IntegralType => i.integral.asInstanceOf[Integral[Any]].quot
+  private lazy val div: (Any, Any) => Long = left.dataType match {
+    case i: IntegralType =>
+      val divide = i.integral.asInstanceOf[Integral[Any]].quot _
+      val toLong = i.integral.asInstanceOf[Integral[Any]].toLong _
+      (x, y) => toLong(divide(x, y))
   }
+
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
 }
 
