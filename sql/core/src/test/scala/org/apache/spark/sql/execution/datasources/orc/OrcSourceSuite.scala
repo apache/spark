@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.OrcFile
 import org.apache.orc.OrcProto.Stream.Kind
+import org.apache.orc.impl.RecordReaderImpl
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.Row
@@ -94,16 +95,22 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
         val orcFilePath = new Path(partFiles.head.getAbsolutePath)
         val readerOptions = OrcFile.readerOptions(new Configuration())
         val reader = OrcFile.createReader(orcFilePath, readerOptions)
-        val recordReader = reader.rows.asInstanceOf[org.apache.orc.impl.RecordReaderImpl]
+        var recordReader: RecordReaderImpl = null
+        try {
+          recordReader = reader.rows.asInstanceOf[RecordReaderImpl]
 
-        // BloomFilter array is created for all types; `struct`, int (`a`), string (`b`)
-        val sargColumns = Array(true, true, true)
-        val orcIndex = recordReader.readRowIndex(0, null, sargColumns)
-        recordReader.close() // Close first to prevent resource leakage at test failures
+          // BloomFilter array is created for all types; `struct`, int (`a`), string (`b`)
+          val sargColumns = Array(true, true, true)
+          val orcIndex = recordReader.readRowIndex(0, null, sargColumns)
 
-        // Check the types and counts of bloom filters
-        assert(orcIndex.getBloomFilterKinds.forall(_ === bloomFilterKind))
-        assert(orcIndex.getBloomFilterIndex.forall(_.getBloomFilterCount > 0))
+          // Check the types and counts of bloom filters
+          assert(orcIndex.getBloomFilterKinds.forall(_ === bloomFilterKind))
+          assert(orcIndex.getBloomFilterIndex.forall(_.getBloomFilterCount > 0))
+        } finally {
+          if (recordReader != null) {
+            recordReader.close()
+          }
+        }
       }
     }
   }
