@@ -209,9 +209,9 @@ trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x + 1);
-       array(2, 3, 4)
+       [2,3,4]
       > SELECT _FUNC_(array(1, 2, 3), (x, i) -> x + i);
-       array(1, 3, 5)
+       [1,3,5]
   """,
   since = "2.4.0")
 case class ArrayTransform(
@@ -268,7 +268,7 @@ usage = "_FUNC_(expr, func) - Filters entries in a map using the function.",
 examples = """
     Examples:
       > SELECT _FUNC_(map(1, 0, 2, 2, 3, -1), (k, v) -> k > v);
-       [1 -> 0, 3 -> -1]
+       {1:0,3:-1}
   """,
 since = "2.4.0")
 case class MapFilter(
@@ -318,7 +318,7 @@ case class MapFilter(
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 1);
-       array(1, 3)
+       [1,3]
   """,
   since = "2.4.0")
 case class ArrayFilter(
@@ -499,10 +499,10 @@ case class ArrayAggregate(
   usage = "_FUNC_(expr, func) - Transforms elements in a map using the function.",
   examples = """
     Examples:
-      > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + 1);
-       map(array(2, 3, 4), array(1, 2, 3))
-      > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + v);
-       map(array(2, 4, 6), array(1, 2, 3))
+      > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + 1);
+       {2:1,3:2,4:3}
+      > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + v);
+       {2:1,4:2,6:3}
   """,
   since = "2.4.0")
 case class TransformKeys(
@@ -549,10 +549,10 @@ case class TransformKeys(
   usage = "_FUNC_(expr, func) - Transforms values in the map using the function.",
   examples = """
     Examples:
-      > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3)), (k, v) -> v + 1);
-        map(array(1, 2, 3), array(2, 3, 4))
-      > SELECT _FUNC_(map(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + v);
-        map(array(1, 2, 3), array(2, 4, 6))
+      > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> v + 1);
+       {1:2,2:3,3:4}
+      > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + v);
+       {1:2,2:4,3:6}
   """,
   since = "2.4.0")
 case class TransformValues(
@@ -777,11 +777,11 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array('a', 'b', 'c'), (x, y) -> (y, x));
-       array(('a', 1), ('b', 2), ('c', 3))
-      > SELECT _FUNC_(array(1, 2), array(3, 4), (x, y) -> x + y));
-       array(4, 6)
+       [{"y":"a","x":1},{"y":"b","x":2},{"y":"c","x":3}]
+      > SELECT _FUNC_(array(1, 2), array(3, 4), (x, y) -> x + y);
+       [4,6]
       > SELECT _FUNC_(array('a', 'b', 'c'), array('d', 'e', 'f'), (x, y) -> concat(x, y));
-       array('ad', 'be', 'cf')
+       ["ad","be","cf"]
   """,
   since = "2.4.0")
 // scalastyle:on line.size.limit
