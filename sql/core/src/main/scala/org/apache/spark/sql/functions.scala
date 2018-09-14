@@ -2214,6 +2214,24 @@ object functions {
    */
   def radians(columnName: String): Column = radians(Column(columnName))
 
+  /**
+   * Returns number truncated to the unit specified by the scale.
+   *
+   * For example, `truncate(1234567891.1234567891, 4)` returns 1234567891.1234
+   *
+   * @param number The number to be truncated
+   * @param scale: A scale used to truncate number
+   *
+   * @return The number truncated to scale decimal places.
+   *         If scale is omitted, then number is truncated to 0 places.
+   *         scale can be negative to truncate (make zero) scale digits left of the decimal point.
+   * @group math_funcs
+   * @since 2.4.0
+   */
+  def truncate(number: Column, scale: Int): Column = withExpr {
+    Truncate(number.expr, Literal(scale))
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Misc functions
   //////////////////////////////////////////////////////////////////////////////////////////////

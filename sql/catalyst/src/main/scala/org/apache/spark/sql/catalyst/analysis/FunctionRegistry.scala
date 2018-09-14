@@ -262,6 +262,7 @@ object FunctionRegistry {
     expression[Tan]("tan"),
     expression[Cot]("cot"),
     expression[Tanh]("tanh"),
+    expression[Truncate]("truncate"),
 
     expression[Add]("+"),
     expression[Subtract]("-"),

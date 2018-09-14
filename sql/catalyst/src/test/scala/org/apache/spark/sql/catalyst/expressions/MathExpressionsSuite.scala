@@ -644,4 +644,31 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BRound(-0.35, 1), -0.4)
     checkEvaluation(BRound(-35, -1), -40)
   }
+
+  test("Truncate number") {
+    def testTruncate(input: Double, fmt: Int, expected: Double): Unit = {
+      checkEvaluation(Truncate(Literal.create(input, DoubleType),
+        Literal.create(fmt, IntegerType)),
+        expected)
+      checkEvaluation(Truncate(Literal.create(input, DoubleType),
+        NonFoldableLiteral.create(fmt, IntegerType)),
+        expected)
+    }
+
+    testTruncate(1234567891.1234567891, 4, 1234567891.1234)
+    testTruncate(1234567891.1234567891, -4, 1234560000)
+    testTruncate(1234567891.1234567891, 0, 1234567891)
+    testTruncate(0.123, -1, 0)
+    testTruncate(0.123, 0, 0)
+
+    checkEvaluation(Truncate(Literal.create(1D, DoubleType),
+      NonFoldableLiteral.create(null, IntegerType)),
+      null)
+    checkEvaluation(Truncate(Literal.create(null, DoubleType),
+      NonFoldableLiteral.create(1, IntegerType)),
+      null)
+    checkEvaluation(Truncate(Literal.create(null, DoubleType),
+      NonFoldableLiteral.create(null, IntegerType)),
+      null)
+  }
 }

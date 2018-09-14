@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.NumberConverter
+import org.apache.spark.sql.catalyst.util.{MathUtils, NumberConverter}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1244,4 +1244,66 @@ case class BRound(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN")
     with Serializable with ImplicitCastInputTypes {
   def this(child: Expression) = this(child, Literal(0))
+}
+
+/**
+ * The number truncated to scale decimal places.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(number, scale) - Returns number truncated to scale decimal places. " +
+    "If scale is omitted, then number is truncated to 0 places. " +
+    "scale can be negative to truncate (make zero) scale digits left of the decimal point.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1234567891.1234567891, 4);
+       1234567891.1234
+      > SELECT _FUNC_(1234567891.1234567891, -4);
+       1234560000
+      > SELECT _FUNC_(1234567891.1234567891);
+       1234567891
+  """)
+// scalastyle:on line.size.limit
+case class Truncate(number: Expression, scale: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def left: Expression = number
+  override def right: Expression = scale
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DoubleType, DecimalType), IntegerType)
+
+  override def dataType: DataType = left.dataType
+
+  private lazy val foldableTruncScale: Int = scale.eval().asInstanceOf[Int]
+
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    val truncScale = if (scale.foldable) {
+      foldableTruncScale
+    } else {
+      scale.eval().asInstanceOf[Int]
+    }
+    number.dataType match {
+      case DoubleType => MathUtils.trunc(input1.asInstanceOf[Double], truncScale)
+      case DecimalType.Fixed(_, _) =>
+        MathUtils.trunc(input1.asInstanceOf[Decimal].toJavaBigDecimal, truncScale)
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val mu = MathUtils.getClass.getName.stripSuffix("$")
+    if (scale.foldable) {
+      val d = number.genCode(ctx)
+      ev.copy(code = code"""
+        ${d.code}
+        boolean ${ev.isNull} = ${d.isNull};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        if (!${ev.isNull}) {
+          ${ev.value} = $mu.trunc(${d.value}, $foldableTruncScale);
+        }""")
+    } else {
+      nullSafeCodeGen(ctx, ev, (doubleVal, truncParam) =>
+        s"${ev.value} = $mu.trunc($doubleVal, $truncParam);")
+    }
+  }
 }
