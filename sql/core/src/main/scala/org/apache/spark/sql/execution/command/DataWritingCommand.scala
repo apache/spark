@@ -49,7 +49,7 @@ trait DataWritingCommand extends Command {
   def outputColumns: Seq[Attribute] =
     DataWritingCommand.logicalPlanOutputWithNames(query, outputColumnNames)
 
-  def outputPath: Option[Path]
+  def outputDir: Option[Path]
 
   lazy val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
 

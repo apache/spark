@@ -440,7 +440,7 @@ case class DataSource(
     // ordering of data.logicalPlan (partition columns are all moved after data column).  This
     // will be adjusted within InsertIntoHadoopFsRelation.
     InsertIntoHadoopFsRelationCommand(
-      outputFsPath = outputPath,
+      outputPath = outputPath,
       staticPartitions = Map.empty,
       ifPartitionNotExists = false,
       partitionColumns = partitionColumns.map(UnresolvedAttribute.quoted),

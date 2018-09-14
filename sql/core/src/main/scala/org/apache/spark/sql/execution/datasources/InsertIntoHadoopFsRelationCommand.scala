@@ -45,7 +45,7 @@ import org.apache.spark.sql.util.SchemaUtils
  *                             Only valid for static partitions.
  */
 case class InsertIntoHadoopFsRelationCommand(
-    outputFsPath: Path,
+    outputPath: Path,
     staticPartitions: TablePartitionSpec,
     ifPartitionNotExists: Boolean,
     partitionColumns: Seq[Attribute],
@@ -64,12 +64,12 @@ case class InsertIntoHadoopFsRelationCommand(
     // Most formats don't do well with duplicate columns, so lets not allow that
     SchemaUtils.checkColumnNameDuplication(
       outputColumnNames,
-      s"when inserting into $outputFsPath",
+      s"when inserting into $outputPath",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(options)
-    val fs = outputFsPath.getFileSystem(hadoopConf)
-    val qualifiedOutputPath = outputFsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    val fs = outputPath.getFileSystem(hadoopConf)
+    val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
 
     val partitionsTrackedByCatalog = sparkSession.sessionState.conf.manageFilesourcePartitions &&
       catalogTable.isDefined &&
@@ -106,7 +106,7 @@ case class InsertIntoHadoopFsRelationCommand(
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
-      outputPath = outputFsPath.toString,
+      outputPath = outputPath.toString,
       dynamicPartitionOverwrite = dynamicPartitionOverwrite)
 
     val doInsertion = (mode, pathExists) match {
@@ -184,7 +184,7 @@ case class InsertIntoHadoopFsRelationCommand(
       // refresh cached files in FileIndex
       fileIndex.foreach(_.refresh())
       // refresh data cache if table is cached
-      sparkSession.catalog.refreshByPath(outputFsPath.toString)
+      sparkSession.catalog.refreshByPath(outputPath.toString)
 
       if (catalogTable.nonEmpty) {
         CommandUtils.updateTableStats(sparkSession, catalogTable.get)
@@ -262,5 +262,5 @@ case class InsertIntoHadoopFsRelationCommand(
     }.toMap
   }
 
-  override def outputPath: Option[Path] = Some(this.outputFsPath)
+  override def outputDir: Option[Path] = Some(this.outputPath)
 }

@@ -101,5 +101,5 @@ case class CreateHiveTableAsSelectCommand(
     s"InsertIntoHiveTable]"
   }
 
-  override def outputPath: Option[Path] = tableDesc.storage.locationUri.map(new Path(_))
+  override def outputDir: Option[Path] = tableDesc.storage.locationUri.map(new Path(_))
 }

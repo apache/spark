@@ -125,7 +125,7 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
   // Metadata that describes more details of this writing.
   lazy val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
-    val outputPath = cmd.outputPath match {
+    val outputPath = cmd.outputDir match {
       case Some(path) if path != null => path.toString
       case _ => ""
     }

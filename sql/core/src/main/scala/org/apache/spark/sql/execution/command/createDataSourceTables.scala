@@ -223,5 +223,5 @@ case class CreateDataSourceTableAsSelectCommand(
     }
   }
 
-  override def outputPath: Option[Path] = table.storage.locationUri.map(new Path(_))
+  override def outputDir: Option[Path] = table.storage.locationUri.map(new Path(_))
 }
