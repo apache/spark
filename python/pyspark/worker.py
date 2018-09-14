@@ -194,7 +194,7 @@ def wrap_bounded_window_agg_pandas_udf_np(f, return_type):
         np_series = [s.values for s in series]
 
         return pd.Series(
-            f(*[s[begin[i] : end[i]].copy() for s in np_series])
+            f(*[s[begin[i]: end[i]].copy() for s in np_series])
             for i in range(len(begin))
         )
 
