@@ -68,7 +68,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   protected override def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
-      val project = UnsafeProjection.create(projectList, child.output)
+      val project = UnsafeProjection.create(projectList, child.output,
+        subexpressionEliminationEnabled)
       project.initialize(index)
       iter.map(project)
     }

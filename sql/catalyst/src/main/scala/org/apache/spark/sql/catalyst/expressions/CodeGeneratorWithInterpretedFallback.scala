@@ -44,12 +44,12 @@ abstract class CodeGeneratorWithInterpretedFallback[IN, OUT] extends Logging {
 
     fallbackMode match {
       case CodegenObjectFactoryMode.CODEGEN_ONLY if Utils.isTesting =>
-        createCodeGeneratedObject(in, SQLConf.get.subexpressionEliminationEnabled)
+        createCodeGeneratedObject(in)
       case CodegenObjectFactoryMode.NO_CODEGEN if Utils.isTesting =>
         createInterpretedObject(in)
       case _ =>
         try {
-          createCodeGeneratedObject(in, SQLConf.get.subexpressionEliminationEnabled)
+          createCodeGeneratedObject(in)
         } catch {
           case NonFatal(_) =>
             // We should have already seen the error message in `CodeGenerator`
@@ -59,6 +59,6 @@ abstract class CodeGeneratorWithInterpretedFallback[IN, OUT] extends Logging {
     }
   }
 
-  protected def createCodeGeneratedObject(in: IN, subexpressionEliminationEnabled: Boolean): OUT
+  protected def createCodeGeneratedObject(in: IN): OUT
   protected def createInterpretedObject(in: IN): OUT
 }

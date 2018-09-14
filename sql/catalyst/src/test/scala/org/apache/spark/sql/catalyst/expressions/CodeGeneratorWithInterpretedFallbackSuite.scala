@@ -27,15 +27,10 @@ import org.apache.spark.sql.types.IntegerType
 
 class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanTestBase {
 
-  val codegenOnly = CodegenObjectFactoryMode.CODEGEN_ONLY.toString
-  val noCodegen = CodegenObjectFactoryMode.NO_CODEGEN.toString
-
   object FailedCodegenProjection
       extends CodeGeneratorWithInterpretedFallback[Seq[Expression], UnsafeProjection] {
 
-    override protected def createCodeGeneratedObject(
-        in: Seq[Expression],
-        subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
+    override protected def createCodeGeneratedObject(in: Seq[Expression]): UnsafeProjection = {
       val invalidCode = new CodeAndComment("invalid code", Map.empty)
       // We assume this compilation throws an exception
       CodeGenerator.compile(invalidCode)
@@ -49,11 +44,13 @@ class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanT
 
   test("UnsafeProjection with codegen factory mode") {
     val input = Seq(BoundReference(0, IntegerType, nullable = true))
+    val codegenOnly = CodegenObjectFactoryMode.CODEGEN_ONLY.toString
     withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenOnly) {
       val obj = UnsafeProjection.createObject(input)
       assert(obj.getClass.getName.contains("GeneratedClass$SpecificUnsafeProjection"))
     }
 
+    val noCodegen = CodegenObjectFactoryMode.NO_CODEGEN.toString
     withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> noCodegen) {
       val obj = UnsafeProjection.createObject(input)
       assert(obj.isInstanceOf[InterpretedUnsafeProjection])
@@ -72,32 +69,11 @@ class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanT
   test("codegen failures in the CODEGEN_ONLY mode") {
     val errMsg = intercept[ExecutionException] {
       val input = Seq(BoundReference(0, IntegerType, nullable = true))
+      val codegenOnly = CodegenObjectFactoryMode.CODEGEN_ONLY.toString
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenOnly) {
         FailedCodegenProjection.createObject(input)
       }
     }.getMessage
     assert(errMsg.contains("failed to compile: org.codehaus.commons.compiler.CompileException:"))
-  }
-
-  test("SPARK-25426 subexpression elimination correctly handled in the codegen factory mode") {
-    Seq(true, false).foreach { flag =>
-      withSQLConf(
-          SQLConf.CODEGEN_FACTORY_MODE.key -> codegenOnly,
-          SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> flag.toString) {
-        val testGenerator = new CodeGeneratorWithInterpretedFallback[String, String] {
-          override protected def createCodeGeneratedObject(
-              in: String,
-              subexpressionEliminationEnabled: Boolean): String = {
-            assert(flag === subexpressionEliminationEnabled)
-            in
-          }
-
-          override protected def createInterpretedObject(in: String): String = {
-            throw new RuntimeException("Cannot be called.")
-          }
-        }
-        assert(testGenerator.createObject("test") === "test")
-      }
-    }
   }
 }
