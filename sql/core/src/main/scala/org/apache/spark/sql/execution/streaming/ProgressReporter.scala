@@ -240,9 +240,6 @@ trait ProgressReporter extends Logging {
   /** Extract number of input sources for each streaming source in plan */
   private def extractSourceToNumInputRows(): Map[BaseStreamingSource, Long] = {
 
-    import java.util.IdentityHashMap
-    import scala.collection.JavaConverters._
-
     def sumRows(tuples: Seq[(BaseStreamingSource, Long)]): Map[BaseStreamingSource, Long] = {
       tuples.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
     }
@@ -255,23 +252,15 @@ trait ProgressReporter extends Logging {
     }
 
     if (onlyDataSourceV2Sources) {
-      // Multiple DataSourceV2ScanExec instance may refer to the same source (can happen with
-      // self-unions or self-joins). Here we create an IdentityHashMap to only count the input
-      // rows for each unique source.
-      val sourceToInputRows = new IdentityHashMap[BaseStreamingSource, Long]
-      lastExecution.executedPlan.foreach {
+      // It's possible that multiple DataSourceV2ScanExec instances may refer to the same source
+      // (can happen with self-unions or self-joins). This means the source is scanned multiple
+      // times in the query, we should count the numRows for each scan.
+      val sourceToInputRowsTuples = lastExecution.executedPlan.collect {
         case s: DataSourceV2ScanExec if s.readSupport.isInstanceOf[BaseStreamingSource] =>
           val numRows = s.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
           val source = s.readSupport.asInstanceOf[BaseStreamingSource]
-          if (sourceToInputRows.containsKey(source)) {
-            assert(sourceToInputRows.get(source) == numRows)
-          } else {
-            sourceToInputRows.put(source, numRows)
-          }
-
-        case _ =>
+          source -> numRows
       }
-      val sourceToInputRowsTuples = sourceToInputRows.asScala.toSeq
       logDebug("Source -> # input rows\n\t" + sourceToInputRowsTuples.mkString("\n\t"))
       sumRows(sourceToInputRowsTuples)
     } else {
@@ -307,20 +296,10 @@ trait ProgressReporter extends Logging {
         val execLeafToSource = allLogicalPlanLeaves.zip(allExecPlanLeaves).flatMap {
           case (lp, ep) => logicalPlanLeafToSource.get(lp).map { source => ep -> source }
         }
-        // Multiple leaf physical nodes may refer to the same source (can happen with
-        // self-unions or self-joins). Here we create an IdentityHashMap to only count the input
-        // rows for each unique source.
-        val sourceToInputRows = new IdentityHashMap[BaseStreamingSource, Long]
-
-        execLeafToSource.map { case (execLeaf, source) =>
+        val sourceToInputRowsTuples = execLeafToSource.map { case (execLeaf, source) =>
           val numRows = execLeaf.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
-          if (sourceToInputRows.containsKey(source)) {
-            assert(sourceToInputRows.get(source) == numRows)
-          } else {
-            sourceToInputRows.put(source, numRows)
-          }
+          source -> numRows
         }
-        val sourceToInputRowsTuples = sourceToInputRows.asScala.toSeq
         sumRows(sourceToInputRowsTuples)
       } else {
         if (!metricWarningLogged) {
