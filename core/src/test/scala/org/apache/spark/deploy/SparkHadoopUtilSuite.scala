@@ -20,14 +20,13 @@ package org.apache.spark.deploy
 import java.io.File
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
-import org.apache.hadoop.fs.permission.{FsAction, FsPermission}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.scalatest.Matchers
 
 import org.apache.spark.{LocalSparkContext, SparkFunSuite}
 import org.apache.spark.util.Utils
 
-class SparkHadoopUtilSuite extends SparkFunSuite with Matchers with LocalSparkContext{
+class SparkHadoopUtilSuite extends SparkFunSuite with Matchers with LocalSparkContext {
   test("test expanding glob path") {
     val tmpDir = Utils.createTempDir()
     val rootDir = tmpDir.getCanonicalPath
@@ -71,23 +70,5 @@ class SparkHadoopUtilSuite extends SparkFunSuite with Matchers with LocalSparkCo
       sparkHadoopUtil.expandGlobPath(fs, new Path(s"$rootDir/000[1-5]/*"), 10) should be(
         Seq.empty[Path])
     } finally Utils.deleteRecursively(tmpDir)
-  }
-
-  private def fileStatus(
-      owner: String,
-      group: String,
-      userAction: FsAction,
-      groupAction: FsAction,
-      otherAction: FsAction): FileStatus = {
-    new FileStatus(0L,
-      false,
-      0,
-      0L,
-      0L,
-      0L,
-      new FsPermission(userAction, groupAction, otherAction),
-      owner,
-      group,
-      null)
   }
 }

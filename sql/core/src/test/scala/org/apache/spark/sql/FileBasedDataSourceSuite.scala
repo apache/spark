@@ -205,6 +205,34 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     }
   }
 
+  allFileBasedDataSources.foreach { format =>
+    testQuietly(s"Enabling/disabling parallelGetGlobbedPath using $format") {
+      def testLoadFiles(): Unit = {
+        withTempDir { dir =>
+          val basePath = dir.getCanonicalPath
+
+          for (i <- 0 to 9) {
+            Seq(i.toString).toDF("a").write.format(format)
+              .save(new Path(basePath, s"dir-$i").toString)
+          }
+          val df = spark.read.format(format).load(new Path(s"$basePath/dir-[0-4]/*").toString)
+          checkAnswer(df, Seq(Row("0"), Row("1"), Row("2"), Row("3"), Row("4")))
+        }
+      }
+
+      // with parallel get globbed path enable and limit the path threashold to 2
+      withSQLConf(SQLConf.PARALLEL_GET_GLOBBED_PATH_THRESHOLD.key -> "2",
+        SQLConf.PARALLEL_GET_GLOBBED_PATH_NUM_THREADS.key -> "2") {
+        testLoadFiles()
+      }
+
+      // with parallel get globbed path disable
+      withSQLConf(SQLConf.PARALLEL_GET_GLOBBED_PATH_THRESHOLD.key -> "0") {
+        testLoadFiles()
+      }
+    }
+  }
+
   // Text file format only supports string type
   test("SPARK-24691 error handling for unsupported types - text") {
     withTempDir { dir =>
