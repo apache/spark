@@ -241,10 +241,10 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
         Java regular expression.
       * limit - an integer expression which controls the number of times the regex is applied.
           * limit > 0: The resulting array's length will not be more than `limit`,
-                     and the resulting array's last entry will contain all input
-                     beyond the last matched regex.
+            and the resulting array's last entry will contain all input
+            beyond the last matched regex.
           * limit <= 0: `regex` will be applied as many times as possible, and
-                      the resulting array can be of any size.
+            the resulting array can be of any size.
   """,
   examples = """
     Examples:

@@ -1677,14 +1677,14 @@ def split(str, pattern, limit=-1):
 
     :param str: a string expression to split
     :param pattern: a string representing a regular expression. The regex string should be
-                  a Java regular expression.
+        a Java regular expression.
     :param limit: an integer which controls the number of times `pattern` is applied.
 
-            * ``limit > 0``: The resulting array's length will not be more than `limit`, and the
-                             resulting array's last entry will contain all input beyond the last
-                             matched pattern.
-            * ``limit <= 0``: `pattern` will be applied as many times as possible, and the resulting
-                              array can be of any size.
+        * ``limit > 0``: The resulting array's length will not be more than `limit`, and the
+                         resulting array's last entry will contain all input beyond the last
+                         matched pattern.
+        * ``limit <= 0``: `pattern` will be applied as many times as possible, and the resulting
+                          array can be of any size.
 
     .. versionchanged:: 3.0
        `split` now takes an optional `limit` field. If not provided, default limit value is -1.
