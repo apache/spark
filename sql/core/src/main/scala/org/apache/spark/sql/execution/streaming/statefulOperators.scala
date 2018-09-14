@@ -430,12 +430,14 @@ case class StateStoreSaveExec(
 // FIXME: javadoc!
 // FIXME: keyExpressions shouldn't have 'session': otherwise we should exclude it...
 case class SessionWindowStateStoreRestoreExec(
-    keyExpressions: Seq[Attribute],
+    keyWithoutSessionExpressions: Seq[Attribute],
     sessionExpression: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo],
     eventTimeWatermark: Option[Long],
     child: SparkPlan)
   extends UnaryExecNode with StateStoreReader with WatermarkSupport {
+
+  override def keyExpressions: Seq[Attribute] = keyWithoutSessionExpressions
 
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
@@ -452,7 +454,8 @@ case class SessionWindowStateStoreRestoreExec(
       val debugPartitionId = TaskContext.get().partitionId()
 
       val debugIter = iter.map { row =>
-        val keysProjection = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+        val keysProjection = GenerateUnsafeProjection.generate(keyWithoutSessionExpressions,
+          child.output)
         val sessionProjection = GenerateUnsafeProjection.generate(
           Seq(sessionExpression), child.output)
         val rowProjection = GenerateUnsafeProjection.generate(child.output, child.output)
@@ -477,14 +480,20 @@ case class SessionWindowStateStoreRestoreExec(
         case None => debugIter
       }
 
-      val mergedIter = new MergingSortWithMultiValuesStateIterator(filteredIterator, stateManager,
-        keyExpressions, sessionExpression, watermarkPredicateForData, child.output).map { row =>
+      val mergedIter = new MergingSortWithMultiValuesStateIterator(
+        filteredIterator,
+        stateManager,
+        keyWithoutSessionExpressions,
+        sessionExpression,
+        watermarkPredicateForData,
+        child.output).map { row =>
         numOutputRows += 1
         row
       }
 
       val debugMergedIter = mergedIter.map { row =>
-        val keysProjection = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+        val keysProjection = GenerateUnsafeProjection.generate(keyWithoutSessionExpressions,
+          child.output)
         val sessionProjection = GenerateUnsafeProjection.generate(
           Seq(sessionExpression), child.output)
         val rowProjection = GenerateUnsafeProjection.generate(child.output, child.output)
@@ -506,15 +515,15 @@ case class SessionWindowStateStoreRestoreExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    if (keyExpressions.isEmpty) {
+    if (keyWithoutSessionExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+      ClusteredDistribution(keyWithoutSessionExpressions, stateInfo.map(_.numPartitions)) :: Nil
     }
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
-    Seq((keyExpressions ++ Seq(sessionExpression)).map(SortOrder(_, Ascending)))
+    Seq((keyWithoutSessionExpressions ++ Seq(sessionExpression)).map(SortOrder(_, Ascending)))
   }
 }
 
@@ -523,13 +532,15 @@ case class SessionWindowStateStoreRestoreExec(
  * the [[MultiValuesStateManager]].
  */
 case class SessionWindowStateStoreSaveExec(
-    keyExpressions: Seq[Attribute],
+    keyWithoutSessionExpressions: Seq[Attribute],
     sessionExpression: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo] = None,
     outputMode: Option[OutputMode] = None,
     eventTimeWatermark: Option[Long] = None,
     child: SparkPlan)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
+
+  override def keyExpressions: Seq[Attribute] = keyWithoutSessionExpressions
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
@@ -538,7 +549,7 @@ case class SessionWindowStateStoreSaveExec(
 
     child.execute().mapPartitionsWithMultiValuesStateManager(
       getStateInfo,
-      keyExpressions.toStructType,
+      keyWithoutSessionExpressions.toStructType,
       child.output.toStructType,
       indexOrdinal = None,
       sqlContext.sessionState,
@@ -558,7 +569,7 @@ case class SessionWindowStateStoreSaveExec(
       val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
       val commitTimeMs = longMetric("commitTimeMs")
 
-      val keyProjection = GenerateUnsafeProjection.generate(keyExpressions,
+      val keyProjection = GenerateUnsafeProjection.generate(keyWithoutSessionExpressions,
         child.output)
 
       val alreadyRemovedKeys = new mutable.HashSet[UnsafeRow]()
@@ -664,15 +675,15 @@ case class SessionWindowStateStoreSaveExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    if (keyExpressions.isEmpty) {
+    if (keyWithoutSessionExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+      ClusteredDistribution(keyWithoutSessionExpressions, stateInfo.map(_.numPartitions)) :: Nil
     }
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
-    Seq((keyExpressions ++ Seq(sessionExpression)).map(SortOrder(_, Ascending)))
+    Seq((keyWithoutSessionExpressions ++ Seq(sessionExpression)).map(SortOrder(_, Ascending)))
   }
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {

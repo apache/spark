@@ -27,6 +27,7 @@ import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
+// FIXME: javadoc!!
 class MultiValuesStateStoreRDD[T: ClassTag, U: ClassTag](
     dataRDD: RDD[T],
     storeUpdateFunction: (MultiValuesStateManager, Iterator[T]) => Iterator[U],

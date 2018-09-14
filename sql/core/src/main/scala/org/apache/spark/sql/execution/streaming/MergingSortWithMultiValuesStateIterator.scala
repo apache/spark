@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, UnsafeR
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, Predicate}
 import org.apache.spark.sql.execution.streaming.state.MultiValuesStateManager
 
+// FIXME: javadoc!!
 class MergingSortWithMultiValuesStateIterator(
     iter: Iterator[InternalRow],
     stateManager: MultiValuesStateManager,

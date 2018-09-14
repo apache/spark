@@ -47,8 +47,6 @@ class UpdatingSessionIterator(
 
   val processedKeys: mutable.HashSet[InternalRow] = new mutable.HashSet[InternalRow]()
 
-  // FIXME: check whether it can be run with such situation: empty groupWithoutSessionExpressions
-
   override def hasNext: Boolean = {
     assertIteratorNotCorrupted()
 
