@@ -23,7 +23,10 @@ import java.util.regex.Pattern
 
 import com.google.common.io.PatternFilenameFilter
 import io.fabric8.kubernetes.api.model.Pod
+import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
+import io.fabric8.kubernetes.client.Watcher.Action
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Tag}
+import org.scalatest.Matchers
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Minutes, Seconds, Span}
 import scala.collection.JavaConverters._
@@ -31,10 +34,12 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.integrationtest.TestConfig._
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
+import org.apache.spark.internal.Logging
 
 private[spark] class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
-  with PythonTestsSuite with ClientModeTestsSuite {
+  with PythonTestsSuite with ClientModeTestsSuite
+  with Logging with Eventually with Matchers {
 
   import KubernetesSuite._
 
@@ -207,17 +212,25 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       .getItems
       .get(0)
     driverPodChecker(driverPod)
-
-    val executorPods = kubernetesTestComponents.kubernetesClient
+    val execPods = scala.collection.mutable.Stack[Pod]()
+    val execWatcher = kubernetesTestComponents.kubernetesClient
       .pods()
       .withLabel("spark-app-locator", appLocator)
       .withLabel("spark-role", "executor")
-      .list()
-      .getItems
-    executorPods.asScala.foreach { pod =>
-      executorPodChecker(pod)
-    }
-
+      .watch(new Watcher[Pod] {
+        logInfo("Beginning watch of executors")
+        override def onClose(cause: KubernetesClientException): Unit =
+          logInfo("Ending watch of executors")
+        override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
+          action match {
+            case Action.ADDED | Action.MODIFIED =>
+              execPods.push(resource)
+          }
+        }
+      })
+    Eventually.eventually(TIMEOUT, INTERVAL) { execPods.nonEmpty should be (true) }
+    execWatcher.close()
+    executorPodChecker(execPods.pop())
     Eventually.eventually(TIMEOUT, INTERVAL) {
       expectedLogOnCompletion.foreach { e =>
         assert(kubernetesTestComponents.kubernetesClient
@@ -228,7 +241,6 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       }
     }
   }
-
   protected def doBasicDriverPodCheck(driverPod: Pod): Unit = {
     assert(driverPod.getMetadata.getName === driverPodName)
     assert(driverPod.getSpec.getContainers.get(0).getImage === image)
