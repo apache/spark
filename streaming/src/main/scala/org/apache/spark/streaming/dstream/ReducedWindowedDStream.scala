@@ -54,6 +54,10 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
   super.persist(StorageLevel.MEMORY_ONLY_SER)
   reducedStream.persist(StorageLevel.MEMORY_ONLY_SER)
 
+  // Checkpoint the reducedStream per slideDuration by default.
+  super.checkpoint(slideDuration)
+  reducedStream.checkpoint(slideDuration)
+
   def windowDuration: Duration = _windowDuration
 
   override def dependencies: List[DStream[_]] = List(reducedStream)
@@ -72,7 +76,7 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
 
   override def checkpoint(interval: Duration): DStream[(K, V)] = {
     super.checkpoint(interval)
-    // reducedStream.checkpoint(interval)
+    reducedStream.checkpoint(interval)
     this
   }
 

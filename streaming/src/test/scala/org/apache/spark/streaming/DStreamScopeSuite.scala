@@ -25,7 +25,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.ui.UIUtils
-import org.apache.spark.util.ManualClock
+import org.apache.spark.util.{ManualClock, Utils}
 
 /**
  * Tests whether scope information is passed from DStream operations to RDDs correctly.
@@ -39,6 +39,9 @@ class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAnd
     val conf = new SparkConf().setMaster("local").setAppName("test")
     conf.set("spark.streaming.clock", classOf[ManualClock].getName())
     ssc = new StreamingContext(new SparkContext(conf), batchDuration)
+    val checkpointDir = Utils.createTempDir(namePrefix = this.getClass.getSimpleName()).toString
+    logDebug(s"Using checkpoint directory $checkpointDir")
+    ssc.checkpoint(checkpointDir)
   }
 
   override def afterAll(): Unit = {
