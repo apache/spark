@@ -170,3 +170,7 @@ function formatDate(date) {
   if (date <= 0) return "-";
   else return date.split(".")[0].replace("T", " ");
 }
+
+function extractDataFromArrayString(data) {
+  return data.split("[")[1].split("]")[0].split(",");
+}

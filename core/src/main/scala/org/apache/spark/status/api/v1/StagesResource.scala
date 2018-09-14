@@ -45,20 +45,22 @@ private[v1] class StagesResource extends BaseAppResource {
     withUI { ui =>
       var ret = ui.store.stageData(stageId, details = details)
       if (ret.nonEmpty) {
-        for (i <- 0 to (ret.length - 1)) {
-          var executorIdArray = ret(i).executorSummary.get.keys.toArray
+        for (r <- ret) {
+          val executorIdArray = r.executorSummary.get.keys.toArray
           for (execId <- executorIdArray) {
-            var executorLogs = ui.store.executorSummary(execId).executorLogs
-            var hostPort = ui.store.executorSummary(execId).hostPort
-            var taskDataArray = ret(i).tasks.get.keys.toArray
-            ret(i).executorSummary.get.get(execId).get.executorLogs = executorLogs
-            ret(i).executorSummary.get.get(execId).get.hostPort = hostPort
+            val executorLogs = ui.store.executorSummary(execId).executorLogs
+            val hostPort = ui.store.executorSummary(execId).hostPort
+            val taskDataArray = r.tasks.get.keys.toArray
+            var execStageSummary = r.executorSummary.get.get(execId).get
+            execStageSummary.executorLogs = executorLogs
+            execStageSummary.hostPort = hostPort
             for (taskData <- taskDataArray) {
-              ret(i).tasks.get.get(taskData).get.executorLogs = executorLogs
-              ret(i).tasks.get.get(taskData).get.schedulerDelay =
-                AppStatusUtils.schedulerDelay(ret(i).tasks.get.get(taskData).get)
-              ret(i).tasks.get.get(taskData).get.gettingResultTime =
-                AppStatusUtils.gettingResultTime(ret(i).tasks.get.get(taskData).get)
+              var taskDataObject = r.tasks.get.get(taskData).get
+              taskDataObject.executorLogs = executorLogs
+              taskDataObject.schedulerDelay =
+                AppStatusUtils.schedulerDelay(taskDataObject)
+              taskDataObject.gettingResultTime =
+                AppStatusUtils.gettingResultTime(taskDataObject)
             }
           }
         }
