@@ -116,8 +116,10 @@ abstract class UnsafeProjection extends Projection {
 object UnsafeProjection
     extends CodeGeneratorWithInterpretedFallback[Seq[Expression], UnsafeProjection] {
 
-  override protected def createCodeGeneratedObject(in: Seq[Expression]): UnsafeProjection = {
-    GenerateUnsafeProjection.generate(in)
+  override protected def createCodeGeneratedObject(
+      in: Seq[Expression],
+      subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
+    GenerateUnsafeProjection.generate(in, subexpressionEliminationEnabled)
   }
 
   override protected def createInterpretedObject(in: Seq[Expression]): UnsafeProjection = {
@@ -167,26 +169,6 @@ object UnsafeProjection
    */
   def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): UnsafeProjection = {
     create(toBoundExprs(exprs, inputSchema))
-  }
-
-  /**
-   * Same as other create()'s but allowing enabling/disabling subexpression elimination.
-   * The param `subexpressionEliminationEnabled` doesn't guarantee to work. For example,
-   * when fallbacking to interpreted execution, it is not supported.
-   */
-  def create(
-      exprs: Seq[Expression],
-      inputSchema: Seq[Attribute],
-      subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
-    val unsafeExprs = toUnsafeExprs(toBoundExprs(exprs, inputSchema))
-    try {
-      GenerateUnsafeProjection.generate(unsafeExprs, subexpressionEliminationEnabled)
-    } catch {
-      case NonFatal(_) =>
-        // We should have already seen the error message in `CodeGenerator`
-        logWarning("Expr codegen error and falling back to interpreter mode")
-        InterpretedUnsafeProjection.createProjection(unsafeExprs)
-    }
   }
 }
 
