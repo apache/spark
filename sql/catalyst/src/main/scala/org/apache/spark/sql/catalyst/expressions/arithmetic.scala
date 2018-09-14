@@ -315,7 +315,7 @@ case class Divide(left: Expression, right: Expression) extends DivModLike {
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns `expr1`/`expr2`. It performs integral division.",
+  usage = "expr1 _FUNC_ expr2 - Divide `expr1` by `expr2` rounded to the long integer.",
   examples = """
     Examples:
       > SELECT 3 _FUNC_ 2;
