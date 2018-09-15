@@ -1377,8 +1377,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val (server, shufflePort) = Utils.startServiceOnPort(candidatePort,
       newShuffleServer, conf, "ShuffleServer")
 
-    conf.set("spark.shuffle.service.enabled", "true")
-    conf.set("spark.shuffle.service.port", shufflePort.toString)
+    conf.set(SHUFFLE_SERVICE_ENABLED.key, "true")
+    conf.set(SHUFFLE_SERVICE_PORT.key, shufflePort.toString)
     conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "40")
     conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
     var e = intercept[SparkException] {
@@ -1420,6 +1420,19 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(mockBlockTransferService.numCalls === 1)
     // assert FileManager is not null if the block size is larger than threshold.
     assert(mockBlockTransferService.tempFileManager === store.remoteBlockTempFileManager)
+  }
+
+  test("query locations of blockIds") {
+    val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
+    val blockLocations = Seq(BlockManagerId("1", "host1", 100), BlockManagerId("2", "host2", 200))
+    when(mockBlockManagerMaster.getLocations(mc.any[Array[BlockId]]))
+      .thenReturn(Array(blockLocations))
+    val env = mock(classOf[SparkEnv])
+
+    val blockIds: Array[BlockId] = Array(StreamBlockId(1, 2))
+    val locs = BlockManager.blockIdsToLocations(blockIds, env, mockBlockManagerMaster)
+    val expectedLocs = Seq("executor_host1_1", "executor_host2_2")
+    assert(locs(blockIds(0)) == expectedLocs)
   }
 
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {

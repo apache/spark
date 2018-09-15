@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.client.Config
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.SparkContext
 import org.apache.spark.deploy.k8s.{KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -35,12 +35,6 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
   override def canCreate(masterURL: String): Boolean = masterURL.startsWith("k8s")
 
   override def createTaskScheduler(sc: SparkContext, masterURL: String): TaskScheduler = {
-    if (masterURL.startsWith("k8s") &&
-      sc.deployMode == "client" &&
-      !sc.conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK).getOrElse(false)) {
-      throw new SparkException("Client mode is currently not supported for Kubernetes.")
-    }
-
     new TaskSchedulerImpl(sc)
   }
 
@@ -48,15 +42,32 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       sc: SparkContext,
       masterURL: String,
       scheduler: TaskScheduler): SchedulerBackend = {
-    val executorSecretNamesToMountPaths = KubernetesUtils.parsePrefixedKeyValuePairs(
-      sc.conf, KUBERNETES_EXECUTOR_SECRETS_PREFIX)
+    val wasSparkSubmittedInClusterMode = sc.conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK)
+    val (authConfPrefix,
+      apiServerUri,
+      defaultServiceAccountToken,
+      defaultServiceAccountCaCrt) = if (wasSparkSubmittedInClusterMode) {
+      require(sc.conf.get(KUBERNETES_DRIVER_POD_NAME).isDefined,
+        "If the application is deployed using spark-submit in cluster mode, the driver pod name " +
+          "must be provided.")
+      (KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
+        KUBERNETES_MASTER_INTERNAL_URL,
+        Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
+        Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
+    } else {
+      (KUBERNETES_AUTH_CLIENT_MODE_PREFIX,
+        KubernetesUtils.parseMasterUrl(masterURL),
+        None,
+        None)
+    }
+
     val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
-      KUBERNETES_MASTER_INTERNAL_URL,
+      apiServerUri,
       Some(sc.conf.get(KUBERNETES_NAMESPACE)),
-      KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
+      authConfPrefix,
       sc.conf,
-      Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
-      Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
+      defaultServiceAccountToken,
+      defaultServiceAccountCaCrt)
 
     val requestExecutorsService = ThreadUtils.newDaemonCachedThreadPool(
       "kubernetes-executor-requests")

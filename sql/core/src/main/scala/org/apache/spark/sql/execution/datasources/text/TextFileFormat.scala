@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.{DataType, StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -46,11 +46,6 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
     if (schema.size != 1) {
       throw new AnalysisException(
         s"Text data source supports only a single column, and you have ${schema.size} columns.")
-    }
-    val tpe = schema(0).dataType
-    if (tpe != StringType) {
-      throw new AnalysisException(
-        s"Text data source supports only a string column, but you have ${tpe.simpleString}.")
     }
   }
 
@@ -125,7 +120,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
       } else {
         new HadoopFileWholeTextReader(file, confValue)
       }
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => reader.close()))
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => reader.close()))
       if (requiredSchema.isEmpty) {
         val emptyUnsafeRow = new UnsafeRow(0)
         reader.map(_ => emptyUnsafeRow)
@@ -141,6 +136,9 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
       }
     }
   }
+
+  override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean =
+    dataType == StringType
 }
 
 class TextOutputWriter(

@@ -82,7 +82,6 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       if (adaptiveExecutionEnabled && supportsCoordinator) {
         val coordinator =
           new ExchangeCoordinator(
-            children.length,
             targetPostShuffleInputSize,
             minNumPostShufflePartitions)
         children.zip(requiredChildDistributions).map {
@@ -279,13 +278,6 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
    */
   private def reorderJoinPredicates(plan: SparkPlan): SparkPlan = {
     plan match {
-      case BroadcastHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition, left,
-        right) =>
-        val (reorderedLeftKeys, reorderedRightKeys) =
-          reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
-        BroadcastHashJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, buildSide, condition,
-          left, right)
-
       case ShuffledHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition, left, right) =>
         val (reorderedLeftKeys, reorderedRightKeys) =
           reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)

@@ -54,6 +54,7 @@ import org.apache.spark.sql.types.StructType
  * The format for input files is simple:
  *  1. A list of SQL queries separated by semicolon.
  *  2. Lines starting with -- are treated as comments and ignored.
+ *  3. Lines starting with --SET are used to run the file with the following set of configs.
  *
  * For example:
  * {{{
@@ -138,18 +139,58 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   private def runTest(testCase: TestCase): Unit = {
     val input = fileToString(new File(testCase.inputFile))
 
-    // List of SQL queries to run
-    val queries: Seq[String] = {
-      val cleaned = input.split("\n").filterNot(_.startsWith("--")).mkString("\n")
-      // note: this is not a robust way to split queries using semicolon, but works for now.
-      cleaned.split("(?<=[^\\\\]);").map(_.trim).filter(_ != "").toSeq
+    val (comments, code) = input.split("\n").partition(_.startsWith("--"))
+    val configSets = {
+      val configLines = comments.filter(_.startsWith("--SET")).map(_.substring(5))
+      val configs = configLines.map(_.split(",").map { confAndValue =>
+        val (conf, value) = confAndValue.span(_ != '=')
+        conf.trim -> value.substring(1).trim
+      })
+      // When we are regenerating the golden files we don't need to run all the configs as they
+      // all need to return the same result
+      if (regenerateGoldenFiles && configs.nonEmpty) {
+        configs.take(1)
+      } else {
+        configs
+      }
     }
+    // List of SQL queries to run
+    // note: this is not a robust way to split queries using semicolon, but works for now.
+    val queries = code.mkString("\n").split("(?<=[^\\\\]);").map(_.trim).filter(_ != "").toSeq
 
+    if (configSets.isEmpty) {
+      runQueries(queries, testCase.resultFile, None)
+    } else {
+      configSets.foreach { configSet =>
+        try {
+          runQueries(queries, testCase.resultFile, Some(configSet))
+        } catch {
+          case e: Throwable =>
+            val configs = configSet.map {
+              case (k, v) => s"$k=$v"
+            }
+            logError(s"Error using configs: ${configs.mkString(",")}")
+            throw e
+        }
+      }
+    }
+  }
+
+  private def runQueries(
+      queries: Seq[String],
+      resultFileName: String,
+      configSet: Option[Seq[(String, String)]]): Unit = {
     // Create a local SparkSession to have stronger isolation between different test cases.
     // This does not isolate catalog changes.
     val localSparkSession = spark.newSession()
     loadTestData(localSparkSession)
 
+    if (configSet.isDefined) {
+      // Execute the list of set operation in order to add the desired configs
+      val setOperations = configSet.get.map { case (key, value) => s"set $key=$value" }
+      logInfo(s"Setting configs: ${setOperations.mkString(", ")}")
+      setOperations.foreach(localSparkSession.sql)
+    }
     // Run the SQL queries preparing them for comparison.
     val outputs: Seq[QueryOutput] = queries.map { sql =>
       val (schema, output) = getNormalizedResult(localSparkSession, sql)
@@ -167,7 +208,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         s"-- Number of queries: ${outputs.size}\n\n\n" +
         outputs.zipWithIndex.map{case (qr, i) => qr.toString(i)}.mkString("\n\n\n") + "\n"
       }
-      val resultFile = new File(testCase.resultFile)
+      val resultFile = new File(resultFileName)
       val parent = resultFile.getParentFile
       if (!parent.exists()) {
         assert(parent.mkdirs(), "Could not create directory: " + parent)
@@ -177,7 +218,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
     // Read back the golden file.
     val expectedOutputs: Seq[QueryOutput] = {
-      val goldenOutput = fileToString(new File(testCase.resultFile))
+      val goldenOutput = fileToString(new File(resultFileName))
       val segments = goldenOutput.split("-- !query.+\n")
 
       // each query has 3 segments, plus the header

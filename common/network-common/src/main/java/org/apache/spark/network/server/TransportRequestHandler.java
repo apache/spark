@@ -234,7 +234,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
              callback.onSuccess(ByteBuffer.allocate(0));
            } catch (Exception ex) {
              IOException ioExc = new IOException("Failure post-processing complete stream;" +
-               " failing this rpc and leaving channel active");
+               " failing this rpc and leaving channel active", ex);
              callback.onFailure(ioExc);
              streamHandler.onFailure(streamId, ioExc);
            }
@@ -252,8 +252,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         }
       };
       if (req.bodyByteCount > 0) {
-        StreamInterceptor interceptor = new StreamInterceptor(this, wrappedCallback.getID(),
-          req.bodyByteCount, wrappedCallback);
+        StreamInterceptor<RequestMessage> interceptor = new StreamInterceptor<>(
+          this, wrappedCallback.getID(), req.bodyByteCount, wrappedCallback);
         frameDecoder.setInterceptor(interceptor);
       } else {
         wrappedCallback.onComplete(wrappedCallback.getID());

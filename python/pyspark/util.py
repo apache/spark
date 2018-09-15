@@ -80,7 +80,7 @@ class VersionUtils(object):
         (2, 3)
 
         """
-        m = re.search('^(\d+)\.(\d+)(\..*)?$', sparkVersion)
+        m = re.search(r'^(\d+)\.(\d+)(\..*)?$', sparkVersion)
         if m is not None:
             return (int(m.group(1)), int(m.group(2)))
         else:

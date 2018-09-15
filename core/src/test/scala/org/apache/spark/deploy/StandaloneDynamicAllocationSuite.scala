@@ -458,7 +458,7 @@ class StandaloneDynamicAllocationSuite
     val initialExecutorLimit = 1
     val myConf = appConf
       .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.shuffle.service.enabled", "true")
+      .set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
       .set("spark.dynamicAllocation.initialExecutors", initialExecutorLimit.toString)
     sc = new SparkContext(myConf)
     val appId = sc.applicationId

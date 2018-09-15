@@ -28,7 +28,7 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
  *
  * @since Spark 2.3.0
  */
-public abstract class AbstractLauncher<T extends AbstractLauncher> {
+public abstract class AbstractLauncher<T extends AbstractLauncher<T>> {
 
   final SparkSubmitCommandBuilder builder;
 

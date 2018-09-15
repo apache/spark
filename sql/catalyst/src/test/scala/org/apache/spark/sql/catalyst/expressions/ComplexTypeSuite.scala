@@ -144,6 +144,13 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(CreateArray(byteWithNull), byteSeq :+ null, EmptyRow)
     checkEvaluation(CreateArray(strWithNull), strSeq :+ null, EmptyRow)
     checkEvaluation(CreateArray(Literal.create(null, IntegerType) :: Nil), null :: Nil)
+
+    val array = CreateArray(Seq(
+      Literal.create(intSeq, ArrayType(IntegerType, containsNull = false)),
+      Literal.create(intSeq :+ null, ArrayType(IntegerType, containsNull = true))))
+    assert(array.dataType ===
+      ArrayType(ArrayType(IntegerType, containsNull = true), containsNull = false))
+    checkEvaluation(array, Seq(intSeq, intSeq :+ null))
   }
 
   test("CreateMap") {
@@ -184,6 +191,18 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
         CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
         null, null)
     }
+
+    val map = CreateMap(Seq(
+      Literal.create(intSeq, ArrayType(IntegerType, containsNull = false)),
+      Literal.create(strSeq, ArrayType(StringType, containsNull = false)),
+      Literal.create(intSeq :+ null, ArrayType(IntegerType, containsNull = true)),
+      Literal.create(strSeq :+ null, ArrayType(StringType, containsNull = true))))
+    assert(map.dataType ===
+      MapType(
+        ArrayType(IntegerType, containsNull = true),
+        ArrayType(StringType, containsNull = true),
+        valueContainsNull = false))
+    checkEvaluation(map, createMap(Seq(intSeq, intSeq :+ null), Seq(strSeq, strSeq :+ null)))
   }
 
   test("MapFromArrays") {

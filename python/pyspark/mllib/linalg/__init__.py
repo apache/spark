@@ -1368,6 +1368,12 @@ class QRDecomposition(object):
 
 def _test():
     import doctest
+    import numpy
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)
     if failure_count:
         sys.exit(-1)

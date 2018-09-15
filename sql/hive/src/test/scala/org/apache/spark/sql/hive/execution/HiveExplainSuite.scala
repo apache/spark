@@ -171,20 +171,15 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("SPARK-23021 AnalysisBarrier should not cut off explain output for parsed logical plans") {
-    val df = Seq((1, 1)).toDF("a", "b").groupBy("a").count().limit(1)
-    val outputStream = new java.io.ByteArrayOutputStream()
-    Console.withOut(outputStream) {
-      df.explain(true)
+  test("SPARK-23034 show relation names in Hive table scan nodes") {
+    val tableName = "tab"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(c1 int) USING hive")
+      val output = new java.io.ByteArrayOutputStream()
+      Console.withOut(output) {
+        spark.table(tableName).explain(extended = false)
+      }
+      assert(output.toString.contains(s"Scan hive default.$tableName"))
     }
-    assert(outputStream.toString.replaceAll("""#\d+""", "#0").contains(
-      s"""== Parsed Logical Plan ==
-         |GlobalLimit 1
-         |+- LocalLimit 1
-         |   +- AnalysisBarrier
-         |         +- Aggregate [a#0], [a#0, count(1) AS count#0L]
-         |            +- Project [_1#0 AS a#0, _2#0 AS b#0]
-         |               +- LocalRelation [_1#0, _2#0]
-         |""".stripMargin))
   }
 }

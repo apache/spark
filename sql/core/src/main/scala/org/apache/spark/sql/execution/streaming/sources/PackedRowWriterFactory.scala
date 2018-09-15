@@ -20,21 +20,22 @@ package org.apache.spark.sql.execution.streaming.sources
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.sources.v2.writer.{DataSourceWriter, DataWriter, DataWriterFactory, WriterCommitMessage}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.sources.v2.writer.{BatchWriteSupport, DataWriter, DataWriterFactory, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingDataWriterFactory
 
 /**
  * A simple [[DataWriterFactory]] whose tasks just pack rows into the commit message for delivery
- * to a [[DataSourceWriter]] on the driver.
+ * to a [[BatchWriteSupport]] on the driver.
  *
  * Note that, because it sends all rows to the driver, this factory will generally be unsuitable
  * for production-quality sinks. It's intended for use in tests.
  */
-case object PackedRowWriterFactory extends DataWriterFactory[Row] {
-  override def createDataWriter(
+case object PackedRowWriterFactory extends StreamingDataWriterFactory {
+  override def createWriter(
       partitionId: Int,
       taskId: Long,
-      epochId: Long): DataWriter[Row] = {
+      epochId: Long): DataWriter[InternalRow] = {
     new PackedRowDataWriter()
   }
 }
@@ -43,15 +44,16 @@ case object PackedRowWriterFactory extends DataWriterFactory[Row] {
  * Commit message for a [[PackedRowDataWriter]], containing all the rows written in the most
  * recent interval.
  */
-case class PackedRowCommitMessage(rows: Array[Row]) extends WriterCommitMessage
+case class PackedRowCommitMessage(rows: Array[InternalRow]) extends WriterCommitMessage
 
 /**
  * A simple [[DataWriter]] that just sends all the rows it's received as a commit message.
  */
-class PackedRowDataWriter() extends DataWriter[Row] with Logging {
-  private val data = mutable.Buffer[Row]()
+class PackedRowDataWriter() extends DataWriter[InternalRow] with Logging {
+  private val data = mutable.Buffer[InternalRow]()
 
-  override def write(row: Row): Unit = data.append(row)
+  // Spark reuses the same `InternalRow` instance, here we copy it before buffer it.
+  override def write(row: InternalRow): Unit = data.append(row.copy())
 
   override def commit(): PackedRowCommitMessage = {
     val msg = PackedRowCommitMessage(data.toArray)

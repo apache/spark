@@ -79,6 +79,12 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
         java.util.Arrays.equals(result, expected)
       case (result: Double, expected: Spread[Double @unchecked]) =>
         expected.asInstanceOf[Spread[Double]].isWithin(result)
+      case (result: InternalRow, expected: InternalRow) =>
+        val st = dataType.asInstanceOf[StructType]
+        assert(result.numFields == st.length && expected.numFields == st.length)
+        st.zipWithIndex.forall { case (f, i) =>
+          checkResult(result.get(i, f.dataType), expected.get(i, f.dataType), f.dataType)
+        }
       case (result: ArrayData, expected: ArrayData) =>
         result.numElements == expected.numElements && {
           val et = dataType.asInstanceOf[ArrayType].elementType
@@ -99,9 +105,6 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
         if (expected.isNaN) result.isNaN else expected == result
       case (result: Float, expected: Float) =>
         if (expected.isNaN) result.isNaN else expected == result
-      case (result: UnsafeRow, expected: GenericInternalRow) =>
-        val structType = exprDataType.asInstanceOf[StructType]
-        result.toSeq(structType) == expected.toSeq(structType)
       case (result: Row, expected: InternalRow) => result.toSeq == expected.toSeq(result.schema)
       case _ =>
         result == expected
