@@ -2301,6 +2301,37 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a new Dataset with columns renamed.
+   * This is a no-op if schema doesn't contain existingNames in columnMap.
+   * {{{
+   *   df.withColumnRenamed(Map(
+   *     "c1" -> "first_column",
+   *     "c2" -> "second_column"
+   *   ))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 2.4.0
+   */
+  def withColumnRenamed(columnMap: Map[String, String]): DataFrame = {
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    val output = queryExecution.analyzed.output
+    val existingNames = columnMap.keys.toSeq
+    val shouldRename = !output.map(_.name).intersect(existingNames).isEmpty
+    if (shouldRename) {
+      val columns = output.map { col =>
+        columnMap.get(col.name) match {
+          case Some(newName) => Column(col).as(newName)
+          case _ => Column(col)
+        }
+      }
+      select(columns : _*)
+    } else {
+      toDF()
+    }
+  }
+
+  /**
    * Returns a new Dataset with a column dropped. This is a no-op if schema doesn't contain
    * column name.
    *

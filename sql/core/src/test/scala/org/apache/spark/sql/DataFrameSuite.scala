@@ -1021,6 +1021,18 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("key", "valueRenamed", "newCol"))
   }
 
+  test("SPARK-25430: Add map parameter for withColumnRenamed") {
+    val df = testData.toDF().withColumn("newCol", col("key") + 1)
+      .withColumnRenamed(Map("value"->"valueRenamed", "newCol"->"newColRenamed",
+        "newCol2"->"newColRenamed2"))
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1)
+      }.toSeq)
+    assert(df.schema.map(_.name) === Seq("key", "valueRenamed", "newColRenamed"))
+  }
+
   private lazy val person2: DataFrame = Seq(
     ("Bob", 16, 176),
     ("Alice", 32, 164),
