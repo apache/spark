@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.DataOutputStream
+import java.io.{ByteArrayOutputStream, OutputStream}
 import java.util.Collections
 
 import scala.collection.JavaConverters._
@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, Codegen
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.execution.streaming.{StreamExecution, StreamingQueryWrapper}
-import org.apache.spark.sql.execution.streaming.continuous.WriteToContinuousDataSourceExec
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
 
@@ -71,25 +70,19 @@ package object debug {
    * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
    */
   def codegenString(plan: SparkPlan): String = {
-    val codegenSeq = codegenStringSeq(plan)
-    var output = s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n"
-    for (((subtree, code), i) <- codegenSeq.zipWithIndex) {
-      output += s"== Subtree ${i + 1} / ${codegenSeq.size} ==\n"
-      output += subtree
-      output += "\nGenerated code:\n"
-      output += s"${code}\n"
-    }
-    output
+    val bos = new ByteArrayOutputStream()
+    codegenToOutputStream(bos, plan)
+    bos.toString
   }
 
-  def codegen(dos: DataOutputStream, plan: SparkPlan): Unit = {
+  def codegenToOutputStream(os: OutputStream, plan: SparkPlan): Unit = {
     val codegenSeq = codegenStringSeq(plan)
-    dos.writeBytes(s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n")
+    os.write(s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n".getBytes)
     for (((subtree, code), i) <- codegenSeq.zipWithIndex) {
-      dos.writeBytes(s"== Subtree ${i + 1} / ${codegenSeq.size} ==\n")
-      dos.writeBytes(subtree)
-      dos.writeBytes("\nGenerated code:\n")
-      dos.writeBytes(s"${code}\n")
+      os.write(s"== Subtree ${i + 1} / ${codegenSeq.size} ==\n".getBytes())
+      os.write(subtree.getBytes)
+      os.write("\nGenerated code:\n".getBytes)
+      os.write(s"${code}\n".getBytes)
     }
   }
 

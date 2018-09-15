@@ -273,7 +273,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
         executedPlan.treeString(dos)
         dos.flush()
         dos.writeBytes("== Whole Stage Codegen ==\n")
-        org.apache.spark.sql.execution.debug.codegen(dos, executedPlan)
+        org.apache.spark.sql.execution.debug.codegenToOutputStream(dos, executedPlan)
       } finally {
         dos.close()
       }
