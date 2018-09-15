@@ -16,16 +16,33 @@
  */
 package org.apache.spark.sql.execution
 
-import java.nio.file.{Files, Paths}
-
 import scala.io.Source
-import scala.reflect.io.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class QueryExecutionSuite extends SharedSQLContext {
+  test("dumping query execution info to a file") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath + s"/plans.txt"
+      val df = spark.range(0, 10)
+      df.queryExecution.debug.toFile(path)
+
+      assert(Source.fromFile(path).getLines.toList
+        .takeWhile(_ != "== Whole Stage Codegen ==") == List(
+        "== Parsed Logical Plan ==",
+        "Range (0, 10, step=1, splits=Some(2))",
+        "== Analyzed Logical Plan ==",
+        "id: bigint",
+        "Range (0, 10, step=1, splits=Some(2))",
+        "== Optimized Logical Plan ==",
+        "Range (0, 10, step=1, splits=Some(2))",
+        "== Physical Plan ==",
+        "*(1) Range (0, 10, step=1, splits=2)"))
+    }
+  }
+
   test("toString() exception/error handling") {
     spark.experimental.extraStrategies = Seq(
         new SparkStrategy {
@@ -53,25 +70,5 @@ class QueryExecutionSuite extends SharedSQLContext {
       })
     val error = intercept[Error](qe.toString)
     assert(error.getMessage.contains("error"))
-  }
-
-  test("debug to file") {
-    withTempDir { dir =>
-      val path = dir.getCanonicalPath + s"/plans.txt"
-      val df = spark.range(0, 10)
-      df.queryExecution.debug.toFile(path)
-
-      assert(Source.fromFile(path).getLines.toList
-        .takeWhile(_ != "== Whole Stage Codegen ==") == List(
-        "== Parsed Logical Plan ==",
-        "Range (0, 10, step=1, splits=Some(2))",
-        "== Analyzed Logical Plan ==",
-        "id: bigint",
-        "Range (0, 10, step=1, splits=Some(2))",
-        "== Optimized Logical Plan ==",
-        "Range (0, 10, step=1, splits=Some(2))",
-        "== Physical Plan ==",
-        "*(1) Range (0, 10, step=1, splits=2)"))
-    }
   }
 }
