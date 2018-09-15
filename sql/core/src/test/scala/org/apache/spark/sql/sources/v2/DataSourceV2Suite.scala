@@ -340,13 +340,13 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
       val sessionPath = path.getCanonicalPath
       withSQLConf("spark.datasource.simpleWritableDataSource.path" -> sessionPath) {
         withTempPath { file =>
-          val path = file.getCanonicalPath
+          val optionPath = file.getCanonicalPath
           val format = classOf[SimpleWritableDataSource].getName
 
           val df = Seq((1L, 2L)).toDF("i", "j")
-          df.write.format(format).option("path", path).save()
+          df.write.format(format).option("path", optionPath).save()
           assert(!new File(sessionPath).exists)
-          checkAnswer(spark.read.format(format).option("path", path).load(), df)
+          checkAnswer(spark.read.format(format).option("path", optionPath).load(), df)
         }
       }
     }
