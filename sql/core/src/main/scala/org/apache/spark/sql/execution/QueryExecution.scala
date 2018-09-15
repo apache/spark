@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
+import org.apache.hadoop.fs.{FileSystem, Path}
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -249,6 +251,20 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
      */
     def codegenToSeq(): Seq[(String, String)] = {
       org.apache.spark.sql.execution.debug.codegenStringSeq(executedPlan)
+    }
+
+    /**
+     * Dumps debug information about query execution into the specified file.
+     */
+    def toFile(path: String): Unit = {
+      val filePath = new Path(path)
+      val fs = FileSystem.get(filePath.toUri, sparkSession.sparkContext.hadoopConfiguration)
+      val fos = fs.create(filePath)
+      try {
+        fos.writeBytes("Hello, World!")
+      } finally {
+        fos.close()
+      }
     }
   }
 }
