@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -260,7 +261,10 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       val filePath = new Path(path)
       val fs = FileSystem.get(filePath.toUri, sparkSession.sparkContext.hadoopConfiguration)
       val dos = fs.create(filePath)
+      val maxFields = SparkEnv.get.conf.getInt(Utils.MAX_TO_STRING_FIELDS,
+        Utils.DEFAULT_MAX_TO_STRING_FIELDS)
       try {
+        SparkEnv.get.conf.set(Utils.MAX_TO_STRING_FIELDS, Int.MaxValue.toString)
         dos.writeBytes("== Parsed Logical Plan ==\n")
         logical.treeString(dos, verbose = true, addSuffix = false)
         dos.writeBytes("== Analyzed Logical Plan ==\n")
@@ -276,6 +280,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
         org.apache.spark.sql.execution.debug.codegenToOutputStream(dos, executedPlan)
       } finally {
         dos.close()
+        SparkEnv.get.conf.set(Utils.MAX_TO_STRING_FIELDS, maxFields.toString)
       }
     }
   }

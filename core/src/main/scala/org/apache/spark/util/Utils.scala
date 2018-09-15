@@ -99,10 +99,11 @@ private[spark] object Utils extends Logging {
    * by setting the 'spark.debug.maxToStringFields' conf in SparkEnv.
    */
   val DEFAULT_MAX_TO_STRING_FIELDS = 25
+  val MAX_TO_STRING_FIELDS = "spark.debug.maxToStringFields"
 
   private[spark] def maxNumToStringFields = {
     if (SparkEnv.get != null) {
-      SparkEnv.get.conf.getInt("spark.debug.maxToStringFields", DEFAULT_MAX_TO_STRING_FIELDS)
+      SparkEnv.get.conf.getInt(MAX_TO_STRING_FIELDS, DEFAULT_MAX_TO_STRING_FIELDS)
     } else {
       DEFAULT_MAX_TO_STRING_FIELDS
     }
