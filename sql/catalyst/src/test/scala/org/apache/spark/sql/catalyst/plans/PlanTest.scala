@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import org.scalactic.source
 import org.scalatest.Suite
+import org.scalatest.Tag
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
@@ -32,6 +35,23 @@ import org.apache.spark.sql.internal.SQLConf
  * Provides helper methods for comparing plans.
  */
 trait PlanTest extends SparkFunSuite with PlanTestBase
+
+trait CodegenInterpretedPlanTest extends PlanTest {
+
+  override protected def test(
+      testName: String,
+      testTags: Tag*)(testFun: => Any)(implicit pos: source.Position): Unit = {
+    val codegenMode = CodegenObjectFactoryMode.CODEGEN_ONLY.toString
+    val interpretedMode = CodegenObjectFactoryMode.NO_CODEGEN.toString
+
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+      super.test(testName + " (codegen path)", testTags: _*)(testFun)(pos)
+    }
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> interpretedMode) {
+      super.test(testName + " (interpreted path)", testTags: _*)(testFun)(pos)
+    }
+  }
+}
 
 /**
  * Provides helper methods for comparing plans, but without the overhead of
@@ -60,6 +80,8 @@ trait PlanTestBase extends PredicateHelper { self: Suite =>
         Alias(a.child, a.name)(exprId = ExprId(0))
       case ae: AggregateExpression =>
         ae.copy(resultId = ExprId(0))
+      case lv: NamedLambdaVariable =>
+        lv.copy(exprId = ExprId(0), value = null)
     }
   }
 

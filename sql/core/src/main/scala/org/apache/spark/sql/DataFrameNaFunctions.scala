@@ -494,6 +494,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
         case (NumericType, dt) => dt.isInstanceOf[NumericType]
         case (StringType, dt) => dt == StringType
         case (BooleanType, dt) => dt == BooleanType
+        case _ =>
+          throw new IllegalArgumentException(s"$targetType is not matched at fillValue")
       }
       // Only fill if the column is part of the cols list.
       if (typeMatches && cols.exists(col => columnEquals(f.name, col))) {

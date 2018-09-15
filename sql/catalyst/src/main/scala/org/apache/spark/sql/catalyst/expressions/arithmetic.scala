@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.TypeUtils
@@ -514,7 +514,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
       > SELECT _FUNC_(10, 9, 2, 4, 3);
        2
   """)
-case class Least(children: Seq[Expression]) extends Expression {
+case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -525,16 +525,14 @@ case class Least(children: Seq[Expression]) extends Expression {
     if (children.length <= 1) {
       TypeCheckResult.TypeCheckFailure(
         s"input to function $prettyName requires at least two arguments")
-    } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
+    } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
-          s" got LEAST(${children.map(_.dataType.simpleString).mkString(", ")}).")
+          s" got LEAST(${children.map(_.dataType.catalogString).mkString(", ")}).")
     } else {
       TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
     }
   }
-
-  override def dataType: DataType = children.head.dataType
 
   override def eval(input: InternalRow): Any = {
     children.foldLeft[Any](null)((r, c) => {
@@ -589,7 +587,7 @@ case class Least(children: Seq[Expression]) extends Expression {
       > SELECT _FUNC_(10, 9, 2, 4, 3);
        10
   """)
-case class Greatest(children: Seq[Expression]) extends Expression {
+case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -600,16 +598,14 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     if (children.length <= 1) {
       TypeCheckResult.TypeCheckFailure(
         s"input to function $prettyName requires at least two arguments")
-    } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
+    } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
-          s" got GREATEST(${children.map(_.dataType.simpleString).mkString(", ")}).")
+          s" got GREATEST(${children.map(_.dataType.catalogString).mkString(", ")}).")
     } else {
       TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
     }
   }
-
-  override def dataType: DataType = children.head.dataType
 
   override def eval(input: InternalRow): Any = {
     children.foldLeft[Any](null)((r, c) => {

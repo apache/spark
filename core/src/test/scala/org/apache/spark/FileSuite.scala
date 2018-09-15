@@ -19,10 +19,12 @@ package org.apache.spark
 
 import java.io._
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import java.util.zip.GZIPOutputStream
 
 import scala.io.Source
 
+import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io._
@@ -296,6 +298,25 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     assert(copyArr.length == numOfCopies)
     for (i <- copyArr.indices) {
       assert(copyArr(i).toArray === testOutput)
+    }
+  }
+
+  test("SPARK-22357 test binaryFiles minPartitions") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local")
+      .set("spark.files.openCostInBytes", "0")
+      .set("spark.default.parallelism", "1"))
+
+    val tempDir = Utils.createTempDir()
+    val tempDirPath = tempDir.getAbsolutePath
+
+    for (i <- 0 until 8) {
+      val tempFile = new File(tempDir, s"part-0000$i")
+      Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", tempFile,
+        StandardCharsets.UTF_8)
+    }
+
+    for (p <- Seq(1, 2, 8)) {
+      assert(sc.binaryFiles(tempDirPath, minPartitions = p).getNumPartitions === p)
     }
   }
 

@@ -51,6 +51,14 @@ private[mesos] class MesosClusterDispatcher(
     conf: SparkConf)
   extends Logging {
 
+  {
+    // This doesn't support authentication because the RestSubmissionServer doesn't support it.
+    val authKey = SecurityManager.SPARK_AUTH_SECRET_CONF
+    require(conf.getOption(authKey).isEmpty,
+      s"The MesosClusterDispatcher does not support authentication via ${authKey}.  It is not " +
+        s"currently possible to run jobs in cluster mode with authentication on.")
+  }
+
   private val publicAddress = Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(args.host)
   private val recoveryMode = conf.get(RECOVERY_MODE).toUpperCase()
   logInfo("Recovery mode in Mesos dispatcher set to: " + recoveryMode)

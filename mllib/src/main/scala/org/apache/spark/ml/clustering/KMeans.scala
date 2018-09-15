@@ -28,6 +28,7 @@ import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
@@ -145,8 +146,12 @@ class KMeansModel private[ml] (
   /**
    * Return the K-means cost (sum of squared distances of points to their nearest center) for this
    * model on the given data.
+   *
+   * @deprecated This method is deprecated and will be removed in 3.0.0. Use ClusteringEvaluator
+   *             instead. You can also get the cost on the training dataset in the summary.
    */
-  // TODO: Replace the temp fix when we have proper evaluators defined for clustering.
+  @deprecated("This method is deprecated and will be removed in 3.0.0. Use ClusteringEvaluator " +
+    "instead. You can also get the cost on the training dataset in the summary.", "2.4.0")
   @Since("2.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
     SchemaUtils.validateVectorCompatibleColumn(dataset.schema, getFeaturesCol)
@@ -332,7 +337,7 @@ class KMeans @Since("1.5.0") (
   def setSeed(value: Long): this.type = set(seed, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): KMeansModel = {
+  override def fit(dataset: Dataset[_]): KMeansModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
@@ -342,8 +347,9 @@ class KMeans @Since("1.5.0") (
       instances.persist(StorageLevel.MEMORY_AND_DISK)
     }
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, distanceMeasure,
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, featuresCol, predictionCol, k, initMode, initSteps, distanceMeasure,
       maxIter, seed, tol)
     val algo = new MLlibKMeans()
       .setK($(k))
@@ -356,11 +362,15 @@ class KMeans @Since("1.5.0") (
     val parentModel = algo.run(instances, Option(instr))
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(
-      model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
+      model.transform(dataset),
+      $(predictionCol),
+      $(featuresCol),
+      $(k),
+      parentModel.numIter,
+      parentModel.trainingCost)
 
     model.setSummary(Some(summary))
     instr.logNamedValue("clusterSizes", summary.clusterSizes)
-    instr.logSuccess(model)
     if (handlePersistence) {
       instances.unpersist()
     }
@@ -388,6 +398,9 @@ object KMeans extends DefaultParamsReadable[KMeans] {
  * @param predictionCol  Name for column of predicted clusters in `predictions`.
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
+ * @param numIter  Number of iterations.
+ * @param trainingCost K-means cost (sum of squared distances to the nearest centroid for all
+ *                     points in the training dataset). This is equivalent to sklearn's inertia.
  */
 @Since("2.0.0")
 @Experimental
@@ -395,4 +408,7 @@ class KMeansSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,
     featuresCol: String,
-    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k)
+    k: Int,
+    numIter: Int,
+    @Since("2.4.0") val trainingCost: Double)
+  extends ClusteringSummary(predictions, predictionCol, featuresCol, k, numIter)

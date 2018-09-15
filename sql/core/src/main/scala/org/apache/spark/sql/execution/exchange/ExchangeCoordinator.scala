@@ -83,7 +83,6 @@ import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan}
  *  - post-shuffle partition 3: pre-shuffle partition 3 and 4 (size 50 MB)
  */
 class ExchangeCoordinator(
-    numExchanges: Int,
     advisoryTargetPostShuffleInputSize: Long,
     minNumPostShufflePartitions: Option[Int] = None)
   extends Logging {
@@ -91,8 +90,14 @@ class ExchangeCoordinator(
   // The registered Exchange operators.
   private[this] val exchanges = ArrayBuffer[ShuffleExchangeExec]()
 
+  // `lazy val` is used here so that we could notice the wrong use of this class, e.g., all the
+  // exchanges should be registered before `postShuffleRDD` called first time. If a new exchange is
+  // registered after the `postShuffleRDD` call, `assert(exchanges.length == numExchanges)` fails
+  // in `doEstimationIfNecessary`.
+  private[this] lazy val numExchanges = exchanges.size
+
   // This map is used to lookup the post-shuffle ShuffledRowRDD for an Exchange operator.
-  private[this] val postShuffleRDDs: JMap[ShuffleExchangeExec, ShuffledRowRDD] =
+  private[this] lazy val postShuffleRDDs: JMap[ShuffleExchangeExec, ShuffledRowRDD] =
     new JHashMap[ShuffleExchangeExec, ShuffledRowRDD](numExchanges)
 
   // A boolean that indicates if this coordinator has made decision on how to shuffle data.
@@ -117,10 +122,6 @@ class ExchangeCoordinator(
    */
   def estimatePartitionStartIndices(
       mapOutputStatistics: Array[MapOutputStatistics]): Array[Int] = {
-    // If we have mapOutputStatistics.length < numExchange, it is because we do not submit
-    // a stage when the number of partitions of this dependency is 0.
-    assert(mapOutputStatistics.length <= numExchanges)
-
     // If minNumPostShufflePartitions is defined, it is possible that we need to use a
     // value less than advisoryTargetPostShuffleInputSize as the target input size of
     // a post shuffle task.
@@ -227,6 +228,10 @@ class ExchangeCoordinator(
         mapOutputStatistics(j) = submittedStageFutures(j).get()
         j += 1
       }
+
+      // If we have mapOutputStatistics.length < numExchange, it is because we do not submit
+      // a stage when the number of partitions of this dependency is 0.
+      assert(mapOutputStatistics.length <= numExchanges)
 
       // Now, we estimate partitionStartIndices. partitionStartIndices.length will be the
       // number of post-shuffle partitions.

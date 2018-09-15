@@ -264,3 +264,11 @@ within it for the various settings. For example:
 A full example is also available in `conf/fairscheduler.xml.template`. Note that any pools not
 configured in the XML file will simply get default values for all settings (scheduling mode FIFO,
 weight 1, and minShare 0).
+
+## Scheduling using JDBC Connections
+To set a [Fair Scheduler](job-scheduling.html#fair-scheduler-pools) pool for a JDBC client session,
+users can set the `spark.sql.thriftserver.scheduler.pool` variable:
+
+{% highlight SQL %}
+SET spark.sql.thriftserver.scheduler.pool=accounting;
+{% endhighlight %}

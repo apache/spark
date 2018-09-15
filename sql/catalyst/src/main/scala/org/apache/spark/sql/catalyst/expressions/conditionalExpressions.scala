@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
@@ -33,7 +33,12 @@ import org.apache.spark.sql.types._
   """)
 // scalastyle:on line.size.limit
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
-  extends Expression {
+  extends ComplexTypeMergingExpression {
+
+  @transient
+  override lazy val inputTypesForMerging: Seq[DataType] = {
+    Seq(trueValue.dataType, falseValue.dataType)
+  }
 
   override def children: Seq[Expression] = predicate :: trueValue :: falseValue :: Nil
   override def nullable: Boolean = trueValue.nullable || falseValue.nullable
@@ -42,16 +47,14 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     if (predicate.dataType != BooleanType) {
       TypeCheckResult.TypeCheckFailure(
         "type of predicate expression in If should be boolean, " +
-          s"not ${predicate.dataType.simpleString}")
-    } else if (!trueValue.dataType.sameType(falseValue.dataType)) {
+          s"not ${predicate.dataType.catalogString}")
+    } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
       TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
-        s"(${trueValue.dataType.simpleString} and ${falseValue.dataType.simpleString}).")
+        s"(${trueValue.dataType.catalogString} and ${falseValue.dataType.catalogString}).")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
   }
-
-  override def dataType: DataType = trueValue.dataType
 
   override def eval(input: InternalRow): Any = {
     if (java.lang.Boolean.TRUE.equals(predicate.eval(input))) {
@@ -118,18 +121,15 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 case class CaseWhen(
     branches: Seq[(Expression, Expression)],
     elseValue: Option[Expression] = None)
-  extends Expression with Serializable {
+  extends ComplexTypeMergingExpression with Serializable {
 
   override def children: Seq[Expression] = branches.flatMap(b => b._1 :: b._2 :: Nil) ++ elseValue
 
   // both then and else expressions should be considered.
-  def valueTypes: Seq[DataType] = branches.map(_._2.dataType) ++ elseValue.map(_.dataType)
-
-  def valueTypesEqual: Boolean = valueTypes.size <= 1 || valueTypes.sliding(2, 1).forall {
-    case Seq(dt1, dt2) => dt1.sameType(dt2)
+  @transient
+  override lazy val inputTypesForMerging: Seq[DataType] = {
+    branches.map(_._2.dataType) ++ elseValue.map(_.dataType)
   }
-
-  override def dataType: DataType = branches.head._2.dataType
 
   override def nullable: Boolean = {
     // Result is nullable if any of the branch is nullable, or if the else value is nullable
@@ -137,8 +137,8 @@ case class CaseWhen(
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    // Make sure all branch conditions are boolean types.
-    if (valueTypesEqual) {
+    if (TypeCoercion.haveSameType(inputTypesForMerging)) {
+      // Make sure all branch conditions are boolean types.
       if (branches.forall(_._1.dataType == BooleanType)) {
         TypeCheckResult.TypeCheckSuccess
       } else {
@@ -294,7 +294,7 @@ object CaseWhen {
       case cond :: value :: Nil => Some((cond, value))
       case value :: Nil => None
     }.toArray.toSeq  // force materialization to make the seq serializable
-    val elseValue = if (branches.size % 2 == 1) Some(branches.last) else None
+    val elseValue = if (branches.size % 2 != 0) Some(branches.last) else None
     CaseWhen(cases, elseValue)
   }
 }
@@ -309,7 +309,7 @@ object CaseKeyWhen {
       case Seq(cond, value) => Some((EqualTo(key, cond), value))
       case Seq(value) => None
     }.toArray.toSeq  // force materialization to make the seq serializable
-    val elseValue = if (branches.size % 2 == 1) Some(branches.last) else None
+    val elseValue = if (branches.size % 2 != 0) Some(branches.last) else None
     CaseWhen(cases, elseValue)
   }
 }

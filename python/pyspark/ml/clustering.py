@@ -16,6 +16,7 @@
 #
 
 import sys
+import warnings
 
 from pyspark import since, keyword_only
 from pyspark.ml.util import *
@@ -86,6 +87,14 @@ class ClusteringSummary(JavaWrapper):
         Size of (number of data points in) each cluster.
         """
         return self._call_java("clusterSizes")
+
+    @property
+    @since("2.4.0")
+    def numIter(self):
+        """
+        Number of iterations.
+        """
+        return self._call_java("numIter")
 
 
 class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
@@ -303,7 +312,15 @@ class KMeansSummary(ClusteringSummary):
 
     .. versionadded:: 2.1.0
     """
-    pass
+
+    @property
+    @since("2.4.0")
+    def trainingCost(self):
+        """
+        K-means cost (sum of squared distances to the nearest centroid for all points in the
+        training dataset). This is equivalent to sklearn's inertia.
+        """
+        return self._call_java("trainingCost")
 
 
 class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
@@ -323,7 +340,13 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         Return the K-means cost (sum of squared distances of points to their nearest center)
         for this model on the given data.
+
+        ..note:: Deprecated in 2.4.0. It will be removed in 3.0.0. Use ClusteringEvaluator instead.
+           You can also get the cost on the training dataset in the summary.
         """
+        warnings.warn("Deprecated in 2.4.0. It will be removed in 3.0.0. Use ClusteringEvaluator "
+                      "instead. You can also get the cost on the training dataset in the summary.",
+                      DeprecationWarning)
         return self._call_java("computeCost", dataset)
 
     @property
@@ -379,6 +402,8 @@ class KMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol
     2
     >>> summary.clusterSizes
     [2, 2]
+    >>> summary.trainingCost
+    2.000...
     >>> kmeans_path = temp_path + "/kmeans"
     >>> kmeans.save(kmeans_path)
     >>> kmeans2 = KMeans.load(kmeans_path)
@@ -1010,7 +1035,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     def setOptimizer(self, value):
         """
         Sets the value of :py:attr:`optimizer`.
-        Currenlty only support 'em' and 'online'.
+        Currently only support 'em' and 'online'.
 
         >>> algo = LDA().setOptimizer("em")
         >>> algo.getOptimizer()
@@ -1177,21 +1202,21 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
     .. note:: Experimental
 
     Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
-    <a href=http://www.icml2010.org/papers/387.pdf>Lin and Cohen</a>. From the abstract:
+    `Lin and Cohen <http://www.icml2010.org/papers/387.pdf>`_. From the abstract:
     PIC finds a very low-dimensional embedding of a dataset using truncated power
     iteration on a normalized pair-wise similarity matrix of the data.
 
     This class is not yet an Estimator/Transformer, use :py:func:`assignClusters` method
     to run the PowerIterationClustering algorithm.
 
-    .. seealso:: `Wikipedia on Spectral clustering \
-    <http://en.wikipedia.org/wiki/Spectral_clustering>`_
+    .. seealso:: `Wikipedia on Spectral clustering
+        <http://en.wikipedia.org/wiki/Spectral_clustering>`_
 
-   >>> data = [(1, 0, 0.5), \
-               (2, 0, 0.5), (2, 1, 0.7), \
-               (3, 0, 0.5), (3, 1, 0.7), (3, 2, 0.9), \
-               (4, 0, 0.5), (4, 1, 0.7), (4, 2, 0.9), (4, 3, 1.1), \
-               (5, 0, 0.5), (5, 1, 0.7), (5, 2, 0.9), (5, 3, 1.1), (5, 4, 1.3)]
+    >>> data = [(1, 0, 0.5),
+    ...         (2, 0, 0.5), (2, 1, 0.7),
+    ...         (3, 0, 0.5), (3, 1, 0.7), (3, 2, 0.9),
+    ...         (4, 0, 0.5), (4, 1, 0.7), (4, 2, 0.9), (4, 3, 1.1),
+    ...         (5, 0, 0.5), (5, 1, 0.7), (5, 2, 0.9), (5, 3, 1.1), (5, 4, 1.3)]
     >>> df = spark.createDataFrame(data).toDF("src", "dst", "weight")
     >>> pic = PowerIterationClustering(k=2, maxIter=40, weightCol="weight")
     >>> assignments = pic.assignClusters(df)
@@ -1345,8 +1370,14 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
 
 if __name__ == "__main__":
     import doctest
+    import numpy
     import pyspark.ml.clustering
     from pyspark.sql import SparkSession
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = pyspark.ml.clustering.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
