@@ -70,8 +70,8 @@ class QueryExecutionSuite extends SharedSQLContext {
         "Range (0, 10, step=1, splits=Some(2))",
         "== Optimized Logical Plan ==",
         "Range (0, 10, step=1, splits=Some(2))",
-        "== Physical Plan ==", "WholeStageCodegen",
-        "+- Range (0, 10, step=1, splits=2)"))
+        "== Physical Plan ==",
+        "*(1) Range (0, 10, step=1, splits=2)"))
     }
   }
 }
