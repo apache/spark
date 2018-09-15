@@ -65,6 +65,7 @@ class QueryExecutionSuite extends SharedSQLContext {
         "== Parsed Logical Plan ==",
         "Range (0, 10, step=1, splits=Some(2))",
         "== Analyzed Logical Plan ==",
+        "id: bigint",
         "Range (0, 10, step=1, splits=Some(2))",
         "== Optimized Logical Plan ==",
         "Range (0, 10, step=1, splits=Some(2))",
