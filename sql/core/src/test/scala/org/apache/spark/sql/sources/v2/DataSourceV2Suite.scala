@@ -325,7 +325,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
       val df = spark
         .read
         .option(optionName, false)
-        .format(classOf[DataSourceWithSessionConfV2].getName).load()
+        .format(classOf[DataSourceV2WithSessionConfigs].getName).load()
       val options = df.queryExecution.optimizedPlan.collectFirst {
         case d: DataSourceV2Relation => d.options
       }
@@ -400,7 +400,7 @@ class SimpleDataSourceV2 extends DataSourceV2 with BatchReadSupportProvider {
   }
 }
 
-class DataSourceWithSessionConfV2 extends SimpleDataSourceV2 with SessionConfigSupport {
+class DataSourceV2WithSessionConfigs extends SimpleDataSourceV2 with SessionConfigSupport {
   def keyPrefix(): String = "test"
 }
 
