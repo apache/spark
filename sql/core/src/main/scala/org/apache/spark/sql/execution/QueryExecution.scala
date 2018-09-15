@@ -272,6 +272,8 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
         dos.writeBytes("== Physical Plan ==\n")
         executedPlan.treeString(dos)
         dos.flush()
+        dos.writeBytes("== Whole Stage Codegen ==\n")
+        org.apache.spark.sql.execution.debug.codegen(dos, executedPlan)
       } finally {
         dos.close()
       }

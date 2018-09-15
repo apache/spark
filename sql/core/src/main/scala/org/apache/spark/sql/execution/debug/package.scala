@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.DataOutputStream
 import java.util.Collections
 
 import scala.collection.JavaConverters._
@@ -79,6 +80,17 @@ package object debug {
       output += s"${code}\n"
     }
     output
+  }
+
+  def codegen(dos: DataOutputStream, plan: SparkPlan): Unit = {
+    val codegenSeq = codegenStringSeq(plan)
+    dos.writeBytes(s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n")
+    for (((subtree, code), i) <- codegenSeq.zipWithIndex) {
+      dos.writeBytes(s"== Subtree ${i + 1} / ${codegenSeq.size} ==\n")
+      dos.writeBytes(subtree)
+      dos.writeBytes("\nGenerated code:\n")
+      dos.writeBytes(s"${code}\n")
+    }
   }
 
   /**

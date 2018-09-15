@@ -61,7 +61,8 @@ class QueryExecutionSuite extends SharedSQLContext {
       val df = spark.range(0, 10)
       df.queryExecution.debug.toFile(path)
 
-      assert(Source.fromFile(path).getLines.toList == List(
+      assert(Source.fromFile(path).getLines.toList
+        .takeWhile(_ != "== Whole Stage Codegen ==") == List(
         "== Parsed Logical Plan ==",
         "Range (0, 10, step=1, splits=Some(2))",
         "== Analyzed Logical Plan ==",
