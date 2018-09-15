@@ -53,7 +53,8 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
   private val numRows = 1024 * 1024 * 15
   private val width = 5
   private val mid = numRows / 2
-  private val blockSize = 1048576
+  // For Parquet/ORC, we will use the same value for block size and compression size
+  private val blockSize = org.apache.parquet.hadoop.ParquetWriter.DEFAULT_PAGE_SIZE
 
   private val spark = SparkSession.builder().config(conf).getOrCreate()
 
@@ -130,16 +131,16 @@ class FilterPushdownBenchmark extends SparkFunSuite with BenchmarkBeforeAndAfter
     }
     val df = spark.range(numRows).selectExpr(selectExpr: _*).sort("value")
 
-    saveAsTable(df, dir)
+    saveAsTable(df, dir, true)
   }
 
-  private def saveAsTable(df: DataFrame, dir: File): Unit = {
+  private def saveAsTable(df: DataFrame, dir: File, useDictionary: Boolean = false): Unit = {
     val orcPath = dir.getCanonicalPath + "/orc"
     val parquetPath = dir.getCanonicalPath + "/parquet"
 
-    // To always turn on dictionary encoding, we set 1.0 at the threshold (the default is 0.8)
     df.write.mode("overwrite")
-      .option("orc.dictionary.key.threshold", 1.0)
+      .option("orc.dictionary.key.threshold", if (useDictionary) 1.0 else 0.8)
+      .option("orc.compress.size", blockSize)
       .option("orc.stripe.size", blockSize).orc(orcPath)
     spark.read.orc(orcPath).createOrReplaceTempView("orcTable")
 
