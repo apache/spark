@@ -259,11 +259,19 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     def toFile(path: String): Unit = {
       val filePath = new Path(path)
       val fs = FileSystem.get(filePath.toUri, sparkSession.sparkContext.hadoopConfiguration)
-      val fos = fs.create(filePath)
+      val dataStream = fs.create(filePath)
       try {
-        fos.writeBytes("Hello, World!")
+        dataStream.writeBytes("== Parsed Logical Plan ==\n")
+        logical.treeString(dataStream)
+        dataStream.writeBytes("== Analyzed Logical Plan ==\n")
+        analyzed.treeString(dataStream)
+        dataStream.writeBytes("== Optimized Logical Plan ==\n")
+        optimizedPlan.treeString(dataStream)
+        dataStream.writeBytes("== Physical Plan ==\n")
+        executedPlan.treeString(dataStream)
+        dataStream.flush()
       } finally {
-        fos.close()
+        dataStream.close()
       }
     }
   }

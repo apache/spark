@@ -62,7 +62,14 @@ class QueryExecutionSuite extends SharedSQLContext {
       df.queryExecution.debug.toFile(path)
 
       assert(Source.fromFile(path).getLines.toList == List(
-        "Hello, World!"))
+        "== Parsed Logical Plan ==",
+        "Range (0, 10, step=1, splits=Some(2))",
+        "== Analyzed Logical Plan ==",
+        "Range (0, 10, step=1, splits=Some(2))",
+        "== Optimized Logical Plan ==",
+        "Range (0, 10, step=1, splits=Some(2))",
+        "== Physical Plan ==", "WholeStageCodegen",
+        "+- Range (0, 10, step=1, splits=2)"))
     }
   }
 }

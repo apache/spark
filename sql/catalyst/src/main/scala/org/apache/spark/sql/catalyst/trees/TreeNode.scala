@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.trees
 
+import java.io.DataOutputStream
 import java.util.UUID
 
 import scala.collection.Map
@@ -472,6 +473,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     generateTreeString(0, Nil, new StringBuilder, verbose = verbose, addSuffix = addSuffix).toString
   }
 
+  def treeString(os: DataOutputStream): Unit = {
+    treeToOutputStream(0, Nil, os, verbose = true, addSuffix = false)
+  }
+
   /**
    * Returns a string representation of the nodes in this tree, where each operator is numbered.
    * The numbers can be used with [[TreeNode.apply]] to easily access specific subtrees.
@@ -570,6 +575,47 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
 
     builder
+  }
+
+  def treeToOutputStream(
+      depth: Int,
+      lastChildren: Seq[Boolean],
+      dos: DataOutputStream,
+      verbose: Boolean,
+      prefix: String = "",
+      addSuffix: Boolean = false): Unit = {
+
+    if (depth > 0) {
+      lastChildren.init.foreach { isLast =>
+        dos.writeBytes(if (isLast) "   " else ":  ")
+      }
+      dos.writeBytes(if (lastChildren.last) "+- " else ":- ")
+    }
+
+    val str = if (verbose) {
+      if (addSuffix) verboseStringWithSuffix else verboseString
+    } else {
+      simpleString
+    }
+    dos.writeBytes(prefix)
+    dos.writeBytes(str)
+    dos.writeBytes("\n")
+
+    if (innerChildren.nonEmpty) {
+      innerChildren.init.foreach(_.treeToOutputStream(
+        depth + 2, lastChildren :+ children.isEmpty :+ false, dos, verbose,
+        addSuffix = addSuffix))
+      innerChildren.last.treeToOutputStream(
+        depth + 2, lastChildren :+ children.isEmpty :+ true, dos, verbose,
+        addSuffix = addSuffix)
+    }
+
+    if (children.nonEmpty) {
+      children.init.foreach(_.treeToOutputStream(
+        depth + 1, lastChildren :+ false, dos, verbose, prefix, addSuffix))
+      children.last.treeToOutputStream(
+        depth + 1, lastChildren :+ true, dos, verbose, prefix, addSuffix)
+    }
   }
 
   /**
