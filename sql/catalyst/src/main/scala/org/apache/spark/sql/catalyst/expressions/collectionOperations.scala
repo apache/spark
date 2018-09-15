@@ -131,7 +131,7 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
-       [1, 2]
+       [1,2]
   """)
 case class MapKeys(child: Expression)
   extends UnaryExpression with ExpectsInputTypes {
@@ -320,7 +320,7 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
-       ["a", "b"]
+       ["a","b"]
   """)
 case class MapValues(child: Expression)
   extends UnaryExpression with ExpectsInputTypes {
@@ -348,7 +348,7 @@ case class MapValues(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
-       [[1, "a"], [2, "b"]]
+       [(1,"a"),(2,"b")]
   """,
   since = "2.4.0")
 case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInputTypes {
@@ -516,7 +516,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(2, 'c', 3, 'd'));
-       [1 -> "a", 2 -> "b", 2 -> "c", 3 -> "d"]
+       [[1 -> "a"], [2 -> "b"], [2 -> "c"], [3 -> "d"]]
   """, since = "2.4.0")
 case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
@@ -718,7 +718,7 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
   examples = """
     Examples:
       > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
-       [1 -> "a", 2 -> "b"]
+       {1:"a",2:"b"}
   """,
   since = "2.4.0")
 case class MapFromEntries(child: Expression) extends UnaryExpression {
@@ -1071,7 +1071,7 @@ object ArraySortLike {
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'), true);
-       [null, "a", "b", "c", "d"]
+       [null,"a","b","c","d"]
   """)
 // scalastyle:on line.size.limit
 case class SortArray(base: Expression, ascendingOrder: Expression)
@@ -1129,7 +1129,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
-       ["a", "b", "c", "d", null]
+       ["a","b","c","d",null]
   """,
   since = "2.4.0")
 // scalastyle:on line.size.limit
@@ -1254,7 +1254,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
-       "LQS krapS"
+       LQS krapS
       > SELECT _FUNC_(array(2, 1, 4, 3));
        [3, 4, 1, 2]
   """,
@@ -1634,9 +1634,9 @@ case class ArraysOverlap(left: Expression, right: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, 4), 2, 2);
-       [2, 3]
+       [2,3]
       > SELECT _FUNC_(array(1, 2, 3, 4), -2, 2);
-       [3, 4]
+       [3,4]
   """, since = "2.4.0")
 // scalastyle:on line.size.limit
 case class Slice(x: Expression, start: Expression, length: Expression)
@@ -1745,11 +1745,11 @@ case class Slice(x: Expression, start: Expression, length: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(array('hello', 'world'), ' ');
-       "hello world"
+       hello world
       > SELECT _FUNC_(array('hello', null ,'world'), ' ');
-       "hello world"
+       hello world
       > SELECT _FUNC_(array('hello', null ,'world'), ' ', ',');
-       "hello , world"
+       hello , world
   """, since = "2.4.0")
 case class ArrayJoin(
     array: Expression,
@@ -2236,11 +2236,10 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
   examples = """
     Examples:
       > SELECT _FUNC_('Spark', 'SQL');
-       "SparkSQL"
+       SparkSQL
       > SELECT _FUNC_(array(1, 2, 3), array(4, 5), array(6));
-       [1, 2, 3, 4, 5, 6]
-  """,
-  note = "Concat logic for arrays is available since 2.4.0.")
+ |     [1,2,3,4,5,6]
+  """)
 case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   private def allowedTypes: Seq[AbstractDataType] = Seq(StringType, BinaryType, ArrayType)
@@ -2428,8 +2427,8 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   usage = "_FUNC_(arrayOfArrays) - Transforms an array of arrays into a single array.",
   examples = """
     Examples:
-      > SELECT _FUNC_(array(array(1, 2), array(3, 4)));
-       [1, 2, 3, 4]
+      > SELECT _FUNC_(array(array(1, 2), array(3, 4));
+       [1,2,3,4]
   """,
   since = "2.4.0")
 case class Flatten(child: Expression) extends UnaryExpression {
@@ -2935,7 +2934,7 @@ object Sequence {
   examples = """
     Examples:
       > SELECT _FUNC_('123', 2);
-       ["123", "123"]
+       ['123', '123']
   """,
   since = "2.4.0")
 case class ArrayRepeat(left: Expression, right: Expression)
@@ -3056,7 +3055,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, null, 3), 3);
-       [1, 2, null]
+       [1,2,null]
   """, since = "2.4.0")
 case class ArrayRemove(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -3246,7 +3245,7 @@ trait ArraySetLike {
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, null, 3));
-       [1, 2, 3, null]
+       [1,2,3,null]
   """, since = "2.4.0")
 case class ArrayDistinct(child: Expression)
   extends UnaryExpression with ArraySetLike with ExpectsInputTypes {
@@ -3422,7 +3421,7 @@ object ArrayBinaryLike {
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
-       [1, 2, 3, 5]
+       array(1, 2, 3, 5)
   """,
   since = "2.4.0")
 case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLike
@@ -3633,7 +3632,7 @@ object ArrayUnion {
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
-       [1, 3]
+       array(1, 3)
   """,
   since = "2.4.0")
 case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBinaryLike
@@ -3874,7 +3873,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
-       [2]
+       array(2)
   """,
   since = "2.4.0")
 case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryLike
