@@ -319,13 +319,13 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-25425: extra options override sessions options") {
-    val prefix = "spark.datasource.test."
+    val prefix = "spark.datasource.userDefinedDataSource."
     val optionName = "optionA"
     withSQLConf(prefix + optionName -> "true") {
       val df = spark
         .read
         .option(optionName, false)
-        .format(classOf[DataSourceV2WithSessionConfigs].getName).load()
+        .format(classOf[DataSourceV2WithSessionConfig].getName).load()
       val options = df.queryExecution.optimizedPlan.collectFirst {
         case d: DataSourceV2Relation => d.options
       }
@@ -398,10 +398,6 @@ class SimpleDataSourceV2 extends DataSourceV2 with BatchReadSupportProvider {
   override def createBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
     new ReadSupport
   }
-}
-
-class DataSourceV2WithSessionConfigs extends SimpleDataSourceV2 with SessionConfigSupport {
-  def keyPrefix(): String = "test"
 }
 
 class AdvancedDataSourceV2 extends DataSourceV2 with BatchReadSupportProvider {
