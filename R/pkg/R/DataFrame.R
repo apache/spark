@@ -503,7 +503,6 @@ setMethod("createOrReplaceTempView",
 #' @param x A SparkDataFrame
 #' @param tableName A character vector containing the name of the table
 #'
-#' @family SparkDataFrame functions
 #' @seealso \link{createOrReplaceTempView}
 #' @rdname registerTempTable-deprecated
 #' @name registerTempTable
