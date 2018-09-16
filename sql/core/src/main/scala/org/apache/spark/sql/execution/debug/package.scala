@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{ByteArrayOutputStream, OutputStream}
+import java.io._
 import java.util.Collections
 
 import scala.collection.JavaConverters._
@@ -70,19 +70,23 @@ package object debug {
    * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
    */
   def codegenString(plan: SparkPlan): String = {
-    val bos = new ByteArrayOutputStream()
-    codegenToOutputStream(bos, plan)
-    bos.toString
+    val baos = new ByteArrayOutputStream()
+    val writer = new BufferedWriter(new OutputStreamWriter(baos))
+
+    writerCodegen(writer, plan)
+    writer.flush()
+
+    baos.toString
   }
 
-  def codegenToOutputStream(os: OutputStream, plan: SparkPlan): Unit = {
+  def writerCodegen(writer: Writer, plan: SparkPlan): Unit = {
     val codegenSeq = codegenStringSeq(plan)
-    os.write(s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n".getBytes)
+    writer.write(s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n")
     for (((subtree, code), i) <- codegenSeq.zipWithIndex) {
-      os.write(s"== Subtree ${i + 1} / ${codegenSeq.size} ==\n".getBytes())
-      os.write(subtree.getBytes)
-      os.write("\nGenerated code:\n".getBytes)
-      os.write(s"${code}\n".getBytes)
+      writer.write(s"== Subtree ${i + 1} / ${codegenSeq.size} ==\n")
+      writer.write(subtree)
+      writer.write("\nGenerated code:\n")
+      writer.write(s"${code}\n")
     }
   }
 

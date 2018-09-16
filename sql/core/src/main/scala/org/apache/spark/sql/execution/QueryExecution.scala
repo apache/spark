@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.{BufferedWriter, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
@@ -260,26 +261,26 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     def toFile(path: String): Unit = {
       val filePath = new Path(path)
       val fs = FileSystem.get(filePath.toUri, sparkSession.sessionState.newHadoopConf())
-      val dos = fs.create(filePath)
+      val writer = new BufferedWriter(new OutputStreamWriter(fs.create(filePath)))
       val maxFields = SparkEnv.get.conf.getInt(Utils.MAX_TO_STRING_FIELDS,
         Utils.DEFAULT_MAX_TO_STRING_FIELDS)
       try {
         SparkEnv.get.conf.set(Utils.MAX_TO_STRING_FIELDS, Int.MaxValue.toString)
-        dos.writeBytes("== Parsed Logical Plan ==\n")
-        logical.treeString(dos, verbose = true, addSuffix = false)
-        dos.writeBytes("== Analyzed Logical Plan ==\n")
-        analyzed.output.foreach(o => dos.writeBytes(s"${o.name}: ${o.dataType.simpleString}"))
-        dos.writeBytes("\n")
-        analyzed.treeString(dos, verbose = true, addSuffix = false)
-        dos.writeBytes("== Optimized Logical Plan ==\n")
-        optimizedPlan.treeString(dos, verbose = true, addSuffix = false)
-        dos.writeBytes("== Physical Plan ==\n")
-        executedPlan.treeString(dos, verbose = true, addSuffix = false)
-        dos.flush()
-        dos.writeBytes("== Whole Stage Codegen ==\n")
-        org.apache.spark.sql.execution.debug.codegenToOutputStream(dos, executedPlan)
+        writer.write("== Parsed Logical Plan ==\n")
+        logical.treeString(writer, verbose = true, addSuffix = false)
+        writer.write("== Analyzed Logical Plan ==\n")
+        analyzed.output.foreach(o => writer.write(s"${o.name}: ${o.dataType.simpleString}"))
+        writer.write("\n")
+        analyzed.treeString(writer, verbose = true, addSuffix = false)
+        writer.write("== Optimized Logical Plan ==\n")
+        optimizedPlan.treeString(writer, verbose = true, addSuffix = false)
+        writer.write("== Physical Plan ==\n")
+        executedPlan.treeString(writer, verbose = true, addSuffix = false)
+        writer.flush()
+        writer.write("== Whole Stage Codegen ==\n")
+        org.apache.spark.sql.execution.debug.writerCodegen(writer, executedPlan)
       } finally {
-        dos.close()
+        writer.close()
         SparkEnv.get.conf.set(Utils.MAX_TO_STRING_FIELDS, maxFields.toString)
       }
     }
