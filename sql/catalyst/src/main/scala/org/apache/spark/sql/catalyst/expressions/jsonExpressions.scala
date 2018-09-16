@@ -743,12 +743,29 @@ case class StructsToJson(
        array<struct<col:int>>
   """,
   since = "2.4.0")
-case class SchemaOfJson(child: Expression)
-  extends UnaryExpression with String2StringExpression with CodegenFallback {
+case class SchemaOfJson(
+    child: Expression,
+    options: Map[String, String],
+    timeZoneId: Option[String])
+  extends UnaryExpression with String2StringExpression with CodegenFallback
+    with TimeZoneAwareExpression {
 
-  private val jsonOptions = new JSONOptions(Map.empty, "UTC")
-  private val jsonFactory = new JsonFactory()
-  jsonOptions.setJacksonOptions(jsonFactory)
+  def this(child: Expression) = this(child, Map.empty[String, String], None)
+
+  def this(child: Expression, options: Expression) = this(
+      child = child,
+      options = JsonExprUtils.convertToMapData(options),
+      timeZoneId = None)
+
+  @transient
+  private lazy val jsonOptions = new JSONOptions(options, timeZoneId.get)
+
+  @transient
+  private lazy val jsonFactory = {
+    val factory = new JsonFactory()
+    jsonOptions.setJacksonOptions(factory)
+    factory
+  }
 
   override def convert(v: UTF8String): UTF8String = {
     val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, v)) { parser =>
@@ -758,13 +775,16 @@ case class SchemaOfJson(child: Expression)
 
     UTF8String.fromString(dt.catalogString)
   }
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
 }
 
 object JsonExprUtils {
 
   def evalSchemaExpr(exp: Expression): DataType = exp match {
     case Literal(s, StringType) => DataType.fromDDL(s.toString)
-    case e @ SchemaOfJson(_: Literal) =>
+    case e @ SchemaOfJson(_: Literal, _, _) =>
       val ddlSchema = e.eval().asInstanceOf[UTF8String]
       DataType.fromDDL(ddlSchema.toString)
     case e => throw new AnalysisException(
