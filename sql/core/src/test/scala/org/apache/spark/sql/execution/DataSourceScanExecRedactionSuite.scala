@@ -83,4 +83,20 @@ class DataSourceScanExecRedactionSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("FileSourceScanExec metadata") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      spark.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
+      val df = spark.read.parquet(basePath).filter("a = 1")
+
+      assert(isIncluded(df.queryExecution, "Format"))
+      assert(isIncluded(df.queryExecution, "ReadSchema"))
+      assert(isIncluded(df.queryExecution, "Batched"))
+      assert(isIncluded(df.queryExecution, "PartitionFilters"))
+      assert(isIncluded(df.queryExecution, "PushedFilters"))
+      assert(isIncluded(df.queryExecution, "DataFilters"))
+      assert(isIncluded(df.queryExecution, "Location"))
+    }
+  }
+
 }
