@@ -243,10 +243,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val ds = cls.newInstance()
       ds match {
         case ws: WriteSupport =>
-          val options = new DataSourceOptions((extraOptions ++
-            DataSourceV2Utils.extractSessionConfigs(
-              ds = ds.asInstanceOf[DataSourceV2],
-              conf = df.sparkSession.sessionState.conf)).asJava)
+          val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+            ds = ds.asInstanceOf[DataSourceV2],
+            conf = df.sparkSession.sessionState.conf)
+          val options = new DataSourceOptions((sessionOptions ++ extraOptions).asJava)
           // Using a timestamp and a random UUID to distinguish different writing jobs. This is good
           // enough as there won't be tons of writing jobs created at the same second.
           val jobId = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
