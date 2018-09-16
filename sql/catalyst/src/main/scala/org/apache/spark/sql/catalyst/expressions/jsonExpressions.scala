@@ -740,7 +740,9 @@ case class StructsToJson(
   examples = """
     Examples:
       > SELECT _FUNC_('[{"col":0}]');
-       array<struct<col:int>>
+       array<struct<col:bigint>>
+      > SELECT _FUNC_('[{"col":01}]', map('allowNumericLeadingZeros', 'true'));
+       array<struct<col:bigint>>
   """,
   since = "2.4.0")
 case class SchemaOfJson(
