@@ -1575,6 +1575,34 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
 
     checkAnswer(
+      OneRowRelation().selectExpr("array_remove(array(1, 2), 1.23D)"),
+      Seq(
+        Row(Seq(1.0, 2.0))
+      )
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_remove(array(1, 2), 1.0D)"),
+      Seq(
+        Row(Seq(2.0))
+      )
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_remove(array(1.0D, 2.0D), 2)"),
+      Seq(
+        Row(Seq(1.0))
+      )
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_remove(array(1.1D, 1.2D), 1)"),
+      Seq(
+        Row(Seq(1.1, 1.2))
+      )
+    )
+
+    checkAnswer(
       df.selectExpr("array_remove(a, 2)", "array_remove(b, \"a\")",
         "array_remove(c, \"\")"),
       Seq(
@@ -1583,10 +1611,26 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(null, null, null))
     )
 
-    val e = intercept[AnalysisException] {
+    val e1 = intercept[AnalysisException] {
       Seq(("a string element", "a")).toDF().selectExpr("array_remove(_1, _2)")
     }
-    assert(e.message.contains("argument 1 requires array type, however, '`_1`' is of string type"))
+    val errorMsg1 =
+      s"""
+         |Input to function array_remove should have been array followed by a
+         |value with same element type, but it's [string, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e1.message.contains(errorMsg1))
+
+    val e2 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("array_remove(array(1, 2), '1')")
+    }
+
+    val errorMsg2 =
+      s"""
+         |Input to function array_remove should have been array followed by a
+         |value with same element type, but it's [array<int>, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e2.message.contains(errorMsg2))
   }
 
   test("array_distinct functions") {
