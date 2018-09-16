@@ -259,7 +259,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
      */
     def toFile(path: String): Unit = {
       val filePath = new Path(path)
-      val fs = FileSystem.get(filePath.toUri, sparkSession.sparkContext.hadoopConfiguration)
+      val fs = FileSystem.get(filePath.toUri, sparkSession.sessionState.newHadoopConf())
       val dos = fs.create(filePath)
       val maxFields = SparkEnv.get.conf.getInt(Utils.MAX_TO_STRING_FIELDS,
         Utils.DEFAULT_MAX_TO_STRING_FIELDS)
