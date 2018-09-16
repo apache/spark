@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import com.univocity.parsers.csv.CsvParser
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.csv._
@@ -119,4 +121,35 @@ case class CsvToStructs(
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
 
   override def prettyName: String = "from_csv"
+}
+
+/**
+ * A function infers schema of CSV string.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(csv[, options]) - Returns schema in the DDL format of CSV string.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('1,abc');
+       struct<_c0:int,_c1:string>
+  """,
+  since = "3.0.0")
+case class SchemaOfCsv(child: Expression)
+  extends UnaryExpression with String2StringExpression with CodegenFallback {
+
+  override def convert(v: UTF8String): UTF8String = {
+    val parsedOptions = new CSVOptions(Map.empty, true, "UTC")
+    val parser = new CsvParser(parsedOptions.asParserSettings)
+    val row = parser.parseLine(v.toString)
+
+    if (row != null) {
+      val header = row.zipWithIndex.map { case (_, index) => s"_c$index" }
+      val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
+      val fieldTypes = CSVInferSchema.inferRowType(parsedOptions)(startType, row)
+      val st = StructType(CSVInferSchema.toStructFields(fieldTypes, header, parsedOptions))
+      UTF8String.fromString(st.catalogString)
+    } else {
+      null
+    }
+  }
 }
