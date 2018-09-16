@@ -677,6 +677,77 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     checkAnswer(selfJoin,
       sql("SELECT * FROM normal_parquet x CROSS JOIN normal_parquet y"))
   }
+
+  def checkConversion(df: DataFrame, converted: Boolean): Unit = {
+    val queryExecution = df.queryExecution
+    if (converted) {
+      queryExecution.analyzed.collectFirst {
+        case _: LogicalRelation =>
+      }.getOrElse {
+        fail(s"Expecting the query plan to convert parquet to data sources, " +
+          s"but got:\n$queryExecution")
+      }
+    } else {
+      queryExecution.analyzed.collectFirst {
+        case _: HiveTableRelation =>
+      }.getOrElse {
+        fail(s"Expecting no conversion from parquet to data sources, " +
+          s"but got:\n$queryExecution")
+      }
+    }
+  }
+
+  test("The behavior must be consistent to do the conversion") {
+    withTempDir { dir =>
+      val tableName = "hive_parquet_with_duplicated_fields"
+      withTable(tableName) {
+        val data = spark.range(10).selectExpr("id as a", "id * 2 as A")
+        var col_a: Array[Row] = null;
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          data.write.format("parquet").mode("overwrite")
+            .save(dir.getCanonicalPath)
+          col_a = data.select("a").collect()
+        }
+        sql(s"""
+          |CREATE TABLE $tableName (A LONG) STORED AS parquet
+          |LOCATION '${dir.getCanonicalPath}'
+          """.stripMargin)
+
+        // The hive parquet table always do case-insensitive field resolution.
+        // When there is ambiguity, it picks the first matched field.
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+            val df = sql(s"select A from $tableName")
+            checkConversion(df, false)
+            checkAnswer(df, col_a)
+          }
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+            val df = sql(s"select A from $tableName")
+            checkConversion(df, false)
+            checkAnswer(sql(s"select A from $tableName"), col_a)
+          }
+        }
+
+        // The behavior must be consistent to do the conversion.
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true") {
+          // If we can't keep behaviors consistent, we skip the conversion
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+            val df = sql(s"select A from $tableName")
+            checkConversion(df, false)
+            checkAnswer(df, col_a)
+          }
+          // When converting hive parquet table to parquet data source, we switch the duplicated
+          // fields resolution mode to ask parquet data source to pick the first matched field -
+          // the same behavior as hive parquet table - to keep behaviors consistent.
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+            val df = sql(s"select A from $tableName")
+            checkConversion(df, true)
+            checkAnswer(df, col_a)
+          }
+        }
+      }
+    }
+  }
 }
 
 /**

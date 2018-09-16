@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
@@ -1015,9 +1016,13 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       parquetSchema: String,
       catalystSchema: StructType,
       expectedSchema: String,
-      caseSensitive: Boolean = true): Unit = {
+      conf: Configuration = {
+        val conf = new Configuration()
+        conf.setBoolean(SQLConf.CASE_SENSITIVE.key, true)
+        conf
+      }): Unit = {
     testSchemaClipping(testName, parquetSchema, catalystSchema,
-      MessageTypeParser.parseMessageType(expectedSchema), caseSensitive)
+      MessageTypeParser.parseMessageType(expectedSchema), conf)
   }
 
   private def testSchemaClipping(
@@ -1025,10 +1030,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       parquetSchema: String,
       catalystSchema: StructType,
       expectedSchema: MessageType,
-      caseSensitive: Boolean): Unit = {
+      conf: Configuration): Unit = {
     test(s"Clipping - $testName") {
       val actual = ParquetReadSupport.clipParquetSchema(
-        MessageTypeParser.parseMessageType(parquetSchema), catalystSchema, caseSensitive)
+        MessageTypeParser.parseMessageType(parquetSchema), catalystSchema, conf)
 
       try {
         expectedSchema.checkContains(actual)
@@ -1390,7 +1395,11 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     catalystSchema = new StructType(),
 
     expectedSchema = ParquetSchemaConverter.EMPTY_MESSAGE,
-    caseSensitive = true)
+    conf = {
+      val conf = new Configuration()
+      conf.setBoolean(SQLConf.CASE_SENSITIVE.key, true)
+      conf
+    })
 
   testSchemaClipping(
     "disjoint field sets",
@@ -1572,9 +1581,13 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         |  optional int32 c;
         |}
       """.stripMargin,
-    caseSensitive = false)
+    conf = {
+      val conf = new Configuration()
+      conf.setBoolean(SQLConf.CASE_SENSITIVE.key, false)
+      conf
+    })
 
-    test("Clipping - case-insensitive resolution: more than one field is matched") {
+    test("Clipping - case-insensitive resolution with ambiguity: fail to resolve fields") {
       val parquetSchema =
         """message root {
           |  required group A {
@@ -1590,9 +1603,45 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           .add("a", nestedType, nullable = true)
           .add("c", IntegerType, nullable = true)
       }
+
       assertThrows[RuntimeException] {
+        val conf = new Configuration()
+        conf.setBoolean(SQLConf.CASE_SENSITIVE.key, false)
         ParquetReadSupport.clipParquetSchema(
-          MessageTypeParser.parseMessageType(parquetSchema), catalystSchema, caseSensitive = false)
+          MessageTypeParser.parseMessageType(parquetSchema), catalystSchema, conf)
       }
     }
+
+  testSchemaClipping(
+    "case-insensitive resolution with ambiguity: pick the first matched field",
+    parquetSchema =
+      """message root {
+        |  required group A {
+        |    optional int32 B;
+        |  }
+        |  optional int32 c;
+        |  optional int32 a;
+        |}
+      """.stripMargin,
+    catalystSchema = {
+      val nestedType = new StructType().add("b", IntegerType, nullable = true)
+      new StructType()
+        .add("a", nestedType, nullable = true)
+        .add("c", IntegerType, nullable = true)
+    },
+    expectedSchema =
+      """message root {
+        |  required group A {
+        |    optional int32 B;
+        |  }
+        |  optional int32 c;
+        |}
+      """.stripMargin,
+    conf = {
+      val conf = new Configuration()
+      conf.setBoolean(SQLConf.CASE_SENSITIVE.key, false)
+      conf.set(ParquetOptions.DUPLICATED_FIELDS_RESOLUTION_MODE,
+        ParquetDuplicatedFieldsResolutionMode.FIRST_MATCH.toString)
+      conf
+    })
 }

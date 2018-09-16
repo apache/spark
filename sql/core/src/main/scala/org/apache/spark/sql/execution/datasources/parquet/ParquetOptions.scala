@@ -69,11 +69,24 @@ class ParquetOptions(
     .get(MERGE_SCHEMA)
     .map(_.toBoolean)
     .getOrElse(sqlConf.isParquetSchemaMergingEnabled)
+
+  /**
+   * How to resolve duplicated field names. By default, parquet data source fails when hitting
+   * duplicated field names in case-insensitive mode. When converting hive parquet table to parquet
+   * data source, we need to ask parquet data source to pick the first matched field - the same
+   * behavior as hive parquet table - to keep behaviors consistent.
+   */
+  val duplicatedFieldsResolutionMode: String = {
+    parameters.getOrElse(DUPLICATED_FIELDS_RESOLUTION_MODE,
+      ParquetDuplicatedFieldsResolutionMode.FAIL.toString)
+  }
 }
 
 
 object ParquetOptions {
   val MERGE_SCHEMA = "mergeSchema"
+
+  val DUPLICATED_FIELDS_RESOLUTION_MODE = "duplicatedFieldsResolutionMode"
 
   // The parquet compression short names
   private val shortParquetCompressionCodecNames = Map(
@@ -89,4 +102,8 @@ object ParquetOptions {
   def getParquetCompressionCodecName(name: String): String = {
     shortParquetCompressionCodecNames(name).name()
   }
+}
+
+object ParquetDuplicatedFieldsResolutionMode extends Enumeration {
+  val FAIL, FIRST_MATCH = Value
 }
