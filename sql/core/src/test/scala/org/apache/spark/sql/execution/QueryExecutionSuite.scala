@@ -25,7 +25,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 class QueryExecutionSuite extends SharedSQLContext {
   test("dumping query execution info to a file") {
     withTempDir { dir =>
-      val path = dir.getCanonicalPath + s"/plans.txt"
+      val path = dir.getCanonicalPath + "/plans.txt"
       val df = spark.range(0, 10)
       df.queryExecution.debug.toFile(path)
 
