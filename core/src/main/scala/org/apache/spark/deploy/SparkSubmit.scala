@@ -292,7 +292,7 @@ private[spark] class SparkSubmit extends Logging {
         error("Cluster deploy mode is not applicable to Spark shells.")
       case (_, CLUSTER) if isSqlShell(args.mainClass) =>
         error("Cluster deploy mode is not applicable to Spark SQL shell.")
-      case (_, CLUSTER) if isThriftServer(args.mainClass) =>
+      case (_, CLUSTER) if (clusterManager != KUBERNETES) && isThriftServer(args.mainClass) =>
         error("Cluster deploy mode is not applicable to Spark Thrift server.")
       case _ =>
     }
