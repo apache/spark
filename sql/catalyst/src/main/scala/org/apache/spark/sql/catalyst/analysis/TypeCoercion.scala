@@ -971,8 +971,35 @@ object TypeCoercion {
         case (ArrayType(fromType, true), ArrayType(toType: DataType, false)) => null
 
         case (ArrayType(fromType, false), ArrayType(toType: DataType, false))
-            if !Cast.forceNullable(fromType, toType) =>
+          if !Cast.forceNullable(fromType, toType) =>
           implicitCast(fromType, toType).map(ArrayType(_, false)).orNull
+
+        // Implicit cast between Map types.
+        // Follows the same semantics of implicit casting between two array types.
+        // Refer to documentation above.
+        case (MapType(fromKeyType, fromValueType, fn), MapType(toKeyType, toValueType, true)) =>
+          val newFromType = implicitCast(fromKeyType, toKeyType).orNull
+          val newValueType = implicitCast(fromValueType, toValueType).orNull
+          if (newFromType != null && newValueType != null
+            && (!newFromType.sameType(fromKeyType) || !newValueType.sameType(fromValueType))) {
+            MapType(newFromType, newValueType, true)
+          } else {
+            null
+          }
+
+        case (MapType(fromKeyType, fromValueType, true), MapType(toKeyType, toValueType, false)) =>
+         null
+
+        case (MapType(fromKeyType, fromValueType, false), MapType(toKeyType, toValueType, false))
+          if !Cast.forceNullable(fromValueType, toValueType) =>
+          val newFromType = implicitCast(fromKeyType, toKeyType).orNull
+          val newValueType = implicitCast(fromValueType, toValueType).orNull
+          if (newFromType != null && newValueType != null
+            && (!newFromType.sameType(fromKeyType) || !newValueType.sameType(fromValueType))) {
+            MapType(newFromType, newValueType, false)
+          } else {
+            null
+          }
 
         case _ => null
       }

@@ -257,9 +257,15 @@ class TypeCoercionSuite extends AnalysisTest {
     shouldNotCast(checkedType, IntegralType)
   }
 
-  test("implicit type cast - MapType(StringType, StringType)") {
+  test("implicit type cast between two Map types") {
     val checkedType = MapType(StringType, StringType)
-    checkTypeCasting(checkedType, castableTypes = Seq(checkedType))
+    val nonCastableTypes =
+      complexTypes ++ Seq(BooleanType, NullType, CalendarIntervalType)
+    checkTypeCasting(checkedType,
+      castableTypes = allTypes.filterNot(nonCastableTypes.contains).map(dt => MapType(dt, dt)))
+    nonCastableTypes.map(dt => MapType(dt, dt)).foreach(shouldNotCast(checkedType, _))
+    shouldNotCast(MapType(DoubleType, DoubleType, valueContainsNull = false),
+      MapType(LongType, LongType, valueContainsNull = false))
     shouldNotCast(checkedType, DecimalType)
     shouldNotCast(checkedType, NumericType)
     shouldNotCast(checkedType, IntegralType)
