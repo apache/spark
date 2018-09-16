@@ -259,11 +259,12 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
      * Dumps debug information about query execution into the specified file.
      */
     def toFile(path: String): Unit = {
+      val maxFields = SparkEnv.get.conf.getInt(Utils.MAX_TO_STRING_FIELDS,
+        Utils.DEFAULT_MAX_TO_STRING_FIELDS)
       val filePath = new Path(path)
       val fs = FileSystem.get(filePath.toUri, sparkSession.sessionState.newHadoopConf())
       val writer = new BufferedWriter(new OutputStreamWriter(fs.create(filePath)))
-      val maxFields = SparkEnv.get.conf.getInt(Utils.MAX_TO_STRING_FIELDS,
-        Utils.DEFAULT_MAX_TO_STRING_FIELDS)
+
       try {
         SparkEnv.get.conf.set(Utils.MAX_TO_STRING_FIELDS, Int.MaxValue.toString)
         writer.write("== Parsed Logical Plan ==\n")
