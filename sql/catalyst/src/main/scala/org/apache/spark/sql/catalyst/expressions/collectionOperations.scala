@@ -159,9 +159,9 @@ case class MapKeys(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(2, 3, 4));
-        [{"0":1,"1":2},{"0":2,"1":3},{"0":3,"1":4}]
+       [{"0":1,"1":2},{"0":2,"1":3},{"0":3,"1":4}]
       > SELECT _FUNC_(array(1, 2), array(2, 3), array(3, 4));
-        [{"0":1,"1":2,"2":3},{"0":2,"1":3,"2":4}]
+       [{"0":1,"1":2,"2":3},{"0":2,"1":3,"2":4}]
   """,
   since = "2.4.0")
 case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsInputTypes {
