@@ -20,12 +20,13 @@ package org.apache.spark.deploy
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
-import java.util.{Arrays, Comparator, Date, Locale}
+import java.util.{Arrays, Comparator, Date, Locale, ServiceLoader}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
+import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
@@ -389,7 +390,39 @@ class SparkHadoopUtil extends Logging {
 
 object SparkHadoopUtil {
 
-  private lazy val instance = new SparkHadoopUtil
+  private lazy val instance = getInstance
+
+  private[deploy] def getInstance: SparkHadoopUtil = {
+    val loader: ClassLoader = Utils.getContextOrSparkClassLoader
+    val services = ServiceLoader.load(classOf[SparkHadoopUtil], loader).asScala.toList
+    getInstance(services)
+  }
+
+  private[deploy] def getInstance(sparkHadoopUtils: List[SparkHadoopUtil]): SparkHadoopUtil = {
+    sparkHadoopUtils match {
+      case Nil =>
+        // the SparkHadoopUtil implementation was not found
+        new SparkHadoopUtil
+      case head :: Nil =>
+        // there is exactly one registered alias
+        val clazz = head.getClass
+        Try(clazz.newInstance()) match {
+          case Success(sparkHadoopUtil: SparkHadoopUtil) =>
+            sparkHadoopUtil
+          case Success(any) =>
+            sys.error(s"Incompatible class found for SparkHadoopUtil implementation: $clazz")
+          case Failure(error) =>
+            throw new ClassNotFoundException(
+              s"Failed to find SparkHadoopUtil implementation: $clazz",
+              error)
+        }
+      case sources =>
+        // There are multiple registered aliases for the input
+        sys.error("Multiple sources found for SparkHadoopUtil " +
+          s"(${sources.map(_.getClass.getName).mkString(", ")}), " +
+          "please specify one fully qualified class name.")
+    }
+  }
 
   val SPARK_YARN_CREDS_TEMP_EXTENSION = ".tmp"
 
