@@ -61,9 +61,8 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val et = dataType.elementType
-    val evals = children.map(e => e.genCode(ctx))
     val (allocation, assigns, arrayData) =
-      GenArrayData.genCodeToCreateArrayData(ctx, et, evals, false, "createArray")
+      GenArrayData.genCodeToCreateArrayData(ctx, et, children, false, "createArray")
     ev.copy(
       code = code"${allocation}${assigns}",
       value = JavaCode.variable(arrayData, dataType),
@@ -79,7 +78,7 @@ private [sql] object GenArrayData {
    *
    * @param ctx a [[CodegenContext]]
    * @param elementType data type of underlying array elements
-   * @param elementsCode concatenated set of [[ExprCode]] for each element of an underlying array
+   * @param elementsExpr concatenated set of [[Expression]] for each element of an underlying array
    * @param isMapKey if true, throw an exception when the element is null
    * @param functionName string to include in the error message
    * @return (array allocation, concatenated assignments to each array elements, arrayData name)
@@ -87,21 +86,22 @@ private [sql] object GenArrayData {
   def genCodeToCreateArrayData(
       ctx: CodegenContext,
       elementType: DataType,
-      elementsCode: Seq[ExprCode],
+      elementsExpr: Seq[Expression],
       isMapKey: Boolean,
       functionName: String): (String, String, String) = {
     val arrayDataName = ctx.freshName("arrayData")
-    val numElements = s"${elementsCode.length}L"
+    val numElements = s"${elementsExpr.length}L"
 
     val initialization = CodeGenerator.createArrayData(
       arrayDataName, elementType, numElements, s" $functionName failed.")
 
-    val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
+    val assignments = elementsExpr.zipWithIndex.map { case (expr, i) =>
+      val eval = expr.genCode(ctx)
       val setArrayElement = CodeGenerator.setArrayElement(
         arrayDataName, elementType, i.toString, eval.value)
 
-      val assignment = if (eval.isNull == FalseLiteral) {
-        s"\n$setArrayElement\n"
+      val assignment = if (!expr.nullable || eval.isNull == FalseLiteral) {
+        setArrayElement
       } else {
         val isNullAssignment = if (!isMapKey) {
           s"$arrayDataName.setNullAt($i);"
@@ -109,19 +109,18 @@ private [sql] object GenArrayData {
           "throw new RuntimeException(\"Cannot use null as map key!\");"
         }
 
-        if (eval.isNull == TrueLiteral) {
-          s"\n$isNullAssignment\n"
-        } else {
-          s"""
-             |if (${eval.isNull}) {
-             |  $isNullAssignment
-             |} else {
-             |  $setArrayElement
-             |}
-           """.stripMargin
-        }
+        s"""
+           |if (${eval.isNull}) {
+           |  $isNullAssignment
+           |} else {
+           |  $setArrayElement
+           |}
+         """.stripMargin
       }
-      eval.code + assignment
+      s"""
+         |${eval.code}
+         |$assignment
+       """.stripMargin
     }
     val assignmentString = ctx.splitExpressionsWithCurrentInputs(
       expressions = assignments,
@@ -189,12 +188,10 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val mapClass = classOf[ArrayBasedMapData].getName
     val MapType(keyDt, valueDt, _) = dataType
-    val evalKeys = keys.map(e => e.genCode(ctx))
-    val evalValues = values.map(e => e.genCode(ctx))
     val (allocationKeyData, assignKeys, keyArrayData) =
-      GenArrayData.genCodeToCreateArrayData(ctx, keyDt, evalKeys, true, "createMap")
+      GenArrayData.genCodeToCreateArrayData(ctx, keyDt, keys, true, "createMap")
     val (allocationValueData, assignValues, valueArrayData) =
-      GenArrayData.genCodeToCreateArrayData(ctx, valueDt, evalValues, false, "createMap")
+      GenArrayData.genCodeToCreateArrayData(ctx, valueDt, values, false, "createMap")
     val code =
       code"""
        final boolean ${ev.isNull} = false;
