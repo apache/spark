@@ -100,7 +100,7 @@ private [sql] object GenArrayData {
       val setArrayElement = CodeGenerator.setArrayElement(
         arrayDataName, elementType, i.toString, eval.value)
 
-      val assignment = if (!expr.nullable || eval.isNull == FalseLiteral) {
+      val assignment = if (!expr.nullable) {
         setArrayElement
       } else {
         val isNullAssignment = if (!isMapKey) {
