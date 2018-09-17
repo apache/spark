@@ -88,7 +88,6 @@ class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanT
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenOnly) {
         FailedCodegenProjection.createObject(input)
       }
-      val noCodegen = CodegenObjectFactoryMode.NO_CODEGEN.toString
     }.getMessage
     assert(errMsg.contains("failed to compile: org.codehaus.commons.compiler.CompileException:"))
   }
