@@ -2372,7 +2372,7 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
 
 test_that("test hint", {
   df <- sql("SELECT * FROM range(10e10)")
-  hintList <- list("hint2", "hin3", "hint4")
+  hintList <- list("hint2", "hint3", "hint4")
   execution_plan_hint <- capture.output(
     explain(hint(df, "hint1", 1.23456, "aaaaaaaaaa", hintList), TRUE)
   )

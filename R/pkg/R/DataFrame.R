@@ -3929,7 +3929,7 @@ setMethod("hint",
           signature(x = "SparkDataFrame", name = "character"),
           function(x, name, ...) {
             parameters <- list(...)
-            stopifnot(all(sapply(parameters, function(y) {
+            if (!all(sapply(parameters, function(y) {
               if (is.character(y) || is.numeric(y)) {
                 TRUE
               } else if (is.list(y)) {
@@ -3937,7 +3937,9 @@ setMethod("hint",
               } else {
                 FALSE
               }
-            })))
+            }))) {
+              stop("sql hint should be character, numeric, or list with character or numeric.")
+            }
             jdf <- callJMethod(x@sdf, "hint", name, parameters)
             dataFrame(jdf)
           })
