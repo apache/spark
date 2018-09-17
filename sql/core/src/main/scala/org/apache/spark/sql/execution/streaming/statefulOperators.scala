@@ -485,7 +485,6 @@ case class SessionWindowStateStoreRestoreExec(
         stateManager,
         keyWithoutSessionExpressions,
         sessionExpression,
-        watermarkPredicateForData,
         child.output).map { row =>
         numOutputRows += 1
         row

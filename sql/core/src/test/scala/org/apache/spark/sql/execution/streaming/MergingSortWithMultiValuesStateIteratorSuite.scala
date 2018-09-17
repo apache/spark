@@ -52,7 +52,7 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
   test("no row in input data") {
     withStateManager(rowAttributes, keysWithoutSessionAttributes) { manager =>
       val iterator = new MergingSortWithMultiValuesStateIterator(None.iterator,
-        manager, keysWithoutSessionAttributes, sessionAttribute, None, rowAttributes)
+        manager, keysWithoutSessionAttributes, sessionAttribute, rowAttributes)
 
       assert(!iterator.hasNext)
     }
@@ -65,7 +65,7 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
       appendRowToStateManager(manager, srow11, srow12)
 
       val iterator = new MergingSortWithMultiValuesStateIterator(None.iterator,
-        manager, keysWithoutSessionAttributes, sessionAttribute, None, rowAttributes)
+        manager, keysWithoutSessionAttributes, sessionAttribute, rowAttributes)
 
       assert(!iterator.hasNext)
     }
@@ -80,7 +80,7 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
       val rows = List(row1, row2, row3, row4)
 
       val iterator = new MergingSortWithMultiValuesStateIterator(rows.iterator,
-        manager, keysWithoutSessionAttributes, sessionAttribute, None, rowAttributes)
+        manager, keysWithoutSessionAttributes, sessionAttribute, rowAttributes)
 
       rows.foreach { row =>
         assert(iterator.hasNext)
@@ -136,7 +136,7 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
         row31, row32, row41, row42, srow41, srow42, srow51, row51, srow52, row52, srow53)
 
       val iterator = new MergingSortWithMultiValuesStateIterator(rows.iterator,
-        manager, keysWithoutSessionAttributes, sessionAttribute, None, rowAttributes)
+        manager, keysWithoutSessionAttributes, sessionAttribute, rowAttributes)
 
       expectedRowSequence.foreach { row =>
         assert(iterator.hasNext)
@@ -197,7 +197,7 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
       val expectedRowSequence = List(srow1, row1, row2, srow2)
 
       val iterator = new MergingSortWithMultiValuesStateIterator(rows.iterator,
-        manager, Seq.empty[Attribute], noKeySessionAttribute, None, noKeyRowAttributes)
+        manager, Seq.empty[Attribute], noKeySessionAttribute, noKeyRowAttributes)
 
       expectedRowSequence.foreach { row =>
         assert(iterator.hasNext)

@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, Partitioning}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.streaming.UpdatingSessionIterator
 
 // FIXME: javadoc should provide precondition that input must be sorted
 // or both required child distribution as well as required child ordering should be presented

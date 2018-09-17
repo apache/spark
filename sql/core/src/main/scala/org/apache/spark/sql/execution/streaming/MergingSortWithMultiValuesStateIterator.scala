@@ -28,7 +28,6 @@ class MergingSortWithMultiValuesStateIterator(
     stateManager: MultiValuesStateManager,
     groupWithoutSessionExpressions: Seq[Expression],
     sessionExpression: Expression,
-    watermarkPredicateForData: Option[Predicate],
     inputSchema: Seq[Attribute]) extends Iterator[InternalRow] {
 
   private case class SessionRowInformation(keys: UnsafeRow, sessionStart: Long, sessionEnd: Long,
