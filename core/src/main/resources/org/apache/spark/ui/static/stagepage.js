@@ -873,9 +873,7 @@ $(document).ready(function () {
                 var taskTableSelector = $(taskTable).DataTable(task_conf);
                 $('#active-tasks-table_filter input').unbind();
                 $('#active-tasks-table_filter input').bind('keyup', function(e) {
-                  if(e.keyCode == 13) {
-                    taskTableSelector.search( this.value ).draw();
-                  }
+                  taskTableSelector.search( this.value ).draw();
                 });
 
                 var optionalColumns = [11, 12, 13, 14, 15, 16, 17];
