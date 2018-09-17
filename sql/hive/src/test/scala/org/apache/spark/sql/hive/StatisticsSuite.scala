@@ -1386,7 +1386,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val factor = 10
     val tableName = s"sizeTest"
     val tableNameAdj = s"${tableName}Adj"
-    withTable(tableName, tableNameAdj) {
+    val tableNameBad = s"${tableName}Bad"
+    withTable(tableName, tableNameAdj, tableNameBad) {
       sql(s"CREATE TABLE $tableName STORED AS PARQUET AS SELECT * FROM SRC")
       val relationStats = spark.table(tableName).queryExecution.optimizedPlan.stats
       val sizeInBytes = relationStats.sizeInBytes
@@ -1397,6 +1398,12 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       val relationStats2 = spark.table(tableNameAdj).queryExecution.optimizedPlan.stats
       val expectedSizeInBytes = sizeInBytes * factor
       assert(relationStats2.sizeInBytes == expectedSizeInBytes)
+
+      // test bad deserialization factor
+      sql(s"CREATE TABLE $tableNameBad STORED AS PARQUET AS SELECT * FROM SRC")
+      sql(s"ALTER TABLE $tableNameBad SET TBLPROPERTIES('deserFactor'='bad')")
+      val relationStats3 = spark.table(tableNameBad).queryExecution.optimizedPlan.stats
+      assert(relationStats3.sizeInBytes == sizeInBytes)
     }
   }
 

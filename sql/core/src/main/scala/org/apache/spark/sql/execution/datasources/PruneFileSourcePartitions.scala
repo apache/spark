@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.commons.lang3.math.NumberUtils
+
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -80,7 +82,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
 
   private def calcPartSize(catalogTable: Option[CatalogTable], sizeInBytes: Long): Long = {
     val factor = if (catalogTable.isDefined) {
-      catalogTable.get.properties.get("deserFactor").getOrElse("1.0").toDouble
+      NumberUtils.toDouble(catalogTable.get.properties.get("deserFactor").getOrElse("1.0"), 1.0)
     } else {
       1.0
     }
