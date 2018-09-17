@@ -212,7 +212,6 @@ cp -r "$SPARK_HOME/examples/src/main" "$DISTDIR/examples/src/"
 
 # Copy license and ASF files
 cp "$SPARK_HOME/LICENSE-binary" "$DISTDIR/LICENSE"
-mkdir -p "$DISTDIR/licenses"
 cp -r "$SPARK_HOME/licenses-binary" "$DISTDIR/licenses"
 cp "$SPARK_HOME/NOTICE-binary" "$DISTDIR/NOTICE"
 
