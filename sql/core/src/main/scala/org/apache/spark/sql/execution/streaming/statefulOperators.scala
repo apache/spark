@@ -642,9 +642,6 @@ case class SessionWindowStateStoreSaveExec(
         // Update and output modified rows from the MultiValuesStateManager.
         case Some(Update) =>
 
-          // FIXME: it doesn't compare all output rows with current state rows, so all sessions
-          // including previous sessions will be provided
-
           new NextIterator[InternalRow] {
             private val updatesStartTimeNs = System.nanoTime
 
