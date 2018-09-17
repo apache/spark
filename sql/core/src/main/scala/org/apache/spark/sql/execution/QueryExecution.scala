@@ -263,7 +263,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
         Utils.DEFAULT_MAX_TO_STRING_FIELDS)
       val filePath = new Path(path)
       val fs = FileSystem.get(filePath.toUri, sparkSession.sessionState.newHadoopConf())
-      val writer = new BufferedWriter(new OutputStreamWriter(fs.create(filePath)))
+      val writer = new OutputStreamWriter(fs.create(filePath))
 
       try {
         SparkEnv.get.conf.set(Utils.MAX_TO_STRING_FIELDS, Int.MaxValue.toString)
@@ -277,7 +277,6 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
         optimizedPlan.treeString(writer, verbose = true, addSuffix = false)
         writer.write("== Physical Plan ==\n")
         executedPlan.treeString(writer, verbose = true, addSuffix = false)
-        writer.flush()
         writer.write("== Whole Stage Codegen ==\n")
         org.apache.spark.sql.execution.debug.writeCodegen(writer, executedPlan)
       } finally {
