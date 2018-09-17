@@ -766,13 +766,17 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(false), Row(false))
     )
 
+    checkAnswer(
+      df.selectExpr("array_contains(array(array(1)), array(1.23))"),
+      Seq(Row(false), Row(false))
+    )
     val e1 = intercept[AnalysisException] {
-      df.selectExpr("array_contains(array(1), 1.23)")
+      df.selectExpr("array_contains(array(1), .01234567890123456790123456780)")
     }
     val errorMsg1 =
       s"""
          |Input to function array_contains should have been array followed by a
-         |value with same element type, but it's [array<int>, decimal(3,2)].
+         |value with same element type, but it's [array<int>, decimal(29,29)].
        """.stripMargin.replace("\n", " ").trim()
     assert(e1.message.contains(errorMsg1))
 
