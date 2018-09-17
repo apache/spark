@@ -86,6 +86,6 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
     } else {
       1.0
     }
-    (sizeInBytes.toLong * factor).toLong
+    (sizeInBytes * factor).toLong
   }
 }
