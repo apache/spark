@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{BufferedWriter, OutputStreamWriter}
+import java.io.{OutputStreamWriter, StringWriter, Writer}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
@@ -101,7 +101,6 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   protected def stringOrError[A](f: => A): String =
     try f.toString catch { case e: AnalysisException => e.toString }
-
 
   /**
    * Returns the result as a hive compatible sequence of strings. This is used in tests and
@@ -193,23 +192,32 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       """.stripMargin.trim
   }
 
-  override def toString: String = withRedaction {
-    def output = Utils.truncatedString(
-      analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ")
-    val analyzedPlan = Seq(
-      stringOrError(output),
-      stringOrError(analyzed.treeString(verbose = true))
-    ).filter(_.nonEmpty).mkString("\n")
+  private def writeOrError(writer: Writer)(f: Writer => Unit): Unit =
+    try f(writer) catch { case e: AnalysisException => writer.write(e.toString) }
 
-    s"""== Parsed Logical Plan ==
-       |${stringOrError(logical.treeString(verbose = true))}
-       |== Analyzed Logical Plan ==
-       |$analyzedPlan
-       |== Optimized Logical Plan ==
-       |${stringOrError(optimizedPlan.treeString(verbose = true))}
-       |== Physical Plan ==
-       |${stringOrError(executedPlan.treeString(verbose = true))}
-    """.stripMargin.trim
+  private def writePlans(writer: Writer): Unit = {
+    writer.write("== Parsed Logical Plan ==\n")
+    writeOrError(writer)(logical.treeString(_, verbose = true, addSuffix = false))
+    writer.write("== Analyzed Logical Plan ==\n")
+    writeOrError(writer) { writer =>
+      analyzed.output.foreach(o => writer.write(s"${o.name}: ${o.dataType.simpleString}"))
+    }
+    writer.write("\n")
+    writeOrError(writer)(analyzed.treeString(_, verbose = true, addSuffix = false))
+    writer.write("== Optimized Logical Plan ==\n")
+    writeOrError(writer)(optimizedPlan.treeString(_, verbose = true, addSuffix = false))
+    writer.write("== Physical Plan ==\n")
+    writeOrError(writer)(executedPlan.treeString(_, verbose = true, addSuffix = false))
+  }
+
+  override def toString: String = withRedaction {
+    val writer = new StringWriter()
+    try {
+      writePlans(writer)
+      writer.toString
+    } finally {
+      writer.close()
+    }
   }
 
   def stringWithStats: String = withRedaction {
@@ -267,16 +275,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
       try {
         SparkEnv.get.conf.set(Utils.MAX_TO_STRING_FIELDS, Int.MaxValue.toString)
-        writer.write("== Parsed Logical Plan ==\n")
-        logical.treeString(writer, verbose = true, addSuffix = false)
-        writer.write("== Analyzed Logical Plan ==\n")
-        analyzed.output.foreach(o => writer.write(s"${o.name}: ${o.dataType.simpleString}"))
-        writer.write("\n")
-        analyzed.treeString(writer, verbose = true, addSuffix = false)
-        writer.write("== Optimized Logical Plan ==\n")
-        optimizedPlan.treeString(writer, verbose = true, addSuffix = false)
-        writer.write("== Physical Plan ==\n")
-        executedPlan.treeString(writer, verbose = true, addSuffix = false)
+        writePlans(writer)
         writer.write("== Whole Stage Codegen ==\n")
         org.apache.spark.sql.execution.debug.writeCodegen(writer, executedPlan)
       } finally {
