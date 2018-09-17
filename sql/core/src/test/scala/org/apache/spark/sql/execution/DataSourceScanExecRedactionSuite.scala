@@ -84,10 +84,10 @@ class DataSourceScanExecRedactionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("FileSourceScanExec metadata") {
-    withTempDir { dir =>
-      val basePath = dir.getCanonicalPath
-      spark.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
-      val df = spark.read.parquet(basePath).filter("a = 1")
+    withTempPath { path =>
+      val dir = path.getCanonicalPath
+      spark.range(0, 10).write.parquet(dir)
+      val df = spark.read.parquet(dir)
 
       assert(isIncluded(df.queryExecution, "Format"))
       assert(isIncluded(df.queryExecution, "ReadSchema"))
