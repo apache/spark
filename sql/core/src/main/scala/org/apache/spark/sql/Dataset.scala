@@ -2311,7 +2311,7 @@ class Dataset[T] private[sql](
    * }}}
    *
    * @group untypedrel
-   * @since 2.4.0
+   * @since 3.0.0
    */
   def withColumnRenamed(columnMap: Map[String, String]): DataFrame = {
     val resolver = sparkSession.sessionState.analyzer.resolver
