@@ -70,16 +70,17 @@ package object debug {
    * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
    */
   def codegenString(plan: SparkPlan): String = {
-    val baos = new ByteArrayOutputStream()
-    val writer = new BufferedWriter(new OutputStreamWriter(baos))
+    val writer = new StringWriter()
 
-    writerCodegen(writer, plan)
-    writer.flush()
-
-    baos.toString
+    try {
+      writeCodegen(writer, plan)
+      writer.toString
+    } finally {
+      writer.close()
+    }
   }
 
-  def writerCodegen(writer: Writer, plan: SparkPlan): Unit = {
+  def writeCodegen(writer: Writer, plan: SparkPlan): Unit = {
     val codegenSeq = codegenStringSeq(plan)
     writer.write(s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n")
     for (((subtree, code), i) <- codegenSeq.zipWithIndex) {

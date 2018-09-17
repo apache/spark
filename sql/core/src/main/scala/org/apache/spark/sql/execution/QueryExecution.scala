@@ -279,7 +279,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
         executedPlan.treeString(writer, verbose = true, addSuffix = false)
         writer.flush()
         writer.write("== Whole Stage Codegen ==\n")
-        org.apache.spark.sql.execution.debug.writerCodegen(writer, executedPlan)
+        org.apache.spark.sql.execution.debug.writeCodegen(writer, executedPlan)
       } finally {
         writer.close()
         SparkEnv.get.conf.set(Utils.MAX_TO_STRING_FIELDS, maxFields.toString)

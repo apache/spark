@@ -470,13 +470,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def treeString: String = treeString(verbose = true)
 
   def treeString(verbose: Boolean, addSuffix: Boolean = false): String = {
-    val baos = new ByteArrayOutputStream()
-    val writer = new BufferedWriter(new OutputStreamWriter(baos))
-
-    treeString(writer, verbose, addSuffix)
-    writer.flush()
-
-    baos.toString
+    val writer = new StringWriter()
+    try {
+      treeString(writer, verbose, addSuffix)
+      writer.toString
+    } finally {
+      writer.close()
+    }
   }
 
   def treeString(writer: Writer, verbose: Boolean, addSuffix: Boolean): Unit = {
