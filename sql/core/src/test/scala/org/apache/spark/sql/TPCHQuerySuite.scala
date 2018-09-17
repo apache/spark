@@ -69,7 +69,7 @@ class TPCHQuerySuite extends BenchmarkQueryTest {
     sql(
       """
         |CREATE TABLE `customer` (`c_custkey` BIGINT, `c_name` STRING, `c_address` STRING,
-        |`c_nationkey` STRING, `c_phone` STRING, `c_acctbal` DECIMAL(10,0),
+        |`c_nationkey` BIGINT, `c_phone` STRING, `c_acctbal` DECIMAL(10,0),
         |`c_mktsegment` STRING, `c_comment` STRING)
         |USING parquet
       """.stripMargin)

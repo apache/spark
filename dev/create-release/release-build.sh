@@ -171,6 +171,10 @@ if [[ "$1" == "package" ]]; then
   # Source and binary tarballs
   echo "Packaging release source tarballs"
   cp -r spark spark-$SPARK_VERSION
+  # For source release, exclude copy of binary license/notice
+  rm spark-$SPARK_VERSION/LICENSE-binary
+  rm spark-$SPARK_VERSION/NOTICE-binary
+  rm -r spark-$SPARK_VERSION/licenses-binary
   tar cvzf spark-$SPARK_VERSION.tgz spark-$SPARK_VERSION
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
     --detach-sig spark-$SPARK_VERSION.tgz
@@ -271,7 +275,7 @@ if [[ "$1" == "package" ]]; then
   BINARY_PKGS_ARGS["hadoop2.7"]="-Phadoop-2.7 $HIVE_PROFILES"
   if ! is_dry_run; then
     BINARY_PKGS_ARGS["hadoop2.6"]="-Phadoop-2.6 $HIVE_PROFILES"
-    BINARY_PKGS_ARGS["without-hadoop"]="-Pwithout-hadoop"
+    BINARY_PKGS_ARGS["without-hadoop"]="-Phadoop-provided"
     if [[ $SPARK_VERSION < "2.2." ]]; then
       BINARY_PKGS_ARGS["hadoop2.4"]="-Phadoop-2.4 $HIVE_PROFILES"
       BINARY_PKGS_ARGS["hadoop2.3"]="-Phadoop-2.3 $HIVE_PROFILES"

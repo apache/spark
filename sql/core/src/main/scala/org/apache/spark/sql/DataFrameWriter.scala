@@ -241,10 +241,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val source = cls.newInstance().asInstanceOf[DataSourceV2]
       source match {
         case provider: BatchWriteSupportProvider =>
-          val options = extraOptions ++
-              DataSourceV2Utils.extractSessionConfigs(source, df.sparkSession.sessionState.conf)
+          val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+            source,
+            df.sparkSession.sessionState.conf)
+          val options = sessionOptions ++ extraOptions
 
-          val relation = DataSourceV2Relation.create(source, options.toMap)
+          val relation = DataSourceV2Relation.create(source, options)
           if (mode == SaveMode.Append) {
             runCommand(df.sparkSession, "save") {
               AppendData.byName(relation, df.logicalPlan)
