@@ -629,6 +629,7 @@ case class SessionWindowStateStoreSaveExec(
 
           val retIter = evictSessionsByWatermark(stateManager).map(_.value).map { row =>
             logWarning(s"DEBUG: partitionId $debugPartitionId - evicting row ${row} ...")
+            numOutputRows += 1
             row
           }
 
