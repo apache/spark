@@ -223,7 +223,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       .getItems
       .get(0)
     driverPodChecker(driverPod)
-    val execPods = scala.collection.mutable.Stack[Pod]()
+    val execPods = scala.collection.mutable.Map[String, Pod]()
     val execWatcher = kubernetesTestComponents.kubernetesClient
       .pods()
       .withLabel("spark-app-locator", appLocator)
@@ -233,15 +233,18 @@ private[spark] class KubernetesSuite extends SparkFunSuite
         override def onClose(cause: KubernetesClientException): Unit =
           logInfo("Ending watch of executors")
         override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
+          val name = resource.getMetadata.getName
           action match {
             case Action.ADDED | Action.MODIFIED =>
-              execPods.push(resource)
+              execPods(name) = resource
+            case Action.DELETED | Action.ERROR =>
+              execPods.remove(name)
           }
         }
       })
-    Eventually.eventually(TIMEOUT, INTERVAL) { execPods.nonEmpty should be (true) }
+    Eventually.eventually(TIMEOUT, INTERVAL) { execPods.values.nonEmpty should be (true) }
     execWatcher.close()
-    executorPodChecker(execPods.pop())
+    execPods.values.foreach(executorPodChecker(_))
     Eventually.eventually(TIMEOUT, INTERVAL) {
       expectedLogOnCompletion.foreach { e =>
         assert(kubernetesTestComponents.kubernetesClient
