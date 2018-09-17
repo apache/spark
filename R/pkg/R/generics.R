@@ -702,6 +702,9 @@ setGeneric("getField", function(x, ...) { standardGeneric("getField") })
 setGeneric("getItem", function(x, ...) { standardGeneric("getItem") })
 
 #' @rdname columnfunctions
+setGeneric("isInf", function(x) { standardGeneric("isInf") })
+
+#' @rdname columnfunctions
 setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
 
 #' @rdname columnfunctions

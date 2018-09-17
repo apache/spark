@@ -197,6 +197,50 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, child: 
   override def sql: String = s"$prettyName(${expr1.sql}, ${expr2.sql}, ${expr3.sql})"
 }
 
+/**
+ * Evaluates to `true` iff it's Infinity.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns true if expr evaluates to infinite else returns false ",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1/0);
+       true
+      > SELECT _FUNC_(5);
+       false
+  """)
+case class IsInf(child: Expression) extends UnaryExpression
+  with Predicate with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(DoubleType, FloatType))
+
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Boolean = {
+    val value = child.eval(input)
+    if (value == null) {
+      false
+    } else {
+      child.dataType match {
+        case DoubleType => value.asInstanceOf[Double].isInfinity
+        case FloatType => value.asInstanceOf[Float].isInfinity
+      }
+    }
+  }
+
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
+    ev.copy(
+      code = code"""
+      ${eval.code}
+      ${CodeGenerator
+        .javaType(
+          dataType)} ${ev.value} = !${eval.isNull} && Double.isInfinite(${eval.value});""",
+            isNull = FalseLiteral
+        )
+    }
+}
 
 /**
  * Evaluates to `true` iff it's NaN.

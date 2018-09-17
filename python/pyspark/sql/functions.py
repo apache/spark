@@ -470,6 +470,18 @@ def input_file_name():
     return Column(sc._jvm.functions.input_file_name())
 
 
+@since(2.4)
+def isinf(col):
+    """An expression that returns true iff the column is Inf.
+
+    >>> df = spark.createDataFrame([(1.0, float('inf')), (float('inf'), 2.0)], ("a", "b"))
+    >>> df.select(isinf("a").alias("r1"), isinf(df.a).alias("r2")).collect()
+    [Row(r1=False, r2=False), Row(r1=True, r2=True)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.isinf(_to_java_column(col)))
+
+
 @since(1.6)
 def isnan(col):
     """An expression that returns true iff the column is NaN.

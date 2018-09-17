@@ -56,6 +56,18 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ex.contains("Null value appeared in non-nullable field"))
   }
 
+  test("IsInf") {
+    checkEvaluation(IsInf(Literal(Double.PositiveInfinity)), true)
+    checkEvaluation(IsInf(Literal(Double.NegativeInfinity)), true)
+    checkEvaluation(IsInf(Literal(Float.PositiveInfinity)), true)
+    checkEvaluation(IsInf(Literal(Float.NegativeInfinity)), true)
+    checkEvaluation(IsInf(Literal.create(null, DoubleType)), false)
+    checkEvaluation(IsInf(Literal(Float.MaxValue)), false)
+    checkEvaluation(IsInf(Literal(5.5f)), false)
+    checkEvaluation(IsInf(Literal(Double.NaN)), expected = false)
+    checkEvaluation(IsInf(Literal(Float.NaN)), expected = false)
+  }
+
   test("IsNaN") {
     checkEvaluation(IsNaN(Literal(Double.NaN)), true)
     checkEvaluation(IsNaN(Literal(Float.NaN)), true)

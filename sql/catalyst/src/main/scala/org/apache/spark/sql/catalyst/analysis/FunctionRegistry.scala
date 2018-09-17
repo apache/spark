@@ -198,6 +198,7 @@ object FunctionRegistry {
     expression[If]("if"),
     expression[Inline]("inline"),
     expressionGeneratorOuter[Inline]("inline_outer"),
+    expression[IsInf]("isinf"),
     expression[IsNaN]("isnan"),
     expression[IfNull]("ifnull"),
     expression[IsNull]("isnull"),
