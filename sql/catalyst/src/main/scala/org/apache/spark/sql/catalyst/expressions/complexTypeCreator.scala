@@ -248,7 +248,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
       in keys should not be null""",
   examples = """
     Examples:
-      > SELECT _FUNC_([1.0, 3.0], ['2', '4']);
+      > SELECT _FUNC_(array(1.0, 3.0), array('2', '4'));
        {1.0:"2",3.0:"4"}
   """, since = "2.4.0")
 case class MapFromArrays(left: Expression, right: Expression)
