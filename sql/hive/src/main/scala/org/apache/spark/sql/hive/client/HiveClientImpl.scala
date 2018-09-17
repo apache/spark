@@ -1056,6 +1056,11 @@ private[hive] object HiveClientImpl {
     // When table is external, `totalSize` is always zero, which will influence join strategy.
     // So when `totalSize` is zero, use `rawDataSize` instead. When `rawDataSize` is also zero,
     // return None.
+    // If a table has a deserialization factor, the table owner expects the in-memory
+    // representation of the table to be larger than the table's totalSize value. In that case,
+    // multiply totalSize by the deserialization factor and use that number instead.
+    // If the user has set spark.sql.statistics.ignoreRawDataSize to true (because of HIVE-20079,
+    // for example), don't use rawDataSize.
     // In Hive, when statistics gathering is disabled, `rawDataSize` and `numRows` is always
     // zero after INSERT command. So they are used here only if they are larger than zero.
     val factor = NumberUtils.toDouble(properties.get("deserFactor").getOrElse("1.0"), 1.0)
