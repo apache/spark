@@ -49,7 +49,7 @@ object FilterPushdownBenchmark extends FileBenchmarkBase {
     .setIfMissing("orc.compression", "snappy")
     .setIfMissing("spark.sql.parquet.compression.codec", "snappy")
 
-  private val numRows = 1024
+  private val numRows = 1024 * 1024 * 15
   private val width = 5
   private val mid = numRows / 2
   // For Parquet/ORC, we will use the same value for block size and compression size
