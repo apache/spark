@@ -2328,11 +2328,14 @@ def to_json(col, options={}):
 
 @ignore_unicode_prefix
 @since(2.4)
-def schema_of_json(col):
+def schema_of_json(col, options={}):
     """
     Parses a column containing a JSON string and infers its schema in DDL format.
 
     :param col: string column in json format
+    :param options: options to control parsing. accepts the same options as the JSON datasource
+
+    .. note:: Since Spark 3.0, it accepts options to control schema inferring.
 
     >>> from pyspark.sql.types import *
     >>> data = [(1, '{"a": 1}')]
@@ -2341,10 +2344,13 @@ def schema_of_json(col):
     [Row(json=u'struct<a:bigint>')]
     >>> df.select(schema_of_json(lit('{"a": 0}')).alias("json")).collect()
     [Row(json=u'struct<a:bigint>')]
+    >>> schema = schema_of_json(lit('{a: 1}'), {'allowUnquotedFieldNames':'true'})
+    >>> df.select(schema.alias("json")).collect()
+    [Row(json=u'struct<a:bigint>')]
     """
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.schema_of_json(_to_java_column(col))
+    jc = sc._jvm.functions.schema_of_json(_to_java_column(col), options)
     return Column(jc)
 
 

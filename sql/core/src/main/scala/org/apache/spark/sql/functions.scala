@@ -3622,7 +3622,7 @@ object functions {
    * @since 3.0.0
    */
   def schema_of_json(e: Column, options: java.util.Map[String, String]): Column = {
-    withExpr(SchemaOfJson(e.expr, options.asScala.toMap, None))
+    withExpr(SchemaOfJson(e.expr, options.asScala.toMap))
   }
 
   /**
