@@ -172,6 +172,9 @@ case class BoundedWindowInPandasExec(
       // combine input with output from Python.
       val queue = HybridRowQueue(context.taskMemoryManager(),
         new File(Utils.getLocalDir(SparkEnv.get.conf)), child.output.length)
+      context.addTaskCompletionListener[Unit] { _ =>
+        queue.close()
+      }
 
       val stream = iter.map { row =>
         queue.add(row.asInstanceOf[UnsafeRow])
@@ -279,5 +282,4 @@ case class BoundedWindowInPandasExec(
       }
     }
   }
-
 }
