@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjecti
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.state._
@@ -572,6 +573,9 @@ case class SessionWindowStateStoreSaveExec(
         child.output)
 
       val alreadyRemovedKeys = new mutable.HashSet[UnsafeRow]()
+      var previousSessions: Seq[UnsafeRow] = null
+
+      val ordering = TypeUtils.getInterpretedOrdering(child.output.toStructType)
 
       // FIXME: DEBUG
       val debugPartitionId = TaskContext.get().partitionId()
@@ -587,22 +591,35 @@ case class SessionWindowStateStoreSaveExec(
               val keys = keyProjection(row)
 
               if (!alreadyRemovedKeys.contains(keys)) {
-                logWarning(s"DEBUG: partitionId $debugPartitionId - removing key ${keys} ...")
+                // This is necessary because MultiValuesStateManager doesn't guarantee
+                // stable ordering.
+                // The number of values for the given key is expected to be likely small,
+                // so sorting it here doesn't hurt.
+                previousSessions = stateManager.get(keys).toList
+
                 stateManager.removeKey(keys)
                 alreadyRemovedKeys.add(keys)
               }
 
-              val sessionProjection = GenerateUnsafeProjection.generate(
-                Seq(sessionExpression), child.output)
-              val rowProjection = GenerateUnsafeProjection.generate(child.output, child.output)
-              logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - keys ${keyProjection(row)}")
-              logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - session ${sessionProjection(row)}")
-              logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - row (proj) ${rowProjection(row)}")
-              logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - row ${row}")
+              if (!previousSessions.exists(p => ordering.equiv(row, p))) {
+                // such session is not in previous session
 
-              logWarning(s"DEBUG: partitionId $debugPartitionId - adding row for key ${keys} row ${row} ...")
-              stateManager.append(keys, row)
-              numUpdatedStateRows += 1
+                val sessionProjection = GenerateUnsafeProjection.generate(
+                  Seq(sessionExpression), child.output)
+                val rowProjection = GenerateUnsafeProjection.generate(child.output, child.output)
+                logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - keys ${keyProjection(row)}")
+                logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - session ${sessionProjection(row)}")
+                logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - row (proj) ${rowProjection(row)}")
+                logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - row ${row}")
+
+                logWarning(s"DEBUG: partitionId $debugPartitionId - adding row for key ${keys} row ${row} ...")
+
+                stateManager.append(keys, row)
+                numUpdatedStateRows += 1
+              } else {
+                logWarning(s"DEBUG: partitionId $debugPartitionId - add row for key ${keys} row ${row} but don't update count since it is already existed...")
+                stateManager.append(keys, row)
+              }
             }
 
             logWarning(s"DEBUG: partitionId $debugPartitionId - finished iterating...")
@@ -632,20 +649,53 @@ case class SessionWindowStateStoreSaveExec(
             private val updatesStartTimeNs = System.nanoTime
 
             override protected def getNext(): InternalRow = {
-              if (iter.hasNext) {
+              var ret: InternalRow = null
+
+              while (ret == null && iter.hasNext) {
                 val row = iter.next().asInstanceOf[UnsafeRow]
                 val keys = keyProjection(row)
                 if (!alreadyRemovedKeys.contains(keys)) {
+                  // This is necessary because MultiValuesStateManager doesn't guarantee
+                  // stable ordering.
+                  // The number of values for the given key is expected to be likely small,
+                  // so sorting it here doesn't hurt.
+                  previousSessions = stateManager.get(keys).toList
+
                   stateManager.removeKey(keys)
                   alreadyRemovedKeys.add(keys)
                 }
-                stateManager.append(keys, row)
-                numOutputRows += 1
-                numUpdatedStateRows += 1
-                row
-              } else {
+
+                if (!previousSessions.exists(p => ordering.equiv(row, p))) {
+                  // such session is not in previous session
+
+                  val sessionProjection = GenerateUnsafeProjection.generate(
+                    Seq(sessionExpression), child.output)
+                  val rowProjection = GenerateUnsafeProjection.generate(child.output, child.output)
+                  logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - keys ${keyProjection(row)}")
+                  logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - session ${sessionProjection(row)}")
+                  logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - row (proj) ${rowProjection(row)}")
+                  logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - row ${row}")
+
+                  logWarning(s"DEBUG: partitionId $debugPartitionId - adding row for key ${keys} row ${row} ...")
+
+                  stateManager.append(keys, row)
+                  numUpdatedStateRows += 1
+
+                  ret = row
+                } else {
+                  logWarning(s"DEBUG: partitionId $debugPartitionId - add row for key ${keys} row ${row} but don't update count since it is already existed...")
+                  stateManager.append(keys, row)
+                }
+              }
+
+              if (ret == null && !iter.hasNext) {
                 finished = true
                 null
+              } else {
+                // !iter.hasNext && ret != null => can return ret, and next getNext() call will
+                // set finished = true
+                // iter.hasNext && (ret != null || ret == null) => not possible
+                ret
               }
             }
 
