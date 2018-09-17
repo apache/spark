@@ -76,9 +76,8 @@ for env in ASF_USERNAME GPG_PASSPHRASE GPG_KEY; do
   fi
 done
 
-# Explicitly set locale in order to make `sort` output consistent across machines.
-# See https://stackoverflow.com/questions/28881 for more details.
-export LC_ALL=C
+export LC_ALL=C.UTF-8
+export LANG=C.UTF-8
 
 # Commit ref to checkout when building
 GIT_REF=${GIT_REF:-master}
