@@ -103,7 +103,7 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
       val sizes1 = df1.queryExecution.optimizedPlan.collect {
         case relation: LogicalRelation => relation.catalogTable.get.stats.get.sizeInBytes
       }
-      assert(sizes1 != 0)
+      assert(sizes1(0) != 0)
 
       sql(s"ALTER TABLE tbl SET TBLPROPERTIES('deserFactor'='$factor')")
       sql("REFRESH TABLE TBL")

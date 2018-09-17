@@ -1382,7 +1382,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("Test deserialization factor") {
+  test("test deserialization factor") {
     val factor = 10
     val tableName = s"sizeTest"
     val tableNameAdj = s"${tableName}Adj"
