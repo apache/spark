@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -332,6 +333,38 @@ object WindowFunctionType {
   }
 }
 
+sealed trait WindowBoundaryType
+
+/**
+ * Case objects that describe the boundary type of a window frame.
+ */
+object WindowBoundaryType {
+
+  case object Unbounded extends WindowBoundaryType
+
+  case object Growing extends WindowBoundaryType
+
+  case object Shrinking extends WindowBoundaryType
+
+  case object Sliding extends WindowBoundaryType
+
+  def boundaryType(windowExpression: NamedExpression): WindowBoundaryType = {
+    windowExpression.collectFirst {
+      case SpecifiedWindowFrame(_, lower, upper) =>
+        (lower, upper) match {
+          case (UnboundedPreceding, UnboundedFollowing) => Unbounded
+          case (UnboundedPreceding, _) => Growing
+          case (_, UnboundedFollowing) => Shrinking
+          case (_, _) => Sliding
+        }
+    }.getOrElse(
+      throw new AnalysisException(
+        s"Cannot resolve boundary type for window expression $windowExpression"))
+  }
+
+  def isUnbounded(windowExpression: NamedExpression): Boolean =
+    boundaryType(windowExpression) == Unbounded
+}
 
 /**
  * An offset window function is a window function that returns the value of the input column offset

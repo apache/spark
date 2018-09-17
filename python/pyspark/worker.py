@@ -225,7 +225,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf):
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return arg_offsets, wrap_grouped_agg_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
-        return arg_offsets, wrap_bounded_window_agg_pandas_udf_np(func, return_type)
+        return arg_offsets, wrap_window_agg_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF:
         return arg_offsets, wrap_bounded_window_agg_pandas_udf_np(func, return_type)
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
