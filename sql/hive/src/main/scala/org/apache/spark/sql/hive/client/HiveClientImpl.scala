@@ -467,9 +467,9 @@ private[hive] class HiveClientImpl(
         properties = filteredProperties,
         stats = readHiveStats(properties),
         comment = comment,
-        // In older versions of Spark(before 2.2.0), we expand the view original text and store
-        // that into `viewExpandedText`, and that should be used in view resolution. So we get
-        // `viewExpandedText` instead of `viewOriginalText` for viewText here.
+        // We need to add `viewOriginalText` back to display the original view DDL
+        // in `DESC [EXTENDED|FORMATTED] table` command.
+        viewOriginalText = Option(h.getViewOriginalText),
         viewText = Option(h.getViewExpandedText),
         unsupportedFeatures = unsupportedFeatures,
         ignoredProperties = ignoredProperties.toMap)
