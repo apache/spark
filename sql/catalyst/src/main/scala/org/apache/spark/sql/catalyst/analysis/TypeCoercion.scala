@@ -93,7 +93,6 @@ object TypeCoercion {
 
     case (t1: IntegralType, t2: DecimalType) =>
       findWiderDecimalType(DecimalType.forType(t1), t2)
-
     case (t1: DecimalType, t2: IntegralType) =>
       findWiderDecimalType(t1, DecimalType.forType(t2))
 
