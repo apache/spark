@@ -859,7 +859,7 @@ We could also use `counts.sortByKey()`, for example, to sort the pairs alphabeti
 **Note:** when using custom objects as the key in key-value pair operations, you must be sure that a
 custom `equals()` method is accompanied with a matching `hashCode()` method.  For full details, see
 the contract outlined in the [Object.hashCode()
-documentation](http://docs.oracle.com/javase/7/docs/api/java/lang/Object.html#hashCode()).
+documentation](https://docs.oracle.com/javase/8/docs/api/java/lang/Object.html#hashCode--).
 
 </div>
 
@@ -896,7 +896,7 @@ We could also use `counts.sortByKey()`, for example, to sort the pairs alphabeti
 **Note:** when using custom objects as the key in key-value pair operations, you must be sure that a
 custom `equals()` method is accompanied with a matching `hashCode()` method.  For full details, see
 the contract outlined in the [Object.hashCode()
-documentation](http://docs.oracle.com/javase/7/docs/api/java/lang/Object.html#hashCode()).
+documentation](https://docs.oracle.com/javase/8/docs/api/java/lang/Object.html#hashCode--).
 
 </div>
 
