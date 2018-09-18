@@ -23,6 +23,7 @@ import java.util.UUID
 import scala.collection.Map
 import scala.reflect.ClassTag
 
+import org.apache.commons.io.output.StringBuilderWriter
 import org.apache.commons.lang3.ClassUtils
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
@@ -470,7 +471,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def treeString: String = treeString(verbose = true)
 
   def treeString(verbose: Boolean, addSuffix: Boolean = false): String = {
-    val writer = new StringWriter()
+    val writer = new StringBuilderWriter()
     try {
       treeString(writer, verbose, addSuffix)
       writer.toString
