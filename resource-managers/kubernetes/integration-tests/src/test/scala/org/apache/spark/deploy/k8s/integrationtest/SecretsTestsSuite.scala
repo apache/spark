@@ -52,8 +52,7 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
       .withName(ENV_SECRET_NAME)
       .delete()
   }
-
-  // TODO: [SPARK-25291] This test is flaky with regards to memory of executors
+  
   test("Run SparkPi with env and mount secrets.", k8sTestTag) {
     createTestSecret()
     sparkAppConf
