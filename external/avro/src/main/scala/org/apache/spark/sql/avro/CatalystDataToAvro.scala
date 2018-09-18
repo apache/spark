@@ -52,7 +52,7 @@ case class CatalystDataToAvro(child: Expression) extends UnaryExpression {
     out.toByteArray
   }
 
-  override def simpleString: String = {
+  override def simpleString(maxFields: Option[Int]): String = {
     s"to_avro(${child.sql}, ${child.dataType.simpleString})"
   }
 

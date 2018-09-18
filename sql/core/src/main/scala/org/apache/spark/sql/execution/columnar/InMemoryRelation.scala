@@ -208,6 +208,8 @@ case class InMemoryRelation(
 
   override protected def otherCopyArgs: Seq[AnyRef] = Seq(statsOfPlanToCache)
 
-  override def simpleString: String =
-    s"InMemoryRelation [${Utils.truncatedString(output, ", ")}], ${cacheBuilder.storageLevel}"
+  override def simpleString(maxFields: Option[Int]): String = {
+    val outputStr = Utils.truncatedString(output, ", ", maxFields)
+    s"InMemoryRelation [${outputStr}], ${cacheBuilder.storageLevel}"
+  }
 }

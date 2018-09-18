@@ -119,7 +119,7 @@ case class ExternalRDDScanExec[T](
     }
   }
 
-  override def simpleString: String = {
+  override def simpleString(maxFields: Option[Int]): String = {
     s"$nodeName${output.mkString("[", ",", "]")}"
   }
 }
@@ -196,7 +196,7 @@ case class RDDScanExec(
     }
   }
 
-  override def simpleString: String = {
+  override def simpleString(maxFields: Option[Int]): String = {
     s"$nodeName${Utils.truncatedString(output, "[", ",", "]")}"
   }
 }

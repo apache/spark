@@ -51,7 +51,7 @@ case class AvroDataToCatalyst(child: Expression, jsonFormatSchema: String)
     deserializer.deserialize(result)
   }
 
-  override def simpleString: String = {
+  override def simpleString(maxFields: Option[Int]): String = {
     s"from_avro(${child.sql}, ${dataType.simpleString})"
   }
 

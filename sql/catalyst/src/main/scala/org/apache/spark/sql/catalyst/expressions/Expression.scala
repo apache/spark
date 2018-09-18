@@ -230,9 +230,9 @@ abstract class Expression extends TreeNode[Expression] {
 
   // Marks this as final, Expression.verboseString should never be called, and thus shouldn't be
   // overridden by concrete classes.
-  final override def verboseString: String = simpleString
+  final override def verboseString(maxFields: Option[Int]): String = simpleString(maxFields)
 
-  override def simpleString: String = toString
+  override def simpleString(maxFields: Option[Int]): String = toString
 
   override def toString: String = prettyName + Utils.truncatedString(
     flatArguments.toSeq, "(", ", ", ")")

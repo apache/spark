@@ -137,8 +137,23 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  def truncatedString[T](
+      seq: Seq[T],
+      start: String,
+      sep: String,
+      end: String,
+      maxFields: Option[Int]): String = {
+    val maxNumFields = maxFields.getOrElse(maxNumToStringFields)
+    truncatedString(seq, start, sep, end, maxNumFields)
+  }
+
   /** Shorthand for calling truncatedString() without start or end strings. */
   def truncatedString[T](seq: Seq[T], sep: String): String = truncatedString(seq, "", sep, "")
+
+  def truncatedString[T](seq: Seq[T], sep: String, maxFields: Option[Int]): String = {
+    truncatedString(seq, "", sep, "", maxFields)
+  }
+
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {

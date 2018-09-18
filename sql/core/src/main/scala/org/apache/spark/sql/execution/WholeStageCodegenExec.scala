@@ -87,7 +87,7 @@ trait CodegenSupport extends SparkPlan {
     this.parent = parent
     ctx.freshNamePrefix = variablePrefix
     s"""
-       |${ctx.registerComment(s"PRODUCE: ${this.simpleString}")}
+       |${ctx.registerComment(s"PRODUCE: ${this.simpleString()}")}
        |${doProduce(ctx)}
      """.stripMargin
   }
@@ -185,7 +185,7 @@ trait CodegenSupport extends SparkPlan {
       parent.doConsume(ctx, inputVars, rowVar)
     }
     s"""
-       |${ctx.registerComment(s"CONSUME: ${parent.simpleString}")}
+       |${ctx.registerComment(s"CONSUME: ${parent.simpleString()}")}
        |$evaluated
        |$consumeFunc
      """.stripMargin
@@ -396,8 +396,9 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       writer: Writer,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): Unit = {
-    child.generateTreeString(depth, lastChildren, writer, verbose, "")
+      addSuffix: Boolean = false,
+      maxFields: Option[Int]): Unit = {
+    child.generateTreeString(depth, lastChildren, writer, verbose, "", false, maxFields)
   }
 
   override def needCopyResult: Boolean = false
@@ -672,8 +673,16 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       writer: Writer,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): Unit = {
-    child.generateTreeString(depth, lastChildren, writer, verbose, s"*($codegenStageId) ")
+      addSuffix: Boolean = false,
+      maxFields: Option[Int]): Unit = {
+    child.generateTreeString(
+      depth,
+      lastChildren,
+      writer,
+      verbose,
+      s"*($codegenStageId) ",
+      false,
+      maxFields)
   }
 
   override def needStopCheck: Boolean = true

@@ -196,27 +196,27 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   private def writeOrError(writer: Writer)(f: Writer => Unit): Unit =
     try f(writer) catch { case e: AnalysisException => writer.write(e.toString) }
 
-  private def writePlans(writer: Writer): Unit = {
+  private def writePlans(writer: Writer, maxFields: Option[Int]): Unit = {
     val (verbose, addSuffix) = (true, false)
 
     writer.write("== Parsed Logical Plan ==\n")
-    writeOrError(writer)(logical.treeString(_, verbose, addSuffix))
+    writeOrError(writer)(logical.treeString(_, verbose, addSuffix, maxFields))
     writer.write("\n== Analyzed Logical Plan ==\n")
     val analyzedOutput = stringOrError(Utils.truncatedString(
-      analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", "))
+      analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields))
     writer.write(analyzedOutput)
     writer.write("\n")
-    writeOrError(writer)(analyzed.treeString(_, verbose, addSuffix))
+    writeOrError(writer)(analyzed.treeString(_, verbose, addSuffix, maxFields))
     writer.write("\n== Optimized Logical Plan ==\n")
-    writeOrError(writer)(optimizedPlan.treeString(_, verbose, addSuffix))
+    writeOrError(writer)(optimizedPlan.treeString(_, verbose, addSuffix, maxFields))
     writer.write("\n== Physical Plan ==\n")
-    writeOrError(writer)(executedPlan.treeString(_, verbose, addSuffix))
+    writeOrError(writer)(executedPlan.treeString(_, verbose, addSuffix, maxFields))
   }
 
   override def toString: String = withRedaction {
     val writer = new StringBuilderWriter()
     try {
-      writePlans(writer)
+      writePlans(writer, None)
       writer.toString
     } finally {
       writer.close()
@@ -275,7 +275,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       val writer = new OutputStreamWriter(fs.create(filePath))
 
       try {
-        writePlans(writer)
+        writePlans(writer, Some(Int.MaxValue))
         writer.write("\n== Whole Stage Codegen ==\n")
         org.apache.spark.sql.execution.debug.writeCodegen(writer, executedPlan)
       } finally {

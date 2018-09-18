@@ -1043,7 +1043,7 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
             case Some(newType) if a.dataType == newType.dataType => a
             case Some(newType) =>
               logDebug(
-                s"Promoting $a from ${a.dataType} to ${newType.dataType} in ${q.simpleString}")
+                s"Promoting $a from ${a.dataType} to ${newType.dataType} in ${q.simpleString()}")
               newType
           }
       }

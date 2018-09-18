@@ -62,7 +62,7 @@ private[execution] object SparkPlanInfo {
       case fileScan: FileSourceScanExec => fileScan.metadata
       case _ => Map[String, String]()
     }
-    new SparkPlanInfo(plan.nodeName, plan.simpleString, children.map(fromSparkPlan),
+    new SparkPlanInfo(plan.nodeName, plan.simpleString(), children.map(fromSparkPlan),
       metadata, metrics)
   }
 }

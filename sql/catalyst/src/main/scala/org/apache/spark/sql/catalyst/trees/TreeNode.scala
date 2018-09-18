@@ -433,11 +433,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   private lazy val allChildren: Set[TreeNode[_]] = (children ++ innerChildren).toSet[TreeNode[_]]
 
   /** Returns a string representing the arguments to this node, minus any children */
-  def argString: String = stringArgs.flatMap {
+  def argString(maxFields: Option[Int]): String = stringArgs.flatMap {
     case tn: TreeNode[_] if allChildren.contains(tn) => Nil
     case Some(tn: TreeNode[_]) if allChildren.contains(tn) => Nil
-    case Some(tn: TreeNode[_]) => tn.simpleString :: Nil
-    case tn: TreeNode[_] => tn.simpleString :: Nil
+    case Some(tn: TreeNode[_]) => tn.simpleString() :: Nil
+    case tn: TreeNode[_] => tn.simpleString() :: Nil
     case seq: Seq[Any] if seq.toSet.subsetOf(allChildren.asInstanceOf[Set[Any]]) => Nil
     case iter: Iterable[_] if iter.isEmpty => Nil
     case seq: Seq[_] => Utils.truncatedString(seq, "[", ", ", "]") :: Nil
@@ -457,13 +457,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }.mkString(", ")
 
   /** ONE line description of this node. */
-  def simpleString: String = s"$nodeName $argString".trim
+  def simpleString(maxFields: Option[Int] = None): String = {
+    s"$nodeName ${argString(maxFields)}".trim
+  }
 
   /** ONE line description of this node with more information */
-  def verboseString: String
+  def verboseString(maxFields: Option[Int]): String
 
   /** ONE line description of this node with some suffix information */
-  def verboseStringWithSuffix: String = verboseString
+  def verboseStringWithSuffix(maxFields: Option[Int]): String = verboseString(maxFields)
 
   override def toString: String = treeString
 
@@ -473,15 +475,19 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def treeString(verbose: Boolean, addSuffix: Boolean = false): String = {
     val writer = new StringBuilderWriter()
     try {
-      treeString(writer, verbose, addSuffix)
+      treeString(writer, verbose, addSuffix, None)
       writer.toString
     } finally {
       writer.close()
     }
   }
 
-  def treeString(writer: Writer, verbose: Boolean, addSuffix: Boolean): Unit = {
-    generateTreeString(0, Nil, writer, verbose, "", addSuffix)
+  def treeString(
+      writer: Writer,
+      verbose: Boolean,
+      addSuffix: Boolean,
+      maxFields: Option[Int]): Unit = {
+    generateTreeString(0, Nil, writer, verbose, "", addSuffix, maxFields)
   }
 
   /**
@@ -547,7 +553,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       writer: Writer,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): Unit = {
+      addSuffix: Boolean = false,
+      maxFields: Option[Int]): Unit = {
 
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
@@ -557,9 +564,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
 
     val str = if (verbose) {
-      if (addSuffix) verboseStringWithSuffix else verboseString
+      if (addSuffix) verboseStringWithSuffix(maxFields) else verboseString(maxFields)
     } else {
-      simpleString
+      simpleString()
     }
     writer.write(prefix)
     writer.write(str)
@@ -568,17 +575,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     if (innerChildren.nonEmpty) {
       innerChildren.init.foreach(_.generateTreeString(
         depth + 2, lastChildren :+ children.isEmpty :+ false, writer, verbose,
-        addSuffix = addSuffix))
+        addSuffix = addSuffix, maxFields = maxFields))
       innerChildren.last.generateTreeString(
         depth + 2, lastChildren :+ children.isEmpty :+ true, writer, verbose,
-        addSuffix = addSuffix)
+        addSuffix = addSuffix, maxFields = maxFields)
     }
 
     if (children.nonEmpty) {
       children.init.foreach(_.generateTreeString(
-        depth + 1, lastChildren :+ false, writer, verbose, prefix, addSuffix))
+        depth + 1, lastChildren :+ false, writer, verbose, prefix, addSuffix, maxFields))
       children.last.generateTreeString(
-        depth + 1, lastChildren :+ true, writer, verbose, prefix, addSuffix)
+        depth + 1, lastChildren :+ true, writer, verbose, prefix, addSuffix, maxFields)
     }
   }
 

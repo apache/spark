@@ -290,7 +290,7 @@ case class ExpressionEncoder[T](
   } catch {
     case e: Exception =>
       throw new RuntimeException(
-        s"Error while encoding: $e\n${serializer.map(_.simpleString).mkString("\n")}", e)
+        s"Error while encoding: $e\n${serializer.map(_.simpleString()).mkString("\n")}", e)
   }
 
   /**
@@ -302,7 +302,7 @@ case class ExpressionEncoder[T](
     constructProjection(row).get(0, ObjectType(clsTag.runtimeClass)).asInstanceOf[T]
   } catch {
     case e: Exception =>
-      throw new RuntimeException(s"Error while decoding: $e\n${deserializer.simpleString}", e)
+      throw new RuntimeException(s"Error while decoding: $e\n${deserializer.simpleString()}", e)
   }
 
   /**
