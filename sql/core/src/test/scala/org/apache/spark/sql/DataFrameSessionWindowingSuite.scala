@@ -92,6 +92,74 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
     )
   }
 
+  test("session window groupBy with multiple keys statement - one distinct") {
+    val df = Seq(
+      ("2016-03-27 19:39:34", 1, "a"),
+      ("2016-03-27 19:39:39", 1, "a"),
+      ("2016-03-27 19:39:56", 2, "a"),
+      ("2016-03-27 19:40:04", 2, "a"),
+      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
+
+    // session window handles sort while applying group by
+    // whereas time window doesn't
+
+    // expected sessions
+    // key "a" => (19:39:34 ~ 19:39:49) (19:39:56 ~ 19:40:14)
+    // key "b" => (19:39:27 ~ 19:39:37)
+
+    val df2 = df.groupBy(session($"time", "10 seconds"), 'id)
+      .agg(count("*").as("counts"), sumDistinct("value").as("sum"))
+      .orderBy($"session.start".asc)
+      .selectExpr("CAST(session.start AS STRING)", "CAST(session.end AS STRING)", "id",
+        "counts", "sum")
+
+    df2.explain(extended = true)
+
+    checkAnswer(
+      df2,
+
+      Seq(
+        Row("2016-03-27 19:39:27", "2016-03-27 19:39:37", "b", 1, 4),
+        Row("2016-03-27 19:39:34", "2016-03-27 19:39:49", "a", 2, 1),
+        Row("2016-03-27 19:39:56", "2016-03-27 19:40:14", "a", 2, 2)
+      )
+    )
+  }
+
+  test("session window groupBy with multiple keys statement - two distincts") {
+    val df = Seq(
+      ("2016-03-27 19:39:34", 1, 2, "a"),
+      ("2016-03-27 19:39:39", 1, 2, "a"),
+      ("2016-03-27 19:39:56", 2, 4, "a"),
+      ("2016-03-27 19:40:04", 2, 4, "a"),
+      ("2016-03-27 19:39:27", 4, 8, "b")).toDF("time", "value", "value2", "id")
+
+    // session window handles sort while applying group by
+    // whereas time window doesn't
+
+    // expected sessions
+    // key "a" => (19:39:34 ~ 19:39:49) (19:39:56 ~ 19:40:14)
+    // key "b" => (19:39:27 ~ 19:39:37)
+
+    val df2 = df.groupBy(session($"time", "10 seconds"), 'id)
+      .agg(sumDistinct("value").as("sum"), sumDistinct("value2").as("sum2"))
+      .orderBy($"session.start".asc)
+      .selectExpr("CAST(session.start AS STRING)", "CAST(session.end AS STRING)", "id",
+        "sum", "sum2")
+
+    df2.explain(extended = true)
+
+    checkAnswer(
+      df2,
+
+      Seq(
+        Row("2016-03-27 19:39:27", "2016-03-27 19:39:37", "b", 4, 8),
+        Row("2016-03-27 19:39:34", "2016-03-27 19:39:49", "a", 1, 2),
+        Row("2016-03-27 19:39:56", "2016-03-27 19:40:14", "a", 2, 4)
+      )
+    )
+  }
+
   test("session window groupBy with multiple keys statement - keys overlapped with sessions") {
     val df = Seq(
       ("2016-03-27 19:39:34", 1, "a"),

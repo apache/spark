@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming._
 
@@ -118,14 +119,14 @@ object AggUtils {
     finalAggregate :: Nil
   }
 
-  // FIXME: now I'm not sure sessionization works with distinct (don't have imagination)
-  // FIXME: maybe it is not easy to add sessionization with distinct?
   def planAggregateWithOneDistinct(
       groupingExpressions: Seq[NamedExpression],
       functionsWithDistinct: Seq[AggregateExpression],
       functionsWithoutDistinct: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
+
+    val maySessionChild = mayAppendUpdatingSessionExec(groupingExpressions, child)
 
     // functionsWithDistinct is guaranteed to be non-empty. Even though it may contain more than one
     // DISTINCT aggregate function, all of those functions will have the same column expressions.
@@ -153,7 +154,7 @@ object AggUtils {
         aggregateAttributes = aggregateAttributes,
         resultExpressions = groupingAttributes ++ distinctAttributes ++
           aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-        child = child)
+        child = maySessionChild)
     }
 
     // 2. Create an Aggregate Operator for partial merge aggregations.
@@ -209,17 +210,13 @@ object AggUtils {
           mergeAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes) ++
           distinctAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
 
-      val partialDistinctAggregate = createAggregate(
+      createAggregate(
         groupingExpressions = groupingAttributes,
         aggregateExpressions = mergeAggregateExpressions ++ distinctAggregateExpressions,
         aggregateAttributes = mergeAggregateAttributes ++ distinctAggregateAttributes,
         initialInputBufferOffset = (groupingAttributes ++ distinctAttributes).length,
         resultExpressions = partialAggregateResult,
         child = partialMergeAggregate)
-
-      mayAppendMergingSessionExec(groupingExpressions,
-        mergeAggregateExpressions ++ distinctAggregateExpressions,
-        partialDistinctAggregate)
     }
 
     // 4. Create an Aggregate Operator for the final aggregation.
@@ -444,6 +441,33 @@ object AggUtils {
 
     finalAndCompleteAggregate :: Nil
   }
+
+  private def mayAppendUpdatingSessionExec(groupingExpressions: Seq[NamedExpression],
+                                           maybeChildPlan: SparkPlan): SparkPlan =
+    groupingExpressions.find(_.metadata.contains(SessionWindow.marker)) match {
+      case Some(sessionExpression) =>
+        val groupWithoutSessionExpression = groupingExpressions.filterNot {
+          p => p.semanticEquals(sessionExpression)
+        }
+
+        val groupingWithoutSessionAttributes = groupWithoutSessionExpression.map(_.toAttribute)
+
+        val childDistribution = if (groupWithoutSessionExpression.isEmpty) {
+          AllTuples :: Nil
+        } else {
+          ClusteredDistribution(groupWithoutSessionExpression) :: Nil
+        }
+        val childOrdering = Seq((groupingWithoutSessionAttributes ++ Seq(sessionExpression))
+          .map(SortOrder(_, Ascending)))
+        val updatedSession = UpdatingSessionExec(
+          groupingWithoutSessionAttributes,
+          sessionExpression.toAttribute,
+          optRequiredChildDistribution = Some(childDistribution),
+          optRequiredChildOrdering = Some(childOrdering),
+          maybeChildPlan)
+        updatedSession
+      case None => maybeChildPlan
+    }
 
   private def mayAppendMergingSessionExec(
       groupingExpressions: Seq[NamedExpression],
