@@ -121,7 +121,7 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
   private ChannelFuture respond(final Channel channel,
                                 final Encodable result) throws InterruptedException {
     final SocketAddress remoteAddress = channel.remoteAddress();
-    return channel.writeAndFlush(result).sync().addListener((ChannelFutureListener) future -> {
+    return channel.writeAndFlush(result).await().addListener((ChannelFutureListener) future -> {
       if (future.isSuccess()) {
         logger.trace("Sent result {} to client {}", result, remoteAddress);
       } else {
