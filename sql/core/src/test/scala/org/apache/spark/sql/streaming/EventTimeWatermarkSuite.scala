@@ -30,7 +30,7 @@ import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.functions.{count, session, sum, window}
+import org.apache.spark.sql.functions.{count, max, session, sum, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.util.Utils
@@ -461,6 +461,64 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       // sessions: key 0 => (40,45) / key 1 => (25,32), (35,40)
       // updated: key 0 => (40,45)
       CheckNewAnswer((0, 40, 45, 1, 40))
+    )
+  }
+
+  test("StructuredSessionization - example") {
+    // Implements StructuredSessionization.scala leveraging "session" function
+    // as a test, to verify the sessionization works with simple example
+
+    val inputData = MemoryStream[(String, Long)]
+
+    // Split the lines into words, treat words as sessionId of events
+    val events = inputData.toDF()
+      .select($"_1".as("value"), $"_2".as("timestamp"))
+      .withColumn("eventTime", $"timestamp".cast("timestamp"))
+      .selectExpr("explode(split(value, ' ')) AS sessionId", "eventTime")
+      .withWatermark("eventTime", "10 seconds")
+
+    val sessionUpdates = events
+      .groupBy(session($"eventTime", "10 seconds") as 'session, 'sessionId)
+      .agg(count("*").as("numEvents"), max("eventTime").as("max_timestamp"))
+      .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
+        "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
+        "numEvents")
+
+    testStream(sessionUpdates, OutputMode.Update())(
+      AddData(inputData, ("hello world spark", 10L), ("world hello structured streaming", 11L)),
+      // Advance watermark to 1 seconds
+      CheckNewAnswer(
+        ("hello", 10, 21, 11, 2),
+        ("world", 10, 21, 11, 2),
+        ("spark", 10, 20, 10, 1),
+        ("structured", 11, 21, 10, 1),
+        ("streaming", 11, 21, 10, 1)
+      ),
+
+      AddData(inputData, ("spark streaming", 15L)),
+      // Advance watermark to 5 seconds
+      CheckNewAnswer(("spark", 10, 25, 15, 2), ("streaming", 11, 25, 14, 2)),
+
+      AddData(inputData, ("hello world", 25L)),
+      // Advance watermark to 15 seconds
+      // ("hello", 10L) and ("world", 11L) are not evicted yet
+      // but new input rows doesn't fall into existing sessions
+      CheckNewAnswer(("hello", 25, 35, 10, 1), ("world", 25, 35, 10, 1)),
+
+      AddData(inputData, ("hello world", 35L)),
+      // Advance watermark to 25 seconds
+      // ("hello", 10L) and ("world", 11L) are evicted
+      CheckNewAnswer(("hello", 25, 45, 20, 2), ("world", 25, 45, 20, 2)),
+
+      AddData(inputData, ("hello world", 10L)),
+      // Should not emit anything as data less than watermark
+      // FIXME: this works but why watermark doesn't effect when we don't add 35L?
+      // FIXME: investigate what's happening here...
+      CheckNewAnswer(),
+
+      AddData(inputData, ("hello apache spark", 40L)),
+      // Advance watermark to 30 seconds
+      CheckNewAnswer(("hello", 25, 50, 25, 3), ("apache", 40, 50, 10, 1), ("spark", 40, 50, 10, 1))
     )
   }
 
