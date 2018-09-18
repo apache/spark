@@ -479,7 +479,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
     val sessionUpdates = events
       .groupBy(session($"eventTime", "10 seconds") as 'session, 'sessionId)
-      .agg(count("*").as("numEvents"), max("eventTime").as("max_timestamp"))
+      .agg(count("*").as("numEvents"))
       .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
         "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
         "numEvents")
