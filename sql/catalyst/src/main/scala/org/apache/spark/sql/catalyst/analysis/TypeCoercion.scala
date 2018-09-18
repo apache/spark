@@ -32,7 +32,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
-
 /**
  * A collection of [[Rule]] that can be used to coerce differing types that participate in
  * operations into compatible ones.
@@ -117,7 +116,7 @@ object TypeCoercion {
     val range = max(d1.precision - d1.scale, d2.precision - d2.scale)
 
     // Check the resultant decimal type does not exceed the allowable limits.
-    if (range + scale <= DecimalType.MAX_PRECISION && scale <= DecimalType.MAX_SCALE ) {
+    if (range + scale <= DecimalType.MAX_PRECISION && scale <= DecimalType.MAX_SCALE) {
       Some(DecimalType(range + scale, scale))
     } else {
       None
