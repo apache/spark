@@ -244,11 +244,15 @@ setMethod("showDF",
 #' @note show(SparkDataFrame) since 1.4.0
 setMethod("show", "SparkDataFrame",
           function(object) {
-            cols <- lapply(dtypes(object), function(l) {
-              paste(l, collapse = ":")
-            })
-            s <- paste(cols, collapse = ", ")
-            cat(paste(class(object), "[", s, "]\n", sep = ""))
+            if (identical(sparkR.conf("spark.sql.repl.eagerEval.enabled", "false")[[1]], "true")) {
+              showDF(object)
+            } else {
+              cols <- lapply(dtypes(object), function(l) {
+                paste(l, collapse = ":")
+              })
+              s <- paste(cols, collapse = ", ")
+              cat(paste(class(object), "[", s, "]\n", sep = ""))
+            }
           })
 
 #' DataTypes

@@ -450,6 +450,42 @@ print(model.summaries)
 {% endhighlight %}
 </div>
 
+### Eager execution
+
+If the eager execution is enabled, the data will be returned to R client immediately when the `SparkDataFrame` is created. Eager execution can be enabled by setting the configuration property `spark.sql.repl.eagerEval.enabled` to `true` when the `SparkSession` is started up.
+
+<div data-lang="r" markdown="1">
+{% highlight r %}
+
+# Start up spark session with eager execution enabled
+sparkR.session(master = "local[*]", sparkConfig = list(spark.sql.repl.eagerEval.enabled = "true"))
+
+df <- createDataFrame(faithful)
+
+# Instead of displaying the SparkDataFrame class, displays the data returned
+df
+
+##+---------+-------+                                                             
+##|eruptions|waiting|
+##+---------+-------+
+##|      3.6|   79.0|
+##|      1.8|   54.0|
+##|    3.333|   74.0|
+##|    2.283|   62.0|
+##|    4.533|   85.0|
+##|    2.883|   55.0|
+##|      4.7|   88.0|
+##|      3.6|   85.0|
+##|     1.95|   51.0|
+##|     4.35|   85.0|
+##+---------+-------+
+##only showing top 10 rows
+
+{% endhighlight %} 
+</div>
+
+Note that the `SparkSession` created by `sparkR` shell does not have eager execution enabled. You can stop the current session and start up a new session like above to enable.
+
 ## Running SQL Queries from SparkR
 A SparkDataFrame can also be registered as a temporary view in Spark SQL and that allows you to run SQL queries over its data.
 The `sql` function enables applications to run SQL queries programmatically and returns the result as a `SparkDataFrame`.
