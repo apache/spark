@@ -82,24 +82,26 @@ private[execution] object SparkPlanInfo {
     }
 
     // dump the file scan metadata (e.g file path) to event log
-    var metadata = plan match {
+    val metadata = plan match {
       case fileScan: FileSourceScanExec => fileScan.metadata
       case DataWritingCommandExec(i: InsertIntoHadoopFsRelationCommand, _) =>
         makeOutputMetadata(Some(i.outputPath), i.outputColumnNames)
-      case DataWritingCommandExec(c: CreateDataSourceTableAsSelectCommand, _) =>
-        makeOutputMetadata(c.table.storage.locationUri.map(new Path(_)), c.outputColumnNames)
-      case DataWritingCommandExec(d: DataWritingCommand, _)
-          if d.getClass.getCanonicalName == CREATE_HIVE_TABLE_AS_SELECT_COMMAND =>
-        val table = reflectTable(d, CREATE_HIVE_TABLE_AS_SELECT_COMMAND, "tableDesc")
-        makeOutputMetadata(table.storage.locationUri.map(new Path(_)), d.outputColumnNames)
-      case DataWritingCommandExec(d: DataWritingCommand, _)
-          if d.getClass.getCanonicalName == INSERT_INTO_HIVE_DIR_COMMAND =>
-        val table = reflectTable(d, INSERT_INTO_HIVE_DIR_COMMAND, "table")
-        makeOutputMetadata(table.storage.locationUri.map(new Path(_)), d.outputColumnNames)
-      case DataWritingCommandExec(d: DataWritingCommand, _)
-        if d.getClass.getCanonicalName == INSERT_INTO_HIVE_TABLE =>
-        val table = reflectTable(d, INSERT_INTO_HIVE_TABLE, "table")
-        makeOutputMetadata(table.storage.locationUri.map(new Path(_)), d.outputColumnNames)
+      case DataWritingCommandExec(d: DataWritingCommand, _) =>
+        d.getClass.getCanonicalName match {
+          case CREATE_DATA_SOURCE_TABLE_AS_SELECT_COMMAND =>
+            val table = reflectTable(d, CREATE_DATA_SOURCE_TABLE_AS_SELECT_COMMAND, "table")
+            makeOutputMetadata(table.storage.locationUri.map(new Path(_)), d.outputColumnNames)
+          case CREATE_HIVE_TABLE_AS_SELECT_COMMAND =>
+            val table = reflectTable(d, CREATE_HIVE_TABLE_AS_SELECT_COMMAND, "tableDesc")
+            makeOutputMetadata(table.storage.locationUri.map(new Path(_)), d.outputColumnNames)
+          case INSERT_INTO_HIVE_DIR_COMMAND =>
+            val table = reflectTable(d, INSERT_INTO_HIVE_DIR_COMMAND, "table")
+            makeOutputMetadata(table.storage.locationUri.map(new Path(_)), d.outputColumnNames)
+          case INSERT_INTO_HIVE_TABLE =>
+            val table = reflectTable(d, INSERT_INTO_HIVE_TABLE, "table")
+            makeOutputMetadata(table.storage.locationUri.map(new Path(_)), d.outputColumnNames)
+          case _ => Map[String, String]()
+        }
       case _ => Map[String, String]()
     }
 
@@ -107,6 +109,8 @@ private[execution] object SparkPlanInfo {
       metadata, metrics)
   }
 
+  private val CREATE_DATA_SOURCE_TABLE_AS_SELECT_COMMAND =
+    "org.apache.spark.sql.execution.command.CreateDataSourceTableAsSelectCommand"
   private val CREATE_HIVE_TABLE_AS_SELECT_COMMAND =
     "org.apache.spark.sql.hive.execution.CreateHiveTableAsSelectCommand"
   private val INSERT_INTO_HIVE_DIR_COMMAND =
