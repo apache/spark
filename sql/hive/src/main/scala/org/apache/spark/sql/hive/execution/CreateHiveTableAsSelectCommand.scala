@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.hadoop.fs.Path
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
@@ -100,6 +99,4 @@ case class CreateHiveTableAsSelectCommand(
     s"TableName: ${tableDesc.identifier.table}, " +
     s"InsertIntoHiveTable]"
   }
-
-  override def outputDir: Option[Path] = tableDesc.storage.locationUri.map(new Path(_))
 }

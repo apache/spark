@@ -59,12 +59,12 @@ class SparkPlanSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-25421 DataWritingCommandExec should contains 'OutputDir' metadata") {
+  test("SPARK-25421 DataWritingCommandExec should contains 'OutputPath' metadata") {
     withTable("t") {
       sql("CREATE TABLE t(col_I int) USING PARQUET")
       val f = sql("INSERT OVERWRITE TABLE t SELECT 1")
       assert(SparkPlanInfo.fromSparkPlan(f.queryExecution.sparkPlan).metadata
-        .contains("OutputDir"))
+        .contains("OutputPath"))
     }
   }
 }

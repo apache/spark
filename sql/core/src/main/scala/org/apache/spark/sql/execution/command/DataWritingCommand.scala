@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -48,8 +47,6 @@ trait DataWritingCommand extends Command {
   // Output columns of the analyzed input query plan.
   def outputColumns: Seq[Attribute] =
     DataWritingCommand.logicalPlanOutputWithNames(query, outputColumnNames)
-
-  def outputDir: Option[Path]
 
   lazy val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
 

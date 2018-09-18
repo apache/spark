@@ -130,7 +130,5 @@ case class InsertIntoHiveDirCommand(
 
     Seq.empty[Row]
   }
-
-  override def outputDir: Option[Path] = storage.locationUri.map(new Path(_))
 }
 

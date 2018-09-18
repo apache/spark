@@ -261,6 +261,4 @@ case class InsertIntoHadoopFsRelationCommand(
       }
     }.toMap
   }
-
-  override def outputDir: Option[Path] = Some(this.outputPath)
 }
