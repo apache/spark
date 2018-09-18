@@ -21,6 +21,7 @@ import javax.annotation.Nullable
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.math._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
@@ -29,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+
 
 
 /**
@@ -89,10 +91,11 @@ object TypeCoercion {
     case (NullType, t1) => Some(t1)
     case (t1, NullType) => Some(t1)
 
-    case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
-      Some(t2)
-    case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
-      Some(t1)
+    case (t1: IntegralType, t2: DecimalType) =>
+      findWiderDecimalType(DecimalType.forType(t1), t2)
+
+    case (t1: DecimalType, t2: IntegralType) =>
+      findWiderDecimalType(t1, DecimalType.forType(t2))
 
     // Promote numeric types to the highest of the two
     case (t1: NumericType, t2: NumericType)
@@ -104,6 +107,22 @@ object TypeCoercion {
       Some(TimestampType)
 
     case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
+  }
+
+  /**
+   * Finds a wider decimal type between the two supplied decimal types without
+   * any loss of precision.
+   */
+  def findWiderDecimalType(d1: DecimalType, d2: DecimalType): Option[DecimalType] = {
+    val scale = max(d1.scale, d2.scale)
+    val range = max(d1.precision - d1.scale, d2.precision - d2.scale)
+
+    // Check the resultant decimal type does not exceed the allowable limits.
+    if (range + scale <= DecimalType.MAX_PRECISION && scale <= DecimalType.MAX_SCALE ) {
+      Some(DecimalType(range + scale, scale))
+    } else {
+      None
+    }
   }
 
   /** Promotes all the way to StringType. */
