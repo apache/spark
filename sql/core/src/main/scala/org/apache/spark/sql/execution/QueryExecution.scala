@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{OutputStreamWriter, StringWriter, Writer}
+import java.io.{OutputStreamWriter, Writer}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
+import org.apache.commons.io.output.StringBuilderWriter
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkEnv
@@ -196,22 +197,24 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     try f(writer) catch { case e: AnalysisException => writer.write(e.toString) }
 
   private def writePlans(writer: Writer): Unit = {
+    val (verbose, addSuffix) = (true, false)
+
     writer.write("== Parsed Logical Plan ==\n")
-    writeOrError(writer)(logical.treeString(_, verbose = true, addSuffix = false))
-    writer.write("== Analyzed Logical Plan ==\n")
-    writeOrError(writer) { writer =>
-      analyzed.output.foreach(o => writer.write(s"${o.name}: ${o.dataType.simpleString}"))
-    }
+    writeOrError(writer)(logical.treeString(_, verbose, addSuffix))
+    writer.write("\n== Analyzed Logical Plan ==\n")
+    val analyzedOutput = stringOrError(Utils.truncatedString(
+      analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", "))
+    writer.write(analyzedOutput)
     writer.write("\n")
-    writeOrError(writer)(analyzed.treeString(_, verbose = true, addSuffix = false))
-    writer.write("== Optimized Logical Plan ==\n")
-    writeOrError(writer)(optimizedPlan.treeString(_, verbose = true, addSuffix = false))
-    writer.write("== Physical Plan ==\n")
-    writeOrError(writer)(executedPlan.treeString(_, verbose = true, addSuffix = false))
+    writeOrError(writer)(analyzed.treeString(_, verbose, addSuffix))
+    writer.write("\n== Optimized Logical Plan ==\n")
+    writeOrError(writer)(optimizedPlan.treeString(_, verbose, addSuffix))
+    writer.write("\n== Physical Plan ==\n")
+    writeOrError(writer)(executedPlan.treeString(_, verbose, addSuffix))
   }
 
   override def toString: String = withRedaction {
-    val writer = new StringWriter()
+    val writer = new StringBuilderWriter()
     try {
       writePlans(writer)
       writer.toString

@@ -22,6 +22,8 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
+import org.apache.commons.io.output.StringBuilderWriter
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -70,7 +72,7 @@ package object debug {
    * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
    */
   def codegenString(plan: SparkPlan): String = {
-    val writer = new StringWriter()
+    val writer = new StringBuilderWriter()
 
     try {
       writeCodegen(writer, plan)
