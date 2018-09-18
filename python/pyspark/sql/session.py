@@ -539,12 +539,18 @@ class SparkSession(object):
                 struct.names[i] = name
             schema = struct
 
+        jsqlContext = self._wrapped._jsqlContext
+
         def reader_func(temp_filename):
-            return self._jvm.PythonSQLUtils.arrowReadStreamFromFile(
-                self._wrapped._jsqlContext, temp_filename, schema.json())
+            return self._jvm.PythonSQLUtils.readArrowStreamFromFile(jsqlContext, temp_filename)
+
+        def create_RDD_server():
+            return self._jvm.ArrowRDDServer(jsqlContext)
 
         # Create Spark DataFrame from Arrow stream file, using one batch per partition
-        jdf = self._sc._serialize_to_jvm(batches, ArrowStreamSerializer(), reader_func)
+        jrdd = self._sc._serialize_to_jvm(batches, ArrowStreamSerializer(), reader_func,
+                                          create_RDD_server)
+        jdf = self._jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), jsqlContext)
         df = DataFrame(jdf, self._wrapped)
         df._schema = schema
         return df
