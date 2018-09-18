@@ -21,7 +21,7 @@ import java.util.Calendar
 
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
@@ -414,13 +414,15 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       InternalRow(null)
     )
 
-    val msg = intercept[TestFailedException] {
+    val exception = intercept[TestFailedException] {
       checkEvaluation(
         JsonToStructs(schema, Map("mode" -> FailFastMode.name), Literal(jsonData), gmtId),
         InternalRow(null)
       )
-    }.getCause.getMessage
-    assert(msg.contains("Malformed records are detected in record parsing. Parse Mode: FAILFAST"))
+    }.getCause
+    assert(exception.isInstanceOf[SparkException])
+    assert(exception.getMessage.contains(
+      "Malformed records are detected in record parsing. Parse Mode: FAILFAST"))
   }
 
   test("from_json - input=array, schema=array, output=array") {
