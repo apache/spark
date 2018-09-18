@@ -55,8 +55,6 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       "spark.driver.port",
       "spark.master",
       "spark.kubernetes.driver.pod.name",
-      "spark.kubernetes.driver.limit.cores",
-      "spark.kubernetes.executor.limit.cores",
       "spark.kubernetes.executor.podNamePrefix",
       "spark.yarn.jars",
       "spark.yarn.keytab",
