@@ -53,7 +53,7 @@ class BarrierCoordinatorSuite extends SparkFunSuite with LocalSparkContext with 
     eventually(timeout(10.seconds)) {
       // Ensure barrierEpoch value have been changed.
       val barrierState = getBarrierState(stageId, stageAttemptNumber, barrierCoordinator)
-      assert(barrierState.barrierEpoch == 1)
+      assert(barrierState.getBarrierEpoch() == 1)
       assert(barrierState.cleanCheck())
     }
   }
@@ -81,7 +81,7 @@ class BarrierCoordinatorSuite extends SparkFunSuite with LocalSparkContext with 
     eventually(timeout(10.seconds)) {
       // Ensure barrierEpoch value have been changed.
       val barrierState = getBarrierState(stageId, stageAttemptNumber, barrierCoordinator)
-      assert(barrierState.barrierEpoch == 1)
+      assert(barrierState.getBarrierEpoch() == 1)
       assert(barrierState.cleanCheck())
     }
   }
@@ -124,7 +124,7 @@ class BarrierCoordinatorSuite extends SparkFunSuite with LocalSparkContext with 
     eventually(timeout(10.seconds)) {
       // Ensure barrierEpoch value have been changed.
       val barrierState = getBarrierState(stageId, stageAttemptNumber, barrierCoordinator)
-      assert(barrierState.barrierEpoch == 1)
+      assert(barrierState.getBarrierEpoch() == 1)
       assert(barrierState.cleanCheck())
     }
     intercept[SparkException](

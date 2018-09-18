@@ -101,7 +101,7 @@ private[spark] class BarrierCoordinator(
     // There may be multiple barrier() calls from a barrier stage attempt, `barrierEpoch` is used
     // to identify each barrier() call. It shall get increased when a barrier() call succeeds, or
     // reset when a barrier() call fails due to timeout.
-    private[spark] var barrierEpoch: Int = 0
+    private var barrierEpoch: Int = 0
 
     // An array of RPCCallContexts for barrier tasks that are waiting for reply of a barrier()
     // call.
@@ -194,6 +194,9 @@ private[spark] class BarrierCoordinator(
 
     // Check for clearing internal data, visible for test only.
     private[spark] def cleanCheck(): Boolean = requesters.isEmpty && timerTask == null
+
+    // Get currently barrier epoch, visible for test only.
+    private[spark] def getBarrierEpoch(): Int = barrierEpoch
   }
 
   // Clean up the [[ContextBarrierState]] that correspond to a specific stage attempt.
