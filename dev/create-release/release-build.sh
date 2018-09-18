@@ -303,6 +303,7 @@ if [[ "$1" == "package" ]]; then
     if ! make_binary_release "$key" "$SCALA_2_12_PROFILES $args" "$extra"; then
       error "Failed to build $key package. Check logs for details."
     fi
+    ./dev/change-scala-version.sh 2.11
   fi
 
   rm -rf spark-$SPARK_VERSION-bin-*/
