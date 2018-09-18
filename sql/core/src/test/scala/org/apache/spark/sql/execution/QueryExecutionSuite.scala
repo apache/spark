@@ -33,13 +33,17 @@ class QueryExecutionSuite extends SharedSQLContext {
         .takeWhile(_ != "== Whole Stage Codegen ==") == List(
         "== Parsed Logical Plan ==",
         "Range (0, 10, step=1, splits=Some(2))",
+        "",
         "== Analyzed Logical Plan ==",
         "id: bigint",
         "Range (0, 10, step=1, splits=Some(2))",
+        "",
         "== Optimized Logical Plan ==",
         "Range (0, 10, step=1, splits=Some(2))",
+        "",
         "== Physical Plan ==",
-        "*(1) Range (0, 10, step=1, splits=2)"))
+        "*(1) Range (0, 10, step=1, splits=2)",
+        ""))
     }
   }
 
