@@ -606,11 +606,7 @@ case class JsonToStructs(
     // deal with this but produces `Nil`.
     if (json.toString.trim.isEmpty) return null
 
-    try {
-      converter(parser.parse(json.asInstanceOf[UTF8String]))
-    } catch {
-      case _: BadRecordException => null
-    }
+    converter(parser.parse(json.asInstanceOf[UTF8String]))
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
