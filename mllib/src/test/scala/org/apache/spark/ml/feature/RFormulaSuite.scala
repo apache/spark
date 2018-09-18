@@ -105,7 +105,7 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     testTransformerByInterceptingException[(Int, Boolean)](
       original,
       model,
-      "Label column already exists and is not of type NumericType.",
+      "Label column already exists and is not of type numeric.",
       "x")
   }
 

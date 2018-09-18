@@ -562,20 +562,57 @@ abstract class OrcQueryTest extends OrcTest {
       }
     }
 
+    def testAllCorruptFiles(): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(1).toDF("a").write.json(new Path(basePath, "first").toString)
+        spark.range(1, 2).toDF("a").write.json(new Path(basePath, "second").toString)
+        val df = spark.read.orc(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString)
+        assert(df.count() == 0)
+      }
+    }
+
+    def testAllCorruptFilesWithoutSchemaInfer(): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(1).toDF("a").write.json(new Path(basePath, "first").toString)
+        spark.range(1, 2).toDF("a").write.json(new Path(basePath, "second").toString)
+        val df = spark.read.schema("a long").orc(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString)
+        assert(df.count() == 0)
+      }
+    }
+
     withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
       testIgnoreCorruptFiles()
       testIgnoreCorruptFilesWithoutSchemaInfer()
+      val m1 = intercept[AnalysisException] {
+        testAllCorruptFiles()
+      }.getMessage
+      assert(m1.contains("Unable to infer schema for ORC"))
+      testAllCorruptFilesWithoutSchemaInfer()
     }
 
     withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
       val m1 = intercept[SparkException] {
         testIgnoreCorruptFiles()
       }.getMessage
-      assert(m1.contains("Could not read footer for file"))
+      assert(m1.contains("Malformed ORC file"))
       val m2 = intercept[SparkException] {
         testIgnoreCorruptFilesWithoutSchemaInfer()
       }.getMessage
       assert(m2.contains("Malformed ORC file"))
+      val m3 = intercept[SparkException] {
+        testAllCorruptFiles()
+      }.getMessage
+      assert(m3.contains("Could not read footer for file"))
+      val m4 = intercept[SparkException] {
+        testAllCorruptFilesWithoutSchemaInfer()
+      }.getMessage
+      assert(m4.contains("Malformed ORC file"))
     }
   }
 }

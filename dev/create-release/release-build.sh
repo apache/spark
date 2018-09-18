@@ -76,9 +76,8 @@ for env in ASF_USERNAME GPG_PASSPHRASE GPG_KEY; do
   fi
 done
 
-# Explicitly set locale in order to make `sort` output consistent across machines.
-# See https://stackoverflow.com/questions/28881 for more details.
-export LC_ALL=C
+export LC_ALL=C.UTF-8
+export LANG=C.UTF-8
 
 # Commit ref to checkout when building
 GIT_REF=${GIT_REF:-master}
@@ -171,6 +170,10 @@ if [[ "$1" == "package" ]]; then
   # Source and binary tarballs
   echo "Packaging release source tarballs"
   cp -r spark spark-$SPARK_VERSION
+  # For source release, exclude copy of binary license/notice
+  rm spark-$SPARK_VERSION/LICENSE-binary
+  rm spark-$SPARK_VERSION/NOTICE-binary
+  rm -r spark-$SPARK_VERSION/licenses-binary
   tar cvzf spark-$SPARK_VERSION.tgz spark-$SPARK_VERSION
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
     --detach-sig spark-$SPARK_VERSION.tgz
@@ -178,12 +181,17 @@ if [[ "$1" == "package" ]]; then
     SHA512 spark-$SPARK_VERSION.tgz > spark-$SPARK_VERSION.tgz.sha512
   rm -rf spark-$SPARK_VERSION
 
+  ZINC_PORT=3035
+
   # Updated for each binary build
   make_binary_release() {
     NAME=$1
-    FLAGS=$2
-    ZINC_PORT=$3
-    BUILD_PACKAGE=$4
+    FLAGS="$MVN_EXTRA_OPTS -B $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES $2"
+    BUILD_PACKAGE=$3
+
+    # We increment the Zinc port each time to avoid OOM's and other craziness if multiple builds
+    # share the same Zinc server.
+    ZINC_PORT=$((ZINC_PORT + 1))
 
     echo "Building binary dist $NAME"
     cp -r spark spark-$SPARK_VERSION-bin-$NAME
@@ -255,19 +263,38 @@ if [[ "$1" == "package" ]]; then
       spark-$SPARK_VERSION-bin-$NAME.tgz.sha512
   }
 
-  # We increment the Zinc port each time to avoid OOM's and other craziness if multiple builds
-  # share the same Zinc server.
-  if ! make_binary_release "hadoop2.6" "$MVN_EXTRA_OPTS -B -Phadoop-2.6 $HIVE_PROFILES $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3035" "withr"; then
-    error "Failed to build hadoop2.6 package. Check logs for details."
-  fi
+  # List of binary packages built. Populates two associative arrays, where the key is the "name" of
+  # the package being built, and the values are respectively the needed maven arguments for building
+  # the package, and any extra package needed for that particular combination.
+  #
+  # In dry run mode, only build the first one. The keys in BINARY_PKGS_ARGS are used as the
+  # list of packages to be built, so it's ok for things to be missing in BINARY_PKGS_EXTRA.
+
+  declare -A BINARY_PKGS_ARGS
+  BINARY_PKGS_ARGS["hadoop2.7"]="-Phadoop-2.7 $HIVE_PROFILES"
   if ! is_dry_run; then
-    if ! make_binary_release "hadoop2.7" "$MVN_EXTRA_OPTS -B -Phadoop-2.7 $HIVE_PROFILES $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3036" "withpip"; then
-      error "Failed to build hadoop2.7 package. Check logs for details."
-    fi
-    if ! make_binary_release "without-hadoop" "$MVN_EXTRA_OPTS -B -Phadoop-provided $SCALA_2_11_PROFILES $BASE_RELEASE_PROFILES" "3037"; then
-      error "Failed to build without-hadoop package. Check logs for details."
+    BINARY_PKGS_ARGS["hadoop2.6"]="-Phadoop-2.6 $HIVE_PROFILES"
+    BINARY_PKGS_ARGS["without-hadoop"]="-Phadoop-provided"
+    if [[ $SPARK_VERSION < "2.2." ]]; then
+      BINARY_PKGS_ARGS["hadoop2.4"]="-Phadoop-2.4 $HIVE_PROFILES"
+      BINARY_PKGS_ARGS["hadoop2.3"]="-Phadoop-2.3 $HIVE_PROFILES"
     fi
   fi
+
+  declare -A BINARY_PKGS_EXTRA
+  BINARY_PKGS_EXTRA["hadoop2.7"]="withpip"
+  if ! is_dry_run; then
+    BINARY_PKGS_EXTRA["hadoop2.6"]="withr"
+  fi
+
+  echo "Packages to build: ${!BINARY_PKGS_ARGS[@]}"
+  for key in ${!BINARY_PKGS_ARGS[@]}; do
+    args=${BINARY_PKGS_ARGS[$key]}
+    extra=${BINARY_PKGS_EXTRA[$key]}
+    if ! make_binary_release "$key" "$args" "$extra"; then
+      error "Failed to build $key package. Check logs for details."
+    fi
+  done
 
   rm -rf spark-$SPARK_VERSION-bin-*/
 

@@ -133,10 +133,17 @@ private[yarn] class YarnAllocator(
   // Additional memory overhead.
   protected val memoryOverhead: Int = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN)).toInt
+  protected val pysparkWorkerMemory: Int = if (sparkConf.get(IS_PYTHON_APP)) {
+    sparkConf.get(PYSPARK_EXECUTOR_MEMORY).map(_.toInt).getOrElse(0)
+  } else {
+    0
+  }
   // Number of cores per executor.
   protected val executorCores = sparkConf.get(EXECUTOR_CORES)
   // Resource capability requested for each executors
-  private[yarn] val resource = Resource.newInstance(executorMemory + memoryOverhead, executorCores)
+  private[yarn] val resource = Resource.newInstance(
+    executorMemory + memoryOverhead + pysparkWorkerMemory,
+    executorCores)
 
   private val launcherPool = ThreadUtils.newDaemonCachedThreadPool(
     "ContainerLauncher", sparkConf.get(CONTAINER_LAUNCH_MAX_THREADS))
@@ -150,13 +157,15 @@ private[yarn] class YarnAllocator(
   private var hostToLocalTaskCounts: Map[String, Int] = Map.empty
 
   // Number of tasks that have locality preferences in active stages
-  private var numLocalityAwareTasks: Int = 0
+  private[yarn] var numLocalityAwareTasks: Int = 0
 
   // A container placement strategy based on pending tasks' locality preference
   private[yarn] val containerPlacementStrategy =
     new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resource, resolver)
 
   def getNumExecutorsRunning: Int = runningExecutors.size()
+
+  def getNumReleasedContainers: Int = releasedContainers.size()
 
   def getNumExecutorsFailed: Int = failureTracker.numFailedExecutors
 
@@ -166,6 +175,10 @@ private[yarn] class YarnAllocator(
    * A sequence of pending container requests that have not yet been fulfilled.
    */
   def getPendingAllocate: Seq[ContainerRequest] = getPendingAtLocation(ANY_HOST)
+
+  def numContainersPendingAllocate: Int = synchronized {
+    getPendingAllocate.size
+  }
 
   /**
    * A sequence of pending container requests at the given location that have not yet been

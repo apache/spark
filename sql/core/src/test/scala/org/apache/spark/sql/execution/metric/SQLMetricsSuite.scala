@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution.metric
 
 import java.io.File
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.execution.ui.SQLAppStatusStore
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -497,45 +497,24 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     }
   }
 
+  test("SPARK-25278: output metrics are wrong for plans repeated in the query") {
+    val name = "demo_view"
+    withView(name) {
+      sql(s"CREATE OR REPLACE VIEW $name AS VALUES 1,2")
+      val view = spark.table(name)
+      val union = view.union(view)
+      testSparkPlanMetrics(union, 1, Map(
+        0L -> ("Union" -> Map()),
+        1L -> ("LocalTableScan" -> Map("number of output rows" -> 2L)),
+        2L -> ("LocalTableScan" -> Map("number of output rows" -> 2L))))
+    }
+  }
+
   test("writing data out metrics: parquet") {
     testMetricsNonDynamicPartition("parquet", "t1")
   }
 
   test("writing data out metrics with dynamic partition: parquet") {
     testMetricsDynamicPartition("parquet", "parquet", "t1")
-  }
-
-  test("writing metrics from single thread") {
-    val nAdds = 10
-    val acc = new SQLMetric("test", -10)
-    assert(acc.isZero())
-    acc.set(0)
-    for (i <- 1 to nAdds) acc.add(1)
-    assert(!acc.isZero())
-    assert(nAdds === acc.value)
-    acc.reset()
-    assert(acc.isZero())
-  }
-
-  test("writing metrics from multiple threads") {
-    implicit val ec: ExecutionContextExecutor = ExecutionContext.global
-    val nFutures = 1000
-    val nAdds = 100
-    val acc = new SQLMetric("test", -10)
-    assert(acc.isZero() === true)
-    acc.set(0)
-    val l = for ( i <- 1 to nFutures ) yield {
-      Future {
-        for (j <- 1 to nAdds) acc.add(1)
-        i
-      }
-    }
-    for (futures <- Future.sequence(l)) {
-      assert(nFutures === futures.length)
-      assert(!acc.isZero())
-      assert(nFutures * nAdds === acc.value)
-      acc.reset()
-      assert(acc.isZero())
-    }
   }
 }

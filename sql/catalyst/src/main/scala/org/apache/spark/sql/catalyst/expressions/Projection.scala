@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -115,7 +116,7 @@ object UnsafeProjection
     extends CodeGeneratorWithInterpretedFallback[Seq[Expression], UnsafeProjection] {
 
   override protected def createCodeGeneratedObject(in: Seq[Expression]): UnsafeProjection = {
-    GenerateUnsafeProjection.generate(in)
+    GenerateUnsafeProjection.generate(in, SQLConf.get.subexpressionEliminationEnabled)
   }
 
   override protected def createInterpretedObject(in: Seq[Expression]): UnsafeProjection = {
@@ -165,23 +166,6 @@ object UnsafeProjection
    */
   def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): UnsafeProjection = {
     create(toBoundExprs(exprs, inputSchema))
-  }
-
-  /**
-   * Same as other create()'s but allowing enabling/disabling subexpression elimination.
-   * The param `subexpressionEliminationEnabled` doesn't guarantee to work. For example,
-   * when fallbacking to interpreted execution, it is not supported.
-   */
-  def create(
-      exprs: Seq[Expression],
-      inputSchema: Seq[Attribute],
-      subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
-    val unsafeExprs = toUnsafeExprs(toBoundExprs(exprs, inputSchema))
-    try {
-      GenerateUnsafeProjection.generate(unsafeExprs, subexpressionEliminationEnabled)
-    } catch {
-      case CodegenError(_) => InterpretedUnsafeProjection.createProjection(unsafeExprs)
-    }
   }
 }
 

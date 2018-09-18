@@ -157,7 +157,7 @@ NULL
 -- !query 19
 select 5 div 2
 -- !query 19 schema
-struct<CAST((CAST(5 AS DOUBLE) / CAST(2 AS DOUBLE)) AS BIGINT):bigint>
+struct<(5 div 2):bigint>
 -- !query 19 output
 2
 
@@ -165,7 +165,7 @@ struct<CAST((CAST(5 AS DOUBLE) / CAST(2 AS DOUBLE)) AS BIGINT):bigint>
 -- !query 20
 select 5 div 0
 -- !query 20 schema
-struct<CAST((CAST(5 AS DOUBLE) / CAST(0 AS DOUBLE)) AS BIGINT):bigint>
+struct<(5 div 0):bigint>
 -- !query 20 output
 NULL
 
@@ -173,7 +173,7 @@ NULL
 -- !query 21
 select 5 div null
 -- !query 21 schema
-struct<CAST((CAST(5 AS DOUBLE) / CAST(NULL AS DOUBLE)) AS BIGINT):bigint>
+struct<(5 div CAST(NULL AS INT)):bigint>
 -- !query 21 output
 NULL
 
@@ -181,7 +181,7 @@ NULL
 -- !query 22
 select null div 5
 -- !query 22 schema
-struct<CAST((CAST(NULL AS DOUBLE) / CAST(5 AS DOUBLE)) AS BIGINT):bigint>
+struct<(CAST(NULL AS INT) div 5):bigint>
 -- !query 22 output
 NULL
 

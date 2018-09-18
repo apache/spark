@@ -30,9 +30,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceOptions, MicroBatchReadSupport, StreamWriteSupport}
-import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousInputPartitionReader
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
+import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -46,9 +45,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     with StreamSinkProvider
     with RelationProvider
     with CreatableRelationProvider
-    with StreamWriteSupport
-    with ContinuousReadSupport
-    with MicroBatchReadSupport
+    with StreamingWriteSupportProvider
+    with ContinuousReadSupportProvider
+    with MicroBatchReadSupportProvider
     with Logging {
   import KafkaSourceProvider._
 
@@ -108,13 +107,12 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   }
 
   /**
-   * Creates a [[org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader]] to read batches
-   * of Kafka data in a micro-batch streaming query.
+   * Creates a [[org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReadSupport]] to read
+   * batches of Kafka data in a micro-batch streaming query.
    */
-  override def createMicroBatchReader(
-      schema: Optional[StructType],
+  override def createMicroBatchReadSupport(
       metadataPath: String,
-      options: DataSourceOptions): KafkaMicroBatchReader = {
+      options: DataSourceOptions): KafkaMicroBatchReadSupport = {
 
     val parameters = options.asMap().asScala.toMap
     validateStreamOptions(parameters)
@@ -140,7 +138,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters,
       driverGroupIdPrefix = s"$uniqueGroupId-driver")
 
-    new KafkaMicroBatchReader(
+    new KafkaMicroBatchReadSupport(
       kafkaOffsetReader,
       kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
       options,
@@ -150,13 +148,12 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   }
 
   /**
-   * Creates a [[ContinuousInputPartitionReader]] to read
+   * Creates a [[org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReadSupport]] to read
    * Kafka data in a continuous streaming query.
    */
-  override def createContinuousReader(
-      schema: Optional[StructType],
+  override def createContinuousReadSupport(
       metadataPath: String,
-      options: DataSourceOptions): KafkaContinuousReader = {
+      options: DataSourceOptions): KafkaContinuousReadSupport = {
     val parameters = options.asMap().asScala.toMap
     validateStreamOptions(parameters)
     // Each running query should use its own group id. Otherwise, the query may be only assigned
@@ -181,7 +178,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters,
       driverGroupIdPrefix = s"$uniqueGroupId-driver")
 
-    new KafkaContinuousReader(
+    new KafkaContinuousReadSupport(
       kafkaOffsetReader,
       kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
       parameters,
@@ -270,11 +267,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
   }
 
-  override def createStreamWriter(
+  override def createStreamingWriteSupport(
       queryId: String,
       schema: StructType,
       mode: OutputMode,
-      options: DataSourceOptions): StreamWriter = {
+      options: DataSourceOptions): StreamingWriteSupport = {
     import scala.collection.JavaConverters._
 
     val spark = SparkSession.getActiveSession.get
@@ -285,7 +282,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     KafkaWriter.validateQuery(
       schema.toAttributes, new java.util.HashMap[String, Object](producerParams.asJava), topic)
 
-    new KafkaStreamWriter(topic, producerParams, schema)
+    new KafkaStreamingWriteSupport(topic, producerParams, schema)
   }
 
   private def strategy(caseInsensitiveParams: Map[String, String]) =

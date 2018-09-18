@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.scalatest.{BeforeAndAfterEach, Matchers}
+import org.scalatest.{Assertions, BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.{SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.SparkSubmitSuite
@@ -39,7 +39,7 @@ class BufferHolderSparkSubmitSuite
     val argsForSparkSubmit = Seq(
       "--class", BufferHolderSparkSubmitSuite.getClass.getName.stripSuffix("$"),
       "--name", "SPARK-22222",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[1,1,4096]",
       "--driver-memory", "4g",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
@@ -49,28 +49,36 @@ class BufferHolderSparkSubmitSuite
   }
 }
 
-object BufferHolderSparkSubmitSuite {
+object BufferHolderSparkSubmitSuite extends Assertions {
 
   def main(args: Array[String]): Unit = {
 
     val ARRAY_MAX = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 
-    val holder = new BufferHolder(new UnsafeRow(1000))
+    val unsafeRow = new UnsafeRow(1000)
+    val holder = new BufferHolder(unsafeRow)
 
     holder.reset()
-    holder.grow(roundToWord(ARRAY_MAX / 2))
 
-    holder.reset()
-    holder.grow(roundToWord(ARRAY_MAX / 2 + 8))
+    assert(intercept[IllegalArgumentException] {
+      holder.grow(-1)
+    }.getMessage.contains("because the size is negative"))
 
-    holder.reset()
-    holder.grow(roundToWord(Integer.MAX_VALUE / 2))
+    // while to reuse a buffer may happen, this test checks whether the buffer can be grown
+    holder.grow(ARRAY_MAX / 2)
+    assert(unsafeRow.getSizeInBytes % 8 == 0)
 
-    holder.reset()
-    holder.grow(roundToWord(Integer.MAX_VALUE))
-  }
+    holder.grow(ARRAY_MAX / 2 + 7)
+    assert(unsafeRow.getSizeInBytes % 8 == 0)
 
-  private def roundToWord(len: Int): Int = {
-    ByteArrayMethods.roundNumberOfBytesToNearestWord(len)
+    holder.grow(Integer.MAX_VALUE / 2)
+    assert(unsafeRow.getSizeInBytes % 8 == 0)
+
+    holder.grow(ARRAY_MAX - holder.totalSize())
+    assert(unsafeRow.getSizeInBytes % 8 == 0)
+
+    assert(intercept[IllegalArgumentException] {
+      holder.grow(ARRAY_MAX + 1 - holder.totalSize())
+    }.getMessage.contains("because the size after growing"))
   }
 }

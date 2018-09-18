@@ -22,8 +22,8 @@ import org.apache.spark._
 class FlatmapIteratorSuite extends SparkFunSuite with LocalSparkContext {
   /* Tests the ability of Spark to deal with user provided iterators from flatMap
    * calls, that may generate more data then available memory. In any
-   * memory based persistance Spark will unroll the iterator into an ArrayBuffer
-   * for caching, however in the case that the use defines DISK_ONLY persistance,
+   * memory based persistence Spark will unroll the iterator into an ArrayBuffer
+   * for caching, however in the case that the use defines DISK_ONLY persistence,
    * the iterator will be fed directly to the serializer and written to disk.
    *
    * This also tests the ObjectOutputStream reset rate. When serializing using the

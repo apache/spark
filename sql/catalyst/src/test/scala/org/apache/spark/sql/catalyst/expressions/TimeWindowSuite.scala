@@ -77,6 +77,19 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
     }
   }
 
+  test("SPARK-21590: Start time works with negative values and return microseconds") {
+    val validDuration = "10 minutes"
+    for ((text, seconds) <- Seq(
+      ("-10 seconds", -10000000), // -1e7
+      ("-1 minute", -60000000),
+      ("-1 hour", -3600000000L))) { // -6e7
+      assert(TimeWindow(Literal(10L), validDuration, validDuration, "interval " + text).startTime
+        === seconds)
+      assert(TimeWindow(Literal(10L), validDuration, validDuration, text).startTime
+        === seconds)
+    }
+  }
+
   private val parseExpression = PrivateMethod[Long]('parseExpression)
 
   test("parse sql expression for duration in microseconds - string") {

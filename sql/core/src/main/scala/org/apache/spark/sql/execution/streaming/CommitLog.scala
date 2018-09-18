@@ -22,6 +22,9 @@ import java.nio.charset.StandardCharsets._
 
 import scala.io.{Source => IOSource}
 
+import org.json4s.NoTypeHints
+import org.json4s.jackson.Serialization
+
 import org.apache.spark.sql.SparkSession
 
 /**
@@ -43,36 +46,28 @@ import org.apache.spark.sql.SparkSession
  * line 2: metadata (optional json string)
  */
 class CommitLog(sparkSession: SparkSession, path: String)
-  extends HDFSMetadataLog[String](sparkSession, path) {
+  extends HDFSMetadataLog[CommitMetadata](sparkSession, path) {
 
   import CommitLog._
 
-  def add(batchId: Long): Unit = {
-    super.add(batchId, EMPTY_JSON)
-  }
-
-  override def add(batchId: Long, metadata: String): Boolean = {
-    throw new UnsupportedOperationException(
-      "CommitLog does not take any metadata, use 'add(batchId)' instead")
-  }
-
-  override protected def deserialize(in: InputStream): String = {
+  override protected def deserialize(in: InputStream): CommitMetadata = {
     // called inside a try-finally where the underlying stream is closed in the caller
     val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file in the offset commit log")
     }
     parseVersion(lines.next.trim, VERSION)
-    EMPTY_JSON
+    val metadataJson = if (lines.hasNext) lines.next else EMPTY_JSON
+    CommitMetadata(metadataJson)
   }
 
-  override protected def serialize(metadata: String, out: OutputStream): Unit = {
+  override protected def serialize(metadata: CommitMetadata, out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
     out.write(s"v${VERSION}".getBytes(UTF_8))
     out.write('\n')
 
     // write metadata
-    out.write(EMPTY_JSON.getBytes(UTF_8))
+    out.write(metadata.json.getBytes(UTF_8))
   }
 }
 
@@ -81,3 +76,13 @@ object CommitLog {
   private val EMPTY_JSON = "{}"
 }
 
+
+case class CommitMetadata(nextBatchWatermarkMs: Long = 0) {
+  def json: String = Serialization.write(this)(CommitMetadata.format)
+}
+
+object CommitMetadata {
+  implicit val format = Serialization.formats(NoTypeHints)
+
+  def apply(json: String): CommitMetadata = Serialization.read[CommitMetadata](json)
+}

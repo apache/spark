@@ -36,6 +36,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -362,11 +363,12 @@ final class OneVsRest @Since("1.4.0") (
   }
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): OneVsRestModel = {
+  override def fit(dataset: Dataset[_]): OneVsRestModel = instrumented { instr =>
     transformSchema(dataset.schema)
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(labelCol, featuresCol, predictionCol, parallelism, rawPredictionCol)
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, labelCol, featuresCol, predictionCol, parallelism, rawPredictionCol)
     instr.logNamedValue("classifier", $(classifier).getClass.getCanonicalName)
 
     // determine number of classes either from metadata if provided, or via computation.
@@ -440,7 +442,6 @@ final class OneVsRest @Since("1.4.0") (
       case attr: Attribute => attr
     }
     val model = new OneVsRestModel(uid, labelAttribute.toMetadata(), models).setParent(this)
-    instr.logSuccess(model)
     copyValues(model)
   }
 

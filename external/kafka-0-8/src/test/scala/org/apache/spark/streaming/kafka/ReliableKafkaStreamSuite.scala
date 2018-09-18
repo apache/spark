@@ -51,6 +51,7 @@ class ReliableKafkaStreamSuite extends SparkFunSuite
   private var tempDirectory: File = null
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     kafkaTestUtils = new KafkaTestUtils
     kafkaTestUtils.setup()
 
@@ -65,11 +66,15 @@ class ReliableKafkaStreamSuite extends SparkFunSuite
   }
 
   override def afterAll(): Unit = {
-    Utils.deleteRecursively(tempDirectory)
+    try {
+      Utils.deleteRecursively(tempDirectory)
 
-    if (kafkaTestUtils != null) {
-      kafkaTestUtils.teardown()
-      kafkaTestUtils = null
+      if (kafkaTestUtils != null) {
+        kafkaTestUtils.teardown()
+        kafkaTestUtils = null
+      }
+    } finally {
+      super.afterAll()
     }
   }
 

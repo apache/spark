@@ -152,8 +152,9 @@ of the most common options to set are:
   <td><code>spark.driver.memory</code></td>
   <td>1g</td>
   <td>
-    Amount of memory to use for the driver process, i.e. where SparkContext is initialized, in MiB 
-    unless otherwise specified (e.g. <code>1g</code>, <code>2g</code>).
+    Amount of memory to use for the driver process, i.e. where SparkContext is initialized, in the
+    same format as JVM memory strings with a size unit suffix ("k", "m", "g" or "t")
+    (e.g. <code>512m</code>, <code>2g</code>).
     <br />
     <em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
@@ -175,8 +176,20 @@ of the most common options to set are:
   <td><code>spark.executor.memory</code></td>
   <td>1g</td>
   <td>
-    Amount of memory to use per executor process, in MiB unless otherwise specified.
-    (e.g. <code>2g</code>, <code>8g</code>).
+    Amount of memory to use per executor process, in the same format as JVM memory strings with
+    a size unit suffix ("k", "m", "g" or "t") (e.g. <code>512m</code>, <code>2g</code>).
+  </td>
+</tr>
+<tr>
+ <td><code>spark.executor.pyspark.memory</code></td>
+  <td>Not set</td>
+  <td>
+    The amount of memory to be allocated to PySpark in each executor, in MiB
+    unless otherwise specified.  If set, PySpark memory for an executor will be
+    limited to this amount. If not set, Spark will not limit Python's memory use
+    and it is up to the application to avoid exceeding the overhead memory space
+    shared with other non-JVM processes. When PySpark is run in YARN or Kubernetes, this memory
+    is added to executor resource requests.
   </td>
 </tr>
 <tr>
@@ -580,13 +593,15 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.maxRemoteBlockSizeFetchToMem</code></td>
-  <td>Long.MaxValue</td>
+  <td>Int.MaxValue - 512</td>
   <td>
     The remote block will be fetched to disk when size of the block is above this threshold in bytes.
-    This is to avoid a giant request takes too much memory. We can enable this config by setting
-    a specific value(e.g. 200m). Note this configuration will affect both shuffle fetch
+    This is to avoid a giant request that takes too much memory.  By default, this is only enabled
+    for blocks > 2GB, as those cannot be fetched directly into memory, no matter what resources are
+    available.  But it can be turned down to a much lower value (eg. 200m) to avoid using too much
+    memory on smaller blocks as well. Note this configuration will affect both shuffle fetch
     and block manager remote block fetch. For users who enabled external shuffle service,
-    this feature can only be worked when external shuffle service is newer than Spark 2.2.
+    this feature can only be used when external shuffle service is newer than Spark 2.2.
   </td>
 </tr>
 <tr>
@@ -729,6 +744,13 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Whether to log events for every block update, if <code>spark.eventLog.enabled</code> is true.
     *Warning*: This will increase the size of the event log considerably.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.eventLog.longForm.enabled</code></td>
+  <td>false</td>
+  <td>
+    If true, use the long form of call sites in the event log. Otherwise use the short form.
   </td>
 </tr>
 <tr>
@@ -1213,6 +1235,15 @@ Apart from these, the following properties are also available, and may be useful
     Size of each piece of a block for <code>TorrentBroadcastFactory</code>, in KiB unless otherwise 
     specified. Too large a value decreases parallelism during broadcast (makes it slower); however, 
     if it is too small, <code>BlockManager</code> might take a performance hit.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.broadcast.checksum</code></td>
+  <td>true</td>
+  <td>
+    Whether to enable checksum for broadcast. If enabled, broadcasts will include a checksum, which can
+    help detect corrupted blocks, at the cost of computing and sending a little more data. It's possible
+    to disable it if the network has other mechanisms to guarantee data won't be corrupted during broadcast.
   </td>
 </tr>
 <tr>
@@ -1816,7 +1847,7 @@ Apart from these, the following properties are also available, and may be useful
     executors w.r.t. full parallelism.
     Defaults to 1.0 to give maximum parallelism.
     0.5 will divide the target number of executors by 2
-    The target number of executors computed by the dynamicAllocation can still be overriden
+    The target number of executors computed by the dynamicAllocation can still be overridden
     by the <code>spark.dynamicAllocation.minExecutors</code> and
     <code>spark.dynamicAllocation.maxExecutors</code> settings
   </td>
@@ -1973,6 +2004,14 @@ showDF(properties, numRows = 200, truncate = FALSE)
     <a href="streaming-kafka-integration.html">Kafka Integration guide</a>
     for more details.
   </td>
+</tr>
+<tr>
+    <td><code>spark.streaming.kafka.minRatePerPartition</code></td>
+    <td>1</td>
+    <td>
+      Minimum rate (number of records per second) at which data will be read from each Kafka
+      partition when using the new Kafka direct stream API.
+    </td>
 </tr>
 <tr>
   <td><code>spark.streaming.kafka.maxRetries</code></td>
@@ -2202,7 +2241,7 @@ Spark's classpath for each application. In a Spark cluster running on YARN, thes
 files are set cluster-wide, and cannot safely be changed by the application.
 
 The better choice is to use spark hadoop properties in the form of `spark.hadoop.*`. 
-They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-default.conf`
+They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-defaults.conf`
 
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
 instance, Spark allows you to simply create an empty conf and set spark/spark hadoop properties.

@@ -109,14 +109,14 @@ private[graphx] object BytecodeUtils {
    * determine the actual method invoked by inspecting the bytecode.
    */
   private class MethodInvocationFinder(className: String, methodName: String)
-    extends ClassVisitor(ASM5) {
+    extends ClassVisitor(ASM6) {
 
     val methodsInvoked = new HashSet[(Class[_], String)]
 
     override def visitMethod(access: Int, name: String, desc: String,
                              sig: String, exceptions: Array[String]): MethodVisitor = {
       if (name == methodName) {
-        new MethodVisitor(ASM5) {
+        new MethodVisitor(ASM6) {
           override def visitMethodInsn(
               op: Int, owner: String, name: String, desc: String, itf: Boolean) {
             if (op == INVOKEVIRTUAL || op == INVOKESPECIAL || op == INVOKESTATIC) {

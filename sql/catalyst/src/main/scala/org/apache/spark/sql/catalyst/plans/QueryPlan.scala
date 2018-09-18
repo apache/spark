@@ -284,7 +284,7 @@ object QueryPlan extends PredicateHelper {
         if (ordinal == -1) {
           ar
         } else {
-          ar.withExprId(ExprId(ordinal))
+          ar.withExprId(ExprId(ordinal)).canonicalized
         }
     }.canonicalized.asInstanceOf[T]
   }

@@ -209,7 +209,7 @@ public class TransportConf {
    * (128 bits by default), which is not generally the case with user passwords.
    */
   public int keyFactoryIterations() {
-    return conf.getInt("spark.networy.crypto.keyFactoryIterations", 1024);
+    return conf.getInt("spark.network.crypto.keyFactoryIterations", 1024);
   }
 
   /**

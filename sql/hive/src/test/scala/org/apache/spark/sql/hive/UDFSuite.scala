@@ -141,11 +141,10 @@ class UDFSuite
     withTempDatabase { dbName =>
       withUserDefinedFunction(functionName -> false) {
         sql(s"CREATE FUNCTION $dbName.$functionName AS '$functionClass'")
-        // TODO: Re-enable it after can distinguish qualified and unqualified function name
-        // checkAnswer(
-        //  sql(s"SELECT $dbName.myuPPer(value) from $testTableName"),
-        //  expectedDF
-        // )
+        checkAnswer(
+          sql(s"SELECT $dbName.$functionName(value) from $testTableName"),
+          expectedDF
+        )
 
         checkAnswer(
           sql(s"SHOW FUNCTIONS like $dbName.$functionNameUpper"),
@@ -174,11 +173,10 @@ class UDFSuite
       // For this block, drop function command uses default.functionName as the function name.
       withUserDefinedFunction(s"$dbName.$functionNameUpper" -> false) {
         sql(s"CREATE FUNCTION $dbName.$functionName AS '$functionClass'")
-        // TODO: Re-enable it after can distinguish qualified and unqualified function name
-        // checkAnswer(
-        //  sql(s"SELECT $dbName.myupper(value) from $testTableName"),
-        //  expectedDF
-        // )
+        checkAnswer(
+          sql(s"SELECT $dbName.$functionName(value) from $testTableName"),
+          expectedDF
+        )
 
         sql(s"USE $dbName")
 

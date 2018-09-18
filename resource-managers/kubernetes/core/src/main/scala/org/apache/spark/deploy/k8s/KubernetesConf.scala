@@ -24,6 +24,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
+import org.apache.spark.deploy.k8s.submit.KubernetesClientApplication._
 import org.apache.spark.internal.config.ConfigEntry
 
 
@@ -43,7 +44,7 @@ private[spark] case class KubernetesDriverSpecificConf(
  */
 private[spark] case class KubernetesExecutorSpecificConf(
     executorId: String,
-    driverPod: Pod)
+    driverPod: Option[Pod])
   extends KubernetesRoleSpecificConf
 
 /**
@@ -77,6 +78,9 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
 
   def pySparkPythonVersion(): String = sparkConf
       .get(PYSPARK_MAJOR_PYTHON_VERSION)
+
+  def sparkRMainResource(): Option[String] = sparkConf
+    .get(KUBERNETES_R_MAIN_APP_RESOURCE)
 
   def imagePullPolicy(): String = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
 
@@ -125,7 +129,7 @@ private[spark] object KubernetesConf {
             sparkConfWithMainAppJar.setJars(previousJars ++ Seq(res))
           }
         // The function of this outer match is to account for multiple nonJVM
-        // bindings that will all have increased MEMORY_OVERHEAD_FACTOR to 0.4
+        // bindings that will all have increased default MEMORY_OVERHEAD_FACTOR to 0.4
         case nonJVM: NonJVMResource =>
           nonJVM match {
             case PythonMainAppResource(res) =>
@@ -133,6 +137,9 @@ private[spark] object KubernetesConf {
               maybePyFiles.foreach{maybePyFiles =>
                 additionalFiles.appendAll(maybePyFiles.split(","))}
               sparkConfWithMainAppJar.set(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE, res)
+            case RMainAppResource(res) =>
+              additionalFiles += res
+              sparkConfWithMainAppJar.set(KUBERNETES_R_MAIN_APP_RESOURCE, res)
           }
           sparkConfWithMainAppJar.setIfMissing(MEMORY_OVERHEAD_FACTOR, 0.4)
     }
@@ -186,7 +193,7 @@ private[spark] object KubernetesConf {
       sparkConf: SparkConf,
       executorId: String,
       appId: String,
-      driverPod: Pod): KubernetesConf[KubernetesExecutorSpecificConf] = {
+      driverPod: Option[Pod]): KubernetesConf[KubernetesExecutorSpecificConf] = {
     val executorCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_EXECUTOR_LABEL_PREFIX)
     require(
@@ -214,10 +221,20 @@ private[spark] object KubernetesConf {
     val executorVolumes = KubernetesVolumeUtils.parseVolumesWithPrefix(
       sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX).map(_.get)
 
+    // If no prefix is defined then we are in pure client mode
+    // (not the one used by cluster mode inside the container)
+    val appResourceNamePrefix = {
+      if (sparkConf.getOption(KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key).isEmpty) {
+        getResourceNamePrefix(getAppName(sparkConf))
+      } else {
+        sparkConf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
+      }
+    }
+
     KubernetesConf(
       sparkConf.clone(),
       KubernetesExecutorSpecificConf(executorId, driverPod),
-      sparkConf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX),
+      appResourceNamePrefix,
       appId,
       executorLabels,
       executorAnnotations,

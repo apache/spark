@@ -213,6 +213,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
   private var _statusStore: AppStatusStore = _
+  private var _heartbeater: Heartbeater = _
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -254,7 +255,7 @@ class SparkContext(config: SparkConf) extends Logging {
       conf: SparkConf,
       isLocal: Boolean,
       listenerBus: LiveListenerBus): SparkEnv = {
-    SparkEnv.createDriverEnv(conf, isLocal, listenerBus, SparkContext.numDriverCores(master))
+    SparkEnv.createDriverEnv(conf, isLocal, listenerBus, SparkContext.numDriverCores(master, conf))
   }
 
   private[spark] def env: SparkEnv = _env
@@ -496,6 +497,11 @@ class SparkContext(config: SparkConf) extends Logging {
     _dagScheduler = new DAGScheduler(this)
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
+    // create and start the heartbeater for collecting memory metrics
+    _heartbeater = new Heartbeater(env.memoryManager, reportHeartBeat, "driver-heartbeater",
+      conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
+    _heartbeater.start()
+
     // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
     // constructor
     _taskScheduler.start()
@@ -571,7 +577,12 @@ class SparkContext(config: SparkConf) extends Logging {
     _shutdownHookRef = ShutdownHookManager.addShutdownHook(
       ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
       logInfo("Invoking stop() from shutdown hook")
-      stop()
+      try {
+        stop()
+      } catch {
+        case e: Throwable =>
+          logWarning("Ignoring Exception while stopping SparkContext from shutdown hook", e)
+      }
     }
   } catch {
     case NonFatal(e) =>
@@ -1524,7 +1535,11 @@ class SparkContext(config: SparkConf) extends Logging {
   def addFile(path: String, recursive: Boolean): Unit = {
     val uri = new Path(path).toUri
     val schemeCorrectedPath = uri.getScheme match {
-      case null | "local" => new File(path).getCanonicalFile.toURI.toString
+      case null => new File(path).getCanonicalFile.toURI.toString
+      case "local" =>
+        logWarning("File with 'local' scheme is not supported to add to file server, since " +
+          "it is already available on every node.")
+        return
       case _ => path
     }
 
@@ -1592,6 +1607,15 @@ class SparkContext(config: SparkConf) extends Logging {
         Nil
     }
   }
+
+  /**
+   * Get the max number of tasks that can be concurrent launched currently.
+   * Note that please don't cache the value returned by this method, because the number can change
+   * due to add/remove executors.
+   *
+   * @return The max number of tasks that can be concurrent launched currently.
+   */
+  private[spark] def maxNumConcurrentTasks(): Int = schedulerBackend.maxNumConcurrentTasks()
 
   /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
@@ -1926,6 +1950,12 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.tryLogNonFatalError {
       _executorAllocationManager.foreach(_.stop())
     }
+    if (_dagScheduler != null) {
+      Utils.tryLogNonFatalError {
+        _dagScheduler.stop()
+      }
+      _dagScheduler = null
+    }
     if (_listenerBusStarted) {
       Utils.tryLogNonFatalError {
         listenerBus.stop()
@@ -1935,11 +1965,11 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.tryLogNonFatalError {
       _eventLogger.foreach(_.stop())
     }
-    if (_dagScheduler != null) {
+    if (_heartbeater != null) {
       Utils.tryLogNonFatalError {
-        _dagScheduler.stop()
+        _heartbeater.stop()
       }
-      _dagScheduler = null
+      _heartbeater = null
     }
     if (env != null && _heartbeatReceiver != null) {
       Utils.tryLogNonFatalError {
@@ -2411,6 +2441,14 @@ class SparkContext(config: SparkConf) extends Logging {
     }
   }
 
+  /** Reports heartbeat metrics for the driver. */
+  private def reportHeartBeat(): Unit = {
+    val driverUpdates = _heartbeater.getCurrentMetrics()
+    val accumUpdates = new Array[(Long, Int, Int, Seq[AccumulableInfo])](0)
+    listenerBus.post(SparkListenerExecutorMetricsUpdate("driver", accumUpdates,
+      Some(driverUpdates)))
+  }
+
   // In order to prevent multiple SparkContexts from being active at the same time, mark this
   // context as having finished construction.
   // NOTE: this must be placed at the end of the SparkContext constructor.
@@ -2664,9 +2702,16 @@ object SparkContext extends Logging {
   }
 
   /**
-   * The number of driver cores to use for execution in local mode, 0 otherwise.
+   * The number of cores available to the driver to use for tasks such as I/O with Netty
    */
   private[spark] def numDriverCores(master: String): Int = {
+    numDriverCores(master, null)
+  }
+
+  /**
+   * The number of cores available to the driver to use for tasks such as I/O with Netty
+   */
+  private[spark] def numDriverCores(master: String, conf: SparkConf): Int = {
     def convertToInt(threads: String): Int = {
       if (threads == "*") Runtime.getRuntime.availableProcessors() else threads.toInt
     }
@@ -2674,7 +2719,13 @@ object SparkContext extends Logging {
       case "local" => 1
       case SparkMasterRegex.LOCAL_N_REGEX(threads) => convertToInt(threads)
       case SparkMasterRegex.LOCAL_N_FAILURES_REGEX(threads, _) => convertToInt(threads)
-      case _ => 0 // driver is not used for execution
+      case "yarn" =>
+        if (conf != null && conf.getOption("spark.submit.deployMode").contains("cluster")) {
+          conf.getInt("spark.driver.cores", 0)
+        } else {
+          0
+        }
+      case _ => 0 // Either driver is not being used, or its core count will be interpolated later
     }
   }
 

@@ -114,6 +114,21 @@ object JavaCode {
   def isNullExpression(code: String): SimpleExprValue = {
     expression(code, BooleanType)
   }
+
+  /**
+   * Create an `Inline` for Java Class name.
+   */
+  def javaType(javaClass: Class[_]): Inline = Inline(javaClass.getName)
+
+  /**
+   * Create an `Inline` for Java Type name.
+   */
+  def javaType(dataType: DataType): Inline = Inline(CodeGenerator.javaType(dataType))
+
+  /**
+   * Create an `Inline` for boxed Java Type name.
+   */
+  def boxedType(dataType: DataType): Inline = Inline(CodeGenerator.boxedType(dataType))
 }
 
 /**
@@ -130,7 +145,9 @@ trait Block extends TreeNode[Block] with JavaCode {
 
   def length: Int = toString.length
 
-  def nonEmpty: Boolean = toString.nonEmpty
+  def isEmpty: Boolean = toString.isEmpty
+
+  def nonEmpty: Boolean = !isEmpty
 
   // The leading prefix that should be stripped from each line.
   // By default we strip blanks or control characters followed by '|' from the line.
@@ -187,6 +204,16 @@ object Block {
 
   val CODE_BLOCK_BUFFER_LENGTH: Int = 512
 
+  /**
+   * A custom string interpolator which inlines a string into code block.
+   */
+  implicit class InlineHelper(val sc: StringContext) extends AnyVal {
+    def inline(args: Any*): Inline = {
+      val inlineString = sc.raw(args: _*)
+      Inline(inlineString)
+    }
+  }
+
   implicit def blocksToBlock(blocks: Seq[Block]): Block = blocks.reduceLeft(_ + _)
 
   implicit class BlockHelper(val sc: StringContext) extends AnyVal {
@@ -196,9 +223,8 @@ object Block {
         EmptyBlock
       } else {
         args.foreach {
-          case _: ExprValue =>
+          case _: ExprValue | _: Inline | _: Block =>
           case _: Int | _: Long | _: Float | _: Double | _: String =>
-          case _: Block =>
           case other => throw new IllegalArgumentException(
             s"Can not interpolate ${other.getClass.getName} into code block.")
         }
@@ -266,6 +292,14 @@ case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[JavaCode]) extends
 case object EmptyBlock extends Block with Serializable {
   override val code: String = ""
   override def children: Seq[Block] = Seq.empty
+}
+
+/**
+ * A piece of java code snippet inlines all types of input arguments into a string without
+ * tracking any reference of `JavaCode` instances.
+ */
+case class Inline(codeString: String) extends JavaCode {
+  override val code: String = codeString
 }
 
 /**
