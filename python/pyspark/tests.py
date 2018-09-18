@@ -373,8 +373,15 @@ class PySparkTestCase(unittest.TestCase):
 class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
+    def conf(cls):
+        """
+        Override this in subclasses to supply a more specific conf
+        """
+        return SparkConf()
+
+    @classmethod
     def setUpClass(cls):
-        cls.sc = SparkContext('local[4]', cls.__name__)
+        cls.sc = SparkContext('local[4]', cls.__name__, conf=cls.conf())
 
     @classmethod
     def tearDownClass(cls):
