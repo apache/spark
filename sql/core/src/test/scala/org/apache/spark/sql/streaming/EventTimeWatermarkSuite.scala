@@ -291,25 +291,26 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     testStream(windowedAggregation)(
       AddData(inputData, 10, 11), // sessions: key 1 => (10,16)
       CheckNewAnswer(),
+
       AddData(inputData, 17),
       // Advance watermark to 7 seconds
       // sessions: key 1 => (10,16), (17,23)
       CheckNewAnswer(),
+
       AddData(inputData, 25),
-      AssertOnQuery { se =>
-        se.explain(true)
-        true
-      },
       // Advance watermark to 15 seconds
       // sessions: key 1 => (10,16), (17,23) / key 2 => (25,30)
       CheckNewAnswer(),
+
       AddData(inputData, 35),
       // Advance watermark to 25 seconds
       // sessions: key 1 => (10,16), (17,22) / key 2 => (25,30) / key 3 => (35,40)
       // evicts: key 1 => (10,16), (17,22)
       CheckNewAnswer((1, 10, 16, 2, 21), (1, 17, 22, 1, 17)),
+
       AddData(inputData, 10),   // Should not emit anything as data less than watermark
       CheckNewAnswer(),
+
       AddData(inputData, 40),
       // Advance watermark to 30 seconds
       // sessions: key 2 => (25,30) / key 3 => (35,45)
@@ -333,25 +334,26 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     testStream(windowedAggregation)(
       AddData(inputData, 10, 11), // sessions: (10,16)
       CheckNewAnswer(),
+
       AddData(inputData, 17),
       // Advance watermark to 7 seconds
       // sessions: (10,16), (17,23)
       CheckNewAnswer(),
-      AssertOnQuery { se =>
-        se.explain(true)
-        true
-      },
+
       AddData(inputData, 25),
       // Advance watermark to 15 seconds
       // sessions: (10,16), (17,23), (25,30)
       CheckNewAnswer(),
+
       AddData(inputData, 35),
       // Advance watermark to 25 seconds
       // sessions: (10,16), (17,22), (25,30), (35,40)
       // evicts: (10,16), (17,22)
       CheckNewAnswer((10, 16, 2, 21), (17, 22, 1, 17)),
+
       AddData(inputData, 10),   // Should not emit anything as data less than watermark
       CheckNewAnswer(),
+
       AddData(inputData, 40),
       // Advance watermark to 30 seconds
       // sessions: (25,30) / (35,45)
@@ -377,28 +379,29 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       // Advance watermark to 1 seconds
       // sessions: key 1 => (10,16)
       CheckNewAnswer((1, 10, 16, 2, 21)),
+
       AddData(inputData, 17),
       // Advance watermark to 7 seconds
       // sessions: key 1 => (10,16), (17,22) <- updated
       // updated: key 1 => (17,22)
       CheckNewAnswer((1, 17, 22, 1, 17)),
-      AssertOnQuery { se =>
-        se.explain(true)
-        true
-      },
+
       AddData(inputData, 25),
       // Advance watermark to 15 seconds
       // sessions: key 1 => (10,16), (17,22) / key 2 => (25,30)
       // updated: key 2 => (25,30)
       CheckNewAnswer((2, 25, 30, 1, 25)),
+
       AddData(inputData, 35),
       // Advance watermark to 25 seconds
       // sessions: key 1 => (10,16), (17,22) / key 2 => (25,30) / key 3 => (35,40)
       // updated: key 3 => (35,40)
       // evicts: key 1 => (10,16), (17,22)
       CheckNewAnswer((3, 35, 40, 1, 35)),
+
       AddData(inputData, 10),   // Should not emit anything as data less than watermark
       CheckNewAnswer(),
+
       AddData(inputData, 40),
       // Advance watermark to 30 seconds
       // sessions: key 2 => (25,30) / key 3 => (35,40) / key 4 => (40, 45)
@@ -436,10 +439,6 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       // sessions: key 0 => (10,17) / key 1 => (11,22), (25,30)
       // updated: key 1 => (25,30)
       CheckNewAnswer((1, 25, 30, 1, 25)),
-      AssertOnQuery { se =>
-        se.explain(true)
-        true
-      },
 
       AddData(inputData, 35),
       // Advance watermark to 25 seconds
@@ -483,28 +482,29 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       // Advance watermark to 1 seconds
       // sessions: (10,16)
       CheckNewAnswer((10, 16, 2, 21)),
+
       AddData(inputData, 17),
       // Advance watermark to 7 seconds
       // sessions: (10,16), (17,22)
       // updated: (17,22)
       CheckNewAnswer((17, 22, 1, 17)),
+
       AddData(inputData, 25),
       // Advance watermark to 15 seconds
       // sessions: (10,16), (17,22), (25,30)
       // updated: (25,30)
       CheckNewAnswer((25, 30, 1, 25)),
-      AssertOnQuery { se =>
-        se.explain(true)
-        true
-      },
+
       AddData(inputData, 35),
       // Advance watermark to 25 seconds
       // sessions: (10,16), (17,22), (25,30), (35,40)
       // updated: (35, 40)
       // evicts: (10,16), (17,22)
       CheckNewAnswer((35, 40, 1, 35)),
+
       AddData(inputData, 10),   // Should not emit anything as data less than watermark
       CheckNewAnswer(),
+
       AddData(inputData, 40),
       // Advance watermark to 30 seconds
       // sessions: (25,30), (35,45)
