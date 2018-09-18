@@ -129,16 +129,17 @@ object DecimalPrecision extends TypeCoercionRule {
         resultType)
 
     case Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+      val adjP2 = if (s2 < 0) p2 - s2 else p2
       val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
         // Precision: p1 - s1 + s2 + max(6, s1 + p2 + 1)
         // Scale: max(6, s1 + p2 + 1)
         val intDig = p1 - s1 + s2
-        val scale = max(DecimalType.MINIMUM_ADJUSTED_SCALE, s1 + p2 + 1)
+        val scale = max(DecimalType.MINIMUM_ADJUSTED_SCALE, s1 + adjP2 + 1)
         val prec = intDig + scale
         DecimalType.adjustPrecisionScale(prec, scale)
       } else {
         var intDig = min(DecimalType.MAX_SCALE, p1 - s1 + s2)
-        var decDig = min(DecimalType.MAX_SCALE, max(6, s1 + p2 + 1))
+        var decDig = min(DecimalType.MAX_SCALE, max(6, s1 + adjP2 + 1))
         val diff = (intDig + decDig) - DecimalType.MAX_SCALE
         if (diff > 0) {
           decDig -= diff / 2 + 1
