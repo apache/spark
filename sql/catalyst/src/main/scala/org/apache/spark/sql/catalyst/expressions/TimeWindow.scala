@@ -35,10 +35,8 @@ case class TimeWindow(
   with ImplicitCastInputTypes
   with Unevaluable
   with NonSQLExpression {
-  require(windowDuration > 0, "The window duration must be " +
-    s"a positive integer, long or string literal, found: $windowDuration")
-  require(slideDuration > 0, "The slide duration must be " +
-    s"a positive integer, long or string literal, found: $slideDuration")
+  TimeWindow.checkWindowAndSlideDuration(windowDuration, slideDuration,
+    windowDuration, slideDuration)
 
   //////////////////////////
   // SQL Constructors
@@ -162,14 +160,20 @@ object TimeWindow {
       startTime: String): TimeWindow = {
     val windowDurationMicroSec = getIntervalInMicroSeconds(windowDuration)
     val slideDurationMicroSec = getIntervalInMicroSeconds(slideDuration)
-    require(windowDurationMicroSec > 0, "The window duration must be " +
-      s"a positive integer, long or string literal, found: $windowDuration")
-    require(slideDurationMicroSec > 0, "The slide duration must be " +
-      s"a positive integer, long or string literal, found: $slideDuration")
+    checkWindowAndSlideDuration(windowDurationMicroSec, slideDurationMicroSec,
+      windowDuration, slideDuration)
     TimeWindow(timeColumn,
       windowDurationMicroSec,
       slideDurationMicroSec,
       getIntervalInMicroSeconds(startTime))
+  }
+
+  private def checkWindowAndSlideDuration(windowDurationMicroSec: Long, slideDurationMicroSec: Long,
+                                          windowDuration: Any, slideDuration: Any): Unit = {
+    require(windowDurationMicroSec > 0, "The window duration must be " +
+      s"a positive integer, long or string literal, found: $windowDuration")
+    require(slideDurationMicroSec > 0, "The slide duration must be " +
+      s"a positive integer, long or string literal, found: $slideDuration")
   }
 }
 
