@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.commons.lang3.math.NumberUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
@@ -58,5 +59,10 @@ object DataSourceUtils {
   private[sql] def isDataPath(path: Path): Boolean = {
     val name = path.getName
     !(name.startsWith("_") || name.startsWith("."))
+  }
+
+  def calcDataSize(properties: Map[String, String], sizeInBytes: Long): Long = {
+    val factor = NumberUtils.toDouble(properties.get("deserFactor").getOrElse("1.0"), 1.0)
+    (sizeInBytes * factor).toLong
   }
 }

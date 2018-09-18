@@ -81,11 +81,10 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
   }
 
   private def calcPartSize(catalogTable: Option[CatalogTable], sizeInBytes: Long): Long = {
-    val factor = if (catalogTable.isDefined) {
-      NumberUtils.toDouble(catalogTable.get.properties.get("deserFactor").getOrElse("1.0"), 1.0)
+    if (catalogTable.isDefined) {
+      DataSourceUtils.calcDataSize(catalogTable.get.properties, sizeInBytes)
     } else {
-      1.0
+      sizeInBytes
     }
-    (sizeInBytes * factor).toLong
   }
 }

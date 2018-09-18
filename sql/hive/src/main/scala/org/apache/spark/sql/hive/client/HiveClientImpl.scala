@@ -50,6 +50,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.hive.HiveExternalCatalog.{DATASOURCE_SCHEMA, DATASOURCE_SCHEMA_NUMPARTS, DATASOURCE_SCHEMA_PART_PREFIX}
 import org.apache.spark.sql.hive.client.HiveClientImpl._
 import org.apache.spark.sql.internal.SQLConf
@@ -1062,19 +1063,11 @@ private[hive] object HiveClientImpl {
     // for example), don't use rawDataSize.
     // In Hive, when statistics gathering is disabled, `rawDataSize` and `numRows` is always
     // zero after INSERT command. So they are used here only if they are larger than zero.
-    val factor = try {
-        properties.get("deserFactor").getOrElse("1.0").toDouble
-      } catch {
-        case _: NumberFormatException => 1.0
-      }
-    val adjustedSize = if (totalSize.isDefined && factor != 1.0D) {
-      Some(BigInt((totalSize.get.toLong * factor).toLong))
-    } else {
-      totalSize
-    }
+    val adjustedSize = BigInt(DataSourceUtils.calcDataSize(properties,
+      totalSize.getOrElse(BigInt(0)).toLong))
     val sqlConf = SQLConf.get
-    if (adjustedSize.isDefined && adjustedSize.get > 0L) {
-      Some(CatalogStatistics(sizeInBytes = adjustedSize.get, rowCount = rowCount.filter(_ > 0)))
+    if (adjustedSize > 0L) {
+      Some(CatalogStatistics(sizeInBytes = adjustedSize, rowCount = rowCount.filter(_ > 0)))
     } else if (rawDataSize.isDefined && rawDataSize.get > 0 && !sqlConf.ignoreRawDataSize) {
       Some(CatalogStatistics(sizeInBytes = rawDataSize.get, rowCount = rowCount.filter(_ > 0)))
     } else {
