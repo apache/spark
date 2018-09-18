@@ -121,7 +121,7 @@ else
 fi
 
 PUBLISH_SCALA_2_12=0
-SCALA_2_12_PROFILES="-Pscala-2.12 -Pkafka-0-8"
+SCALA_2_12_PROFILES="-Pscala-2.12"
 if [[ $SPARK_VERSION > "2.4" ]]; then
   PUBLISH_SCALA_2_12=1
 fi
@@ -431,6 +431,8 @@ if [[ "$1" == "publish-release" ]]; then
 
   # Clean-up Zinc nailgun process
   $LSOF -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
+
+  ./dev/change-scala-version.sh 2.11
 
   pushd $tmp_repo/org/apache/spark
 
