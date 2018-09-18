@@ -429,7 +429,6 @@ case class StateStoreSaveExec(
 }
 
 // FIXME: javadoc!
-// FIXME: keyExpressions shouldn't have 'session': otherwise we should exclude it...
 case class SessionWindowStateStoreRestoreExec(
     keyWithoutSessionExpressions: Seq[Attribute],
     sessionExpression: Attribute,
@@ -576,10 +575,8 @@ case class SessionWindowStateStoreSaveExec(
       val keyProjection = GenerateUnsafeProjection.generate(keyWithoutSessionExpressions,
         child.output)
 
-      val alreadyRemovedKeys = new mutable.HashSet[UnsafeRow]()
-      var previousSessions: Seq[UnsafeRow] = null
-
-      val ordering = TypeUtils.getInterpretedOrdering(child.output.toStructType)
+      var currentKey: UnsafeRow = null
+      var previousSessions: scala.collection.immutable.Set[UnsafeRow] = null
 
       // FIXME: DEBUG
       val debugPartitionId = TaskContext.get().partitionId()
@@ -594,18 +591,18 @@ case class SessionWindowStateStoreSaveExec(
               val row = iter.next().asInstanceOf[UnsafeRow]
               val keys = keyProjection(row)
 
-              if (!alreadyRemovedKeys.contains(keys)) {
+              if (currentKey == null || currentKey != keys) {
+                currentKey = keys
                 // This is necessary because MultiValuesStateManager doesn't guarantee
                 // stable ordering.
                 // The number of values for the given key is expected to be likely small,
-                // so sorting it here doesn't hurt.
-                previousSessions = stateManager.get(keys).toList
+                // so listing it here doesn't hurt.
+                previousSessions = stateManager.get(keys).toSet
 
                 stateManager.removeKey(keys)
-                alreadyRemovedKeys.add(keys)
               }
 
-              if (!previousSessions.exists(p => ordering.equiv(row, p))) {
+              if (!previousSessions.contains(row)) {
                 // such session is not in previous session
 
                 val sessionProjection = GenerateUnsafeProjection.generate(
@@ -656,18 +653,18 @@ case class SessionWindowStateStoreSaveExec(
               while (ret == null && iter.hasNext) {
                 val row = iter.next().asInstanceOf[UnsafeRow]
                 val keys = keyProjection(row)
-                if (!alreadyRemovedKeys.contains(keys)) {
+                if (currentKey == null || currentKey != keys) {
+                  currentKey = keys
                   // This is necessary because MultiValuesStateManager doesn't guarantee
                   // stable ordering.
                   // The number of values for the given key is expected to be likely small,
-                  // so sorting it here doesn't hurt.
-                  previousSessions = stateManager.get(keys).toList
+                  // so listing it here doesn't hurt.
+                  previousSessions = stateManager.get(keys).toSet
 
                   stateManager.removeKey(keys)
-                  alreadyRemovedKeys.add(keys)
                 }
 
-                if (!previousSessions.exists(p => ordering.equiv(row, p))) {
+                if (!previousSessions.contains(row)) {
                   // such session is not in previous session
 
                   val sessionProjection = GenerateUnsafeProjection.generate(
@@ -697,6 +694,7 @@ case class SessionWindowStateStoreSaveExec(
                 // !iter.hasNext && ret != null => can return ret, and next getNext() call will
                 // set finished = true
                 // iter.hasNext && (ret != null || ret == null) => not possible
+                numOutputRows += 1
                 ret
               }
             }
