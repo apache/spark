@@ -1111,12 +1111,11 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS =
-    buildConf("spark.sql.statistics.fallBackToHdfs")
-      .doc("If the table statistics are not available from table metadata enable fall back to hdfs." +
-        " This is useful in determining if a table is small enough to use auto broadcast joins.")
-      .booleanConf
-      .createWithDefault(false)
+  val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS = buildConf("spark.sql.statistics.fallBackToHdfs")
+    .doc("If the table statistics are not available from table metadata enable fall back to hdfs." +
+      " This is useful in determining if a table is small enough to use auto broadcast joins.")
+    .booleanConf
+    .createWithDefault(false)
 
   val DEFAULT_SIZE_IN_BYTES = buildConf("spark.sql.defaultSizeInBytes")
     .internal()
