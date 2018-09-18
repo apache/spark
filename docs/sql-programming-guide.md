@@ -1002,6 +1002,15 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     </p>
   </td>
 </tr>
+<tr>
+  <td><code>spark.sql.parquet.writeLegacyFormat</code></td>
+  <td>false</td>
+  <td>
+    When true, Spark will write Parquet data in the legacy format adopted by Spark 1.4 and prior
+    versions. Parquet data written by Spark is readable by Hive and Impala when this flag is set to
+    true.
+  </td>
+</tr>
 </table>
 
 ## ORC Files
