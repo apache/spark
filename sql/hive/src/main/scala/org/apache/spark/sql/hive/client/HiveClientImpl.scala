@@ -25,7 +25,6 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.commons.lang3.math.NumberUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
@@ -1063,7 +1062,11 @@ private[hive] object HiveClientImpl {
     // for example), don't use rawDataSize.
     // In Hive, when statistics gathering is disabled, `rawDataSize` and `numRows` is always
     // zero after INSERT command. So they are used here only if they are larger than zero.
-    val factor = NumberUtils.toDouble(properties.get("deserFactor").getOrElse("1.0"), 1.0)
+    val factor = try {
+        properties.get("deserFactor").getOrElse("1.0").toDouble
+      } catch {
+        case _: NumberFormatException => 1.0
+      }
     val adjustedSize = if (totalSize.isDefined && factor != 1.0D) {
       Some(BigInt((totalSize.get.toLong * factor).toLong))
     } else {
