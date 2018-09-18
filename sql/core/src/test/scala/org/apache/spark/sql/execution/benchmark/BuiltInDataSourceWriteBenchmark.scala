@@ -18,10 +18,15 @@ package org.apache.spark.sql.execution.benchmark
 
 /**
  * Benchmark to measure built-in data sources write performance.
- * By default it measures 4 data source format: Parquet, ORC, JSON, CSV:
- *  spark-submit --class <this class> <spark sql test jar>
+ * By default it measures 4 data source format: Parquet, ORC, JSON, CSV. Run it with spark-submit:
+ *   spark-submit --class <this class> <spark sql test jar>
+ * Or with sbt:
+ *   build/sbt "sql/test:runMain <this class>"
+ *
  * To measure specified formats, run it with arguments:
- *  spark-submit --class <this class> <spark sql test jar> format1 [format2] [...]
+ *   spark-submit --class <this class> <spark sql test jar> format1 [format2] [...]
+ * Or with sbt:
+ *   build/sbt "sql/test:runMain <this class> format1 [format2] [...]"
  */
 object BuiltInDataSourceWriteBenchmark extends DataSourceWriteBenchmark {
   def main(args: Array[String]): Unit = {

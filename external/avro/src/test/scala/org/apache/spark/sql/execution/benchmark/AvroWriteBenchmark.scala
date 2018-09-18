@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.benchmark
 /**
  * Benchmark to measure Avro data sources write performance.
  * Usage:
- *  spark-submit --class <this class> <spark sql test jar>
+ * 1. with spark-submit: bin/spark-submit --class <this class> <spark sql test jar>
+ * 2. with sbt: build/sbt "avro/test:runMain <this class>"
  */
 object AvroWriteBenchmark extends DataSourceWriteBenchmark {
   def main(args: Array[String]): Unit = {
