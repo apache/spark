@@ -84,7 +84,6 @@ class MergingSortWithMultiValuesStateIterator(
           // state row cannot advance to row in input, so state row should be lower
           false
         } else {
-          System.err.println(s"DEBUG: WARN - comparing row ${currentRow} and state row ${currentStateRow}")
           currentRow.sessionStart < currentStateRow.sessionStart
         }
       }
@@ -102,22 +101,18 @@ class MergingSortWithMultiValuesStateIterator(
       }
     }
 
-    System.err.println(s"DEBUG: WARN - returning row ${ret.row} for iterator")
-
     ret.row
   }
 
   private def mayFillCurrentRow(): Unit = {
     if (iter.hasNext) {
       currentRow = SessionRowInformation.of(iter.next())
-      System.err.println(s"DEBUG - filling current row... current row: $currentRow")
     }
   }
 
   private def mayFillCurrentStateRow(): Unit = {
     if (currentStateIter != null && currentStateIter.hasNext) {
       currentStateRow = SessionRowInformation.of(currentStateIter.next())
-      System.err.println(s"DEBUG - filling state row... current state row: $currentStateRow")
     } else {
       currentStateIter = null
 
@@ -137,9 +132,6 @@ class MergingSortWithMultiValuesStateIterator(
         currentStateFetchedKey = currentRow.keys
         if (currentStateIter.hasNext) {
           currentStateRow = SessionRowInformation.of(currentStateIter.next())
-          System.err.println(s"DEBUG: read data ${currentStateRow.row} from state for key ${currentRow.keys}")
-        } else {
-          System.err.println(s"DEBUG: no state data for key ${currentRow.keys}")
         }
       }
     }

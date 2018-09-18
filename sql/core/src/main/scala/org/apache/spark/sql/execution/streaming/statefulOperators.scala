@@ -450,37 +450,13 @@ case class SessionWindowStateStoreRestoreExec(
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { case (stateManager, iter) =>
 
-      // FIXME: remove
-      val debugPartitionId = TaskContext.get().partitionId()
-
-      val debugIter = iter.map { row =>
-        val keysProjection = GenerateUnsafeProjection.generate(keyWithoutSessionExpressions,
-          child.output)
-        val sessionProjection = GenerateUnsafeProjection.generate(
-          Seq(sessionExpression), child.output)
-        val rowProjection = GenerateUnsafeProjection.generate(child.output, child.output)
-
-        logWarning(s"DEBUG: partitionId $debugPartitionId - input row - keys ${keysProjection(row)}")
-        logWarning(s"DEBUG: partitionId $debugPartitionId - input row - session ${sessionProjection(row)}")
-        logWarning(s"DEBUG: partitionId $debugPartitionId - input row - row (proj) ${rowProjection(row)}")
-        logWarning(s"DEBUG: partitionId $debugPartitionId - input row - row $row")
-
-        row
-      }
-
       // We need to filter out outdated inputs
       val filteredIterator = watermarkPredicateForData match {
-        case Some(predicate) => debugIter.filter((row: InternalRow) => {
-          val pr = !predicate.eval(row)
-          if (!pr) {
-            logWarning(s"DEBUG - evicting input due to watermark... $row")
-          }
-          pr
-        })
-        case None => debugIter
+        case Some(predicate) => iter.filter((row: InternalRow) => !predicate.eval(row))
+        case None => iter
       }
 
-      val mergedIter = new MergingSortWithMultiValuesStateIterator(
+      new MergingSortWithMultiValuesStateIterator(
         filteredIterator,
         stateManager,
         keyWithoutSessionExpressions,
@@ -489,23 +465,6 @@ case class SessionWindowStateStoreRestoreExec(
         numOutputRows += 1
         row
       }
-
-      val debugMergedIter = mergedIter.map { row =>
-        val keysProjection = GenerateUnsafeProjection.generate(keyWithoutSessionExpressions,
-          child.output)
-        val sessionProjection = GenerateUnsafeProjection.generate(
-          Seq(sessionExpression), child.output)
-        val rowProjection = GenerateUnsafeProjection.generate(child.output, child.output)
-
-        logWarning(s"DEBUG: partitionId $debugPartitionId - merged row - keys ${keysProjection(row)}")
-        logWarning(s"DEBUG: partitionId $debugPartitionId - merged row - session ${sessionProjection(row)}")
-        logWarning(s"DEBUG: partitionId $debugPartitionId - merged row - row (proj) ${rowProjection(row)}")
-        logWarning(s"DEBUG: partitionId $debugPartitionId - merged row - row ${row}")
-
-        row
-      }
-
-      debugMergedIter
     }
   }
 
@@ -602,41 +561,24 @@ case class SessionWindowStateStoreSaveExec(
                 stateManager.removeKey(keys)
               }
 
+              stateManager.append(keys, row)
+
               if (!previousSessions.contains(row)) {
                 // such session is not in previous session
-
-                val sessionProjection = GenerateUnsafeProjection.generate(
-                  Seq(sessionExpression), child.output)
-                val rowProjection = GenerateUnsafeProjection.generate(child.output, child.output)
-                logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - keys ${keyProjection(row)}")
-                logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - session ${sessionProjection(row)}")
-                logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - row (proj) ${rowProjection(row)}")
-                logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - row ${row}")
-
-                logWarning(s"DEBUG: partitionId $debugPartitionId - adding row for key ${keys} row ${row} ...")
-
-                stateManager.append(keys, row)
                 numUpdatedStateRows += 1
-              } else {
-                logWarning(s"DEBUG: partitionId $debugPartitionId - add row for key ${keys} row ${row} but don't update count since it is already existed...")
-                stateManager.append(keys, row)
               }
             }
-
-            logWarning(s"DEBUG: partitionId $debugPartitionId - finished iterating...")
           }
 
           val removalStartTimeNs = System.nanoTime
 
           val retIter = evictSessionsByWatermark(stateManager).map(_.value).map { row =>
-            logWarning(s"DEBUG: partitionId $debugPartitionId - evicting row ${row} ...")
             numOutputRows += 1
             row
           }
 
           CompletionIterator[InternalRow, Iterator[InternalRow]](retIter, {
             allRemovalsTimeMs += NANOSECONDS.toMillis(System.nanoTime - removalStartTimeNs)
-            logWarning(s"DEBUG: partitionId $debugPartitionId - committing...")
             commitTimeMs += timeTakenMs { stateManager.commit() }
             setStoreMetrics(stateManager)
           })
@@ -664,26 +606,12 @@ case class SessionWindowStateStoreSaveExec(
                   stateManager.removeKey(keys)
                 }
 
+                stateManager.append(keys, row)
+
                 if (!previousSessions.contains(row)) {
                   // such session is not in previous session
-
-                  val sessionProjection = GenerateUnsafeProjection.generate(
-                    Seq(sessionExpression), child.output)
-                  val rowProjection = GenerateUnsafeProjection.generate(child.output, child.output)
-                  logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - keys ${keyProjection(row)}")
-                  logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - session ${sessionProjection(row)}")
-                  logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - row (proj) ${rowProjection(row)}")
-                  logWarning(s"DEBUG: partitionId $debugPartitionId - adding row - row ${row}")
-
-                  logWarning(s"DEBUG: partitionId $debugPartitionId - adding row for key ${keys} row ${row} ...")
-
-                  stateManager.append(keys, row)
                   numUpdatedStateRows += 1
-
                   ret = row
-                } else {
-                  logWarning(s"DEBUG: partitionId $debugPartitionId - add row for key ${keys} row ${row} but don't update count since it is already existed...")
-                  stateManager.append(keys, row)
                 }
               }
 
@@ -705,9 +633,7 @@ case class SessionWindowStateStoreSaveExec(
               // Remove old aggregates if watermark specified
               allRemovalsTimeMs += timeTakenMs {
                 // fully consume iterator to let removal take effect
-                evictSessionsByWatermark(stateManager).map { rowPair =>
-                  System.err.println(s"DEBUG: evicting row ${rowPair.value}")
-                }.toList
+                evictSessionsByWatermark(stateManager).toList
               }
               commitTimeMs += timeTakenMs { stateManager.commit() }
               setStoreMetrics(stateManager)

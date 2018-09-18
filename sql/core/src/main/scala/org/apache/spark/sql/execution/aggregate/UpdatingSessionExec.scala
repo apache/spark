@@ -38,27 +38,8 @@ case class UpdatingSessionExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions { iter =>
-      val newIter = new UpdatingSessionIterator(iter, keyExpressions, sessionExpression,
+      new UpdatingSessionIterator(iter, keyExpressions, sessionExpression,
         child.output)
-
-      val debugIter = newIter.map { row =>
-        val keysProjection = GenerateUnsafeProjection.generate(keyExpressions, child.output)
-        val sessionProjection = GenerateUnsafeProjection.generate(
-          Seq(sessionExpression), child.output)
-        val rowProjection = GenerateUnsafeProjection.generate(child.output, child.output)
-
-        // FIXME: remove
-        val debugPartitionId = TaskContext.get().partitionId()
-
-        logWarning(s"DEBUG: partitionId $debugPartitionId - updated session row - keys ${keysProjection(row)}")
-        logWarning(s"DEBUG: partitionId $debugPartitionId - updated session row - session ${sessionProjection(row)}")
-        logWarning(s"DEBUG: partitionId $debugPartitionId - updated session row - row (proj) ${rowProjection(row)}")
-        logWarning(s"DEBUG: partitionId $debugPartitionId - updated session row - row ${row}")
-
-        row
-      }
-
-      debugIter
     }
   }
 

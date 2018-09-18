@@ -65,11 +65,6 @@ class UpdatingSessionIterator(
     assertIteratorNotCorrupted()
 
     if (returnRowsIter != null && returnRowsIter.hasNext) {
-      System.err.println(s"DEBUG: has remaining returnRowsIter - not going into loop - " +
-        s"current session - currentKeys: $currentKeys / " +
-        s"currentRows: $currentRows / currentSessionStart: $currentSessionStart / " +
-        s"currentSessionEnd: $currentSessionEnd")
-
       return returnRowsIter.next()
     }
 
@@ -104,9 +99,6 @@ class UpdatingSessionIterator(
           // expanding session length if needed
           expandEndOfCurrentSession(sessionEnd)
           currentRows += row
-
-          System.err.println(s"DEBUG: - adding row: $row / currentRows: $currentRows")
-
         } else {
           closeCurrentSession(keyChanged = false)
           startNewSession(row, keys, sessionStart, sessionEnd)
@@ -119,10 +111,6 @@ class UpdatingSessionIterator(
       // no further row: closing session
       closeCurrentSession(keyChanged = false)
     }
-
-    System.err.println(s"DEBUG: end of loop - current session - currentKeys: $currentKeys / " +
-      s"currentRows: $currentRows / currentSessionStart: $currentSessionStart / " +
-      s"currentSessionEnd: $currentSessionEnd")
 
     // here returnRowsIter should be able to provide at least one row
     require(returnRowsIter != null && returnRowsIter.hasNext)
@@ -147,10 +135,6 @@ class UpdatingSessionIterator(
     currentSessionEnd = sessionEnd
     currentRows.clear()
     currentRows += row
-
-    System.err.println(s"DEBUG: started new session - currentKeys: $currentKeys / " +
-      s"currentRows: $currentRows / currentSessionStart: $currentSessionStart / " +
-      s"currentSessionEnd: $currentSessionEnd")
   }
 
   private def handleBrokenPreconditionForSort(): Unit = {
@@ -159,10 +143,6 @@ class UpdatingSessionIterator(
   }
 
   private def closeCurrentSession(keyChanged: Boolean): Unit = {
-    System.err.println(s"DEBUG: closing current session - currentKeys: $currentKeys / " +
-      s"currentRows: $currentRows / currentSessionStart: $currentSessionStart / " +
-      s"currentSessionEnd: $currentSessionEnd")
-
     val sessionStruct = CreateNamedStruct(
       Literal("start") ::
         PreciseTimestampConversion(
@@ -194,11 +174,6 @@ class UpdatingSessionIterator(
     } else {
       returnRowsIter = returnRows.iterator
     }
-
-    // FIXME: DEBUG
-    val (rIter, tmpReturnRowsIter) = returnRowsIter.duplicate
-    returnRowsIter = rIter
-    System.err.println(s"DEBUG: closing current session - return rows iter will return: ${tmpReturnRowsIter.toList}")
 
     if (keyChanged) processedKeys.add(currentKeys)
 
