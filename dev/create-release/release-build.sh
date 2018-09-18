@@ -116,13 +116,12 @@ SCALA_2_10_PROFILES="-Pscala-2.10"
 SCALA_2_11_PROFILES=
 SCALA_2_12_PROFILES="-Pscala-2.12"
 
-if [[ $SPARK_VERSION > "2.4" ]]; then
+if [[ $SPARK_VERSION > "2.3" ]]; then
   BASE_PROFILES="$BASE_PROFILES -Pkubernetes -Pflume"
   SCALA_2_11_PROFILES="-Pkafka-0-8"
-  PUBLISH_SCALA_2_12=1
-elif [[ $SPARK_VERSION > "2.3" ]]; then
-  BASE_PROFILES="$BASE_PROFILES -Pkubernetes -Pflume"
-  SCALA_2_11_PROFILES="-Pkafka-0-8"
+  if [[ $SPARK_VERSION > "2.4" ]]; then
+    PUBLISH_SCALA_2_12=1
+  fi
 else
   PUBLISH_SCALA_2_10=1
 fi
@@ -194,11 +193,11 @@ if [[ "$1" == "package" ]]; then
     SCALA_VERSION=$2
     SCALA_PROFILES=
     if [[ SCALA_VERSION == "2.10" ]]; then
-      SCALA_PROFILES=$SCALA_2_10_PROFILES
+      SCALA_PROFILES="$SCALA_2_10_PROFILES"
     elif [[ SCALA_VERSION == "2.12" ]]; then
-      SCALA_PROFILES=$SCALA_2_12_PROFILES
+      SCALA_PROFILES="$SCALA_2_12_PROFILES"
     else
-      SCALA_PROFILES=$SCALA_2_11_PROFILES
+      SCALA_PROFILES="$SCALA_2_11_PROFILES"
     fi
     FLAGS="$MVN_EXTRA_OPTS -B $SCALA_PROFILES $BASE_RELEASE_PROFILES $3"
     BUILD_PACKAGE=$4
@@ -440,7 +439,7 @@ if [[ "$1" == "publish-release" ]]; then
 
   if ! is_dry_run && [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
     ./dev/change-scala-version.sh 2.12
-    $MVN -DzincPort=$((ZINC_PORT + 1)) -Dmaven.repo.local=$tmp_repo -Dscala-2.12 \
+    $MVN -DzincPort=$((ZINC_PORT + 2)) -Dmaven.repo.local=$tmp_repo -Dscala-2.12 \
       -DskipTests $PUBLISH_PROFILES $SCALA_2_12_PROFILES clean install
   fi
 
