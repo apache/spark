@@ -107,12 +107,16 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
     // a => (19:39:34 ~ 19:39:50)
     // b => (19:39:27 ~ 19:39:37), (19:39:39 ~ 19:39:55)
 
+    val df2 = df.groupBy(session($"time", "10 seconds"), 'id)
+      .agg(count("*").as("counts"), sum("value").as("sum"))
+      .orderBy($"session.start".asc)
+      .selectExpr("CAST(session.start AS STRING)", "CAST(session.end AS STRING)", "id",
+        "counts", "sum")
+
+    df2.explain(extended = true)
+
     checkAnswer(
-      df.groupBy(session($"time", "10 seconds"), 'id)
-        .agg(count("*").as("counts"), sum("value").as("sum"))
-        .orderBy($"session.start".asc)
-        .selectExpr("CAST(session.start AS STRING)", "CAST(session.end AS STRING)", "id",
-          "counts", "sum"),
+      df2,
 
       Seq(
         Row("2016-03-27 19:39:27", "2016-03-27 19:39:37", "b", 1, 4),

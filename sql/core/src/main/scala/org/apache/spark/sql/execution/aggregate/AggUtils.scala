@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming._
 
@@ -98,7 +97,8 @@ object AggUtils {
         resultExpressions = partialResultExpressions,
         child = child)
 
-    val interExec: SparkPlan = mayAppendUpdatingSessionExec(groupingExpressions, partialAggregate)
+    val interExec: SparkPlan = mayAppendMergingSessionExec(groupingExpressions,
+      aggregateExpressions, partialAggregate)
 
     // 2. Create an Aggregate Operator for final aggregations.
     val finalAggregateExpressions = aggregateExpressions.map(_.copy(mode = Final))
@@ -118,6 +118,8 @@ object AggUtils {
     finalAggregate :: Nil
   }
 
+  // FIXME: now I'm not sure sessionization works with distinct (don't have imagination)
+  // FIXME: maybe it is not easy to add sessionization with distinct?
   def planAggregateWithOneDistinct(
       groupingExpressions: Seq[NamedExpression],
       functionsWithDistinct: Seq[AggregateExpression],
@@ -206,17 +208,19 @@ object AggUtils {
       val partialAggregateResult = groupingAttributes ++
           mergeAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes) ++
           distinctAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
-      createAggregate(
+
+      val partialDistinctAggregate = createAggregate(
         groupingExpressions = groupingAttributes,
         aggregateExpressions = mergeAggregateExpressions ++ distinctAggregateExpressions,
         aggregateAttributes = mergeAggregateAttributes ++ distinctAggregateAttributes,
         initialInputBufferOffset = (groupingAttributes ++ distinctAttributes).length,
         resultExpressions = partialAggregateResult,
         child = partialMergeAggregate)
-    }
 
-    val interExec: SparkPlan = mayAppendUpdatingSessionExec(groupingExpressions,
-      partialDistinctAggregate)
+      mayAppendMergingSessionExec(groupingExpressions,
+        mergeAggregateExpressions ++ distinctAggregateExpressions,
+        partialDistinctAggregate)
+    }
 
     // 4. Create an Aggregate Operator for the final aggregation.
     val finalAndCompleteAggregate: SparkPlan = {
@@ -245,7 +249,7 @@ object AggUtils {
         aggregateAttributes = finalAggregateAttributes ++ distinctAggregateAttributes,
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = resultExpressions,
-        child = interExec)
+        child = partialDistinctAggregate)
     }
 
     finalAndCompleteAggregate :: Nil
@@ -352,11 +356,10 @@ object AggUtils {
    *  - Shuffle & Sort (distribution: keys "without" session, sort: all keys)
    *  - SessionWindowStateStoreRestore (group: keys "without" session)
    *    - merge input tuples with stored tuples (sessions) respecting sort order
-   *  - UpdatingSessionExec
-   *    - calculate session among tuples, and update all tuples to get correct session range
+   *  - MergingSessionExec
+   *    - calculate session among tuples, and aggregate tuples in session with partial merge
    *    - NOTE: it leverages the fact that the output of SessionWindowStateStoreRestore is sorted
-   *  - PartialMerge (group: all keys)
-   *    - now there is at most 1 tuple per group
+   *    - now there is at most 1 tuple per group, key with session
    *  - SessionWindowStateStoreSave (group: keys "without" session)
    *    - saves tuple(s) for the next batch (multiple sessions could co-exist at the same time)
    *  - Complete (output the current result of the aggregation)
@@ -395,23 +398,21 @@ object AggUtils {
     val restored = SessionWindowStateStoreRestoreExec(groupingWithoutSessionAttributes,
       sessionExpression.toAttribute, stateInfo = None, eventTimeWatermark = None, partialAggregate)
 
-    val updatedSession = UpdatingSessionExec(groupingWithoutSessionAttributes,
-      sessionExpression.toAttribute, optRequiredChildDistribution = None,
-      optRequiredChildOrdering = None, restored)
-
-    val partialMerged: SparkPlan = {
+    val mergedSessions = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
-      createAggregate(
-        requiredChildDistributionExpressions =
-            Some(groupingAttributes),
+      MergingSessionsExec(
+        requiredChildDistributionExpressions = None,
+        requiredChildDistributionOption = Some(restored.requiredChildDistribution),
         groupingExpressions = groupingAttributes,
+        sessionExpression = sessionExpression,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = groupingAttributes ++
-            aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-        child = updatedSession)
+          aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
+        child = restored
+      )
     }
 
     // Note: stateId and returnAllStates are filled in later with preparation rules
@@ -423,7 +424,7 @@ object AggUtils {
         stateInfo = None,
         outputMode = None,
         eventTimeWatermark = None,
-        partialMerged)
+        mergedSessions)
 
     val finalAndCompleteAggregate: SparkPlan = {
       val finalAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Final))
@@ -444,37 +445,35 @@ object AggUtils {
     finalAndCompleteAggregate :: Nil
   }
 
-  private def mayAppendUpdatingSessionExec(groupingExpressions: Seq[NamedExpression],
-                                           maybeChildPlan: SparkPlan): SparkPlan = {
-    val interExec = groupingExpressions.find(_.metadata.contains(SessionWindow.marker)) match {
+  private def mayAppendMergingSessionExec(
+      groupingExpressions: Seq[NamedExpression],
+      aggregateExpressions: Seq[AggregateExpression],
+      partialAggregate: SparkPlan): SparkPlan = {
+
+    groupingExpressions.find(_.metadata.contains(SessionWindow.marker)) match {
       case Some(sessionExpression) =>
-        val groupWithoutSessionExpression = groupingExpressions.filterNot { p =>
-          p.semanticEquals(sessionExpression)
-        }
+        val aggExpressions = aggregateExpressions.map(_.copy(mode = PartialMerge))
+        val aggAttributes = aggregateExpressions.map(_.resultAttribute)
 
-        val groupingWithoutSessionAttributes = groupWithoutSessionExpression.map(_.toAttribute)
+        val groupingAttributes = groupingExpressions.map(_.toAttribute)
+        val groupingWithoutSessionExpressions = groupingExpressions.diff(Seq(sessionExpression))
+        val groupingWithoutSessionsAttributes = groupingWithoutSessionExpressions
+          .map(_.toAttribute)
 
-        val childDistribution = if (groupWithoutSessionExpression.isEmpty) {
-          AllTuples :: Nil
-        } else {
-          ClusteredDistribution(groupWithoutSessionExpression) :: Nil
-        }
+        MergingSessionsExec(
+          requiredChildDistributionExpressions = Some(groupingWithoutSessionsAttributes),
+          requiredChildDistributionOption = None,
+          groupingExpressions = groupingAttributes,
+          sessionExpression = sessionExpression,
+          aggregateExpressions = aggExpressions,
+          aggregateAttributes = aggAttributes,
+          initialInputBufferOffset = groupingAttributes.length,
+          resultExpressions = groupingAttributes ++
+            aggExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
+          child = partialAggregate
+        )
 
-        val childOrdering = Seq((groupingWithoutSessionAttributes ++ Seq(sessionExpression))
-          .map(SortOrder(_, Ascending)))
-
-        val updatedSession = UpdatingSessionExec(groupingWithoutSessionAttributes,
-          sessionExpression.toAttribute,
-          optRequiredChildDistribution = Some(childDistribution),
-          optRequiredChildOrdering = Some(childOrdering),
-          maybeChildPlan)
-
-        updatedSession
-
-      case None => maybeChildPlan
+      case None => partialAggregate
     }
-
-    interExec
   }
-
 }

@@ -514,6 +514,10 @@ case class SessionWindowStateStoreRestoreExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
+  override def outputOrdering: Seq[SortOrder] = {
+    (keyWithoutSessionExpressions ++ Seq(sessionExpression)).map(SortOrder(_, Ascending))
+  }
+
   override def requiredChildDistribution: Seq[Distribution] = {
     if (keyWithoutSessionExpressions.isEmpty) {
       AllTuples :: Nil
