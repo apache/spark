@@ -68,23 +68,22 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
 
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-    logger.warn("Exception in connection from " + getRemoteAddress(ctx.channel()),
-        cause);
+    logger.warn("Exception in connection from " + getRemoteAddress(ctx.channel()), cause);
     ctx.close();
   }
 
   @Override
-  protected void channelRead0(ChannelHandlerContext ctx,
-                              final ChunkFetchRequest msg) throws Exception {
+  protected void channelRead0(ChannelHandlerContext ctx, final ChunkFetchRequest msg)
+    throws Exception {
     Channel channel = ctx.channel();
     if (logger.isTraceEnabled()) {
       logger.trace("Received req from {} to fetch block {}", getRemoteAddress(channel),
-          msg.streamChunkId);
+        msg.streamChunkId);
     }
     long chunksBeingTransferred = streamManager.chunksBeingTransferred();
     if (chunksBeingTransferred >= maxChunksBeingTransferred) {
       logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
-          chunksBeingTransferred, maxChunksBeingTransferred);
+        chunksBeingTransferred, maxChunksBeingTransferred);
       channel.close();
       return;
     }
@@ -95,16 +94,15 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
       buf = streamManager.getChunk(msg.streamChunkId.streamId, msg.streamChunkId.chunkIndex);
     } catch (Exception e) {
       logger.error(String.format("Error opening block %s for request from %s",
-          msg.streamChunkId, getRemoteAddress(channel)), e);
-      respond(channel,
-              new ChunkFetchFailure(msg.streamChunkId,
-              Throwables.getStackTraceAsString(e)));
+        msg.streamChunkId, getRemoteAddress(channel)), e);
+      respond(channel, new ChunkFetchFailure(msg.streamChunkId,
+        Throwables.getStackTraceAsString(e)));
       return;
     }
 
     streamManager.chunkBeingSent(msg.streamChunkId.streamId);
     respond(channel, new ChunkFetchSuccess(msg.streamChunkId, buf)).addListener(
-        (ChannelFutureListener) future -> streamManager.chunkSent(msg.streamChunkId.streamId));
+      (ChannelFutureListener) future -> streamManager.chunkSent(msg.streamChunkId.streamId));
   }
 
   /**
@@ -128,7 +126,7 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
         logger.trace("Sent result {} to client {}", result, remoteAddress);
       } else {
         logger.error(String.format("Error sending result %s to %s; closing connection",
-            result, remoteAddress), future.cause());
+          result, remoteAddress), future.cause());
         channel.close();
       }
     });

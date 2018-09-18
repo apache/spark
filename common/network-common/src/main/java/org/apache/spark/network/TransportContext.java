@@ -98,13 +98,14 @@ public class TransportContext {
     this.rpcHandler = rpcHandler;
     this.closeIdleConnections = closeIdleConnections;
 
-    synchronized(this.getClass()) {
-      if (chunkFetchWorkers == null && conf.getModuleName() != null &&
-              conf.getModuleName().equalsIgnoreCase("shuffle")) {
+    synchronized(TransportContext.class) {
+      if (chunkFetchWorkers == null &&
+          conf.getModuleName() != null &&
+          conf.getModuleName().equalsIgnoreCase("shuffle")) {
         chunkFetchWorkers = NettyUtils.createEventLoop(
             IOMode.valueOf(conf.ioMode()),
             conf.chunkFetchHandlerThreads(),
-            "chunk-fetch-handler");
+            "shuffle-chunk-fetch-handler");
       }
     }
   }
@@ -164,13 +165,13 @@ public class TransportContext {
     try {
       TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
       ChunkFetchRequestHandler chunkFetchHandler =
-              createChunkFetchHandler(channelHandler, channelRpcHandler);
+        createChunkFetchHandler(channelHandler, channelRpcHandler);
       ChannelPipeline pipeline = channel.pipeline()
         .addLast("encoder", ENCODER)
         .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder())
         .addLast("decoder", DECODER)
         .addLast("idleStateHandler",
-                new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000))
+          new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000))
         // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this
         // would require more logic to guarantee if this were not part of the same event loop.
         .addLast("handler", channelHandler);
