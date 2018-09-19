@@ -296,14 +296,14 @@ if [[ "$1" == "package" ]]; then
   done
 
   if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
-    ./dev/change-scala-version.sh 2.12
+    ./spark/dev/change-scala-version.sh 2.12
     key="without-hadoop-scala-2.12"
     args="-Phadoop-provided"
     extra=""
     if ! make_binary_release "$key" "$SCALA_2_12_PROFILES $args" "$extra"; then
       error "Failed to build $key package. Check logs for details."
     fi
-    ./dev/change-scala-version.sh 2.11
+    ./spark/dev/change-scala-version.sh 2.11
   fi
 
   rm -rf spark-$SPARK_VERSION-bin-*/
