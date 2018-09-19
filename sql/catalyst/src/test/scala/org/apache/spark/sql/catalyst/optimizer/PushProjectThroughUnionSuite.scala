@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.CaseWhen
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -29,7 +28,6 @@ class PushProjectThroughUnionSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Optimizer Batch", FixedPoint(100),
       PushProjectionThroughUnion,
-      SimplifyConditionals,
       FoldablePropagation) :: Nil
   }
 
@@ -39,12 +37,12 @@ class PushProjectThroughUnionSuite extends PlanTest {
     val testRelation2 = LocalRelation('d.string, 'e.int, 'f.string)
     val query = testRelation1
       .union(testRelation2.select("bar".as("d"), 'e, 'f))
-      .select(CaseWhen(Seq(('b.isNull.expr, 'a.expr)), Some("bar".expr)).as("n"))
+      .select('a.as("n"))
       .select('n, "dummy").analyze
     val optimized = Optimize.execute(query)
 
     val expected = testRelation1
-      .select(CaseWhen(Seq(('b.isNull.expr, 'a.expr)), Some("bar".expr)).as("n"))
+      .select('a.as("n"))
       .select('n, "dummy")
       .union(testRelation2
         .select("bar".as("d"), 'e, 'f)
