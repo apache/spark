@@ -386,6 +386,7 @@ final class ShuffleBlockFetcherIterator(
 
     var result: FetchResult = null
     var input: InputStream = null
+    var originalInput: InputStream = null
     // Take the next fetched result and try to decompress it to detect data corruption,
     // then fetch it one more time if it's corrupt, throw FailureFetchResult if the second fetch
     // is also corrupt, so the previous stage could be retried.
@@ -446,6 +447,7 @@ final class ShuffleBlockFetcherIterator(
 
           try {
             input = streamWrapper(blockId, in)
+            originalInput = input
             // Only copy the stream if it's wrapped by compression or encryption, also the size of
             // block is small (the decompressed block is smaller than maxBytesInFlight)
             if (detectCorrupt && !input.eq(in) && size < maxBytesInFlight / 3) {
@@ -471,6 +473,7 @@ final class ShuffleBlockFetcherIterator(
               }
           } finally {
             // TODO: release the buf here to free memory earlier
+            originalInput.close()
             in.close()
           }
 
