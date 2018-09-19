@@ -254,48 +254,17 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
   }
 
   test("Heartbeat should drop zero metrics") {
-    withHeartbeatExecutor((executor, heartbeats) => {
-      // When no tasks are running, there should be no accumulators sent in heartbeat
-      invokeReportHeartbeat(executor)
-      assert(heartbeats.length == 1)
-      assert(heartbeats(0).accumUpdates.length == 0,
-        "No updates should be sent when no tasks are running")
-
-      // When we start a task with a nonzero accumulator, that should end up in the heartbeat
-      val metrics = new TaskMetrics()
-      val nonZeroAccumulator = new LongAccumulator()
-      nonZeroAccumulator.add(1)
-      metrics.registerAccumulator(nonZeroAccumulator)
-
-      val executorClass = classOf[Executor]
-      val tasksMap = {
-        val field =
-          executorClass.getDeclaredField("org$apache$spark$executor$Executor$$runningTasks")
-        field.setAccessible(true)
-        field.get(executor).asInstanceOf[ConcurrentHashMap[Long, executor.TaskRunner]]
-      }
-      val mockTaskRunner = mock[executor.TaskRunner]
-      val mockTask = mock[Task[Any]]
-      when(mockTask.metrics).thenReturn(metrics)
-      when(mockTaskRunner.taskId).thenReturn(6)
-      when(mockTaskRunner.task).thenReturn(mockTask)
-      when(mockTaskRunner.startGCTime).thenReturn(1)
-      tasksMap.put(6, mockTaskRunner)
-
-      invokeReportHeartbeat(executor)
-      assert(heartbeats.length == 2)
-      val updates = heartbeats(1).accumUpdates
-      assert(updates.length == 1 && updates(0)._1 == 6,
-        "Heartbeat should only send update for the one task running")
-      val accumsSent = updates(0)._2.length
-      assert(accumsSent > 0, "The nonzero accumulator we added should be sent")
-      assert(accumsSent == metrics.accumulators().count(!_.isZero),
-        "The number of accumulators sent should match the number of nonzero accumulators")
-    })
+    heartbeatZeroMetricTest(true)
   }
 
-  private def withHeartbeatExecutor(f: (Executor, ArrayBuffer[Heartbeat]) => Unit): Unit = {
+  test("Heartbeat should not drop zero metrics when the conf is set to false") {
+    heartbeatZeroMetricTest(false)
+  }
+
+  private def withHeartbeatExecutor(confs: (String, String)*)
+      (f: (Executor, ArrayBuffer[Heartbeat]) => Unit): Unit = {
     val conf = new SparkConf
+    confs.foreach { case (k, v) => conf.set(k, v) }
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     val executor =
@@ -335,6 +304,53 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
       .getDeclaredMethod("org$apache$spark$executor$Executor$$reportHeartBeat")
     method.setAccessible(true)
     method.invoke(executor)
+  }
+
+  private def heartbeatZeroMetricTest(dropZeroMetrics: Boolean): Unit = {
+    val c = "spark.executor.heartbeat.dropZeroMetrics" -> dropZeroMetrics.toString
+    withHeartbeatExecutor(c) { (executor, heartbeats) =>
+      // When no tasks are running, there should be no accumulators sent in heartbeat
+      invokeReportHeartbeat(executor)
+      assert(heartbeats.length == 1)
+      assert(heartbeats(0).accumUpdates.length == 0,
+        "No updates should be sent when no tasks are running")
+
+      // When we start a task with a nonzero accumulator, that should end up in the heartbeat
+      val metrics = new TaskMetrics()
+      val nonZeroAccumulator = new LongAccumulator()
+      nonZeroAccumulator.add(1)
+      metrics.registerAccumulator(nonZeroAccumulator)
+
+      val executorClass = classOf[Executor]
+      val tasksMap = {
+        val field =
+          executorClass.getDeclaredField("org$apache$spark$executor$Executor$$runningTasks")
+        field.setAccessible(true)
+        field.get(executor).asInstanceOf[ConcurrentHashMap[Long, executor.TaskRunner]]
+      }
+      val mockTaskRunner = mock[executor.TaskRunner]
+      val mockTask = mock[Task[Any]]
+      when(mockTask.metrics).thenReturn(metrics)
+      when(mockTaskRunner.taskId).thenReturn(6)
+      when(mockTaskRunner.task).thenReturn(mockTask)
+      when(mockTaskRunner.startGCTime).thenReturn(1)
+      tasksMap.put(6, mockTaskRunner)
+
+      invokeReportHeartbeat(executor)
+      assert(heartbeats.length == 2)
+      val updates = heartbeats(1).accumUpdates
+      assert(updates.length == 1 && updates(0)._1 == 6,
+        "Heartbeat should only send update for the one task running")
+      val accumsSent = updates(0)._2.length
+      assert(accumsSent > 0, "The nonzero accumulator we added should be sent")
+      if (dropZeroMetrics) {
+        assert(accumsSent == metrics.accumulators().count(!_.isZero),
+          "The number of accumulators sent should match the number of nonzero accumulators")
+      } else {
+        assert(accumsSent == metrics.accumulators().length,
+          "The number of accumulators sent should match the number of total accumulators")
+      }
+    }
   }
 
   private def createMockEnv(conf: SparkConf, serializer: JavaSerializer): SparkEnv = {
