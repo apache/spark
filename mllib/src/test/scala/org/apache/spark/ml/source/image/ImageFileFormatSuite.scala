@@ -63,8 +63,7 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
     val resultOrigin = result.getStruct(0).getString(0)
     // covert `origin` to `java.net.URI` object and then compare.
     // because `file:/path` and `file:///path` are both valid URI-ifications
-    assert(new URI(resultOrigin) ===
-      new URI(Paths.get(filePath).toAbsolutePath().normalize().toString))
+    assert(new URI(resultOrigin) === Paths.get(filePath).toAbsolutePath().normalize().toUri())
 
     // Compare other columns in the row to be the same with the `invalidImageRow`
     assert(result === invalidImageRow(resultOrigin))
