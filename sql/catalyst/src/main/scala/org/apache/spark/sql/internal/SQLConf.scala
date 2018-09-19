@@ -604,14 +604,6 @@ object SQLConf {
     .stringConf
     .createWithDefault("_corrupt_record")
 
-  val FROM_JSON_FORCE_NULLABLE_SCHEMA = buildConf("spark.sql.fromJsonForceNullableSchema")
-    .internal()
-    .doc("When true, force the output schema of the from_json() function to be nullable " +
-      "(including all the fields). Otherwise, the schema might not be compatible with" +
-      "actual data, which leads to curruptions.")
-    .booleanConf
-    .createWithDefault(true)
-
   val BROADCAST_TIMEOUT = buildConf("spark.sql.broadcastTimeout")
     .doc("Timeout in seconds for the broadcast wait time in broadcast joins.")
     .timeConf(TimeUnit.SECONDS)
@@ -1333,6 +1325,14 @@ object SQLConf {
         "dummy value. This is currently used to redact the output of SQL explain commands. " +
         "When this conf is not set, the value from `spark.redaction.string.regex` is used.")
       .fallbackConf(org.apache.spark.internal.config.STRING_REDACTION_PATTERN)
+
+  val FROM_JSON_FORCE_NULLABLE_SCHEMA = buildConf("spark.sql.function.fromJson.forceNullable")
+    .internal()
+    .doc("When true, force the output schema of the from_json() function to be nullable " +
+      "(including all the fields). Otherwise, the schema might not be compatible with" +
+      "actual data, which leads to corruptions.")
+    .booleanConf
+    .createWithDefault(true)
 
   val CONCAT_BINARY_AS_STRING = buildConf("spark.sql.function.concatBinaryAsString")
     .doc("When this option is set to false and all inputs are binary, `functions.concat` returns " +
