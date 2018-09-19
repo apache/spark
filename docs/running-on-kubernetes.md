@@ -371,6 +371,8 @@ kube-dns. For persistent external access one can run kubectl expose pod spark-ap
 to create a Kubernetes Service which will accept connections on a particular port of every node on the cluster and send
 them to the pod's port 10000.
 
+Note that STS will not work with Spark dynamicAllocation as Spark Shuffle Service support is not yet available.
+
 ## Future Work
 
 There are several Spark on Kubernetes features that are currently being worked on or planned to be worked on. Those features are expected to eventually make it into future versions of the spark-kubernetes integration.
