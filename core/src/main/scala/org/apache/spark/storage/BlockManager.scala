@@ -34,6 +34,7 @@ import scala.util.control.NonFatal
 
 import com.codahale.metrics.{MetricRegistry, MetricSet}
 import com.google.common.io.CountingOutputStream
+import org.apache.commons.codec.binary.Hex
 
 import org.apache.spark._
 import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
@@ -1380,6 +1381,21 @@ private[spark] class BlockManager(
     }
   }
 
+
+  private def hex(buf: ByteBuffer): String = {
+    val (bytesToShow, len) = if (buf.hasArray) {
+      val arr = buf.array
+      val b = if (arr.length > 1000) arr.slice(0, 1000) else arr
+      (b, arr.length)
+    } else {
+      val length = math.min(buf.remaining(), 1000)
+      val bytes = new Array[Byte](length)
+      buf.duplicate.get(bytes, 0, length)
+      (bytes, buf.remaining())
+    }
+    "(length = " + len + ") " + new String(Hex.encodeHex(bytesToShow))
+  }
+
   /**
    * Replicate block to another node. Note that this is a blocking call that returns after
    * the block has been replicated.
@@ -1424,6 +1440,7 @@ private[spark] class BlockManager(
         logTrace(s"Trying to replicate $blockId of ${data.size} bytes to $peer")
         // This thread keeps a lock on the block, so we do not want the netty thread to unlock
         // block when it finishes sending the message.
+        logTrace(s"replicating bytes: ${hex(data.toByteBuffer())}")
         val buffer = new BlockManagerManagedBuffer(blockInfoManager, blockId, data, false,
           unlockOnDeallocate = false)
         blockTransferService.uploadBlockSync(

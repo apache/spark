@@ -114,7 +114,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   private def hex(buf: ByteBuffer): String = {
     val (bytesToShow, len) = if (buf.hasArray) {
       val arr = buf.array
-      val b = if (arr.length > 1000) (arr.slice(0, 1000) else arr
+      val b = if (arr.length > 1000) arr.slice(0, 1000) else arr
       (b, arr.length)
     } else {
       val length = math.min(buf.remaining(), 1000)
