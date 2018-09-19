@@ -638,6 +638,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     testStream(sessionUpdates, OutputMode.Update())(
       AddData(inputData, ("hello world spark", 10L), ("world hello structured streaming", 11L)),
       // Advance watermark to 1 seconds
+      // current sessions after batch:
       // ("hello", 10, 21, 11, 2)
       // ("world", 10, 21, 11, 2)
       // ("spark", 10, 20, 10, 1)

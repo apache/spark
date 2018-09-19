@@ -348,8 +348,11 @@ object AggUtils {
   /**
    * Plans a streaming session aggregation using the following progression:
    *
-   *  - Partial Merge (group: all keys)
+   *  - Partial Aggregation
    *    - all tuples will have aggregated columns with initial value
+   *  - Sort within partition (sort: all keys)
+   *  - SessionWindowStateStoreRestore (group: keys "without" session)
+   *    - This will play as "Partial Merge" in each partition
    *  - Shuffle & Sort (distribution: keys "without" session, sort: all keys)
    *  - SessionWindowStateStoreRestore (group: keys "without" session)
    *    - merge input tuples with stored tuples (sessions) respecting sort order
@@ -391,9 +394,28 @@ object AggUtils {
         child = child)
     }
 
+    // sort happens here to merge sessions on each partition
+    // this is to reduce amount of rows to shuffle
+    val partialMerged1: SparkPlan = {
+      val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
+      val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
+      MergingSessionsExec(
+        requiredChildDistributionExpressions = None,
+        requiredChildDistributionOption = None,
+        groupingExpressions = groupingAttributes,
+        sessionExpression = sessionExpression,
+        aggregateExpressions = aggregateExpressions,
+        aggregateAttributes = aggregateAttributes,
+        initialInputBufferOffset = groupingAttributes.length,
+        resultExpressions = groupingAttributes ++
+          aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
+        child = partialAggregate
+      )
+    }
+
     // shuffle & sort happens here: most of details are also handled in this physical plan
     val restored = SessionWindowStateStoreRestoreExec(groupingWithoutSessionAttributes,
-      sessionExpression.toAttribute, stateInfo = None, eventTimeWatermark = None, partialAggregate)
+      sessionExpression.toAttribute, stateInfo = None, eventTimeWatermark = None, partialMerged1)
 
     val mergedSessions = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
