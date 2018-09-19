@@ -29,11 +29,12 @@ public class ExecutorPluginSuite {
   private static final String EXECUTOR_PLUGIN_CONF_NAME = "spark.executor.plugins";
   private static final String testBadPluginName = TestBadShutdownPlugin.class.getName();
   private static final String testPluginName = TestExecutorPlugin.class.getName();
+  private static final String testSecondPluginName = TestSecondPlugin.class.getName();
 
-  // Static value modified by testing plugin to ensure plugin loaded correctly.
+  // Static value modified by testing plugins to ensure plugins loaded correctly.
   public static int numSuccessfulPlugins = 0;
 
-  // Static value modified by testing plugin to verify plugins shut down properly.
+  // Static value modified by testing plugins to verify plugins shut down properly.
   public static int numSuccessfulTerminations = 0;
 
   private JavaSparkContext sc;
@@ -85,8 +86,8 @@ public class ExecutorPluginSuite {
 
   @Test
   public void testAddMultiplePlugins() throws InterruptedException {
-    // Load the sample TestExecutorPlugin twice
-    SparkConf conf = initializeSparkConf(testPluginName + "," + testPluginName);
+    // Load two plugins and verify they both execute.
+    SparkConf conf = initializeSparkConf(testPluginName + "," + testSecondPluginName);
     sc = new JavaSparkContext(conf);
     assertEquals(2, numSuccessfulPlugins);
     sc.stop();
@@ -107,6 +108,16 @@ public class ExecutorPluginSuite {
   }
 
   public static class TestExecutorPlugin implements ExecutorPlugin {
+    public void init() {
+      ExecutorPluginSuite.numSuccessfulPlugins++;
+    }
+
+    public void shutdown() {
+      ExecutorPluginSuite.numSuccessfulTerminations++;
+    }
+  }
+
+  public static class TestSecondPlugin implements ExecutorPlugin {
     public void init() {
       ExecutorPluginSuite.numSuccessfulPlugins++;
     }

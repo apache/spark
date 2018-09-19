@@ -145,7 +145,10 @@ private[spark] class Executor(
       val pluginList: Seq[ExecutorPlugin] =
         Utils.withContextClassLoader(replClassLoader) {
           val plugins = Utils.loadExtensions(classOf[ExecutorPlugin], pluginNames, conf)
-          plugins.foreach(_.init())
+          plugins.foreach { plugin =>
+            plugin.init()
+            logDebug(s"Successfully loaded plugin " + plugin.getClass().getCanonicalName())
+          }
           plugins
         }
 
