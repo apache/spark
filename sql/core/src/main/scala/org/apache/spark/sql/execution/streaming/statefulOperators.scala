@@ -535,10 +535,10 @@ case class SessionWindowStateStoreSaveExec(
         child.output)
 
       var currentKey: UnsafeRow = null
-      var previousSessions: scala.collection.immutable.Set[UnsafeRow] = null
+      var previousSessions: List[UnsafeRow] = null
 
-      // FIXME: DEBUG
-      val debugPartitionId = TaskContext.get().partitionId()
+      val keyOrdering = TypeUtils.getInterpretedOrdering(keyWithoutSessionExpressions.toStructType)
+      val valueOrdering = TypeUtils.getInterpretedOrdering(child.output.toStructType)
 
       // assuming late events were dropped from MergingSortWithMultiValuesStateIterator
       outputMode match {
@@ -550,20 +550,21 @@ case class SessionWindowStateStoreSaveExec(
               val row = iter.next().asInstanceOf[UnsafeRow]
               val keys = keyProjection(row)
 
-              if (currentKey == null || currentKey != keys) {
+              if (currentKey == null || !keyOrdering.equiv(currentKey, keys)) {
                 currentKey = keys
+
                 // This is necessary because MultiValuesStateManager doesn't guarantee
                 // stable ordering.
                 // The number of values for the given key is expected to be likely small,
                 // so listing it here doesn't hurt.
-                previousSessions = stateManager.get(keys).toSet
+                previousSessions = stateManager.get(keys).toList
 
                 stateManager.removeKey(keys)
               }
 
               stateManager.append(keys, row)
 
-              if (!previousSessions.contains(row)) {
+              if (!previousSessions.exists(p => valueOrdering.equiv(row, p))) {
                 // such session is not in previous session
                 numUpdatedStateRows += 1
               }
@@ -595,20 +596,22 @@ case class SessionWindowStateStoreSaveExec(
               while (ret == null && iter.hasNext) {
                 val row = iter.next().asInstanceOf[UnsafeRow]
                 val keys = keyProjection(row)
-                if (currentKey == null || currentKey != keys) {
-                  currentKey = keys
+
+                if (currentKey == null || !keyOrdering.equiv(currentKey, keys)) {
+                  currentKey = keys.copy()
+
                   // This is necessary because MultiValuesStateManager doesn't guarantee
                   // stable ordering.
                   // The number of values for the given key is expected to be likely small,
                   // so listing it here doesn't hurt.
-                  previousSessions = stateManager.get(keys).toSet
+                  previousSessions = stateManager.get(keys).toList
 
                   stateManager.removeKey(keys)
                 }
 
                 stateManager.append(keys, row)
 
-                if (!previousSessions.contains(row)) {
+                if (!previousSessions.exists(p => valueOrdering.equiv(row, p))) {
                   // such session is not in previous session
                   numUpdatedStateRows += 1
                   ret = row
