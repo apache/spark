@@ -328,7 +328,7 @@ NULL
 
 
 -- !query 39
-select 26393499451/ 1000e6
+select 26393499451 / 1000e6
 -- !query 39 schema
 struct<(CAST(CAST(26393499451 AS DECIMAL(11,0)) AS DECIMAL(11,0)) / CAST(1.000E+9 AS DECIMAL(11,0))):decimal(16,11)>
 -- !query 39 output
