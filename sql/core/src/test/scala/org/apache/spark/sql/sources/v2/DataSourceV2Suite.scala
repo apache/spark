@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.sources.v2
 
+import java.io.File
 import java.util.{ArrayList, List => JList}
 
 import test.org.apache.spark.sql.sources.v2._
