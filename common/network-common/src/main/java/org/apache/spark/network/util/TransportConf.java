@@ -288,7 +288,7 @@ public class TransportConf {
   /**
    * Check if it is a shuffle client
    * and avoid creating unnecessary event loops
-   * in the TransportClientHandler
+   * in the TransportChannelHandler
    */
   public boolean shuffleClient() {
     return this.isShuffleClient;
