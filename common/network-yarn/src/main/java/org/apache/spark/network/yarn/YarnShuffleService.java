@@ -19,10 +19,8 @@ package org.apache.spark.network.yarn;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Method;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 
@@ -37,13 +35,14 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.impl.MetricsSystemImpl;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.*;
+import org.apache.spark.network.util.LevelDBProvider;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.DBIterator;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,19 +52,18 @@ import org.apache.spark.network.sasl.ShuffleSecretManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler;
-import org.apache.spark.network.util.LevelDBProvider;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.yarn.util.HadoopConfigProvider;
 
 /**
  * An external shuffle service used by Spark on Yarn.
- * <p>
+ *
  * This is intended to be a long-running auxiliary service that runs in the NodeManager process.
  * A Spark application may connect to this service by setting `spark.shuffle.service.enabled`.
  * The application also automatically derives the service port through `spark.shuffle.service.port`
  * specified in the Yarn configuration. This is so that both the clients and the server agree on
  * the same port to communicate on.
- * <p>
+ *
  * The service also optionally supports authentication. This ensures that executors from one
  * application cannot read the shuffle files written by those from another. This feature can be
  * enabled by setting `spark.authenticate` in the Yarn configuration before starting the NM.
@@ -100,7 +98,7 @@ public class YarnShuffleService extends AuxiliaryService {
   private static final ObjectMapper mapper = new ObjectMapper();
   private static final String APP_CREDS_KEY_PREFIX = "AppCreds";
   private static final LevelDBProvider.StoreVersion CURRENT_VERSION = new LevelDBProvider
-    .StoreVersion(1, 0);
+      .StoreVersion(1, 0);
 
   // just for integration tests that want to look at this file -- in general not sensible as
   // a static
@@ -173,21 +171,13 @@ public class YarnShuffleService extends AuxiliaryService {
       blockHandler = new ExternalShuffleBlockHandler(transportConf, registeredExecutorFile);
 
       // register metrics on the block handler into the Node Manager's metrics system.
-      try {
-        YarnShuffleServiceMetrics serviceMetrics = new YarnShuffleServiceMetrics(
-          blockHandler.getAllMetrics());
-        MetricsSystemImpl metricsSystem = (MetricsSystemImpl) DefaultMetricsSystem.instance();
+      YarnShuffleServiceMetrics serviceMetrics =
+              new YarnShuffleServiceMetrics(blockHandler.getAllMetrics());
 
-        Method registerSourceMethod = metricsSystem.getClass().getDeclaredMethod("registerSource",
-          String.class, String.class, MetricsSource.class);
-        registerSourceMethod.setAccessible(true);
-        registerSourceMethod.invoke(metricsSystem, "shuffleService", "Metrics on the Spark " +
-          "Shuffle Service", serviceMetrics);
-        logger.info("Registered metrics with Hadoop's DefaultMetricsSystem");
-      } catch (Exception e) {
-        logger.warn("Unable to register Spark Shuffle Service metrics with Node Manager; " +
-          "proceeding without metrics", e);
-      }
+      MetricsSystemImpl metricsSystem = (MetricsSystemImpl) DefaultMetricsSystem.instance();
+      metricsSystem.register(
+              "shuffleService", "Metrics on the Spark Shuffle Service", serviceMetrics);
+      logger.info("Registered metrics with Hadoop's DefaultMetricsSystem");
 
       // If authentication is enabled, set up the shuffle server to use a
       // special RPC handler that filters out unauthenticated fetch requests
@@ -210,7 +200,7 @@ public class YarnShuffleService extends AuxiliaryService {
       boundPort = port;
       String authEnabledString = authEnabled ? "enabled" : "not enabled";
       logger.info("Started YARN shuffle service for Spark on port {}. " +
-          "Authentication is {}.  Registered executor file is {}", port, authEnabledString,
+        "Authentication is {}.  Registered executor file is {}", port, authEnabledString,
         registeredExecutorFile);
     } catch (Exception e) {
       if (stopOnFailure) {
@@ -430,8 +420,8 @@ public class YarnShuffleService extends AuxiliaryService {
     @Override
     public String toString() {
       return Objects.toStringHelper(this)
-        .add("appId", appId)
-        .toString();
+          .add("appId", appId)
+          .toString();
     }
   }
 

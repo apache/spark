@@ -173,8 +173,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   /**
    * A simple class to wrap all shuffle service wrapper metrics
    */
-  @VisibleForTesting
-  public class ShuffleMetrics implements MetricSet {
+  private class ShuffleMetrics implements MetricSet {
     private final Map<String, Metric> allMetrics;
     // Time latency for open block request in ms
     private final Timer openBlockRequestLatencyMillis = new Timer();
@@ -183,7 +182,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     // Block transfer rate in byte per second
     private final Meter blockTransferRateBytes = new Meter();
 
-    public ShuffleMetrics() {
+    private ShuffleMetrics() {
       allMetrics = new HashMap<>();
       allMetrics.put("openBlockRequestLatencyMillis", openBlockRequestLatencyMillis);
       allMetrics.put("registerExecutorRequestLatencyMillis", registerExecutorRequestLatencyMillis);
