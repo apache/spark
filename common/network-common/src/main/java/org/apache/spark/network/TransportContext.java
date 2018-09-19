@@ -99,6 +99,7 @@ public class TransportContext {
   }
 
   /**
+   * Enables TransportContext initialization for underlying client and server.
    *
    * @param conf TransportConf
    * @param rpcHandler RpcHandler responsible for handling requests and responses.
