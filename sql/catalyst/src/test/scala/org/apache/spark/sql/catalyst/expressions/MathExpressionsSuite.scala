@@ -646,29 +646,54 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Truncate number") {
-    def testTruncate(input: Double, fmt: Int, expected: Double): Unit = {
+    assert(Truncate(Literal.create(123.123, DoubleType),
+      NonFoldableLiteral.create(1, IntegerType)).checkInputDataTypes().isFailure)
+    assert(Truncate(Literal.create(123.123, DoubleType),
+      Literal.create(1, IntegerType)).checkInputDataTypes().isSuccess)
+
+    def testDouble(input: Any, scale: Any, expected: Any): Unit = {
       checkEvaluation(Truncate(Literal.create(input, DoubleType),
-        Literal.create(fmt, IntegerType)),
-        expected)
-      checkEvaluation(Truncate(Literal.create(input, DoubleType),
-        NonFoldableLiteral.create(fmt, IntegerType)),
+        Literal.create(scale, IntegerType)),
         expected)
     }
 
-    testTruncate(1234567891.1234567891, 4, 1234567891.1234)
-    testTruncate(1234567891.1234567891, -4, 1234560000)
-    testTruncate(1234567891.1234567891, 0, 1234567891)
-    testTruncate(0.123, -1, 0)
-    testTruncate(0.123, 0, 0)
+    def testFloat(input: Any, scale: Any, expected: Any): Unit = {
+      checkEvaluation(Truncate(Literal.create(input, FloatType),
+        Literal.create(scale, IntegerType)),
+        expected)
+    }
 
-    checkEvaluation(Truncate(Literal.create(1D, DoubleType),
-      NonFoldableLiteral.create(null, IntegerType)),
-      null)
-    checkEvaluation(Truncate(Literal.create(null, DoubleType),
-      NonFoldableLiteral.create(1, IntegerType)),
-      null)
-    checkEvaluation(Truncate(Literal.create(null, DoubleType),
-      NonFoldableLiteral.create(null, IntegerType)),
-      null)
+    def testDecimal(input: Any, scale: Any, expected: Any): Unit = {
+      checkEvaluation(Truncate(Literal.create(input, DecimalType.DoubleDecimal),
+        Literal.create(scale, IntegerType)),
+        expected)
+    }
+
+    testDouble(1234567891.1234567891D, 4, 1234567891.1234D)
+    testDouble(1234567891.1234567891D, -4, 1234560000D)
+    testDouble(1234567891.1234567891D, 0, 1234567891D)
+    testDouble(0.123D, -1, 0D)
+    testDouble(0.123D, 0, 0D)
+    testDouble(null, null, null)
+    testDouble(null, 0, null)
+    testDouble(1D, null, null)
+
+    testFloat(1234567891.1234567891F, 4, 1234567891.1234F)
+    testFloat(1234567891.1234567891F, -4, 1234560000F)
+    testFloat(1234567891.1234567891F, 0, 1234567891F)
+    testFloat(0.123F, -1, 0F)
+    testFloat(0.123F, 0, 0F)
+    testFloat(null, null, null)
+    testFloat(null, 0, null)
+    testFloat(1D, null, null)
+
+    testDecimal(Decimal(1234567891.1234567891), 4, Decimal(1234567891.1234))
+    testDecimal(Decimal(1234567891.1234567891), -4, Decimal(1234560000))
+    testDecimal(Decimal(1234567891.1234567891), 0, Decimal(1234567891))
+    testDecimal(Decimal(0.123), -1, Decimal(0))
+    testDecimal(Decimal(0.123), 0, Decimal(0))
+    testDecimal(null, null, null)
+    testDecimal(null, 0, null)
+    testDecimal(1D, null, null)
   }
 }

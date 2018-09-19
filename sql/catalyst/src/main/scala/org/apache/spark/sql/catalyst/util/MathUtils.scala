@@ -18,19 +18,35 @@ package org.apache.spark.sql.catalyst.util
 
 import java.math.{BigDecimal => JBigDecimal}
 
+import org.apache.spark.sql.types.Decimal
+
 object MathUtils {
 
   /**
    * Returns double type input truncated to scale decimal places.
    */
   def trunc(input: Double, scale: Int): Double = {
-    trunc(JBigDecimal.valueOf(input), scale).doubleValue()
+    trunc(JBigDecimal.valueOf(input), scale).toDouble
+  }
+
+  /**
+   * Returns float type input truncated to scale decimal places.
+   */
+  def trunc(input: Float, scale: Int): Float = {
+    trunc(JBigDecimal.valueOf(input), scale).toFloat
+  }
+
+  /**
+   * Returns decimal type input truncated to scale decimal places.
+   */
+  def trunc(input: Decimal, scale: Int): Decimal = {
+    trunc(input.toJavaBigDecimal, scale)
   }
 
   /**
    * Returns BigDecimal type input truncated to scale decimal places.
    */
-  def trunc(input: JBigDecimal, scale: Int): JBigDecimal = {
+  def trunc(input: JBigDecimal, scale: Int): Decimal = {
     // Copy from (https://github.com/apache/hive/blob/release-2.3.0-rc0
     // /ql/src/java/org/apache/hadoop/hive/ql/udf/generic/GenericUDFTrunc.java#L471-L487)
     val pow = if (scale >= 0) {
@@ -39,7 +55,7 @@ object MathUtils {
       JBigDecimal.valueOf(Math.pow(10, Math.abs(scale)))
     }
 
-    if (scale > 0) {
+    val truncatedValue = if (scale > 0) {
       val longValue = input.multiply(pow).longValue()
       JBigDecimal.valueOf(longValue).divide(pow)
     } else if (scale == 0) {
@@ -48,5 +64,7 @@ object MathUtils {
       val longValue = input.divide(pow).longValue()
       JBigDecimal.valueOf(longValue).multiply(pow)
     }
+
+    Decimal(truncatedValue)
   }
 }
