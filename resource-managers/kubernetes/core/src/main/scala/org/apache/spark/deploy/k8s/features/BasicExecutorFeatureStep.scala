@@ -170,6 +170,7 @@ private[spark] class BasicExecutorFeatureStep(
                 List("/opt/spark/sbin/decommission-slave.sh", "--block-until-exit").asJava)
                .endExec()
           .endPreStop()
+          .endLifecycle()
           .build()
       case false => containerWithLimitCores
     }
