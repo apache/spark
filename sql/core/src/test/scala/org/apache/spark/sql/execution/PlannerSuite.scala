@@ -704,6 +704,23 @@ class PlannerSuite extends SharedSQLContext {
     df.queryExecution.executedPlan.execute()
   }
 
+  test("SPARK-25278: physical nodes should be different instances for same logical nodes") {
+    val range = Range(1, 1, 1, 1)
+    val df = Union(range, range)
+    val ranges = df.queryExecution.optimizedPlan.collect {
+      case r: Range => r
+    }
+    assert(ranges.length == 2)
+    // Ensure the two Range instances are equal according to their equal method
+    assert(ranges.head == ranges.last)
+    val execRanges = df.queryExecution.sparkPlan.collect {
+      case r: RangeExec => r
+    }
+    assert(execRanges.length == 2)
+    // Ensure the two RangeExec instances are different instances
+    assert(!execRanges.head.eq(execRanges.last))
+  }
+
   test("SPARK-24556: always rewrite output partitioning in ReusedExchangeExec " +
     "and InMemoryTableScanExec") {
     def checkOutputPartitioningRewrite(

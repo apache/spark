@@ -314,6 +314,34 @@ case class Divide(left: Expression, right: Expression) extends DivModLike {
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "expr1 _FUNC_ expr2 - Divide `expr1` by `expr2` rounded to the long integer. It returns NULL if an operand is NULL or `expr2` is 0.",
+  examples = """
+    Examples:
+      > SELECT 3 _FUNC_ 2;
+       1
+  """,
+  since = "2.5.0")
+// scalastyle:on line.size.limit
+case class IntegralDivide(left: Expression, right: Expression) extends DivModLike {
+
+  override def inputType: AbstractDataType = IntegralType
+  override def dataType: DataType = LongType
+
+  override def symbol: String = "/"
+  override def sqlOperator: String = "div"
+
+  private lazy val div: (Any, Any) => Long = left.dataType match {
+    case i: IntegralType =>
+      val divide = i.integral.asInstanceOf[Integral[Any]].quot _
+      val toLong = i.integral.asInstanceOf[Integral[Any]].toLong _
+      (x, y) => toLong(divide(x, y))
+  }
+
+  override def evalOperation(left: Any, right: Any): Any = div(left, right)
+}
+
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns the remainder after `expr1`/`expr2`.",
   examples = """

@@ -21,6 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 object RuleExecutor {
@@ -72,6 +73,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   def execute(plan: TreeType): TreeType = {
     var curPlan = plan
     val queryExecutionMetrics = RuleExecutor.queryExecutionMeter
+    val planChangeLogger = new PlanChangeLogger()
 
     batches.foreach { batch =>
       val batchStartPlan = curPlan
@@ -90,11 +92,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             if (!result.fastEquals(plan)) {
               queryExecutionMetrics.incNumEffectiveExecution(rule.ruleName)
               queryExecutionMetrics.incTimeEffectiveExecutionBy(rule.ruleName, runTime)
-              logTrace(
-                s"""
-                  |=== Applying Rule ${rule.ruleName} ===
-                  |${sideBySide(plan.treeString, result.treeString).mkString("\n")}
-                """.stripMargin)
+              planChangeLogger.log(rule.ruleName, plan, result)
             }
             queryExecutionMetrics.incExecutionTimeBy(rule.ruleName, runTime)
             queryExecutionMetrics.incNumExecution(rule.ruleName)
@@ -142,5 +140,30 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     }
 
     curPlan
+  }
+
+  private class PlanChangeLogger {
+
+    private val logLevel = SQLConf.get.optimizerPlanChangeLogLevel.toUpperCase
+
+    private val logRules = SQLConf.get.optimizerPlanChangeRules.map(Utils.stringToSeq)
+
+    def log(ruleName: String, oldPlan: TreeType, newPlan: TreeType): Unit = {
+      if (logRules.isEmpty || logRules.get.contains(ruleName)) {
+        lazy val message =
+          s"""
+             |=== Applying Rule ${ruleName} ===
+             |${sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n")}
+           """.stripMargin
+        logLevel match {
+          case "TRACE" => logTrace(message)
+          case "DEBUG" => logDebug(message)
+          case "INFO" => logInfo(message)
+          case "WARN" => logWarning(message)
+          case "ERROR" => logError(message)
+          case _ => logTrace(message)
+        }
+      }
+    }
   }
 }
