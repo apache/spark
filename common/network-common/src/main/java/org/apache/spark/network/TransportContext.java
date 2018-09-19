@@ -65,6 +65,7 @@ public class TransportContext {
   private final TransportConf conf;
   private final RpcHandler rpcHandler;
   private final boolean closeIdleConnections;
+  private final boolean isClient;
 
   /**
    * Force to create MessageEncoder and MessageDecoder so that we can make sure they will be created
@@ -87,22 +88,31 @@ public class TransportContext {
   private static EventLoopGroup chunkFetchWorkers;
 
   public TransportContext(TransportConf conf, RpcHandler rpcHandler) {
-    this(conf, rpcHandler, false);
+    this(conf, rpcHandler, false, false);
   }
 
   public TransportContext(
       TransportConf conf,
       RpcHandler rpcHandler,
       boolean closeIdleConnections) {
+    this(conf, rpcHandler, closeIdleConnections, false);
+  }
+
+  public TransportContext(
+      TransportConf conf,
+      RpcHandler rpcHandler,
+      boolean closeIdleConnections,
+      boolean isClient) {
     this.conf = conf;
     this.rpcHandler = rpcHandler;
     this.closeIdleConnections = closeIdleConnections;
+    this.isClient = isClient;
 
     synchronized(TransportContext.class) {
       if (chunkFetchWorkers == null &&
           conf.getModuleName() != null &&
           conf.getModuleName().equalsIgnoreCase("shuffle") &&
-          !conf.shuffleClient()) {
+          !isClient) {
         chunkFetchWorkers = NettyUtils.createEventLoop(
             IOMode.valueOf(conf.ioMode()),
             conf.chunkFetchHandlerThreads(),
@@ -179,7 +189,7 @@ public class TransportContext {
       // Use a separate EventLoopGroup to handle ChunkFetchRequest messages for shuffle rpcs.
       if (conf.getModuleName() != null &&
           conf.getModuleName().equalsIgnoreCase("shuffle")
-          && !conf.shuffleClient()) {
+          && !isClient) {
         pipeline.addLast(chunkFetchWorkers, "chunkFetchHandler", chunkFetchHandler);
       }
       return channelHandler;

@@ -47,8 +47,6 @@ public class TransportConf {
 
   private final String module;
 
-  private boolean isShuffleClient;
-
   public TransportConf(String module, ConfigProvider conf) {
     this.module = module;
     this.conf = conf;
@@ -283,19 +281,6 @@ public class TransportConf {
    */
   public long maxChunksBeingTransferred() {
     return conf.getLong("spark.shuffle.maxChunksBeingTransferred", Long.MAX_VALUE);
-  }
-
-  /**
-   * Check if it is a shuffle client
-   * and avoid creating unnecessary event loops
-   * in the TransportChannelHandler
-   */
-  public boolean shuffleClient() {
-    return this.isShuffleClient;
-  }
-
-  public void setShuffleClient(boolean isShuffleClient) {
-    this.isShuffleClient = isShuffleClient;
   }
 
   /**
