@@ -52,7 +52,7 @@ class ExtendedChannelPromise extends DefaultChannelPromise {
   }
 
   @Override
-  public ChannelPromise sync() throws InterruptedException {
+  public ChannelPromise await() throws InterruptedException {
     return this;
   }
 
