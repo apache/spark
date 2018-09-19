@@ -116,7 +116,7 @@ object TypeCoercion {
     val range = max(d1.precision - d1.scale, d2.precision - d2.scale)
 
     // Check the resultant decimal type does not exceed the allowable limits.
-    if (range + scale <= DecimalType.MAX_PRECISION && scale <= DecimalType.MAX_SCALE) {
+    if (range + scale <= DecimalType.MAX_PRECISION) {
       Some(DecimalType(range + scale, scale))
     } else {
       None
