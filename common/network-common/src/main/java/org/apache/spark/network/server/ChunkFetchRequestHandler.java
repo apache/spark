@@ -113,7 +113,7 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
    * being processed by TransportServer's default EventLoopGroup. In order to throttle the max
    * number of threads that channel I/O for sending response to ChunkFetchRequest, the thread
    * calling channel.writeAndFlush will wait for the completion of sending response back to
-   * client by invoking sync(). This will throttle the rate at which threads from
+   * client by invoking await(). This will throttle the rate at which threads from
    * ChunkFetchRequest dedicated EventLoopGroup submit channel I/O requests to TransportServer's
    * default EventLoopGroup, thus making sure that we can reserve some threads in
    * TransportServer's default EventLoopGroup for handling other RPC messages.
