@@ -612,7 +612,8 @@ object SQLConf {
     .internal()
     .doc("When true, force the output schema of the from_json() function to be nullable " +
       "(including all the fields). Otherwise, the schema might not be compatible with" +
-      "actual data, which leads to curruptions.")
+      " actual data, which leads to corruptions. " +
+      "The configuration property is deprecated and will be removed in Spark 3.0.")
     .booleanConf
     .createWithDefault(true)
 
