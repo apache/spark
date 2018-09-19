@@ -321,6 +321,10 @@ private[spark] class Executor(
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = env.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
+      if (taskId == 1) {
+        logInfo("Sleeping before deserialization, so broadcast is available on another host")
+        Thread.sleep(200)
+      }
       execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
       var taskStartTime: Long = 0
       var taskStartCpu: Long = 0

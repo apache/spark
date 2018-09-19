@@ -710,7 +710,9 @@ private[spark] class BlockManager(
    */
   private def sortLocations(locations: Seq[BlockManagerId]): Seq[BlockManagerId] = {
     val locs = Random.shuffle(locations)
-    val (preferredLocs, otherLocs) = locs.partition { loc => blockManagerId.host == loc.host }
+    val (preferredLocs, otherLocs) = locs.partition { loc =>
+      blockManagerId.host == loc.host  && !loc.isDriver
+    }
     blockManagerId.topologyInfo match {
       case None => preferredLocs ++ otherLocs
       case Some(_) =>
@@ -753,11 +755,12 @@ private[spark] class BlockManager(
     }
 
     val locations = sortLocations(blockLocations)
+    logInfo(s"sorted locations: ${blockLocations.map { l => (l.hostPort, l.isDriver) } }")
     val maxFetchFailures = locations.size
     var locationIterator = locations.iterator
     while (locationIterator.hasNext) {
       val loc = locationIterator.next()
-      logDebug(s"Getting remote block $blockId from $loc")
+      logInfo(s"Getting remote block $blockId from $loc")
       val data = try {
         blockTransferService.fetchBlockSync(
           loc.host, loc.port, loc.executorId, blockId.toString, tempFileManager)
