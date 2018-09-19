@@ -76,7 +76,7 @@ public class ExternalShuffleClient extends ShuffleClient {
   @Override
   public void init(String appId) {
     this.appId = appId;
-    TransportContext context = new TransportContext(conf, new NoOpRpcHandler(), true);
+    TransportContext context = new TransportContext(conf, new NoOpRpcHandler(), true, true);
     List<TransportClientBootstrap> bootstraps = Lists.newArrayList();
     if (authEnabled) {
       bootstraps.add(new AuthClientBootstrap(conf, appId, secretKeyHolder));
