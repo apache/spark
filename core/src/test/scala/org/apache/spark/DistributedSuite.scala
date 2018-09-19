@@ -199,17 +199,19 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(blockIds.flatMap(id => blockManager.get[Int](id).get.data).toSet === (1 to 1000).toSet)
   }
 
-  Seq(
-    "caching" -> StorageLevel.MEMORY_ONLY,
-    "caching on disk" -> StorageLevel.DISK_ONLY,
-    "caching in memory, replicated" -> StorageLevel.MEMORY_ONLY_2,
-    "caching in memory, serialized, replicated" -> StorageLevel.MEMORY_ONLY_SER_2,
-    "caching on disk, replicated" -> StorageLevel.DISK_ONLY_2,
-    "caching in memory and disk, replicated" -> StorageLevel.MEMORY_AND_DISK_2,
-    "caching in memory and disk, serialized, replicated" -> StorageLevel.MEMORY_AND_DISK_SER_2
-  ).foreach { case (testName, storageLevel) =>
-    encryptionTestHelper(testName) { case (name, conf) =>
-      testCaching(name, conf, storageLevel)
+  (0 until 5).foreach { idx =>
+    Seq(
+      "caching" -> StorageLevel.MEMORY_ONLY,
+      "caching on disk" -> StorageLevel.DISK_ONLY,
+      "caching in memory, replicated" -> StorageLevel.MEMORY_ONLY_2,
+      "caching in memory, serialized, replicated" -> StorageLevel.MEMORY_ONLY_SER_2,
+      "caching on disk, replicated" -> StorageLevel.DISK_ONLY_2,
+      "caching in memory and disk, replicated" -> StorageLevel.MEMORY_AND_DISK_2,
+      "caching in memory and disk, serialized, replicated" -> StorageLevel.MEMORY_AND_DISK_SER_2
+    ).foreach { case (testName, storageLevel) =>
+      encryptionTestHelper(idx + testName) { case (name, conf) =>
+        testCaching(name, conf, storageLevel)
+      }
     }
   }
 
