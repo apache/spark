@@ -19,10 +19,14 @@ package org.apache.spark.sql
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkConf
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.util.Utils
 
 /**
  * :: Experimental ::
@@ -65,6 +69,11 @@ class SparkSessionExtensions {
   type CheckRuleBuilder = SparkSession => LogicalPlan => Unit
   type StrategyBuilder = SparkSession => Strategy
   type ParserBuilder = (SparkSession, ParserInterface) => ParserInterface
+
+  private[sql] def this(conf: SparkConf) {
+    this()
+    SparkSessionExtensions.applyExtensionsFromConf(conf, this)
+  }
 
   private[this] val resolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]
 
@@ -167,5 +176,31 @@ class SparkSessionExtensions {
    */
   def injectParser(builder: ParserBuilder): Unit = {
     parserBuilders += builder
+  }
+}
+
+object SparkSessionExtensions extends Logging {
+
+  /**
+   * Initialize extensions if the user has defined a configurator class in their SparkConf.
+   * This class will be applied to the extensions passed into this function.
+   */
+  private[sql] def applyExtensionsFromConf(conf: SparkConf, extensions: SparkSessionExtensions) {
+    val extensionConfOption = conf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
+    if (extensionConfOption.isDefined) {
+      val extensionConfClassName = extensionConfOption.get
+      try {
+        val extensionConfClass = Utils.classForName(extensionConfClassName)
+        val extensionConf = extensionConfClass.newInstance()
+          .asInstanceOf[SparkSessionExtensions => Unit]
+        extensionConf(extensions)
+      } catch {
+        // Ignore the error if we cannot find the class or when the class has the wrong type.
+        case e@(_: ClassCastException |
+                _: ClassNotFoundException |
+                _: NoClassDefFoundError) =>
+          logWarning(s"Cannot use $extensionConfClassName to configure session extensions.", e)
+      }
+    }
   }
 }
