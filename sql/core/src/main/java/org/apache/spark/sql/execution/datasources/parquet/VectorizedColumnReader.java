@@ -30,7 +30,8 @@ import org.apache.parquet.column.Encoding;
 import org.apache.parquet.column.page.*;
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
-import org.apache.parquet.schema.OriginalType;
+import org.apache.parquet.schema.LogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.TimestampLogicalTypeAnnotation;
 import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
@@ -40,6 +41,8 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
 
 import static org.apache.parquet.column.ValuesType.REPETITION_LEVEL;
+import static org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit.MICROS;
+import static org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit.MILLIS;
 import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.ValuesReaderIntIterator;
 import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.createRLEIterator;
 
@@ -96,20 +99,23 @@ public class VectorizedColumnReader {
 
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
-  private final OriginalType originalType;
+  private final LogicalTypeAnnotation logicalTypeAnnotation;
   // The timezone conversion to apply to int96 timestamps. Null if no conversion.
   private final TimeZone convertTz;
+  private final TimeZone sessionLocalTz;
   private static final TimeZone UTC = DateTimeUtils.TimeZoneUTC();
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
-      OriginalType originalType,
+      LogicalTypeAnnotation logicalTypeAnnotation,
       PageReader pageReader,
-      TimeZone convertTz) throws IOException {
+      TimeZone convertTz,
+      TimeZone sessionLocalTz) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.convertTz = convertTz;
-    this.originalType = originalType;
+    this.sessionLocalTz = sessionLocalTz;
+    this.logicalTypeAnnotation = logicalTypeAnnotation;
     this.maxDefLevel = descriptor.getMaxDefinitionLevel();
 
     DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
@@ -179,7 +185,7 @@ public class VectorizedColumnReader {
         if (column.hasDictionary() || (rowId == 0 &&
             (typeName == PrimitiveType.PrimitiveTypeName.INT32 ||
             (typeName == PrimitiveType.PrimitiveTypeName.INT64 &&
-              originalType != OriginalType.TIMESTAMP_MILLIS) ||
+              !(logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation)) ||
             typeName == PrimitiveType.PrimitiveTypeName.FLOAT ||
             typeName == PrimitiveType.PrimitiveTypeName.DOUBLE ||
             typeName == PrimitiveType.PrimitiveTypeName.BINARY))) {
@@ -287,17 +293,24 @@ public class VectorizedColumnReader {
       case INT64:
         if (column.dataType() == DataTypes.LongType ||
             DecimalType.is64BitDecimalType(column.dataType()) ||
-            originalType == OriginalType.TIMESTAMP_MICROS) {
+            isTimestampWithUnit(logicalTypeAnnotation, MICROS)) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
-              column.putLong(i, dictionary.decodeToLong(dictionaryIds.getDictId(i)));
+              long time = dictionary.decodeToLong(dictionaryIds.getDictId(i));
+              if (needsTimezoneAdjustment()) {
+                time = DateTimeUtils.convertTz(time, sessionLocalTz, UTC);
+              }
+              column.putLong(i, time);
             }
           }
-        } else if (originalType == OriginalType.TIMESTAMP_MILLIS) {
+        } else if (isTimestampWithUnit(logicalTypeAnnotation, MILLIS)) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
-              column.putLong(i,
-                DateTimeUtils.fromMillis(dictionary.decodeToLong(dictionaryIds.getDictId(i))));
+              long time = DateTimeUtils.fromMillis(dictionary.decodeToLong(dictionaryIds.getDictId(i)));
+              if (needsTimezoneAdjustment()) {
+                time = DateTimeUtils.convertTz(time, sessionLocalTz, UTC);
+              }
+              column.putLong(i, time);
             }
           }
         } else {
@@ -425,13 +438,31 @@ public class VectorizedColumnReader {
     // This is where we implement support for the valid type conversions.
     if (column.dataType() == DataTypes.LongType ||
         DecimalType.is64BitDecimalType(column.dataType()) ||
-        originalType == OriginalType.TIMESTAMP_MICROS) {
-      defColumn.readLongs(
-        num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
-    } else if (originalType == OriginalType.TIMESTAMP_MILLIS) {
+        isTimestampWithUnit(logicalTypeAnnotation, MICROS)) {
+      if (needsTimezoneAdjustment()) {
+        for (int i = 0; i < num; i++) {
+          if (defColumn.readInteger() == maxDefLevel) {
+            long timestamp = dataColumn.readLong();
+            if (needsTimezoneAdjustment()) {
+              timestamp = DateTimeUtils.convertTz(timestamp, sessionLocalTz, UTC);
+            }
+            column.putLong(rowId + i, timestamp);
+          } else {
+            column.putNull(rowId + i);
+          }
+        }
+      } else {
+        defColumn.readLongs(
+          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+      }
+    } else if (isTimestampWithUnit(logicalTypeAnnotation, MILLIS)) {
       for (int i = 0; i < num; i++) {
         if (defColumn.readInteger() == maxDefLevel) {
-          column.putLong(rowId + i, DateTimeUtils.fromMillis(dataColumn.readLong()));
+          long timestamp = DateTimeUtils.fromMillis(dataColumn.readLong());
+          if (needsTimezoneAdjustment()) {
+            timestamp = DateTimeUtils.convertTz(timestamp, sessionLocalTz, UTC);
+          }
+          column.putLong(rowId + i, timestamp);
         } else {
           column.putNull(rowId + i);
         }
@@ -439,6 +470,16 @@ public class VectorizedColumnReader {
     } else {
       throw constructConvertNotSupportedException(descriptor, column);
     }
+  }
+
+  private boolean needsTimezoneAdjustment() {
+    return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation &&
+      !((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).isAdjustedToUTC();
+  }
+
+  private boolean isTimestampWithUnit(LogicalTypeAnnotation logicalTypeAnnotation, LogicalTypeAnnotation.TimeUnit timeUnit) {
+    return (logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation) &&
+      ((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).getUnit() == timeUnit;
   }
 
   private void readFloatBatch(int rowId, int num, WritableColumnVector column) throws IOException {

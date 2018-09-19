@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.util.TimeZone
+
 import scala.collection.JavaConverters._
 
 import org.apache.parquet.hadoop.ParquetOutputFormat
@@ -42,7 +44,8 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          null, TimeZone.getDefault, conf.offHeapColumnVectorEnabled,
+          conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file.asInstanceOf[String], null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
@@ -69,7 +72,8 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          null, TimeZone.getDefault, conf.offHeapColumnVectorEnabled,
+          conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file.asInstanceOf[String], null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
@@ -100,7 +104,8 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          null, TimeZone.getDefault, conf.offHeapColumnVectorEnabled,
+          conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file, null /* set columns to null to project all columns */)
         val column = reader.resultBatch().column(0)
         assert(reader.nextBatch())

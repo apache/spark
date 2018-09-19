@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.util.Locale
+import java.util.{Locale, TimeZone}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -658,7 +658,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          null, TimeZone.getDefault, conf.offHeapColumnVectorEnabled,
+          conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, null)
           val result = mutable.ArrayBuffer.empty[(Int, String)]
@@ -677,7 +678,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          null, TimeZone.getDefault, conf.offHeapColumnVectorEnabled,
+          conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, ("_2" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String)]
@@ -695,7 +697,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          null, TimeZone.getDefault, conf.offHeapColumnVectorEnabled,
+          conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, ("_2" :: "_1" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String, Int)]
@@ -714,7 +717,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          null, TimeZone.getDefault, conf.offHeapColumnVectorEnabled,
+          conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, List[String]().asJava)
           var result = 0
@@ -755,7 +759,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         val schema = StructType(StructField("pcol", dt) :: Nil)
         val conf = sqlContext.conf
         val vectorizedReader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          null, TimeZone.getDefault, conf.offHeapColumnVectorEnabled,
+          conf.parquetVectorizedReaderBatchSize)
         val partitionValues = new GenericInternalRow(Array(v))
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
 

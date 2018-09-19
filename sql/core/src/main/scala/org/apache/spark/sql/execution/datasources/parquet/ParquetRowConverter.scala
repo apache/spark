@@ -26,9 +26,9 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
-import org.apache.parquet.schema.{GroupType, MessageType, OriginalType, Type}
-import org.apache.parquet.schema.OriginalType.{INT_32, LIST, UTF8}
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, DOUBLE, FIXED_LEN_BYTE_ARRAY, INT32, INT64, INT96}
+import org.apache.parquet.schema.{GroupType, MessageType, Type}
+import org.apache.parquet.schema.LogicalTypeAnnotation._
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
@@ -106,10 +106,10 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
  * 5 converters will be created:
  *
  * - a root [[ParquetRowConverter]] for [[MessageType]] `root`, which contains:
- *   - a [[ParquetPrimitiveConverter]] for required [[INT_32]] field `f1`, and
+ *   - a [[ParquetPrimitiveConverter]] for required [[intType()]] field `f1`, and
  *   - a nested [[ParquetRowConverter]] for optional [[GroupType]] `f2`, which contains:
  *     - a [[ParquetPrimitiveConverter]] for required [[DOUBLE]] field `f21`, and
- *     - a [[ParquetStringConverter]] for optional [[UTF8]] string field `f22`
+ *     - a [[ParquetStringConverter]] for optional [[stringType()]] string field `f22`
  *
  * When used as a root converter, [[NoopUpdater]] should be used since root converters don't have
  * any "parent" container.
@@ -126,6 +126,7 @@ private[parquet] class ParquetRowConverter(
     parquetType: GroupType,
     catalystType: StructType,
     convertTz: Option[TimeZone],
+    sessionLocalTz: TimeZone,
     updater: ParentContainerUpdater)
   extends ParquetGroupConverter(updater) with Logging {
 
@@ -257,17 +258,31 @@ private[parquet] class ParquetRowConverter(
       case StringType =>
         new ParquetStringConverter(updater)
 
-      case TimestampType if parquetType.getOriginalType == OriginalType.TIMESTAMP_MICROS =>
+      case TimestampType
+        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
+          parquetType.getLogicalTypeAnnotation.asInstanceOf[TimestampLogicalTypeAnnotation].getUnit
+            == TimeUnit.MICROS =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-            updater.setLong(value)
+            val utc = parquetType.getLogicalTypeAnnotation
+              .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC
+            val adjTime = if (utc) value else DateTimeUtils.convertTz(value, sessionLocalTz, UTC)
+            updater.setLong(adjTime.asInstanceOf[Long])
           }
         }
 
-      case TimestampType if parquetType.getOriginalType == OriginalType.TIMESTAMP_MILLIS =>
+      case TimestampType
+        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
+          parquetType.getLogicalTypeAnnotation.asInstanceOf[TimestampLogicalTypeAnnotation].getUnit
+            == TimeUnit.MILLIS =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-            updater.setLong(DateTimeUtils.fromMillis(value))
+            val utc = parquetType.getLogicalTypeAnnotation
+              .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC
+            val rawTime = DateTimeUtils.fromMillis(value)
+            val adjTime = if (utc) rawTime else DateTimeUtils.convertTz(rawTime,
+              sessionLocalTz, UTC)
+            updater.setLong(adjTime.asInstanceOf[Long])
           }
         }
 
@@ -301,7 +316,8 @@ private[parquet] class ParquetRowConverter(
       // A repeated field that is neither contained by a `LIST`- or `MAP`-annotated group nor
       // annotated by `LIST` or `MAP` should be interpreted as a required list of required
       // elements where the element type is the type of the field.
-      case t: ArrayType if parquetType.getOriginalType != LIST =>
+      case t: ArrayType
+        if !parquetType.getLogicalTypeAnnotation.isInstanceOf[ListLogicalTypeAnnotation] =>
         if (parquetType.isPrimitive) {
           new RepeatedPrimitiveConverter(parquetType, t.elementType, updater)
         } else {
@@ -316,7 +332,8 @@ private[parquet] class ParquetRowConverter(
 
       case t: StructType =>
         new ParquetRowConverter(
-          schemaConverter, parquetType.asGroupType(), t, convertTz, new ParentContainerUpdater {
+          schemaConverter, parquetType.asGroupType(), t, convertTz, sessionLocalTz,
+          new ParentContainerUpdater {
             override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
           })
 

@@ -26,6 +26,7 @@ import org.apache.parquet.hadoop.api.{InitContext, ReadSupport}
 import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
 import org.apache.parquet.io.api.RecordMaterializer
 import org.apache.parquet.schema._
+import org.apache.parquet.schema.LogicalTypeAnnotation.{listType, ListLogicalTypeAnnotation}
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.internal.Logging
@@ -49,7 +50,8 @@ import org.apache.spark.sql.types._
  * Due to this reason, we no longer rely on [[ReadContext]] to pass requested schema from [[init()]]
  * to [[prepareForRead()]], but use a private `var` for simplicity.
  */
-private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone])
+private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone],
+                                          val sessionLocalTz: TimeZone)
     extends ReadSupport[UnsafeRow] with Logging {
   private var catalystRequestedSchema: StructType = _
 
@@ -57,7 +59,7 @@ private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone])
     // We need a zero-arg constructor for SpecificParquetRecordReaderBase.  But that is only
     // used in the vectorized reader, where we get the convertTz value directly, and the value here
     // is ignored.
-    this(None)
+    this(None, null)
   }
 
   /**
@@ -107,7 +109,8 @@ private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone])
       parquetRequestedSchema,
       ParquetReadSupport.expandUDT(catalystRequestedSchema),
       new ParquetToSparkSchemaConverter(conf),
-      convertTz)
+      convertTz,
+      sessionLocalTz)
   }
 }
 
@@ -183,11 +186,12 @@ private[parquet] object ParquetReadSupport {
 
     // Unannotated repeated group should be interpreted as required list of required element, so
     // list element type is just the group itself.  Clip it.
-    if (parquetList.getOriginalType == null && parquetList.isRepetition(Repetition.REPEATED)) {
+    if (parquetList.getLogicalTypeAnnotation == null
+      && parquetList.isRepetition(Repetition.REPEATED)) {
       clipParquetType(parquetList, elementType, caseSensitive)
     } else {
       assert(
-        parquetList.getOriginalType == OriginalType.LIST,
+        parquetList.getLogicalTypeAnnotation.isInstanceOf[ListLogicalTypeAnnotation],
         "Invalid Parquet schema. " +
           "Original type of annotated Parquet lists must be LIST: " +
           parquetList.toString)
@@ -215,7 +219,7 @@ private[parquet] object ParquetReadSupport {
       ) {
         Types
           .buildGroup(parquetList.getRepetition)
-          .as(OriginalType.LIST)
+          .as(listType())
           .addField(clipParquetType(repeatedGroup, elementType, caseSensitive))
           .named(parquetList.getName)
       } else {
@@ -223,7 +227,7 @@ private[parquet] object ParquetReadSupport {
         // repetition.
         Types
           .buildGroup(parquetList.getRepetition)
-          .as(OriginalType.LIST)
+          .as(listType())
           .addField(
             Types
               .repeatedGroup()
@@ -254,14 +258,14 @@ private[parquet] object ParquetReadSupport {
     val clippedRepeatedGroup =
       Types
         .repeatedGroup()
-        .as(repeatedGroup.getOriginalType)
+        .as(repeatedGroup.getLogicalTypeAnnotation)
         .addField(clipParquetType(parquetKeyType, keyType, caseSensitive))
         .addField(clipParquetType(parquetValueType, valueType, caseSensitive))
         .named(repeatedGroup.getName)
 
     Types
       .buildGroup(parquetMap.getRepetition)
-      .as(parquetMap.getOriginalType)
+      .as(parquetMap.getLogicalTypeAnnotation)
       .addField(clippedRepeatedGroup)
       .named(parquetMap.getName)
   }
@@ -279,7 +283,7 @@ private[parquet] object ParquetReadSupport {
     val clippedParquetFields = clipParquetGroupFields(parquetRecord, structType, caseSensitive)
     Types
       .buildGroup(parquetRecord.getRepetition)
-      .as(parquetRecord.getOriginalType)
+      .as(parquetRecord.getLogicalTypeAnnotation)
       .addFields(clippedParquetFields: _*)
       .named(parquetRecord.getName)
   }

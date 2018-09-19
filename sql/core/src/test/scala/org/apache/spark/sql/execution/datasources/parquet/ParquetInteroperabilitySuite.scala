@@ -98,7 +98,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
     }
   }
 
-  test("parquet timestamp conversion") {
+  test("parquet Impala timestamp conversion") {
     // Make a table with one parquet file written by impala, and one parquet file written by spark.
     // We should only adjust the timestamps in the impala file, and only if the conf is set
     val impalaFile = "test-data/impala_timestamp.parq"
@@ -203,5 +203,51 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
         }
       }
     }
+  }
+
+  test("parquet timestamp read path") {
+    Seq("timestamp_plain", "timestamp_dictionary").foreach({ file =>
+      val timestampPath = Thread.currentThread()
+        .getContextClassLoader.getResource("test-data/" + file + ".parq").toURI.getPath
+      val expectedPath = Thread.currentThread()
+        .getContextClassLoader.getResource("test-data/" + file + ".txt").toURI.getPath
+
+      withTempPath {tableDir =>
+        val textValues = spark.read
+          .option("header", false).option("inferSchema", true)
+          .option("delimiter", ";").csv(expectedPath).collect
+        val timestamps = textValues.map(
+          row => (row.getInt(0),
+            row.getTimestamp(1),
+            row.getTimestamp(2),
+            row.getTimestamp(3),
+            row.getTimestamp(4)
+          )
+        )
+        FileUtils.copyFile(new File(timestampPath), new File(tableDir, "part-00001.parq"))
+
+        Seq(false, true).foreach { vectorized =>
+          withSQLConf(
+            (SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized.toString())
+          ) {
+            val readBack = spark.read.parquet(tableDir.getAbsolutePath).collect
+
+            val expected = timestamps.map(_.toString).sorted
+            val actual = readBack.map(
+              row => (row.getInt(0),
+                row.getTimestamp(1),
+                row.getTimestamp(2),
+                row.getTimestamp(3),
+                row.getTimestamp(4)
+              )
+            ).map(_.toString).sorted
+            assert(readBack.size === expected.size)
+            withClue(s"vectorized = $vectorized, file = $file") {
+              assert(actual === expected)
+            }
+          }
+        }
+      }
+    })
   }
 }

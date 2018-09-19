@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import java.io.File
+import java.util.TimeZone
 
 import scala.collection.JavaConverters._
 import scala.util.Random
@@ -165,7 +166,7 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
 
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new VectorizedParquetRecordReader(
-              null, enableOffHeapColumnVector, vectorizedReaderBatchSize)
+              null, TimeZone.getDefault, enableOffHeapColumnVector, vectorizedReaderBatchSize)
             try {
               reader.initialize(p, ("id" :: Nil).asJava)
               val batch = reader.resultBatch()
@@ -199,7 +200,7 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
 
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new VectorizedParquetRecordReader(
-              null, enableOffHeapColumnVector, vectorizedReaderBatchSize)
+              null, TimeZone.getDefault, enableOffHeapColumnVector, vectorizedReaderBatchSize)
             try {
               reader.initialize(p, ("id" :: Nil).asJava)
               val batch = reader.resultBatch()
@@ -454,7 +455,7 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
           var sum = 0
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new VectorizedParquetRecordReader(
-              null, enableOffHeapColumnVector, vectorizedReaderBatchSize)
+              null, TimeZone.getDefault, enableOffHeapColumnVector, vectorizedReaderBatchSize)
             try {
               reader.initialize(p, ("c1" :: "c2" :: Nil).asJava)
               val batch = reader.resultBatch()

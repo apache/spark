@@ -88,6 +88,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   private TimeZone convertTz = null;
 
+  private TimeZone sessionLocalTz = null;
+
   /**
    * columnBatch object that is used for batch decoding. This is created on first use and triggers
    * batched decoding. It is not valid to interleave calls to the batched interface with the row
@@ -116,8 +118,9 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   private final MemoryMode MEMORY_MODE;
 
-  public VectorizedParquetRecordReader(TimeZone convertTz, boolean useOffHeap, int capacity) {
+  public VectorizedParquetRecordReader(TimeZone convertTz, TimeZone sessionLocalTz, boolean useOffHeap, int capacity) {
     this.convertTz = convertTz;
+    this.sessionLocalTz = sessionLocalTz;
     MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
     this.capacity = capacity;
   }
@@ -308,8 +311,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     columnReaders = new VectorizedColumnReader[columns.size()];
     for (int i = 0; i < columns.size(); ++i) {
       if (missingColumns[i]) continue;
-      columnReaders[i] = new VectorizedColumnReader(columns.get(i), types.get(i).getOriginalType(),
-        pages.getPageReader(columns.get(i)), convertTz);
+      columnReaders[i] = new VectorizedColumnReader(columns.get(i), types.get(i).getLogicalTypeAnnotation(),
+        pages.getPageReader(columns.get(i)), convertTz, sessionLocalTz);
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }

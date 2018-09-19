@@ -36,11 +36,13 @@ private[parquet] class ParquetRecordMaterializer(
     parquetSchema: MessageType,
     catalystSchema: StructType,
     schemaConverter: ParquetToSparkSchemaConverter,
-    convertTz: Option[TimeZone])
+    convertTz: Option[TimeZone],
+    sessionLocalTz: TimeZone)
   extends RecordMaterializer[UnsafeRow] {
 
   private val rootConverter =
-    new ParquetRowConverter(schemaConverter, parquetSchema, catalystSchema, convertTz, NoopUpdater)
+    new ParquetRowConverter(schemaConverter, parquetSchema, catalystSchema, convertTz,
+      sessionLocalTz, NoopUpdater)
 
   override def getCurrentRecord: UnsafeRow = rootConverter.currentRecord
 
