@@ -219,7 +219,7 @@ public class TransportContext {
   private ChunkFetchRequestHandler createChunkFetchHandler(TransportChannelHandler channelHandler,
       RpcHandler rpcHandler) {
     return new ChunkFetchRequestHandler(channelHandler.getClient(),
-        rpcHandler.getStreamManager(), conf.maxChunksBeingTransferred());
+      rpcHandler.getStreamManager(), conf.maxChunksBeingTransferred());
   }
 
   public TransportConf getConf() { return conf; }

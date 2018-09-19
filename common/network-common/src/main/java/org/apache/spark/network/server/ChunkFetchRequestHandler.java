@@ -37,7 +37,6 @@ import org.apache.spark.network.protocol.Encodable;
 
 import static org.apache.spark.network.util.NettyUtils.*;
 
-
 /**
  * A dedicated ChannelHandler for processing ChunkFetchRequest messages. When sending response
  * of ChunkFetchRequest messages to the clients, the thread performing the I/O on the underlying
