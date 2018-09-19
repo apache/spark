@@ -345,29 +345,33 @@ RBAC authorization and how to configure Kubernetes service accounts for pods, pl
 Thrift JDBC/ODBC Server (aka Spark Thrift Server or STS) is Spark SQL’s port of Apache Hive’s HiveServer2 that allows
 JDBC/ODBC clients to execute SQL queries over JDBC and ODBC protocols on Apache Spark.
 
-### Spark deploy mode of Client
+### Client Deployment Mode
 
 To start STS in client mode, excute the following command
 
+```bash
 $ sbin/start-thriftserver.sh \
     --master k8s://https://<k8s-apiserver-host>:<k8s-apiserver-port>
+```
 
-### Spark deploy mode of Cluster
+### Cluster Deployment Mode
 
 To start STS in cluster mode, excute the following command
 
+```bash
 $ sbin/start-thriftserver.sh \
     --master k8s://https://<k8s-apiserver-host>:<k8s-apiserver-port> \
     --deploy-mode cluster
+```
 
-The most basic workflow is to use the pod name (driver pod name incase of cluster mode and self pod name incase of client
-mode, which can be found with kubectl get pods), and run kubectl port-forward spark-app-podname 31416:10000
-(https://kubernetes.io/docs/tasks/access-application-cluster/port-forward-access-application-cluster/#forward-a
--local-port-to-a-port-on-the-pod), which will automatically forward localhost:31416 to the pod's port 10000.
-Any jdbc client can then be used to query jdbc:hive2://localhost:31416.
+The most basic workflow is to use the pod name (driver pod name incase of cluster mode and self pod name(pod/container from 
+which the STS start command is issued) incase of client mode, which can be found with "kubectl get pods"), and run 
+"kubectl port-forward spark-app-podname 31416:10000" (https://kubernetes.io/docs/tasks/access-application-cluster/port-forward
+-access-application-cluster/#forward-a-local-port-to-a-port-on-the-pod), which will automatically forward "localhost:31416" 
+to the pod's port 10000. Any jdbc client can then be used to query jdbc:hive2://localhost:31416.
 
-Alternatively, any other application on the cluster can simply use spark-app-podname:10000, which will be resolved by
-kube-dns. For persistent external access one can run kubectl expose pod spark-app-podname --type=NodePort --port 10000
+Alternatively, any other application on the cluster can simply use "spark-app-podname:10000", which will be resolved by
+kube-dns. For persistent external access one can run "kubectl expose pod spark-app-podname --type=NodePort --port 10000"
 to create a Kubernetes Service which will accept connections on a particular port of every node on the cluster and send
 them to the pod's port 10000.
 
