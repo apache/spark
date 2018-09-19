@@ -120,7 +120,7 @@ private[spark] class Executor(
   }
 
   // Whether to load classes in user jars before those in Spark jars
-  private val userClassPathFirst = conf.getBoolean("spark.executor.userClassPathFirst", false)
+  private val userClassPathFirst = conf.getBoolean(EXECUTOR_USER_CLASS_PATH_FIRST.key, false)
 
   // Whether to monitor killed / interrupted tasks
   private val taskReaperEnabled = conf.getBoolean("spark.task.reaper.enabled", false)
@@ -149,7 +149,7 @@ private[spark] class Executor(
 
   // Executor for the heartbeat task.
   private val heartbeater = new Heartbeater(env.memoryManager, reportHeartBeat,
-    "executor-heartbeater", conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
+    "executor-heartbeater", conf.getTimeAsMs(EXECUTOR_HEARTBEAT_INTERVAL.key, "10s"))
 
   // must be initialized before running startDriverHeartbeat()
   private val heartbeatReceiverRef =
@@ -160,7 +160,7 @@ private[spark] class Executor(
    * times, it should kill itself. The default value is 60. It means we will retry to send
    * heartbeats about 10 minutes because the heartbeat interval is 10s.
    */
-  private val HEARTBEAT_MAX_FAILURES = conf.getInt("spark.executor.heartbeat.maxFailures", 60)
+  private val HEARTBEAT_MAX_FAILURES = conf.getInt(EXECUTOR_HEARTBEAT_MAX_FAILURES.key, 60)
 
   /**
    * Count the failure times of heartbeat. It should only be accessed in the heartbeat thread. Each
@@ -799,8 +799,13 @@ private[spark] class Executor(
       if (taskRunner.task != null) {
         taskRunner.task.metrics.mergeShuffleReadMetrics()
         taskRunner.task.metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
-        accumUpdates +=
-          ((taskRunner.taskId, taskRunner.task.metrics.accumulators().filterNot(_.isZero)))
+        val accumulatorsToReport =
+          if (conf.getBoolean(EXECUTOR_HEARTBEAT_DROP_ZERO_METRICS.key, true)) {
+            taskRunner.task.metrics.accumulators().filterNot(_.isZero)
+          } else {
+            taskRunner.task.metrics.accumulators()
+          }
+        accumUpdates += ((taskRunner.taskId, accumulatorsToReport))
       }
     }
 
@@ -808,7 +813,7 @@ private[spark] class Executor(
       executorUpdates)
     try {
       val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
-          message, RpcTimeout(conf, "spark.executor.heartbeatInterval", "10s"))
+          message, RpcTimeout(conf, EXECUTOR_HEARTBEAT_INTERVAL.key, "10s"))
       if (response.reregisterBlockManager) {
         logInfo("Told to re-register on heartbeat")
         env.blockManager.reregister()
