@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.arrow.ArrowUtils
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
-case class UnboundedWindowInPandasExec(
+case class WindowInPandasExec(
     windowExpression: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],

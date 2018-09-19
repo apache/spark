@@ -149,6 +149,7 @@ case class BoundedWindowInPandasExec(
     val allInputs = indiceInputs ++ dataInputs
     val allInputTypes = allInputs.map(_.dataType)
 
+    // TODO: Handle short circuit code path for unbounded window
     // Schema of input rows to the python runner
     val windowInputSchema = StructType(
       allInputTypes.zipWithIndex.map { case (dt, i) =>

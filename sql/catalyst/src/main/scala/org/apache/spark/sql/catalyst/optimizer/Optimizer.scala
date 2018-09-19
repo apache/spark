@@ -735,14 +735,7 @@ object CollapseWindow extends Rule[LogicalPlan] {
         if ps1 == ps2 && os1 == os2 && w1.references.intersect(w2.windowOutputSet).isEmpty &&
           // This assumes Window contains the same type of window expressions. This is ensured
           // by ExtractWindowFunctions.
-          WindowFunctionType.functionType(we1.head) == WindowFunctionType.functionType(we2.head) &&
-          // Rules for collapsing windows that contains Python UDFs are more strict.
-          // We don't combine unbounded and bounded windows because they have different physical
-          // plans.
-          ((WindowFunctionType.functionType(we1.head) != WindowFunctionType.Python) ||
-            (WindowBoundaryType.isUnbounded(we1.head) ==
-              WindowBoundaryType.isUnbounded(we2.head)))
-    =>
+          WindowFunctionType.functionType(we1.head) == WindowFunctionType.functionType(we2.head) =>
       w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
   }
 }

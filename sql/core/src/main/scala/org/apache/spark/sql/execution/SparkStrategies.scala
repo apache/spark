@@ -460,13 +460,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case PhysicalWindow(
         WindowFunctionType.Python, windowExprs, partitionSpec, orderSpec, child) =>
-        if (WindowBoundaryType.isUnbounded(windowExprs.head)) {
-          execution.python.UnboundedWindowInPandasExec(
-            windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
-        } else {
-          execution.python.BoundedWindowInPandasExec(
-            windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
-        }
+        execution.python.BoundedWindowInPandasExec(
+          windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
 
       case _ => Nil
     }

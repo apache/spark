@@ -139,8 +139,7 @@ private[sql] abstract class WindowExecBase(
             case AggregateExpression(f, _, _, _) => collect("AGGREGATE", frame, e, f)
             case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
             case f: OffsetWindowFunction => collect("OFFSET", frame, e, f)
-            case f: PythonUDF if PythonUDF.isGroupedAggPandasUDF(f) =>
-              collect("AGGREGATE", frame, e, f)
+            case f: PythonUDF => collect("AGGREGATE", frame, e, f)
             case f => sys.error(s"Unsupported window function: $f")
           }
         case _ =>
@@ -156,17 +155,16 @@ private[sql] abstract class WindowExecBase(
         val functions = functionSeq.toArray
 
         // Construct an aggregate processor if we need one.
-        def processor =
-          if (functions.exists {f => f.isInstanceOf[PythonUDF]}) {
-            null
-          } else {
-            AggregateProcessor(
-              functions,
-              ordinal,
-              child.output,
-              (expressions, schema) =>
-                newMutableProjection(expressions, schema, subexpressionEliminationEnabled))
-          }
+        def processor = if (functions.exists{ f => f.isInstanceOf[PythonUDF]}) {
+          null
+        } else {
+          AggregateProcessor(
+            functions,
+            ordinal,
+            child.output,
+            (expressions, schema) =>
+              newMutableProjection(expressions, schema, subexpressionEliminationEnabled))
+        }
 
         // Create the factory
         val factory = key match {
