@@ -112,16 +112,17 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   }
 
   private def hex(buf: ByteBuffer): String = {
-    val bytesToShow = if (buf.hasArray) {
+    val (bytesToShow, len) = if (buf.hasArray) {
       val arr = buf.array
-      if (arr.length > 1000) arr.slice(0, 1000) else arr
+      val b = if (arr.length > 1000) (arr.slice(0, 1000) else arr
+      (b, arr.length)
     } else {
       val length = math.min(buf.remaining(), 1000)
       val bytes = new Array[Byte](length)
       buf.duplicate.get(bytes, 0, length)
-      bytes
+      (bytes, buf.remaining())
     }
-    new String(Hex.encodeHex(bytesToShow))
+    "(length = " + len + ") " + new String(Hex.encodeHex(bytesToShow))
   }
 
   /**

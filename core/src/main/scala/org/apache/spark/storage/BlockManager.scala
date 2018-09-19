@@ -755,7 +755,7 @@ private[spark] class BlockManager(
     }
 
     val locations = sortLocations(blockLocations)
-    logInfo(s"sorted locations: ${blockLocations.map { l => (l.hostPort, l.isDriver) } }")
+    logInfo(s"sorted locations: ${locations.map { l => (l.hostPort, l.isDriver) } }")
     val maxFetchFailures = locations.size
     var locationIterator = locations.iterator
     while (locationIterator.hasNext) {
