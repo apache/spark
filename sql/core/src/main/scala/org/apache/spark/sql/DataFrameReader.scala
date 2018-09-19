@@ -193,7 +193,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         ds = ds.asInstanceOf[DataSourceV2],
         conf = sparkSession.sessionState.conf)
-      val options = new DataSourceOptions((sessionOptions ++ extraOptions)).asJava)
+      val options = new DataSourceOptions((sessionOptions ++ extraOptions).asJava)
 
       // Streaming also uses the data source V2 API. So it may be that the data source implements
       // v2, but has no v2 implementation for batch reads. In that case, we fall back to loading
