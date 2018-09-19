@@ -98,17 +98,17 @@ public class TransportContext {
     this(conf, rpcHandler, closeIdleConnections, false);
   }
 
-    /**
-     *
-     * @param conf TransportConf
-     * @param rpcHandler RpcHandler responsible for handling requests and responses.
-     * @param closeIdleConnections Close idle connections if it is set to true.
-     * @param isClientOnly This config is more important when external shuffle is enabled.
-     *                     It stops creating extra event loop and subsequent thread pool
-     *                     for shuffle clients to handle chunked fetch requests.
-     *                     In the case when external shuffle is disabled, the executors are both
-     *                     client and server so both share the same event loop which is trivial.
-     */
+  /**
+   *
+   * @param conf TransportConf
+   * @param rpcHandler RpcHandler responsible for handling requests and responses.
+   * @param closeIdleConnections Close idle connections if it is set to true.
+   * @param isClientOnly This config is more important when external shuffle is enabled.
+   *                     It stops creating extra event loop and subsequent thread pool
+   *                     for shuffle clients to handle chunked fetch requests.
+   *                     In the case when external shuffle is disabled, the executors are both
+   *                     client and server so both share the same event loop which is trivial.
+   */
   public TransportContext(
       TransportConf conf,
       RpcHandler rpcHandler,
