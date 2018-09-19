@@ -102,7 +102,7 @@ public class TransportContext {
      *
      * @param conf TransportConf
      * @param rpcHandler RpcHandler responsible for handling requests and responses.
-     * @param closeIdleConnections Close idle connections if is set to true.
+     * @param closeIdleConnections Close idle connections if it is set to true.
      * @param isClientOnly This config is more important when external shuffle is enabled.
      *                     It stops creating extra event loop and subsequent thread pool
      *                     for shuffle clients to handle chunked fetch requests.
