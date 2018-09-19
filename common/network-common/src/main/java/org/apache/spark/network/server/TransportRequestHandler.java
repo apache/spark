@@ -25,14 +25,6 @@ import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 
-import org.apache.spark.network.protocol.OneWayMessage;
-import org.apache.spark.network.protocol.RpcFailure;
-import org.apache.spark.network.protocol.RpcRequest;
-import org.apache.spark.network.protocol.RpcResponse;
-import org.apache.spark.network.protocol.StreamFailure;
-import org.apache.spark.network.protocol.StreamRequest;
-import org.apache.spark.network.protocol.StreamResponse;
-import org.apache.spark.network.protocol.UploadStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,6 +33,7 @@ import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.*;
 import org.apache.spark.network.protocol.*;
 import org.apache.spark.network.util.TransportFrameDecoder;
+
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
 /**
