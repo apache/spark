@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -365,5 +366,26 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     val ctx2 = new CodegenContext()
     Greatest(Seq(Literal(1), Literal(1))).genCode(ctx2)
     assert(ctx2.inlinedMutableStates.size == 1)
+  }
+
+  test("SPARK-25454: decimal operations with negative scale") {
+    val a = Literal(BigDecimal(1234567891))
+    val b = Literal(BigDecimal(100e6))
+    val c = Literal(BigDecimal(123456.7891))
+    assert(b.dataType.isInstanceOf[DecimalType] &&
+      b.dataType.asInstanceOf[DecimalType].scale < 0)
+    Seq("true", "false").foreach { allowPrecLoss =>
+      withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> allowPrecLoss) {
+        checkEvaluationWithOptimization(Add(a, b), Decimal(BigDecimal(1334567891)))
+        checkEvaluationWithOptimization(Add(b, c), Decimal(BigDecimal(100123456.7891)))
+        checkEvaluationWithOptimization(Subtract(a, b), Decimal(BigDecimal(1134567891)))
+        checkEvaluationWithOptimization(Subtract(b, c), Decimal(BigDecimal(99876543.2109)))
+        checkEvaluationWithOptimization(Multiply(a, b), Decimal(BigDecimal(123456789100000000L)))
+        checkEvaluationWithOptimization(Multiply(b, c), Decimal(BigDecimal(12345678910000L)))
+        checkEvaluationWithOptimization(Divide(a, b), Decimal(BigDecimal(12.34567891)))
+        checkEvaluationWithOptimization(Divide(b, c), Decimal(BigDecimal(810.000007)))
+        checkEvaluationWithOptimization(Divide(c, b), Decimal(BigDecimal(0.001234567891)))
+      }
+    }
   }
 }

@@ -40,9 +40,12 @@ import org.apache.spark.sql.types._
  *   e1 + e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
  *   e1 - e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
  *   e1 * e2      p1 + p2 + 1                             s1 + s2
- *   e1 / e2      p1 - s1 + s2 + max(6, s1 + p2 + 1)      max(6, s1 + p2 + 1)
+ *   e1 / e2      max(p1-s1+s2, 0) + max(6, s1+adjP2+1)   max(6, s1+adjP2+1)
  *   e1 % e2      min(p1-s1, p2-s2) + max(s1, s2)         max(s1, s2)
  *   e1 union e2  max(s1, s2) + max(p1-s1, p2-s2)         max(s1, s2)
+ *
+ * Where adjP2 is p2 - s2 if s2 < 0, p2 otherwise. This adjustment is needed because Spark does not
+ * forbid decimals with negative scale, while MS SQL and Hive do.
  *
  * When `spark.sql.decimalOperations.allowPrecisionLoss` is set to true, if the precision / scale
  * needed are out of the range of available values, the scale is reduced up to 6, in order to
@@ -133,12 +136,12 @@ object DecimalPrecision extends TypeCoercionRule {
       val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
         // Precision: p1 - s1 + s2 + max(6, s1 + p2 + 1)
         // Scale: max(6, s1 + p2 + 1)
-        val intDig = p1 - s1 + s2
+        val intDig = max(p1 - s1 + s2, 0) // can be negative if s2 < 0
         val scale = max(DecimalType.MINIMUM_ADJUSTED_SCALE, s1 + adjP2 + 1)
         val prec = intDig + scale
         DecimalType.adjustPrecisionScale(prec, scale)
       } else {
-        var intDig = min(DecimalType.MAX_SCALE, p1 - s1 + s2)
+        var intDig = max(min(DecimalType.MAX_SCALE, p1 - s1 + s2), 0) // can be negative if s2 < 0
         var decDig = min(DecimalType.MAX_SCALE, max(6, s1 + adjP2 + 1))
         val diff = (intDig + decDig) - DecimalType.MAX_SCALE
         if (diff > 0) {
