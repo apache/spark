@@ -65,7 +65,7 @@ public class TransportContext {
   private final TransportConf conf;
   private final RpcHandler rpcHandler;
   private final boolean closeIdleConnections;
-  private final boolean isClient;
+  private final boolean isClientOnly;
 
   /**
    * Force to create MessageEncoder and MessageDecoder so that we can make sure they will be created
@@ -98,21 +98,32 @@ public class TransportContext {
     this(conf, rpcHandler, closeIdleConnections, false);
   }
 
+    /**
+     *
+     * @param conf TransportConf
+     * @param rpcHandler RpcHandler responsible for handling requests and responses.
+     * @param closeIdleConnections Close idle connections if is set to true.
+     * @param isClientOnly This config is more important when external shuffle is enabled.
+     *                     It stops creating extra event loop and subsequent thread pool
+     *                     for shuffle clients to handle chunked fetch requests.
+     *                     In the case when external shuffle is disabled, the executors are both
+     *                     client and server so both share the same event loop which is trivial.
+     */
   public TransportContext(
       TransportConf conf,
       RpcHandler rpcHandler,
       boolean closeIdleConnections,
-      boolean isClient) {
+      boolean isClientOnly) {
     this.conf = conf;
     this.rpcHandler = rpcHandler;
     this.closeIdleConnections = closeIdleConnections;
-    this.isClient = isClient;
+    this.isClientOnly = isClientOnly;
 
     synchronized(TransportContext.class) {
       if (chunkFetchWorkers == null &&
           conf.getModuleName() != null &&
           conf.getModuleName().equalsIgnoreCase("shuffle") &&
-          !isClient) {
+          !isClientOnly) {
         chunkFetchWorkers = NettyUtils.createEventLoop(
             IOMode.valueOf(conf.ioMode()),
             conf.chunkFetchHandlerThreads(),
@@ -189,7 +200,7 @@ public class TransportContext {
       // Use a separate EventLoopGroup to handle ChunkFetchRequest messages for shuffle rpcs.
       if (conf.getModuleName() != null &&
           conf.getModuleName().equalsIgnoreCase("shuffle")
-          && !isClient) {
+          && !isClientOnly) {
         pipeline.addLast(chunkFetchWorkers, "chunkFetchHandler", chunkFetchHandler);
       }
       return channelHandler;
