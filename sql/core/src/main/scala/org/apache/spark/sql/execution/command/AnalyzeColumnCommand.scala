@@ -37,7 +37,8 @@ import org.apache.spark.sql.types._
  */
 case class AnalyzeColumnCommand(
     tableIdent: TableIdentifier,
-    columnNames: Seq[String]) extends RunnableCommand {
+    columnNames: Option[Seq[String]],
+    allColumns: Boolean = false ) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState = sparkSession.sessionState
@@ -50,7 +51,26 @@ case class AnalyzeColumnCommand(
     val sizeInBytes = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
 
     // Compute stats for each column
-    val (rowCount, newColStats) = computeColumnStats(sparkSession, tableIdentWithDB, columnNames)
+    val conf = sparkSession.sessionState.conf
+    val relation = sparkSession.table(tableIdent).logicalPlan
+    val attributesToAnalyze = if (allColumns) {
+      relation.output
+    } else {
+      columnNames.get.map { col =>
+        val exprOption = relation.output.find(attr => conf.resolver(attr.name, col))
+        exprOption.getOrElse(throw new AnalysisException(s"Column $col does not exist."))
+      }
+    }
+    // Make sure the column types are supported for stats gathering.
+    attributesToAnalyze.foreach { attr =>
+      if (!supportsType(attr.dataType)) {
+        throw new AnalysisException(
+          s"Column ${attr.name} in table $tableIdent is of type ${attr.dataType}, " +
+            "and Spark does not support statistics collection on this column type.")
+      }
+    }
+    val (rowCount, newColStats) =
+      computeColumnStats(sparkSession, relation, attributesToAnalyze)
 
     // We also update table-level stats in order to keep them consistent with column-level stats.
     val statistics = CatalogStatistics(
@@ -70,25 +90,9 @@ case class AnalyzeColumnCommand(
    */
   private def computeColumnStats(
       sparkSession: SparkSession,
-      tableIdent: TableIdentifier,
-      columnNames: Seq[String]): (Long, Map[String, CatalogColumnStat]) = {
-
+      relation: LogicalPlan,
+      attributesToAnalyze: Seq[Attribute]): (Long, Map[String, CatalogColumnStat]) = {
     val conf = sparkSession.sessionState.conf
-    val relation = sparkSession.table(tableIdent).logicalPlan
-    // Resolve the column names and dedup using AttributeSet
-    val attributesToAnalyze = columnNames.map { col =>
-      val exprOption = relation.output.find(attr => conf.resolver(attr.name, col))
-      exprOption.getOrElse(throw new AnalysisException(s"Column $col does not exist."))
-    }
-
-    // Make sure the column types are supported for stats gathering.
-    attributesToAnalyze.foreach { attr =>
-      if (!supportsType(attr.dataType)) {
-        throw new AnalysisException(
-          s"Column ${attr.name} in table $tableIdent is of type ${attr.dataType}, " +
-            "and Spark does not support statistics collection on this column type.")
-      }
-    }
 
     // Collect statistics per column.
     // If no histogram is required, we run a job to compute basic column stats such as
