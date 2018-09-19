@@ -225,6 +225,13 @@ private[spark] object Config extends Logging {
         "Ensure that major Python version is either Python2 or Python3")
       .createWithDefault("2")
 
+  val APP_RESOURCE_TYPE =
+    ConfigBuilder("spark.kubernetes.resource.type")
+      .doc("This sets the resource type internally")
+      .internal()
+      .stringConf
+      .createOptional
+
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 
