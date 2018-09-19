@@ -624,11 +624,11 @@ object SQLConf {
     .stringConf
     .createWithDefault("_corrupt_record")
 
-  val FROM_JSON_FORCE_NULLABLE_SCHEMA = buildConf("spark.sql.fromJsonForceNullableSchema")
+  val FROM_JSON_FORCE_NULLABLE_SCHEMA = buildConf("spark.sql.function.fromJson.forceNullable")
     .internal()
     .doc("When true, force the output schema of the from_json() function to be nullable " +
       "(including all the fields). Otherwise, the schema might not be compatible with" +
-      "actual data, which leads to curruptions.")
+      "actual data, which leads to corruptions.")
     .booleanConf
     .createWithDefault(true)
 
