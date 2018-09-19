@@ -69,14 +69,14 @@ public class TransportRequestHandlerSuite {
     assert responseAndPromisePairs.size() == 1;
     assert responseAndPromisePairs.get(0).getLeft() instanceof StreamResponse;
     assert ((StreamResponse) (responseAndPromisePairs.get(0).getLeft())).body() ==
-        managedBuffers.get(0);
+      managedBuffers.get(0);
 
     RequestMessage request1 = new StreamRequest(String.format("%d_%d", streamId, 1));
     requestHandler.handle(request1);
     assert responseAndPromisePairs.size() == 2;
     assert responseAndPromisePairs.get(1).getLeft() instanceof StreamResponse;
     assert ((StreamResponse) (responseAndPromisePairs.get(1).getLeft())).body() ==
-        managedBuffers.get(1);
+      managedBuffers.get(1);
 
     // Finish flushing the response for request0.
     responseAndPromisePairs.get(0).getRight().finish(true);
