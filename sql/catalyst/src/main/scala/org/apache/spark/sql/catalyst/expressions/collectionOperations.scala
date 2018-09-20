@@ -2274,21 +2274,21 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
 
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override def eval(input: InternalRow): Any = evalFunction(input)
+  override def eval(input: InternalRow): Any = doConcat(input)
 
-  @transient private lazy val evalFunction: InternalRow => Any = dataType match {
+  @transient private lazy val doConcat: InternalRow => Any = dataType match {
     case BinaryType =>
-      (input) => {
+      input => {
         val inputs = children.map(_.eval(input).asInstanceOf[Array[Byte]])
         ByteArray.concat(inputs: _*)
       }
     case StringType =>
-      (input) => {
+      input => {
         val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
         UTF8String.concat(inputs: _*)
       }
     case ArrayType(elementType, _) =>
-      (input) => {
+      input => {
         val inputs = children.toStream.map(_.eval(input))
         if (inputs.contains(null)) {
           null
