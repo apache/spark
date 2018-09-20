@@ -110,6 +110,8 @@ private[spark] class ByteBufferBlockData(
     }
   }
 
+  override def toString(): String = s"ByteBufferBlockData($buffer)"
+
 }
 
 /**
@@ -749,10 +751,10 @@ private[spark] class BlockManager(
     // If the block size is above the threshold, we should pass our FileManger to
     // BlockTransferService, which will leverage it to spill the block; if not, then passed-in
     // null value means the block will be persisted in memory.
-    val tempFileManager = if (blockSize > maxRemoteBlockToMem) {
-      remoteBlockTempFileManager
+    val (tempFileManager, asStream) = if (blockSize > maxRemoteBlockToMem) {
+      (remoteBlockTempFileManager, "streamed to disk")
     } else {
-      null
+      (null, "in memory")
     }
 
     val locations = sortLocations(blockLocations)
@@ -761,7 +763,7 @@ private[spark] class BlockManager(
     var locationIterator = locations.iterator
     while (locationIterator.hasNext) {
       val loc = locationIterator.next()
-      logInfo(s"Getting remote block $blockId from $loc")
+      logInfo(s"Getting remote block $blockId from $loc $asStream")
       val data = try {
         blockTransferService.fetchBlockSync(
           loc.host, loc.port, loc.executorId, blockId.toString, tempFileManager)
@@ -801,11 +803,13 @@ private[spark] class BlockManager(
         // SPARK-24307 undocumented "escape-hatch" in case there are any issues in converting to
         // ChunkedByteBuffer, to go back to old code-path.  Can be removed post Spark 2.4 if
         // new path is stable.
-        if (remoteReadNioBufferConversion) {
-          return Some(new ChunkedByteBuffer(data.nioByteBuffer()))
+        val r = if (remoteReadNioBufferConversion) {
+          Some(new ChunkedByteBuffer(data.nioByteBuffer()))
         } else {
-          return Some(ChunkedByteBuffer.fromManagedBuffer(data, chunkSize))
+          Some(ChunkedByteBuffer.fromManagedBuffer(data, chunkSize))
         }
+        logInfo(s"converted $data to $r")
+        return r
       }
       logDebug(s"The value of block $blockId is null")
     }
@@ -1382,20 +1386,6 @@ private[spark] class BlockManager(
   }
 
 
-  private def hex(buf: ByteBuffer): String = {
-    val (bytesToShow, len) = if (buf.hasArray) {
-      val arr = buf.array
-      val b = if (arr.length > 1000) arr.slice(0, 1000) else arr
-      (b, arr.length)
-    } else {
-      val length = math.min(buf.remaining(), 1000)
-      val bytes = new Array[Byte](length)
-      buf.duplicate.get(bytes, 0, length)
-      (bytes, buf.remaining())
-    }
-    "(length = " + len + ") " + new String(Hex.encodeHex(bytesToShow))
-  }
-
   /**
    * Replicate block to another node. Note that this is a blocking call that returns after
    * the block has been replicated.
@@ -1440,7 +1430,7 @@ private[spark] class BlockManager(
         logTrace(s"Trying to replicate $blockId of ${data.size} bytes to $peer")
         // This thread keeps a lock on the block, so we do not want the netty thread to unlock
         // block when it finishes sending the message.
-        logTrace(s"replicating bytes: ${hex(data.toByteBuffer())}")
+        logTrace(s"replicating bytes: ${BlockManager.hex(data.toByteBuffer())}")
         val buffer = new BlockManagerManagedBuffer(blockInfoManager, blockId, data, false,
           unlockOnDeallocate = false)
         blockTransferService.uploadBlockSync(
@@ -1796,4 +1786,19 @@ private[spark] object BlockManager {
       override def close(): Unit = countingOutput.close()
     }
   }
+
+  private def hex(buf: ByteBuffer): String = {
+    val (bytesToShow, len) = if (buf.hasArray) {
+      val arr = buf.array
+      val b = if (arr.length > 1000) arr.slice(0, 1000) else arr
+      (b, arr.length)
+    } else {
+      val length = math.min(buf.remaining(), 1000)
+      val bytes = new Array[Byte](length)
+      buf.duplicate.get(bytes, 0, length)
+      (bytes, buf.remaining())
+    }
+    "(length = " + len + ") " + new String(Hex.encodeHex(bytesToShow))
+  }
+
 }

@@ -52,7 +52,7 @@ class NettyBlockRpcServer(
       rpcMessage: ByteBuffer,
       responseContext: RpcResponseCallback): Unit = {
     val message = BlockTransferMessage.Decoder.fromByteBuffer(rpcMessage)
-    logTrace(s"Received request: $message")
+    logTrace(s"Received request: $message from ${client.getSocketAddress}")
 
     message match {
       case openBlocks: OpenBlocks =>

@@ -67,4 +67,8 @@ private[storage] class BlockManagerManagedBuffer(
     }
     this
   }
+
+  override def toString(): String = {
+    s"BlockManagerManagedBuffer(blockId: $blockId; data: $data)"
+  }
 }

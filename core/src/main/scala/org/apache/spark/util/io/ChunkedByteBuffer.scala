@@ -42,7 +42,7 @@ import org.apache.spark.util.Utils
  *               buffers may also be used elsewhere then the caller is responsible for copying
  *               them as needed.
  */
-private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
+private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer], file: Option[File] = None) {
   require(chunks != null, "chunks must not be null")
   require(chunks.forall(_.position() == 0), "chunks' positions must be 0")
 
@@ -57,6 +57,12 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
    * This size of this buffer, in bytes.
    */
   val size: Long = chunks.map(_.limit().asInstanceOf[Long]).sum
+
+  override def toString(): String = {
+    val fileString = file.map{ f => s"; file: ${f.getAbsolutePath}(${f.exists()})" }.getOrElse("")
+    s"ChunkedByteBuffer(nChunks: ${chunks.length}; size: $size$fileString)"
+  }
+
 
   def this(byteBuffer: ByteBuffer) = {
     this(Array(byteBuffer))
@@ -197,7 +203,7 @@ object ChunkedByteBuffer {
         remaining -= chunkSize
         chunks += chunk
       }
-      new ChunkedByteBuffer(chunks.toArray)
+      new ChunkedByteBuffer(chunks.toArray, Some(file))
     }
   }
 }
