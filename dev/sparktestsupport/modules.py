@@ -567,7 +567,7 @@ root = Module(
     build_profile_flags=list(set(
         itertools.chain.from_iterable(m.build_profile_flags for m in all_modules))),
     sbt_test_goals=[
-        "test",
+        "core/test",
     ],
     python_test_goals=list(itertools.chain.from_iterable(m.python_test_goals for m in all_modules)),
     should_run_r_tests=True,
