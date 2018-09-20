@@ -54,9 +54,9 @@ class MergingSessionsIterator(
 
 
   /**
-    * Creates a new aggregation buffer and initializes buffer values
-    * for all aggregate functions.
-    */
+   * Creates a new aggregation buffer and initializes buffer values
+   * for all aggregate functions.
+   */
   private def newBuffer: InternalRow = {
     val bufferSchema = aggregateFunctions.flatMap(_.aggBufferAttributes)
     val bufferRowSize: Int = bufferSchema.length

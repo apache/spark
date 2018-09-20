@@ -48,9 +48,9 @@ class MultiValuesStateStoreRDD[T: ClassTag, U: ClassTag](
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
   /**
-    * Set the preferred location of each partition using the executor that has the related
-    * [[StateStoreProvider]] already loaded.
-    */
+   * Set the preferred location of each partition using the executor that has the related
+   * [[StateStoreProvider]] already loaded.
+   */
   override def getPreferredLocations(partition: Partition): Seq[String] = {
     val stateStoreProviderId = StateStoreProviderId(
       StateStoreId(stateInfo.checkpointLocation, stateInfo.operatorId, partition.index),
