@@ -386,7 +386,6 @@ final class ShuffleBlockFetcherIterator(
 
     var result: FetchResult = null
     var input: InputStream = null
-    var originalInput: InputStream = null
     // Take the next fetched result and try to decompress it to detect data corruption,
     // then fetch it one more time if it's corrupt, throw FailureFetchResult if the second fetch
     // is also corrupt, so the previous stage could be retried.
