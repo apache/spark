@@ -211,7 +211,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
         StreamCallback callback = entry.getValue();
-        if (entry.getKey() != resp.streamId) {
+        if (!entry.getKey().equals(resp.streamId)) {
           logger.error("Mismatched streamIds: callback id = " + entry.getKey() + "; resp id = "
               + resp.streamId);
         }
@@ -242,7 +242,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
         StreamCallback callback = entry.getValue();
-        if (entry.getKey() != resp.streamId) {
+        if (!entry.getKey().equals(resp.streamId)) {
           logger.error("Mismatched streamIds: callback id = " + entry.getKey() + "; resp id = "
               + resp.streamId);
         }
