@@ -152,6 +152,8 @@ private class DiskBlockData(
     file: File,
     blockSize: Long) extends BlockData {
 
+  override def toString(): String = s"DiskBlockData(file: $file (exists: ${file.exists()}))"
+
   override def toInputStream(): InputStream = new FileInputStream(file)
 
   /**
@@ -206,6 +208,8 @@ private class EncryptedBlockData(
     blockSize: Long,
     conf: SparkConf,
     key: Array[Byte]) extends BlockData {
+
+  override def toString(): String = s"EncryptedBlockData(file: $file (exists: ${file.exists()}))"
 
   override def toInputStream(): InputStream = Channels.newInputStream(open())
 
@@ -277,6 +281,8 @@ private class EncryptedManagedBuffer(val blockData: EncryptedBlockData) extends 
   override def retain(): ManagedBuffer = this
 
   override def release(): ManagedBuffer = this
+
+  override def toString(): String = s"EncryptedManagedBuffer($blockData)"
 }
 
 private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: Long)

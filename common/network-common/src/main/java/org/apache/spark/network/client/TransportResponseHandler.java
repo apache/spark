@@ -211,6 +211,10 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
         StreamCallback callback = entry.getValue();
+        if (!entry.getKey().equals(resp.streamId)) {
+          logger.error("Mismatched streamIds: callback id = " + entry.getKey() + "; resp id = "
+              + resp.streamId);
+        }
         if (resp.byteCount > 0) {
           StreamInterceptor<ResponseMessage> interceptor = new StreamInterceptor<>(
             this, resp.streamId, resp.byteCount, callback);
@@ -238,6 +242,10 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
         StreamCallback callback = entry.getValue();
+        if (!entry.getKey().equals(resp.streamId)) {
+          logger.error("Mismatched streamIds: callback id = " + entry.getKey() + "; resp id = "
+              + resp.streamId);
+        }
         try {
           callback.onFailure(resp.streamId, new RuntimeException(resp.error));
         } catch (IOException ioe) {

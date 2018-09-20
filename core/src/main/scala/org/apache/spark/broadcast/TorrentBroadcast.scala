@@ -25,6 +25,8 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
 
+import org.apache.commons.codec.binary.Hex
+
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
@@ -109,6 +111,20 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     adler.getValue.toInt
   }
 
+  private def hex(buf: ByteBuffer): String = {
+    val (bytesToShow, len) = if (buf.hasArray) {
+      val arr = buf.array
+      val b = if (arr.length > 1000) arr.slice(0, 1000) else arr
+      (b, arr.length)
+    } else {
+      val length = math.min(buf.remaining(), 1000)
+      val bytes = new Array[Byte](length)
+      buf.duplicate.get(bytes, 0, length)
+      (bytes, buf.remaining())
+    }
+    "(length = " + len + ") " + new String(Hex.encodeHex(bytesToShow))
+  }
+
   /**
    * Divide the object into multiple blocks and put those blocks in the block manager.
    *
@@ -131,6 +147,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     blocks.zipWithIndex.foreach { case (block, i) =>
       if (checksumEnabled) {
         checksums(i) = calcChecksum(block)
+        logDebug(s"$broadcastId checksum($i) = ${checksums(i)}")
+        logDebug(s"bytes = ${hex(block)}")
       }
       val pieceId = BroadcastBlockId(id, "piece" + i)
       val bytes = new ChunkedByteBuffer(block.duplicate())
@@ -165,7 +183,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
                 val sum = calcChecksum(b.chunks(0))
                 if (sum != checksums(pid)) {
                   throw new SparkException(s"corrupt remote block $pieceId of $broadcastId:" +
-                    s" $sum != ${checksums(pid)}")
+                    s" $sum != ${checksums(pid)}; bytes = ${hex(b.chunks(0))}")
                 }
               }
               // We found the block from remote executors/driver's BlockManager, so put the block

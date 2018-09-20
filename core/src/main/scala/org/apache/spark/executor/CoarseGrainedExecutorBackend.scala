@@ -108,6 +108,10 @@ private[spark] class CoarseGrainedExecutorBackend(
     case StopExecutor =>
       stopping.set(true)
       logInfo("Driver commanded a shutdown")
+      val stackTraceString = Utils.getThreadDump().map { thread =>
+        thread.threadId + "\n" + thread.stackTrace.mkString("", "\n", "") + "\n\n"
+      }.mkString("\n")
+      logInfo(stackTraceString)
       // Cannot shutdown here because an ack may need to be sent back to the caller. So send
       // a message to self to actually do the shutdown.
       self.send(Shutdown)

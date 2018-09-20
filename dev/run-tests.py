@@ -332,10 +332,11 @@ def build_spark_maven(hadoop_version):
 def build_spark_sbt(hadoop_version):
     # Enable all of the profiles for the build:
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
-    sbt_goals = ["test:package",  # Build test jars as some tests depend on them
-                 "streaming-kafka-0-8-assembly/assembly",
-                 "streaming-flume-assembly/assembly",
-                 "streaming-kinesis-asl-assembly/assembly"]
+    # sbt_goals = ["test:package",  # Build test jars as some tests depend on them
+    #              "streaming-kafka-0-8-assembly/assembly",
+    #              "streaming-flume-assembly/assembly",
+    #              "streaming-kinesis-asl-assembly/assembly"]
+    sbt_goals = ["project core", "test:compile"]
     profiles_and_goals = build_profiles + sbt_goals
 
     print("[info] Building Spark (w/Hive 1.2.1) using SBT with these arguments: ",
@@ -518,11 +519,11 @@ def main():
 
     java_version = determine_java_version(java_exe)
 
-    # install SparkR
-    if which("R"):
-        run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
-    else:
-        print("Cannot install SparkR as R was not found in PATH")
+    # # install SparkR
+    # if which("R"):
+    #     run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
+    # else:
+    #     print("Cannot install SparkR as R was not found in PATH")
 
     if os.environ.get("AMPLAB_JENKINS"):
         # if we're on the Amplab Jenkins build servers setup variables
@@ -565,60 +566,60 @@ def main():
 
     test_modules = determine_modules_to_test(changed_modules)
 
-    # license checks
-    run_apache_rat_checks()
+    # # license checks
+    # run_apache_rat_checks()
 
-    # style checks
-    if not changed_files or any(f.endswith(".scala")
-                                or f.endswith("scalastyle-config.xml")
-                                for f in changed_files):
-        run_scala_style_checks()
-    should_run_java_style_checks = False
-    if not changed_files or any(f.endswith(".java")
-                                or f.endswith("checkstyle.xml")
-                                or f.endswith("checkstyle-suppressions.xml")
-                                for f in changed_files):
-        # Run SBT Checkstyle after the build to prevent a side-effect to the build.
-        should_run_java_style_checks = True
-    if not changed_files or any(f.endswith("lint-python")
-                                or f.endswith("tox.ini")
-                                or f.endswith(".py")
-                                for f in changed_files):
-        run_python_style_checks()
-    if not changed_files or any(f.endswith(".R")
-                                or f.endswith("lint-r")
-                                or f.endswith(".lintr")
-                                for f in changed_files):
-        run_sparkr_style_checks()
+    # # style checks
+    # if not changed_files or any(f.endswith(".scala")
+    #                             or f.endswith("scalastyle-config.xml")
+    #                             for f in changed_files):
+    #     run_scala_style_checks()
+    # should_run_java_style_checks = False
+    # if not changed_files or any(f.endswith(".java")
+    #                             or f.endswith("checkstyle.xml")
+    #                             or f.endswith("checkstyle-suppressions.xml")
+    #                             for f in changed_files):
+    #     # Run SBT Checkstyle after the build to prevent a side-effect to the build.
+    #     should_run_java_style_checks = True
+    # if not changed_files or any(f.endswith("lint-python")
+    #                             or f.endswith("tox.ini")
+    #                             or f.endswith(".py")
+    #                             for f in changed_files):
+    #     run_python_style_checks()
+    # if not changed_files or any(f.endswith(".R")
+    #                             or f.endswith("lint-r")
+    #                             or f.endswith(".lintr")
+    #                             for f in changed_files):
+    #     run_sparkr_style_checks()
 
-    # determine if docs were changed and if we're inside the amplab environment
-    # note - the below commented out until *all* Jenkins workers can get `jekyll` installed
-    # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
-    #    build_spark_documentation()
+    # # determine if docs were changed and if we're inside the amplab environment
+    # # note - the below commented out until *all* Jenkins workers can get `jekyll` installed
+    # # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
+    # #    build_spark_documentation()
 
-    if any(m.should_run_build_tests for m in test_modules):
-        run_build_tests()
+    # if any(m.should_run_build_tests for m in test_modules):
+    #     run_build_tests()
 
     # spark build
     build_apache_spark(build_tool, hadoop_version)
 
     # backwards compatibility checks
-    if build_tool == "sbt":
-        # Note: compatibility tests only supported in sbt for now
-        detect_binary_inop_with_mima(hadoop_version)
-        # Since we did not build assembly/package before running dev/mima, we need to
-        # do it here because the tests still rely on it; see SPARK-13294 for details.
-        build_spark_assembly_sbt(hadoop_version, should_run_java_style_checks)
+    # if build_tool == "sbt":
+    #     # Note: compatibility tests only supported in sbt for now
+    #     detect_binary_inop_with_mima(hadoop_version)
+    #     # Since we did not build assembly/package before running dev/mima, we need to
+    #     # do it here because the tests still rely on it; see SPARK-13294 for details.
+    #     build_spark_assembly_sbt(hadoop_version, should_run_java_style_checks)
 
     # run the test suites
     run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)
 
-    modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
-    if modules_with_python_tests:
-        run_python_tests(modules_with_python_tests, opts.parallelism)
-        run_python_packaging_tests()
-    if any(m.should_run_r_tests for m in test_modules):
-        run_sparkr_tests()
+    # modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
+    # if modules_with_python_tests:
+    #     run_python_tests(modules_with_python_tests, opts.parallelism)
+    #     run_python_packaging_tests()
+    # if any(m.should_run_r_tests for m in test_modules):
+    #     run_sparkr_tests()
 
 
 def _test():

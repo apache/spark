@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import org.apache.log4j.{Level, LogManager}
 import org.scalatest.Matchers
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.{Millis, Span}
@@ -171,45 +172,59 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   private def testCaching(conf: SparkConf, storageLevel: StorageLevel): Unit = {
-    sc = new SparkContext(conf.setMaster(clusterUrl).setAppName("test"))
-    TestUtils.waitUntilExecutorsUp(sc, 2, 30000)
-    val data = sc.parallelize(1 to 1000, 10)
-    val cachedData = data.persist(storageLevel)
-    assert(cachedData.count === 1000)
-    assert(sc.getRDDStorageInfo.filter(_.id == cachedData.id).map(_.numCachedPartitions).sum ===
-      data.getNumPartitions)
-    // Get all the locations of the first partition and try to fetch the partitions
-    // from those locations.
-    val blockIds = data.partitions.indices.map(index => RDDBlockId(data.id, index)).toArray
-    val blockId = blockIds(0)
-    val blockManager = SparkEnv.get.blockManager
-    val blockTransfer = blockManager.blockTransferService
-    val serializerManager = SparkEnv.get.serializerManager
-    val locations = blockManager.master.getLocations(blockId)
-    assert(locations.size === storageLevel.replication,
-      s"; got ${locations.size} replicas instead of ${storageLevel.replication}")
-    locations.foreach { cmId =>
-      val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
-        blockId.toString, null)
-      val deserialized = serializerManager.dataDeserializeStream(blockId,
-        new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream())(data.elementClassTag).toList
-      assert(deserialized === (1 to 100).toList)
+    val l = LogManager.getLogger("org.apache.spark.network")
+    val originalLevel = l.getLevel()
+    l.setLevel(Level.TRACE)
+    try {
+      sc = new SparkContext(conf.setMaster(clusterUrl).setAppName("test"))
+      TestUtils.waitUntilExecutorsUp(sc, 2, 30000)
+      val data = sc.parallelize(1 to 1000, 10)
+      val cachedData = data.persist(storageLevel)
+      assert(cachedData.mapPartitions{ itr =>
+        // probably too late to be useful, I need this when the first broadcast is received
+        val l = LogManager.getLogger("org.apache.spark.network")
+        l.setLevel(Level.TRACE)
+        itr
+      }.count === 1000)
+      assert(sc.getRDDStorageInfo.filter(_.id == cachedData.id).map(_.numCachedPartitions).sum ===
+        data.getNumPartitions)
+      // Get all the locations of the first partition and try to fetch the partitions
+      // from those locations.
+      val blockIds = data.partitions.indices.map(index => RDDBlockId(data.id, index)).toArray
+      val blockId = blockIds(0)
+      val blockManager = SparkEnv.get.blockManager
+      val blockTransfer = blockManager.blockTransferService
+      val serializerManager = SparkEnv.get.serializerManager
+      val locations = blockManager.master.getLocations(blockId)
+      assert(locations.size === storageLevel.replication,
+        s"; got ${locations.size} replicas instead of ${storageLevel.replication}")
+      locations.foreach { cmId =>
+        val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
+          blockId.toString, null)
+        val deserialized = serializerManager.dataDeserializeStream(blockId,
+          new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream())(data.elementClassTag).toList
+        assert(deserialized === (1 to 100).toList)
+      }
+      // This will exercise the getRemoteBytes / getRemoteValues code paths:
+      assert(blockIds.flatMap(id => blockManager.get[Int](id).get.data).toSet === (1 to 1000).toSet)
+    } finally {
+      l.setLevel(originalLevel)
     }
-    // This will exercise the getRemoteBytes / getRemoteValues code paths:
-    assert(blockIds.flatMap(id => blockManager.get[Int](id).get.data).toSet === (1 to 1000).toSet)
   }
 
-  Seq(
-    "caching" -> StorageLevel.MEMORY_ONLY,
-    "caching on disk" -> StorageLevel.DISK_ONLY,
-    "caching in memory, replicated" -> StorageLevel.MEMORY_ONLY_2,
-    "caching in memory, serialized, replicated" -> StorageLevel.MEMORY_ONLY_SER_2,
-    "caching on disk, replicated" -> StorageLevel.DISK_ONLY_2,
-    "caching in memory and disk, replicated" -> StorageLevel.MEMORY_AND_DISK_2,
-    "caching in memory and disk, serialized, replicated" -> StorageLevel.MEMORY_AND_DISK_SER_2
-  ).foreach { case (testName, storageLevel) =>
-    encryptionTestHelper(testName) { case (name, conf) =>
-      testCaching(name, conf, storageLevel)
+  (0 until 5).foreach { idx =>
+    Seq(
+      "caching" -> StorageLevel.MEMORY_ONLY,
+      "caching on disk" -> StorageLevel.DISK_ONLY,
+      "caching in memory, replicated" -> StorageLevel.MEMORY_ONLY_2,
+      "caching in memory, serialized, replicated" -> StorageLevel.MEMORY_ONLY_SER_2,
+      "caching on disk, replicated" -> StorageLevel.DISK_ONLY_2,
+      "caching in memory and disk, replicated" -> StorageLevel.MEMORY_AND_DISK_2,
+      "caching in memory and disk, serialized, replicated" -> StorageLevel.MEMORY_AND_DISK_SER_2
+    ).foreach { case (testName, storageLevel) =>
+      encryptionTestHelper(idx + testName) { case (name, conf) =>
+        testCaching(name, conf, storageLevel)
+      }
     }
   }
 

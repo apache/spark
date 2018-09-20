@@ -34,6 +34,7 @@ import scala.util.control.NonFatal
 
 import com.codahale.metrics.{MetricRegistry, MetricSet}
 import com.google.common.io.CountingOutputStream
+import org.apache.commons.codec.binary.Hex
 
 import org.apache.spark._
 import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
@@ -108,6 +109,8 @@ private[spark] class ByteBufferBlockData(
       buffer.dispose()
     }
   }
+
+  override def toString(): String = s"ByteBufferBlockData($buffer)"
 
 }
 
@@ -710,7 +713,9 @@ private[spark] class BlockManager(
    */
   private def sortLocations(locations: Seq[BlockManagerId]): Seq[BlockManagerId] = {
     val locs = Random.shuffle(locations)
-    val (preferredLocs, otherLocs) = locs.partition { loc => blockManagerId.host == loc.host }
+    val (preferredLocs, otherLocs) = locs.partition { loc =>
+      blockManagerId.host == loc.host  && !loc.isDriver
+    }
     blockManagerId.topologyInfo match {
       case None => preferredLocs ++ otherLocs
       case Some(_) =>
@@ -746,18 +751,19 @@ private[spark] class BlockManager(
     // If the block size is above the threshold, we should pass our FileManger to
     // BlockTransferService, which will leverage it to spill the block; if not, then passed-in
     // null value means the block will be persisted in memory.
-    val tempFileManager = if (blockSize > maxRemoteBlockToMem) {
-      remoteBlockTempFileManager
+    val (tempFileManager, asStream) = if (blockSize > maxRemoteBlockToMem) {
+      (remoteBlockTempFileManager, "streamed to disk")
     } else {
-      null
+      (null, "in memory")
     }
 
     val locations = sortLocations(blockLocations)
+    logInfo(s"sorted locations: ${locations.map { l => (l.hostPort, l.isDriver) } }")
     val maxFetchFailures = locations.size
     var locationIterator = locations.iterator
     while (locationIterator.hasNext) {
       val loc = locationIterator.next()
-      logDebug(s"Getting remote block $blockId from $loc")
+      logInfo(s"Getting remote block $blockId from $loc $asStream")
       val data = try {
         blockTransferService.fetchBlockSync(
           loc.host, loc.port, loc.executorId, blockId.toString, tempFileManager)
@@ -797,11 +803,13 @@ private[spark] class BlockManager(
         // SPARK-24307 undocumented "escape-hatch" in case there are any issues in converting to
         // ChunkedByteBuffer, to go back to old code-path.  Can be removed post Spark 2.4 if
         // new path is stable.
-        if (remoteReadNioBufferConversion) {
-          return Some(new ChunkedByteBuffer(data.nioByteBuffer()))
+        val r = if (remoteReadNioBufferConversion) {
+          Some(new ChunkedByteBuffer(data.nioByteBuffer()))
         } else {
-          return Some(ChunkedByteBuffer.fromManagedBuffer(data, chunkSize))
+          Some(ChunkedByteBuffer.fromManagedBuffer(data, chunkSize))
         }
+        logInfo(s"converted $data to $r")
+        return r
       }
       logDebug(s"The value of block $blockId is null")
     }
@@ -1377,6 +1385,7 @@ private[spark] class BlockManager(
     }
   }
 
+
   /**
    * Replicate block to another node. Note that this is a blocking call that returns after
    * the block has been replicated.
@@ -1421,6 +1430,7 @@ private[spark] class BlockManager(
         logTrace(s"Trying to replicate $blockId of ${data.size} bytes to $peer")
         // This thread keeps a lock on the block, so we do not want the netty thread to unlock
         // block when it finishes sending the message.
+        logTrace(s"replicating bytes: ${BlockManager.hex(data.toByteBuffer())}")
         val buffer = new BlockManagerManagedBuffer(blockInfoManager, blockId, data, false,
           unlockOnDeallocate = false)
         blockTransferService.uploadBlockSync(
@@ -1672,11 +1682,11 @@ private[spark] object BlockManager {
     lazy val encryptionKey = SparkEnv.get.securityManager.getIOEncryptionKey()
 
     private class ReferenceWithCleanup(
-        file: DownloadFile,
-        referenceQueue: JReferenceQueue[DownloadFile]
-        ) extends WeakReference[DownloadFile](file, referenceQueue) {
+        file: File,
+        referenceQueue: JReferenceQueue[File]
+        ) extends WeakReference[File](file, referenceQueue) {
 
-      val filePath = file.path()
+      val filePath = file.getAbsolutePath()
 
       def cleanUp(): Unit = {
         logDebug(s"Clean up file $filePath")
@@ -1687,7 +1697,7 @@ private[spark] object BlockManager {
       }
     }
 
-    private val referenceQueue = new JReferenceQueue[DownloadFile]
+    private val referenceQueue = new JReferenceQueue[File]
     private val referenceBuffer = Collections.newSetFromMap[ReferenceWithCleanup](
       new ConcurrentHashMap)
 
@@ -1714,7 +1724,7 @@ private[spark] object BlockManager {
     }
 
     override def registerTempFileToClean(file: DownloadFile): Boolean = {
-      referenceBuffer.add(new ReferenceWithCleanup(file, referenceQueue))
+      referenceBuffer.add(new ReferenceWithCleanup(file.file(), referenceQueue))
     }
 
     def stop(): Unit = {
@@ -1746,27 +1756,27 @@ private[spark] object BlockManager {
    * A DownloadFile that encrypts data when it is written, and decrypts when it's read.
    */
   private class EncryptedDownloadFile(
-      file: File,
+      _file: File,
       key: Array[Byte]) extends DownloadFile {
 
     private val env = SparkEnv.get
 
-    override def delete(): Boolean = file.delete()
+    override def delete(): Boolean = _file.delete()
 
     override def openForWriting(): DownloadFileWritableChannel = {
       new EncryptedDownloadWritableChannel()
     }
 
-    override def path(): String = file.getAbsolutePath
+    override def file(): File = _file
 
     private class EncryptedDownloadWritableChannel extends DownloadFileWritableChannel {
       private val countingOutput: CountingWritableChannel = new CountingWritableChannel(
-        Channels.newChannel(env.serializerManager.wrapForEncryption(new FileOutputStream(file))))
+        Channels.newChannel(env.serializerManager.wrapForEncryption(new FileOutputStream(_file))))
 
       override def closeAndRead(): ManagedBuffer = {
         countingOutput.close()
         val size = countingOutput.getCount
-        new EncryptedManagedBuffer(new EncryptedBlockData(file, size, env.conf, key))
+        new EncryptedManagedBuffer(new EncryptedBlockData(_file, size, env.conf, key))
       }
 
       override def write(src: ByteBuffer): Int = countingOutput.write(src)
@@ -1776,4 +1786,19 @@ private[spark] object BlockManager {
       override def close(): Unit = countingOutput.close()
     }
   }
+
+  private def hex(buf: ByteBuffer): String = {
+    val (bytesToShow, len) = if (buf.hasArray) {
+      val arr = buf.array
+      val b = if (arr.length > 1000) arr.slice(0, 1000) else arr
+      (b, arr.length)
+    } else {
+      val length = math.min(buf.remaining(), 1000)
+      val bytes = new Array[Byte](length)
+      buf.duplicate.get(bytes, 0, length)
+      (bytes, buf.remaining())
+    }
+    "(length = " + len + ") " + new String(Hex.encodeHex(bytesToShow))
+  }
+
 }

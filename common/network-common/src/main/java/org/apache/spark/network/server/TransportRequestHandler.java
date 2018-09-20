@@ -167,6 +167,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
     if (buf != null) {
       streamManager.streamBeingSent(req.streamId);
+      logger.info("Stream {} sending buf {}", req.streamId, buf);
       respond(new StreamResponse(req.streamId, buf.size(), buf)).addListener(future -> {
         streamManager.streamSent(req.streamId);
       });
