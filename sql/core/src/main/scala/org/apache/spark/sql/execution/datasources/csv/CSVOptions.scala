@@ -197,6 +197,7 @@ class CSVOptions(
     settings.setEmptyValue("")
     settings.setMaxCharsPerColumn(maxCharsPerColumn)
     settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
+    settings.setLineSeparatorDetectionEnabled(true)
     settings
   }
 }
