@@ -27,7 +27,7 @@ import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReaderFactory, ScanConfig, ScanConfigBuilder}
 import org.apache.spark.sql.sources.v2.reader.streaming._
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
-import org.apache.spark.sql.streaming.{OutputMode, StreamTest, Trigger}
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamTest, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -185,8 +185,14 @@ class StreamingDataSourceV2Suite extends StreamTest {
     Trigger.ProcessingTime(1000),
     Trigger.Continuous(1000))
 
-  private def testPositiveCase(
-      readFormat: String, writeFormat: String, trigger: Trigger, shouldStop: Boolean = true) = {
+  private def testPositiveCase(readFormat: String, writeFormat: String, trigger: Trigger): Unit = {
+    testPositiveCaseWithQuery(readFormat, writeFormat, trigger)(() => _)
+  }
+
+  private def testPositiveCaseWithQuery(
+      readFormat: String,
+      writeFormat: String,
+      trigger: Trigger)(check: StreamingQuery => Unit): Unit = {
     val query = spark.readStream
       .format(readFormat)
       .load()
@@ -194,10 +200,8 @@ class StreamingDataSourceV2Suite extends StreamTest {
       .format(writeFormat)
       .trigger(trigger)
       .start()
-    if (shouldStop) {
-      query.stop()
-    }
-    query
+    check(query)
+    query.stop()
   }
 
   private def testNegativeCase(
@@ -233,19 +237,21 @@ class StreamingDataSourceV2Suite extends StreamTest {
 
   test("disabled v2 write") {
     // Ensure the V2 path works normally and generates a V2 sink..
-    val v2Query = testPositiveCase(
-      "fake-read-microbatch-continuous", "fake-write-v1-fallback", Trigger.Once())
-    assert(v2Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
-      .isInstanceOf[FakeWriteSupportProviderV1Fallback])
+    testPositiveCaseWithQuery(
+      "fake-read-microbatch-continuous", "fake-write-v1-fallback", Trigger.Once()) { v2Query =>
+      assert(v2Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
+        .isInstanceOf[FakeWriteSupportProviderV1Fallback])
+    }
 
     // Ensure we create a V1 sink with the config. Note the config is a comma separated
     // list, including other fake entries.
     val fullSinkName = classOf[FakeWriteSupportProviderV1Fallback].getName
     withSQLConf(SQLConf.DISABLED_V2_STREAMING_WRITERS.key -> s"a,b,c,test,$fullSinkName,d,e") {
-      val v1Query = testPositiveCase(
-        "fake-read-microbatch-continuous", "fake-write-v1-fallback", Trigger.Once())
-      assert(v1Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
-        .isInstanceOf[FakeSink])
+      testPositiveCaseWithQuery(
+        "fake-read-microbatch-continuous", "fake-write-v1-fallback", Trigger.Once()) { v1Query =>
+        assert(v1Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
+          .isInstanceOf[FakeSink])
+      }
     }
   }
 
@@ -260,21 +266,23 @@ class StreamingDataSourceV2Suite extends StreamTest {
 
       val readOptionName = "optionA"
       withSQLConf(s"spark.datasource.$readSource.$readOptionName" -> "true") {
-        testPositiveCase(readSource, writeSource, trigger, shouldStop = false)
-        eventually(timeout(streamingTimeout)) {
-          // Write options should not be set.
-          assert(LastWriteOptions.options.getBoolean(readOptionName, false) == false)
-          assert(LastReadOptions.options.getBoolean(readOptionName, false) == true)
+        testPositiveCaseWithQuery(readSource, writeSource, trigger) { _ =>
+          eventually(timeout(streamingTimeout)) {
+            // Write options should not be set.
+            assert(LastWriteOptions.options.getBoolean(readOptionName, false) == false)
+            assert(LastReadOptions.options.getBoolean(readOptionName, false) == true)
+          }
         }
       }
 
       val writeOptionName = "optionB"
       withSQLConf(s"spark.datasource.$writeSource.$writeOptionName" -> "true") {
-        testPositiveCase(readSource, writeSource, trigger, shouldStop = false)
-        eventually(timeout(streamingTimeout)) {
-          // Read options should not be set.
-          assert(LastReadOptions.options.getBoolean(writeOptionName, false) == false)
-          assert(LastWriteOptions.options.getBoolean(writeOptionName, false) == true)
+        testPositiveCaseWithQuery(readSource, writeSource, trigger) { _ =>
+          eventually(timeout(streamingTimeout)) {
+            // Read options should not be set.
+            assert(LastReadOptions.options.getBoolean(writeOptionName, false) == false)
+            assert(LastWriteOptions.options.getBoolean(writeOptionName, false) == true)
+          }
         }
       }
     }
