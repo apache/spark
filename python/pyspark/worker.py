@@ -145,7 +145,7 @@ def wrap_grouped_agg_pandas_udf(f, return_type):
     return lambda *a: (wrapped(*a), arrow_return_type)
 
 
-def wrap_window_agg_pandas_udf(f, return_type):
+def wrap_unbounded_window_agg_pandas_udf(f, return_type):
     # This is similar to grouped_agg_pandas_udf, the only difference
     # is that window_agg_pandas_udf needs to repeat the return value
     # to match window length, where grouped_agg_pandas_udf just returns
@@ -225,9 +225,9 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf):
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return arg_offsets, wrap_grouped_agg_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_UNBOUNDED_WINDOW_AGG_PANDAS_UDF:
-        return arg_offsets, wrap_window_agg_pandas_udf(func, return_type)
+        return arg_offsets, wrap_unbounded_window_agg_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF:
-        return arg_offsets, wrap_bounded_window_agg_pandas_udf_np(func, return_type)
+        return arg_offsets, wrap_bounded_window_agg_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
         return arg_offsets, wrap_udf(func, return_type)
     else:
