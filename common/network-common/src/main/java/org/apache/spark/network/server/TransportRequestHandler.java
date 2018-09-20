@@ -24,7 +24,6 @@ import java.nio.ByteBuffer;
 import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
-import org.apache.commons.codec.binary.Hex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -168,7 +167,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
     if (buf != null) {
       streamManager.streamBeingSent(req.streamId);
-      logger.info("Stream {} sending buf {}; bytes {}", req.streamId, buf, hex(buf));
+      logger.info("Stream {} sending buf {}", req.streamId, buf);
       respond(new StreamResponse(req.streamId, buf.size(), buf)).addListener(future -> {
         streamManager.streamSent(req.streamId);
       });
@@ -176,35 +175,6 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       respond(new StreamFailure(req.streamId, String.format(
         "Stream '%s' was not found.", req.streamId)));
     }
-  }
-
-  private String hex(ManagedBuffer buf) {
-    try {
-      return hex(buf.nioByteBuffer());
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  private String hex(ByteBuffer buf) {
-    long len = 0;
-    byte[] bytesToShow = null;
-    if (buf.hasArray()) {
-      byte[] arr = buf.array();
-      len = arr.length;
-      if (arr.length > 1000) {
-        bytesToShow = new byte[1000];
-        System.arraycopy(arr, 0, bytesToShow, 0, 1000);
-      } else {
-        bytesToShow = arr;
-      }
-    } else {
-      len = buf.remaining();
-      int length = Math.min(buf.remaining(), 1000);
-      bytesToShow = new byte[length];
-      buf.duplicate().get(bytesToShow, 0, length);
-    }
-    return "(length = " + len + ") " + new String(Hex.encodeHex(bytesToShow));
   }
 
   private void processRpcRequest(final RpcRequest req) {
