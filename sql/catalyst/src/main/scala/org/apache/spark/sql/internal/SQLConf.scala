@@ -1437,7 +1437,7 @@ object SQLConf {
         .createWithDefault(true)
 
   val NESTED_SCHEMA_PRUNING_ENABLED =
-    buildConf("spark.sql.nestedSchemaPruning.enabled")
+    buildConf("spark.sql.optimizer.nestedSchemaPruning.enabled")
       .internal()
       .doc("Prune nested fields from a logical relation's output which are unnecessary in " +
         "satisfying a query. This optimization allows columnar file format readers to avoid " +
