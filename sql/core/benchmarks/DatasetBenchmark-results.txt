@@ -1,0 +1,51 @@
+================================================================================================
+Dataset Benchmark
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+back-to-back map long:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+RDD                                           2932 / 3036         34.1          29.3       1.0X
+DataFrame                                      666 /  736        150.1           6.7       4.4X
+Dataset                                        832 /  939        120.1           8.3       3.5X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+back-to-back map:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+RDD                                           4788 / 4804         20.9          47.9       1.0X
+DataFrame                                     3278 / 3314         30.5          32.8       1.5X
+Dataset                                       8333 / 8825         12.0          83.3       0.6X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+back-to-back filter Long:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+RDD                                            975 / 1027        102.6           9.7       1.0X
+DataFrame                                      432 /  538        231.6           4.3       2.3X
+Dataset                                       1192 / 1202         83.9          11.9       0.8X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+back-to-back filter:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+RDD                                           1668 / 1696         60.0          16.7       1.0X
+DataFrame                                       73 /   80       1370.2           0.7      22.9X
+Dataset                                       3691 / 3733         27.1          36.9       0.5X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+aggregate:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+RDD sum                                       1621 / 1660         61.7          16.2       1.0X
+DataFrame sum                                   31 /   37       3228.6           0.3      52.3X
+Dataset sum using Aggregator                  3567 / 3604         28.0          35.7       0.5X
+Dataset complex Aggregator                    5109 / 5134         19.6          51.1       0.3X
+
+
