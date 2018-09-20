@@ -60,4 +60,3 @@ select to_json(array(array(1, 2, 3), array(4)));
 select schema_of_json('{"c1":1}', map('primitivesAsString', 'true'));
 select schema_of_json('{"c1":01, "c2":0.1}', map('allowNumericLeadingZeros', 'true', 'prefersDecimal', 'true'));
 
-
