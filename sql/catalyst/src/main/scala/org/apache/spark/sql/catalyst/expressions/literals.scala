@@ -59,9 +59,10 @@ object Literal {
     case s: String => Literal(UTF8String.fromString(s), StringType)
     case c: Char => Literal(UTF8String.fromString(c.toString), StringType)
     case b: Boolean => Literal(b, BooleanType)
-    case d: BigDecimal => Literal(Decimal(d), DecimalType.fromBigDecimal(d))
+    case d: BigDecimal =>
+      Literal(Decimal(d), DecimalType.fromJVMDecimal(d.precision, d.scale))
     case d: JavaBigDecimal =>
-      Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
+      Literal(Decimal(d), DecimalType.fromJVMDecimal(d.precision, d.scale))
     case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)

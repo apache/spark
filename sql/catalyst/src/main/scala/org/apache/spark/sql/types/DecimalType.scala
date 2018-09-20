@@ -140,14 +140,41 @@ object DecimalType extends AbstractDataType {
   }
 
   private[sql] def fromLiteral(literal: Literal): DecimalType = literal.value match {
-    case v: Short => fromBigDecimal(BigDecimal(v))
-    case v: Int => fromBigDecimal(BigDecimal(v))
-    case v: Long => fromBigDecimal(BigDecimal(v))
+    case v: Short =>
+      val bd = BigDecimal(v)
+      fromJVMDecimal(bd.precision, bd.scale)
+    case v: Int =>
+      val bd = BigDecimal(v)
+      fromJVMDecimal(bd.precision, bd.scale)
+    case v: Long =>
+      val bd = BigDecimal(v)
+      fromJVMDecimal(bd.precision, bd.scale)
     case _ => forType(literal.dataType)
   }
 
   private[sql] def fromBigDecimal(d: BigDecimal): DecimalType = {
     DecimalType(Math.max(d.precision, d.scale), d.scale)
+  }
+
+  /**
+   * The JVM decimal (BigDecimal in Java/Scala) has a different definition of precision and scale
+   * compared to Spark SQL. E.g. in JVM decimal the digit count starts from the leftmost nonzero
+   * digit of the exact result, while Spark SQL counts digits start from the dot. This means, for
+   * "0.001", JVM decimal thinks the precision is 1 and scale is 3, Spark SQL thinks the precision
+   * and scale are both 3. JVM decimal allows negative scale, while Spark SQL can't handle it well.
+   * This method creates a DecimalType from a JVM decimal's precision and scale, with some proper
+   * translations.
+   */
+  private[sql] def fromJVMDecimal(precision: Int, scale: Int): DecimalType = {
+    if (scale < 0) {
+      // Spark SQL accepts negative scale by accident, and the behavior is confusing. We should
+      // avoid creating negative-scale DecimalType by ourselves.
+      DecimalType(precision - scale, 0)
+    } else {
+      // For JVM decimal, scale can be larger than prevision. In this case, Spark SQL should take
+      // the scale of JVM decimal as precision, to satisfy the prevision definition in Spark SQL.
+      DecimalType(Math.max(precision, scale), scale)
+    }
   }
 
   private[sql] def bounded(precision: Int, scale: Int): DecimalType = {
