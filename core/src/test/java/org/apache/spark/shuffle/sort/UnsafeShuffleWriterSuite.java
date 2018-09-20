@@ -233,7 +233,7 @@ public class UnsafeShuffleWriterSuite {
     writer.write(Iterators.emptyIterator());
     final Option<MapStatus> mapStatus = writer.stop(true);
     assertTrue(mapStatus.isDefined());
-    assertEquals(0, mapStatus.get().numberOfOutput());
+    assertEquals(0, mapStatus.get().numRecords());
     assertTrue(mergedOutputFile.exists());
     assertArrayEquals(new long[NUM_PARTITITONS], partitionSizesInMergedFile);
     assertEquals(0, taskMetrics.shuffleWriteMetrics().recordsWritten());
@@ -253,7 +253,7 @@ public class UnsafeShuffleWriterSuite {
     writer.write(dataToWrite.iterator());
     final Option<MapStatus> mapStatus = writer.stop(true);
     assertTrue(mapStatus.isDefined());
-    assertEquals(NUM_PARTITITONS, mapStatus.get().numberOfOutput());
+    assertEquals(NUM_PARTITITONS, mapStatus.get().numRecords());
     assertTrue(mergedOutputFile.exists());
 
     long sumOfPartitionSizes = 0;

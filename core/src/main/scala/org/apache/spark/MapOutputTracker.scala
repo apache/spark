@@ -534,7 +534,7 @@ private[spark] class MapOutputTrackerMaster(
           for (i <- 0 until totalSizes.length) {
             totalSizes(i) += s.getSizeForBlock(i)
           }
-          recordsByMapTask(index) = s.numberOfOutput
+          recordsByMapTask(index) = s.numRecords
         }
       } else {
         val threadPool = ThreadUtils.newDaemonFixedThreadPool(parallelism, "map-output-aggregate")
@@ -552,7 +552,7 @@ private[spark] class MapOutputTrackerMaster(
           threadPool.shutdown()
         }
         statuses.zipWithIndex.foreach { case (s, index) =>
-          recordsByMapTask(index) = s.numberOfOutput
+          recordsByMapTask(index) = s.numRecords
         }
       }
       new MapOutputStatistics(dep.shuffleId, totalSizes, recordsByMapTask)
