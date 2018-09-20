@@ -118,8 +118,13 @@ case class InsertIntoHiveDirCommand(
         }
       }
 
-      fs.listStatus(tmpPath).foreach {
-        tmpFile => fs.rename(tmpFile.getPath, writeToPath)
+      val tmpFs = tmpPath.getFileSystem(hadoopConf)
+      tmpFs.listStatus(tmpPath).foreach { tmpFile =>
+        if (writeToPath.toUri.getScheme == "file") {
+          tmpFs.copyToLocalFile(tmpFile.getPath, writeToPath)
+        } else {
+          tmpFs.rename(tmpFile.getPath, writeToPath)
+        }
       }
     } catch {
       case e: Throwable =>
