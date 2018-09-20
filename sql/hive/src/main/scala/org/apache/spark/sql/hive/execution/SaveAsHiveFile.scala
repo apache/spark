@@ -159,10 +159,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       scratchDir: String): Path = {
     val extURI: URI = path.toUri
     val scratchPath = new Path(scratchDir, executionId)
-    var dirPath = new Path(
-      extURI.getScheme,
-      extURI.getAuthority,
-      scratchPath.toUri.getPath + "-" + TaskRunner.getTaskRunnerID())
+    var dirPath = new Path(scratchPath.toUri.getPath + "-" + TaskRunner.getTaskRunnerID())
 
     try {
       val fs: FileSystem = dirPath.getFileSystem(hadoopConf)
@@ -205,7 +202,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       hadoopConf: Configuration,
       stagingDir: String): Path = {
     getStagingDir(
-      new Path(extURI.getScheme, extURI.getAuthority, extURI.getPath),
+      new Path(extURI.getPath),
       hadoopConf,
       stagingDir)
   }
