@@ -3615,7 +3615,8 @@ object functions {
    * Parses a column containing a JSON string and infers its schema using options.
    *
    * @param e a string column containing JSON data.
-   * @param options JSON datasource options that control JSON parsing and type inference.
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source. See [[DataFrameReader.json(paths:String*]].
    * @return a column with string literal containing schema in DDL format.
    *
    * @group collection_funcs
