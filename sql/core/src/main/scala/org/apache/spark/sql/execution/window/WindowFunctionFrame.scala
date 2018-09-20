@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
  * Before use a frame must be prepared by passing it all the rows in the current partition. After
  * preparation the update method can be called to fill the output rows.
  */
-private[window] abstract class WindowFunctionFrame {
+private[sql] abstract class WindowFunctionFrame {
   /**
    * Prepare the frame for calculating the results for a partition.
    *
@@ -44,14 +44,18 @@ private[window] abstract class WindowFunctionFrame {
   def write(index: Int, current: InternalRow): Unit
 
   /**
-   * The row index of the lower window bound (inclusive)
+   * The current lower window bound in the row array (inclusive).
+   *
+   * This should be called after the current row is updated via [[write]]
    */
-  def currentLowIndex(): Int = -1
+  def currentLowerBound(): Int
 
   /**
-   * The row index of the upper window bound (exclusive)
+   * The current row index of the upper window bound in the row array (exclusive)
+   *
+   * This should be called after the current row is updated via [[write]]
    */
-  def currentHighIndex(): Int = -1
+  def currentUpperBound(): Int
 }
 
 object WindowFunctionFrame {
@@ -147,6 +151,10 @@ private[sql] final class OffsetWindowFunctionFrame(
     }
     inputIndex += 1
   }
+
+  override def currentLowerBound(): Int = throw new UnsupportedOperationException()
+
+  override def currentUpperBound(): Int = throw new UnsupportedOperationException()
 }
 
 /**
@@ -180,24 +188,24 @@ private[sql] final class SlidingWindowFunctionFrame(
   private[this] val buffer = new util.ArrayDeque[InternalRow]()
 
   /**
-   * Index of the first input row with a value greater than the upper bound of the current
-   * output row.
-   */
-  private[this] var inputHighIndex = 0
-
-  /**
    * Index of the first input row with a value equal to or greater than the lower bound of the
    * current output row.
    */
-  private[this] var inputLowIndex = 0
+  private[this] var lowerBound = 0
+
+  /**
+   * Index of the first input row with a value greater than the upper bound of the current
+   * output row.
+   */
+  private[this] var upperBound = 0
 
   /** Prepare the frame for calculating a new partition. Reset all variables. */
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
     inputIterator = input.generateIterator()
     nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
-    inputHighIndex = 0
-    inputLowIndex = 0
+    lowerBound = 0
+    upperBound = 0
     buffer.clear()
   }
 
@@ -207,27 +215,27 @@ private[sql] final class SlidingWindowFunctionFrame(
 
     // Drop all rows from the buffer for which the input row value is smaller than
     // the output row lower bound.
-    while (!buffer.isEmpty && lbound.compare(buffer.peek(), inputLowIndex, current, index) < 0) {
+    while (!buffer.isEmpty && lbound.compare(buffer.peek(), lowerBound, current, index) < 0) {
       buffer.remove()
-      inputLowIndex += 1
+      lowerBound += 1
       bufferUpdated = true
     }
 
     // Add all rows to the buffer for which the input row value is equal to or less than
     // the output row upper bound.
-    while (nextRow != null && ubound.compare(nextRow, inputHighIndex, current, index) <= 0) {
-      if (lbound.compare(nextRow, inputLowIndex, current, index) < 0) {
-        inputLowIndex += 1
+    while (nextRow != null && ubound.compare(nextRow, upperBound, current, index) <= 0) {
+      if (lbound.compare(nextRow, lowerBound, current, index) < 0) {
+        lowerBound += 1
       } else {
         buffer.add(nextRow.copy())
         bufferUpdated = true
       }
       nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
-      inputHighIndex += 1
+      upperBound += 1
     }
 
     // Only recalculate and update when the buffer changes.
-    if (bufferUpdated && processor != null) {
+    if (processor != null && bufferUpdated) {
       processor.initialize(input.length)
       val iter = buffer.iterator()
       while (iter.hasNext) {
@@ -237,9 +245,9 @@ private[sql] final class SlidingWindowFunctionFrame(
     }
   }
 
-  override def currentLowIndex(): Int = inputLowIndex
+  override def currentLowerBound(): Int = lowerBound
 
-  override def currentHighIndex(): Int = inputHighIndex
+  override def currentUpperBound(): Int = upperBound
 }
 
 /**
@@ -258,8 +266,8 @@ private[sql] final class UnboundedWindowFunctionFrame(
     processor: AggregateProcessor)
   extends WindowFunctionFrame {
 
-  val inputLowIndex = 0
-  var inputHighIndex = 0
+  val lowerBound: Int = 0
+  var upperBound: Int = 0
 
   /** Prepare the frame for calculating a new partition. Process all rows eagerly. */
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
@@ -271,8 +279,7 @@ private[sql] final class UnboundedWindowFunctionFrame(
       }
     }
 
-    inputHighIndex = rows.length
-
+    upperBound = rows.length
   }
 
   /** Write the frame columns for the current row to the given target row. */
@@ -284,9 +291,9 @@ private[sql] final class UnboundedWindowFunctionFrame(
     }
   }
 
-  override def currentLowIndex(): Int = inputLowIndex
+  override def currentLowerBound(): Int = lowerBound
 
-  override def currentHighIndex(): Int = inputHighIndex
+  override def currentUpperBound(): Int = upperBound
 }
 
 /**
@@ -335,7 +342,9 @@ private[sql] final class UnboundedPrecedingWindowFunctionFrame(
       nextRow = inputIterator.next()
     }
 
-    processor.initialize(input.length)
+    if (processor != null) {
+      processor.initialize(input.length)
+    }
   }
 
   /** Write the frame columns for the current row to the given target row. */
@@ -345,17 +354,23 @@ private[sql] final class UnboundedPrecedingWindowFunctionFrame(
     // Add all rows to the aggregates for which the input row value is equal to or less than
     // the output row upper bound.
     while (nextRow != null && ubound.compare(nextRow, inputIndex, current, index) <= 0) {
-      processor.update(nextRow)
+      if (processor != null) {
+        processor.update(nextRow)
+      }
       nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
       inputIndex += 1
       bufferUpdated = true
     }
 
     // Only recalculate and update when the buffer changes.
-    if (bufferUpdated) {
+    if (processor != null && bufferUpdated) {
       processor.evaluate(target)
     }
   }
+
+  override def currentLowerBound(): Int = 0
+
+  override def currentUpperBound(): Int = inputIndex
 }
 
 /**
@@ -411,7 +426,7 @@ private[sql] final class UnboundedFollowingWindowFunctionFrame(
     }
 
     // Only recalculate and update when the buffer changes.
-    if (bufferUpdated) {
+    if (processor != null && bufferUpdated) {
       processor.initialize(input.length)
       if (nextRow != null) {
         processor.update(nextRow)
@@ -422,4 +437,8 @@ private[sql] final class UnboundedFollowingWindowFunctionFrame(
       processor.evaluate(target)
     }
   }
+
+  override def currentLowerBound(): Int = inputIndex
+
+  override def currentUpperBound(): Int = input.length
 }

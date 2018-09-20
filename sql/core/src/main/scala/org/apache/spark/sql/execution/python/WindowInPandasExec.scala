@@ -27,17 +27,62 @@ import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 import org.apache.spark.sql.execution.arrow.ArrowUtils
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.execution.window._
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
+/**
+ * This class calculates and outputs windowed aggregates over the rows in a single partition.
+ *
+ * It is very similar to [[WindowExec]] and has similar logic. The main difference is that this
+ * node doesn't not compute any window aggregation values. Instead, it computes the lower and
+ * upper bound for each window (i.e. window bounds) and pass the data and indices to python work
+ * to do the actual window aggregation.
+ *
+ * It currently materialize all data associated with the same partition key and pass them to
+ * Python. This is not strictly necessary for sliding windows and can be improved (by slicing
+ * data into overlapping small chunks and stitch them together).
+ *
+ * This class groups window expressions by their window boundaries so that window expressions
+ * with the same window boundaries can share the same window bounds. The window bounds are
+ * prepended to the data passed to the python worker.
+ *
+ * For example, if we have:
+ *     avg(v) over specifiedwindowframe(RowFrame, -5, 5),
+ *     avg(v) over specifiedwindowframe(RowFrame, UnboundedPreceding, UnboundedFollowing),
+ *     avg(v) over specifiedwindowframe(RowFrame, -3, 3),
+ *     max(v) over specifiedwindowframe(RowFrame, -3, 3)
+ *
+ * The python input will look like:
+ * (lower_bound_w1, upper_bound_w1, lower_bound_w3, upper_bound_w3, v)
+ *
+ * where w1 is specifiedwindowframe(RowFrame, -5, 5)
+ *       w2 is specifiedwindowframe(RowFrame, UnboundedPreceding, UnboundedFollowing)
+ *       w3 is specifiedwindowframe(RowFrame, -3, 3)
+ *
+ * Note that w2 doesn't have bound indices in the python input because its unbounded window
+ * so it's bound indices will always be the same.
+ *
+ * Unbounded window also have a different eval type, because:
+ * (1) It doesn't have bound indices as input
+ * (2) The udf only needs to be evaluated once the in python worker (because the udf is
+ *     deterministic and window bounds are the same for all windows)
+ *
+ * The logic to compute window bounds is delegated to [[WindowFunctionFrame]] and shared with
+ * [[WindowExec]]
+ *
+ * Note this doesn't support partial aggregation and all aggregation is computed from the entire
+ * window.
+ */
 case class WindowInPandasExec(
     windowExpression: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    child: SparkPlan) extends UnaryExecNode {
+    child: SparkPlan
+) extends WindowExecBase(windowExpression, partitionSpec, orderSpec, child) {
 
   override def output: Seq[Attribute] =
     child.output ++ windowExpression.map(_.toAttribute)
@@ -73,68 +118,154 @@ case class WindowInPandasExec(
   }
 
   /**
-   * Create the resulting projection.
+   * Helper function to get all relevant helper functions and data structures for window bounds
    *
-   * This method uses Code Generation. It can only be used on the executor side.
-   *
-   * @param expressions unbound ordered function expressions.
-   * @return the final resulting projection.
+   * This function returns:
+   * (1) Total number of window bound indices in the python input row
+   * (2) Function from frame index to its lower bound column index in the python input row
+   * (3) Function from frame index to its upper bound column index in the python input row
+   * (4) Function that returns a frame requires window bound indices in the python input row
+   *     (unbounded window doesn't need it)
+   * (5) Function from frame index to its eval type
    */
-  private[this] def createResultProjection(expressions: Seq[Expression]): UnsafeProjection = {
-    val references = expressions.zipWithIndex.map { case (e, i) =>
-      // Results of window expressions will be on the right side of child's output
-      BoundReference(child.output.size + i, e.dataType, e.nullable)
+  private def computeWindowBoundHelpers(
+      factories: Seq[InternalRow => WindowFunctionFrame]
+  ): (Int, Int => Int, Int => Int, Int => Boolean, Int => Int) = {
+    val dummyRow = new SpecificInternalRow()
+    val functionFrames = factories.map(_(dummyRow))
+
+    val evalTypes = functionFrames.map {
+      case _: UnboundedWindowFunctionFrame => PythonEvalType.SQL_UNBOUNDED_WINDOW_AGG_PANDAS_UDF
+      case _ => PythonEvalType.SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF
     }
-    val unboundToRefMap = expressions.zip(references).toMap
-    val patchedWindowExpression = windowExpression.map(_.transform(unboundToRefMap))
-    UnsafeProjection.create(
-      child.output ++ patchedWindowExpression,
-      child.output)
+
+    val requiredIndices = functionFrames.map {
+      case _: UnboundedWindowFunctionFrame => 0
+      case _ => 2
+    }
+
+    val upperBoundIndices = requiredIndices.scan(0)(_ + _).tail
+
+    val boundIndices = (requiredIndices zip upperBoundIndices).map {case (num, upperBoundIndex) =>
+        if (num == 0) {
+          // Sentinel values for unbounded window
+          (-1, -1)
+        } else {
+          (upperBoundIndex - 2, upperBoundIndex - 1)
+        }
+    }
+
+    println("requiredIndices:" + requiredIndices)
+    println("upperBoundIndices:" + upperBoundIndices)
+    println("boundIndices:" + boundIndices)
+
+    def lowerBoundIndex(frameIndex: Int) = boundIndices(frameIndex)._1
+    def upperBoundIndex(frameIndex: Int) = boundIndices(frameIndex)._2
+    def frameEvalType(frameIndex: Int) = evalTypes(frameIndex)
+    def frameRequireIndex(frameIndex: Int) =
+      evalTypes(frameIndex) == PythonEvalType.SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF
+
+    (requiredIndices.sum, lowerBoundIndex, upperBoundIndex, frameRequireIndex, frameEvalType)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val inputRDD = child.execute()
+    // Unwrap the expressions and factories from the map.
+    val expressionsWithFrameIndex =
+      windowFrameExpressionFactoryPairs.map(_._1).zipWithIndex.flatMap {
+        case (buffer, frameIndex) => buffer.map( expr => (expr, frameIndex))
+      }
+
+    val expressions = expressionsWithFrameIndex.map(_._1)
+    val expressionIndexToFrameIndex =
+      expressionsWithFrameIndex.map(_._2).zipWithIndex.map(_.swap).toMap
+
+    val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
+
+    val (numBoundIndices, lowerBoundIndex, upperBoundIndex, frameRequireIndex, frameEvalType) =
+      computeWindowBoundHelpers(factories)
+
+    val funcEvalTypes = expressions.indices.map(
+      i => frameEvalType(expressionIndexToFrameIndex(i)))
+
+    val numFrames = factories.length
+
+    val inMemoryThreshold = sqlContext.conf.windowExecBufferInMemoryThreshold
+    val spillThreshold = sqlContext.conf.windowExecBufferSpillThreshold
 
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
     val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
     // Extract window expressions and window functions
-    val expressions = windowExpression.flatMap(_.collect { case e: WindowExpression => e })
+    val windowExpressions = expressions.flatMap(_.collect { case e: WindowExpression => e })
+    val udfExpressions = windowExpressions.map(_.windowFunction.asInstanceOf[PythonUDF])
 
-    val udfExpressions = expressions.map(_.windowFunction.asInstanceOf[PythonUDF])
-
+    // We shouldn't be chaining anything here.
+    // All chained python functions should only contain one function.
     val (pyFuncs, inputs) = udfExpressions.map(collectFunctions).unzip
+    require(pyFuncs.length == expressions.length)
 
     // Filter child output attributes down to only those that are UDF inputs.
     // Also eliminate duplicate UDF inputs.
-    val allInputs = new ArrayBuffer[Expression]
-    val dataTypes = new ArrayBuffer[DataType]
+    val dataInputs = new ArrayBuffer[Expression]
+    val dataInputTypes = new ArrayBuffer[DataType]
     val argOffsets = inputs.map { input =>
       input.map { e =>
-        if (allInputs.exists(_.semanticEquals(e))) {
-          allInputs.indexWhere(_.semanticEquals(e))
+        if (dataInputs.exists(_.semanticEquals(e))) {
+          dataInputs.indexWhere(_.semanticEquals(e))
         } else {
-          allInputs += e
-          dataTypes += e.dataType
-          allInputs.length - 1
+          dataInputs += e
+          dataInputTypes += e.dataType
+          dataInputs.length - 1
         }
       }.toArray
     }.toArray
 
-    // Schema of input rows to the python runner
-    val windowInputSchema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
-      StructField(s"_$i", dt)
-    })
+    // Add window indices to allInputs, dataTypes and argOffsets
+    val indiceInputs = factories.indices.flatMap { frameIndex =>
+      if (frameRequireIndex(frameIndex)) {
+        Seq(
+          BoundReference(lowerBoundIndex(frameIndex), IntegerType, nullable = false),
+          BoundReference(upperBoundIndex(frameIndex), IntegerType, nullable = false)
+        )
+      } else {
+        Seq.empty
+      }
+    }
 
-    inputRDD.mapPartitionsInternal { iter =>
+    pyFuncs.indices.foreach { exprIndex =>
+      val frameIndex = expressionIndexToFrameIndex(exprIndex)
+      if (frameRequireIndex(frameIndex)) {
+        argOffsets(exprIndex) =
+          Array(lowerBoundIndex(frameIndex), upperBoundIndex(frameIndex)) ++
+            argOffsets(exprIndex).map(_ + indiceInputs.length)
+      } else {
+        argOffsets(exprIndex) = argOffsets(exprIndex).map(_ + indiceInputs.length)
+      }
+    }
+
+    val allInputs = indiceInputs ++ dataInputs
+    val allInputTypes = allInputs.map(_.dataType)
+
+    println(allInputs)
+    println(argOffsets.deep)
+
+    // Start processing.
+    child.execute().mapPartitions { iter =>
       val context = TaskContext.get()
 
-      val grouped = if (partitionSpec.isEmpty) {
-        // Use an empty unsafe row as a place holder for the grouping key
-        Iterator((new UnsafeRow(), iter))
-      } else {
-        GroupedIterator(iter, partitionSpec, child.output)
-      }
+      // Get all relevant projections.
+      val resultProj = createResultProjection(expressions)
+      val pythonInputProj = UnsafeProjection.create(
+        allInputs,
+        indiceInputs.map(ref =>
+          AttributeReference(s"i_${ref.ordinal}", ref.dataType)()) ++ child.output
+      )
+      val pythonInputSchema = StructType(
+        allInputTypes.zipWithIndex.map { case (dt, i) =>
+          StructField(s"_$i", dt)
+        }
+      )
+      val grouping = UnsafeProjection.create(partitionSpec, child.output)
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
@@ -144,24 +275,108 @@ case class WindowInPandasExec(
         queue.close()
       }
 
-      val inputProj = UnsafeProjection.create(allInputs, child.output)
-      val pythonInput = grouped.map { case (_, rows) =>
-        rows.map { row =>
-          queue.add(row.asInstanceOf[UnsafeRow])
-          inputProj(row)
+      val stream = iter.map { row =>
+        queue.add(row.asInstanceOf[UnsafeRow])
+        row
+      }
+
+      val pythonInput = new Iterator[Iterator[UnsafeRow]] {
+
+        // Manage the stream and the grouping.
+        var nextRow: UnsafeRow = null
+        var nextGroup: UnsafeRow = null
+        var nextRowAvailable: Boolean = false
+        private[this] def fetchNextRow() {
+          nextRowAvailable = stream.hasNext
+          if (nextRowAvailable) {
+            nextRow = stream.next().asInstanceOf[UnsafeRow]
+            nextGroup = grouping(nextRow)
+          } else {
+            nextRow = null
+            nextGroup = null
+          }
+        }
+        fetchNextRow()
+
+        // Manage the current partition.
+        val buffer: ExternalAppendOnlyUnsafeRowArray =
+          new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
+        var bufferIterator: Iterator[UnsafeRow] = _
+
+        val indexRow = new SpecificInternalRow(Array.fill(numBoundIndices)(IntegerType))
+
+        val frames = factories.map(_(indexRow))
+
+        private[this] def fetchNextPartition() {
+          // Collect all the rows in the current partition.
+          // Before we start to fetch new input rows, make a copy of nextGroup.
+          val currentGroup = nextGroup.copy()
+
+          // clear last partition
+          buffer.clear()
+
+          while (nextRowAvailable && nextGroup == currentGroup) {
+            buffer.add(nextRow)
+            fetchNextRow()
+          }
+
+          // Setup the frames.
+          var i = 0
+          while (i < numFrames) {
+            frames(i).prepare(buffer)
+            i += 1
+          }
+
+          // Setup iteration
+          rowIndex = 0
+          bufferIterator = buffer.generateIterator()
+        }
+
+        // Iteration
+        var rowIndex = 0
+
+        override final def hasNext: Boolean =
+          (bufferIterator != null && bufferIterator.hasNext) || nextRowAvailable
+
+        override final def next(): Iterator[UnsafeRow] = {
+          // Load the next partition if we need to.
+          if ((bufferIterator == null || !bufferIterator.hasNext) && nextRowAvailable) {
+            fetchNextPartition()
+          }
+
+          val join = new JoinedRow
+
+          bufferIterator.zipWithIndex.map {
+            case (current, index) =>
+              var frameIndex = 0
+              while (frameIndex < numFrames) {
+                frames(frameIndex).write(index, current)
+                // If lowerBoundIndex of frame is < 0, it means the window is unbounded
+                // and we don't need to write out window bounds.
+                if (lowerBoundIndex(frameIndex) >= 0) {
+                  indexRow.setInt(
+                    lowerBoundIndex(frameIndex), frames(frameIndex).currentLowerBound())
+                  indexRow.setInt(
+                    upperBoundIndex(frameIndex), frames(frameIndex).currentUpperBound())
+                }
+                frameIndex += 1
+              }
+
+              val r = pythonInputProj(join(indexRow, current))
+              r
+          }
         }
       }
 
       val windowFunctionResult = new ArrowPythonRunner(
         pyFuncs,
-        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+        funcEvalTypes,
         argOffsets,
-        windowInputSchema,
+        pythonInputSchema,
         sessionLocalTimeZone,
         pythonRunnerConf).compute(pythonInput, context.partitionId(), context)
 
       val joined = new JoinedRow
-      val resultProj = createResultProjection(expressions)
 
       windowFunctionResult.flatMap(_.rowIterator.asScala).map { windowOutput =>
         val leftRow = queue.remove()

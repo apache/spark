@@ -224,8 +224,8 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf):
         return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return arg_offsets, wrap_grouped_agg_pandas_udf(func, return_type)
-    elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
-        return arg_offsets, wrap_bounded_window_agg_pandas_udf_np(func, return_type)
+    elif eval_type == PythonEvalType.SQL_UNBOUNDED_WINDOW_AGG_PANDAS_UDF:
+        return arg_offsets, wrap_window_agg_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF:
         return arg_offsets, wrap_bounded_window_agg_pandas_udf_np(func, return_type)
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
@@ -234,14 +234,16 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf):
         raise ValueError("Unknown eval type: {}".format(eval_type))
 
 
-def read_udfs(pickleSer, infile, eval_type):
+def read_udfs(pickleSer, infile, eval_types):
     runner_conf = {}
 
-    if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
-                     PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-                     PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-                     PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
-                     PythonEvalType.SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF):
+    first_eval_type = eval_types[0]
+
+    if first_eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                           PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+                           PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+                           PythonEvalType.SQL_UNBOUNDED_WINDOW_AGG_PANDAS_UDF,
+                           PythonEvalType.SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF):
 
         # Load conf used for pandas_udf evaluation
         num_conf = read_int(infile)
@@ -257,10 +259,12 @@ def read_udfs(pickleSer, infile, eval_type):
         ser = BatchedSerializer(PickleSerializer(), 100)
 
     num_udfs = read_int(infile)
+    assert num_udfs == len(eval_types)
+
     udfs = {}
     call_udf = []
     mapper_str = ""
-    if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
+    if first_eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         # Create function like this:
         #   lambda a: f([a[0]], [a[0], a[1]])
 
@@ -270,7 +274,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # See FlatMapGroupsInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, udf = read_single_udf(pickleSer, infile, eval_type, runner_conf)
+        arg_offsets, udf = read_single_udf(pickleSer, infile, first_eval_type, runner_conf)
         udfs['f'] = udf
         split_offset = arg_offsets[0] + 1
         arg0 = ["a[%d]" % o for o in arg_offsets[1: split_offset]]
@@ -282,7 +286,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # In the special case of a single UDF this will return a single result rather
         # than a tuple of results; this is the format that the JVM side expects.
         for i in range(num_udfs):
-            arg_offsets, udf = read_single_udf(pickleSer, infile, eval_type, runner_conf)
+            arg_offsets, udf = read_single_udf(pickleSer, infile, eval_types[i], runner_conf)
             udfs['f%d' % i] = udf
             args = ["a[%d]" % o for o in arg_offsets]
             call_udf.append("f%d(%s)" % (i, ", ".join(args)))
@@ -403,11 +407,12 @@ def main(infile, outfile):
             broadcast_sock_file.close()
 
         _accumulatorRegistry.clear()
-        eval_type = read_int(infile)
-        if eval_type == PythonEvalType.NON_UDF:
+        num_eval_types = read_int(infile)
+        eval_types = list(read_int(infile) for i in range(0, num_eval_types))
+        if eval_types[0] == PythonEvalType.NON_UDF:
             func, profiler, deserializer, serializer = read_command(pickleSer, infile)
         else:
-            func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_type)
+            func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_types)
 
         init_time = time.time()
 

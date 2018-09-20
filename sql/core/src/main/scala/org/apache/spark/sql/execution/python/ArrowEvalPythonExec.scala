@@ -91,7 +91,7 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
     val columnarBatchIter = new ArrowPythonRunner(
       funcs,
-      PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+      Array.fill(funcs.length)(PythonEvalType.SQL_SCALAR_PANDAS_UDF),
       argOffsets,
       schema,
       sessionLocalTimeZone,
