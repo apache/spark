@@ -97,12 +97,7 @@ case class CsvToStructs(
 
   override def nullSafeEval(input: Any): Any = {
     val csv = input.asInstanceOf[UTF8String].toString
-    if (csv.trim.isEmpty) return null
-    try {
-      converter(parser.parse(csv))
-    } catch {
-      case _: BadRecordException => null
-    }
+    converter(parser.parse(csv))
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil

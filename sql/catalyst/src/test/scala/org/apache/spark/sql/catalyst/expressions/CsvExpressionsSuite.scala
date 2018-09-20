@@ -114,7 +114,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
       CsvToStructs(schema, Map.empty, Literal.create(" ", StringType), gmtId),
-      null
+      InternalRow(null)
     )
   }
 
