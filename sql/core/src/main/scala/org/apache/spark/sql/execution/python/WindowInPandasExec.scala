@@ -155,10 +155,6 @@ case class WindowInPandasExec(
         }
     }
 
-    println("requiredIndices:" + requiredIndices)
-    println("upperBoundIndices:" + upperBoundIndices)
-    println("boundIndices:" + boundIndices)
-
     def lowerBoundIndex(frameIndex: Int) = boundIndices(frameIndex)._1
     def upperBoundIndex(frameIndex: Int) = boundIndices(frameIndex)._2
     def frameEvalType(frameIndex: Int) = evalTypes(frameIndex)
@@ -245,9 +241,6 @@ case class WindowInPandasExec(
 
     val allInputs = indiceInputs ++ dataInputs
     val allInputTypes = allInputs.map(_.dataType)
-
-    println(allInputs)
-    println(argOffsets.deep)
 
     // Start processing.
     child.execute().mapPartitions { iter =>
