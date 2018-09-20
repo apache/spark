@@ -1396,10 +1396,13 @@ def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
         res = sc._jvm.functions.window(time_col, windowDuration)
     return Column(res)
 
+
 @since(3.0)
 @ignore_unicode_prefix
 def session(timeColumn, gapDuration):
+    """
     # FIXME: python doc!!
+    """
     def check_string_field(field, fieldName):
         if not field or type(field) is not str:
             raise TypeError("%s should be provided as a string" % fieldName)
