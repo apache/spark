@@ -326,9 +326,9 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         .option(optionName, false)
         .format(classOf[DataSourceV2WithSessionConfig].getName).load()
       val options = df.queryExecution.optimizedPlan.collectFirst {
-        case d: DataSourceV2Relation => d.options
+        case DataSourceV2Relation(_, SimpleDataSourceV2Reader(options)) => options
       }
-      assert(options.get.get(optionName) == Some("false"))
+      assert(options.get.getBoolean(optionName, true) == false)
     }
   }
 
@@ -350,17 +350,18 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
   }
 }
 
-class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {
+case class SimpleDataSourceV2Reader(options: DataSourceOptions) extends DataSourceReader {
+  override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
 
-  class Reader extends DataSourceReader {
-    override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
-
-    override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
-      java.util.Arrays.asList(new SimpleDataReaderFactory(0, 5), new SimpleDataReaderFactory(5, 10))
-    }
+  override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
+    java.util.Arrays.asList(new SimpleDataReaderFactory(0, 5), new SimpleDataReaderFactory(5, 10))
   }
+}
 
-  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
+class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {
+  override def createReader(options: DataSourceOptions): DataSourceReader = {
+    SimpleDataSourceV2Reader(options)
+  }
 }
 
 class SimpleDataReaderFactory(start: Int, end: Int)
