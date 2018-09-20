@@ -1056,7 +1056,7 @@ object SQLConf {
       .createWithDefault(10000L)
 
   val STREAMING_NO_DATA_MICRO_BATCHES_ENABLED =
-    buildConf("spark.sql.streaming.noDataMicroBatchesEnabled")
+    buildConf("spark.sql.streaming.noDataMicroBatches.enabled")
       .doc(
         "Whether streaming micro-batch engine will execute batches without data " +
           "for eager state management for stateful streaming queries.")
