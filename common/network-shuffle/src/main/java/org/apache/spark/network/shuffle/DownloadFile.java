@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.shuffle;
 
+import java.io.File;
 import java.io.IOException;
 
 /**
@@ -40,8 +41,5 @@ public interface DownloadFile {
    */
   DownloadFileWritableChannel openForWriting() throws IOException;
 
-  /**
-   * The path of the file, intended only for debug purposes.
-   */
-  String path();
+  File file();
 }
