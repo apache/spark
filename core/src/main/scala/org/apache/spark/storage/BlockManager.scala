@@ -1682,11 +1682,11 @@ private[spark] object BlockManager {
     lazy val encryptionKey = SparkEnv.get.securityManager.getIOEncryptionKey()
 
     private class ReferenceWithCleanup(
-        file: DownloadFile,
-        referenceQueue: JReferenceQueue[DownloadFile]
-        ) extends WeakReference[DownloadFile](file, referenceQueue) {
+        file: File,
+        referenceQueue: JReferenceQueue[File]
+        ) extends WeakReference[File](file, referenceQueue) {
 
-      val filePath = file.path()
+      val filePath = file.getAbsolutePath()
 
       def cleanUp(): Unit = {
         logDebug(s"Clean up file $filePath")
@@ -1697,7 +1697,7 @@ private[spark] object BlockManager {
       }
     }
 
-    private val referenceQueue = new JReferenceQueue[DownloadFile]
+    private val referenceQueue = new JReferenceQueue[File]
     private val referenceBuffer = Collections.newSetFromMap[ReferenceWithCleanup](
       new ConcurrentHashMap)
 
@@ -1724,7 +1724,7 @@ private[spark] object BlockManager {
     }
 
     override def registerTempFileToClean(file: DownloadFile): Boolean = {
-      referenceBuffer.add(new ReferenceWithCleanup(file, referenceQueue))
+      referenceBuffer.add(new ReferenceWithCleanup(file.file(), referenceQueue))
     }
 
     def stop(): Unit = {
@@ -1756,27 +1756,27 @@ private[spark] object BlockManager {
    * A DownloadFile that encrypts data when it is written, and decrypts when it's read.
    */
   private class EncryptedDownloadFile(
-      file: File,
+      _file: File,
       key: Array[Byte]) extends DownloadFile {
 
     private val env = SparkEnv.get
 
-    override def delete(): Boolean = file.delete()
+    override def delete(): Boolean = _file.delete()
 
     override def openForWriting(): DownloadFileWritableChannel = {
       new EncryptedDownloadWritableChannel()
     }
 
-    override def path(): String = file.getAbsolutePath
+    override def file(): File = _file
 
     private class EncryptedDownloadWritableChannel extends DownloadFileWritableChannel {
       private val countingOutput: CountingWritableChannel = new CountingWritableChannel(
-        Channels.newChannel(env.serializerManager.wrapForEncryption(new FileOutputStream(file))))
+        Channels.newChannel(env.serializerManager.wrapForEncryption(new FileOutputStream(_file))))
 
       override def closeAndRead(): ManagedBuffer = {
         countingOutput.close()
         val size = countingOutput.getCount
-        new EncryptedManagedBuffer(new EncryptedBlockData(file, size, env.conf, key))
+        new EncryptedManagedBuffer(new EncryptedBlockData(_file, size, env.conf, key))
       }
 
       override def write(src: ByteBuffer): Int = countingOutput.write(src)
