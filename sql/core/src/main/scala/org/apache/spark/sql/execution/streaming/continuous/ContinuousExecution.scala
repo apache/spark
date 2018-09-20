@@ -265,8 +265,8 @@ class ContinuousExecution(
           sparkSessionForQuery, lastExecution)(lastExecution.toRdd)
       }
     } catch {
-      case t: Throwable
-          if StreamExecution.isInterruptionException(t) && state.get() == RECONFIGURING =>
+      case t: Throwable if StreamExecution.isInterruptionException(t, sparkSession.sparkContext) &&
+          state.get() == RECONFIGURING =>
         logInfo(s"Query $id ignoring exception from reconfiguring: $t")
         // interrupted by reconfiguration - swallow exception so we can restart the query
     } finally {
