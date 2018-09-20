@@ -71,7 +71,6 @@ class UnivocityParser(
     if (parsedSchema.length < dataSchema.length) {
       parserSetting.selectIndexes(tokenIndexArr: _*)
     }
-
     new CsvParser(parserSetting)
   }
 
