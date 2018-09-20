@@ -353,7 +353,7 @@ case class WindowInPandasExec(
                 frames(frameIndex).write(index, current)
                 // If lowerBoundIndex of frame is < 0, it means the window is unbounded
                 // and we don't need to write out window bounds.
-                if (lowerBoundIndex(frameIndex) >= 0) {
+                if (frameRequireIndex(frameIndex)) {
                   indexRow.setInt(
                     lowerBoundIndex(frameIndex), frames(frameIndex).currentLowerBound())
                   indexRow.setInt(
@@ -362,8 +362,7 @@ case class WindowInPandasExec(
                 frameIndex += 1
               }
 
-              val r = pythonInputProj(join(indexRow, current))
-              r
+              pythonInputProj(join(indexRow, current))
           }
         }
       }
