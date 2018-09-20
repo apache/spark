@@ -2328,7 +2328,16 @@ private[spark] object Utils extends Logging {
    * configure a new log4j level
    */
   def setLogLevel(l: org.apache.log4j.Level) {
-    org.apache.log4j.Logger.getRootLogger().setLevel(l)
+    val rootLogger = org.apache.log4j.Logger.getRootLogger()
+    rootLogger.setLevel(l)
+    val appenders = rootLogger.getAllAppenders
+    while (appenders.hasMoreElements()) {
+      val tmp = appenders.nextElement()
+      tmp match {
+        case ca: org.apache.log4j.ConsoleAppender => ca.setThreshold(l)
+        case _ => // no-op
+      }
+    }
   }
 
   /**
@@ -2862,6 +2871,14 @@ private[spark] object Utils extends Logging {
    */
   def stringHalfWidth(str: String): Int = {
     if (str == null) 0 else str.length + fullWidthRegex.findAllIn(str).size
+  }
+
+  private[spark] def sanitizeDirName(str: String): String = {
+    str.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase(Locale.ROOT)
+  }
+
+  private[spark] def isClientMode(conf: SparkConf): Boolean = {
+    "client".equals(conf.get(SparkLauncher.DEPLOY_MODE, "client"))
   }
 }
 

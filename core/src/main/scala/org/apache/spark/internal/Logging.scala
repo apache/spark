@@ -17,7 +17,7 @@
 
 package org.apache.spark.internal
 
-import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
+import org.apache.log4j.{ConsoleAppender, Level, LogManager, PropertyConfigurator}
 import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
 
@@ -143,13 +143,28 @@ trait Logging {
         // overriding the root logger's config if they're different.
         val replLogger = LogManager.getLogger(logName)
         val replLevel = Option(replLogger.getLevel()).getOrElse(Level.WARN)
+        // Update the consoleAppender threshold to replLevel
         if (replLevel != rootLogger.getEffectiveLevel()) {
           if (!silent) {
-            System.err.printf("Setting default log level to \"%s\".\n", replLevel)
+            System.err.printf("Setting console log level to \"%s\".\n", replLevel)
             System.err.println("To adjust logging level use sc.setLogLevel(newLevel). " +
               "For SparkR, use setLogLevel(newLevel).")
           }
-          rootLogger.setLevel(replLevel)
+          val appenders = rootLogger.getAllAppenders()
+          while (appenders.hasMoreElements()) {
+            val tmp = appenders.nextElement()
+            tmp match {
+              case ca: ConsoleAppender =>
+                Option(ca.getThreshold()) match {
+                  case Some(t) =>
+                    if (!t.isGreaterOrEqual(replLevel)) {
+                      ca.setThreshold(replLevel)
+                    }
+                  case None => ca.setThreshold(replLevel)
+                }
+              case _ => // no-op
+            }
+          }
         }
       }
       // scalastyle:on println
@@ -192,7 +207,16 @@ private[spark] object Logging {
         defaultSparkLog4jConfig = false
         LogManager.resetConfiguration()
       } else {
-        LogManager.getRootLogger().setLevel(defaultRootLevel)
+        val rootLogger = LogManager.getRootLogger()
+        rootLogger.setLevel(defaultRootLevel)
+        val appenders = rootLogger.getAllAppenders
+        while (appenders.hasMoreElements()) {
+          val tmp = appenders.nextElement()
+          tmp match {
+            case ca: ConsoleAppender => ca.setThreshold(defaultRootLevel)
+            case _ => // no-op
+          }
+        }
       }
     }
     this.initialized = false

@@ -58,6 +58,7 @@ import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
 import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
 import org.apache.spark.util._
+import org.apache.spark.util.logging.DriverLogger
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -205,6 +206,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _applicationId: String = _
   private var _applicationAttemptId: Option[String] = None
   private var _eventLogger: Option[EventLoggingListener] = None
+  private var _driverLogger: Option[DriverLogger] = None
   private var _executorAllocationManager: Option[ExecutorAllocationManager] = None
   private var _cleaner: Option[ContextCleaner] = None
   private var _listenerBusStarted: Boolean = false
@@ -370,6 +372,8 @@ class SparkContext(config: SparkConf) extends Logging {
     if (!_conf.contains("spark.app.name")) {
       throw new SparkException("An application name must be set in your configuration")
     }
+
+    _driverLogger = DriverLogger(_conf)
 
     // log out spark.app.name in the Spark driver logs
     logInfo(s"Submitted application: $appName")
@@ -2351,11 +2355,13 @@ class SparkContext(config: SparkConf) extends Logging {
     // the cluster manager to get an application ID (in case the cluster manager provides one).
     listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
       startTime, sparkUser, applicationAttemptId, schedulerBackend.getDriverLogUrls))
+    _driverLogger.map(_.startSync(_hadoopConfiguration))
   }
 
   /** Post the application end event */
   private def postApplicationEnd() {
     listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis))
+    _driverLogger.map(_.stop())
   }
 
   /** Post the environment update event once the task scheduler is ready */
