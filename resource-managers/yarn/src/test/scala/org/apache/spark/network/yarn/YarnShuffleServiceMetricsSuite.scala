@@ -20,10 +20,8 @@ package org.apache.spark.network.yarn
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.metrics2.MetricsRecordBuilder
-
 import org.mockito.Matchers._
 import org.mockito.Mockito.{mock, times, verify, when}
-
 import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
@@ -41,7 +39,8 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
   test("metrics named as expected") {
     val allMetrics = Set(
       "openBlockRequestLatencyMillis", "registerExecutorRequestLatencyMillis",
-      "blockTransferRateBytes", "registeredExecutorsSize", "numActiveConnections", "numRegisteredConnections")
+      "blockTransferRateBytes", "registeredExecutorsSize", "numActiveConnections",
+      "numRegisteredConnections")
 
     metrics.getMetrics.keySet().asScala should be (allMetrics)
   }
