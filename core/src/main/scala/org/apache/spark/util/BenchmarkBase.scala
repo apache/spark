@@ -38,8 +38,12 @@ abstract class BenchmarkBase {
   def main(args: Array[String]): Unit = {
     val regenerateBenchmarkFiles: Boolean = System.getenv("SPARK_GENERATE_BENCHMARK_FILES") == "1"
     if (regenerateBenchmarkFiles) {
+      val dir = new File(s"benchmarks")
+      if (!dir.exists()) {
+        dir.mkdir()
+      }
       val resultFileName = s"${this.getClass.getSimpleName.replace("$", "")}-results.txt"
-      val file = new File(s"benchmarks/$resultFileName")
+      val file = new File(dir, resultFileName)
       if (!file.exists()) {
         file.createNewFile()
       }
