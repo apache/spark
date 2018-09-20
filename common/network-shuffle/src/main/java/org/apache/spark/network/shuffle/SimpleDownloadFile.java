@@ -56,8 +56,8 @@ public class SimpleDownloadFile implements DownloadFile {
   }
 
   @Override
-  public String path() {
-    return file.getAbsolutePath();
+  public File file() {
+    return file;
   }
 
   private class SimpleDownloadWritableChannel implements DownloadFileWritableChannel {
@@ -69,7 +69,8 @@ public class SimpleDownloadFile implements DownloadFile {
     }
 
     @Override
-    public ManagedBuffer closeAndRead() {
+    public ManagedBuffer closeAndRead() throws IOException {
+      channel.close();
       return new FileSegmentManagedBuffer(transportConf, file, 0, file.length());
     }
 
