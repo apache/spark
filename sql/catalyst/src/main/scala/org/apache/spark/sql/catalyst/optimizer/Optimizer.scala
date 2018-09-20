@@ -486,6 +486,10 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
   private def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]) = {
     val result = e transform {
       case a: Attribute => rewrites(a)
+    } match {
+      // Make sure exprId is unique in each child of Union.
+      case Alias(child, alias) => Alias(child, alias)()
+      case other => other
     }
 
     // We must promise the compiler that we did not discard the names in the case of project
