@@ -1911,20 +1911,6 @@ working with timestamps in `pandas_udf`s to get the best performance, see
         </tr>
         <tr>
           <th>
-            <b>SELECT <br> array_contains(array(1), 1.34);</b>
-          </th>
-          <th>
-            <b>true</b>
-          </th>
-          <th>
-            <b>AnalysisException is thrown since integer type can not be promoted to decimal type in a loss-less manner.</b>
-          </th>
-          <th>
-            <b>Users can use explict cast</b>
-          </th>
-        </tr>
-        <tr>
-          <th>
             <b>SELECT <br> array_contains(array(1), '1');</b>
           </th>
           <th>
