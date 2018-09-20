@@ -26,6 +26,7 @@ import scala.util.Random
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -737,41 +738,37 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
 
     checkAnswer(
-      df.selectExpr("array_contains(array(1), 1.23D)"),
-      Seq(Row(false), Row(false))
+      OneRowRelation().selectExpr("array_contains(array(1), 1.23D)"),
+      Seq(Row(false))
     )
 
     checkAnswer(
-      df.selectExpr("array_contains(array(1), 1.0D)"),
-      Seq(Row(true), Row(true))
+      OneRowRelation().selectExpr("array_contains(array(1), 1.0D)"),
+      Seq(Row(true))
     )
 
     checkAnswer(
-      df.selectExpr("array_contains(array(1.0D), 1)"),
-      Seq(Row(true), Row(true))
+      OneRowRelation().selectExpr("array_contains(array(1.0D), 1)"),
+      Seq(Row(true))
     )
 
     checkAnswer(
-      df.selectExpr("array_contains(array(1.23D), 1)"),
-      Seq(Row(false), Row(false))
+      OneRowRelation().selectExpr("array_contains(array(1.23D), 1)"),
+      Seq(Row(false))
     )
 
     checkAnswer(
-      df.selectExpr("array_contains(array(array(1)), array(1.0D))"),
-      Seq(Row(true), Row(true))
+      OneRowRelation().selectExpr("array_contains(array(array(1)), array(1.0D))"),
+      Seq(Row(true))
     )
 
     checkAnswer(
-      df.selectExpr("array_contains(array(array(1)), array(1.23D))"),
-      Seq(Row(false), Row(false))
+      OneRowRelation().selectExpr("array_contains(array(array(1)), array(1.23D))"),
+      Seq(Row(false))
     )
 
-    checkAnswer(
-      df.selectExpr("array_contains(array(array(1)), array(1.23))"),
-      Seq(Row(false), Row(false))
-    )
     val e1 = intercept[AnalysisException] {
-      df.selectExpr("array_contains(array(1), .01234567890123456790123456780)")
+      OneRowRelation().selectExpr("array_contains(array(1), .01234567890123456790123456780)")
     }
     val errorMsg1 =
       s"""
@@ -781,7 +778,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(e1.message.contains(errorMsg1))
 
     val e2 = intercept[AnalysisException] {
-      df.selectExpr("array_contains(array(1), 'foo')")
+      OneRowRelation().selectExpr("array_contains(array(1), 'foo')")
     }
     val errorMsg2 =
       s"""

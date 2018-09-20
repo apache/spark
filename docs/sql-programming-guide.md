@@ -1906,7 +1906,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
             <b>false</b>
           </th>
           <th>
-            <b>In Spark 2.4, both left and right parameters are  promoted to array(double) and double type respectively.</b>
+            <b>In Spark 2.4, left and right parameters are  promoted to array(double) and double type respectively.</b>
           </th>
         </tr>
         <tr>
