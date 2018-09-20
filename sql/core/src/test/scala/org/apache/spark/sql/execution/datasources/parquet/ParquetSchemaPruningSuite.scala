@@ -218,20 +218,24 @@ class ParquetSchemaPruningSuite
   }
 
   private def testSchemaPruning(testName: String)(testThunk: => Unit) {
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-      test(s"Spark vectorized reader - without partition data column - $testName") {
+    test(s"Spark vectorized reader - without partition data column - $testName") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
         withContacts(testThunk)
       }
-      test(s"Spark vectorized reader - with partition data column - $testName") {
+    }
+    test(s"Spark vectorized reader - with partition data column - $testName") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
         withContactsWithDataPartitionColumn(testThunk)
       }
     }
 
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-      test(s"Parquet-mr reader - without partition data column - $testName") {
+    test(s"Parquet-mr reader - without partition data column - $testName") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         withContacts(testThunk)
       }
-      test(s"Parquet-mr reader - with partition data column - $testName") {
+    }
+    test(s"Parquet-mr reader - with partition data column - $testName") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         withContactsWithDataPartitionColumn(testThunk)
       }
     }
@@ -271,7 +275,7 @@ class ParquetSchemaPruningSuite
     MixedCase(1, "r1c1", MixedCaseColumn("123", 2)) ::
     Nil
 
-  testMixedCasePruning("select with exact column names") {
+  testExactCaseQueryPruning("select with exact column names") {
     val query = sql("select CoL1, coL2.B from mixedcase")
     checkScan(query, "struct<CoL1:string,coL2:struct<B:int>>")
     checkAnswer(query.orderBy("id"),
@@ -280,7 +284,7 @@ class ParquetSchemaPruningSuite
       Nil)
   }
 
-  testMixedCasePruning("select with lowercase column names") {
+  testMixedCaseQueryPruning("select with lowercase column names") {
     val query = sql("select col1, col2.b from mixedcase")
     checkScan(query, "struct<CoL1:string,coL2:struct<B:int>>")
     checkAnswer(query.orderBy("id"),
@@ -289,7 +293,7 @@ class ParquetSchemaPruningSuite
       Nil)
   }
 
-  testMixedCasePruning("select with different-case column names") {
+  testMixedCaseQueryPruning("select with different-case column names") {
     val query = sql("select cOL1, cOl2.b from mixedcase")
     checkScan(query, "struct<CoL1:string,coL2:struct<B:int>>")
     checkAnswer(query.orderBy("id"),
@@ -298,34 +302,43 @@ class ParquetSchemaPruningSuite
       Nil)
   }
 
-  testMixedCasePruning("filter with different-case column names") {
+  testMixedCaseQueryPruning("filter with different-case column names") {
     val query = sql("select id from mixedcase where Col2.b = 2")
     checkScan(query, "struct<id:int,coL2:struct<B:int>>")
     checkAnswer(query.orderBy("id"), Row(1) :: Nil)
   }
 
-  private def testMixedCasePruning(testName: String)(testThunk: => Unit) {
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
-      SQLConf.CASE_SENSITIVE.key -> "true") {
-      test(s"Spark vectorized reader - case-sensitive parser - mixed-case schema - $testName") {
-          withMixedCaseData(testThunk)
-      }
-    }
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
-      SQLConf.CASE_SENSITIVE.key -> "false") {
-      test(s"Parquet-mr reader - case-insensitive parser - mixed-case schema - $testName") {
+  // Tests schema pruning for a query whose column and field names are exactly the same as the table
+  // schema's column and field names. N.B. this implies that `testThunk` should pass using either a
+  // case-sensitive or case-insensitive query parser
+  private def testExactCaseQueryPruning(testName: String)(testThunk: => Unit) {
+    test(s"Spark vectorized reader - case-sensitive parser - mixed-case schema - $testName") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "true") {
         withMixedCaseData(testThunk)
       }
     }
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
-      SQLConf.CASE_SENSITIVE.key -> "false") {
-      test(s"Spark vectorized reader - case-insensitive parser - mixed-case schema - $testName") {
-          withMixedCaseData(testThunk)
+    test(s"Parquet-mr reader - case-sensitive parser - mixed-case schema - $testName") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
+        SQLConf.CASE_SENSITIVE.key -> "true") {
+        withMixedCaseData(testThunk)
       }
     }
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
-      SQLConf.CASE_SENSITIVE.key -> "true") {
-      test(s"Parquet-mr reader - case-sensitive parser - mixed-case schema - $testName") {
+    testMixedCaseQueryPruning(testName)(testThunk)
+  }
+
+  // Tests schema pruning for a query whose column and field names may differ in case from the table
+  // schema's column and field names
+  private def testMixedCaseQueryPruning(testName: String)(testThunk: => Unit) {
+    test(s"Spark vectorized reader - case-insensitive parser - mixed-case schema - $testName") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "false") {
+        withMixedCaseData(testThunk)
+      }
+    }
+    test(s"Parquet-mr reader - case-insensitive parser - mixed-case schema - $testName") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
+        SQLConf.CASE_SENSITIVE.key -> "false") {
         withMixedCaseData(testThunk)
       }
     }

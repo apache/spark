@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.ql.metadata.HiveException
+import org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_FORMAT
 import org.apache.thrift.TException
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -806,6 +807,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       updateLocationInStorageProps(table, newPath = None).copy(
         locationUri = tableLocation.map(CatalogUtils.stringToURI(_)))
     }
+    val storageWithoutHiveGeneratedProperties = storageWithLocation.copy(
+      properties = storageWithLocation.properties.filterKeys(!HIVE_GENERATED_STORAGE_PROPERTIES(_)))
     val partitionProvider = table.properties.get(TABLE_PARTITION_PROVIDER)
 
     val schemaFromTableProps = getSchemaFromTableProperties(table)
@@ -814,7 +817,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     table.copy(
       provider = Some(provider),
-      storage = storageWithLocation,
+      storage = storageWithoutHiveGeneratedProperties,
       schema = reorderedSchema,
       partitionColumnNames = partColumnNames,
       bucketSpec = getBucketSpecFromTableProperties(table),
@@ -1308,6 +1311,8 @@ object HiveExternalCatalog {
   val TABLE_PARTITION_PROVIDER_FILESYSTEM = "filesystem"
 
   val CREATED_SPARK_VERSION = SPARK_SQL_PREFIX + "create.version"
+
+  val HIVE_GENERATED_STORAGE_PROPERTIES = Set(SERIALIZATION_FORMAT)
 
   // When storing data source tables in hive metastore, we need to set data schema to empty if the
   // schema is hive-incompatible. However we need a hack to preserve existing behavior. Before

@@ -19,10 +19,9 @@ package org.apache.spark.sql.execution
 
 import scala.util.Random
 
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -38,6 +37,14 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSQLContext {
     rand = new Random(seed)
   }
 
+  private def generateRandomInputData(): DataFrame = {
+    val schema = new StructType()
+      .add("a", IntegerType, nullable = false)
+      .add("b", IntegerType, nullable = false)
+    val inputData = Seq.fill(10000)(Row(rand.nextInt(), rand.nextInt()))
+    spark.createDataFrame(sparkContext.parallelize(Random.shuffle(inputData), 10), schema)
+  }
+
   /**
    * Adds a no-op filter to the child plan in order to prevent executeCollect() from being
    * called directly on the child plan.
@@ -48,62 +55,32 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSQLContext {
   val sortOrder = 'a.desc :: 'b.desc :: Nil
 
   test("TakeOrderedAndProject.doExecute without project") {
-    withSQLConf(SQLConf.LIMIT_FLAT_GLOBAL_LIMIT.key -> "false") {
-      withClue(s"seed = $seed") {
-        checkThatPlansAgree(
-          LimitTest.generateRandomInputData(spark, rand),
-          input =>
-            noOpFilter(TakeOrderedAndProjectExec(limit, sortOrder, input.output, input)),
-          input =>
-            GlobalLimitExec(limit,
-              LocalLimitExec(limit,
-                SortExec(sortOrder, true, input))),
-          sortAnswers = false)
-      }
+    withClue(s"seed = $seed") {
+      checkThatPlansAgree(
+        generateRandomInputData(),
+        input =>
+          noOpFilter(TakeOrderedAndProjectExec(limit, sortOrder, input.output, input)),
+        input =>
+          GlobalLimitExec(limit,
+            LocalLimitExec(limit,
+              SortExec(sortOrder, true, input))),
+        sortAnswers = false)
     }
   }
 
   test("TakeOrderedAndProject.doExecute with project") {
-    withSQLConf(SQLConf.LIMIT_FLAT_GLOBAL_LIMIT.key -> "false") {
-      withClue(s"seed = $seed") {
-        checkThatPlansAgree(
-          LimitTest.generateRandomInputData(spark, rand),
-          input =>
-            noOpFilter(
-              TakeOrderedAndProjectExec(limit, sortOrder, Seq(input.output.last), input)),
-          input =>
-            GlobalLimitExec(limit,
-              LocalLimitExec(limit,
-                ProjectExec(Seq(input.output.last),
-                  SortExec(sortOrder, true, input)))),
-          sortAnswers = false)
-      }
+    withClue(s"seed = $seed") {
+      checkThatPlansAgree(
+        generateRandomInputData(),
+        input =>
+          noOpFilter(
+            TakeOrderedAndProjectExec(limit, sortOrder, Seq(input.output.last), input)),
+        input =>
+          GlobalLimitExec(limit,
+            LocalLimitExec(limit,
+              ProjectExec(Seq(input.output.last),
+                SortExec(sortOrder, true, input)))),
+        sortAnswers = false)
     }
-  }
-
-  test("TakeOrderedAndProject.doExecute equals to ordered global limit") {
-    withSQLConf(SQLConf.LIMIT_FLAT_GLOBAL_LIMIT.key -> "true") {
-      withClue(s"seed = $seed") {
-        checkThatPlansAgree(
-          LimitTest.generateRandomInputData(spark, rand),
-          input =>
-            noOpFilter(TakeOrderedAndProjectExec(limit, sortOrder, input.output, input)),
-          input =>
-            GlobalLimitExec(limit,
-              LocalLimitExec(limit,
-                SortExec(sortOrder, true, input)), orderedLimit = true),
-          sortAnswers = false)
-      }
-    }
-  }
-}
-
-object LimitTest {
-  def generateRandomInputData(spark: SparkSession, rand: Random): DataFrame = {
-    val schema = new StructType()
-      .add("a", IntegerType, nullable = false)
-      .add("b", IntegerType, nullable = false)
-    val inputData = Seq.fill(10000)(Row(rand.nextInt(), rand.nextInt()))
-    spark.createDataFrame(spark.sparkContext.parallelize(Random.shuffle(inputData), 10), schema)
   }
 }

@@ -159,9 +159,9 @@ case class MapKeys(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(2, 3, 4));
-        [[1, 2], [2, 3], [3, 4]]
+       [{"0":1,"1":2},{"0":2,"1":3},{"0":3,"1":4}]
       > SELECT _FUNC_(array(1, 2), array(2, 3), array(3, 4));
-        [[1, 2, 3], [2, 3, 4]]
+       [{"0":1,"1":2,"2":3},{"0":2,"1":3,"2":4}]
   """,
   since = "2.4.0")
 case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsInputTypes {
@@ -348,7 +348,7 @@ case class MapValues(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
-       [(1,"a"),(2,"b")]
+       [{"key":1,"value":"a"},{"key":2,"value":"b"}]
   """,
   since = "2.4.0")
 case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInputTypes {
@@ -516,7 +516,7 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(2, 'c', 3, 'd'));
-       [[1 -> "a"], [2 -> "b"], [2 -> "c"], [3 -> "d"]]
+       {1:"a",2:"c",3:"d"}
   """, since = "2.4.0")
 case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
@@ -1171,9 +1171,9 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLi
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 20, 3, 5));
-       [3, 1, 5, 20]
+       [3,1,5,20]
       > SELECT _FUNC_(array(1, 20, null, 3));
-       [20, null, 3, 1]
+       [20,null,3,1]
   """,
   note = "The function is non-deterministic.",
   since = "2.4.0")
@@ -1256,7 +1256,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
       > SELECT _FUNC_('Spark SQL');
        LQS krapS
       > SELECT _FUNC_(array(2, 1, 4, 3));
-       [3, 4, 1, 2]
+       [3,4,1,2]
   """,
   since = "1.5.0",
   note = "Reverse logic for arrays is available since 2.4.0."
@@ -1331,23 +1331,27 @@ case class ArrayContains(left: Expression, right: Expression)
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(right.dataType)
 
-  override def inputTypes: Seq[AbstractDataType] = right.dataType match {
-    case NullType => Seq.empty
-    case _ => left.dataType match {
-      case n @ ArrayType(element, _) => Seq(n, element)
+  override def inputTypes: Seq[AbstractDataType] = {
+    (left.dataType, right.dataType) match {
+      case (_, NullType) => Seq.empty
+      case (ArrayType(e1, hasNull), e2) =>
+        TypeCoercion.findTightestCommonType(e1, e2) match {
+          case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
+          case _ => Seq.empty
+        }
       case _ => Seq.empty
     }
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (right.dataType == NullType) {
-      TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
-    } else if (!left.dataType.isInstanceOf[ArrayType]
-      || !left.dataType.asInstanceOf[ArrayType].elementType.sameType(right.dataType)) {
-      TypeCheckResult.TypeCheckFailure(
-        "Arguments must be an array followed by a value of same type as the array members")
-    } else {
-      TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
+    (left.dataType, right.dataType) match {
+      case (_, NullType) =>
+        TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
+      case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
+        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
+      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
+        s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
+        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
     }
   }
 
@@ -2123,7 +2127,7 @@ case class ArrayPosition(left: Expression, right: Expression)
       > SELECT _FUNC_(array(1, 2, 3), 2);
        2
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), 2);
-       "b"
+       b
   """,
   since = "2.4.0")
 case class ElementAt(left: Expression, right: Expression) extends GetMapValueUtil {
@@ -2238,8 +2242,9 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
       > SELECT _FUNC_('Spark', 'SQL');
        SparkSQL
       > SELECT _FUNC_(array(1, 2, 3), array(4, 5), array(6));
- |     [1,2,3,4,5,6]
-  """)
+       [1,2,3,4,5,6]
+  """,
+  note = "Concat logic for arrays is available since 2.4.0.")
 case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   private def allowedTypes: Seq[AbstractDataType] = Seq(StringType, BinaryType, ArrayType)
@@ -2427,7 +2432,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   usage = "_FUNC_(arrayOfArrays) - Transforms an array of arrays into a single array.",
   examples = """
     Examples:
-      > SELECT _FUNC_(array(array(1, 2), array(3, 4));
+      > SELECT _FUNC_(array(array(1, 2), array(3, 4)));
        [1,2,3,4]
   """,
   since = "2.4.0")
@@ -2556,11 +2561,11 @@ case class Flatten(child: Expression) extends UnaryExpression {
   examples = """
     Examples:
       > SELECT _FUNC_(1, 5);
-       [1, 2, 3, 4, 5]
+       [1,2,3,4,5]
       > SELECT _FUNC_(5, 1);
-       [5, 4, 3, 2, 1]
+       [5,4,3,2,1]
       > SELECT _FUNC_(to_date('2018-01-01'), to_date('2018-03-01'), interval 1 month);
-       [2018-01-01, 2018-02-01, 2018-03-01]
+       [2018-01-01,2018-02-01,2018-03-01]
   """,
   since = "2.4.0"
 )
@@ -2934,7 +2939,7 @@ object Sequence {
   examples = """
     Examples:
       > SELECT _FUNC_('123', 2);
-       ['123', '123']
+       ["123","123"]
   """,
   since = "2.4.0")
 case class ArrayRepeat(left: Expression, right: Expression)
@@ -3421,7 +3426,7 @@ object ArrayBinaryLike {
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
-       array(1, 2, 3, 5)
+       [1,2,3,5]
   """,
   since = "2.4.0")
 case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLike
@@ -3632,7 +3637,7 @@ object ArrayUnion {
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
-       array(1, 3)
+       [1,3]
   """,
   since = "2.4.0")
 case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBinaryLike
@@ -3873,7 +3878,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
-       array(2)
+       [2]
   """,
   since = "2.4.0")
 case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryLike
