@@ -22,6 +22,7 @@ import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricSet;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -158,5 +159,9 @@ public class TransportServer implements Closeable {
       bootstrap.config().childGroup().shutdownGracefully();
     }
     bootstrap = null;
+  }
+
+  public Counter getRegisteredConnections() {
+    return context.getRegisteredConnections();
   }
 }
