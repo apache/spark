@@ -37,7 +37,7 @@ test_that("eager execution is not enabled", {
 })
 
 test_that("eager execution is enabled", {
-  # Start Spark session without eager execution enabled
+  # Start Spark session with eager execution enabled
   sparkSession <- if (windows_with_hadoop()) {
     sparkR.session(master = sparkRTestMaster,
                    sparkConfig = list(spark.sql.repl.eagerEval.enabled = "true"))
