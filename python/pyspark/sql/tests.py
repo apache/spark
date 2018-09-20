@@ -1168,7 +1168,7 @@ class SQLTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(
             [(i % 3, PythonOnlyPoint(float(i), float(i))) for i in range(10)],
             schema=schema)
-        df.show()
+        df.collect()
 
     def test_nested_udt_in_df(self):
         schema = StructType().add("key", LongType()).add("val", ArrayType(PythonOnlyUDT()))
