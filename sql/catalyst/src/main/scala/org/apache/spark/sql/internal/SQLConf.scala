@@ -1345,6 +1345,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LITERAL_PRECISE_PRECISION =
+    buildConf("spark.sql.literal.precisePrecision")
+      .internal()
+      .doc("When integral literals are used with decimals in binary operators, Spark will " +
+        "pick a precise precision for the literals to calculate the precision and scale " +
+        "of the result decimal, when this config is true. By picking a precise precision, we " +
+        "can avoid wasting precision, to reduce the possibility of overflow.")
+      .booleanConf
+      .createWithDefault(true)
+
   val SQL_OPTIONS_REDACTION_PATTERN =
     buildConf("spark.sql.redaction.options.regex")
       .doc("Regex to decide which keys in a Spark SQL command's options map contain sensitive " +
@@ -1938,6 +1948,8 @@ class SQLConf extends Serializable with Logging {
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
+
+  def literalPrecisePrecision: Boolean = getConf(LITERAL_PRECISE_PRECISION)
 
   def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
 
