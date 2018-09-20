@@ -27,9 +27,9 @@ test_that("eager execution is not enabled", {
     sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
   }
   
-  df <- suppressWarnings(createDataFrame(iris))
+  df <- createDataFrame(faithful)
   expect_is(df, "SparkDataFrame")
-  expected <- "Sepal_Length:double, Sepal_Width:double, Petal_Length:double, Petal_Width:double, Species:string"
+  expected <- "eruptions:double, waiting:double"
   expect_output(show(df), expected)
   
   # Stop Spark session
@@ -46,11 +46,11 @@ test_that("eager execution is enabled", {
                    sparkConfig = list(spark.sql.repl.eagerEval.enabled = "true"))
   }
   
-  df <- suppressWarnings(createDataFrame(iris))
+  df <- createDataFrame(faithful)
   expect_is(df, "SparkDataFrame")
-  expected <- paste0("+------------+-----------+------------+-----------+-------+\n",
-                     "|Sepal_Length|Sepal_Width|Petal_Length|Petal_Width|Species|\n",
-                     "+------------+-----------+------------+-----------+-------+\n")
+  expected <- paste0("+---------+-------+\n",
+                     "|eruptions|waiting|\n",
+                     "+---------+-------+\n")
   expect_output(show(df), expected)
   
   # Stop Spark session

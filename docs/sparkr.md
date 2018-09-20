@@ -460,31 +460,43 @@ If the eager execution is enabled, the data will be returned to R client immedia
 # Start up spark session with eager execution enabled
 sparkR.session(master = "local[*]", sparkConfig = list(spark.sql.repl.eagerEval.enabled = "true"))
 
+# Create a grouped and sorted SparkDataFrame
 df <- createDataFrame(faithful)
+df2 <- arrange(summarize(groupBy(df, df$waiting), count = n(df$waiting)), "waiting")
 
-# Instead of displaying the SparkDataFrame class, displays the data returned
-df
+# Similar to R data.frame, displays the data returned, instead of SparkDataFrame class string
+df2
 
-##+---------+-------+                                                             
-##|eruptions|waiting|
-##+---------+-------+
-##|      3.6|   79.0|
-##|      1.8|   54.0|
-##|    3.333|   74.0|
-##|    2.283|   62.0|
-##|    4.533|   85.0|
-##|    2.883|   55.0|
-##|      4.7|   88.0|
-##|      3.6|   85.0|
-##|     1.95|   51.0|
-##|     4.35|   85.0|
-##+---------+-------+
-##only showing top 10 rows
+##+-------+-----+
+##|waiting|count|
+##+-------+-----+
+##|   43.0|    1|
+##|   45.0|    3|
+##|   46.0|    5|
+##|   47.0|    4|
+##|   48.0|    3|
+##|   49.0|    5|
+##|   50.0|    5|
+##|   51.0|    6|
+##|   52.0|    5|
+##|   53.0|    7|
+##|   54.0|    9|
+##|   55.0|    6|
+##|   56.0|    4|
+##|   57.0|    3|
+##|   58.0|    4|
+##|   59.0|    7|
+##|   60.0|    6|
+##|   62.0|    4|
+##|   63.0|    3|
+##|   64.0|    4|
+##+-------+-----+
+##only showing top 20 rows
 
 {% endhighlight %} 
 </div>
 
-Note that the `SparkSession` created by `sparkR` shell does not have eager execution enabled. You can stop the current session and start up a new session like above to enable.
+Note that to enable eager execution through `sparkR` command, add `spark.sql.repl.eagerEval.enabled=true` configuration property to the `--conf` option.
 
 ## Running SQL Queries from SparkR
 A SparkDataFrame can also be registered as a temporary view in Spark SQL and that allows you to run SQL queries over its data.

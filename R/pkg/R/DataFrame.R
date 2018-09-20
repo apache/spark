@@ -226,7 +226,8 @@ setMethod("showDF",
 
 #' show
 #'
-#' Print class and type information of a Spark object.
+#' If eager evaluation is enabled, return the data of the SparkDataFrame object, otherwise,
+#' print the class and type information of the SparkDataFrame object.
 #'
 #' @param object a Spark object. Can be a SparkDataFrame, Column, GroupedData, WindowSpec.
 #'
