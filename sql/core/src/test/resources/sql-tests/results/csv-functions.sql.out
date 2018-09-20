@@ -23,7 +23,7 @@ Extended Usage:
       > SELECT from_csv('1, 0.8', 'a INT, b DOUBLE');
        {"a":1, "b":0.8}
   
-    Since: 3.0.0
+    Since: 2.5.0
 
 Function: from_csv
 Usage: from_csv(csvStr, schema[, options]) - Returns a struct value with the given `csvStr` and `schema`.

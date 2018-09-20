@@ -3821,7 +3821,7 @@ object functions {
    *                CSV data source.
    *
    * @group collection_funcs
-   * @since 3.0.0
+   * @since 2.5.0
    */
   def from_csv(e: Column, schema: StructType, options: Map[String, String]): Column = withExpr {
     CsvToStructs(schema, options, e.expr)
@@ -3837,7 +3837,7 @@ object functions {
    *                CSV data source.
    *
    * @group collection_funcs
-   * @since 3.0.0
+   * @since 2.5.0
    */
   def from_csv(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
     withExpr(new CsvToStructs(e.expr, lit(schema).expr, options.asScala.toMap))

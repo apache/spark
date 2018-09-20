@@ -2638,7 +2638,7 @@ def sequence(start, stop, step=None):
 
 
 @ignore_unicode_prefix
-@since(3.0)
+@since(2.5)
 def from_csv(col, schema, options={}):
     """
     Parses a column containing a CSV string into a :class:`StructType`

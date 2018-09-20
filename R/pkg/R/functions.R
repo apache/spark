@@ -2215,7 +2215,7 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructType")
 #'
 #' @rdname column_collection_functions
 #' @aliases from_csv from_csv,Column,character-method
-#' @note from_csv since 3.0.0
+#' @note from_csv since 2.5.0
 setMethod("from_csv", signature(x = "Column", schema = "character"),
           function(x, schema, ...) {
             options <- varargsToStrEnv(...)
