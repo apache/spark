@@ -255,13 +255,6 @@ object SQLConf {
     .intConf
     .createWithDefault(4)
 
-  val LIMIT_FLAT_GLOBAL_LIMIT = buildConf("spark.sql.limit.flatGlobalLimit")
-    .internal()
-    .doc("During global limit, try to evenly distribute limited rows across data " +
-      "partitions. If disabled, scanning data partitions sequentially until reaching limit number.")
-    .booleanConf
-    .createWithDefault(true)
-
   val ADVANCED_PARTITION_PREDICATE_PUSHDOWN =
     buildConf("spark.sql.hive.advancedPartitionPredicatePushdown.enabled")
       .internal()
@@ -1764,8 +1757,6 @@ class SQLConf extends Serializable with Logging {
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
   def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
-
-  def limitFlatGlobalLimit: Boolean = getConf(LIMIT_FLAT_GLOBAL_LIMIT)
 
   def advancedPartitionPredicatePushdownEnabled: Boolean =
     getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
