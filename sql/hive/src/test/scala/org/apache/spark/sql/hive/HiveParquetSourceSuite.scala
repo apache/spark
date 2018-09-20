@@ -83,29 +83,28 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
   }
 
   test("SPARK-6016 make sure to use the latest footers") {
-    sql("drop table if exists spark_6016_fix")
+    val tableName = "spark_6016_fix"
+    withTable(tableName) {
+      // Create a DataFrame with two partitions. So, the created table will have two parquet files.
+      val df1 = (1 to 10).map(Tuple1(_)).toDF("a").coalesce(2)
+      df1.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable(tableName)
+      checkAnswer(
+        sql(s"select * from $tableName"),
+        (1 to 10).map(i => Row(i))
+      )
 
-    // Create a DataFrame with two partitions. So, the created table will have two parquet files.
-    val df1 = (1 to 10).map(Tuple1(_)).toDF("a").coalesce(2)
-    df1.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable("spark_6016_fix")
-    checkAnswer(
-      sql("select * from spark_6016_fix"),
-      (1 to 10).map(i => Row(i))
-    )
-
-    // Create a DataFrame with four partitions. So, the created table will have four parquet files.
-    val df2 = (1 to 10).map(Tuple1(_)).toDF("b").coalesce(4)
-    df2.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable("spark_6016_fix")
-    // For the bug of SPARK-6016, we are caching two outdated footers for df1. Then,
-    // since the new table has four parquet files, we are trying to read new footers from two files
-    // and then merge metadata in footers of these four (two outdated ones and two latest one),
-    // which will cause an error.
-    checkAnswer(
-      sql("select * from spark_6016_fix"),
-      (1 to 10).map(i => Row(i))
-    )
-
-    sql("drop table spark_6016_fix")
+      // Create a DataFrame with four partitions. So the created table will have four parquet files.
+      val df2 = (1 to 10).map(Tuple1(_)).toDF("b").coalesce(4)
+      df2.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable(tableName)
+      // For the bug of SPARK-6016, we are caching two outdated footers for df1. Then,
+      // since the new table has four parquet files, we are trying to read new footers from two
+      // files and then merge metadata in footers of these four
+      // (two outdated ones and two latest one), which will cause an error.
+      checkAnswer(
+        sql(s"select * from $tableName"),
+        (1 to 10).map(i => Row(i))
+      )
+    }
   }
 
   test("SPARK-8811: compatibility with array of struct in Hive") {
@@ -203,18 +202,19 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
   }
 
   test("Aggregation attribute names can't contain special chars \" ,;{}()\\n\\t=\"") {
-    val tempDir = Utils.createTempDir()
-    val filePath = new File(tempDir, "testParquet").getCanonicalPath
-    val filePath2 = new File(tempDir, "testParquet2").getCanonicalPath
+    withTempDir { tempDir =>
+      val filePath = new File(tempDir, "testParquet").getCanonicalPath
+      val filePath2 = new File(tempDir, "testParquet2").getCanonicalPath
 
-    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
-    val df2 = df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").max("y.int")
-    intercept[Throwable](df2.write.parquet(filePath))
+      val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
+      val df2 = df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").max("y.int")
+      intercept[Throwable](df2.write.parquet(filePath))
 
-    val df3 = df2.toDF("str", "max_int")
-    df3.write.parquet(filePath2)
-    val df4 = read.parquet(filePath2)
-    checkAnswer(df4, Row("1", 1) :: Row("2", 2) :: Row("3", 3) :: Nil)
-    assert(df4.columns === Array("str", "max_int"))
+      val df3 = df2.toDF("str", "max_int")
+      df3.write.parquet(filePath2)
+      val df4 = read.parquet(filePath2)
+      checkAnswer(df4, Row("1", 1) :: Row("2", 2) :: Row("3", 3) :: Nil)
+      assert(df4.columns === Array("str", "max_int"))
+    }
   }
 }

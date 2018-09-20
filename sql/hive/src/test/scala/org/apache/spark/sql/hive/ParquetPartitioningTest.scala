@@ -119,7 +119,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
 
   /**
    * Drop named tables if they exist
- *
+   *
    * @param tableNames tables to drop
    */
   def dropTables(tableNames: String*): Unit = {
@@ -243,7 +243,6 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
         (1 to 10).map(i => Row((1 to i).toArray, 1)))
     }
   }
-
 
   test("non-part select(*)") {
     checkAnswer(
