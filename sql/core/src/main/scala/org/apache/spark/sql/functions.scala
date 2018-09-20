@@ -3616,7 +3616,7 @@ object functions {
    *
    * @param e a string column containing JSON data.
    * @param options options to control how the json is parsed. accepts the same options and the
-   *                json data source. See [[DataFrameReader.json(paths:String*]].
+   *                json data source. See [[DataFrameReader#json]].
    * @return a column with string literal containing schema in DDL format.
    *
    * @group collection_funcs
