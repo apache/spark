@@ -444,19 +444,18 @@ final class ShuffleBlockFetcherIterator(
               buf.release()
               throwFetchFailedException(blockId, address, e)
           }
-
+          var isStreamCopied: Boolean = false
           try {
             input = streamWrapper(blockId, in)
-            originalInput = input
             // Only copy the stream if it's wrapped by compression or encryption, also the size of
             // block is small (the decompressed block is smaller than maxBytesInFlight)
             if (detectCorrupt && !input.eq(in) && size < maxBytesInFlight / 3) {
+              isStreamCopied = true
               val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
               // Decompress the whole block at once to detect any corruption, which could increase
               // the memory usage tne potential increase the chance of OOM.
               // TODO: manage the memory used here, and spill it into disk in case of OOM.
-              Utils.copyStream(input, out)
-              out.close()
+              Utils.copyStream(input, out, closeStreams = true)
               input = out.toChunkedByteBuffer.toInputStream(dispose = true)
             }
           } catch {
@@ -473,8 +472,9 @@ final class ShuffleBlockFetcherIterator(
               }
           } finally {
             // TODO: release the buf here to free memory earlier
-            originalInput.close()
-            in.close()
+            if (isStreamCopied) {
+              in.close()
+            }
           }
 
         case FailureFetchResult(blockId, address, e) =>
