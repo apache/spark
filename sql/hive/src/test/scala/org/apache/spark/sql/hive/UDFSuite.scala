@@ -201,23 +201,14 @@ class UDFSuite
     val UDAFName = "empty"
     val UDAFClassName = classOf[org.apache.spark.sql.hive.execution.UDAFEmpty].getCanonicalName
 
-    withTempDatabase { dbName =>
-      withUserDefinedFunction(s"$dbName.$UDAFName" -> false) {
-        sql(s"CREATE FUNCTION $dbName.$UDAFName AS '$UDAFClassName'")
-        sql(s"USE $dbName")
+    withUserDefinedFunction(UDAFName -> false) {
+      sql(s"CREATE FUNCTION $UDAFName AS '$UDAFClassName'")
 
-        assert(
-          sql("SHOW FUNCTIONS").collect()
-            .map(_.getString(0))
-            .contains(s"$dbName.$UDAFName"))
-
-        val e = intercept[AnalysisException] {
-          sql(s"SELECT $UDAFName(value) from $testTableName")
-        }
-        sql(s"USE default")
-
-        assert(e.getMessage.contains("Can not get an evaluator of the empty UDAF"))
+      val e = intercept[AnalysisException] {
+        sql(s"SELECT $UDAFName(value) from $testTableName")
       }
+
+      assert(e.getMessage.contains("Can not get an evaluator of the empty UDAF"))
     }
   }
 }
