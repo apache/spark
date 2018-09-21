@@ -47,15 +47,12 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode 
 }
 
 /**
- * Take the first `limit` elements of each child partition, but do not collect or shuffle them.
+ * Helper trait which defines methods that are shared by both
+ * [[LocalLimitExec]] and [[GlobalLimitExec]].
  */
-case class LocalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode with CodegenSupport {
-
+trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
+  val limit: Int
   override def output: Seq[Attribute] = child.output
-
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
 
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
     iter.take(limit)
@@ -96,93 +93,25 @@ case class LocalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode wi
 }
 
 /**
- * Take the `limit` elements of the child output.
+ * Take the first `limit` elements of each child partition, but do not collect or shuffle them.
  */
-case class GlobalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
+case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
 
-  override def output: Seq[Attribute] = child.output
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+}
+
+/**
+ * Take the first `limit` elements of the child's single output partition.
+ */
+case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
+
+  override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
-  private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
-
-  protected override def doExecute(): RDD[InternalRow] = {
-    val childRDD = child.execute()
-    val partitioner = LocalPartitioning(childRDD)
-    val shuffleDependency = ShuffleExchangeExec.prepareShuffleDependency(
-      childRDD, child.output, partitioner, serializer)
-    val numberOfOutput: Seq[Long] = if (shuffleDependency.rdd.getNumPartitions != 0) {
-      // submitMapStage does not accept RDD with 0 partition.
-      // So, we will not submit this dependency.
-      val submittedStageFuture = sparkContext.submitMapStage(shuffleDependency)
-      submittedStageFuture.get().recordsByPartitionId.toSeq
-    } else {
-      Nil
-    }
-
-    // This is an optimization to evenly distribute limited rows across all partitions.
-    // When enabled, Spark goes to take rows at each partition repeatedly until reaching
-    // limit number. When disabled, Spark takes all rows at first partition, then rows
-    // at second partition ..., until reaching limit number.
-    val flatGlobalLimit = sqlContext.conf.limitFlatGlobalLimit
-
-    val shuffled = new ShuffledRowRDD(shuffleDependency)
-
-    val sumOfOutput = numberOfOutput.sum
-    if (sumOfOutput <= limit) {
-      shuffled
-    } else if (!flatGlobalLimit) {
-      var numRowTaken = 0
-      val takeAmounts = numberOfOutput.map { num =>
-        if (numRowTaken + num < limit) {
-          numRowTaken += num.toInt
-          num.toInt
-        } else {
-          val toTake = limit - numRowTaken
-          numRowTaken += toTake
-          toTake
-        }
-      }
-      val broadMap = sparkContext.broadcast(takeAmounts)
-      shuffled.mapPartitionsWithIndexInternal { case (index, iter) =>
-        iter.take(broadMap.value(index).toInt)
-      }
-    } else {
-      // We try to evenly require the asked limit number of rows across all child rdd's partitions.
-      var rowsNeedToTake: Long = limit
-      val takeAmountByPartition: Array[Long] = Array.fill[Long](numberOfOutput.length)(0L)
-      val remainingRowsByPartition: Array[Long] = Array(numberOfOutput: _*)
-
-      while (rowsNeedToTake > 0) {
-        val nonEmptyParts = remainingRowsByPartition.count(_ > 0)
-        // If the rows needed to take are less the number of non-empty partitions, take one row from
-        // each non-empty partitions until we reach `limit` rows.
-        // Otherwise, evenly divide the needed rows to each non-empty partitions.
-        val takePerPart = math.max(1, rowsNeedToTake / nonEmptyParts)
-        remainingRowsByPartition.zipWithIndex.foreach { case (num, index) =>
-          // In case `rowsNeedToTake` < `nonEmptyParts`, we may run out of `rowsNeedToTake` during
-          // the traversal, so we need to add this check.
-          if (rowsNeedToTake > 0 && num > 0) {
-            if (num >= takePerPart) {
-              rowsNeedToTake -= takePerPart
-              takeAmountByPartition(index) += takePerPart
-              remainingRowsByPartition(index) -= takePerPart
-            } else {
-              rowsNeedToTake -= num
-              takeAmountByPartition(index) += num
-              remainingRowsByPartition(index) -= num
-            }
-          }
-        }
-      }
-      val broadMap = sparkContext.broadcast(takeAmountByPartition)
-      shuffled.mapPartitionsWithIndexInternal { case (index, iter) =>
-        iter.take(broadMap.value(index).toInt)
-      }
-    }
-  }
 }
 
 /**

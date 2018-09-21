@@ -611,7 +611,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     ).toDF("id", "stringData")
     val sampleDF = df.sample(false, 0.7, 50)
     // After sampling, sampleDF doesn't contain id=1.
-    assert(!sampleDF.select("id").collect.contains(1))
+    assert(!sampleDF.select("id").as[Int].collect.contains(1))
     // simpleUdf should not encounter id=1.
     checkAnswer(sampleDF.select(simpleUdf($"id")), List.fill(sampleDF.count.toInt)(Row(1)))
   }

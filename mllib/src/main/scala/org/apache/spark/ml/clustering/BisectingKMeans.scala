@@ -104,10 +104,6 @@ class BisectingKMeansModel private[ml] (
   @Since("2.1.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-  /** @group expertSetParam */
-  @Since("2.4.0")
-  def setDistanceMeasure(value: String): this.type = set(distanceMeasure, value)
-
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
