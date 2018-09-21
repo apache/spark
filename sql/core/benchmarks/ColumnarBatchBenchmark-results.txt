@@ -1,0 +1,63 @@
+================================================================================================
+int access benchmark
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Int Read/Write:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Java Array                                     190 /  194       1725.7           0.6       1.0X
+ByteBuffer Unsafe                              319 /  324       1028.7           1.0       0.6X
+ByteBuffer API                                1363 / 1366        240.4           4.2       0.1X
+DirectByteBuffer                               532 /  542        615.5           1.6       0.4X
+Unsafe Buffer                                  186 /  190       1758.7           0.6       1.0X
+Column(on heap)                                186 /  192       1758.6           0.6       1.0X
+Column(off heap)                               372 /  375        881.5           1.1       0.5X
+Column(off heap direct)                        185 /  191       1769.8           0.6       1.0X
+UnsafeRow (on heap)                            378 /  384        865.9           1.2       0.5X
+UnsafeRow (off heap)                           402 /  406        815.3           1.2       0.5X
+Column On Heap Append                          324 /  332       1012.8           1.0       0.6X
+
+
+================================================================================================
+boolean access benchmark
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Boolean Read/Write:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Bitset                                         730 /  736        459.6           2.2       1.0X
+Byte Array                                     462 /  469        725.8           1.4       1.6X
+
+
+================================================================================================
+string access benchmark
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+String Read/Write:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+On Heap                                        364 /  369         45.0          22.2       1.0X
+Off Heap                                       485 /  490         33.8          29.6       0.8X
+
+
+================================================================================================
+array access benchmark
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Array Vector Read:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+On Heap Read Size Only                         500 /  500        327.8           3.1       1.0X
+Off Heap Read Size Only                        541 /  552        302.6           3.3       0.9X
+On Heap Read Elements                         2956 / 2975         55.4          18.0       0.2X
+Off Heap Read Elements                        3854 / 3854         42.5          23.5       0.1X
+
+
