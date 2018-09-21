@@ -31,10 +31,12 @@ import org.apache.spark.util.collection.BitSet
 /**
  * Benchmark to low level memory access using different ways to manage buffers.
  * To run this benchmark:
- * 1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
- * 2. build/sbt "sql/test:runMain <this class>"
- * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
- *    Results will be written to "benchmarks/<this class>-results.txt".
+ * {{{
+ *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
+ *   2. build/sbt "sql/test:runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      Results will be written to "benchmarks/<this class>-results.txt".
+ * }}}
  */
 object ColumnarBatchBenchmark extends BenchmarkBase {
   // This benchmark reads and writes an array of ints.
@@ -442,16 +444,16 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
   }
 
   override def benchmark(): Unit = {
-    runBenchmark("int access benchmark") {
+    runBenchmark("Int Read/Write") {
       intAccess(1024 * 40)
     }
-    runBenchmark("boolean access benchmark") {
+    runBenchmark("Boolean Read/Write") {
       booleanAccess(1024 * 40)
     }
-    runBenchmark("string access benchmark") {
+    runBenchmark("String Read/Write") {
       stringAccess(1024 * 4)
     }
-    runBenchmark("array access benchmark") {
+    runBenchmark("Array Vector Read") {
       arrayAccess(1024 * 40)
     }
   }
