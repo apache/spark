@@ -298,7 +298,25 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   test("SQL interface support storageLevel(DISK_ONLY)") {
-    sql("CACHE DISK_ONLY TABLE testData")
+    sql("CACHE TABLE testData OPTIONS('storageLevel' 'DISK_ONLY')")
+    assertCached(spark.table("testData"))
+    val rddId = rddIdOf("testData")
+    assert(isExpectStorageLevel(rddId, Disk))
+    assert(!isExpectStorageLevel(rddId, Memory))
+    spark.catalog.uncacheTable("testData")
+  }
+
+  test("SQL interface select from table support storageLevel(DISK_ONLY)") {
+    sql("CACHE TABLE testSelect OPTIONS('storageLevel' 'DISK_ONLY') select * from testData")
+    assertCached(spark.table("testSelect"))
+    val rddId = rddIdOf("testSelect")
+    assert(isExpectStorageLevel(rddId, Disk))
+    assert(!isExpectStorageLevel(rddId, Memory))
+    spark.catalog.uncacheTable("testSelect")
+  }
+
+  test("SQL interface support storageLevel(DISK_ONLY) with invalid options") {
+    sql("CACHE TABLE testData OPTIONS('storageLevel' 'DISK_ONLY', 'a' '1', 'b' '2')")
     assertCached(spark.table("testData"))
     val rddId = rddIdOf("testData")
     assert(isExpectStorageLevel(rddId, Disk))
@@ -307,7 +325,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   test("SQL interface support storageLevel(MEMORY_ONLY)") {
-    sql("CACHE MEMORY_ONLY TABLE testData")
+    sql("CACHE TABLE testData OPTIONS('storageLevel' 'MEMORY_ONLY')")
     assertCached(spark.table("testData"))
     val rddId = rddIdOf("testData")
     assert(!isExpectStorageLevel(rddId, Disk))
@@ -316,13 +334,13 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
 
   test("SQL interface support storageLevel(Invalid StorageLevel)") {
     val message = intercept[IllegalArgumentException] {
-      sql("CACHE InvalidStorageLevel TABLE testData")
+      sql("CACHE TABLE testData OPTIONS('storageLevel' 'invalid_storage_level')")
     }.getMessage
-    assert(message.contains("Invalid StorageLevel: INVALIDSTORAGELEVEL"))
+    assert(message.contains("Invalid StorageLevel: INVALID_STORAGE_LEVEL"))
   }
 
   test("SQL interface support storageLevel(with LAZY)") {
-    sql("CACHE LAZY disk_only TABLE testData")
+    sql("CACHE LAZY TABLE testData OPTIONS('storageLevel' 'disk_only')")
     assertCached(spark.table("testData"))
 
     val rddId = rddIdOf("testData")
