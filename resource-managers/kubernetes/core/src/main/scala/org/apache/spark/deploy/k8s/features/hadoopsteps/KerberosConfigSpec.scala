@@ -19,8 +19,7 @@ package org.apache.spark.deploy.k8s.features.hadoopsteps
 import io.fabric8.kubernetes.api.model.Secret
 
  /**
-  * Represents a given configuration of the hadoop configuration logic, informing the
-  * HadoopConfigBootstrapStep of how the driver should be configured. This includes:
+  * Represents a given configuration of the Kerberos Configuration logic
   * <p>
   * - The secret containing a DT, either previously specified or built on the fly
   * - The name of the secret where the DT will be stored

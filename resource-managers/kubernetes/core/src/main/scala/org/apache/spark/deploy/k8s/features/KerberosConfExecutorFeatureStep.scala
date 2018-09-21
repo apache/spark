@@ -46,7 +46,7 @@ private[spark] class KerberosConfExecutorFeatureStep(
       dTDataItemKey,
       sparkUserName,
       krb5Location,
-      kubernetesConf.getKRBConfigMapName,
+      kubernetesConf.kRBConfigMapName,
       pod)
   }
 
@@ -55,7 +55,7 @@ private[spark] class KerberosConfExecutorFeatureStep(
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
       .map(fileLocation => HadoopBootstrapUtil.buildkrb5ConfigMap(
-        kubernetesConf.getKRBConfigMapName,
+        kubernetesConf.kRBConfigMapName,
         fileLocation)).toSeq
   }
 }

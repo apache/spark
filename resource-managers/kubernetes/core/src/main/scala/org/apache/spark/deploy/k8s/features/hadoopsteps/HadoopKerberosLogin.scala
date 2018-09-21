@@ -31,7 +31,7 @@ import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManag
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 
  /**
-  * This step does all the heavy lifting for Delegation Token logic. This step
+  * This logic does all the heavy lifting for Delegation Token creation. This step
   * assumes that the job user has either specified a principal and keytab or ran
   * $kinit before running spark-submit. With a TGT stored locally, by running
   * UGI.getCurrentUser you are able to obtain the current user, alternatively
@@ -39,8 +39,7 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
   * as the logged into user instead of the current user. With the Job User principal
   * you then retrieve the delegation token from the NameNode and store values in
   * DelegationToken. Lastly, the class puts the data into a secret. All this is
-  * appended to the current HadoopSpec which in turn will append to the current
-  * DriverSpec.
+  * defined in a KerberosConfigSpec
   */
 private[spark] object HadoopKerberosLogin {
    def buildSpec(
@@ -48,7 +47,6 @@ private[spark] object HadoopKerberosLogin {
      kubernetesResourceNamePrefix : String,
      maybePrincipal: Option[String],
      maybeKeytab: Option[File],
-     maybeRenewerPrincipal: Option[String],
      tokenManager: KubernetesHadoopDelegationTokenManager): KerberosConfigSpec = {
      val hadoopConf = SparkHadoopUtil.get.newConfiguration(submissionSparkConf)
      if (!tokenManager.isSecurityEnabled) {
@@ -78,7 +76,7 @@ private[spark] object HadoopKerberosLogin {
              hadoopConf,
              hadoopTokenManager)
          }})
-     if (tokenData.isEmpty) throw new SparkException(s"Did not obtain any delegation tokens")
+     require(tokenData.nonEmpty, "Did not obtain any delegation tokens")
      val currentTime = tokenManager.getCurrentTime
      val initialTokenDataKeyName = s"$KERBEROS_SECRET_LABEL_PREFIX-$currentTime-$renewalInterval"
      val uniqueSecretName =

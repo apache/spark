@@ -37,128 +37,120 @@ import org.apache.spark.internal.Logging
   * SparkPod and Kubernetes Resources using the additive method of the feature steps
   */
 private[spark] class HadoopGlobalFeatureDriverStep(
-  kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf])
-  extends KubernetesFeatureConfigStep with Logging {
+    kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf])
+    extends KubernetesFeatureConfigStep with Logging {
 
-   private val conf = kubernetesConf.sparkConf
-   private val maybePrincipal = conf.get(KUBERNETES_KERBEROS_PRINCIPAL)
-   private val maybeKeytab = conf.get(KUBERNETES_KERBEROS_KEYTAB)
-     .map(k => new File(k))
-   private val maybeExistingSecretName = conf.get(KUBERNETES_KERBEROS_DT_SECRET_NAME)
-   private val maybeExistingSecretItemKey =
-     conf.get(KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY)
-   private val maybeRenewerPrincipal =
-     conf.get(KUBERNETES_KERBEROS_RENEWER_PRINCIPAL)
-   private val kubeTokenManager = kubernetesConf.getTokenManager
-   private val isKerberosEnabled = kubeTokenManager.isSecurityEnabled
+    private val conf = kubernetesConf.sparkConf
+    private val maybePrincipal = conf.get(KUBERNETES_KERBEROS_PRINCIPAL)
+    private val maybeKeytab = conf.get(KUBERNETES_KERBEROS_KEYTAB)
+      .map(k => new File(k))
+    private val maybeExistingSecretName = conf.get(KUBERNETES_KERBEROS_DT_SECRET_NAME)
+    private val maybeExistingSecretItemKey =
+      conf.get(KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY)
+    private val kubeTokenManager = kubernetesConf.tokenManager
+    private val isKerberosEnabled = kubeTokenManager.isSecurityEnabled
 
-   require(maybeKeytab.forall( _ => isKerberosEnabled ),
-     "You must enable Kerberos support if you are specifying a Kerberos Keytab")
+    require(maybeKeytab.forall( _ => isKerberosEnabled ),
+      "You must enable Kerberos support if you are specifying a Kerberos Keytab")
 
-   require(maybeExistingSecretName.forall( _ => isKerberosEnabled ),
-     "You must enable Kerberos support if you are specifying a Kerberos Secret")
+    require(maybeExistingSecretName.forall( _ => isKerberosEnabled ),
+      "You must enable Kerberos support if you are specifying a Kerberos Secret")
 
-   KubernetesUtils.requireBothOrNeitherDefined(
-     maybeKeytab,
-     maybePrincipal,
-     "If a Kerberos keytab is specified you must also specify a Kerberos principal",
-     "If a Kerberos principal is specified you must also specify a Kerberos keytab")
+    KubernetesUtils.requireBothOrNeitherDefined(
+      maybeKeytab,
+      maybePrincipal,
+      "If a Kerberos principal is specified you must also specify a Kerberos keytab",
+      "If a Kerberos keytab is specified you must also specify a Kerberos principal")
 
-   KubernetesUtils.requireBothOrNeitherDefined(
-     maybeExistingSecretName,
-     maybeExistingSecretItemKey,
-     "If a secret storing a Kerberos Delegation Token is specified you must also" +
-       " specify the label where the data is stored",
-     "If a secret data item-key where the data of the Kerberos Delegation Token is specified" +
-       " you must also specify the name of the secret")
+    KubernetesUtils.requireBothOrNeitherDefined(
+      maybeExistingSecretName,
+      maybeExistingSecretItemKey,
+      "If a secret data item-key where the data of the Kerberos Delegation Token is specified" +
+        " you must also specify the name of the secret",
+      "If a secret storing a Kerberos Delegation Token is specified you must also" +
+        " specify the item-key where the data is stored")
 
-   // TODO: Using pre-existing configMaps instead of local HADOOP_CONF_DIR
-   require(kubernetesConf.hadoopConfDir.isDefined, "Ensure that HADOOP_CONF_DIR is defined")
-   private val hadoopConfDir = kubernetesConf.hadoopConfDir.get
-   private val hadoopConfigurationFiles = kubeTokenManager.getHadoopConfFiles(hadoopConfDir)
+    // TODO: Using pre-existing configMaps instead of local HADOOP_CONF_DIR
+    require(kubernetesConf.hadoopConfDir.isDefined, "Ensure that HADOOP_CONF_DIR is defined")
+    private val hadoopConfDir = kubernetesConf.hadoopConfDir.get
+    private val hadoopConfigurationFiles = kubeTokenManager.getHadoopConfFiles(hadoopConfDir)
 
-   // Either use pre-existing secret or login to create new Secret with DT stored within
-   private val hadoopSpec: Option[KerberosConfigSpec] = (for {
-     secretName <- maybeExistingSecretName
-     secretItemKey <- maybeExistingSecretItemKey
-   } yield {
-     KerberosConfigSpec(
-       dtSecret = None,
-       dtSecretName = secretName,
-       dtSecretItemKey = secretItemKey,
-       jobUserName = kubeTokenManager.getCurrentUser.getShortUserName)
-   }).orElse(
-     for {
-       _ <- maybePrincipal
-       _ <- maybeKeytab
-       _ <- maybeRenewerPrincipal
-     } yield {
-       HadoopKerberosLogin.buildSpec(
-         conf,
-         kubernetesConf.appResourceNamePrefix,
-         maybePrincipal,
-         maybeKeytab,
-         maybeRenewerPrincipal,
-         kubeTokenManager)
-     })
-
-  override def configurePod(pod: SparkPod): SparkPod = {
-    val hadoopBasedSparkPod = HadoopBootstrapUtil.bootstrapHadoopConfDir(
-      hadoopConfDir,
-      kubernetesConf.getHadoopConfigMapName,
-      kubeTokenManager,
-      pod)
-    (for {
-      hSpec <- hadoopSpec
-      krb5fileLocation <- kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
+    // Either use pre-existing secret or login to create new Secret with DT stored within
+    private val hadoopSpec: Option[KerberosConfigSpec] = (for {
+      secretName <- maybeExistingSecretName
+      secretItemKey <- maybeExistingSecretItemKey
     } yield {
-      HadoopBootstrapUtil.bootstrapKerberosPod(
-        hSpec.dtSecretName,
-        hSpec.dtSecretItemKey,
-        hSpec.jobUserName,
-        krb5fileLocation,
-        kubernetesConf.getKRBConfigMapName,
-        hadoopBasedSparkPod)
-    }).getOrElse(
-      HadoopBootstrapUtil.bootstrapSparkUserPod(
-        kubeTokenManager.getCurrentUser.getShortUserName,
-        hadoopBasedSparkPod))
-  }
+      KerberosConfigSpec(
+         dtSecret = None,
+         dtSecretName = secretName,
+         dtSecretItemKey = secretItemKey,
+         jobUserName = kubeTokenManager.getCurrentUser.getShortUserName)
+    }).orElse(
+      if (isKerberosEnabled) {
+         Some(HadoopKerberosLogin.buildSpec(
+             conf,
+             kubernetesConf.appResourceNamePrefix,
+             maybePrincipal,
+             maybeKeytab,
+             kubeTokenManager))
+       } else None )
 
-  override def getAdditionalPodSystemProperties(): Map[String, String] = {
-    val resolvedConfValues = hadoopSpec.map{hSpec =>
-      Map(KERBEROS_KEYTAB_SECRET_NAME -> hSpec.dtSecretName,
-        KERBEROS_KEYTAB_SECRET_KEY -> hSpec.dtSecretItemKey,
-        KERBEROS_SPARK_USER_NAME -> hSpec.jobUserName)
-    }.getOrElse(
-        Map(KERBEROS_SPARK_USER_NAME ->
-          kubernetesConf.getTokenManager.getCurrentUser.getShortUserName)
-      )
-    Map(HADOOP_CONFIG_MAP_SPARK_CONF_NAME -> kubernetesConf.getHadoopConfigMapName,
-      HADOOP_CONF_DIR_LOC -> kubernetesConf.hadoopConfDir.get) ++ resolvedConfValues
-  }
-
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    val krb5ConfigMap = kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
-      .map(fileLocation => HadoopBootstrapUtil.buildkrb5ConfigMap(
-        kubernetesConf.getKRBConfigMapName,
-        fileLocation))
-    val kerberosDTSecret = for {
-      hSpec <- hadoopSpec
-      kDtSecret <- hSpec.dtSecret
-    } yield {
-      kDtSecret
+    override def configurePod(pod: SparkPod): SparkPod = {
+      val hadoopBasedSparkPod = HadoopBootstrapUtil.bootstrapHadoopConfDir(
+        hadoopConfDir,
+        kubernetesConf.hadoopConfigMapName,
+        kubeTokenManager,
+        pod)
+      (for {
+        hSpec <- hadoopSpec
+        krb5fileLocation <- kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
+      } yield {
+        HadoopBootstrapUtil.bootstrapKerberosPod(
+            hSpec.dtSecretName,
+            hSpec.dtSecretItemKey,
+            hSpec.jobUserName,
+            krb5fileLocation,
+            kubernetesConf.kRBConfigMapName,
+            hadoopBasedSparkPod)
+      }).getOrElse(
+        HadoopBootstrapUtil.bootstrapSparkUserPod(
+          kubeTokenManager.getCurrentUser.getShortUserName,
+          hadoopBasedSparkPod))
     }
-    val configMap =
-      new ConfigMapBuilder()
-        .withNewMetadata()
-          .withName(kubernetesConf.getHadoopConfigMapName)
-          .endMetadata()
-        .addToData(hadoopConfigurationFiles.map(file =>
-          (file.toPath.getFileName.toString, Files.toString(file, Charsets.UTF_8))).toMap.asJava)
-        .build()
-    Seq(configMap) ++
-      krb5ConfigMap.toSeq ++
-      kerberosDTSecret.toSeq
-  }
+
+    override def getAdditionalPodSystemProperties(): Map[String, String] = {
+      val resolvedConfValues = hadoopSpec.map{ hSpec =>
+         Map(KERBEROS_KEYTAB_SECRET_NAME -> hSpec.dtSecretName,
+          KERBEROS_KEYTAB_SECRET_KEY -> hSpec.dtSecretItemKey,
+          KERBEROS_SPARK_USER_NAME -> hSpec.jobUserName)
+      }.getOrElse(
+          Map(KERBEROS_SPARK_USER_NAME ->
+            kubernetesConf.tokenManager.getCurrentUser.getShortUserName))
+      Map(HADOOP_CONFIG_MAP_SPARK_CONF_NAME -> kubernetesConf.hadoopConfigMapName,
+        HADOOP_CONF_DIR_LOC -> kubernetesConf.hadoopConfDir.get) ++ resolvedConfValues
+    }
+
+    override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
+      val krb5ConfigMap = kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
+        .map(fileLocation => HadoopBootstrapUtil.buildkrb5ConfigMap(
+          kubernetesConf.kRBConfigMapName,
+          fileLocation))
+      val kerberosDTSecret = for {
+        hSpec <- hadoopSpec
+        kDtSecret <- hSpec.dtSecret
+      } yield {
+        kDtSecret
+      }
+      val configMap =
+        new ConfigMapBuilder()
+          .withNewMetadata()
+            .withName(kubernetesConf.hadoopConfigMapName)
+            .endMetadata()
+          .addToData(hadoopConfigurationFiles.map(file =>
+            (file.toPath.getFileName.toString, Files.toString(file, Charsets.UTF_8))).toMap.asJava)
+          .build()
+      Seq(configMap) ++
+        krb5ConfigMap.toSeq ++
+        kerberosDTSecret.toSeq
+    }
 }

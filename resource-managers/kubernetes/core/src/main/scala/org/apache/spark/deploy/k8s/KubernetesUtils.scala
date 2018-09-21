@@ -40,12 +40,19 @@ private[spark] object KubernetesUtils {
   }
 
   def requireBothOrNeitherDefined(
-    opt1: Option[_],
-    opt2: Option[_],
-    errMessageWhenFirstIsMissing: String,
-    errMessageWhenSecondIsMissing: String): Unit = {
-    requireNandDefined(opt1, opt2, errMessageWhenSecondIsMissing)
-    requireNandDefined(opt2, opt1, errMessageWhenFirstIsMissing)
+      opt1: Option[_],
+      opt2: Option[_],
+      errMessageWhenFirstIsMissing: String,
+      errMessageWhenSecondIsMissing: String): Unit = {
+    requireSecondIfFirstIsDefined(opt1, opt2, errMessageWhenSecondIsMissing)
+    requireSecondIfFirstIsDefined(opt2, opt1, errMessageWhenFirstIsMissing)
+  }
+
+  def requireSecondIfFirstIsDefined(
+      opt1: Option[_], opt2: Option[_], errMessageWhenSecondIsMissing: String): Unit = {
+    opt1.foreach { _ =>
+      require(opt2.isDefined, errMessageWhenSecondIsMissing)
+    }
   }
 
   def requireNandDefined(opt1: Option[_], opt2: Option[_], errMessage: String): Unit = {

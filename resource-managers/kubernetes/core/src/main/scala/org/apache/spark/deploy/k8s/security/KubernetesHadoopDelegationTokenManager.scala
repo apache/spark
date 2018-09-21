@@ -30,12 +30,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.{Clock, SystemClock}
 
  /**
-  * The KubernetesHadoopDelegationTokenManager fetches and updates Hadoop delegation tokens
-  * on the behalf of the Kubernetes submission client. It is modeled after the YARN
-  * AMCredentialRenewer, renewals in Kubernetes happen in a seperate microservice that will
-  * automatically update the Tokens via Kubernetes Secrets. The principal difference is that
-  * instead of writing the new credentials to HDFS and incrementing the timestamp of the file,
-  * the new credentials (called Tokens when they are serialized) are stored in Secrets accessible
+  * The KubernetesHadoopDelegationTokenManager fetches Hadoop delegation tokens
+  * on the behalf of the Kubernetes submission client. The new credentials
+  * (called Tokens when they are serialized) are stored in Secrets accessible
   * to the driver and executors, when new Tokens are received they overwrite the current Secrets.
   */
 private[spark] class KubernetesHadoopDelegationTokenManager extends Logging {
@@ -62,7 +59,6 @@ private[spark] class KubernetesHadoopDelegationTokenManager extends Logging {
      }
    }
 
-   // Principle method in charge of retrieving new Delegation Tokens
    def getDelegationTokens(
     creds: Credentials,
     conf: SparkConf,
@@ -70,7 +66,7 @@ private[spark] class KubernetesHadoopDelegationTokenManager extends Logging {
     tokenManager: HadoopDelegationTokenManager): (Array[Byte], Long) = {
     try {
       val rt = tokenManager.obtainDelegationTokens(hadoopConf, creds)
-      logDebug(s"Initialized tokens: ${SparkHadoopUtil.get.dumpTokens(creds)}")
+      logDebug(s"Initialized tokens")
       (serializeCreds(creds), nextRT(rt, conf))
     } catch {
       case e: Exception =>

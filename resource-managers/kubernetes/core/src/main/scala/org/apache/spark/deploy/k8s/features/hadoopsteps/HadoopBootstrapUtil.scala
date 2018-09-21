@@ -42,53 +42,53 @@ private[spark] object HadoopBootstrapUtil {
     * @return a modified SparkPod
     */
   def bootstrapKerberosPod(
-      dtSecretName: String,
-      dtSecretItemKey: String,
-      userName: String,
-      fileLocation: String,
-      krb5ConfName: String,
-      pod: SparkPod) : SparkPod = {
-      val krb5File = new File(fileLocation)
-      val fileStringPath = krb5File.toPath.getFileName.toString
-      val kerberizedPod = new PodBuilder(pod.pod)
-        .editOrNewSpec()
-          .addNewVolume()
-            .withName(SPARK_APP_HADOOP_SECRET_VOLUME_NAME)
-            .withNewSecret()
-              .withSecretName(dtSecretName)
-              .endSecret()
-            .endVolume()
-          .addNewVolume()
-            .withName(KRB_FILE_VOLUME)
-              .withNewConfigMap()
-                .withName(krb5ConfName)
-                .withItems(new KeyToPathBuilder()
-                  .withKey(fileStringPath)
-                  .withPath(fileStringPath)
-                  .build())
-                .endConfigMap()
-              .endVolume()
-          .endSpec()
-        .build()
-      val kerberizedContainer = new ContainerBuilder(pod.container)
-        .addNewVolumeMount()
+    dtSecretName: String,
+    dtSecretItemKey: String,
+    userName: String,
+    fileLocation: String,
+    krb5ConfName: String,
+    pod: SparkPod) : SparkPod = {
+    val krb5File = new File(fileLocation)
+    val fileStringPath = krb5File.toPath.getFileName.toString
+    val kerberizedPod = new PodBuilder(pod.pod)
+      .editOrNewSpec()
+        .addNewVolume()
           .withName(SPARK_APP_HADOOP_SECRET_VOLUME_NAME)
-          .withMountPath(SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR)
-          .endVolumeMount()
-        .addNewVolumeMount()
+          .withNewSecret()
+            .withSecretName(dtSecretName)
+            .endSecret()
+          .endVolume()
+        .addNewVolume()
           .withName(KRB_FILE_VOLUME)
-          .withMountPath(KRB_FILE_DIR_PATH + "/krb5.conf")
-          .withSubPath("krb5.conf")
-          .endVolumeMount()
-        .addNewEnv()
-          .withName(ENV_HADOOP_TOKEN_FILE_LOCATION)
-          .withValue(s"$SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR/$dtSecretItemKey")
-          .endEnv()
-        .addNewEnv()
-          .withName(ENV_SPARK_USER)
-          .withValue(userName)
-          .endEnv()
-        .build()
+            .withNewConfigMap()
+              .withName(krb5ConfName)
+              .withItems(new KeyToPathBuilder()
+                .withKey(fileStringPath)
+                .withPath(fileStringPath)
+                .build())
+              .endConfigMap()
+            .endVolume()
+        .endSpec()
+      .build()
+    val kerberizedContainer = new ContainerBuilder(pod.container)
+      .addNewVolumeMount()
+        .withName(SPARK_APP_HADOOP_SECRET_VOLUME_NAME)
+        .withMountPath(SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR)
+        .endVolumeMount()
+      .addNewVolumeMount()
+        .withName(KRB_FILE_VOLUME)
+        .withMountPath(KRB_FILE_DIR_PATH + "/krb5.conf")
+        .withSubPath("krb5.conf")
+        .endVolumeMount()
+      .addNewEnv()
+        .withName(ENV_HADOOP_TOKEN_FILE_LOCATION)
+        .withValue(s"$SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR/$dtSecretItemKey")
+        .endEnv()
+      .addNewEnv()
+        .withName(ENV_SPARK_USER)
+        .withValue(userName)
+        .endEnv()
+      .build()
     SparkPod(kerberizedPod, kerberizedContainer)
   }
 
@@ -103,11 +103,11 @@ private[spark] object HadoopBootstrapUtil {
      sparkUserName: String,
      pod: SparkPod) : SparkPod = {
      val envModifiedContainer = new ContainerBuilder(pod.container)
-       .addNewEnv()
-         .withName(ENV_SPARK_USER)
-         .withValue(sparkUserName)
-         .endEnv()
-       .build()
+         .addNewEnv()
+           .withName(ENV_SPARK_USER)
+           .withValue(sparkUserName)
+           .endEnv()
+         .build()
     SparkPod(pod.pod, envModifiedContainer)
   }
 
@@ -126,47 +126,47 @@ private[spark] object HadoopBootstrapUtil {
     hadoopConfigMapName: String,
     kubeTokenManager: KubernetesHadoopDelegationTokenManager,
     pod: SparkPod) : SparkPod = {
-    val hadoopConfigFiles =
-      kubeTokenManager.getHadoopConfFiles(hadoopConfDir)
-    val keyPaths = hadoopConfigFiles.map { file =>
-      val fileStringPath = file.toPath.getFileName.toString
-      new KeyToPathBuilder()
-        .withKey(fileStringPath)
-        .withPath(fileStringPath)
-        .build() }
+      val hadoopConfigFiles =
+        kubeTokenManager.getHadoopConfFiles(hadoopConfDir)
+      val keyPaths = hadoopConfigFiles.map { file =>
+        val fileStringPath = file.toPath.getFileName.toString
+        new KeyToPathBuilder()
+          .withKey(fileStringPath)
+          .withPath(fileStringPath)
+          .build() }
 
-    val hadoopSupportedPod = new PodBuilder(pod.pod)
-      .editSpec()
-        .addNewVolume()
+      val hadoopSupportedPod = new PodBuilder(pod.pod)
+        .editSpec()
+          .addNewVolume()
+            .withName(HADOOP_FILE_VOLUME)
+            .withNewConfigMap()
+              .withName(hadoopConfigMapName)
+              .withItems(keyPaths.asJava)
+              .endConfigMap()
+            .endVolume()
+          .endSpec()
+        .build()
+
+      val hadoopSupportedContainer = new ContainerBuilder(pod.container)
+        .addNewVolumeMount()
           .withName(HADOOP_FILE_VOLUME)
-          .withNewConfigMap()
-            .withName(hadoopConfigMapName)
-            .withItems(keyPaths.asJava)
-            .endConfigMap()
-          .endVolume()
-        .endSpec()
-      .build()
-
-    val hadoopSupportedContainer = new ContainerBuilder(pod.container)
-      .addNewVolumeMount()
-        .withName(HADOOP_FILE_VOLUME)
-        .withMountPath(HADOOP_CONF_DIR_PATH)
-        .endVolumeMount()
-      .addNewEnv()
-        .withName(ENV_HADOOP_CONF_DIR)
-        .withValue(HADOOP_CONF_DIR_PATH)
-        .endEnv()
-      .build()
-    SparkPod(hadoopSupportedPod, hadoopSupportedContainer)
-  }
-   /**
-    * bootstraping the container with ConfigMaps that store
-    * Hadoop configuration files
-    *
-    * @param configMapName name of configMap for krb5
-    * @param fileLocation location of krb5 file
-    * @return a ConfigMap
-    */
+          .withMountPath(HADOOP_CONF_DIR_PATH)
+          .endVolumeMount()
+        .addNewEnv()
+          .withName(ENV_HADOOP_CONF_DIR)
+          .withValue(HADOOP_CONF_DIR_PATH)
+          .endEnv()
+        .build()
+      SparkPod(hadoopSupportedPod, hadoopSupportedContainer)
+    }
+     /**
+      * bootstraping the container with ConfigMaps that store
+      * Hadoop configuration files
+      *
+      * @param configMapName name of configMap for krb5
+      * @param fileLocation location of krb5 file
+      * @return a ConfigMap
+      */
   def buildkrb5ConfigMap(
     configMapName: String,
     fileLocation: String) : ConfigMap = {

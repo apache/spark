@@ -245,12 +245,6 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
-  val KUBERNETES_KERBEROS_RENEWER_PRINCIPAL =
-    ConfigBuilder("spark.kubernetes.kerberos.renewer.principal")
-      .doc("Specify the principal you wish to renew and retrieve your Kerberos values with")
-      .stringConf
-      .createOptional
-
   val KUBERNETES_KERBEROS_DT_SECRET_NAME =
     ConfigBuilder("spark.kubernetes.kerberos.tokensecret.name")
       .doc("Specify the name of the secret where your existing delegation token is stored. " +
@@ -260,9 +254,8 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY =
     ConfigBuilder("spark.kubernetes.kerberos.tokensecret.itemkey")
-      .doc("Specify the item key of the data where " +
-        "your existing delegation token is stored. This removes the need " +
-        "for the job user to provide any keytab for launching a job")
+      .doc("Specify the item key of the data where your existing delegation token is stored. " +
+        "This removes the need for the job user to provide any keytab for launching a job")
       .stringConf
       .createOptional
 
