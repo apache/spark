@@ -41,45 +41,50 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
       "partitioned_parquet_with_key_and_complextypes",
       "normal_parquet")
 
-    sql( s"""
-      CREATE TEMPORARY VIEW partitioned_parquet
-      USING org.apache.spark.sql.parquet
-      OPTIONS (
-        path '${partitionedTableDir.toURI}'
-      )
-    """)
+    sql(
+      s"""
+        |CREATE TEMPORARY VIEW partitioned_parquet
+        |USING org.apache.spark.sql.parquet
+        |OPTIONS (
+        |  path '${partitionedTableDir.toURI}'
+        |)
+      """.stripMargin)
 
-    sql( s"""
-      CREATE TEMPORARY VIEW partitioned_parquet_with_key
-      USING org.apache.spark.sql.parquet
-      OPTIONS (
-        path '${partitionedTableDirWithKey.toURI}'
-      )
-    """)
+    sql(
+      s"""
+        |CREATE TEMPORARY VIEW partitioned_parquet_with_key
+        |USING org.apache.spark.sql.parquet
+        |OPTIONS (
+        |  path '${partitionedTableDirWithKey.toURI}'
+        |)
+      """.stripMargin)
 
-    sql( s"""
-      CREATE TEMPORARY VIEW normal_parquet
-      USING org.apache.spark.sql.parquet
-      OPTIONS (
-        path '${new File(partitionedTableDir, "p=1").toURI}'
-      )
-    """)
+    sql(
+      s"""
+        |CREATE TEMPORARY VIEW normal_parquet
+        |USING org.apache.spark.sql.parquet
+        |OPTIONS (
+        |  path '${new File(partitionedTableDir, "p=1").toURI}'
+        |)
+      """.stripMargin)
 
-    sql( s"""
-      CREATE TEMPORARY VIEW partitioned_parquet_with_key_and_complextypes
-      USING org.apache.spark.sql.parquet
-      OPTIONS (
-        path '${partitionedTableDirWithKeyAndComplexTypes.toURI}'
-      )
-    """)
+    sql(
+      s"""
+        |CREATE TEMPORARY VIEW partitioned_parquet_with_key_and_complextypes
+        |USING org.apache.spark.sql.parquet
+        |OPTIONS (
+        |  path '${partitionedTableDirWithKeyAndComplexTypes.toURI}'
+        |)
+      """.stripMargin)
 
-    sql( s"""
-      CREATE TEMPORARY VIEW partitioned_parquet_with_complextypes
-      USING org.apache.spark.sql.parquet
-      OPTIONS (
-        path '${partitionedTableDirWithComplexTypes.toURI}'
-      )
-    """)
+    sql(
+      s"""
+        |CREATE TEMPORARY VIEW partitioned_parquet_with_complextypes
+        |USING org.apache.spark.sql.parquet
+        |OPTIONS (
+        |  path '${partitionedTableDirWithComplexTypes.toURI}'
+        |)
+      """.stripMargin)
   }
 
   test("SPARK-6016 make sure to use the latest footers") {

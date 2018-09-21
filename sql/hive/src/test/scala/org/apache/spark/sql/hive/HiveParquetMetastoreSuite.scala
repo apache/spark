@@ -44,78 +44,83 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
       "jt",
       "jt_array",
       "test_parquet")
-    sql(s"""
-      create external table partitioned_parquet
-      (
-        intField INT,
-        stringField STRING
-      )
-      PARTITIONED BY (p int)
-      ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-       STORED AS
-       INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-       OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      location '${partitionedTableDir.toURI}'
-    """)
+    sql(
+      s"""
+        |create external table partitioned_parquet
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |PARTITIONED BY (p int)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        | STORED AS
+        | INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        | OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        |location '${partitionedTableDir.toURI}'
+      """.stripMargin)
 
-    sql(s"""
-      create external table partitioned_parquet_with_key
-      (
-        intField INT,
-        stringField STRING
-      )
-      PARTITIONED BY (p int)
-      ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-       STORED AS
-       INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-       OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      location '${partitionedTableDirWithKey.toURI}'
-    """)
+    sql(
+      s"""
+        |create external table partitioned_parquet_with_key
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |PARTITIONED BY (p int)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        | STORED AS
+        | INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        | OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        |location '${partitionedTableDirWithKey.toURI}'
+      """.stripMargin)
 
-    sql(s"""
-      create external table normal_parquet
-      (
-        intField INT,
-        stringField STRING
-      )
-      ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-       STORED AS
-       INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-       OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      location '${new File(normalTableDir, "normal").toURI}'
-    """)
+    sql(
+      s"""
+        |create external table normal_parquet
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        | STORED AS
+        | INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        | OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        |location '${new File(normalTableDir, "normal").toURI}'
+      """.stripMargin)
 
-    sql(s"""
-      CREATE EXTERNAL TABLE partitioned_parquet_with_complextypes
-      (
-        intField INT,
-        stringField STRING,
-        structField STRUCT<intStructField: INT, stringStructField: STRING>,
-        arrayField ARRAY<INT>
-      )
-      PARTITIONED BY (p int)
-      ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-       STORED AS
-       INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-       OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      LOCATION '${partitionedTableDirWithComplexTypes.toURI}'
-    """)
+    sql(
+      s"""
+        |CREATE EXTERNAL TABLE partitioned_parquet_with_complextypes
+        |(
+        |  intField INT,
+        |  stringField STRING,
+        |  structField STRUCT<intStructField: INT, stringStructField: STRING>,
+        |  arrayField ARRAY<INT>
+        |)
+        |PARTITIONED BY (p int)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        | STORED AS
+        | INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        | OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        |LOCATION '${partitionedTableDirWithComplexTypes.toURI}'
+      """.stripMargin)
 
-    sql(s"""
-      CREATE EXTERNAL TABLE partitioned_parquet_with_key_and_complextypes
-      (
-        intField INT,
-        stringField STRING,
-        structField STRUCT<intStructField: INT, stringStructField: STRING>,
-        arrayField ARRAY<INT>
-      )
-      PARTITIONED BY (p int)
-      ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-       STORED AS
-       INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-       OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      LOCATION '${partitionedTableDirWithKeyAndComplexTypes.toURI}'
-    """)
+    sql(
+      s"""
+        |CREATE EXTERNAL TABLE partitioned_parquet_with_key_and_complextypes
+        |(
+        |  intField INT,
+        |  stringField STRING,
+        |  structField STRUCT<intStructField: INT, stringStructField: STRING>,
+        |  arrayField ARRAY<INT>
+        |)
+        |PARTITIONED BY (p int)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        | STORED AS
+        | INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        | OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        |LOCATION '${partitionedTableDirWithKeyAndComplexTypes.toURI}'
+      """.stripMargin)
 
     sql(
       """
