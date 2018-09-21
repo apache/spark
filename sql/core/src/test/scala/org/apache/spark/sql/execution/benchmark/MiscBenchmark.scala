@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.benchmark
 
+import org.apache.spark.benchmark.Benchmark
+
 /**
  * Benchmark to measure whole stage codegen performance.
  * To run this:

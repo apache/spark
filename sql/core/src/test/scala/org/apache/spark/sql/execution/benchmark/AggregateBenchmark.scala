@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.benchmark
 import java.util.HashMap
 
 import org.apache.spark.SparkConf
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow

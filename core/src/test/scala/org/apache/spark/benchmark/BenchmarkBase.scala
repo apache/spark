@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.benchmark
+package org.apache.spark.benchmark
 
 import java.io.{File, FileOutputStream, OutputStream}
 

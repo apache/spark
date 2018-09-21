@@ -21,8 +21,8 @@ import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.serializer.KryoTest._
-import org.apache.spark.sql.execution.benchmark.Benchmark
 
 class KryoBenchmark extends SparkFunSuite {
   val benchmark = new Benchmark("Benchmark Kryo Unsafe vs safe Serialization", 1024 * 1024 * 15, 10)

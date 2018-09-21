@@ -22,7 +22,7 @@ import java.io.{File, FileOutputStream, OutputStream}
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.benchmark.Benchmark
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.functions._
 import org.apache.spark.util.Utils
 

@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.SparkConf
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.SQLConf
 

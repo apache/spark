@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.benchmark
 
 import scala.util.Random
 
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeArrayWriter}

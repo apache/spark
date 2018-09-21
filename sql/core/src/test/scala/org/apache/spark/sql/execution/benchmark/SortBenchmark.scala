@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.benchmark
 
 import java.util.{Arrays, Comparator}
 
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.unsafe.array.LongArray
 import org.apache.spark.unsafe.memory.MemoryBlock
 import org.apache.spark.util.collection.Sorter

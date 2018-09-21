@@ -19,8 +19,8 @@ package org.apache.spark.sql
 
 import java.util.Random
 
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.catalyst.expressions.{HiveHasher, XXH64}
-import org.apache.spark.sql.execution.benchmark.Benchmark
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 

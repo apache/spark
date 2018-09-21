@@ -21,6 +21,7 @@ import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFPercentileApprox
 
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogFunction
