@@ -30,6 +30,7 @@ import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.DecisionTreeModelReadWrite._
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
@@ -99,37 +100,36 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   @Since("2.0.0")
   def setVarianceCol(value: String): this.type = set(varianceCol, value)
 
-  override protected def train(dataset: Dataset[_]): DecisionTreeRegressionModel = {
+  override protected def train(
+      dataset: Dataset[_]): DecisionTreeRegressionModel = instrumented { instr =>
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy = getOldStrategy(categoricalFeatures)
 
-    val instr = Instrumentation.create(this, oldDataset)
-    instr.logParams(params: _*)
+    instr.logPipelineStage(this)
+    instr.logDataset(oldDataset)
+    instr.logParams(this, params: _*)
 
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
-    val m = trees.head.asInstanceOf[DecisionTreeRegressionModel]
-    instr.logSuccess(m)
-    m
+    trees.head.asInstanceOf[DecisionTreeRegressionModel]
   }
 
   /** (private[ml]) Train a decision tree on an RDD */
   private[ml] def train(
       data: RDD[LabeledPoint],
       oldStrategy: OldStrategy,
-      featureSubsetStrategy: String): DecisionTreeRegressionModel = {
-    val instr = Instrumentation.create(this, data)
-    instr.logParams(params: _*)
+      featureSubsetStrategy: String): DecisionTreeRegressionModel = instrumented { instr =>
+    instr.logPipelineStage(this)
+    instr.logDataset(data)
+    instr.logParams(this, params: _*)
 
     val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy,
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
-    val m = trees.head.asInstanceOf[DecisionTreeRegressionModel]
-    instr.logSuccess(m)
-    m
+    trees.head.asInstanceOf[DecisionTreeRegressionModel]
   }
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */

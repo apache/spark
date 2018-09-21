@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableS
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlanV2
 import org.apache.spark.sql.internal.SQLConf
@@ -65,24 +66,35 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Plans special cases of limit operators.
    */
   object SpecialLimits extends Strategy {
+    private def decideTopRankNode(limit: Int, child: LogicalPlan): Seq[SparkPlan] = {
+      if (limit < conf.topKSortFallbackThreshold) {
+        child match {
+          case Sort(order, true, child) =>
+            TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
+          case Project(projectList, Sort(order, true, child)) =>
+            TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
+        }
+      } else {
+        GlobalLimitExec(limit,
+          LocalLimitExec(limit, planLater(child)),
+          orderedLimit = true) :: Nil
+      }
+    }
+
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ReturnAnswer(rootPlan) => rootPlan match {
-        case Limit(IntegerLiteral(limit), Sort(order, true, child))
-            if limit < conf.topKSortFallbackThreshold =>
-          TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
-        case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
-            if limit < conf.topKSortFallbackThreshold =>
-          TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
+        case Limit(IntegerLiteral(limit), s @ Sort(order, true, child)) =>
+          decideTopRankNode(limit, s)
+        case Limit(IntegerLiteral(limit), p @ Project(projectList, Sort(order, true, child))) =>
+          decideTopRankNode(limit, p)
         case Limit(IntegerLiteral(limit), child) =>
           CollectLimitExec(limit, planLater(child)) :: Nil
         case other => planLater(other) :: Nil
       }
-      case Limit(IntegerLiteral(limit), Sort(order, true, child))
-          if limit < conf.topKSortFallbackThreshold =>
-        TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
-      case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
-          if limit < conf.topKSortFallbackThreshold =>
-        TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
+      case Limit(IntegerLiteral(limit), s @ Sort(order, true, child)) =>
+        decideTopRankNode(limit, s)
+      case Limit(IntegerLiteral(limit), p @ Project(projectList, Sort(order, true, child))) =>
+        decideTopRankNode(limit, p)
       case _ => Nil
     }
   }
@@ -328,10 +340,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             "Streaming aggregation doesn't support group aggregate pandas UDF")
         }
 
+        val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
+
         aggregate.AggUtils.planStreamingAggregation(
           namedGroupingExpressions,
           aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
           rewrittenResultExpressions,
+          stateVersion,
           planLater(child))
 
       case _ => Nil
@@ -504,10 +519,25 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case FlatMapGroupsWithState(
         func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, stateEnc, outputMode, _,
         timeout, child) =>
+        val stateVersion = conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
         val execPlan = FlatMapGroupsWithStateExec(
-          func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, None, stateEnc, outputMode,
-          timeout, batchTimestampMs = None, eventTimeWatermark = None, planLater(child))
+          func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, None, stateEnc, stateVersion,
+          outputMode, timeout, batchTimestampMs = None, eventTimeWatermark = None, planLater(child))
         execPlan :: Nil
+      case _ =>
+        Nil
+    }
+  }
+
+  /**
+   * Strategy to convert EvalPython logical operator to physical operator.
+   */
+  object PythonEvals extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case ArrowEvalPython(udfs, output, child) =>
+        ArrowEvalPythonExec(udfs, output, planLater(child)) :: Nil
+      case BatchEvalPython(udfs, output, child) =>
+        BatchEvalPythonExec(udfs, output, planLater(child)) :: Nil
       case _ =>
         Nil
     }
@@ -528,12 +558,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Distinct(child) =>
         throw new IllegalStateException(
           "logical distinct operator should have been replaced by aggregate in the optimizer")
-      case logical.Intersect(left, right) =>
+      case logical.Intersect(left, right, false) =>
         throw new IllegalStateException(
-          "logical intersect operator should have been replaced by semi-join in the optimizer")
-      case logical.Except(left, right) =>
+          "logical intersect  operator should have been replaced by semi-join in the optimizer")
+      case logical.Intersect(left, right, true) =>
+        throw new IllegalStateException(
+          "logical intersect operator should have been replaced by union, aggregate" +
+            " and generate operators in the optimizer")
+      case logical.Except(left, right, false) =>
         throw new IllegalStateException(
           "logical except operator should have been replaced by anti-join in the optimizer")
+      case logical.Except(left, right, true) =>
+        throw new IllegalStateException(
+          "logical except (all) operator should have been replaced by union, aggregate" +
+            " and generate operators in the optimizer")
 
       case logical.DeserializeToObject(deserializer, objAttr, child) =>
         execution.DeserializeToObjectExec(deserializer, objAttr, planLater(child)) :: Nil

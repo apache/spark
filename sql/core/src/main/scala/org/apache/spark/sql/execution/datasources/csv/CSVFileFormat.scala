@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
+import java.nio.charset.Charset
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce._
@@ -129,6 +131,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       )
     }
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val columnPruning = sparkSession.sessionState.conf.csvColumnPruning
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
@@ -142,7 +145,8 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         parser,
         requiredSchema,
         dataSchema,
-        caseSensitive)
+        caseSensitive,
+        columnPruning)
     }
   }
 
@@ -168,7 +172,9 @@ private[csv] class CsvOutputWriter(
     context: TaskAttemptContext,
     params: CSVOptions) extends OutputWriter with Logging {
 
-  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
+  private val charset = Charset.forName(params.charset)
+
+  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path), charset)
 
   private val gen = new UnivocityGenerator(dataSchema, writer, params)
 

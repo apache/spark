@@ -74,7 +74,7 @@ class ContinuousAggregationSuite extends ContinuousSuiteBase {
     val df = input.toDF()
       .select('value as 'copy, 'value)
       .where('copy =!= 1)
-      .planWithBarrier
+      .logicalPlan
       .coalesce(1)
       .where('copy =!= 2)
       .agg(max('value))
@@ -95,7 +95,7 @@ class ContinuousAggregationSuite extends ContinuousSuiteBase {
 
     val df = input.toDF()
       .coalesce(1)
-      .planWithBarrier
+      .logicalPlan
       .coalesce(1)
       .select('value as 'copy, 'value)
       .agg(max('value))

@@ -110,7 +110,7 @@ private[kafka010] abstract class KafkaRowWriter(
       case t =>
         throw new IllegalStateException(s"${KafkaWriter.TOPIC_ATTRIBUTE_NAME} " +
           s"attribute unsupported type $t. ${KafkaWriter.TOPIC_ATTRIBUTE_NAME} " +
-          "must be a StringType")
+          s"must be a ${StringType.catalogString}")
     }
     val keyExpression = inputSchema.find(_.name == KafkaWriter.KEY_ATTRIBUTE_NAME)
       .getOrElse(Literal(null, BinaryType))
@@ -118,7 +118,7 @@ private[kafka010] abstract class KafkaRowWriter(
       case StringType | BinaryType => // good
       case t =>
         throw new IllegalStateException(s"${KafkaWriter.KEY_ATTRIBUTE_NAME} " +
-          s"attribute unsupported type $t")
+          s"attribute unsupported type ${t.catalogString}")
     }
     val valueExpression = inputSchema
       .find(_.name == KafkaWriter.VALUE_ATTRIBUTE_NAME).getOrElse(
@@ -129,7 +129,7 @@ private[kafka010] abstract class KafkaRowWriter(
       case StringType | BinaryType => // good
       case t =>
         throw new IllegalStateException(s"${KafkaWriter.VALUE_ATTRIBUTE_NAME} " +
-          s"attribute unsupported type $t")
+          s"attribute unsupported type ${t.catalogString}")
     }
     UnsafeProjection.create(
       Seq(topicExpression, Cast(keyExpression, BinaryType),

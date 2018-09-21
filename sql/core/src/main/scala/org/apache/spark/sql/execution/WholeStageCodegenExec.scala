@@ -21,6 +21,7 @@ import java.util.Locale
 import java.util.function.Supplier
 
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
@@ -275,7 +276,7 @@ trait CodegenSupport extends SparkPlan {
       required: AttributeSet): String = {
     val evaluateVars = new StringBuilder
     variables.zipWithIndex.foreach { case (ev, i) =>
-      if (ev.code != "" && required.contains(attributes(i))) {
+      if (ev.code.nonEmpty && required.contains(attributes(i))) {
         evaluateVars.append(ev.code.toString + "\n")
         ev.code = EmptyBlock
       }
@@ -582,7 +583,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     val (_, maxCodeSize) = try {
       CodeGenerator.compile(cleanedSource)
     } catch {
-      case _: Exception if !Utils.isTesting && sqlContext.conf.codegenFallback =>
+      case NonFatal(_) if !Utils.isTesting && sqlContext.conf.codegenFallback =>
         // We should already saw the error message
         logWarning(s"Whole-stage codegen disabled for plan (id=$codegenStageId):\n $treeString")
         return child.execute()

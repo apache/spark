@@ -501,7 +501,7 @@ class SparkSession(object):
         to Arrow data, then sending to the JVM to parallelize. If a schema is passed in, the
         data types will be used to coerce the data in Pandas to Arrow conversion.
         """
-        from pyspark.serializers import ArrowSerializer, _create_batch
+        from pyspark.serializers import ArrowStreamSerializer, _create_batch
         from pyspark.sql.types import from_arrow_schema, to_arrow_type, TimestampType
         from pyspark.sql.utils import require_minimum_pandas_version, \
             require_minimum_pyarrow_version
@@ -539,10 +539,18 @@ class SparkSession(object):
                 struct.names[i] = name
             schema = struct
 
-        # Create the Spark DataFrame directly from the Arrow data and schema
-        jrdd = self._sc._serialize_to_jvm(batches, len(batches), ArrowSerializer())
-        jdf = self._jvm.PythonSQLUtils.arrowPayloadToDataFrame(
-            jrdd, schema.json(), self._wrapped._jsqlContext)
+        jsqlContext = self._wrapped._jsqlContext
+
+        def reader_func(temp_filename):
+            return self._jvm.PythonSQLUtils.readArrowStreamFromFile(jsqlContext, temp_filename)
+
+        def create_RDD_server():
+            return self._jvm.ArrowRDDServer(jsqlContext)
+
+        # Create Spark DataFrame from Arrow stream file, using one batch per partition
+        jrdd = self._sc._serialize_to_jvm(batches, ArrowStreamSerializer(), reader_func,
+                                          create_RDD_server)
+        jdf = self._jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), jsqlContext)
         df = DataFrame(jdf, self._wrapped)
         df._schema = schema
         return df
@@ -678,9 +686,8 @@ class SparkSession(object):
             from pyspark.sql.utils import require_minimum_pandas_version
             require_minimum_pandas_version()
 
-            if self.conf.get("spark.sql.execution.pandas.respectSessionTimeZone").lower() \
-               == "true":
-                timezone = self.conf.get("spark.sql.session.timeZone")
+            if self._wrapped._conf.pandasRespectSessionTimeZone():
+                timezone = self._wrapped._conf.sessionLocalTimeZone()
             else:
                 timezone = None
 
@@ -690,15 +697,13 @@ class SparkSession(object):
                           (x.encode('utf-8') if not isinstance(x, str) else x)
                           for x in data.columns]
 
-            if self.conf.get("spark.sql.execution.arrow.enabled", "false").lower() == "true" \
-                    and len(data) > 0:
+            if self._wrapped._conf.arrowEnabled() and len(data) > 0:
                 try:
                     return self._create_from_pandas_with_arrow(data, schema, timezone)
                 except Exception as e:
                     from pyspark.util import _exception_message
 
-                    if self.conf.get("spark.sql.execution.arrow.fallback.enabled", "true") \
-                            .lower() == "true":
+                    if self._wrapped._conf.arrowFallbackEnabled():
                         msg = (
                             "createDataFrame attempted Arrow optimization because "
                             "'spark.sql.execution.arrow.enabled' is set to true; however, "

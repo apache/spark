@@ -47,6 +47,7 @@ private[spark] object Constants {
   val DEFAULT_BLOCKMANAGER_PORT = 7079
   val DRIVER_PORT_NAME = "driver-rpc-port"
   val BLOCK_MANAGER_PORT_NAME = "blockmanager"
+  val UI_PORT_NAME = "spark-ui"
 
   // Environment Variables
   val ENV_DRIVER_URL = "SPARK_DRIVER_URL"
@@ -70,6 +71,8 @@ private[spark] object Constants {
   val ENV_PYSPARK_FILES = "PYSPARK_FILES"
   val ENV_PYSPARK_ARGS = "PYSPARK_APP_ARGS"
   val ENV_PYSPARK_MAJOR_PYTHON_VERSION = "PYSPARK_MAJOR_PYTHON_VERSION"
+  val ENV_R_PRIMARY = "R_PRIMARY"
+  val ENV_R_ARGS = "R_APP_ARGS"
 
   // Miscellaneous
   val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"

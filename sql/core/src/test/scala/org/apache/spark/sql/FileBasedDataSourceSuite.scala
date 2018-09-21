@@ -20,10 +20,13 @@ package org.apache.spark.sql
 import java.io.{File, FileNotFoundException}
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -312,14 +315,14 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25)))).toDF("id", "vectors")
           .write.mode("overwrite").csv(csvDir)
       }.getMessage
-      assert(msg.contains("CSV data source does not support mydensevector data type"))
+      assert(msg.contains("CSV data source does not support array<double> data type"))
 
       msg = intercept[AnalysisException] {
         val schema = StructType(StructField("a", new UDT.MyDenseVectorUDT(), true) :: Nil)
         spark.range(1).write.mode("overwrite").csv(csvDir)
         spark.read.schema(schema).csv(csvDir).collect()
       }.getMessage
-      assert(msg.contains("CSV data source does not support mydensevector data type."))
+      assert(msg.contains("CSV data source does not support array<double> data type."))
     }
   }
 
@@ -339,7 +342,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
           sql("select testType()").write.format(format).mode("overwrite").save(tempDir)
         }.getMessage
         assert(msg.toLowerCase(Locale.ROOT)
-          .contains(s"$format data source does not support interval data type."))
+          .contains(s"$format data source does not support calendarinterval data type."))
       }
 
       // read path
@@ -358,7 +361,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
           spark.read.schema(schema).format(format).load(tempDir).collect()
         }.getMessage
         assert(msg.toLowerCase(Locale.ROOT)
-          .contains(s"$format data source does not support interval data type."))
+          .contains(s"$format data source does not support calendarinterval data type."))
       }
     }
   }
@@ -427,6 +430,71 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         }.getMessage
         assert(msg.toLowerCase(Locale.ROOT)
           .contains(s"$format data source does not support null data type."))
+      }
+    }
+  }
+
+  Seq("parquet", "orc").foreach { format =>
+    test(s"Spark native readers should respect spark.sql.caseSensitive - ${format}") {
+      withTempDir { dir =>
+        val tableName = s"spark_25132_${format}_native"
+        val tableDir = dir.getCanonicalPath + s"/$tableName"
+        withTable(tableName) {
+          val end = 5
+          val data = spark.range(end).selectExpr("id as A", "id * 2 as b", "id * 3 as B")
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+            data.write.format(format).mode("overwrite").save(tableDir)
+          }
+          sql(s"CREATE TABLE $tableName (a LONG, b LONG) USING $format LOCATION '$tableDir'")
+
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+            checkAnswer(sql(s"select a from $tableName"), data.select("A"))
+            checkAnswer(sql(s"select A from $tableName"), data.select("A"))
+
+            // RuntimeException is triggered at executor side, which is then wrapped as
+            // SparkException at driver side
+            val e1 = intercept[SparkException] {
+              sql(s"select b from $tableName").collect()
+            }
+            assert(
+              e1.getCause.isInstanceOf[RuntimeException] &&
+                e1.getCause.getMessage.contains(
+                  """Found duplicate field(s) "b": [b, B] in case-insensitive mode"""))
+            val e2 = intercept[SparkException] {
+              sql(s"select B from $tableName").collect()
+            }
+            assert(
+              e2.getCause.isInstanceOf[RuntimeException] &&
+                e2.getCause.getMessage.contains(
+                  """Found duplicate field(s) "b": [b, B] in case-insensitive mode"""))
+          }
+
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+            checkAnswer(sql(s"select a from $tableName"), (0 until end).map(_ => Row(null)))
+            checkAnswer(sql(s"select b from $tableName"), data.select("b"))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-25237 compute correct input metrics in FileScanRDD") {
+    withTempPath { p =>
+      val path = p.getAbsolutePath
+      spark.range(1000).repartition(1).write.csv(path)
+      val bytesReads = new mutable.ArrayBuffer[Long]()
+      val bytesReadListener = new SparkListener() {
+        override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+          bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
+        }
+      }
+      sparkContext.addSparkListener(bytesReadListener)
+      try {
+        spark.read.csv(path).limit(1).collect()
+        sparkContext.listenerBus.waitUntilEmpty(1000L)
+        assert(bytesReads.sum === 7860)
+      } finally {
+        sparkContext.removeSparkListener(bytesReadListener)
       }
     }
   }

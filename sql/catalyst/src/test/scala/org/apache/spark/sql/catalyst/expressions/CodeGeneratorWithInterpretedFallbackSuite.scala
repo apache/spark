@@ -17,17 +17,33 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.concurrent.ExecutionException
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, LongType}
+import org.apache.spark.sql.types.IntegerType
 
 class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanTestBase {
 
-  test("UnsafeProjection with codegen factory mode") {
-    val input = Seq(LongType, IntegerType)
-      .zipWithIndex.map(x => BoundReference(x._2, x._1, true))
+  object FailedCodegenProjection
+      extends CodeGeneratorWithInterpretedFallback[Seq[Expression], UnsafeProjection] {
 
+    override protected def createCodeGeneratedObject(in: Seq[Expression]): UnsafeProjection = {
+      val invalidCode = new CodeAndComment("invalid code", Map.empty)
+      // We assume this compilation throws an exception
+      CodeGenerator.compile(invalidCode)
+      null
+    }
+
+    override protected def createInterpretedObject(in: Seq[Expression]): UnsafeProjection = {
+      InterpretedUnsafeProjection.createProjection(in)
+    }
+  }
+
+  test("UnsafeProjection with codegen factory mode") {
+    val input = Seq(BoundReference(0, IntegerType, nullable = true))
     val codegenOnly = CodegenObjectFactoryMode.CODEGEN_ONLY.toString
     withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenOnly) {
       val obj = UnsafeProjection.createObject(input)
@@ -39,5 +55,25 @@ class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanT
       val obj = UnsafeProjection.createObject(input)
       assert(obj.isInstanceOf[InterpretedUnsafeProjection])
     }
+  }
+
+  test("fallback to the interpreter mode") {
+    val input = Seq(BoundReference(0, IntegerType, nullable = true))
+    val fallback = CodegenObjectFactoryMode.FALLBACK.toString
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallback) {
+      val obj = FailedCodegenProjection.createObject(input)
+      assert(obj.isInstanceOf[InterpretedUnsafeProjection])
+    }
+  }
+
+  test("codegen failures in the CODEGEN_ONLY mode") {
+    val errMsg = intercept[ExecutionException] {
+      val input = Seq(BoundReference(0, IntegerType, nullable = true))
+      val codegenOnly = CodegenObjectFactoryMode.CODEGEN_ONLY.toString
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenOnly) {
+        FailedCodegenProjection.createObject(input)
+      }
+    }.getMessage
+    assert(errMsg.contains("failed to compile: org.codehaus.commons.compiler.CompileException:"))
   }
 }

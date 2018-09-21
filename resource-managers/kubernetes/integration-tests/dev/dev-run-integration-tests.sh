@@ -16,9 +16,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-TEST_ROOT_DIR=$(git rev-parse --show-toplevel)/resource-managers/kubernetes/integration-tests
-
-cd "${TEST_ROOT_DIR}"
+set -xo errexit
+TEST_ROOT_DIR=$(git rev-parse --show-toplevel)
 
 DEPLOY_MODE="minikube"
 IMAGE_REPO="docker.io/kubespark"
@@ -27,7 +26,7 @@ IMAGE_TAG="N/A"
 SPARK_MASTER=
 NAMESPACE=
 SERVICE_ACCOUNT=
-INCLUDE_TAGS=
+INCLUDE_TAGS="k8s"
 EXCLUDE_TAGS=
 
 # Parse arguments
@@ -62,7 +61,7 @@ while (( "$#" )); do
       shift
       ;;
     --include-tags)
-      INCLUDE_TAGS="$2"
+      INCLUDE_TAGS="k8s,$2"
       shift
       ;;
     --exclude-tags)
@@ -76,13 +75,12 @@ while (( "$#" )); do
   shift
 done
 
-cd $TEST_ROOT_DIR
-
 properties=(
   -Dspark.kubernetes.test.sparkTgz=$SPARK_TGZ \
   -Dspark.kubernetes.test.imageTag=$IMAGE_TAG \
   -Dspark.kubernetes.test.imageRepo=$IMAGE_REPO \
-  -Dspark.kubernetes.test.deployMode=$DEPLOY_MODE
+  -Dspark.kubernetes.test.deployMode=$DEPLOY_MODE \
+  -Dtest.include.tags=$INCLUDE_TAGS
 )
 
 if [ -n $NAMESPACE ];
@@ -105,9 +103,4 @@ then
   properties=( ${properties[@]} -Dtest.exclude.tags=$EXCLUDE_TAGS )
 fi
 
-if [ -n $INCLUDE_TAGS ];
-then
-  properties=( ${properties[@]} -Dtest.include.tags=$INCLUDE_TAGS )
-fi
-
-../../../build/mvn integration-test ${properties[@]}
+$TEST_ROOT_DIR/build/mvn integration-test -f $TEST_ROOT_DIR/pom.xml -pl resource-managers/kubernetes/integration-tests -am -Pkubernetes -Phadoop-2.7 ${properties[@]}

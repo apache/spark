@@ -61,7 +61,7 @@ In `cluster` mode, the driver runs on a different machine than the client, so `S
 # Preparations
 
 Running Spark on YARN requires a binary distribution of Spark which is built with YARN support.
-Binary distributions can be downloaded from the [downloads page](http://spark.apache.org/downloads.html) of the project website.
+Binary distributions can be downloaded from the [downloads page](https://spark.apache.org/downloads.html) of the project website.
 To build Spark yourself, refer to [Building Spark](building-spark.html).
 
 To make Spark runtime jars accessible from YARN side, you can specify `spark.yarn.archive` or `spark.yarn.jars`. For details please refer to [Spark Properties](running-on-yarn.html#spark-properties). If neither `spark.yarn.archive` nor `spark.yarn.jars` is specified, Spark will create a zip file with all jars under `$SPARK_HOME/jars` and upload it to the distributed cache.
@@ -421,7 +421,14 @@ To use a custom metrics.properties for the application master and executors, upd
   <code>spark.blacklist.application.maxFailedExecutorsPerNode</code>.
   </td>
 </tr>
-
+<tr>
+  <td><code>spark.yarn.metrics.namespace</code></td>
+  <td>(none)</td>
+  <td>
+  The root namespace for AM metrics reporting. 
+  If it is not set then the YARN application ID is used.
+  </td>
+</tr>
 </table>
 
 # Important notes

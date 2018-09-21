@@ -67,7 +67,7 @@ public class JavaHypothesisTestingExample {
       )
     );
 
-    // The contingency table is constructed from the raw (feature, label) pairs and used to conduct
+    // The contingency table is constructed from the raw (label, feature) pairs and used to conduct
     // the independence test. Returns an array containing the ChiSquaredTestResult for every feature
     // against the label.
     ChiSqTestResult[] featureTestResults = Statistics.chiSqTest(obs.rdd());

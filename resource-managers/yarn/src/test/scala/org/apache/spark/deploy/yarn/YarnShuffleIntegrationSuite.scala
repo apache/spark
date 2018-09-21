@@ -44,7 +44,7 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
       classOf[YarnShuffleService].getCanonicalName)
-    yarnConfig.set("spark.shuffle.service.port", "0")
+    yarnConfig.set(SHUFFLE_SERVICE_PORT.key, "0")
     yarnConfig
   }
 
@@ -54,8 +54,8 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     logInfo("Shuffle service port = " + shuffleServicePort)
 
     Map(
-      "spark.shuffle.service.enabled" -> "true",
-      "spark.shuffle.service.port" -> shuffleServicePort.toString,
+      SHUFFLE_SERVICE_ENABLED.key -> "true",
+      SHUFFLE_SERVICE_PORT.key -> shuffleServicePort.toString,
       MAX_EXECUTOR_FAILURES.key -> "1"
     )
   }

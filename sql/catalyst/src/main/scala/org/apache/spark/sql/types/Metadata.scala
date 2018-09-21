@@ -215,6 +215,8 @@ object Metadata {
         x.##
       case x: Metadata =>
         hash(x.map)
+      case null =>
+        0
       case other =>
         throw new RuntimeException(s"Do not support type ${other.getClass}.")
     }

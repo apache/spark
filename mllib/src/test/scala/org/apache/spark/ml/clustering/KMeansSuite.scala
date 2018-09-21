@@ -131,6 +131,8 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
       assert(summary.predictions.columns.contains(c))
     }
     assert(summary.cluster.columns === Array(predictionColName))
+    assert(summary.trainingCost < 0.1)
+    assert(model.computeCost(dataset) == summary.trainingCost)
     val clusterSizes = summary.clusterSizes
     assert(clusterSizes.length === k)
     assert(clusterSizes.sum === numRows)
@@ -232,7 +234,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     val oldKmeansModel = new MLlibKMeansModel(clusterCenters)
     val kmeansModel = new KMeansModel("", oldKmeansModel)
     def checkModel(pmml: PMML): Unit = {
-      // Check the header descripiton is what we expect
+      // Check the header description is what we expect
       assert(pmml.getHeader.getDescription === "k-means clustering")
       // check that the number of fields match the single vector size
       assert(pmml.getDataDictionary.getNumberOfFields === clusterCenters(0).size)

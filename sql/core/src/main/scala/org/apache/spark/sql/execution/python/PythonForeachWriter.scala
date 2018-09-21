@@ -45,10 +45,7 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
   }
 
   private lazy val pythonRunner = {
-    val conf = SparkEnv.get.conf
-    val bufferSize = conf.getInt("spark.buffer.size", 65536)
-    val reuseWorker = conf.getBoolean("spark.python.worker.reuse", true)
-    PythonRunner(func, bufferSize, reuseWorker)
+    PythonRunner(func)
   }
 
   private lazy val outputIterator =
@@ -56,7 +53,7 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
 
   override def open(partitionId: Long, version: Long): Boolean = {
     outputIterator  // initialize everything
-    TaskContext.get.addTaskCompletionListener { _ => buffer.close() }
+    TaskContext.get.addTaskCompletionListener[Unit] { _ => buffer.close() }
     true
   }
 

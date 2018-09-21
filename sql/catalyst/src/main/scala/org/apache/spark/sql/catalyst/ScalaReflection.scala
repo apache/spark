@@ -709,6 +709,8 @@ object ScalaReflection extends ScalaReflection {
   def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
     case Schema(s: StructType, _) =>
       s.toAttributes
+    case others =>
+      throw new UnsupportedOperationException(s"Attributes for type $others is not supported")
   }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
@@ -928,15 +930,6 @@ trait ScalaReflection {
    */
   def getClassNameFromType(tpe: `Type`): String = {
     tpe.dealias.erasure.typeSymbol.asClass.fullName
-  }
-
-  /**
-   * Returns classes of input parameters of scala function object.
-   */
-  def getParameterTypes(func: AnyRef): Seq[Class[_]] = {
-    val methods = func.getClass.getMethods.filter(m => m.getName == "apply" && !m.isBridge)
-    assert(methods.length == 1)
-    methods.head.getParameterTypes
   }
 
   /**

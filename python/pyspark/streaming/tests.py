@@ -179,7 +179,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self._test_func(input, func, expected)
 
     def test_flatMap(self):
-        """Basic operation test for DStream.faltMap."""
+        """Basic operation test for DStream.flatMap."""
         input = [range(1, 5), range(5, 9), range(9, 13)]
 
         def func(dstream):
@@ -205,6 +205,38 @@ class BasicOperationTests(PySparkStreamingTestCase):
             return dstream.count()
         expected = [[len(x)] for x in input]
         self._test_func(input, func, expected)
+
+    def test_slice(self):
+        """Basic operation test for DStream.slice."""
+        import datetime as dt
+        self.ssc = StreamingContext(self.sc, 1.0)
+        self.ssc.remember(4.0)
+        input = [[1], [2], [3], [4]]
+        stream = self.ssc.queueStream([self.sc.parallelize(d, 1) for d in input])
+
+        time_vals = []
+
+        def get_times(t, rdd):
+            if rdd and len(time_vals) < len(input):
+                time_vals.append(t)
+
+        stream.foreachRDD(get_times)
+
+        self.ssc.start()
+        self.wait_for(time_vals, 4)
+        begin_time = time_vals[0]
+
+        def get_sliced(begin_delta, end_delta):
+            begin = begin_time + dt.timedelta(seconds=begin_delta)
+            end = begin_time + dt.timedelta(seconds=end_delta)
+            rdds = stream.slice(begin, end)
+            result_list = [rdd.collect() for rdd in rdds]
+            return [r for result in result_list for r in result]
+
+        self.assertEqual(set([1]), set(get_sliced(0, 0)))
+        self.assertEqual(set([2, 3]), set(get_sliced(1, 2)))
+        self.assertEqual(set([2, 3, 4]), set(get_sliced(1, 4)))
+        self.assertEqual(set([1, 2, 3, 4]), set(get_sliced(0, 4)))
 
     def test_reduce(self):
         """Basic operation test for DStream.reduce."""
@@ -822,7 +854,7 @@ class StreamingContextTests(PySparkStreamingTestCase):
         self.ssc = StreamingContext.getActiveOrCreate(None, setupFunc)
         self.assertTrue(self.setupCalled)
 
-        # Verify that getActiveOrCreate() retuns active context and does not call the setupFunc
+        # Verify that getActiveOrCreate() returns active context and does not call the setupFunc
         self.ssc.start()
         self.setupCalled = False
         self.assertEqual(StreamingContext.getActiveOrCreate(None, setupFunc), self.ssc)

@@ -940,6 +940,11 @@ abstract class DStream[T: ClassTag] (
 
 object DStream {
 
+  private val SPARK_CLASS_REGEX = """^org\.apache\.spark""".r
+  private val SPARK_STREAMING_TESTCLASS_REGEX = """^org\.apache\.spark\.streaming\.test""".r
+  private val SPARK_EXAMPLES_CLASS_REGEX = """^org\.apache\.spark\.examples""".r
+  private val SCALA_CLASS_REGEX = """^scala""".r
+
   // `toPairDStreamFunctions` was in SparkContext before 1.3 and users had to
   // `import StreamingContext._` to enable it. Now we move it here to make the compiler find
   // it automatically. However, we still keep the old function in StreamingContext for backward
@@ -953,11 +958,6 @@ object DStream {
 
   /** Get the creation site of a DStream from the stack trace of when the DStream is created. */
   private[streaming] def getCreationSite(): CallSite = {
-    val SPARK_CLASS_REGEX = """^org\.apache\.spark""".r
-    val SPARK_STREAMING_TESTCLASS_REGEX = """^org\.apache\.spark\.streaming\.test""".r
-    val SPARK_EXAMPLES_CLASS_REGEX = """^org\.apache\.spark\.examples""".r
-    val SCALA_CLASS_REGEX = """^scala""".r
-
     /** Filtering function that excludes non-user classes for a streaming application */
     def streamingExclustionFunction(className: String): Boolean = {
       def doesMatch(r: Regex): Boolean = r.findFirstIn(className).isDefined

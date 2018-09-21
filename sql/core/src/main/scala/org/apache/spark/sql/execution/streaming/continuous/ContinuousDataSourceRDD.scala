@@ -19,16 +19,15 @@ package org.apache.spark.sql.execution.streaming.continuous
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, RowToUnsafeInputPartitionReader}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousInputPartitionReader, PartitionOffset}
-import org.apache.spark.util.{NextIterator, ThreadUtils}
+import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousPartitionReaderFactory
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.NextIterator
 
 class ContinuousDataSourceRDDPartition(
     val index: Int,
-    val inputPartition: InputPartition[UnsafeRow])
+    val inputPartition: InputPartition)
   extends Partition with Serializable {
 
   // This is semantically a lazy val - it's initialized once the first time a call to
@@ -51,37 +50,46 @@ class ContinuousDataSourceRDD(
     sc: SparkContext,
     dataQueueSize: Int,
     epochPollIntervalMs: Long,
-    private val readerInputPartitions: Seq[InputPartition[UnsafeRow]])
-  extends RDD[UnsafeRow](sc, Nil) {
+    private val inputPartitions: Seq[InputPartition],
+    schema: StructType,
+    partitionReaderFactory: ContinuousPartitionReaderFactory)
+  extends RDD[InternalRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
-    readerInputPartitions.zipWithIndex.map {
+    inputPartitions.zipWithIndex.map {
       case (inputPartition, index) => new ContinuousDataSourceRDDPartition(index, inputPartition)
     }.toArray
+  }
+
+  private def castPartition(split: Partition): ContinuousDataSourceRDDPartition = split match {
+    case p: ContinuousDataSourceRDDPartition => p
+    case _ => throw new SparkException(s"[BUG] Not a ContinuousDataSourceRDDPartition: $split")
   }
 
   /**
    * Initialize the shared reader for this partition if needed, then read rows from it until
    * it returns null to signal the end of the epoch.
    */
-  override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
+  override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     // If attempt number isn't 0, this is a task retry, which we don't support.
     if (context.attemptNumber() != 0) {
       throw new ContinuousTaskRetryException()
     }
 
     val readerForPartition = {
-      val partition = split.asInstanceOf[ContinuousDataSourceRDDPartition]
+      val partition = castPartition(split)
       if (partition.queueReader == null) {
-        partition.queueReader =
-          new ContinuousQueuedDataReader(partition, context, dataQueueSize, epochPollIntervalMs)
+        val partitionReader = partitionReaderFactory.createReader(
+          partition.inputPartition)
+        partition.queueReader = new ContinuousQueuedDataReader(
+          partition.index, partitionReader, schema, context, dataQueueSize, epochPollIntervalMs)
       }
 
       partition.queueReader
     }
 
-    new NextIterator[UnsafeRow] {
-      override def getNext(): UnsafeRow = {
+    new NextIterator[InternalRow] {
+      override def getNext(): InternalRow = {
         readerForPartition.next() match {
           case null =>
             finished = true
@@ -95,19 +103,6 @@ class ContinuousDataSourceRDD(
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    split.asInstanceOf[ContinuousDataSourceRDDPartition].inputPartition.preferredLocations()
-  }
-}
-
-object ContinuousDataSourceRDD {
-  private[continuous] def getContinuousReader(
-      reader: InputPartitionReader[UnsafeRow]): ContinuousInputPartitionReader[_] = {
-    reader match {
-      case r: ContinuousInputPartitionReader[UnsafeRow] => r
-      case wrapped: RowToUnsafeInputPartitionReader =>
-        wrapped.rowReader.asInstanceOf[ContinuousInputPartitionReader[Row]]
-      case _ =>
-        throw new IllegalStateException(s"Unknown continuous reader type ${reader.getClass}")
-    }
+    castPartition(split).inputPartition.preferredLocations()
   }
 }

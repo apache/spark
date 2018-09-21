@@ -70,7 +70,7 @@ from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, 
 from pyspark.shuffle import Aggregator, ExternalMerger, ExternalSorter
 from pyspark import shuffle
 from pyspark.profiler import BasicProfiler
-from pyspark.taskcontext import TaskContext
+from pyspark.taskcontext import BarrierTaskContext, TaskContext
 
 _have_scipy = False
 _have_numpy = False
@@ -373,8 +373,15 @@ class PySparkTestCase(unittest.TestCase):
 class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
+    def conf(cls):
+        """
+        Override this in subclasses to supply a more specific conf
+        """
+        return SparkConf()
+
+    @classmethod
     def setUpClass(cls):
-        cls.sc = SparkContext('local[4]', cls.__name__)
+        cls.sc = SparkContext('local[4]', cls.__name__, conf=cls.conf())
 
     @classmethod
     def tearDownClass(cls):
@@ -587,6 +594,40 @@ class TaskContextTests(PySparkTestCase):
             self.assertTrue(prop2 is None)
         finally:
             self.sc.setLocalProperty(key, None)
+
+    def test_barrier(self):
+        """
+        Verify that BarrierTaskContext.barrier() performs global sync among all barrier tasks
+        within a stage.
+        """
+        rdd = self.sc.parallelize(range(10), 4)
+
+        def f(iterator):
+            yield sum(iterator)
+
+        def context_barrier(x):
+            tc = BarrierTaskContext.get()
+            time.sleep(random.randint(1, 10))
+            tc.barrier()
+            return time.time()
+
+        times = rdd.barrier().mapPartitions(f).map(context_barrier).collect()
+        self.assertTrue(max(times) - min(times) < 1)
+
+    def test_barrier_infos(self):
+        """
+        Verify that BarrierTaskContext.getTaskInfos() returns a list of all task infos in the
+        barrier stage.
+        """
+        rdd = self.sc.parallelize(range(10), 4)
+
+        def f(iterator):
+            yield sum(iterator)
+
+        taskInfos = rdd.barrier().mapPartitions(f).map(lambda x: BarrierTaskContext.get()
+                                                       .getTaskInfos()).collect()
+        self.assertTrue(len(taskInfos) == 4)
+        self.assertTrue(len(taskInfos[0]) == 4)
 
 
 class RDDTests(ReusedPySparkTestCase):

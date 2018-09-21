@@ -105,7 +105,12 @@ object JdbcUtils extends Logging {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
-      statement.executeUpdate(dialect.getTruncateQuery(options.table))
+      val truncateQuery = if (options.isCascadeTruncate.isDefined) {
+        dialect.getTruncateQuery(options.table, options.isCascadeTruncate)
+      } else {
+        dialect.getTruncateQuery(options.table)
+      }
+      statement.executeUpdate(truncateQuery)
     } finally {
       statement.close()
     }
@@ -175,7 +180,7 @@ object JdbcUtils extends Logging {
 
   private def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
     dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
-      throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.simpleString}"))
+      throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.catalogString}"))
   }
 
   /**
@@ -480,7 +485,7 @@ object JdbcUtils extends Logging {
 
         case LongType if metadata.contains("binarylong") =>
           throw new IllegalArgumentException(s"Unsupported array element " +
-            s"type ${dt.simpleString} based on binary")
+            s"type ${dt.catalogString} based on binary")
 
         case ArrayType(_, _) =>
           throw new IllegalArgumentException("Nested arrays unsupported")
@@ -494,7 +499,7 @@ object JdbcUtils extends Logging {
           array => new GenericArrayData(elementConversion.apply(array.getArray)))
         row.update(pos, array)
 
-    case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.simpleString}")
+    case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.catalogString}")
   }
 
   private def nullSafeConvert[T](input: T, f: T => Any): Any = {
