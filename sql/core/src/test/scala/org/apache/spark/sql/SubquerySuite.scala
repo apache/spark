@@ -1276,7 +1276,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       sql("create temporary view t2(b int) using parquet")
       val plan = sql("select * from t2 where b > (select max(a) from t1)")
       val subqueries = plan.queryExecution.executedPlan.collect {
-        case p => p.expressions.flatMap(_.collect { case s: ScalarSubquery => s.plan })
+        case p => p.subqueries
       }.flatten
       assert(subqueries.length == 2 && subqueries.head.eq(subqueries(1)))
     }
