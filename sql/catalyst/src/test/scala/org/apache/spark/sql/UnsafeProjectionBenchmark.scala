@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{Benchmark, BenchmarkBase => FileBenchmarkBase}
 
 /**
  * Benchmark `UnsafeProjection` for fixed-length/primitive-type fields.
@@ -31,7 +31,7 @@ import org.apache.spark.util.{Benchmark, BenchmarkBase => FileBenchmarkBase}
  * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
  *    Results will be written to "benchmarks/<this class>-results.txt".
  */
-object UnsafeProjectionBenchmark extends FileBenchmarkBase {
+object UnsafeProjectionBenchmark extends BenchmarkBase {
 
   def generateRows(schema: StructType, numRows: Int): Array[InternalRow] = {
     val generator = RandomDataGenerator.forType(schema, nullable = false).get

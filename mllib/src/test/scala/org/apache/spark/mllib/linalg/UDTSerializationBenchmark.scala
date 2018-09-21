@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.linalg
 
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.util.Benchmark
 
 /**
  * Serialization benchmark for VectorUDT.
