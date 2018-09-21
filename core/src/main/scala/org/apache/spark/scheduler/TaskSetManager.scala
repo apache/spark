@@ -624,8 +624,7 @@ private[spark] class TaskSetManager(
    * It is possible that this taskset has become impossible to schedule *anywhere* due to the
    * blacklist.  The most common scenario would be if there are fewer executors than
    * spark.task.maxFailures. We need to detect this so we can avoid the job from being hung.
-   * If dynamic allocation is enabled we try to acquire new executor/s by killing the existing one.
-   * In case of static allocation we abort the taskSet immediately to fail the job.
+   * We try to acquire new executor/s by killing an existing idle blacklisted executor.
    *
    * There's a tradeoff here: we could make sure all tasks in the task set are schedulable, but that
    * would add extra time to each iteration of the scheduling loop. Here, we take the approach of

@@ -81,10 +81,12 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     setupHelper()
   }
 
-  def setupSchedulerWithMockTaskSetBlacklist(): TaskSchedulerImpl = {
+  def setupSchedulerWithMockTaskSetBlacklist(confs: (String, String)*): TaskSchedulerImpl = {
     blacklist = mock[BlacklistTracker]
     val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
     conf.set(config.BLACKLIST_ENABLED, true)
+    confs.foreach{ case (k, v) => conf.set(k, v) }
+
     sc = new SparkContext(conf)
     taskScheduler =
       new TaskSchedulerImpl(sc, sc.conf.getInt("spark.task.maxFailures", 4)) {
@@ -465,7 +467,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
   }
 
-  test("abort stage when all executors are blacklisted") {
+  test("abort stage when all executors are blacklisted and we cannot acquire new executor") {
     taskScheduler = setupSchedulerWithMockTaskSetBlacklist()
     val taskSet = FakeTask.createTaskSet(numTasks = 10, stageAttemptId = 0)
     taskScheduler.submitTasks(taskSet)
@@ -500,6 +502,92 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     )).flatten.size === 0)
     assert(tsm.isZombie)
     verify(tsm).abort(anyString(), anyObject())
+  }
+
+  test("SPARK-22148 abort timer should kick in when task is completely blacklisted & no new " +
+    "executor can be acquired") {
+    // set the abort timer to fail immediately
+    taskScheduler = setupSchedulerWithMockTaskSetBlacklist(
+      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "0")
+
+    // We have only 1 task remaining with 1 executor
+    val taskSet = FakeTask.createTaskSet(numTasks = 1, stageAttemptId = 0)
+    taskScheduler.submitTasks(taskSet)
+    val tsm = stageToMockTaskSetManager(0)
+
+    // submit an offer with one executor
+    val firstTaskAttempts = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten
+
+    // Fail the running task
+    val failedTask = firstTaskAttempts.find(_.executorId == "executor0").get
+    taskScheduler.statusUpdate(
+      tid = failedTask.taskId,
+      state = TaskState.FAILED,
+      serializedData = ByteBuffer.allocate(0)
+    )
+    // Wait for the failed task to propagate.
+    Thread.sleep(500)
+    //    taskScheduler.handleFailedTask(tsm, failedTask.taskId, TaskState.FAILED, TaskResultLost)
+    //    tsm.handleFailedTask(failedTask.taskId, TaskState.FAILED, TaskResultLost)
+
+    when(stageToMockTaskSetBlacklist(0).isExecutorBlacklistedForTask("executor0", failedTask.index))
+      .thenReturn(true)
+
+    // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
+    // timer to kick in immediately
+    assert(taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten.size === 0)
+    // Wait for the abort timer to kick in. Without sleep the test exits before the timer is
+    // triggered.
+    Thread.sleep(500)
+    assert(tsm.isZombie)
+  }
+
+  test("SPARK-22148 try to acquire a new executor when task is unschedulable with 1 executor") {
+
+    taskScheduler = setupSchedulerWithMockTaskSetBlacklist(
+      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "10")
+
+    // We have only 1 task remaining with 1 executor
+    val taskSet = FakeTask.createTaskSet(numTasks = 1, stageAttemptId = 0)
+    taskScheduler.submitTasks(taskSet)
+    val tsm = stageToMockTaskSetManager(0)
+
+    // submit an offer with one executor
+    val firstTaskAttempts = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten
+
+    // Fail the running task
+    val failedTask = firstTaskAttempts.find(_.executorId == "executor0").get
+    taskScheduler.statusUpdate(
+      tid = failedTask.taskId,
+      state = TaskState.FAILED,
+      serializedData = ByteBuffer.allocate(0)
+    )
+    // Wait for the failed task to propagate
+    Thread.sleep(500)
+    when(stageToMockTaskSetBlacklist(0).isExecutorBlacklistedForTask("executor0", failedTask.index))
+      .thenReturn(true)
+
+    // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
+    // timer to expire if no new executors could be acquired. We kill the existing idle blacklisted
+    // executor and try to acquire a new one.
+    assert(taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten.size === 0)
+    Thread.sleep(500)
+    assert(!tsm.isZombie)
+
+    // Offer a new executor which should be accepted
+    assert(taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor1", "host0", 1)
+    )).flatten.size === 1)
+
+    assert(!tsm.isZombie)
   }
 
   /**
