@@ -1459,7 +1459,7 @@ class TypeCoercionSuite extends AnalysisTest {
         DoubleType)))
     Seq(true, false).foreach { convertToTS =>
       withSQLConf(
-        "spark.sql.typeCoercion.compareDateTimestampInTimestamp" -> convertToTS.toString) {
+        "spark.sql.legacy.compareDateTimestampInTimestamp" -> convertToTS.toString) {
         val date0301 = Literal(java.sql.Date.valueOf("2017-03-01"))
         val timestamp0301000000 = Literal(Timestamp.valueOf("2017-03-01 00:00:00"))
         val timestamp0301000001 = Literal(Timestamp.valueOf("2017-03-01 00:00:01"))
