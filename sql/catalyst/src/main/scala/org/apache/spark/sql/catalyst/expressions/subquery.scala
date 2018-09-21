@@ -37,6 +37,9 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
   /** Updates the expression with a new plan. */
   def withNewPlan(plan: T): PlanExpression[T]
 
+  /** Updates the expression with a new id of the expression. */
+  def withNewExprId(): PlanExpression[T]
+
   protected def conditionString: String = children.mkString("[", " && ", "]")
 }
 
@@ -251,6 +254,7 @@ case class ScalarSubquery(
   override def dataType: DataType = plan.schema.fields.head.dataType
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = copy(plan = plan)
+  override def withNewExprId(): ScalarSubquery = copy(exprId = NamedExpression.newExprId)
   override def toString: String = s"scalar-subquery#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
     ScalarSubquery(
@@ -295,6 +299,7 @@ case class ListQuery(
   override lazy val resolved: Boolean = childrenResolved && plan.resolved && childOutputs.nonEmpty
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): ListQuery = copy(plan = plan)
+  override def withNewExprId(): ListQuery = copy(exprId = NamedExpression.newExprId)
   override def toString: String = s"list#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
     ListQuery(
@@ -324,6 +329,7 @@ case class Exists(
   extends SubqueryExpression(plan, children, exprId) with Predicate with Unevaluable {
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): Exists = copy(plan = plan)
+  override def withNewExprId(): Exists = copy(exprId = NamedExpression.newExprId)
   override def toString: String = s"exists#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
     Exists(

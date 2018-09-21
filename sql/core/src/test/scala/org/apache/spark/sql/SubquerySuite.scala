@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
+import org.apache.spark.sql.execution.{ScalarSubquery, SubqueryExec}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class SubquerySuite extends QueryTest with SharedSQLContext {
@@ -1266,6 +1267,18 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           |             LIMIT 1)
         """.stripMargin
       assert(getNumSortsInQuery(query5) == 1)
+    }
+  }
+
+  test("SPARK-25482: Reuse same Subquery in order to execute it only once") {
+    withTempView("t1", "t2", "t3") {
+      sql("create temporary view t1(a int) using parquet")
+      sql("create temporary view t2(b int) using parquet")
+      val plan = sql("select * from t2 where b > (select max(a) from t1)")
+      val subqueries = plan.queryExecution.executedPlan.collect {
+        case p => p.expressions.flatMap(_.collect { case s: ScalarSubquery => s.plan })
+      }.flatten
+      assert(subqueries.length == 2 && subqueries.head.eq(subqueries(1)))
     }
   }
 }

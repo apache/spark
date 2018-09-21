@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExprId, InSet, Literal, PlanExpression}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExprId, InSet, Literal, NamedExpression, PlanExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -53,6 +53,7 @@ case class ScalarSubquery(
   override def nullable: Boolean = true
   override def toString: String = plan.simpleString
   override def withNewPlan(query: SubqueryExec): ScalarSubquery = copy(plan = query)
+  override def withNewExprId(): ScalarSubquery = copy(exprId = NamedExpression.newExprId)
 
   override def semanticEquals(other: Expression): Boolean = other match {
     case s: ScalarSubquery => plan.sameResult(s.plan)
@@ -105,6 +106,7 @@ case class InSubquery(
   override def nullable: Boolean = child.nullable
   override def toString: String = s"$child IN ${plan.name}"
   override def withNewPlan(plan: SubqueryExec): InSubquery = copy(plan = plan)
+  override def withNewExprId(): InSubquery = copy(exprId = NamedExpression.newExprId)
 
   override def semanticEquals(other: Expression): Boolean = other match {
     case in: InSubquery => child.semanticEquals(in.child) && plan.sameResult(in.plan)
@@ -166,7 +168,7 @@ case class ReuseSubquery(conf: SQLConf) extends Rule[SparkPlan] {
         val sameSchema = subqueries.getOrElseUpdate(sub.plan.schema, ArrayBuffer[SubqueryExec]())
         val sameResult = sameSchema.find(_.sameResult(sub.plan))
         if (sameResult.isDefined) {
-          sub.withNewPlan(sameResult.get)
+          sub.withNewPlan(sameResult.get).withNewExprId()
         } else {
           sameSchema += sub.plan
           sub
