@@ -1287,8 +1287,18 @@ bin/spark-shell --driver-class-path postgresql-9.4.1207.jar --jars postgresql-9.
 Tables from the remote database can be loaded as a DataFrame or Spark SQL temporary view using
 the Data Sources API. Users can specify the JDBC connection properties in the data source options.
 <code>user</code> and <code>password</code> are normally provided as connection properties for
-logging into the data sources. In addition to the connection properties, Spark also supports
-the following case-insensitive options:
+logging into the data sources. Vendor-specific connection properties can also be passed to the
+underlying JDBC driver in the same way. For example:
+
+{% highlight scala %}
+// oracle.jdbc.mapDateToTimestamp defaults to true. If this flag is not disabled, a column of Oracle
+// DATE type will be resolved as Catalyst TimestampType, which is probably not the desired behavior.
+spark.read.format("jdbc")
+  .option("url", oracleJdbcUrl)
+  .option("oracle.jdbc.mapDateToTimestamp", "false")
+{% endhighlight %}
+
+In addition to the connection properties, Spark also supports the following case-insensitive options:
 
 <table class="table">
   <tr><th>Property Name</th><th>Meaning</th></tr>
