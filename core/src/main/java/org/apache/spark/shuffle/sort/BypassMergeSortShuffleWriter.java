@@ -125,7 +125,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     if (!records.hasNext()) {
       partitionLengths = new long[numPartitions];
       shuffleBlockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, null);
-      mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths, 0);
+      mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
       return;
     }
     final SerializerInstance serInstance = serializer.newInstance();
@@ -167,8 +167,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         logger.error("Error while deleting temp file {}", tmp.getAbsolutePath());
       }
     }
-    mapStatus = MapStatus$.MODULE$.apply(
-      blockManager.shuffleServerId(), partitionLengths, writeMetrics.recordsWritten());
+    mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
   }
 
   @VisibleForTesting

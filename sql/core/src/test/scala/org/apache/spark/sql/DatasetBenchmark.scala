@@ -17,26 +17,23 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.util.{Benchmark, BenchmarkBase => FileBenchmarkBase}
 
 /**
  * Benchmark for Dataset typed operations comparing with DataFrame and RDD versions.
  * To run this benchmark:
- * 1. without sbt: bin/spark-submit --class [this class] [spark sql test jar]
- * 2. build/sbt "sql/test:runMain [this class]"
- * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain [this class]"
- *    Results will be written to "benchmarks/DatasetBenchmark-results.txt".
+ * {{{
+ *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
+ *   2. build/sbt "sql/test:runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      Results will be written to "benchmarks/DatasetBenchmark-results.txt".
+ * }}}
  */
-object DatasetBenchmark extends FileBenchmarkBase {
-
-  val spark = SparkSession.builder
-    .master("local[*]")
-    .appName("Dataset benchmark")
-    .getOrCreate()
+object DatasetBenchmark extends BenchmarkBase {
 
   case class Data(l: Long, s: String)
 
@@ -250,6 +247,11 @@ object DatasetBenchmark extends FileBenchmarkBase {
 
     benchmark
   }
+
+  val spark = SparkSession.builder
+    .master("local[*]")
+    .appName("Dataset benchmark")
+    .getOrCreate()
 
   override def benchmark(): Unit = {
     val numRows = 100000000
