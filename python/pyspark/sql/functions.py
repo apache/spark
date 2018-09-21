@@ -2364,6 +2364,27 @@ def schema_of_json(json, options={}):
     return Column(jc)
 
 
+@ignore_unicode_prefix
+@since(2.5)
+def schema_of_csv(col, options={}):
+    """
+    Parses a column containing a CSV string and infers its schema in DDL format.
+
+    :param col: string column in CSV format
+    :param options: options to control parsing. accepts the same options as the CSV datasource
+
+    >>> from pyspark.sql.types import *
+    >>> data = [(1, '1|a')]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(schema_of_csv(df.value, {'sep':'|'}).alias("csv")).collect()
+    [Row(csv=u'struct<_c0:int,_c1:string>')]
+    """
+
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.schema_of_csv(_to_java_column(col), options)
+    return Column(jc)
+
+
 @since(1.5)
 def size(col):
     """
