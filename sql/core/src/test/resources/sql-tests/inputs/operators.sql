@@ -94,7 +94,8 @@ select pmod(-7, 2), pmod(0, 2), pmod(7, 0), pmod(7, null), pmod(null, 2), pmod(n
 select pmod(cast(3.13 as decimal), cast(0 as decimal)), pmod(cast(2 as smallint), cast(0 as smallint));
 
 -- truncate
-select truncate(1234567891.1234567891, -4), truncate(1234567891.1234567891, 0), truncate(1234567891.1234567891, 4);
+select truncate(cast(1234567891.1234567891 as double), -4), truncate(cast(1234567891.1234567891 as double), 0), truncate(cast(1234567891.1234567891 as double), 4);
+select truncate(cast(1234567891.1234567891 as float), -4), truncate(cast(1234567891.1234567891 as float), 0), truncate(cast(1234567891.1234567891 as float), 4);
 select truncate(cast(1234567891.1234567891 as decimal), -4), truncate(cast(1234567891.1234567891 as decimal), 0), truncate(cast(1234567891.1234567891 as decimal), 4);
 select truncate(cast(1234567891.1234567891 as long), -4), truncate(cast(1234567891.1234567891 as long), 0), truncate(cast(1234567891.1234567891 as long), 4);
 select truncate(cast(1234567891.1234567891 as long), 9.03);

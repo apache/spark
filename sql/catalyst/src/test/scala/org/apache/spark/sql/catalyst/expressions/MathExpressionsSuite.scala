@@ -685,7 +685,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testFloat(0.123F, 0, 0F)
     testFloat(null, null, null)
     testFloat(null, 0, null)
-    testFloat(1D, null, null)
+    testFloat(1F, null, null)
 
     testDecimal(Decimal(1234567891.1234567891), 4, Decimal(1234567891.1234))
     testDecimal(Decimal(1234567891.1234567891), -4, Decimal(1234560000))
@@ -694,6 +694,6 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testDecimal(Decimal(0.123), 0, Decimal(0))
     testDecimal(null, null, null)
     testDecimal(null, 0, null)
-    testDecimal(1D, null, null)
+    testDecimal(Decimal(1), null, null)
   }
 }

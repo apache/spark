@@ -413,6 +413,7 @@ object Decimal {
   val ROUND_HALF_EVEN = BigDecimal.RoundingMode.HALF_EVEN
   val ROUND_CEILING = BigDecimal.RoundingMode.CEILING
   val ROUND_FLOOR = BigDecimal.RoundingMode.FLOOR
+  val ROUND_DOWN = BigDecimal.RoundingMode.DOWN
 
   /** Maximum number of decimal digits an Int can represent */
   val MAX_INT_DIGITS = 9

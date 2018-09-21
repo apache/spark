@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{MathUtils, NumberConverter}
+import org.apache.spark.sql.catalyst.util.NumberConverter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1264,61 +1264,8 @@ case class BRound(child: Expression, scale: Expression)
        1234567891
   """)
 // scalastyle:on line.size.limit
-case class Truncate(number: Expression, scale: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
-
-  def this(number: Expression) = this(number, Literal(0))
-
-  override def left: Expression = number
-  override def right: Expression = scale
-
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(DoubleType, FloatType, DecimalType), IntegerType)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case TypeCheckSuccess =>
-        if (scale.foldable) {
-          TypeCheckSuccess
-        } else {
-          TypeCheckFailure("Only foldable Expression is allowed for scale arguments")
-        }
-      case f => f
-    }
-  }
-
-  override def dataType: DataType = left.dataType
-  override def nullable: Boolean = true
-  override def prettyName: String = "truncate"
-
-  private lazy val scaleV: Any = scale.eval(EmptyRow)
-  private lazy val _scale: Int = scaleV.asInstanceOf[Int]
-
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    number.dataType match {
-      case DoubleType => MathUtils.trunc(input1.asInstanceOf[Double], _scale)
-      case FloatType => MathUtils.trunc(input1.asInstanceOf[Float], _scale)
-      case DecimalType.Fixed(_, _) => MathUtils.trunc(input1.asInstanceOf[Decimal], _scale)
-    }
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val mu = MathUtils.getClass.getName.stripSuffix("$")
-
-    val javaType = CodeGenerator.javaType(dataType)
-    if (scaleV == null) { // if scale is null, no need to eval its child at all
-      ev.copy(code = code"""
-        boolean ${ev.isNull} = true;
-        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};""")
-    } else {
-      val d = number.genCode(ctx)
-      ev.copy(code = code"""
-        ${d.code}
-        boolean ${ev.isNull} = ${d.isNull};
-        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        if (!${ev.isNull}) {
-          ${ev.value} = $mu.trunc(${d.value}, ${_scale});
-        }""")
-    }
-  }
+case class Truncate(child: Expression, scale: Expression)
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.DOWN, "ROUND_DOWN")
+    with Serializable with ImplicitCastInputTypes {
+  def this(child: Expression) = this(child, Literal(0))
 }
