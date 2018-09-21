@@ -32,6 +32,8 @@ import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
   RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -585,5 +587,21 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisSuccess(
       listRelation.select(MultiAlias(MultiAlias(
         PosExplode('list), Seq("first_pos", "first_val")), Seq("second_pos", "second_val"))))
+  }
+
+  test("SPARK-24151: CURRENT_DATE, CURRENT_TIMESTAMP should be case insensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val input = Project(Seq(
+        UnresolvedAttribute("current_date"),
+        UnresolvedAttribute("CURRENT_DATE"),
+        UnresolvedAttribute("CURRENT_TIMESTAMP"),
+        UnresolvedAttribute("current_timestamp")), testRelation)
+      val expected = Project(Seq(
+        Alias(CurrentDate(), toPrettySQL(CurrentDate()))(),
+        Alias(CurrentDate(), toPrettySQL(CurrentDate()))(),
+        Alias(CurrentTimestamp(), toPrettySQL(CurrentTimestamp()))(),
+        Alias(CurrentTimestamp(), toPrettySQL(CurrentTimestamp()))()), testRelation).analyze
+      checkAnalysis(input, expected)
+    }
   }
 }
