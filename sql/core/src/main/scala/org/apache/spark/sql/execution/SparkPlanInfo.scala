@@ -110,7 +110,7 @@ private[execution] object SparkPlanInfo {
   }
 
   private val CREATE_DATA_SOURCE_TABLE_AS_SELECT_COMMAND =
-    "org.apache.spark.sql.execution.command.CreateDataSourceTableAsSelectCommand"
+    classOf[CreateDataSourceTableAsSelectCommand].getCanonicalName
   private val CREATE_HIVE_TABLE_AS_SELECT_COMMAND =
     "org.apache.spark.sql.hive.execution.CreateHiveTableAsSelectCommand"
   private val INSERT_INTO_HIVE_DIR_COMMAND =
