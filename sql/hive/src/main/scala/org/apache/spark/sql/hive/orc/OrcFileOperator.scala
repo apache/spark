@@ -92,11 +92,12 @@ private[hive] object OrcFileOperator extends Logging {
       : Option[StructType] = {
     // Take the first file where we can open a valid reader if we can find one.  Otherwise just
     // return None to indicate we can't infer the schema.
-    paths.flatMap(getFileReader(_, conf, ignoreCorruptFiles)).headOption.map { reader =>
-      val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
-      val schema = readerInspector.getTypeName
-      logDebug(s"Reading schema from file $paths, got Hive schema string: $schema")
-      CatalystSqlParser.parseDataType(schema).asInstanceOf[StructType]
+    paths.toIterator.map(getFileReader(_, conf, ignoreCorruptFiles)).collectFirst {
+      case Some(reader) =>
+        val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
+        val schema = readerInspector.getTypeName
+        logDebug(s"Reading schema from file $paths, got Hive schema string: $schema")
+        CatalystSqlParser.parseDataType(schema).asInstanceOf[StructType]
     }
   }
 

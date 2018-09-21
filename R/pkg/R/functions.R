@@ -208,7 +208,7 @@ NULL
 #' # Dataframe used throughout this doc
 #' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
 #' tmp <- mutate(df, v1 = create_array(df$mpg, df$cyl, df$hp))
-#' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1)))
+#' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1), shuffle(tmp$v1)))
 #' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1), array_distinct(tmp$v1)))
 #' head(select(tmp, array_position(tmp$v1, 21), array_repeat(df$mpg, 3), array_sort(tmp$v1)))
 #' head(select(tmp, flatten(tmp$v1), reverse(tmp$v1), array_remove(tmp$v1, 21)))
@@ -223,6 +223,8 @@ NULL
 #' head(select(tmp3, element_at(tmp3$v3, "Valiant")))
 #' tmp4 <- mutate(df, v4 = create_array(df$mpg, df$cyl), v5 = create_array(df$cyl, df$hp))
 #' head(select(tmp4, concat(tmp4$v4, tmp4$v5), arrays_overlap(tmp4$v4, tmp4$v5)))
+#' head(select(tmp4, array_except(tmp4$v4, tmp4$v5), array_intersect(tmp4$v4, tmp4$v5)))
+#' head(select(tmp4, array_union(tmp4$v4, tmp4$v5)))
 #' head(select(tmp4, arrays_zip(tmp4$v4, tmp4$v5), map_from_arrays(tmp4$v4, tmp4$v5)))
 #' head(select(tmp, concat(df$mpg, df$cyl, df$hp)))
 #' tmp5 <- mutate(df, v6 = create_array(df$model, df$model))
@@ -1697,8 +1699,8 @@ setMethod("to_date",
           })
 
 #' @details
-#' \code{to_json}: Converts a column containing a \code{structType}, array of \code{structType},
-#' a \code{mapType} or array of \code{mapType} into a Column of JSON string.
+#' \code{to_json}: Converts a column containing a \code{structType}, a \code{mapType}
+#' or an \code{arrayType} into a Column of JSON string.
 #' Resolving the Column can fail if an unsupported type is encountered.
 #'
 #' @rdname column_collection_functions
@@ -3025,6 +3027,34 @@ setMethod("array_distinct",
           })
 
 #' @details
+#' \code{array_except}: Returns an array of the elements in the first array but not in the second
+#'  array, without duplicates. The order of elements in the result is not determined.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_except array_except,Column-method
+#' @note array_except since 2.4.0
+setMethod("array_except",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_except", x@jc, y@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{array_intersect}: Returns an array of the elements in the intersection of the given two
+#'  arrays, without duplicates.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_intersect array_intersect,Column-method
+#' @note array_intersect since 2.4.0
+setMethod("array_intersect",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_intersect", x@jc, y@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{array_join}: Concatenates the elements of column using the delimiter.
 #' Null values are replaced with nullReplacement if set, otherwise they are ignored.
 #'
@@ -3150,6 +3180,20 @@ setMethod("arrays_overlap",
           })
 
 #' @details
+#' \code{array_union}: Returns an array of the elements in the union of the given two arrays,
+#'  without duplicates.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_union array_union,Column-method
+#' @note array_union since 2.4.0
+setMethod("array_union",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_union", x@jc, y@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{arrays_zip}: Returns a merged array of structs in which the N-th struct contains all N-th
 #' values of input arrays.
 #'
@@ -3164,6 +3208,19 @@ setMethod("arrays_zip",
               arg@jc
             })
             jc <- callJStatic("org.apache.spark.sql.functions", "arrays_zip", jcols)
+            column(jc)
+          })
+
+#' @details
+#' \code{shuffle}: Returns a random permutation of the given array.
+#'
+#' @rdname column_collection_functions
+#' @aliases shuffle shuffle,Column-method
+#' @note shuffle since 2.4.0
+setMethod("shuffle",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "shuffle", x@jc)
             column(jc)
           })
 

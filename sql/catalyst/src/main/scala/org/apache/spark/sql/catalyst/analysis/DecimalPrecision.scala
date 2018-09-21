@@ -286,7 +286,7 @@ object DecimalPrecision extends TypeCoercionRule {
         // Consider the following example: multiplying a column which is DECIMAL(38, 18) by 2.
         // If we use the default precision and scale for the integer type, 2 is considered a
         // DECIMAL(10, 0). According to the rules, the result would be DECIMAL(38 + 10 + 1, 18),
-        // which is out of range and therefore it will becomes DECIMAL(38, 7), leading to
+        // which is out of range and therefore it will become DECIMAL(38, 7), leading to
         // potentially loosing 11 digits of the fractional part. Using only the precision needed
         // by the Literal, instead, the result would be DECIMAL(38 + 1 + 1, 18), which would
         // become DECIMAL(38, 16), safely having a much lower precision loss.

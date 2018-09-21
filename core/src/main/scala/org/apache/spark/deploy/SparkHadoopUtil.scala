@@ -107,7 +107,7 @@ class SparkHadoopUtil extends Logging {
   }
 
   /**
-   * Return an appropriate (subclass) of Configuration. Creating config can initializes some Hadoop
+   * Return an appropriate (subclass) of Configuration. Creating config can initialize some Hadoop
    * subsystems.
    */
   def newConfiguration(conf: SparkConf): Configuration = {

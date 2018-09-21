@@ -57,7 +57,6 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     MAIN_CLASS,
     APP_ARGS)
 
-
   test("Check the pod respects all configurations from the user.") {
     val sparkConf = new SparkConf()
       .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")

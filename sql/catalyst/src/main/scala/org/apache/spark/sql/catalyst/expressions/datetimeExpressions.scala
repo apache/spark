@@ -1018,48 +1018,6 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 }
 
 /**
- * A special expression used to convert the string input of `to/from_utc_timestamp` to timestamp,
- * which requires the timestamp string to not have timezone information, otherwise null is returned.
- */
-case class StringToTimestampWithoutTimezone(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with ExpectsInputTypes {
-
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
-  override def dataType: DataType = TimestampType
-  override def nullable: Boolean = true
-  override def toString: String = child.toString
-  override def sql: String = child.sql
-
-  override def nullSafeEval(input: Any): Any = {
-    DateTimeUtils.stringToTimestamp(
-      input.asInstanceOf[UTF8String], timeZone, rejectTzInString = true).orNull
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    val tz = ctx.addReferenceObj("timeZone", timeZone)
-    val longOpt = ctx.freshName("longOpt")
-    val eval = child.genCode(ctx)
-    val code = code"""
-       |${eval.code}
-       |${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = true;
-       |${CodeGenerator.JAVA_LONG} ${ev.value} = ${CodeGenerator.defaultValue(TimestampType)};
-       |if (!${eval.isNull}) {
-       |  scala.Option<Long> $longOpt = $dtu.stringToTimestamp(${eval.value}, $tz, true);
-       |  if ($longOpt.isDefined()) {
-       |    ${ev.value} = ((Long) $longOpt.get()).longValue();
-       |    ${ev.isNull} = false;
-       |  }
-       |}
-     """.stripMargin
-    ev.copy(code = code)
-  }
-}
-
-/**
  * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
  * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
  * '2017-07-14 03:40:00.0'.
@@ -1345,7 +1303,7 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
   }
 
   def this(left: Expression) = {
-    // backwards compatability
+    // backwards compatibility
     this(left, None, Cast(left, DateType))
   }
 

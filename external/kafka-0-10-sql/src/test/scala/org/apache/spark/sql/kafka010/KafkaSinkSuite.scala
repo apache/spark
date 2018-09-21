@@ -33,7 +33,7 @@ import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
-class KafkaSinkSuite extends StreamTest with SharedSQLContext {
+class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
   import testImplicits._
 
   protected var testUtils: KafkaTestUtils = _
@@ -48,9 +48,12 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
   }
 
   override def afterAll(): Unit = {
-    if (testUtils != null) {
-      testUtils.teardown()
-      testUtils = null
+    try {
+      if (testUtils != null) {
+        testUtils.teardown()
+        testUtils = null
+      }
+    } finally {
       super.afterAll()
     }
   }

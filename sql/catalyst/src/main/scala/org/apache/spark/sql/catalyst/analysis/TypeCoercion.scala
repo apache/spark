@@ -54,12 +54,13 @@ object TypeCoercion {
       BooleanEquality ::
       FunctionArgumentConversion ::
       ConcatCoercion(conf) ::
+      MapZipWithCoercion ::
       EltCoercion(conf) ::
       CaseWhenCoercion ::
       IfCoercion ::
       StackCoercion ::
       Division ::
-      new ImplicitTypeCasts(conf) ::
+      ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
       Nil
@@ -153,19 +154,26 @@ object TypeCoercion {
       t2: DataType,
       findTypeFunc: (DataType, DataType) => Option[DataType]): Option[DataType] = (t1, t2) match {
     case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
-      findTypeFunc(et1, et2).map(ArrayType(_, containsNull1 || containsNull2))
+      findTypeFunc(et1, et2).map { et =>
+        ArrayType(et, containsNull1 || containsNull2 ||
+          Cast.forceNullable(et1, et) || Cast.forceNullable(et2, et))
+      }
     case (MapType(kt1, vt1, valueContainsNull1), MapType(kt2, vt2, valueContainsNull2)) =>
-      findTypeFunc(kt1, kt2).flatMap { kt =>
-        findTypeFunc(vt1, vt2).map { vt =>
-          MapType(kt, vt, valueContainsNull1 || valueContainsNull2)
-        }
+      findTypeFunc(kt1, kt2)
+        .filter { kt => !Cast.forceNullable(kt1, kt) && !Cast.forceNullable(kt2, kt) }
+        .flatMap { kt =>
+          findTypeFunc(vt1, vt2).map { vt =>
+            MapType(kt, vt, valueContainsNull1 || valueContainsNull2 ||
+              Cast.forceNullable(vt1, vt) || Cast.forceNullable(vt2, vt))
+          }
       }
     case (StructType(fields1), StructType(fields2)) if fields1.length == fields2.length =>
       val resolver = SQLConf.get.resolver
       fields1.zip(fields2).foldLeft(Option(new StructType())) {
         case (Some(struct), (field1, field2)) if resolver(field1.name, field2.name) =>
-          findTypeFunc(field1.dataType, field2.dataType).map {
-            dt => struct.add(field1.name, dt, field1.nullable || field2.nullable)
+          findTypeFunc(field1.dataType, field2.dataType).map { dt =>
+            struct.add(field1.name, dt, field1.nullable || field2.nullable ||
+              Cast.forceNullable(field1.dataType, dt) || Cast.forceNullable(field2.dataType, dt))
           }
         case _ => None
       }
@@ -756,6 +764,30 @@ object TypeCoercion {
   }
 
   /**
+   * Coerces key types of two different [[MapType]] arguments of the [[MapZipWith]] expression
+   * to a common type.
+   */
+  object MapZipWithCoercion extends TypeCoercionRule {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      // Lambda function isn't resolved when the rule is executed.
+      case m @ MapZipWith(left, right, function) if m.arguments.forall(a => a.resolved &&
+          MapType.acceptsType(a.dataType)) && !m.leftKeyType.sameType(m.rightKeyType) =>
+        findWiderTypeForTwo(m.leftKeyType, m.rightKeyType) match {
+          case Some(finalKeyType) if !Cast.forceNullable(m.leftKeyType, finalKeyType) &&
+              !Cast.forceNullable(m.rightKeyType, finalKeyType) =>
+            val newLeft = castIfNotSameType(
+              left,
+              MapType(finalKeyType, m.leftValueType, m.leftValueContainsNull))
+            val newRight = castIfNotSameType(
+              right,
+              MapType(finalKeyType, m.rightValueType, m.rightValueContainsNull))
+            MapZipWith(newLeft, newRight, function)
+          case _ => m
+        }
+    }
+  }
+
+  /**
    * Coerces the types of [[Elt]] children to expected ones.
    *
    * If `spark.sql.function.eltOutputAsString` is false and all children types are binary,
@@ -809,32 +841,11 @@ object TypeCoercion {
   /**
    * Casts types according to the expected input types for [[Expression]]s.
    */
-  class ImplicitTypeCasts(conf: SQLConf) extends TypeCoercionRule {
-
-    private def rejectTzInString = conf.getConf(SQLConf.REJECT_TIMEZONE_IN_STRING)
-
+  object ImplicitTypeCasts extends TypeCoercionRule {
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-
-      // Special rules for `from/to_utc_timestamp`. These 2 functions assume the input timestamp
-      // string is in a specific timezone, so the string itself should not contain timezone.
-      // TODO: We should move the type coercion logic to expressions instead of a central
-      // place to put all the rules.
-      case e: FromUTCTimestamp if e.left.dataType == StringType =>
-        if (rejectTzInString) {
-          e.copy(left = StringToTimestampWithoutTimezone(e.left))
-        } else {
-          e.copy(left = Cast(e.left, TimestampType))
-        }
-
-      case e: ToUTCTimestamp if e.left.dataType == StringType =>
-        if (rejectTzInString) {
-          e.copy(left = StringToTimestampWithoutTimezone(e.left))
-        } else {
-          e.copy(left = Cast(e.left, TimestampType))
-        }
 
       case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
@@ -852,7 +863,7 @@ object TypeCoercion {
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
           // If we cannot do the implicit cast, just use the original input.
-          ImplicitTypeCasts.implicitCast(in, expected).getOrElse(in)
+          implicitCast(in, expected).getOrElse(in)
         }
         e.withNewChildren(children)
 
@@ -868,9 +879,6 @@ object TypeCoercion {
         }
         e.withNewChildren(children)
     }
-  }
-
-  object ImplicitTypeCasts {
 
     /**
      * Given an expected data type, try to cast the expression and return the cast expression.

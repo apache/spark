@@ -130,12 +130,20 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
       CombineUnions) ::
+    // run this once earlier. this might simplify the plan and reduce cost of optimizer.
+    // for example, a query such as Filter(LocalRelation) would go through all the heavy
+    // optimizer rules that are triggered when there is a filter
+    // (e.g. InferFiltersFromConstraints). if we run this batch earlier, the query becomes just
+    // LocalRelation and does not trigger many rules
+    Batch("LocalRelation early", fixedPoint,
+      ConvertToLocalRelation,
+      PropagateEmptyRelation) ::
     Batch("Pullup Correlated Expressions", Once,
       PullupCorrelatedPredicates) ::
     Batch("Subquery", Once,
       OptimizeSubqueries) ::
     Batch("Replace Operators", fixedPoint,
-      RewriteExcepAll,
+      RewriteExceptAll,
       RewriteIntersectAll,
       ReplaceIntersectWithSemiJoin,
       ReplaceExceptWithFilter,
@@ -189,8 +197,11 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ReplaceIntersectWithSemiJoin.ruleName ::
       ReplaceExceptWithFilter.ruleName ::
       ReplaceExceptWithAntiJoin.ruleName ::
+      RewriteExceptAll.ruleName ::
+      RewriteIntersectAll.ruleName ::
       ReplaceDistinctWithAggregate.ruleName ::
       PullupCorrelatedPredicates.ruleName ::
+      RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName :: Nil
 
   /**
@@ -475,6 +486,10 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
   private def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]) = {
     val result = e transform {
       case a: Attribute => rewrites(a)
+    } match {
+      // Make sure exprId is unique in each child of Union.
+      case Alias(child, alias) => Alias(child, alias)()
+      case other => other
     }
 
     // We must promise the compiler that we did not discard the names in the case of project
@@ -720,6 +735,28 @@ object CollapseWindow extends Rule[LogicalPlan] {
           // by ExtractWindowFunctions.
           WindowFunctionType.functionType(we1.head) == WindowFunctionType.functionType(we2.head) =>
       w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
+  }
+}
+
+/**
+ * Transpose Adjacent Window Expressions.
+ * - If the partition spec of the parent Window expression is compatible with the partition spec
+ *   of the child window expression, transpose them.
+ */
+object TransposeWindow extends Rule[LogicalPlan] {
+  private def compatibleParititions(ps1 : Seq[Expression], ps2: Seq[Expression]): Boolean = {
+    ps1.length < ps2.length && ps2.take(ps1.length).permutations.exists(ps1.zip(_).forall {
+      case (l, r) => l.semanticEquals(r)
+    })
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case w1 @ Window(we1, ps1, os1, w2 @ Window(we2, ps2, os2, grandChild))
+        if w1.references.intersect(w2.windowOutputSet).isEmpty &&
+           w1.expressions.forall(_.deterministic) &&
+           w2.expressions.forall(_.deterministic) &&
+           compatibleParititions(ps1, ps2) =>
+      Project(w1.output, Window(we2, ps2, os2, Window(we1, ps1, os1, grandChild)))
   }
 }
 
@@ -1346,6 +1383,12 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
 
     case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming)) =>
       LocalRelation(output, data.take(limit), isStreaming)
+
+    case Filter(condition, LocalRelation(output, data, isStreaming))
+        if !hasUnevaluableExpr(condition) =>
+      val predicate = InterpretedPredicate.create(condition, output)
+      predicate.initialize(0)
+      LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming)
   }
 
   private def hasUnevaluableExpr(expr: Expression): Boolean = {
@@ -1462,7 +1505,7 @@ object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
  * }}}
  */
 
-object RewriteExcepAll extends Rule[LogicalPlan] {
+object RewriteExceptAll extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Except(left, right, true) =>
       assert(left.output.size == right.output.size)

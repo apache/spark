@@ -59,13 +59,13 @@ private[r] class AFTSurvivalRegressionWrapper private (
 
 private[r] object AFTSurvivalRegressionWrapper extends MLReadable[AFTSurvivalRegressionWrapper] {
 
+  private val FORMULA_REGEXP = """Surv\(([^,]+), ([^,]+)\) ~ (.+)""".r
+
   private def formulaRewrite(formula: String): (String, String) = {
     var rewritedFormula: String = null
     var censorCol: String = null
-
-    val regex = """Surv\(([^,]+), ([^,]+)\) ~ (.+)""".r
     try {
-      val regex(label, censor, features) = formula
+      val FORMULA_REGEXP(label, censor, features) = formula
       // TODO: Support dot operator.
       if (features.contains(".")) {
         throw new UnsupportedOperationException(

@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.datasources.csv
 import java.io.File
 
 import org.apache.spark.SparkConf
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{Column, Row, SparkSession}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{Benchmark, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Benchmark to measure CSV read/write performance.
@@ -119,8 +120,47 @@ object CSVBenchmarks {
     }
   }
 
+  def countBenchmark(rowsNum: Int): Unit = {
+    val colsNum = 10
+    val benchmark = new Benchmark(s"Count a dataset with $colsNum columns", rowsNum)
+
+    withTempPath { path =>
+      val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", IntegerType))
+      val schema = StructType(fields)
+
+      spark.range(rowsNum)
+        .select(Seq.tabulate(colsNum)(i => lit(i).as(s"col$i")): _*)
+        .write
+        .csv(path.getAbsolutePath)
+
+      val ds = spark.read.schema(schema).csv(path.getAbsolutePath)
+
+      benchmark.addCase(s"Select $colsNum columns + count()", 3) { _ =>
+        ds.select("*").filter((_: Row) => true).count()
+      }
+      benchmark.addCase(s"Select 1 column + count()", 3) { _ =>
+        ds.select($"col1").filter((_: Row) => true).count()
+      }
+      benchmark.addCase(s"count()", 3) { _ =>
+        ds.count()
+      }
+
+      /*
+      Intel(R) Core(TM) i7-7700HQ CPU @ 2.80GHz
+
+      Count a dataset with 10 columns:      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      ---------------------------------------------------------------------------------------------
+      Select 10 columns + count()              12598 / 12740          0.8        1259.8       1.0X
+      Select 1 column + count()                  7960 / 8175          1.3         796.0       1.6X
+      count()                                    2332 / 2386          4.3         233.2       5.4X
+      */
+      benchmark.run()
+    }
+  }
+
   def main(args: Array[String]): Unit = {
     quotedValuesBenchmark(rowsNum = 50 * 1000, numIters = 3)
     multiColumnsBenchmark(rowsNum = 1000 * 1000)
+    countBenchmark(10 * 1000 * 1000)
   }
 }

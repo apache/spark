@@ -345,7 +345,7 @@ class Column(val expr: Expression) extends Logging {
    *
    *   // Java:
    *   import static org.apache.spark.sql.functions.*;
-   *   people.select( people("age").gt(21) );
+   *   people.select( people.col("age").gt(21) );
    * }}}
    *
    * @group expr_ops
@@ -361,7 +361,7 @@ class Column(val expr: Expression) extends Logging {
    *
    *   // Java:
    *   import static org.apache.spark.sql.functions.*;
-   *   people.select( people("age").gt(21) );
+   *   people.select( people.col("age").gt(21) );
    * }}}
    *
    * @group java_expr_ops
@@ -376,7 +376,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") < 21 )
    *
    *   // Java:
-   *   people.select( people("age").lt(21) );
+   *   people.select( people.col("age").lt(21) );
    * }}}
    *
    * @group expr_ops
@@ -391,7 +391,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") < 21 )
    *
    *   // Java:
-   *   people.select( people("age").lt(21) );
+   *   people.select( people.col("age").lt(21) );
    * }}}
    *
    * @group java_expr_ops
@@ -406,7 +406,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") <= 21 )
    *
    *   // Java:
-   *   people.select( people("age").leq(21) );
+   *   people.select( people.col("age").leq(21) );
    * }}}
    *
    * @group expr_ops
@@ -421,7 +421,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") <= 21 )
    *
    *   // Java:
-   *   people.select( people("age").leq(21) );
+   *   people.select( people.col("age").leq(21) );
    * }}}
    *
    * @group java_expr_ops
@@ -436,7 +436,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") >= 21 )
    *
    *   // Java:
-   *   people.select( people("age").geq(21) )
+   *   people.select( people.col("age").geq(21) )
    * }}}
    *
    * @group expr_ops
@@ -451,7 +451,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") >= 21 )
    *
    *   // Java:
-   *   people.select( people("age").geq(21) )
+   *   people.select( people.col("age").geq(21) )
    * }}}
    *
    * @group java_expr_ops
@@ -588,7 +588,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.filter( people("inSchool") || people("isEmployed") )
    *
    *   // Java:
-   *   people.filter( people("inSchool").or(people("isEmployed")) );
+   *   people.filter( people.col("inSchool").or(people.col("isEmployed")) );
    * }}}
    *
    * @group expr_ops
@@ -603,7 +603,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.filter( people("inSchool") || people("isEmployed") )
    *
    *   // Java:
-   *   people.filter( people("inSchool").or(people("isEmployed")) );
+   *   people.filter( people.col("inSchool").or(people.col("isEmployed")) );
    * }}}
    *
    * @group java_expr_ops
@@ -618,7 +618,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("inSchool") && people("isEmployed") )
    *
    *   // Java:
-   *   people.select( people("inSchool").and(people("isEmployed")) );
+   *   people.select( people.col("inSchool").and(people.col("isEmployed")) );
    * }}}
    *
    * @group expr_ops
@@ -633,7 +633,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("inSchool") && people("isEmployed") )
    *
    *   // Java:
-   *   people.select( people("inSchool").and(people("isEmployed")) );
+   *   people.select( people.col("inSchool").and(people.col("isEmployed")) );
    * }}}
    *
    * @group java_expr_ops
@@ -648,7 +648,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") + people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").plus(people("weight")) );
+   *   people.select( people.col("height").plus(people.col("weight")) );
    * }}}
    *
    * @group expr_ops
@@ -663,7 +663,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") + people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").plus(people("weight")) );
+   *   people.select( people.col("height").plus(people.col("weight")) );
    * }}}
    *
    * @group java_expr_ops
@@ -678,7 +678,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") - people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").minus(people("weight")) );
+   *   people.select( people.col("height").minus(people.col("weight")) );
    * }}}
    *
    * @group expr_ops
@@ -693,7 +693,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") - people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").minus(people("weight")) );
+   *   people.select( people.col("height").minus(people.col("weight")) );
    * }}}
    *
    * @group java_expr_ops
@@ -708,7 +708,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") * people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").multiply(people("weight")) );
+   *   people.select( people.col("height").multiply(people.col("weight")) );
    * }}}
    *
    * @group expr_ops
@@ -723,7 +723,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") * people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").multiply(people("weight")) );
+   *   people.select( people.col("height").multiply(people.col("weight")) );
    * }}}
    *
    * @group java_expr_ops
@@ -738,7 +738,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") / people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").divide(people("weight")) );
+   *   people.select( people.col("height").divide(people.col("weight")) );
    * }}}
    *
    * @group expr_ops
@@ -753,7 +753,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") / people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").divide(people("weight")) );
+   *   people.select( people.col("height").divide(people.col("weight")) );
    * }}}
    *
    * @group java_expr_ops
