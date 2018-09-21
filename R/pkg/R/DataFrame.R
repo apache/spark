@@ -226,8 +226,9 @@ setMethod("showDF",
 
 #' show
 #'
-#' If eager evaluation is enabled and the Spark object is a SparkDataFrame, return the data of
-#' the SparkDataFrame object, otherwise, print the class and type information of the Spark object.
+#' If eager evaluation is enabled and the Spark object is a SparkDataFrame, evaluate the
+#' SparkDataFrame and print top rows of the SparkDataFrame, otherwise, print the class 
+#' and type information of the Spark object.
 #'
 #' @param object a Spark object. Can be a SparkDataFrame, Column, GroupedData, WindowSpec.
 #'
@@ -246,7 +247,17 @@ setMethod("showDF",
 setMethod("show", "SparkDataFrame",
           function(object) {
             if (identical(sparkR.conf("spark.sql.repl.eagerEval.enabled", "false")[[1]], "true")) {
-              showDF(object)
+              argsList <- list()
+              argsList$x <- object
+              numRows <- as.numeric(sparkR.conf("spark.sql.repl.eagerEval.maxNumRows", "0")[[1]])
+              if (numRows > 0) {
+                argsList$numRows <- numRows
+              }
+              truncate <- as.numeric(sparkR.conf("spark.sql.repl.eagerEval.truncate", "0")[[1]])
+              if (truncate > 0) {
+                argsList$truncate <- truncate
+              }
+              do.call(showDF, argsList)
             } else {
               cols <- lapply(dtypes(object), function(l) {
                 paste(l, collapse = ":")

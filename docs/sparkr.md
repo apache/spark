@@ -454,11 +454,15 @@ print(model.summaries)
 
 If the eager execution is enabled, the data will be returned to R client immediately when the `SparkDataFrame` is created. Eager execution can be enabled by setting the configuration property `spark.sql.repl.eagerEval.enabled` to `true` when the `SparkSession` is started up.
 
+Maximum number of rows and maximum number of characters per column of data to display can be controlled by `spark.sql.repl.eagerEval.maxNumRows` and `spark.sql.repl.eagerEval.truncate` configuration properties, respectively.
+
 <div data-lang="r" markdown="1">
 {% highlight r %}
 
 # Start up spark session with eager execution enabled
-sparkR.session(master = "local[*]", sparkConfig = list(spark.sql.repl.eagerEval.enabled = "true"))
+sparkR.session(master = "local[*]",
+               sparkConfig = list(spark.sql.repl.eagerEval.enabled = "true",
+                                  spark.sql.repl.eagerEval.maxNumRows = as.integer(10)))
 
 # Create a grouped and sorted SparkDataFrame
 df <- createDataFrame(faithful)
@@ -480,18 +484,8 @@ df2
 ##|   51.0|    6|
 ##|   52.0|    5|
 ##|   53.0|    7|
-##|   54.0|    9|
-##|   55.0|    6|
-##|   56.0|    4|
-##|   57.0|    3|
-##|   58.0|    4|
-##|   59.0|    7|
-##|   60.0|    6|
-##|   62.0|    4|
-##|   63.0|    3|
-##|   64.0|    4|
 ##+-------+-----+
-##only showing top 20 rows
+##only showing top 10 rows
 
 {% endhighlight %} 
 </div>

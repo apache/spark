@@ -40,17 +40,20 @@ test_that("eager execution is enabled", {
   # Start Spark session with eager execution enabled
   sparkSession <- if (windows_with_hadoop()) {
     sparkR.session(master = sparkRTestMaster,
-                   sparkConfig = list(spark.sql.repl.eagerEval.enabled = "true"))
+                   sparkConfig = list(spark.sql.repl.eagerEval.enabled = "true",
+                                      spark.sql.repl.eagerEval.maxNumRows = as.integer(10)))
   } else {
     sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE, 
-                   sparkConfig = list(spark.sql.repl.eagerEval.enabled = "true"))
+                   sparkConfig = list(spark.sql.repl.eagerEval.enabled = "true",
+                                      spark.sql.repl.eagerEval.maxNumRows = as.integer(10)))
   }
   
   df <- createDataFrame(faithful)
   expect_is(df, "SparkDataFrame")
-  expected <- paste0("+---------+-------+\n",
+  expected <- paste0("(+---------+-------+\n",
                      "|eruptions|waiting|\n",
-                     "+---------+-------+\n")
+                     "+---------+-------+\n)*",
+                     "(only showing top 10 rows)")
   expect_output(show(df), expected)
   
   # Stop Spark session
