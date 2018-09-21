@@ -17,18 +17,21 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.util.Locale
+
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.storage.StorageLevel
 
 case class CacheTableCommand(
     tableIdent: TableIdentifier,
     plan: Option[LogicalPlan],
     isLazy: Boolean,
-    storageLevel: Option[String]) extends RunnableCommand {
+    options: Map[String, String]) extends RunnableCommand {
   require(plan.isEmpty || tableIdent.database.isEmpty,
     "Database name is not allowed in CACHE TABLE AS SELECT")
 
@@ -39,10 +42,17 @@ case class CacheTableCommand(
       Dataset.ofRows(sparkSession, logicalPlan).createTempView(tableIdent.quotedString)
     }
 
-    if (storageLevel.nonEmpty) {
+    val storageLevelKey = "storagelevel"
+    val storageLevelValue =
+      CaseInsensitiveMap(options).get(storageLevelKey).map(_.toUpperCase(Locale.ROOT))
+    val withoutStorageLevel = options.filterKeys(_.toLowerCase(Locale.ROOT) != storageLevelKey)
+    if (withoutStorageLevel.nonEmpty) {
+      logWarning(s"Invalid options: ${withoutStorageLevel.mkString(", ")}")
+    }
+
+    if (storageLevelValue.nonEmpty) {
       sparkSession.catalog.cacheTable(
-        tableIdent.quotedString,
-        StorageLevel.fromString(storageLevel.get))
+        tableIdent.quotedString, StorageLevel.fromString(storageLevelValue.get))
     } else {
       sparkSession.catalog.cacheTable(tableIdent.quotedString)
     }
