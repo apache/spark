@@ -49,7 +49,6 @@ private[spark] sealed trait MapStatus {
 
 private[spark] object MapStatus {
 
-<<<<<<< HEAD
   /**
    * Min partition number to use [[HighlyCompressedMapStatus]]. A bit ugly here because in test
    * code we can't assume SparkEnv.get exists.
@@ -58,16 +57,9 @@ private[spark] object MapStatus {
     .map(_.conf.get(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS))
     .getOrElse(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS.defaultValue.get)
 
-  def apply(loc: BlockManagerId, uncompressedSizes: Array[Long], numOutput: Long): MapStatus = {
+  def apply(loc: BlockManagerId, uncompressedSizes: Array[Long]): MapStatus = {
     if (uncompressedSizes.length > minPartitionsToUseHighlyCompressMapStatus) {
       HighlyCompressedMapStatus(loc, uncompressedSizes, numOutput)
-=======
-  def apply(loc: BlockManagerId, uncompressedSizes: Array[Long]): MapStatus = {
-    if (uncompressedSizes.length >  Option(SparkEnv.get)
-      .map(_.conf.get(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS))
-      .getOrElse(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS.defaultValue.get)) {
-      HighlyCompressedMapStatus(loc, uncompressedSizes)
->>>>>>> 4a11209539130c6a075119bf87c5ad854d42978e
     } else {
       new CompressedMapStatus(loc, uncompressedSizes)
     }
