@@ -106,6 +106,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val logDir = conf.get(EVENT_LOG_DIR)
 
+  private val appRefreshNum = conf.get(HISTORY_APP_REFRESH_NUM)
+  private val loadInComplete = conf.get(HISTORY_APP_LOAD_INCOMPLETE)
+
   private val HISTORY_UI_ACLS_ENABLE = conf.getBoolean("spark.history.ui.acls.enable", false)
   private val HISTORY_UI_ADMIN_ACLS = conf.get("spark.history.ui.admin.acls", "")
   private val HISTORY_UI_ADMIN_ACLS_GROUPS = conf.get("spark.history.ui.admin.acls.groups", "")
@@ -441,6 +444,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             !isBlacklisted(entry.getPath)
         }
         .filter { entry =>
+          if (entry.getPath().getName().endsWith(".inprogress")) {
+            loadInComplete
+          } else {
+            true
+          }
+        }
+        .filter { entry =>
           try {
             val info = listing.read(classOf[LogInfo], entry.getPath().toString())
 
@@ -465,20 +475,31 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             }
           } catch {
             case _: NoSuchElementException =>
-              // If the file is currently not being tracked by the SHS, add an entry for it and try
-              // to parse it. This will allow the cleaner code to detect the file as stale later on
-              // if it was not possible to parse it.
-              listing.write(LogInfo(entry.getPath().toString(), newLastScanTime, None, None,
-                entry.getLen()))
               entry.getLen() > 0
           }
         }
         .sortWith { case (entry1, entry2) =>
           entry1.getModificationTime() > entry2.getModificationTime()
         }
+        .take(appRefreshNum)
+
+      updated.foreach{
+        entry =>
+          try {
+            listing.read(classOf[LogInfo], entry.getPath().toString())
+          } catch {
+            case _: NoSuchElementException =>
+              // If the file is currently not being tracked by the SHS, add an entry for it and
+              // try to parse it. This will allow the cleaner code to detect the file as stale
+              // later on if it was not possible to parse it.
+              listing.write(LogInfo(entry.getPath().toString(), newLastScanTime, None, None,
+                entry.getLen()))
+          }
+      }
+
 
       if (updated.nonEmpty) {
-        logDebug(s"New/updated attempts found: ${updated.size} ${updated.map(_.getPath)}")
+        logDebug(s"Attempts to update: ${updated.size} ${updated.map(_.getPath)}")
       }
 
       val tasks = updated.flatMap { entry =>

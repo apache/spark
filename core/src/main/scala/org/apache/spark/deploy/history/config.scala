@@ -64,4 +64,13 @@ private[spark] object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("1m")
 
+  val HISTORY_APP_REFRESH_NUM = ConfigBuilder("spark.history.fs.appRefreshNum")
+    .doc("APP number to refresh each scan")
+    .intConf
+    .createWithDefault(3000)
+
+  val HISTORY_APP_LOAD_INCOMPLETE = ConfigBuilder("spark.history.fs.load.incomplete")
+    .doc("Show incomplete APP's information or not")
+    .booleanConf
+    .createWithDefault(true)
 }
