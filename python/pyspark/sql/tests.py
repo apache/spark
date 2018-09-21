@@ -3863,7 +3863,7 @@ class SparkSessionTests(PySparkTestCase):
             spark.stop()
 
 
-class SparkSessionTests2(ReusedSQLTestCase):
+class SparkSessionTests2(unittest.TestCase):
 
     def test_active_session(self):
         spark = SparkSession.builder \
@@ -3875,6 +3875,14 @@ class SparkSessionTests2(ReusedSQLTestCase):
             self.assertEqual(df.collect(), [Row(age=1, name=u'Alice')])
         finally:
             spark.stop()
+
+    def test_get_active_session_when_no_active_session(self):
+        spark = SparkSession.builder \
+            .master("local") \
+            .getOrCreate()
+        spark.stop()
+        active = spark.getActiveSession()
+        self.assertEqual(active, None)
 
     def test_SparkSession(self):
         spark = SparkSession.builder \
@@ -3929,7 +3937,7 @@ class SparkSessionTests2(ReusedSQLTestCase):
         finally:
             session1.stop()
 
-    def test_newSession(self):
+    def test_new_session(self):
         session = SparkSession.builder \
             .master("local") \
             .getOrCreate()
