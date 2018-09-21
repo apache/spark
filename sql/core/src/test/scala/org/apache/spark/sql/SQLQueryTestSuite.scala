@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeTableCommand}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
@@ -140,6 +141,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     val input = fileToString(new File(testCase.inputFile))
 
     val (comments, code) = input.split("\n").partition(_.startsWith("--"))
+
+    // Runs all the tests on both codegen-only and interpreter modes. Since explain results differ
+    // when `WHOLESTAGE_CODEGEN_ENABLED` disabled, we don't run these tests now.
+    val codegenConfigSets = Array(("false", "NO_CODEGEN"), ("true", "CODEGEN_ONLY")).map {
+      case (wholeStageCodegenEnabled, codegenFactoryMode) =>
+        Array( // SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStageCodegenEnabled,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> codegenFactoryMode)
+    }
     val configSets = {
       val configLines = comments.filter(_.startsWith("--SET")).map(_.substring(5))
       val configs = configLines.map(_.split(",").map { confAndValue =>
@@ -148,12 +157,21 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       })
       // When we are regenerating the golden files we don't need to run all the configs as they
       // all need to return the same result
-      if (regenerateGoldenFiles && configs.nonEmpty) {
+      if (regenerateGoldenFiles) {
         configs.take(1)
       } else {
-        configs
+        if (configs.nonEmpty) {
+          codegenConfigSets.flatMap { codegenConfig =>
+            configs.map { config =>
+              config ++ codegenConfig
+            }
+          }
+        } else {
+          codegenConfigSets
+        }
       }
     }
+
     // List of SQL queries to run
     // note: this is not a robust way to split queries using semicolon, but works for now.
     val queries = code.mkString("\n").split("(?<=[^\\\\]);").map(_.trim).filter(_ != "").toSeq
