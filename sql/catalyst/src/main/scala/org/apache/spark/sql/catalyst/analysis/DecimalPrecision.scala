@@ -292,11 +292,11 @@ object DecimalPrecision extends TypeCoercionRule {
         // become DECIMAL(38, 16), safely having a much lower precision loss.
         case (l: Literal, r) if r.dataType.isInstanceOf[DecimalType] &&
             l.dataType.isInstanceOf[IntegralType] &&
-            SQLConf.get.literalPrecisePrecision =>
+            SQLConf.get.literalPickMinimumPrecision =>
           b.makeCopy(Array(Cast(l, DecimalType.fromLiteral(l)), r))
         case (l, r: Literal) if l.dataType.isInstanceOf[DecimalType] &&
             r.dataType.isInstanceOf[IntegralType] &&
-            SQLConf.get.literalPrecisePrecision =>
+            SQLConf.get.literalPickMinimumPrecision =>
           b.makeCopy(Array(l, Cast(r, DecimalType.fromLiteral(r))))
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
         // and fixed-precision decimals in an expression with floats / doubles to doubles

@@ -2860,8 +2860,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-25454: decimal division with negative scale") {
-    // TODO: completely fix this issue even LITERAL_PRECISE_PRECISION is true.
-    withSQLConf(SQLConf.LITERAL_PRECISE_PRECISION.key -> "false") {
+    // TODO: completely fix this issue even when LITERAL_PRECISE_PRECISION is true.
+    withSQLConf(SQLConf.LITERAL_PICK_MINIMUM_PRECISION.key -> "false") {
       checkAnswer(sql("select 26393499451 / (1e6 * 1000)"), Row(BigDecimal("26.3934994510000")))
     }
   }

@@ -1345,13 +1345,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val LITERAL_PRECISE_PRECISION =
-    buildConf("spark.sql.literal.precisePrecision")
+  val LITERAL_PICK_MINIMUM_PRECISION =
+    buildConf("spark.sql.literal.pickMinimumPrecision")
       .internal()
-      .doc("When integral literals are used with decimals in binary operators, Spark will " +
-        "pick a precise precision for the literals to calculate the precision and scale " +
-        "of the result decimal, when this config is true. By picking a precise precision, we " +
-        "can avoid wasting precision, to reduce the possibility of overflow.")
+      .doc("When integral literal is used in decimal operations, pick a minimum precision " +
+        "required by the literal if this config is true, to make the resulting precision and/or " +
+        "scale smaller. This can reduce the possibility of precision lose and/or overflow.")
       .booleanConf
       .createWithDefault(true)
 
@@ -1949,7 +1948,7 @@ class SQLConf extends Serializable with Logging {
 
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
 
-  def literalPrecisePrecision: Boolean = getConf(LITERAL_PRECISE_PRECISION)
+  def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 
   def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
 
