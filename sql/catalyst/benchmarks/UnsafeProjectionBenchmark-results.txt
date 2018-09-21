@@ -7,9 +7,9 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 unsafe projection:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-single long                                   2399 / 2405        111.9           8.9       1.0X
-single nullable long                          2838 / 2841         94.6          10.6       0.8X
-7 primitive types                             5745 / 5916         46.7          21.4       0.4X
-7 nullable primitive types                  10166 / 10236         26.4          37.9       0.2X
+single long                                   2104 / 2114        127.6           7.8       1.0X
+single nullable long                          2873 / 2899         93.4          10.7       0.7X
+7 primitive types                             5960 / 6000         45.0          22.2       0.4X
+7 nullable primitive types                    9650 / 9815         27.8          36.0       0.2X
 
 
