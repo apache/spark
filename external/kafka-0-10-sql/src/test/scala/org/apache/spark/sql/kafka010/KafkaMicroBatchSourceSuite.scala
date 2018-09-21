@@ -888,9 +888,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .option("kafka.isolation.level", "read_committed")
       .option("subscribe", topic)
       .option("startingOffsets", "earliest")
-      // Set a short timeout to make the test fast. When a batch doesn't contain any visible data
-      // messages, "poll" will wait until timeout.
-      .option("kafkaConsumer.pollTimeoutMs", 5000)
       .load()
       .select($"value".as[String])
 
