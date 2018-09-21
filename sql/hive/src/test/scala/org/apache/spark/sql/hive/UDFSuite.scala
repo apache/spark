@@ -196,14 +196,14 @@ class UDFSuite
 
   test("SPARK-21318: The correct exception message should be thrown " +
     "if a UDF/UDAF has already been registered") {
-    val UDAFName = "empty"
-    val UDAFClassName = classOf[org.apache.spark.sql.hive.execution.UDAFEmpty].getCanonicalName
+    val functionName = "empty"
+    val functionClass = classOf[org.apache.spark.sql.hive.execution.UDAFEmpty].getCanonicalName
 
-    withUserDefinedFunction(UDAFName -> false) {
-      sql(s"CREATE FUNCTION $UDAFName AS '$UDAFClassName'")
+    withUserDefinedFunction(functionName -> false) {
+      sql(s"CREATE FUNCTION $functionName AS '$functionClass'")
 
       val e = intercept[AnalysisException] {
-        sql(s"SELECT $UDAFName(value) from $testTableName")
+        sql(s"SELECT $functionName(value) from $testTableName")
       }
 
       assert(e.getMessage.contains("Can not get an evaluator of the empty UDAF"))
