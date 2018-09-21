@@ -22,13 +22,14 @@ import scala.collection.JavaConverters._
 import scala.util.{Random, Try}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.parquet.{SpecificParquetRecordReaderBase, VectorizedParquetRecordReader}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnVector
-import org.apache.spark.util.{Benchmark, Utils}
+import org.apache.spark.util.Utils
 
 
 /**
