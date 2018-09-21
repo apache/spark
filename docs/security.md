@@ -728,6 +728,7 @@ When talking to Hadoop-based services behind Kerberos, it was noted that Spark n
 so that non-local processes can authenticate. These delegation tokens in Kubernetes are stored in Secrets that are 
 shared by the Driver and its Executors. As such, there are three ways of submitting a kerberos job: 
 
+In all cases you must define the environment variable: `HADOOP_CONF_DIR`.
 1. Submitting with a $kinit that stores a TGT in the Local Ticket Cache:
 ```bash
 /usr/bin/kinit -kt <keytab_file> <username>/<krb5 realm>
@@ -742,7 +743,7 @@ shared by the Driver and its Executors. As such, there are three ways of submitt
     local:///opt/spark/examples/jars/spark-examples_2.11-2.4.0-SNAPSHOT.jar \
     <HDFS_FILE_LOCATION>
 ```
-3. Submitting with a local keytab and principle
+2. Submitting with a local keytab and principal
 ```bash
 /opt/spark/bin/spark-submit \
     --deploy-mode cluster \
@@ -758,7 +759,7 @@ shared by the Driver and its Executors. As such, there are three ways of submitt
     <HDFS_FILE_LOCATION>
 ```
 
-3. Submitting with pre-populated secrets already existing within the namespace
+3. Submitting with pre-populated secrets, that contain the delegation token, already existing within the namespace
 ```bash
 /opt/spark/bin/spark-submit \
     --deploy-mode cluster \

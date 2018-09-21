@@ -224,48 +224,37 @@ private[spark] object Config extends Logging {
       .checkValue(pv => List("2", "3").contains(pv),
         "Ensure that major Python version is either Python2 or Python3")
       .createWithDefault("2")
-  
-  val KUBERNETES_KERBEROS_PROXY_USER =
-    ConfigBuilder("spark.kubernetes.kerberos.proxyUser")
-      .doc("Specify the proxy user " +
-        "for HadoopUGI login for the Driver + Executors")
-      .internal()
-      .stringConf
-      .createWithDefault("false")
 
   val KUBERNETES_KERBEROS_KRB5_FILE =
     ConfigBuilder("spark.kubernetes.kerberos.krb5location")
-      .doc("Specify the location of the krb5 file " +
-        "to be mounted on the driver and executors for Secure HDFS")
+      .doc("Specify the location of the krb5 file to be mounted on the driver " +
+        "and executors for Secure HDFS. Note: the KDC defined needs to be " +
+        "visible from inside the containers ")
       .stringConf
       .createOptional
 
   val KUBERNETES_KERBEROS_KEYTAB =
     ConfigBuilder("spark.kubernetes.kerberos.keytab")
-      .doc("Specify the location of keytab " +
-        "for Kerberos in order to access Secure HDFS")
+      .doc("Specify the location of keytab for Kerberos in order to access Secure HDFS")
       .stringConf
       .createOptional
 
   val KUBERNETES_KERBEROS_PRINCIPAL =
     ConfigBuilder("spark.kubernetes.kerberos.principal")
-      .doc("Specify the principal " +
-        "for Kerberos in order to access Secure HDFS")
+      .doc("Specify the principal for Kerberos in order to access Secure HDFS")
       .stringConf
       .createOptional
 
   val KUBERNETES_KERBEROS_RENEWER_PRINCIPAL =
     ConfigBuilder("spark.kubernetes.kerberos.renewer.principal")
-      .doc("Specify the principal " +
-        "you wish to renew and retrieve your Kerberos values with")
+      .doc("Specify the principal you wish to renew and retrieve your Kerberos values with")
       .stringConf
       .createOptional
 
   val KUBERNETES_KERBEROS_DT_SECRET_NAME =
     ConfigBuilder("spark.kubernetes.kerberos.tokensecret.name")
-      .doc("Specify the name of the secret where " +
-        "your existing delegation token is stored. This removes the need " +
-        "for the job user to provide any keytab for launching a job")
+      .doc("Specify the name of the secret where your existing delegation token is stored. " +
+        "This removes the need for the job user to provide any keytab for launching a job")
       .stringConf
       .createOptional
 

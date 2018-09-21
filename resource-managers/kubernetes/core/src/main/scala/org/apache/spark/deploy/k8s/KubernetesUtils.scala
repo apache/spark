@@ -39,6 +39,15 @@ private[spark] object KubernetesUtils {
     sparkConf.getAllWithPrefix(prefix).toMap
   }
 
+  def requireBothOrNeitherDefined(
+    opt1: Option[_],
+    opt2: Option[_],
+    errMessageWhenFirstIsMissing: String,
+    errMessageWhenSecondIsMissing: String): Unit = {
+    requireNandDefined(opt1, opt2, errMessageWhenSecondIsMissing)
+    requireNandDefined(opt2, opt1, errMessageWhenFirstIsMissing)
+  }
+
   def requireNandDefined(opt1: Option[_], opt2: Option[_], errMessage: String): Unit = {
     opt1.foreach { _ => require(opt2.isEmpty, errMessage) }
   }

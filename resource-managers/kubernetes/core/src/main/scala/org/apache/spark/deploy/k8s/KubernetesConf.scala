@@ -23,7 +23,6 @@ import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferen
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.features.hadoopsteps.HadoopStepsOrchestrator
 import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.deploy.k8s.submit.KubernetesClientApplication._
@@ -69,14 +68,6 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
   def getHadoopConfigMapName: String = s"$appResourceNamePrefix-hadoop-config"
 
   def getKRBConfigMapName: String = s"$appResourceNamePrefix-krb5-file"
-
-  def getHadoopStepsOrchestrator : Option[HadoopStepsOrchestrator] = hadoopConfDir.map {
-    hConf => new HadoopStepsOrchestrator(
-      sparkConf,
-      appResourceNamePrefix,
-      hConf,
-      getHadoopConfigMapName,
-      getTokenManager.isSecurityEnabled)}
 
   def getTokenManager : KubernetesHadoopDelegationTokenManager =
     new KubernetesHadoopDelegationTokenManager

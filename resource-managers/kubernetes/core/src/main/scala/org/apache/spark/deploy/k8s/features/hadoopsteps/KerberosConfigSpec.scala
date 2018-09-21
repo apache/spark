@@ -16,22 +16,19 @@
  */
 package org.apache.spark.deploy.k8s.features.hadoopsteps
 
-import io.fabric8.kubernetes.api.model.{EnvVar, Secret, Volume, VolumeMount}
+import io.fabric8.kubernetes.api.model.Secret
 
  /**
   * Represents a given configuration of the hadoop configuration logic, informing the
   * HadoopConfigBootstrapStep of how the driver should be configured. This includes:
   * <p>
-  * - The properties that will be stored into the config map which have (key, value)
-  *   pairs of (path, data)
   * - The secret containing a DT, either previously specified or built on the fly
   * - The name of the secret where the DT will be stored
   * - The data item-key on the secret which correlates with where the current DT data is stored
   * - The Job User's username
   */
-private[spark] case class HadoopConfigSpec(
-  configMapProperties: Map[String, String],
+private[spark] case class KerberosConfigSpec(
   dtSecret: Option[Secret],
   dtSecretName: String,
-  dtSecretItemKey: Option[String],
-  jobUserName: Option[String])
+  dtSecretItemKey: String,
+  jobUserName: String)
