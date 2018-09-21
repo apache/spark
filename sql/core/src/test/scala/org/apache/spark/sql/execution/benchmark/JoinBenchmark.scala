@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.IntegerType
  *
  * Benchmarks in this file are skipped in normal builds.
  */
-class JoinBenchmark extends BenchmarkBase {
+class JoinBenchmark extends BenchmarkWithCodegen {
 
   ignore("broadcast hash join, long key") {
     val N = 20 << 20

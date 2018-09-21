@@ -22,22 +22,25 @@ import java.io.File
 import scala.util.{Random, Try}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.monotonically_increasing_id
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType}
-import org.apache.spark.util.{Benchmark, BenchmarkBase => FileBenchmarkBase, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Benchmark to measure read performance with Filter pushdown.
  * To run this benchmark:
- * 1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
- * 2. build/sbt "sql/test:runMain <this class>"
- * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
- *    Results will be written to "benchmarks/FilterPushdownBenchmark-results.txt".
+ * {{{
+ *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
+ *   2. build/sbt "sql/test:runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      Results will be written to "benchmarks/FilterPushdownBenchmark-results.txt".
+ * }}}
  */
-object FilterPushdownBenchmark extends FileBenchmarkBase {
+object FilterPushdownBenchmark extends BenchmarkBase {
 
   private val conf = new SparkConf()
     .setAppName(this.getClass.getSimpleName)

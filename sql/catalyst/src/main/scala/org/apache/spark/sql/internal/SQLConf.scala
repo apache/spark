@@ -255,13 +255,6 @@ object SQLConf {
     .intConf
     .createWithDefault(4)
 
-  val LIMIT_FLAT_GLOBAL_LIMIT = buildConf("spark.sql.limit.flatGlobalLimit")
-    .internal()
-    .doc("During global limit, try to evenly distribute limited rows across data " +
-      "partitions. If disabled, scanning data partitions sequentially until reaching limit number.")
-    .booleanConf
-    .createWithDefault(true)
-
   val ADVANCED_PARTITION_PREDICATE_PUSHDOWN =
     buildConf("spark.sql.hive.advancedPartitionPredicatePushdown.enabled")
       .internal()
@@ -584,16 +577,6 @@ object SQLConf {
     .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
     .createWithDefault(HiveCaseSensitiveInferenceMode.INFER_AND_SAVE.toString)
 
-  val TYPECOERCION_COMPARE_DATE_TIMESTAMP_IN_TIMESTAMP =
-    buildConf("spark.sql.typeCoercion.compareDateTimestampInTimestamp")
-      .internal()
-      .doc("When true (default), compare Date with Timestamp after converting both sides to " +
-        "Timestamp. This behavior is compatible with Hive 2.2 or later. See HIVE-15236. " +
-        "When false, restore the behavior prior to Spark 2.4. Compare Date with Timestamp after " +
-        "converting both sides to string. This config will be removed in spark 3.0")
-      .booleanConf
-      .createWithDefault(true)
-
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
       "to produce the partition columns instead of table scans. It applies when all the columns " +
@@ -612,7 +595,7 @@ object SQLConf {
     .internal()
     .doc("When true, force the output schema of the from_json() function to be nullable " +
       "(including all the fields). Otherwise, the schema might not be compatible with" +
-      "actual data, which leads to curruptions.")
+      "actual data, which leads to corruptions. This config will be removed in Spark 3.0.")
     .booleanConf
     .createWithDefault(true)
 
@@ -1415,13 +1398,6 @@ object SQLConf {
       .stringConf
       .createWithDefault("")
 
-  val REJECT_TIMEZONE_IN_STRING = buildConf("spark.sql.function.rejectTimezoneInString")
-    .internal()
-    .doc("If true, `to_utc_timestamp` and `from_utc_timestamp` return null if the input string " +
-      "contains a timezone part, e.g. `2000-10-10 00:00:00+00:00`.")
-    .booleanConf
-    .createWithDefault(true)
-
   object PartitionOverwriteMode extends Enumeration {
     val STATIC, DYNAMIC = Value
   }
@@ -1490,12 +1466,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
-    .doc("If it is set to true, size of null returns -1. This behavior was inherited from Hive. " +
-      "The size function returns null for null input if the flag is disabled.")
-    .booleanConf
-    .createWithDefault(true)
-
   val REPL_EAGER_EVAL_ENABLED = buildConf("spark.sql.repl.eagerEval.enabled")
     .doc("Enables eager evaluation or not. When true, the top K rows of Dataset will be " +
       "displayed if and only if the REPL supports the eager evaluation. Currently, the " +
@@ -1544,6 +1514,22 @@ object SQLConf {
     .intConf
     .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
     .createWithDefault(Deflater.DEFAULT_COMPRESSION)
+
+  val COMPARE_DATE_TIMESTAMP_IN_TIMESTAMP =
+    buildConf("spark.sql.legacy.compareDateTimestampInTimestamp")
+      .internal()
+      .doc("When true (default), compare Date with Timestamp after converting both sides to " +
+        "Timestamp. This behavior is compatible with Hive 2.2 or later. See HIVE-15236. " +
+        "When false, restore the behavior prior to Spark 2.4. Compare Date with Timestamp after " +
+        "converting both sides to string. This config will be removed in Spark 3.0.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
+    .doc("If it is set to true, size of null returns -1. This behavior was inherited from Hive. " +
+      "The size function returns null for null input if the flag is disabled.")
+    .booleanConf
+    .createWithDefault(true)
 
   val LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED =
     buildConf("spark.sql.legacy.replaceDatabricksSparkAvro.enabled")
@@ -1705,8 +1691,7 @@ class SQLConf extends Serializable with Logging {
   def caseSensitiveInferenceMode: HiveCaseSensitiveInferenceMode.Value =
     HiveCaseSensitiveInferenceMode.withName(getConf(HIVE_CASE_SENSITIVE_INFERENCE))
 
-  def compareDateTimestampInTimestamp : Boolean =
-    getConf(TYPECOERCION_COMPARE_DATE_TIMESTAMP_IN_TIMESTAMP)
+  def compareDateTimestampInTimestamp : Boolean = getConf(COMPARE_DATE_TIMESTAMP_IN_TIMESTAMP)
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 
@@ -1770,8 +1755,6 @@ class SQLConf extends Serializable with Logging {
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
   def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
-
-  def limitFlatGlobalLimit: Boolean = getConf(LIMIT_FLAT_GLOBAL_LIMIT)
 
   def advancedPartitionPredicatePushdownEnabled: Boolean =
     getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
