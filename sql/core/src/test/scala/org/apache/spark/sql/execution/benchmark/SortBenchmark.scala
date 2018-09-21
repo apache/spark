@@ -21,7 +21,6 @@ import java.util.{Arrays, Comparator}
 
 import org.apache.spark.unsafe.array.LongArray
 import org.apache.spark.unsafe.memory.MemoryBlock
-import org.apache.spark.util.Benchmark
 import org.apache.spark.util.collection.Sorter
 import org.apache.spark.util.collection.unsafe.sort._
 import org.apache.spark.util.random.XORShiftRandom
@@ -33,7 +32,7 @@ import org.apache.spark.util.random.XORShiftRandom
  *
  * Benchmarks in this file are skipped in normal builds.
  */
-class SortBenchmark extends BenchmarkBase {
+class SortBenchmark extends BenchmarkWithCodegen {
 
   private def referenceKeyPrefixSort(buf: LongArray, lo: Int, hi: Int, refCmp: PrefixComparator) {
     val sortBuffer = new LongArray(MemoryBlock.fromLongArray(new Array[Long](buf.size().toInt)))

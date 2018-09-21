@@ -23,7 +23,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkEnv, TaskContext}
 import org.apache.spark.internal.config
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.util.Benchmark
+import org.apache.spark.sql.execution.benchmark.Benchmark
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 object ExternalAppendOnlyUnsafeRowArrayBenchmark {

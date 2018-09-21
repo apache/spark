@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.util.Benchmark
 
 /**
  * Benchmark to measure TPCDS query performance.

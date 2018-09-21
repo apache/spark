@@ -19,13 +19,12 @@ package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.util.Benchmark
 
 /**
  * Common base trait for micro benchmarks that are supposed to run standalone (i.e. not together
  * with other test suites).
  */
-private[benchmark] trait BenchmarkBase extends SparkFunSuite {
+private[benchmark] trait BenchmarkWithCodegen extends SparkFunSuite {
 
   lazy val sparkSession = SparkSession.builder
     .master("local[1]")

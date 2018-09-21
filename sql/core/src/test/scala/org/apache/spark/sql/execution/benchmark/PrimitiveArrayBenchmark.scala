@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.util.{Benchmark, BenchmarkBase => FileBenchmarkBase}
 
 /**
  * Benchmark primitive arrays via DataFrame and Dataset program using primitive arrays
@@ -28,7 +27,7 @@ import org.apache.spark.util.{Benchmark, BenchmarkBase => FileBenchmarkBase}
  * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
  *    Results will be written to "benchmarks/PrimitiveArrayBenchmark-results.txt".
  */
-object PrimitiveArrayBenchmark extends FileBenchmarkBase {
+object PrimitiveArrayBenchmark extends BenchmarkBase {
   lazy val sparkSession = SparkSession.builder
     .master("local[1]")
     .appName("microbenchmark")

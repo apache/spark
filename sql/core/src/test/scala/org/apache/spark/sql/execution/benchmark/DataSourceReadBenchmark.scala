@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.datasources.parquet.{SpecificParquetRecord
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnVector
-import org.apache.spark.util.{Benchmark, Utils}
+import org.apache.spark.util.Utils
 
 
 /**

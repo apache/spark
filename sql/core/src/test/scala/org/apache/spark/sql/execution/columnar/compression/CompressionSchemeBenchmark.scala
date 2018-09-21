@@ -24,9 +24,9 @@ import org.apache.commons.lang3.RandomStringUtils
 import org.apache.commons.math3.distribution.LogNormalDistribution
 
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.execution.benchmark.Benchmark
 import org.apache.spark.sql.execution.columnar.{BOOLEAN, INT, LONG, NativeColumnType, SHORT, STRING}
 import org.apache.spark.sql.types.AtomicType
-import org.apache.spark.util.Benchmark
 import org.apache.spark.util.Utils._
 
 /**

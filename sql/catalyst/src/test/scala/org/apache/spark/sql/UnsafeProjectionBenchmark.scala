@@ -20,8 +20,8 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql.execution.benchmark.Benchmark
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Benchmark
 
 /**
  * Benchmark `UnsafeProjection` for fixed-length/primitive-type fields.

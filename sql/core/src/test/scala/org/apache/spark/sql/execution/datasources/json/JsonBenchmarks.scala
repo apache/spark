@@ -20,9 +20,10 @@ import java.io.File
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.execution.benchmark.Benchmark
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{Benchmark, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * The benchmarks aims to measure performance of JSON parsing when encoding is set and isn't.

@@ -31,9 +31,8 @@ import org.apache.spark.sql.hive.execution.TestingTypedCount
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
-import org.apache.spark.util.Benchmark
 
-class ObjectHashAggregateExecBenchmark extends BenchmarkBase with TestHiveSingleton {
+class ObjectHashAggregateExecBenchmark extends BenchmarkWithCodegen with TestHiveSingleton {
   ignore("Hive UDAF vs Spark AF") {
     val N = 2 << 15
 

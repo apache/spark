@@ -27,7 +27,7 @@ import org.apache.spark.sql.functions.monotonically_increasing_id
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType}
-import org.apache.spark.util.{Benchmark, BenchmarkBase => FileBenchmarkBase, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Benchmark to measure read performance with Filter pushdown.
@@ -37,7 +37,7 @@ import org.apache.spark.util.{Benchmark, BenchmarkBase => FileBenchmarkBase, Uti
  * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
  *    Results will be written to "benchmarks/FilterPushdownBenchmark-results.txt".
  */
-object FilterPushdownBenchmark extends FileBenchmarkBase {
+object FilterPushdownBenchmark extends BenchmarkBase {
 
   private val conf = new SparkConf()
     .setAppName(this.getClass.getSimpleName)

@@ -22,7 +22,6 @@ import scala.util.Random
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeArrayWriter}
-import org.apache.spark.util.Benchmark
 
 /**
  * Benchmark [[UnsafeArrayDataBenchmark]] for UnsafeArrayData
@@ -32,7 +31,7 @@ import org.apache.spark.util.Benchmark
  *
  * Benchmarks in this file are skipped in normal builds.
  */
-class UnsafeArrayDataBenchmark extends BenchmarkBase {
+class UnsafeArrayDataBenchmark extends BenchmarkWithCodegen {
 
   def calculateHeaderPortionInBytes(count: Int) : Int = {
     /* 4 + 4 * count // Use this expression for SPARK-15962 */
