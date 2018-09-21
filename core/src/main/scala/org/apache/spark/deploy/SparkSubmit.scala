@@ -521,9 +521,9 @@ private[spark] class SparkSubmit extends Logging {
       OptionAssigner(args.driverExtraLibraryPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         confKey = "spark.driver.extraLibraryPath"),
       OptionAssigner(args.principal, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        confKey = "spark.kerberos.principal"),
+        confKey = PRINCIPAL.key),
       OptionAssigner(args.keytab, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        confKey = "spark.kerberos.keytab"),
+        confKey = KEYTAB.key),
 
       // Propagate attributes for dependency resolution at the driver side
       OptionAssigner(args.packages, STANDALONE | MESOS, CLUSTER, confKey = "spark.jars.packages"),

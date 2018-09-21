@@ -624,6 +624,7 @@ sparkConfToSubmitOps[["spark.driver.extraClassPath"]]   <- "--driver-class-path"
 sparkConfToSubmitOps[["spark.driver.extraJavaOptions"]] <- "--driver-java-options"
 sparkConfToSubmitOps[["spark.driver.extraLibraryPath"]] <- "--driver-library-path"
 sparkConfToSubmitOps[["spark.master"]] <- "--master"
+sparkConfToSubmitOps[["spark.yarn.keytab"]] <- "--keytab"
 sparkConfToSubmitOps[["spark.kerberos.keytab"]] <- "--keytab"
 sparkConfToSubmitOps[["spark.kerberos.principal"]] <- "--principal"
 

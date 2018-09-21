@@ -55,6 +55,8 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       "spark.driver.port",
       "spark.master",
       "spark.yarn.jars",
+      "spark.yarn.keytab",
+      "spark.yarn.principal",
       "spark.kerberos.keytab",
       "spark.kerberos.principal",
       "spark.ui.filters",
