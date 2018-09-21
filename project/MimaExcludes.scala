@@ -34,6 +34,10 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
+  // Exclude rules for 2.5.x
+  lazy val v25excludes = v24excludes ++ Seq(
+  )
+
   // Exclude rules for 2.4.x
   lazy val v24excludes = v23excludes ++ Seq(
     // [SPARK-23429][CORE] Add executor memory metrics to heartbeat and expose in executors REST API
@@ -1202,6 +1206,7 @@ object MimaExcludes {
   }
 
   def excludes(version: String) = version match {
+    case v if v.startsWith("2.5") => v25excludes
     case v if v.startsWith("2.4") => v24excludes
     case v if v.startsWith("2.3") => v23excludes
     case v if v.startsWith("2.2") => v22excludes

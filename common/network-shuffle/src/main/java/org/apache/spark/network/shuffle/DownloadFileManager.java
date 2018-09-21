@@ -17,20 +17,20 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.File;
+import org.apache.spark.network.util.TransportConf;
 
 /**
- * A manager to create temp block files to reduce the memory usage and also clean temp
- * files when they won't be used any more.
+ * A manager to create temp block files used when fetching remote data to reduce the memory usage.
+ * It will clean files when they won't be used any more.
  */
-public interface TempFileManager {
+public interface DownloadFileManager {
 
   /** Create a temp block file. */
-  File createTempFile();
+  DownloadFile createTempFile(TransportConf transportConf);
 
   /**
    * Register a temp file to clean up when it won't be used any more. Return whether the
    * file is registered successfully. If `false`, the caller should clean up the file by itself.
    */
-  boolean registerTempFileToClean(File file);
+  boolean registerTempFileToClean(DownloadFile file);
 }

@@ -268,6 +268,7 @@ object FunctionRegistry {
     expression[Subtract]("-"),
     expression[Multiply]("*"),
     expression[Divide]("/"),
+    expression[IntegralDivide]("div"),
     expression[Remainder]("%"),
 
     // aggregate functions

@@ -503,7 +503,6 @@ setMethod("createOrReplaceTempView",
 #' @param x A SparkDataFrame
 #' @param tableName A character vector containing the name of the table
 #'
-#' @family SparkDataFrame functions
 #' @seealso \link{createOrReplaceTempView}
 #' @rdname registerTempTable-deprecated
 #' @name registerTempTable
@@ -3986,7 +3985,17 @@ setMethod("hint",
           signature(x = "SparkDataFrame", name = "character"),
           function(x, name, ...) {
             parameters <- list(...)
-            stopifnot(all(sapply(parameters, is.character)))
+            if (!all(sapply(parameters, function(y) {
+              if (is.character(y) || is.numeric(y)) {
+                TRUE
+              } else if (is.list(y)) {
+                all(sapply(y, function(z) { is.character(z) || is.numeric(z) }))
+              } else {
+                FALSE
+              }
+            }))) {
+              stop("sql hint should be character, numeric, or list with character or numeric.")
+            }
             jdf <- callJMethod(x@sdf, "hint", name, parameters)
             dataFrame(jdf)
           })
