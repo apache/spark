@@ -1287,18 +1287,8 @@ bin/spark-shell --driver-class-path postgresql-9.4.1207.jar --jars postgresql-9.
 Tables from the remote database can be loaded as a DataFrame or Spark SQL temporary view using
 the Data Sources API. Users can specify the JDBC connection properties in the data source options.
 <code>user</code> and <code>password</code> are normally provided as connection properties for
-logging into the data sources. Vendor-specific connection properties can also be passed to the
-underlying JDBC driver in the same way. For example:
-
-{% highlight scala %}
-// oracle.jdbc.mapDateToTimestamp defaults to true. If this flag is not disabled, a column of Oracle
-// DATE type will be resolved as Catalyst TimestampType, which is probably not the desired behavior.
-spark.read.format("jdbc")
-  .option("url", oracleJdbcUrl)
-  .option("oracle.jdbc.mapDateToTimestamp", "false")
-{% endhighlight %}
-
-In addition to the connection properties, Spark also supports the following case-insensitive options:
+logging into the data sources. In addition to the connection properties, Spark also supports
+the following case-insensitive options:
 
 <table class="table">
   <tr><th>Property Name</th><th>Meaning</th></tr>
@@ -1499,7 +1489,7 @@ See the [Apache Avro Data Source Guide](avro-data-source-guide.html).
 
  * The JDBC driver class must be visible to the primordial class loader on the client session and on all executors. This is because Java's DriverManager class does a security check that results in it ignoring all drivers not visible to the primordial class loader when one goes to open a connection. One convenient way to do this is to modify compute_classpath.sh on all worker nodes to include your driver JARs.
  * Some databases, such as H2, convert all names to upper case. You'll need to use upper case to refer to those names in Spark SQL.
-
+ * Users can specify vendor-specific JDBC connection properties in the data source options to do special treatment. For example, `spark.read.format("jdbc").option("url", oracleJdbcUrl).option("oracle.jdbc.mapDateToTimestamp", "false")`. `oracle.jdbc.mapDateToTimestamp` defaults to true, users often need to disable this flag to avoid Oracle date being resolved as timestamp.
 
 # Performance Tuning
 
