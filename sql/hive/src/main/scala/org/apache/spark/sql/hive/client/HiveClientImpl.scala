@@ -1063,8 +1063,7 @@ private[hive] object HiveClientImpl {
     // for example), don't use rawDataSize.
     // In Hive, when statistics gathering is disabled, `rawDataSize` and `numRows` is always
     // zero after INSERT command. So they are used here only if they are larger than zero.
-    val adjustedSize = BigInt(DataSourceUtils.calcDataSize(properties,
-      totalSize.getOrElse(BigInt(0)).toLong))
+    val adjustedSize = DataSourceUtils.calcDataSize(properties, totalSize.getOrElse(BigInt(0)))
     val sqlConf = SQLConf.get
     if (adjustedSize > 0L) {
       Some(CatalogStatistics(sizeInBytes = adjustedSize, rowCount = rowCount.filter(_ > 0)))

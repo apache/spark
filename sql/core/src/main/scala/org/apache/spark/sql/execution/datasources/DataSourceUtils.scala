@@ -61,8 +61,8 @@ object DataSourceUtils {
     !(name.startsWith("_") || name.startsWith("."))
   }
 
-  def calcDataSize(properties: Map[String, String], sizeInBytes: Long): Long = {
-    val factor = NumberUtils.toDouble(properties.get("deserFactor").getOrElse("1.0"), 1.0)
-    (sizeInBytes * factor).toLong
+  def calcDataSize(properties: Map[String, String], sizeInBytes: BigInt): BigInt = {
+    val factor = NumberUtils.toInt(properties.get("deserFactor").getOrElse("1"), 1)
+    sizeInBytes * factor
   }
 }
