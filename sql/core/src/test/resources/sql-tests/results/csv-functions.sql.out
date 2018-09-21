@@ -67,3 +67,20 @@ struct<>
 -- !query 6 output
 org.apache.spark.sql.AnalysisException
 Invalid number of arguments for function from_csv. Expected: one of 2 and 3; Found: 0; line 1 pos 7
+-- Number of queries: 2
+
+
+-- !query 0
+select schema_of_csv('1,abc')
+-- !query 0 schema
+struct<schemaofcsv(1,abc):string>
+-- !query 0 output
+struct<_c0:int,_c1:string>
+
+
+-- !query 1
+select schema_of_csv('1|abc', map('delimiter', '|'))
+-- !query 1 schema
+struct<schemaofcsv(1|abc):string>
+-- !query 1 output
+struct<_c0:int,_c1:string>

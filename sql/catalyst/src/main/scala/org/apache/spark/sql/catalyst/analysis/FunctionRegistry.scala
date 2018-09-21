@@ -523,7 +523,8 @@ object FunctionRegistry {
     castAlias("string", StringType),
 
     // csv
-    expression[CsvToStructs]("from_csv")
+    expression[CsvToStructs]("from_csv"),
+    expression[SchemaOfCsv]("schema_of_csv")
   )
 
   val builtin: SimpleFunctionRegistry = {

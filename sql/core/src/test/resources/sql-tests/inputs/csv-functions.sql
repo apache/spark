@@ -7,3 +7,6 @@ select from_csv('1', 'a InvalidType');
 select from_csv('1', 'a INT', named_struct('mode', 'PERMISSIVE'));
 select from_csv('1', 'a INT', map('mode', 1));
 select from_csv();
+-- infer schema of json literal
+select schema_of_csv('1,abc');
+select schema_of_csv('1|abc', map('delimiter', '|'));
