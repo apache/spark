@@ -33,9 +33,8 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.log4j.{AppenderSkeleton, LogManager}
 import org.apache.log4j.spi.LoggingEvent
-import org.apache.spark.SparkException
-import sun.nio.cs.StandardCharsets
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
