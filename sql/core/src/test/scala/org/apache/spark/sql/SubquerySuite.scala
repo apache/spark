@@ -1271,7 +1271,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-25482: Reuse same Subquery in order to execute it only once") {
-    withTempView("t1", "t2", "t3") {
+    withTempView("t1", "t2") {
       sql("create temporary view t1(a int) using parquet")
       sql("create temporary view t2(b int) using parquet")
       val plan = sql("select * from t2 where b > (select max(a) from t1)")
