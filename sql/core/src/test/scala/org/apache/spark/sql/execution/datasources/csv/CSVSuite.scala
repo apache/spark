@@ -1824,8 +1824,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
   test("read zip archive containing one CSV file") {
     withTempDir { path =>
-      val zipCSV = new File(path.getAbsolutePath, "test.csv.zip")
-      val out = new ZipOutputStream(new FileOutputStream(zipCSV));
+      val zippedCSV = new File(path.getAbsolutePath, "test.csv.zip")
+      val out = new ZipOutputStream(new FileOutputStream(zippedCSV));
       val entry = new ZipEntry("test.csv")
       out.putNextEntry(entry)
       val content = "1,2\n3,4".getBytes()
