@@ -26,6 +26,7 @@ import scala.util.Random
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -735,6 +736,56 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_contains(array(1, null), array(1, null)[0])"),
       Seq(Row(true), Row(true))
     )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(1), 1.23D)"),
+      Seq(Row(false))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(1), 1.0D)"),
+      Seq(Row(true))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(1.0D), 1)"),
+      Seq(Row(true))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(1.23D), 1)"),
+      Seq(Row(false))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(array(1)), array(1.0D))"),
+      Seq(Row(true))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(array(1)), array(1.23D))"),
+      Seq(Row(false))
+    )
+
+    val e1 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("array_contains(array(1), .01234567890123456790123456780)")
+    }
+    val errorMsg1 =
+      s"""
+         |Input to function array_contains should have been array followed by a
+         |value with same element type, but it's [array<int>, decimal(29,29)].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e1.message.contains(errorMsg1))
+
+    val e2 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("array_contains(array(1), 'foo')")
+    }
+    val errorMsg2 =
+      s"""
+         |Input to function array_contains should have been array followed by a
+         |value with same element type, but it's [array<int>, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e2.message.contains(errorMsg2))
   }
 
   test("arrays_overlap function") {

@@ -22,11 +22,11 @@ import java.io.File
 import scala.util.{Random, Try}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{Benchmark, Utils}
-
+import org.apache.spark.util.Utils
 
 /**
  * Benchmark to measure ORC read performance.

@@ -23,23 +23,23 @@ import java.nio.charset.StandardCharsets
 import org.apache.commons.lang3.RandomStringUtils
 import org.apache.commons.math3.distribution.LogNormalDistribution
 
+import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.columnar.{BOOLEAN, INT, LONG, NativeColumnType, SHORT, STRING}
 import org.apache.spark.sql.types.AtomicType
-import org.apache.spark.util.{Benchmark, BenchmarkBase => FileBenchmarkBase}
 import org.apache.spark.util.Utils._
 
 /**
  * Benchmark to decoders using various compression schemes.
  * To run this benchmark:
- * 1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
- * 2. build/sbt "sql/test:runMain <this class>"
- * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
- *    Results will be written to "benchmarks/CompressionSchemeBenchmark-results.txt".
+ * {{{
+ *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
+ *   2. build/sbt "sql/test:runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      Results will be written to "benchmarks/CompressionSchemeBenchmark-results.txt".
+ * }}}
  */
-object CompressionSchemeBenchmark extends FileBenchmarkBase with AllCompressionSchemes {
-
-  val iters = 1024
+object CompressionSchemeBenchmark extends BenchmarkBase with AllCompressionSchemes {
 
   private[this] def allocateLocal(size: Int): ByteBuffer = {
     ByteBuffer.allocate(size).order(ByteOrder.nativeOrder)
@@ -133,105 +133,113 @@ object CompressionSchemeBenchmark extends FileBenchmarkBase with AllCompressionS
     benchmark.run()
   }
 
+  def bitEncodingBenchmark(iters: Int): Unit = {
+    val count = 65536
+    val testData = allocateLocal(count * BOOLEAN.defaultSize)
+
+    val g = {
+      val rng = genLowerSkewData()
+      () => (rng().toInt % 2).toByte
+    }
+    for (i <- 0 until count) {
+      testData.put(i * BOOLEAN.defaultSize, g())
+    }
+
+    runEncodeBenchmark("BOOLEAN Encode", iters, count, BOOLEAN, testData)
+    runDecodeBenchmark("BOOLEAN Decode", iters, count, BOOLEAN, testData)
+  }
+
+  def shortEncodingBenchmark(iters: Int): Unit = {
+    val count = 65536
+    val testData = allocateLocal(count * SHORT.defaultSize)
+
+    val g1 = genLowerSkewData()
+    for (i <- 0 until count) {
+      testData.putShort(i * SHORT.defaultSize, g1().toShort)
+    }
+
+    runEncodeBenchmark("SHORT Encode (Lower Skew)", iters, count, SHORT, testData)
+    runDecodeBenchmark("SHORT Decode (Lower Skew)", iters, count, SHORT, testData)
+
+    val g2 = genHigherSkewData()
+    for (i <- 0 until count) {
+      testData.putShort(i * SHORT.defaultSize, g2().toShort)
+    }
+
+    runEncodeBenchmark("SHORT Encode (Higher Skew)", iters, count, SHORT, testData)
+    runDecodeBenchmark("SHORT Decode (Higher Skew)", iters, count, SHORT, testData)
+  }
+
+  def intEncodingBenchmark(iters: Int): Unit = {
+    val count = 65536
+    val testData = allocateLocal(count * INT.defaultSize)
+
+    val g1 = genLowerSkewData()
+    for (i <- 0 until count) {
+      testData.putInt(i * INT.defaultSize, g1().toInt)
+    }
+
+    runEncodeBenchmark("INT Encode (Lower Skew)", iters, count, INT, testData)
+    runDecodeBenchmark("INT Decode (Lower Skew)", iters, count, INT, testData)
+
+    val g2 = genHigherSkewData()
+    for (i <- 0 until count) {
+      testData.putInt(i * INT.defaultSize, g2().toInt)
+    }
+
+    runEncodeBenchmark("INT Encode (Higher Skew)", iters, count, INT, testData)
+    runDecodeBenchmark("INT Decode (Higher Skew)", iters, count, INT, testData)
+  }
+
+  def longEncodingBenchmark(iters: Int): Unit = {
+    val count = 65536
+    val testData = allocateLocal(count * LONG.defaultSize)
+
+    val g1 = genLowerSkewData()
+    for (i <- 0 until count) {
+      testData.putLong(i * LONG.defaultSize, g1().toLong)
+    }
+
+    runEncodeBenchmark("LONG Encode (Lower Skew)", iters, count, LONG, testData)
+    runDecodeBenchmark("LONG Decode (Lower Skew)", iters, count, LONG, testData)
+
+    val g2 = genHigherSkewData()
+    for (i <- 0 until count) {
+      testData.putLong(i * LONG.defaultSize, g2().toLong)
+    }
+
+    runEncodeBenchmark("LONG Encode (Higher Skew)", iters, count, LONG, testData)
+    runDecodeBenchmark("LONG Decode (Higher Skew)", iters, count, LONG, testData)
+  }
+
+  def stringEncodingBenchmark(iters: Int): Unit = {
+    val count = 65536
+    val strLen = 8
+    val tableSize = 16
+    val testData = allocateLocal(count * (4 + strLen))
+
+    val g = {
+      val dataTable = (0 until tableSize).map(_ => RandomStringUtils.randomAlphabetic(strLen))
+      val rng = genHigherSkewData()
+      () => dataTable(rng().toInt % tableSize)
+    }
+    for (i <- 0 until count) {
+      testData.putInt(strLen)
+      testData.put(g().getBytes(StandardCharsets.UTF_8))
+    }
+    testData.rewind()
+
+    runEncodeBenchmark("STRING Encode", iters, count, STRING, testData)
+    runDecodeBenchmark("STRING Decode", iters, count, STRING, testData)
+  }
+
   override def benchmark(): Unit = {
-    runBenchmark("bit encoding benchmark") {
-      val count = 65536
-      val testData = allocateLocal(count * BOOLEAN.defaultSize)
-
-      val g = {
-        val rng = genLowerSkewData()
-        () => (rng().toInt % 2).toByte
-      }
-      for (i <- 0 until count) {
-        testData.put(i * BOOLEAN.defaultSize, g())
-      }
-
-      runEncodeBenchmark("BOOLEAN Encode", iters, count, BOOLEAN, testData)
-      runDecodeBenchmark("BOOLEAN Decode", iters, count, BOOLEAN, testData)
-    }
-
-    runBenchmark("short encoding benchmark") {
-      val count = 65536
-      val testData = allocateLocal(count * SHORT.defaultSize)
-
-      val g1 = genLowerSkewData()
-      for (i <- 0 until count) {
-        testData.putShort(i * SHORT.defaultSize, g1().toShort)
-      }
-
-      runEncodeBenchmark("SHORT Encode (Lower Skew)", iters, count, SHORT, testData)
-      runDecodeBenchmark("SHORT Decode (Lower Skew)", iters, count, SHORT, testData)
-
-      val g2 = genHigherSkewData()
-      for (i <- 0 until count) {
-        testData.putShort(i * SHORT.defaultSize, g2().toShort)
-      }
-
-      runEncodeBenchmark("SHORT Encode (Higher Skew)", iters, count, SHORT, testData)
-      runDecodeBenchmark("SHORT Decode (Higher Skew)", iters, count, SHORT, testData)
-    }
-
-    runBenchmark("int encoding benchmark") {
-      val count = 65536
-      val testData = allocateLocal(count * INT.defaultSize)
-
-      val g1 = genLowerSkewData()
-      for (i <- 0 until count) {
-        testData.putInt(i * INT.defaultSize, g1().toInt)
-      }
-
-      runEncodeBenchmark("INT Encode (Lower Skew)", iters, count, INT, testData)
-      runDecodeBenchmark("INT Decode (Lower Skew)", iters, count, INT, testData)
-
-      val g2 = genHigherSkewData()
-      for (i <- 0 until count) {
-        testData.putInt(i * INT.defaultSize, g2().toInt)
-      }
-
-      runEncodeBenchmark("INT Encode (Higher Skew)", iters, count, INT, testData)
-      runDecodeBenchmark("INT Decode (Higher Skew)", iters, count, INT, testData)
-    }
-
-    runBenchmark("long encoding benchmark") {
-      val count = 65536
-      val testData = allocateLocal(count * LONG.defaultSize)
-
-      val g1 = genLowerSkewData()
-      for (i <- 0 until count) {
-        testData.putLong(i * LONG.defaultSize, g1().toLong)
-      }
-
-      runEncodeBenchmark("LONG Encode (Lower Skew)", iters, count, LONG, testData)
-      runDecodeBenchmark("LONG Decode (Lower Skew)", iters, count, LONG, testData)
-
-      val g2 = genHigherSkewData()
-      for (i <- 0 until count) {
-        testData.putLong(i * LONG.defaultSize, g2().toLong)
-      }
-
-      runEncodeBenchmark("LONG Encode (Higher Skew)", iters, count, LONG, testData)
-      runDecodeBenchmark("LONG Decode (Higher Skew)", iters, count, LONG, testData)
-    }
-
-    runBenchmark("string encoding benchmark") {
-      val count = 65536
-      val strLen = 8
-      val tableSize = 16
-      val testData = allocateLocal(count * (4 + strLen))
-
-      val g = {
-        val dataTable = (0 until tableSize).map(_ => RandomStringUtils.randomAlphabetic(strLen))
-        val rng = genHigherSkewData()
-        () => dataTable(rng().toInt % tableSize)
-      }
-      for (i <- 0 until count) {
-        testData.putInt(strLen)
-        testData.put(g().getBytes(StandardCharsets.UTF_8))
-      }
-      testData.rewind()
-
-      runEncodeBenchmark("STRING Encode", iters, count, STRING, testData)
-      runDecodeBenchmark("STRING Decode", iters, count, STRING, testData)
+    runBenchmark("encoding benchmark") {
+      bitEncodingBenchmark(1024)
+      shortEncodingBenchmark(1024)
+      intEncodingBenchmark(1024)
+      longEncodingBenchmark(1024)
+      stringEncodingBenchmark(1024)
     }
   }
 }
