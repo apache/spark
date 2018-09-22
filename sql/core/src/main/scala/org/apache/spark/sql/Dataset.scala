@@ -995,7 +995,8 @@ class Dataset[T] private[sql](
     // After the cloning, left and right side will have distinct expression ids.
     val plan = withPlan(
       Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr)))
-      .queryExecution.analyzed.asInstanceOf[Join]
+      .queryExecution.analyzed
+    val joinPlan = plan.collectFirst { case j: Join => j }.get
 
     // If auto self join alias is disabled, return the plan.
     if (!sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
@@ -1012,21 +1013,24 @@ class Dataset[T] private[sql](
     // Otherwise, find the trivially true predicates and automatically resolves them to both sides.
     // By the time we get here, since we have already run analysis, all attributes should've been
     // resolved and become AttributeReference.
-    val cond = plan.condition.map { _.transform {
+    val cond = joinPlan.condition.map { _.transform {
       case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
           if a.sameRef(b) =>
         catalyst.expressions.EqualTo(
-          withPlan(plan.left).resolve(a.name),
-          withPlan(plan.right).resolve(b.name))
+          withPlan(joinPlan.left).resolve(a.name),
+          withPlan(joinPlan.right).resolve(b.name))
       case catalyst.expressions.EqualNullSafe(a: AttributeReference, b: AttributeReference)
         if a.sameRef(b) =>
         catalyst.expressions.EqualNullSafe(
-          withPlan(plan.left).resolve(a.name),
-          withPlan(plan.right).resolve(b.name))
+          withPlan(joinPlan.left).resolve(a.name),
+          withPlan(joinPlan.right).resolve(b.name))
     }}
 
     withPlan {
-      plan.copy(condition = cond)
+      plan.transformDown {
+        case j: Join if j == joinPlan =>
+          j.copy(condition = cond)
+      }
     }
   }
 

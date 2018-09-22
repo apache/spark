@@ -194,7 +194,8 @@ class Analyzer(
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
-      HandleNullInputsForUDF),
+      HandleNullInputsForUDF,
+      HandlePythonUDFInJoinCondition(conf)),
     Batch("FixNullability", Once,
       FixNullability),
     Batch("Subquery", Once,
@@ -2178,6 +2179,54 @@ class Analyzer(
               .getOrElse(udf)
           }
       }
+    }
+  }
+
+  /**
+   * Correctly handle PythonUDF which need access both side of join side by changing the new join
+   * type to Cross.
+   */
+  case class HandlePythonUDFInJoinCondition(conf: SQLConf) extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case j @ Join(_, _, joinType, condition)
+          if condition.map(splitConjunctivePredicates).getOrElse(Nil).exists(
+            _.collectFirst { case udf: PythonUDF => udf }.isDefined) =>
+        if (conf.crossJoinEnabled) {
+          // if condition expression contains python udf, it will be moved out from
+          // the new join conditions, and the join type will be changed to CrossJoin.
+          logWarning(s"The join condition:$condition of the join plan contains " +
+            "PythonUDF, it will be moved out and the join plan will be " +
+            s"turned to cross join. This plan shows below:\n $j")
+          val (udf, rest) =
+            condition.map(splitConjunctivePredicates).get.partition(
+              _.collectFirst { case udf: PythonUDF => udf }.isDefined)
+          val newCondition = if (rest.isEmpty) {
+            Option.empty
+          } else {
+            Some(rest.reduceLeft(And))
+          }
+          val newJoin = j.copy(joinType = Cross, condition = newCondition)
+          joinType match {
+            case _: InnerLike =>
+              Filter(udf.reduceLeft(And), newJoin)
+            case LeftSemi =>
+              Project(
+                j.left.output.map(_.toAttribute), Filter(udf.reduceLeft(And), newJoin))
+            case _ =>
+              // TODO: Need to support more join type
+              j
+          }
+        } else {
+          // if the crossJoinEnabled is false, a RuntimeException will be thrown later while
+          // the PythonUDF need to access both side of join. We give a warning log not throw
+          // an Exception first here because the python udf may only access one side.
+          logWarning(s"Detected the join condition:$condition of this join plan contains" +
+            " PythonUDF, if the PythonUDF need to access both side of join, it will get" +
+            " an invalid PythonUDF RuntimeException with message `requires attributes from" +
+            " more than one child`, we need to cast the join to cross join by setting the" +
+            s" config ${SQLConf.CROSS_JOINS_ENABLED.key}=true")
+          j
+        }
     }
   }
 
