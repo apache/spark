@@ -43,7 +43,7 @@ object CodecStreams {
     getDecompressionCodec(config, file)
       .map(codec => codec.createInputStream(inputStream))
       .orElse {
-        if (file.getName.endsWith(".zip")) {
+        if (file.getName.toLowerCase.endsWith(".zip")) {
           val zip = new ZipArchiveInputStream(inputStream)
           if (zip.getNextEntry != null) Some(zip) else None
         } else None
