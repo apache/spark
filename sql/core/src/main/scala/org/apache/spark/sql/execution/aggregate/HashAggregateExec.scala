@@ -243,7 +243,7 @@ case class HashAggregateExec(
     val aggTime = metricTerm(ctx, "aggTime")
     val beforeAgg = ctx.freshName("beforeAgg")
     s"""
-       | while (!$initAgg) {
+       | while (!$initAgg && !stopEarly()) {
        |   $initAgg = true;
        |   long $beforeAgg = System.nanoTime();
        |   $doAggFuncName();
@@ -665,7 +665,7 @@ case class HashAggregateExec(
 
     def outputFromRowBasedMap: String = {
       s"""
-         |while ($iterTermForFastHashMap.next()) {
+         |while ($iterTermForFastHashMap.next() && !stopEarly()) {
          |  UnsafeRow $keyTerm = (UnsafeRow) $iterTermForFastHashMap.getKey();
          |  UnsafeRow $bufferTerm = (UnsafeRow) $iterTermForFastHashMap.getValue();
          |  $outputFunc($keyTerm, $bufferTerm);
@@ -690,7 +690,7 @@ case class HashAggregateExec(
           BoundReference(groupingKeySchema.length + i, attr.dataType, attr.nullable)
         })
       s"""
-         |while ($iterTermForFastHashMap.hasNext()) {
+         |while ($iterTermForFastHashMap.hasNext() && !stopEarly()) {
          |  InternalRow $row = (InternalRow) $iterTermForFastHashMap.next();
          |  ${generateKeyRow.code}
          |  ${generateBufferRow.code}
@@ -705,7 +705,7 @@ case class HashAggregateExec(
 
     def outputFromRegularHashMap: String = {
       s"""
-         |while ($iterTerm.next()) {
+         |while ($iterTerm.next() && !stopEarly()) {
          |  UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
          |  UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getValue();
          |  $outputFunc($keyTerm, $bufferTerm);

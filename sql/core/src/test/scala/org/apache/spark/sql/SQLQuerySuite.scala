@@ -25,9 +25,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.execution.aggregate
+import org.apache.spark.sql.execution.{aggregate, FilterExec, RangeExec}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2848,6 +2847,34 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val ds = List(Foo(Some("bar"))).toDS
     val result = ds.flatMap(_.bar).distinct
     result.rdd.isEmpty
+  }
+
+  test("SPARK-25497: limit operation within whole stage codegen should not " +
+    "consume all the inputs") {
+
+    val aggDF = spark.range(0, 100, 1, 1)
+      .groupBy("id")
+      .count().limit(1).filter('count > 0)
+    aggDF.collect()
+    val aggNumRecords = aggDF.queryExecution.sparkPlan.collect {
+      case h: HashAggregateExec => h
+    }.map { hashNode =>
+      hashNode.metrics("numOutputRows").value
+    }.sum
+    // The first hash aggregate node outputs 100 records.
+    // The second hash aggregate before local limit outputs 1 record.
+    assert(aggNumRecords == 101)
+
+    val filterDF = spark.range(0, 100, 1, 1).filter('id >= 0)
+      .selectExpr("id + 1 as id2").limit(1).filter('id > 50)
+    filterDF.collect()
+    val filterNumRecords = filterDF.queryExecution.sparkPlan.collect {
+      case f @ FilterExec(_, r: RangeExec) => (f, r)
+    }.map { case (filterNode, rangeNode) =>
+      (filterNode.metrics("numOutputRows").value, rangeNode.metrics("numOutputRows").value)
+    }.head
+    // RangeNode and FilterNode both output 1 record.
+    assert(filterNumRecords == Tuple2(1, 1))
   }
 }
 
