@@ -19,19 +19,21 @@ package org.apache.spark.sql.execution.benchmark
 
 import scala.util.Random
 
+import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
-import org.apache.spark.util.{Benchmark, BenchmarkBase => FileBenchmarkBase}
 
 /**
  * Benchmark [[UnsafeArrayDataBenchmark]] for UnsafeArrayData
  * To run this benchmark:
- * 1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
- * 2. build/sbt "sql/test:runMain <this class>"
- * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
- *    Results will be written to "benchmarks/UnsafeArrayDataBenchmark-results.txt".
+ * {{{
+ *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
+ *   2. build/sbt "sql/test:runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      Results will be written to "benchmarks/UnsafeArrayDataBenchmark-results.txt".
+ * }}}
  */
-object UnsafeArrayDataBenchmark extends FileBenchmarkBase {
+object UnsafeArrayDataBenchmark extends BenchmarkBase {
 
   def calculateHeaderPortionInBytes(count: Int) : Int = {
     /* 4 + 4 * count // Use this expression for SPARK-15962 */
