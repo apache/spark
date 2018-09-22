@@ -26,6 +26,7 @@ import scala.util.Random
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1046,42 +1047,42 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
 
     checkAnswer(
-      df.selectExpr("array_position(array(1), 1.23D)"),
-      Seq(Row(0L), Row(0L))
+      OneRowRelation().selectExpr("array_position(array(1), 1.23D)"),
+      Seq(Row(0L))
     )
 
     checkAnswer(
-      df.selectExpr("array_position(array(1), 1.0D)"),
-      Seq(Row(1L), Row(1L))
+      OneRowRelation().selectExpr("array_position(array(1), 1.0D)"),
+      Seq(Row(1L))
     )
 
     checkAnswer(
-      df.selectExpr("array_position(array(1.D), 1)"),
-      Seq(Row(1L), Row(1L))
+      OneRowRelation().selectExpr("array_position(array(1.D), 1)"),
+      Seq(Row(1L))
     )
 
     checkAnswer(
-      df.selectExpr("array_position(array(1.23D), 1)"),
-      Seq(Row(0L), Row(0L))
+      OneRowRelation().selectExpr("array_position(array(1.23D), 1)"),
+      Seq(Row(0L))
     )
 
     checkAnswer(
-      df.selectExpr("array_position(array(array(1)), array(1.0D))"),
-      Seq(Row(1L), Row(1L))
+      OneRowRelation().selectExpr("array_position(array(array(1)), array(1.0D))"),
+      Seq(Row(1L))
     )
 
     checkAnswer(
-      df.selectExpr("array_position(array(array(1)), array(1.23D))"),
-      Seq(Row(0L), Row(0L))
+      OneRowRelation().selectExpr("array_position(array(array(1)), array(1.23D))"),
+      Seq(Row(0L))
     )
 
     checkAnswer(
-      df.selectExpr("array_position(array(array(1), null)[0], 1)"),
-      Seq(Row(1L), Row(1L))
+      OneRowRelation().selectExpr("array_position(array(array(1), null)[0], 1)"),
+      Seq(Row(1L))
     )
     checkAnswer(
-      df.selectExpr("array_position(array(1, null), array(1, null)[0])"),
-      Seq(Row(1L), Row(1L))
+      OneRowRelation().selectExpr("array_position(array(1, null), array(1, null)[0])"),
+      Seq(Row(1L))
     )
 
     val e1 = intercept[AnalysisException] {
@@ -1095,7 +1096,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(e1.message.contains(errorMsg1))
 
     val e2 = intercept[AnalysisException] {
-        df.selectExpr("array_position(array(1), '1')")
+      OneRowRelation().selectExpr("array_position(array(1), '1')")
     }
     val errorMsg2 =
       s"""
