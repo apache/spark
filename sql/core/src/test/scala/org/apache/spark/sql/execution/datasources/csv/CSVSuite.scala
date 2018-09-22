@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.io.File
+import java.io.{File, FileOutputStream}
 import java.nio.charset.{Charset, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.util.Properties
@@ -32,8 +33,9 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.log4j.{AppenderSkeleton, LogManager}
 import org.apache.log4j.spi.LoggingEvent
-
 import org.apache.spark.SparkException
+import sun.nio.cs.StandardCharsets
+
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -1819,5 +1821,24 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     checkAnswer(spark.read.schema(schema).csv(input), Row(null))
     checkAnswer(spark.read.option("multiLine", true).schema(schema).csv(input), Row(null))
     assert(spark.read.csv(input).collect().toSet == Set(Row()))
+  }
+
+  test("read zip archive containing one CSV file") {
+    withTempDir { path =>
+      val zipCSV = new File(path.getAbsolutePath, "test.csv.zip")
+      val out = new ZipOutputStream(new FileOutputStream(zipCSV));
+      val entry = new ZipEntry("test.csv")
+      out.putNextEntry(entry)
+      val content = "1,2\n3,4".getBytes()
+      out.write(content, 0, content.length)
+      out.close()
+
+      checkAnswer(
+        spark.read
+          .option("multiLine", true)
+          .option("inferSchema", true)
+          .csv(path.getAbsolutePath),
+        Seq(Row(1, 2), Row(3, 4)))
+    }
   }
 }
