@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.{File, FileOutputStream}
-import java.nio.charset.{Charset, UnsupportedCharsetException}
+import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
@@ -1828,7 +1828,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       val out = new ZipOutputStream(new FileOutputStream(zippedCSV));
       val entry = new ZipEntry("test.csv")
       out.putNextEntry(entry)
-      val content = "1,2\n3,4".getBytes()
+      val content = "1,2\n3,4".getBytes(StandardCharsets.UTF_8)
       out.write(content, 0, content.length)
       out.close()
 
