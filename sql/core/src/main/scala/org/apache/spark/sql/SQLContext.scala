@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.lang.reflect.Method
 import java.util.Properties
 
 import scala.collection.immutable
@@ -1100,13 +1101,24 @@ object SQLContext {
       attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
     val extractors =
       JavaTypeInference.getJavaBeanReadableProperties(beanClass).map(_.getReadMethod)
-    val methodsToConverts = extractors.zip(attrs).map { case (e, attr) =>
-      (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
+    val methodsToTypes = extractors.zip(attrs).map { case (e, attr) =>
+      (e, attr.dataType)
+    }
+    def invoke(element: Any)(tuple: (Method, DataType)): Any = tuple match {
+      case (e, structType: StructType) =>
+        val value = e.invoke(element)
+        val nestedExtractors = JavaTypeInference.getJavaBeanReadableProperties(value.getClass)
+            .map(desc => desc.getName -> desc.getReadMethod)
+            .toMap
+        new GenericInternalRow(structType.map(nestedProperty =>
+          invoke(value)(nestedExtractors(nestedProperty.name) -> nestedProperty.dataType)
+        ).toArray)
+      case (e, dataType) =>
+        CatalystTypeConverters.createToCatalystConverter(dataType)(e.invoke(element))
     }
     data.map { element =>
       new GenericInternalRow(
-        methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }
-      ): InternalRow
+        methodsToTypes.map(invoke(element))): InternalRow
     }
   }
 
