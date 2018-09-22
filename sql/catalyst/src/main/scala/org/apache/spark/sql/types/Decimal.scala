@@ -287,6 +287,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
             if (doubled > pow10diff || doubled == pow10diff && longVal % 2 != 0) {
               longVal += (if (droppedDigits < 0) -1L else 1L)
             }
+          case ROUND_DOWN =>
           case _ =>
             sys.error(s"Not supported rounding mode: $roundMode")
         }

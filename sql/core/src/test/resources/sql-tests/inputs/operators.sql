@@ -100,3 +100,4 @@ select truncate(cast(1234567891.1234567891 as decimal), -4), truncate(cast(12345
 select truncate(cast(1234567891.1234567891 as long), -4), truncate(cast(1234567891.1234567891 as long), 0), truncate(cast(1234567891.1234567891 as long), 4);
 select truncate(cast(1234567891.1234567891 as long), 9.03);
 select truncate(cast(1234567891.1234567891 as double)), truncate(cast(1234567891.1234567891 as float)), truncate(cast(1234567891.1234567891 as decimal));
+select truncate(cast(-1234567891.1234567891 as double), -4), truncate(cast(-1234567891.1234567891 as double), 4);
