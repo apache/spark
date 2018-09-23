@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
+import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
@@ -44,8 +44,8 @@ case class SaveIntoDataSourceCommand(
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
-    dataSource.createRelation(
-      sparkSession.sqlContext, mode, options, Dataset.ofRows(sparkSession, query))
+    val df = sparkSession.internalCreateDataFrame(child.execute(), outputColumns.toStructType)
+    dataSource.createRelation(sparkSession.sqlContext, mode, options, df)
 
     Seq.empty[Row]
   }
