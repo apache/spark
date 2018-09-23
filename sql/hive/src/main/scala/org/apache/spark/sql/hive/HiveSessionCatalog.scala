@@ -137,7 +137,7 @@ private[sql] class HiveSessionCatalog(
           // We need to throw the original exception.
           throw error
         } else {
-          // This function is not in functionRegistry or externalCatalog,
+          // This function does not exist(neither in functionRegistry or externalCatalog),
           // let's try to load it as a Hive's built-in function.
           // Hive is case insensitive.
           val functionName = funcName.unquotedString.toLowerCase(Locale.ROOT)
