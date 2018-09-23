@@ -18,7 +18,7 @@
 // this function works exactly the same as UIUtils.formatDuration
 function formatDuration(milliseconds) {
     if (milliseconds < 100) {
-        return milliseconds + " ms";
+        return parseInt(milliseconds).toFixed(1) + " ms";
     }
     var seconds = milliseconds * 1.0 / 1000;
     if (seconds < 1) {
@@ -112,9 +112,7 @@ function getStandAloneAppId(cb) {
 
 function getStageAttemptId() {
   var words = document.baseURI.split('?');
-  var attemptIdStr = words[1].split('&')[1];
-  var stgAttemptId = attemptIdStr.substr(attemptIdStr.indexOf('=') + 1, attemptIdStr.length - 1);
-  return stgAttemptId;
+  return words[1].split("&").filter(word => word.includes("attempt="))[0].split("=")[1];
 }
 
 // This function is a helper function for sorting in datatable.
@@ -169,8 +167,4 @@ function setDataTableDefaults() {
 function formatDate(date) {
   if (date <= 0) return "-";
   else return date.split(".")[0].replace("T", " ");
-}
-
-function extractDataFromArrayString(data) {
-  return data.split("[")[1].split("]")[0].split(",");
 }

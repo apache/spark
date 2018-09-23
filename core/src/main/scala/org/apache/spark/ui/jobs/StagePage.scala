@@ -238,7 +238,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         // Only show the tasks in the table
         Option(taskTable).map(_.dataSource.tasks).getOrElse(Nil),
         currentTime) ++
-        <div id="active-tasks">
+        <div id="parent-container">
           <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
           <script src={UIUtils.prependBaseUri(request, "/static/stagepage.js")}></script>
         </div>

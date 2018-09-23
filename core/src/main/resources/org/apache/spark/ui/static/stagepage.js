@@ -15,21 +15,16 @@
  * limitations under the License.
  */
 
-$(document).ajaxStop($.unblockUI);
-$(document).ajaxStart(function () {
-    $.blockUI({message: '<h3>Loading Stage Page...</h3>'});
-});
-
 $.extend( $.fn.dataTable.ext.type.order, {
-    "file-size-pre": ConvertDurationString,
+    "duration-pre": ConvertDurationString,
 
-    "file-size-asc": function ( a, b ) {
+    "duration-asc": function ( a, b ) {
         a = ConvertDurationString( a );
         b = ConvertDurationString( b );
         return ((a < b) ? -1 : ((a > b) ? 1 : 0));
     },
 
-    "file-size-desc": function ( a, b ) {
+    "duration-desc": function ( a, b ) {
         a = ConvertDurationString( a );
         b = ConvertDurationString( b );
         return ((a < b) ? 1 : ((a > b) ? -1 : 0));
@@ -37,33 +32,35 @@ $.extend( $.fn.dataTable.ext.type.order, {
 } );
 
 // This function will only parse the URL under certain format
-// e.g. https://domain:50509/history/application_1502220952225_59143/stages/stage/?id=0&attempt=0
+// e.g. (history) https://domain:50509/history/application_1536254569791_3806251/1/stages/stage/?id=4&attempt=1
+// e.g. (proxy) https://domain:50505/proxy/application_1502220952225_59143/stages/stage?id=4&attempt=1
 function stageEndPoint(appId) {
+    var urlRegex = /https\:\/\/[^\/]+\/([^\/]+)\/([^\/]+)\/([^\/]+)?\/?([^\/]+)?\/?([^\/]+)?\/?([^\/]+)?/gm;
+    var urlArray = urlRegex.exec(document.baseURI);
+    var ind = urlArray.indexOf("proxy");
+    var queryString = document.baseURI.split('?');
     var words = document.baseURI.split('/');
-    var words2 = document.baseURI.split('?');
-    var ind = words.indexOf("proxy");
     if (ind > 0) {
-        var appId = words[ind + 1];
-        var stageIdLen = words2[1].indexOf('&');
-        var stageId = words2[1].substr(3, stageIdLen - 3);
-        var newBaseURI = words.slice(0, ind + 2).join('/');
+        var appId = urlArray[2];
+        var stageId = queryString[1].split("&").filter(word => word.includes("id="))[0].split("=")[1];
+        var indexOfProxy = words.indexOf("proxy");
+        var newBaseURI = words.slice(0, indexOfProxy + 2).join('/');
         return newBaseURI + "/api/v1/applications/" + appId + "/stages/" + stageId;
     }
-    ind = words.indexOf("history");
+    ind = urlArray.indexOf("history");
     if (ind > 0) {
-        var appId = words[ind + 1];
-        var attemptId = words[ind + 2];
-        var stageIdLen = words2[1].indexOf('&');
-        var stageId = words2[1].substr(3, stageIdLen - 3);
-        var newBaseURI = words.slice(0, ind).join('/');
-        if (isNaN(attemptId) || attemptId == "0") {
+        var appId = urlArray[2];
+        var appAttemptId = urlArray[ind + 2];
+        var stageId = queryString[1].split("&").filter(word => word.includes("id="))[0].split("=")[1];
+        var indexOfHistory = words.indexOf("history");
+        var newBaseURI = words.slice(0, indexOfHistory).join('/');
+        if (isNaN(appAttemptId) || appAttemptId == "0") {
             return newBaseURI + "/api/v1/applications/" + appId + "/stages/" + stageId;
         } else {
-            return newBaseURI + "/api/v1/applications/" + appId + "/" + attemptId + "/stages/" + stageId;
+            return newBaseURI + "/api/v1/applications/" + appId + "/" + appAttemptId + "/stages/" + stageId;
         }
     }
-    var stageIdLen = words2[1].indexOf('&');
-    var stageId = words2[1].substr(3, stageIdLen - 3);
+    var stageId = queryString[1].split("&").filter(word => word.includes("id="))[0].split("=")[1];
     return location.origin + "/api/v1/applications/" + appId + "/stages/" + stageId;
 }
 
@@ -126,11 +123,115 @@ function getColumnNameForTaskMetricSummary(columnKey) {
     }
 }
 
+function displayRowsForSummaryMetricsTable(row, type, columnIndex) {
+    switch(row.metric) {
+        case 'Input Size / Records':
+            var str = formatBytes(row.data.bytesRead[columnIndex], type) + " / " +
+              row.data.recordsRead[columnIndex];
+            return str;
+            break;
+
+        case 'Output Size / Records':
+            var str = formatBytes(row.data.bytesWritten[columnIndex], type) + " / " +
+              row.data.recordsWritten[columnIndex];
+            return str;
+            break;
+
+        case 'Shuffle Read Size / Records':
+            var str = formatBytes(row.data.readBytes[columnIndex], type) + " / " +
+              row.data.readRecords[columnIndex];
+            return str;
+            break;
+
+        case 'Shuffle Read Blocked Time':
+            var str = formatDuration(row.data.fetchWaitTime[columnIndex]);
+            return str;
+            break;
+
+        case 'Shuffle Remote Reads':
+            var str = formatBytes(row.data.remoteBytesRead[columnIndex], type);
+            return str;
+            break;
+
+        case 'Shuffle Write Size / Records':
+            var str = formatBytes(row.data.writeBytes[columnIndex], type) + " / " +
+              row.data.writeRecords[columnIndex];
+            return str;
+            break;
+
+        default:
+            return (row.metric == 'Peak Execution Memory' || row.metric == 'Shuffle spill (memory)'
+                    || row.metric == 'Shuffle spill (disk)') ? formatBytes(row.data[columnIndex], type) : (formatDuration(row.data[columnIndex]));
+
+    }
+}
+
+function createDataTableForTaskSummaryMetricsTable(task_summary_metrics_table) {
+    var taskMetricsTable = "#summary-metrics-table";
+    if ($.fn.dataTable.isDataTable(taskMetricsTable)) {
+        taskSummaryMetricsDataTable.clear().draw();
+        taskSummaryMetricsDataTable.rows.add(task_summary_metrics_table).draw();
+    } else {
+        var task_conf = {
+            "data": task_summary_metrics_table,
+            "columns": [
+                {data : 'metric'},
+                // Min
+                {
+                    data: function (row, type) {
+                        return displayRowsForSummaryMetricsTable(row, type, 0);
+                    }
+                },
+                // 25th percentile
+                {
+                    data: function (row, type) {
+                        return displayRowsForSummaryMetricsTable(row, type, 1);
+                    }
+                },
+                // Median
+                {
+                    data: function (row, type) {
+                        return displayRowsForSummaryMetricsTable(row, type, 2);
+                    }
+                },
+                // 75th percentile
+                {
+                    data: function (row, type) {
+                        return displayRowsForSummaryMetricsTable(row, type, 3);
+                    }
+                },
+                // Max
+                {
+                    data: function (row, type) {
+                        return displayRowsForSummaryMetricsTable(row, type, 4);
+                    }
+                }
+            ],
+            "columnDefs": [
+                { "type": "duration", "targets": 1 },
+                { "type": "duration", "targets": 2 },
+                { "type": "duration", "targets": 3 },
+                { "type": "duration", "targets": 4 },
+                { "type": "duration", "targets": 5 }
+            ],
+            "paging": false,
+            "searching": false,
+            "order": [[0, "asc"]]
+        };
+        taskSummaryMetricsDataTable = $(taskMetricsTable).DataTable(task_conf);
+    }
+    task_summary_metrics_table_current_state_array = task_summary_metrics_table;
+}
+
+var task_summary_metrics_table_array = [];
+var task_summary_metrics_table_current_state_array = [];
+var taskSummaryMetricsDataTable;
+
 $(document).ready(function () {
     setDataTableDefaults();
 
     $("#showAdditionalMetrics").append(
-        "<div><a id='taskMetric'>" +
+        "<div><a id='additionalMetrics'>" +
         "<span class='expand-input-rate-arrow arrow-closed' id='arrowtoggle1'></span>" +
         " Show Additional Metrics" +
         "</a></div>" +
@@ -178,42 +279,32 @@ $(document).ready(function () {
     $('#result_serialization_time').tooltip(true);
     $('#getting_result_time').tooltip(true);
     $('#peak_execution_memory').tooltip(true);
-    tasksSummary = $("#active-tasks");
+    tasksSummary = $("#parent-container");
     getStandAloneAppId(function (appId) {
 
         var endPoint = stageEndPoint(appId);
         $.getJSON(endPoint, function(response, status, jqXHR) {
 
-            var responseBody = response[0];
+            var stageAttemptId = getStageAttemptId();
+            var responseBody = response[stageAttemptId];
             // prepare data for task aggregated metrics table
             indices = Object.keys(responseBody.executorSummary);
-            var task_summary_table = [];
+            var executor_summary_table = [];
             indices.forEach(function (ix) {
                responseBody.executorSummary[ix].id = ix;
-               task_summary_table.push(responseBody.executorSummary[ix]);
+               executor_summary_table.push(responseBody.executorSummary[ix]);
             });
 
             // prepare data for accumulatorUpdates
-            var indices = Object.keys(responseBody.accumulatorUpdates);
-            var accumulator_table_all = [];
-            var accumulator_table = [];
-            indices.forEach(function (ix) {
-               accumulator_table_all.push(responseBody.accumulatorUpdates[ix]);
-            });
-
-            accumulator_table_all.forEach(function (x){
-                var name = (x.name).toString();
-                if(name.includes("internal.") == false){
-                    accumulator_table.push(x);
-                }
-            });
+            var accumulator_table = responseBody.accumulatorUpdates.filter(accumUpdate =>
+                !(accumUpdate.name).toString().includes("internal."));
 
             // rendering the UI page
             var data = {"executors": response};
             $.get(createTemplateURI(appId, "stagespage"), function(template) {
                 tasksSummary.append(Mustache.render($(template).filter("#stages-summary-template").html(), data));
 
-                $("#taskMetric").click(function(){
+                $("#additionalMetrics").click(function(){
                     $("#arrowtoggle1").toggleClass("arrow-open arrow-closed");
                     $("#toggle-metrics").toggle();
                 });
@@ -223,313 +314,90 @@ $(document).ready(function () {
                     $("#toggle-aggregatedMetrics").toggle();
                 });
 
-                var task_metrics_table = [];
-                var stageAttemptId = getStageAttemptId();
                 var quantiles = "0,0.25,0.5,0.75,1.0";
-                $.getJSON(stageEndPoint(appId) + "/"+stageAttemptId+"/taskSummary?quantiles="+quantiles, function(taskMetricsResponse, status, jqXHR) {
-                    var taskMetricIndices = Object.keys(taskMetricsResponse);
-                    taskMetricIndices.forEach(function (ix) {
+                $.getJSON(stageEndPoint(appId) + "/"+stageAttemptId+"/taskSummary?quantiles="+quantiles,
+                  function(taskMetricsResponse, status, jqXHR) {
+                    var taskMetricKeys = Object.keys(taskMetricsResponse);
+                    taskMetricKeys.forEach(function (ix) {
                         var columnName = getColumnNameForTaskMetricSummary(ix);
                         if (columnName == "Shuffle Read Size / Records") {
                             var row1 = {
                                 "metric": columnName,
-                                "data": taskMetricsResponse[ix]
+                                "data": taskMetricsResponse[ix],
+                                "checkboxId": 0
                             };
                             var row2 = {
                                 "metric": "Shuffle Read Blocked Time",
-                                "data": taskMetricsResponse[ix]
+                                "data": taskMetricsResponse[ix],
+                                "checkboxId": 13
                             };
                             var row3 = {
                                 "metric": "Shuffle Remote Reads",
-                                "data": taskMetricsResponse[ix]
+                                "data": taskMetricsResponse[ix],
+                                "checkboxId": 14
                             };
-                            task_metrics_table.push(row1);
-                            task_metrics_table.push(row2);
-                            task_metrics_table.push(row3);
+                            task_summary_metrics_table_array.push(row1);
+                            task_summary_metrics_table_array.push(row2);
+                            task_summary_metrics_table_array.push(row3);
+                        }
+                        else if (columnName == "Scheduler Delay") {
+                            var row = {
+                                "metric": columnName,
+                                "data": taskMetricsResponse[ix],
+                                "checkboxId": 11
+                            };
+                            task_summary_metrics_table_array.push(row);
+                        }
+                        else if (columnName == "Task Deserialization Time") {
+                            var row = {
+                                "metric": columnName,
+                                "data": taskMetricsResponse[ix],
+                                "checkboxId": 12
+                            };
+                            task_summary_metrics_table_array.push(row);
+                        }
+                        else if (columnName == "Result Serialization Time") {
+                            var row = {
+                                "metric": columnName,
+                                "data": taskMetricsResponse[ix],
+                                "checkboxId": 15
+                            };
+                            task_summary_metrics_table_array.push(row);
+                        }
+                        else if (columnName == "Getting Result Time") {
+                            var row = {
+                                "metric": columnName,
+                                "data": taskMetricsResponse[ix],
+                                "checkboxId": 16
+                            };
+                            task_summary_metrics_table_array.push(row);
+                        }
+                        else if (columnName == "Peak Execution Memory") {
+                            var row = {
+                                "metric": columnName,
+                                "data": taskMetricsResponse[ix],
+                                "checkboxId": 17
+                            };
+                            task_summary_metrics_table_array.push(row);
                         }
                         else if (columnName != "NA") {
                             var row = {
                                 "metric": columnName,
-                                "data": taskMetricsResponse[ix]
+                                "data": taskMetricsResponse[ix],
+                                "checkboxId": 0
                             };
-                            task_metrics_table.push(row);
+                            task_summary_metrics_table_array.push(row);
                         }
                     });
-
-                    var taskMetricsTable = "#summary-metrics-table";
-                    var task_conf = {
-                        "data": task_metrics_table,
-                        "columns": [
-                            {data : 'metric'},
-                            {
-                                data: function (row, type) {
-                                    switch(row.metric) {
-                                        case 'Input Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.bytesRead));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.recordsRead));
-                                            var str = formatBytes(str1arr[0], type) + " / " + str2arr[0];
-                                            return str;
-                                            break;
-
-                                        case 'Output Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.bytesWritten));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.recordsWritten));
-                                            var str = formatBytes(str1arr[0], type) + " / " + str2arr[0];
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Read Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.readBytes));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.readRecords));
-                                            var str = formatBytes(str1arr[0], type) + " / " + str2arr[0];
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Read Blocked Time':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.fetchWaitTime));
-                                            var str = formatDuration(str1arr[0]);
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Remote Reads':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.remoteBytesRead));
-                                            var str = formatBytes(str1arr[0], type);
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Write Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.writeBytes));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.writeRecords));
-                                            var str = formatBytes(str1arr[0], type) + " / " + str2arr[0];
-                                            return str;
-                                            break;
-
-                                        default:
-                                            return (row.metric == 'Peak Execution Memory' || row.metric == 'Shuffle spill (memory)'
-                                                    || row.metric == 'Shuffle spill (disk)') ? formatBytes(row.data[0], type) : (formatDuration(row.data[0]));
-
-                                    }
-                                }
-                            },
-                            {
-                                data: function (row, type) {
-                                    switch(row.metric) {
-                                        case 'Input Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.bytesRead));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.recordsRead));
-                                            var str = formatBytes(str1arr[1], type) + " / " + str2arr[1];
-                                            return str;
-                                            break;
-
-                                        case 'Output Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.bytesWritten));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.recordsWritten));
-                                            var str = formatBytes(str1arr[1], type) + " / " + str2arr[1];
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Read Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.readBytes));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.readRecords));
-                                            var str = formatBytes(str1arr[1], type) + " / " + str2arr[1];
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Read Blocked Time':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.fetchWaitTime));
-                                            var str = formatDuration(str1arr[1]);
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Remote Reads':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.remoteBytesRead));
-                                            var str = formatBytes(str1arr[1], type);
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Write Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.writeBytes));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.writeRecords));
-                                            var str = formatBytes(str1arr[1], type) + " / " + str2arr[1];
-                                            return str;
-                                            break;
-
-                                        default:
-                                            return (row.metric == 'Peak Execution Memory' || row.metric == 'Shuffle spill (memory)'
-                                                    || row.metric == 'Shuffle spill (disk)') ? formatBytes(row.data[1], type) : (formatDuration(row.data[1]));
-
-                                    }
-                                }
-                            },
-                            {
-                                data: function (row, type) {
-                                    switch(row.metric) {
-                                        case 'Input Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.bytesRead));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.recordsRead));
-                                            var str = formatBytes(str1arr[2], type) + " / " + str2arr[2];
-                                            return str;
-                                            break;
-
-                                        case 'Output Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.bytesWritten));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.recordsWritten));
-                                            var str = formatBytes(str1arr[2], type) + " / " + str2arr[2];
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Read Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.readBytes));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.readRecords));
-                                            var str = formatBytes(str1arr[2], type) + " / " + str2arr[2];
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Read Blocked Time':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.fetchWaitTime));
-                                            var str = formatDuration(str1arr[2]);
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Remote Reads':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.remoteBytesRead));
-                                            var str = formatBytes(str1arr[2], type);
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Write Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.writeBytes));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.writeRecords));
-                                            var str = formatBytes(str1arr[2], type) + " / " + str2arr[2];
-                                            return str;
-                                            break;
-
-                                        default:
-                                            return (row.metric == 'Peak Execution Memory' || row.metric == 'Shuffle spill (memory)'
-                                                    || row.metric == 'Shuffle spill (disk)') ? formatBytes(row.data[2], type) : (formatDuration(row.data[2]));
-
-                                    }
-                                }
-                            },
-                            {
-                                data: function (row, type) {
-                                    switch(row.metric) {
-                                        case 'Input Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.bytesRead));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.recordsRead));
-                                            var str = formatBytes(str1arr[3], type) + " / " + str2arr[3];
-                                            return str;
-                                            break;
-
-                                        case 'Output Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.bytesWritten));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.recordsWritten));
-                                            var str = formatBytes(str1arr[3], type) + " / " + str2arr[3];
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Read Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.readBytes));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.readRecords));
-                                            var str = formatBytes(str1arr[3], type) + " / " + str2arr[3];
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Read Blocked Time':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.fetchWaitTime));
-                                            var str = formatDuration(str1arr[3]);
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Remote Reads':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.remoteBytesRead));
-                                            var str = formatBytes(str1arr[3], type);
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Write Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.writeBytes));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.writeRecords));
-                                            var str = formatBytes(str1arr[3], type) + " / " + str2arr[3];
-                                            return str;
-                                            break;
-
-                                        default:
-                                            return (row.metric == 'Peak Execution Memory' || row.metric == 'Shuffle spill (memory)'
-                                                    || row.metric == 'Shuffle spill (disk)') ? formatBytes(row.data[3], type) : (formatDuration(row.data[3]));
-
-                                    }
-                                }
-                            },
-                            {
-                                data: function (row, type) {
-                                    switch(row.metric) {
-                                        case 'Input Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.bytesRead));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.recordsRead));
-                                            var str = formatBytes(str1arr[4], type) + " / " + str2arr[4];
-                                            return str;
-                                            break;
-
-                                        case 'Output Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.bytesWritten));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.recordsWritten));
-                                            var str = formatBytes(str1arr[4], type) + " / " + str2arr[4];
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Read Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.readBytes));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.readRecords));
-                                            var str = formatBytes(str1arr[4], type) + " / " + str2arr[4];
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Read Blocked Time':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.fetchWaitTime));
-                                            var str = formatDuration(str1arr[4]);
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Remote Reads':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.remoteBytesRead));
-                                            var str = formatBytes(str1arr[4], type);
-                                            return str;
-                                            break;
-
-                                        case 'Shuffle Write Size / Records':
-                                            var str1arr = extractDataFromArrayString(JSON.stringify(row.data.writeBytes));
-                                            var str2arr = extractDataFromArrayString(JSON.stringify(row.data.writeRecords));
-                                            var str = formatBytes(str1arr[4], type) + " / " + str2arr[4];
-                                            return str;
-                                            break;
-
-                                        default:
-                                            return (row.metric == 'Peak Execution Memory' || row.metric == 'Shuffle spill (memory)'
-                                                    || row.metric == 'Shuffle spill (disk)') ? formatBytes(row.data[4], type) : (formatDuration(row.data[4]));
-
-                                    }
-                                }
-                            }
-                        ],
-                        "columnDefs": [
-                            { "type": "file-size", "targets": 1 },
-                            { "type": "file-size", "targets": 2 },
-                            { "type": "file-size", "targets": 3 },
-                            { "type": "file-size", "targets": 4 },
-                            { "type": "file-size", "targets": 5 }
-                        ],
-                        "paging": false,
-                        "searching": false,
-                        "order": [[0, "asc"]]
-                    };
-                    $(taskMetricsTable).DataTable(task_conf);
+                    var task_summary_metrics_table_filtered_array =
+                        task_summary_metrics_table_array.filter(row => row.checkboxId < 11);
+                    createDataTableForTaskSummaryMetricsTable(task_summary_metrics_table_filtered_array);
                 });
 
-                // building task aggregated metric table
-                var tasksSummarytable = "#summary-stages-table";
-                var task_summary_conf = {
-                    "data": task_summary_table,
+                // building task aggregated metrics by executor table
+                var executorSummaryTable = "#summary-executor-table";
+                var executor_summary_conf = {
+                    "data": executor_summary_table,
                     "columns": [
                         {data : "id"},
                         {data : "executorLogs", render: formatLogsCells},
@@ -582,8 +450,8 @@ $(document).ready(function () {
                     ],
                     "order": [[0, "asc"]]
                 }
-                $(tasksSummarytable).DataTable(task_summary_conf);
-                $('#active-tasks [data-toggle="tooltip"]').tooltip();
+                $(executorSummaryTable).DataTable(executor_summary_conf);
+                $('#parent-container [data-toggle="tooltip"]').tooltip();
 
                 // building accumulator update table
                 var accumulatorTable = "#accumulator-table";
@@ -611,11 +479,11 @@ $(document).ready(function () {
                         "url": stageEndPoint(appId) + "/" + stageAttemptId + "/taskTable",
                         "data": {
                             "numTasks": responseBody.numTasks
-                            },
+                        },
                         "dataSrc": function ( jsons ) {
                             var jsonStr = JSON.stringify(jsons);
-                            var marrr = JSON.parse(jsonStr);
-                            return marrr.aaData;
+                            var tasksToShow = JSON.parse(jsonStr);
+                            return tasksToShow.aaData;
                         }
                     },
                     "columns": [
@@ -872,40 +740,58 @@ $(document).ready(function () {
                 };
                 var taskTableSelector = $(taskTable).DataTable(task_conf);
                 $('#active-tasks-table_filter input').unbind();
+                var searchEvent;
                 $('#active-tasks-table_filter input').bind('keyup', function(e) {
-                  taskTableSelector.search( this.value ).draw();
+                  if (typeof searchEvent !== 'undefined') {
+                    window.clearTimeout(searchEvent);
+                  }
+                  var value = this.value;
+                  window.setTimeout(function(){taskTableSelector.search( value ).draw();}, 2000);
                 });
 
                 var optionalColumns = [11, 12, 13, 14, 15, 16, 17];
                 var allChecked = true;
                 for(k = 0; k < optionalColumns.length; k++) {
                     if (taskTableSelector.column(optionalColumns[k]).visible()) {
-                        document.getElementById("box-"+optionalColumns[k]).checked = true;
+                        $("#box-"+optionalColumns[k]).checked = true;
                     } else {
                         allChecked = false;
                     }
                 }
                 if (allChecked) {
-                    document.getElementById("box-0").checked = true;
+                    $("#box-0").checked = true;
                 }
 
                 // hide or show columns dynamically event
                 $('input.toggle-vis').on('click', function(e){
                     // Get the column
                     var para = $(this).attr('data-column');
-                    if(para == "0"){
-                        var column = taskTableSelector.column([11, 12, 13, 14, 15, 16, 17]);
-                        if($(this).is(":checked")){
+                    if (para == "0") {
+                        var column = taskTableSelector.column(optionalColumns);
+                        if ($(this).is(":checked")) {
                             $(".toggle-vis").prop('checked', true);
                             column.visible(true);
+                            createDataTableForTaskSummaryMetricsTable(task_summary_metrics_table_array);
                         } else {
                             $(".toggle-vis").prop('checked', false);
                             column.visible(false);
+                            var task_summary_metrics_table_filtered_array =
+                                task_summary_metrics_table_array.filter(row => row.checkboxId < 11);
+                            createDataTableForTaskSummaryMetricsTable(task_summary_metrics_table_filtered_array);
                         }
                     } else {
-                    var column = taskTableSelector.column($(this).attr('data-column'));
-                    // Toggle the visibility
-                    column.visible(!column.visible());
+                        var column = taskTableSelector.column(para);
+                        // Toggle the visibility
+                        column.visible(!column.visible());
+                        var task_summary_metrics_table_filtered_array = [];
+                        if ($(this).is(":checked")) {
+                            task_summary_metrics_table_current_state_array.push(task_summary_metrics_table_array.filter(row => (row.checkboxId).toString() == para)[0]);
+                            task_summary_metrics_table_filtered_array = task_summary_metrics_table_current_state_array;
+                        } else {
+                            task_summary_metrics_table_filtered_array =
+                                task_summary_metrics_table_current_state_array.filter(row => (row.checkboxId).toString() != para);
+                        }
+                        createDataTableForTaskSummaryMetricsTable(task_summary_metrics_table_filtered_array);
                     }
                 });
 

@@ -16,8 +16,7 @@
  */
 package org.apache.spark.status.api.v1
 
-import java.util
-import java.util.{Collections, Comparator, List => JList}
+import java.util.{HashMap, List => JList}
 import javax.ws.rs._
 import javax.ws.rs.core.{Context, MediaType, MultivaluedMap, UriInfo}
 
@@ -45,9 +44,11 @@ private[v1] class StagesResource extends BaseAppResource {
     withUI { ui =>
       var ret = ui.store.stageData(stageId, details = details)
       if (ret.nonEmpty) {
+        // Some of the data that we want to display for the tasks like executorLogs,
+        // schedulerDelay etc. comes from other sources, thus, we basically add them to the
+        // executor and task data object before passing them to the client.
         for (r <- ret) {
-          val executorIdArray = r.executorSummary.get.keys.toArray
-          for (execId <- executorIdArray) {
+          for (execId <- r.executorSummary.get.keys.toArray) {
             val executorLogs = ui.store.executorSummary(execId).executorLogs
             val hostPort = ui.store.executorSummary(execId).hostPort
             val taskDataArray = r.tasks.get.keys.toArray
@@ -124,27 +125,32 @@ private[v1] class StagesResource extends BaseAppResource {
     withUI(_.store.taskList(stageId, stageAttemptId, offset, length, sortBy))
   }
 
+  // This api needs to stay formatted exactly as it is below, since, it is being used by the
+  // datatables for the stages page.
   @GET
   @Path("{stageId: \\d+}/{stageAttemptId: \\d+}/taskTable")
   def taskTable(
     @PathParam("stageId") stageId: Int,
     @PathParam("stageAttemptId") stageAttemptId: Int,
-    @QueryParam("details") @DefaultValue("true") details: Boolean, @Context uriInfo: UriInfo):
-  util.HashMap[String, Object] = {
+    @QueryParam("details") @DefaultValue("true") details: Boolean,
+    @Context uriInfo: UriInfo):
+  HashMap[String, Object] = {
     withUI { ui =>
       val uriQueryParameters = uriInfo.getQueryParameters(true)
       val totalRecords = uriQueryParameters.getFirst("numTasks")
       var isSearch = false
       var searchValue: String = null
+      var filteredRecords = totalRecords
       var _tasksToShow: Seq[TaskData] = null
       if (uriQueryParameters.getFirst("search[value]") != null &&
         uriQueryParameters.getFirst("search[value]").length > 0) {
-        _tasksToShow = ui.store.taskList(stageId, stageAttemptId, 0, totalRecords.toInt,
-          indexName("Index"), true)
+        _tasksToShow = doPagination(uriQueryParameters, stageId, stageAttemptId, true,
+          totalRecords.toInt)
         isSearch = true
         searchValue = uriQueryParameters.getFirst("search[value]")
       } else {
-        _tasksToShow = doPagination(uriQueryParameters, stageId, stageAttemptId)
+        _tasksToShow = doPagination(uriQueryParameters, stageId, stageAttemptId, false,
+          totalRecords.toInt)
       }
       if (_tasksToShow.nonEmpty) {
         val iterator = _tasksToShow.iterator
@@ -156,30 +162,24 @@ private[v1] class StagesResource extends BaseAppResource {
           t1.schedulerDelay = AppStatusUtils.schedulerDelay(t1)
           t1.gettingResultTime = AppStatusUtils.gettingResultTime(t1)
         }
-        val ret = new util.HashMap[String, Object]()
+        val ret = new HashMap[String, Object]()
         // Performs server-side search based on input from user
         if (isSearch) {
-          val filteredTaskList = ui.store.filterTaskList(_tasksToShow, searchValue)
+          val filteredTaskList = filterTaskList(_tasksToShow, searchValue)
+          filteredRecords = filteredTaskList.length.toString
           if (filteredTaskList.length > 0) {
-            ret.put("aaData", filteredTaskList)
+            val pageStartIndex = uriQueryParameters.getFirst("start").toInt
+            val pageLength = uriQueryParameters.getFirst("length").toInt
+            ret.put("aaData", filteredTaskList.filter(f =>
+              (f.index >= pageStartIndex && f.index < (pageStartIndex + pageLength))))
           } else {
-            _tasksToShow = doPagination(uriQueryParameters, stageId, stageAttemptId)
-            val iterator = _tasksToShow.iterator
-            while(iterator.hasNext) {
-              val t1: TaskData = iterator.next()
-              val execId = t1.executorId
-              val executorLogs = ui.store.executorSummary(execId).executorLogs
-              t1.executorLogs = executorLogs
-              t1.schedulerDelay = AppStatusUtils.schedulerDelay(t1)
-              t1.gettingResultTime = AppStatusUtils.gettingResultTime(t1)
-            }
-            ret.put("aaData", _tasksToShow)
+            ret.put("aaData", filteredTaskList)
           }
         } else {
           ret.put("aaData", _tasksToShow)
         }
         ret.put("recordsTotal", totalRecords)
-        ret.put("recordsFiltered", totalRecords)
+        ret.put("recordsFiltered", filteredRecords)
         ret
       } else {
         throw new NotFoundException(s"unknown stage: $stageId")
@@ -189,7 +189,7 @@ private[v1] class StagesResource extends BaseAppResource {
 
   // Performs pagination on the server side
   def doPagination(queryParameters: MultivaluedMap[String, String], stageId: Int,
-    stageAttemptId: Int): Seq[TaskData] = {
+    stageAttemptId: Int, isSearch: Boolean, totalRecords: Int): Seq[TaskData] = {
     val queryParams = queryParameters.keySet()
     var columnToSort = 0
     if (queryParams.contains("order[0][column]")) {
@@ -201,10 +201,49 @@ private[v1] class StagesResource extends BaseAppResource {
       columnToSort = 0
     }
     val isAscendingStr = queryParameters.getFirst("order[0][dir]")
-    val pageStartIndex = queryParameters.getFirst("start").toInt
-    val pageLength = queryParameters.getFirst("length").toInt
+    var pageStartIndex = 0
+    var pageLength = totalRecords
+    if (!isSearch) {
+      pageStartIndex = queryParameters.getFirst("start").toInt
+      pageLength = queryParameters.getFirst("length").toInt
+    }
     return withUI(_.store.taskList(stageId, stageAttemptId, pageStartIndex, pageLength,
       indexName(columnNameToSort), isAscendingStr.equalsIgnoreCase("asc")))
+  }
+
+  // Filters task list based on search parameter
+  def filterTaskList(
+    taskDataList: Seq[TaskData],
+    searchValue: String): Seq[TaskData] = {
+    val defaultOptionString: String = "d"
+    val filteredTaskDataSequence: Seq[TaskData] = taskDataList.filter(f =>
+      (f.taskId.toString.contains(searchValue) || f.index.toString.contains(searchValue)
+        || f.attempt.toString.contains(searchValue) || f.launchTime.toString.contains(searchValue)
+        || f.resultFetchStart.getOrElse(defaultOptionString).toString.contains(searchValue)
+        || f.duration.getOrElse(defaultOptionString).toString.contains(searchValue)
+        || f.executorId.contains(searchValue) || f.host.contains(searchValue)
+        || f.status.contains(searchValue) || f.taskLocality.contains(searchValue)
+        || f.speculative.toString.contains(searchValue)
+        || f.errorMessage.getOrElse(defaultOptionString).contains(searchValue)
+        || f.taskMetrics.get.executorDeserializeTime.toString.contains(searchValue)
+        || f.taskMetrics.get.executorRunTime.toString.contains(searchValue)
+        || f.taskMetrics.get.jvmGcTime.toString.contains(searchValue)
+        || f.taskMetrics.get.resultSerializationTime.toString.contains(searchValue)
+        || f.taskMetrics.get.memoryBytesSpilled.toString.contains(searchValue)
+        || f.taskMetrics.get.diskBytesSpilled.toString.contains(searchValue)
+        || f.taskMetrics.get.peakExecutionMemory.toString.contains(searchValue)
+        || f.taskMetrics.get.inputMetrics.bytesRead.toString.contains(searchValue)
+        || f.taskMetrics.get.inputMetrics.recordsRead.toString.contains(searchValue)
+        || f.taskMetrics.get.outputMetrics.bytesWritten.toString.contains(searchValue)
+        || f.taskMetrics.get.outputMetrics.recordsWritten.toString.contains(searchValue)
+        || f.taskMetrics.get.shuffleReadMetrics.fetchWaitTime.toString.contains(searchValue)
+        || f.taskMetrics.get.shuffleReadMetrics.recordsRead.toString.contains(searchValue)
+        || f.taskMetrics.get.shuffleWriteMetrics.bytesWritten.toString.contains(searchValue)
+        || f.taskMetrics.get.shuffleWriteMetrics.recordsWritten.toString.contains(searchValue)
+        || f.taskMetrics.get.shuffleWriteMetrics.writeTime.toString.contains(searchValue)
+        || f.schedulerDelay.toString.contains(searchValue)
+        || f.gettingResultTime.toString.contains(searchValue)))
+    filteredTaskDataSequence
   }
 
 }

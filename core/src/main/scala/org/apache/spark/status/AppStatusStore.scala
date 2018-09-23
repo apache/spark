@@ -391,41 +391,6 @@ private[spark] class AppStatusStore(
     ordered.skip(offset).max(length).asScala.map(_.toApi).toSeq
   }
 
-  // Filters task list based on search parameter
-  def filterTaskList(
-      taskDataList: Seq[v1.TaskData],
-      searchValue: String): Seq[v1.TaskData] = {
-    val defaultOptionString: String = "d"
-    val filteredTaskDataSequence: Seq[v1.TaskData] = taskDataList.filter(f =>
-      (f.taskId.toString.contains(searchValue) || f.index.toString.contains(searchValue)
-        || f.attempt.toString.contains(searchValue) || f.launchTime.toString.contains(searchValue)
-        || f.resultFetchStart.getOrElse(defaultOptionString).toString.contains(searchValue)
-        || f.duration.getOrElse(defaultOptionString).toString.contains(searchValue)
-        || f.executorId.contains(searchValue) || f.host.contains(searchValue)
-        || f.status.contains(searchValue) || f.taskLocality.contains(searchValue)
-        || f.speculative.toString.contains(searchValue)
-        || f.errorMessage.getOrElse(defaultOptionString).contains(searchValue)
-        || f.taskMetrics.get.executorDeserializeTime.toString.contains(searchValue)
-        || f.taskMetrics.get.executorRunTime.toString.contains(searchValue)
-        || f.taskMetrics.get.jvmGcTime.toString.contains(searchValue)
-        || f.taskMetrics.get.resultSerializationTime.toString.contains(searchValue)
-        || f.taskMetrics.get.memoryBytesSpilled.toString.contains(searchValue)
-        || f.taskMetrics.get.diskBytesSpilled.toString.contains(searchValue)
-        || f.taskMetrics.get.peakExecutionMemory.toString.contains(searchValue)
-        || f.taskMetrics.get.inputMetrics.bytesRead.toString.contains(searchValue)
-        || f.taskMetrics.get.inputMetrics.recordsRead.toString.contains(searchValue)
-        || f.taskMetrics.get.outputMetrics.bytesWritten.toString.contains(searchValue)
-        || f.taskMetrics.get.outputMetrics.recordsWritten.toString.contains(searchValue)
-        || f.taskMetrics.get.shuffleReadMetrics.fetchWaitTime.toString.contains(searchValue)
-        || f.taskMetrics.get.shuffleReadMetrics.recordsRead.toString.contains(searchValue)
-        || f.taskMetrics.get.shuffleWriteMetrics.bytesWritten.toString.contains(searchValue)
-        || f.taskMetrics.get.shuffleWriteMetrics.recordsWritten.toString.contains(searchValue)
-        || f.taskMetrics.get.shuffleWriteMetrics.writeTime.toString.contains(searchValue)
-        || f.schedulerDelay.toString.contains(searchValue)
-        || f.gettingResultTime.toString.contains(searchValue)))
-    filteredTaskDataSequence
-  }
-
   def executorSummary(stageId: Int, attemptId: Int): Map[String, v1.ExecutorStageSummary] = {
     val stageKey = Array(stageId, attemptId)
     store.view(classOf[ExecutorStageSummaryWrapper]).index("stage").first(stageKey).last(stageKey)

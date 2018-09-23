@@ -40,7 +40,7 @@ limitations under the License.
     <br>
     <div class="container-fluid" id="toggle-aggregatedMetrics" hidden>
         <div class="container-fluid">
-            <table id="summary-stages-table" class="table table-striped compact table-dataTable">
+            <table id="summary-executor-table" class="table table-striped compact table-dataTable">
                 <thead>
                 <th>Executor ID</th>
                 <th>Logs</th>
@@ -55,12 +55,20 @@ limitations under the License.
                 title="Shows if this executor has been blacklisted by the scheduler due to task failures.">
             Blacklisted</span>
                 </th>
-                <th>Input Size / Records</th>
-                <th>Output:</th>
-                <th>Shuffle Read: </th>
-                <th>Shuffle Write: </th>
-                <th>Shuffle Spill (Memory): </th>
-                <th>Shuffle Spill (Disk): </th>
+                <th>
+          <span data-toggle="tooltip" data-placement="top"
+                title="Bytes and records read from Hadoop or from Spark storage.">
+            Input Size / Records</span>
+                </th>
+                <th>Output</th>
+                <th>Shuffle Read Size / Records</th>
+                <th>
+          <span data-toggle="tooltip" data-placement="top"
+                title="Bytes and records written to disk in order to be read by a shuffle in a future stage.">
+            Shuffle Write Size / Records</span>
+                </th>
+                <th>Shuffle Spill (Memory) </th>
+                <th>Shuffle Spill (Disk) </th>
                 </thead>
                 <tbody>
                 </tbody>
