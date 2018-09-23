@@ -108,7 +108,7 @@ class FakeReadNeitherMode extends DataSourceRegister {
   override def shortName(): String = "fake-read-neither-mode"
 }
 
-class FakeWriteSupportProvider
+class FakeWrite
     extends DataSourceRegister
     with FakeStreamWriteSupport
     with SessionConfigSupport {
