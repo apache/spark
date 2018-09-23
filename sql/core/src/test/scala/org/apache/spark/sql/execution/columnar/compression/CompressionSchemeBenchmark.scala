@@ -234,7 +234,7 @@ object CompressionSchemeBenchmark extends BenchmarkBase with AllCompressionSchem
   }
 
   override def benchmark(): Unit = {
-    runBenchmark("encoding benchmark") {
+    runBenchmark("Compression Scheme Benchmark") {
       bitEncodingBenchmark(1024)
       shortEncodingBenchmark(1024)
       intEncodingBenchmark(1024)
