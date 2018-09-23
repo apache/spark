@@ -34,7 +34,8 @@ from pyspark.serializers import ArrowStreamSerializer, BatchedSerializer, Pickle
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import _parse_datatype_json_string
-from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
+from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column, \
+    _to_sorted_java_columns
 from pyspark.sql.readwriter import DataFrameWriter
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import IntegralType
@@ -1125,21 +1126,8 @@ class DataFrame(object):
     def _sort_cols(self, cols, kwargs):
         """ Return a JVM Seq of Columns that describes the sort order
         """
-        if not cols:
-            raise ValueError("should sort by at least one column")
-        if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
-        jcols = [_to_java_column(c) for c in cols]
         ascending = kwargs.get('ascending', True)
-        if isinstance(ascending, (bool, int)):
-            if not ascending:
-                jcols = [jc.desc() for jc in jcols]
-        elif isinstance(ascending, list):
-            jcols = [jc if asc else jc.desc()
-                     for asc, jc in zip(ascending, jcols)]
-        else:
-            raise TypeError("ascending can only be boolean or list, but got %s" % type(ascending))
-        return self._jseq(jcols)
+        return self._jseq(_to_sorted_java_columns(cols, ascending))
 
     @since("1.3.1")
     def describe(self, *cols):
@@ -2332,3 +2320,4 @@ def _test():
 
 if __name__ == "__main__":
     _test()
+

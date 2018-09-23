@@ -20,7 +20,7 @@ if sys.version >= '3':
     long = int
 
 from pyspark import since, SparkContext
-from pyspark.sql.column import Column, _to_seq, _to_java_column
+from pyspark.sql.column import Column, _to_seq, _to_java_column, _to_sorted_java_columns
 
 __all__ = ["Window", "WindowSpec"]
 
@@ -43,6 +43,9 @@ class Window(object):
 
     >>> # PARTITION BY country ORDER BY date RANGE BETWEEN 3 PRECEDING AND 3 FOLLOWING
     >>> window = Window.orderBy("date").partitionBy("country").rangeBetween(-3, 3)
+
+    >>> # PARTITION BY country ORDER BY date RANGE BETWEEN 3 PRECEDING AND 3 FOLLOWING
+    >>> window = Window.orderBy("date", ascending=False).partitionBy("country").rangeBetween(-3, 3)
 
     .. note:: When ordering is not defined, an unbounded window frame (rowFrame,
          unboundedPreceding, unboundedFollowing) is used by default. When ordering is defined,
@@ -76,12 +79,37 @@ class Window(object):
 
     @staticmethod
     @since(1.4)
-    def orderBy(*cols):
+    def orderBy(*cols, **kwargs):
         """
         Creates a :class:`WindowSpec` with the ordering defined.
+
+        :param cols: names of columns or expressions.
+        :param ascending: boolean or list of boolean (default True).
+            Sort ascending vs. descending. Specify list for multiple sort orders.
+            If a list is specified, length of the list must equal length of the `cols`.
+
+        >>> from pyspark.sql import functions as F, SparkSession, Window
+        >>> spark = SparkSession.builder.getOrCreate()
+        >>> df = spark.createDataFrame(
+        ...     [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")], ["id", "category"])
+        >>> window = Window.orderBy("id", ascending=False).partitionBy("category").rowsBetween(
+        ...     Window.unboundedPreceding, Window.currentRow)
+        >>> df.withColumn("sum", F.sum("id").over(window)).show()
+        +---+--------+---+
+        | id|category|sum|
+        +---+--------+---+
+        |  3|       b|  3|
+        |  2|       b|  5|
+        |  1|       b|  6|
+        |  2|       a|  2|
+        |  1|       a|  3|
+        |  1|       a|  4|
+        +---+--------+---+
         """
         sc = SparkContext._active_spark_context
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.orderBy(_to_java_cols(cols))
+        ascending = kwargs.get('ascending', True)
+        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.orderBy(
+            _to_seq(sc, _to_sorted_java_columns(cols, ascending)))
         return WindowSpec(jspec)
 
     @staticmethod
@@ -195,13 +223,20 @@ class WindowSpec(object):
         return WindowSpec(self._jspec.partitionBy(_to_java_cols(cols)))
 
     @since(1.4)
-    def orderBy(self, *cols):
+    def orderBy(self, *cols, **kwargs):
         """
         Defines the ordering columns in a :class:`WindowSpec`.
 
-        :param cols: names of columns or expressions
+        :param cols: names of columns or expressions.
+        :param ascending: boolean or list of boolean (default True).
+            Sort ascending vs. descending. Specify list for multiple sort orders.
+            If a list is specified, length of the list must equal length of the `cols`.
         """
-        return WindowSpec(self._jspec.orderBy(_to_java_cols(cols)))
+        ascending = kwargs.get('ascending', True)
+        return WindowSpec(self._jspec.orderBy(_to_seq(
+            SparkContext._active_spark_context,
+            _to_sorted_java_columns(cols, ascending)
+        )))
 
     @since(1.4)
     def rowsBetween(self, start, end):
@@ -273,3 +308,4 @@ def _test():
 
 if __name__ == "__main__":
     _test()
+

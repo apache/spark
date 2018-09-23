@@ -54,6 +54,22 @@ def _to_java_column(col):
     return jcol
 
 
+def _to_sorted_java_columns(cols, ascending=True):
+    if len(cols) == 1 and isinstance(cols[0], list):
+        cols = cols[0]
+    jcols = [_to_java_column(c) for c in cols]
+    if isinstance(ascending, (bool, int)):
+        if not ascending:
+            jcols = [jc.desc() for jc in jcols]
+    elif isinstance(ascending, list):
+        jcols = [jc if asc else jc.desc()
+                 for asc, jc in zip(ascending, jcols)]
+    else:
+        raise TypeError("Ascending can only be boolean or list, but got %s" % type(ascending))
+
+    return jcols
+
+
 def _to_seq(sc, cols, converter=None):
     """
     Convert a list of Column (or names) into a JVM Seq of Column.
@@ -712,3 +728,4 @@ def _test():
 
 if __name__ == "__main__":
     _test()
+
