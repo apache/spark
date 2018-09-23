@@ -522,9 +522,21 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
   test("pretty print - roundtrip from_json -> to_json") {
     val json = """[{"book":{"publisher":[{"country":"NL","year":[1981,1986,1999]}]}}]"""
     val jsonDF = Seq(json).toDF("root")
+    val expected =
+      """[ {
+        |  "book" : {
+        |    "publisher" : [ {
+        |      "country" : "NL",
+        |      "year" : [ 1981, 1986, 1999 ]
+        |    } ]
+        |  }
+        |} ]""".stripMargin
 
     checkAnswer(
-      jsonDF.select(to_json(from_json($"root", schema_of_json(lit(json))))),
-      Seq(Row(json)))
+      jsonDF.select(
+        to_json(
+          from_json($"root", schema_of_json(lit(json))),
+          Map("pretty" -> "true"))),
+      Seq(Row(expected)))
   }
 }
