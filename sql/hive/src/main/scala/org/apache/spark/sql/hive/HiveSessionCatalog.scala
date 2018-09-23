@@ -132,12 +132,12 @@ private[sql] class HiveSessionCatalog(
       case Success(expr) => expr
       case Failure(error) =>
         if (super.functionExists(name)) {
-          // If the function actually exists in functionRegistry or externalCatalog,
+          // If the function exists (either in functionRegistry or externalCatalog),
           // it means that there is an error when we create the Expression using the given children.
           // We need to throw the original exception.
           throw error
         } else {
-          // This function does not exist(neither in functionRegistry or externalCatalog),
+          // This function does not exist (neither in functionRegistry or externalCatalog),
           // let's try to load it as a Hive's built-in function.
           // Hive is case insensitive.
           val functionName = funcName.unquotedString.toLowerCase(Locale.ROOT)
