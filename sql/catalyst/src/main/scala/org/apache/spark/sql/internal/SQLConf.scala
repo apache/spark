@@ -177,8 +177,8 @@ object SQLConf {
       "plan after a rule is applied. The value can be 'trace', 'debug', 'info', 'warn', or " +
       "'error'. The default log level is 'trace'.")
     .stringConf
-    .checkValue(
-      str => Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(str.toUpperCase),
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValue(logLevel => Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(logLevel),
       "Invalid value for 'spark.sql.optimizer.planChangeLog.level'. Valid values are " +
         "'trace', 'debug', 'info', 'warn' and 'error'.")
     .createWithDefault("trace")
