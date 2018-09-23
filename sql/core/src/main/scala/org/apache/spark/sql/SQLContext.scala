@@ -1107,12 +1107,11 @@ object SQLContext {
     def invoke(element: Any)(tuple: (Method, DataType)): Any = tuple match {
       case (e, structType: StructType) =>
         val value = e.invoke(element)
-        val nestedExtractors = JavaTypeInference.getJavaBeanReadableProperties(value.getClass)
-            .map(desc => desc.getName -> desc.getReadMethod)
-            .toMap
-        new GenericInternalRow(structType.map(nestedProperty =>
-          invoke(value)(nestedExtractors(nestedProperty.name) -> nestedProperty.dataType)
-        ).toArray)
+        val nestedExtractors =
+          JavaTypeInference.getJavaBeanReadableProperties(value.getClass).map(_.getReadMethod)
+        new GenericInternalRow(structType.zipWithIndex.map { case (field, index) =>
+          invoke(value)(nestedExtractors(index) -> field.dataType)
+        }.toArray)
       case (e, dataType) =>
         CatalystTypeConverters.createToCatalystConverter(dataType)(e.invoke(element))
     }

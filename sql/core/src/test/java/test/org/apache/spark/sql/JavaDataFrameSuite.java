@@ -185,10 +185,9 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(new StructField("e", DataTypes.createDecimalType(38,0), true,
       Metadata.empty()), schema.apply("e"));
     Assert.assertEquals(new StructField("f",
-                    DataTypes.createStructType(Collections.singletonList(new StructField(
-                            "a", IntegerType$.MODULE$, false, Metadata.empty()))),
-                    true, Metadata.empty()),
-            schema.apply("f"));
+      DataTypes.createStructType(Collections.singletonList(new StructField(
+        "a", IntegerType$.MODULE$, false, Metadata.empty()))),
+      true, Metadata.empty()), schema.apply("f"));
     Row first = df.select("a", "b", "c", "d", "e", "f").first();
     Assert.assertEquals(bean.getA(), first.getDouble(0), 0.0);
     // Now Java lists and maps are converted to Scala Seq's and Map's. Once we get a Seq below,
