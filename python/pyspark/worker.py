@@ -98,7 +98,7 @@ def wrap_scalar_pandas_udf(f, return_type):
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
     assign_cols_by_pos = runner_conf.get(
-        "spark.sql.execution.pandas.groupedMap.assignColumnsByPosition", False)
+        "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", True)
 
     def wrapped(key_series, value_series):
         import pandas as pd

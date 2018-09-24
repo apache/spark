@@ -127,7 +127,7 @@ class ArrowPythonRunner(
       private var reader: ArrowStreamReader = _
       private var root: VectorSchemaRoot = _
       private var schema: StructType = _
-      private var vectors: Array[ColumnVector] = _
+      private var vectors: Array[ColumnVector] = `
 
       context.addTaskCompletionListener[Unit] { _ =>
         if (reader != null) {
