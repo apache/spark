@@ -36,8 +36,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-private[spark] class DriverLogger(conf: SparkConf)
-    extends Logging {
+private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 
   private val UPLOAD_CHUNK_SIZE = 1024 * 1024
   private val UPLOAD_INTERVAL_IN_SECS = 5
@@ -73,8 +72,7 @@ private[spark] class DriverLogger(conf: SparkConf)
     try {
       val appId = Utils.sanitizeDirName(conf.getAppId)
       hdfsLogFile = {
-        val rootDir = conf.get(DRIVER_LOG_DFS_DIR.key,
-          "/tmp/driver_logs").split(",").head
+        val rootDir = conf.get(DRIVER_LOG_DFS_DIR.key, "/tmp/driver_logs").split(",").head
         FileUtils.getFile(rootDir, appId, DRIVER_LOG_FILE).getAbsolutePath()
       }
       hadoopConfiguration = hadoopConf
@@ -116,31 +114,32 @@ private[spark] class DriverLogger(conf: SparkConf)
       val yarnConf = new YarnConfiguration(hadoopConfiguration)
       val rootDir = yarnConf.get(YarnConfiguration.NM_REMOTE_APP_LOG_DIR)
       if (rootDir != null && !rootDir.isEmpty()) {
-        var parentDir = if (UserGroupInformation.getCurrentUser() != null) {
-          FileUtils.getFile(
+        var parentDir = FileUtils.getFile(
             rootDir,
             UserGroupInformation.getCurrentUser().getShortUserName(),
             "logs",
             appId)
-        } else {
-          FileUtils.getFile(rootDir, "logs", appId)
-        }
-        if (syncToDfs) {
-          fileSystem.rename(new Path(hdfsLogFile), new Path(parentDir.getAbsolutePath()))
-          fileSystem.delete(new Path(FileUtils.getFile(hdfsLogFile).getParent()), true)
-          logInfo(
-            s"Moved the driver log file to: ${parentDir.getAbsolutePath()}")
-        } else {
-          fileSystem.copyFromLocalFile(true,
-            new Path(localLogFile),
-            new Path(parentDir.getAbsolutePath()))
-          logInfo(
-            s"Moved the local driver log file to spark dfs at: ${parentDir.getAbsolutePath()}")
+        if (fileSystem.exists(new Path(parentDir.getAbsolutePath()))) {
+          if (syncToDfs) {
+            fileSystem.rename(new Path(hdfsLogFile), new Path(parentDir.getAbsolutePath()))
+            fileSystem.delete(new Path(FileUtils.getFile(hdfsLogFile).getParent()), true)
+            logInfo(
+              s"Moved the driver log file to: ${parentDir.getAbsolutePath()}")
+          } else {
+            fileSystem.copyFromLocalFile(true,
+              new Path(localLogFile),
+              new Path(parentDir.getAbsolutePath()))
+            logInfo(
+              s"Moved the local driver log file to spark dfs at: ${parentDir.getAbsolutePath()}")
+          }
+        } else if (!syncToDfs) {
+          // Move the file to spark dfs if yarn app dir does not exist and not syncing to dfs
+          moveToDfs()
         }
       }
     } catch {
-      case nse: NoSuchElementException => logWarning("Couldn't move driver log" +
-        " to YARN application dir as no appId defined")
+      case nse: NoSuchElementException =>
+        logWarning("Couldn't move driver log to YARN application dir as no appId defined")
       case ace: AccessControlException =>
         if (!syncToDfs) {
           logWarning(s"Couldn't move local driver log to YARN application dir," +
@@ -160,8 +159,7 @@ private[spark] class DriverLogger(conf: SparkConf)
         new Path(localLogFile),
         new Path(hdfsLogFile))
       fileSystem.setPermission(new Path(hdfsLogFile), LOG_FILE_PERMISSIONS)
-      logInfo(
-        s"Moved the local driver log file to spark dfs at: ${hdfsLogFile}")
+      logInfo(s"Moved the local driver log file to spark dfs at: ${hdfsLogFile}")
     } catch {
       case e: Exception =>
         logError(s"Could not move local driver log to spark dfs", e)
@@ -200,8 +198,6 @@ private[spark] class DriverLogger(conf: SparkConf)
       try {
         // Write all remaining bytes
         run()
-      } catch {
-        case e: Exception => logError("Failed to write to spark dfs", e)
       } finally {
         inStream.close()
         outputStream.close()
@@ -230,10 +226,13 @@ private[spark] object DriverLogger extends Logging {
 
   def apply(conf: SparkConf): Option[DriverLogger] = {
     if ((conf.get(DRIVER_LOG_SYNCTODFS) || conf.get(DRIVER_LOG_SYNCTOYARN))
-      && Utils.isClientMode(conf)) {
+        && Utils.isClientMode(conf)) {
       Try[DriverLogger] { new DriverLogger(conf) }
-        .recoverWith { case t: Throwable => logError("Could not add driver logger", t); Failure(t) }
-        .toOption
+        .recoverWith {
+          case t: Throwable =>
+            logError("Could not add driver logger", t)
+            Failure(t)
+        }.toOption
     } else {
       None
     }

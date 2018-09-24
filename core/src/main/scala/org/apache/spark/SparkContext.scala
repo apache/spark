@@ -2355,13 +2355,13 @@ class SparkContext(config: SparkConf) extends Logging {
     // the cluster manager to get an application ID (in case the cluster manager provides one).
     listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
       startTime, sparkUser, applicationAttemptId, schedulerBackend.getDriverLogUrls))
-    _driverLogger.map(_.startSync(_hadoopConfiguration))
+    _driverLogger.foreach(_.startSync(_hadoopConfiguration))
   }
 
   /** Post the application end event */
   private def postApplicationEnd() {
     listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis))
-    _driverLogger.map(_.stop())
+    _driverLogger.foreach(_.stop())
   }
 
   /** Post the environment update event once the task scheduler is ready */

@@ -17,7 +17,11 @@
 
 package org.apache.spark.internal
 
-import org.apache.log4j.{ConsoleAppender, Level, LogManager, PropertyConfigurator}
+import java.util.concurrent.ConcurrentHashMap
+
+import scala.collection.JavaConverters._
+
+import org.apache.log4j._
 import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
 
@@ -146,17 +150,16 @@ trait Logging {
         // Update the consoleAppender threshold to replLevel
         if (replLevel != rootLogger.getEffectiveLevel()) {
           if (!silent) {
-            System.err.printf("Setting console log level to \"%s\".\n", replLevel)
+            System.err.printf("Setting default log level to \"%s\".\n", replLevel)
             System.err.println("To adjust logging level use sc.setLogLevel(newLevel). " +
               "For SparkR, use setLogLevel(newLevel).")
           }
-          val appenders = rootLogger.getAllAppenders()
-          while (appenders.hasMoreElements()) {
-            val tmp = appenders.nextElement()
+          rootLogger.getAllAppenders().asScala.foreach { tmp =>
             tmp match {
               case ca: ConsoleAppender =>
                 Option(ca.getThreshold()) match {
                   case Some(t) =>
+                    Logging.consoleAppenderToThreshold.put(ca, t)
                     if (!t.isGreaterOrEqual(replLevel)) {
                       ca.setThreshold(replLevel)
                     }
@@ -181,6 +184,7 @@ private[spark] object Logging {
   @volatile private var initialized = false
   @volatile private var defaultRootLevel: Level = null
   @volatile private var defaultSparkLog4jConfig = false
+  val consoleAppenderToThreshold = new ConcurrentHashMap[ConsoleAppender, Priority]()
 
   val initLock = new Object()
   try {
@@ -209,11 +213,10 @@ private[spark] object Logging {
       } else {
         val rootLogger = LogManager.getRootLogger()
         rootLogger.setLevel(defaultRootLevel)
-        val appenders = rootLogger.getAllAppenders
-        while (appenders.hasMoreElements()) {
-          val tmp = appenders.nextElement()
+        rootLogger.getAllAppenders().asScala.foreach { tmp =>
           tmp match {
-            case ca: ConsoleAppender => ca.setThreshold(defaultRootLevel)
+            case ca: ConsoleAppender =>
+              ca.setThreshold(consoleAppenderToThreshold.get(ca))
             case _ => // no-op
           }
         }
