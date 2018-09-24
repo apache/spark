@@ -35,10 +35,6 @@ private[spark] case class KubernetesConfigmapVolumeConf(
     configMapName: String)
   extends KubernetesVolumeSpecificConf
 
-private[spark] case class KubernetesSecretVolumeConf(
-    secretName: String)
-  extends KubernetesVolumeSpecificConf
-
 private[spark] case class KubernetesVolumeSpec[T <: KubernetesVolumeSpecificConf](
     volumeName: String,
     mountPath: String,

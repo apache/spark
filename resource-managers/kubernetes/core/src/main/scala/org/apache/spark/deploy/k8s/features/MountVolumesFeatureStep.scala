@@ -74,10 +74,6 @@ private[spark] class MountVolumesFeatureStep(
           new VolumeBuilder()
             .withConfigMap(new ConfigMapVolumeSourceBuilder()
                            .withName(configMapName).build)
-
-        case KubernetesSecretVolumeConf(secretName) =>
-          new VolumeBuilder()
-            .withNewSecret().withSecretName(secretName).endSecret()
       }
 
       val volume = volumeBuilder.withName(spec.volumeName).build()

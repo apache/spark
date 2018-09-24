@@ -98,12 +98,6 @@ private[spark] object KubernetesVolumeUtils {
           path <- options.getTry(nameKey)
         } yield KubernetesConfigmapVolumeConf(path)
 
-      case KUBERNETES_VOLUMES_SECRET_TYPE =>
-        val nameKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_NAME_KEY"
-        for {
-          path <- options.getTry(nameKey)
-        } yield KubernetesSecretVolumeConf(path)
-
       case _ =>
         Failure(new RuntimeException(s"Kubernetes Volume type `$volumeType` is not supported"))
     }

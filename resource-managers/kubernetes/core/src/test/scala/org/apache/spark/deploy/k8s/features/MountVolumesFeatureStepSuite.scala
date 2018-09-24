@@ -160,23 +160,4 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
     assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
   }
-
-  test("Mounts Secrets") {
-    val volumeConf = KubernetesVolumeSpec(
-      "testVolume",
-      "/tmp",
-      false,
-      KubernetesConfigmapVolumeConf("secret")
-    )
-    val kubernetesConf = emptyKubernetesConf.copy(roleVolumes = volumeConf :: Nil)
-    val step = new MountVolumesFeatureStep(kubernetesConf)
-    val configuredPod = step.configurePod(SparkPod.initialPod())
-
-    assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
-    val secret = configuredPod.pod.getSpec.getVolumes.get(0).getSecret
-    assert(secret.getSecretName === "secret")
-    assert(configuredPod.container.getVolumeMounts.size() === 1)
-    assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
-    assert(configuredPod.container.getVolumeMounts.get(0).getName === "testVolume")
-  }
 }
