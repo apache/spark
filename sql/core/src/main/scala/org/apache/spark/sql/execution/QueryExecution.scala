@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{OutputStreamWriter, Writer}
+import java.io.{BufferedWriter, OutputStreamWriter, Writer}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.apache.commons.io.output.StringBuilderWriter
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -272,7 +271,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     def toFile(path: String): Unit = {
       val filePath = new Path(path)
       val fs = filePath.getFileSystem(sparkSession.sessionState.newHadoopConf())
-      val writer = new OutputStreamWriter(fs.create(filePath))
+      val writer = new BufferedWriter(new OutputStreamWriter(fs.create(filePath)))
 
       try {
         writePlans(writer, Some(Int.MaxValue))
