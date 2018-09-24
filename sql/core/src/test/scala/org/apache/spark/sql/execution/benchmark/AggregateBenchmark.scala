@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.benchmark
 import java.util.HashMap
 
 import org.apache.spark.SparkConf
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -30,7 +31,6 @@ import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.map.BytesToBytesMap
-import org.apache.spark.util.Benchmark
 
 /**
  * Benchmark to measure performance for aggregate primitives.
@@ -39,7 +39,7 @@ import org.apache.spark.util.Benchmark
  *
  * Benchmarks in this file are skipped in normal builds.
  */
-class AggregateBenchmark extends BenchmarkBase {
+class AggregateBenchmark extends BenchmarkWithCodegen {
 
   ignore("aggregate without grouping") {
     val N = 500L << 22

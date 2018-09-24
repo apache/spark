@@ -18,11 +18,11 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.util.Benchmark
 
 /**
  * Benchmark for Dataset typed operations comparing with DataFrame and RDD versions.
