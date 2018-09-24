@@ -63,8 +63,6 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
   // this metric writes only one gauge to the collector
   test("registeredExecutorsSize - collector receives correct types") {
     val builder = mock(classOf[MetricsRecordBuilder])
-    when(builder.addCounter(any(), anyLong())).thenReturn(builder)
-    when(builder.addGauge(any(), anyDouble())).thenReturn(builder)
 
     YarnShuffleServiceMetrics.collectMetric(builder, "registeredExecutorsSize",
       metrics.getMetrics.get("registeredExecutorsSize"))

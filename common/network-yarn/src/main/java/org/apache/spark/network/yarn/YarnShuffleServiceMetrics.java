@@ -56,7 +56,7 @@ class YarnShuffleServiceMetrics implements MetricsSource {
   /**
    * The metric types used in {@link ExternalShuffleBlockHandler.ShuffleMetrics}
    */
-  private static void collectMetric(MetricsRecordBuilder metricsRecordBuilder, String name, Metric metric) {
+  public static void collectMetric(MetricsRecordBuilder metricsRecordBuilder, String name, Metric metric) {
     if (metric instanceof Timer) {
       Timer t = (Timer) metric;
       metricsRecordBuilder
