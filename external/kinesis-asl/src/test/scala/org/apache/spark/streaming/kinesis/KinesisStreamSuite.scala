@@ -37,12 +37,14 @@ import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.kinesis.KinesisInitialPositions.Latest
 import org.apache.spark.streaming.kinesis.KinesisReadConfigurations._
 import org.apache.spark.streaming.kinesis.KinesisTestUtils._
-import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
+import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
+import org.apache.spark.streaming.receiver.{BlockManagerBasedStoreResult, WriteAheadLogBasedStoreResult}
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
+import org.apache.spark.streaming.util.{WriteAheadLogRecordHandle, WriteAheadLogUtils}
 import org.apache.spark.util.Utils
 
-abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFunSuite
-  with Eventually with BeforeAndAfter with BeforeAndAfterAll {
+abstract class KinesisStreamTests(aggregateTestData: Boolean, enableWAL: Boolean)
+  extends KinesisFunSuite with Eventually with BeforeAndAfter with BeforeAndAfterAll {
 
   // This is the name that KCL will use to save metadata to DynamoDB
   private val appName = s"KinesisStreamSuite-${math.abs(Random.nextLong())}"
@@ -62,6 +64,8 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     val conf = new SparkConf()
       .setMaster("local[4]")
       .setAppName("KinesisStreamSuite") // Setting Spark app name to Kinesis app name
+    conf.set(WriteAheadLogUtils.RECEIVER_WAL_ENABLE_CONF_KEY, enableWAL.toString)
+    require(WriteAheadLogUtils.enableReceiverLog(conf) === enableWAL)
     sc = new SparkContext(conf)
 
     runIfTestsEnabled("Prepare KinesisTestUtils") {
@@ -99,6 +103,18 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     }
   }
 
+  private def testWithoutWAL(msg: String)(body: => Unit): Unit = {
+    test(s"Without WAL enabled: $msg") {
+      if (!enableWAL) body
+    }
+  }
+
+  private def testWithWAL(msg: String)(body: => Unit): Unit = {
+    test(s"With WAL enabled: $msg") {
+      if (enableWAL) body
+    }
+  }
+
   test("KinesisUtils API") {
     val kinesisStream1 = KinesisUtils.createStream(ssc, "myAppName", "mySparkStream",
       dummyEndpointUrl, dummyRegionName,
@@ -109,7 +125,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       dummyAWSAccessKey, dummyAWSSecretKey)
   }
 
-  test("RDD generation") {
+  testWithoutWAL("KinesisBackedBlockRDD generation") {
     val inputStream = KinesisUtils.createStream(ssc, appName, "dummyStream",
       dummyEndpointUrl, dummyRegionName, InitialPositionInStream.LATEST, Seconds(2),
       StorageLevel.MEMORY_AND_DISK_2, dummyAWSAccessKey, dummyAWSSecretKey)
@@ -164,6 +180,42 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     }
   }
 
+  testWithWAL("WriteAheadLogBackedBlockRDD generation") {
+    val inputStream = KinesisUtils.createStream(ssc, appName, "dummyStream",
+      dummyEndpointUrl, dummyRegionName, InitialPositionInStream.LATEST, Seconds(2),
+      StorageLevel.MEMORY_AND_DISK_2, dummyAWSAccessKey, dummyAWSSecretKey)
+    assert(inputStream.isInstanceOf[KinesisInputDStream[Array[Byte]]])
+
+    val kinesisStream = inputStream.asInstanceOf[KinesisInputDStream[Array[Byte]]]
+    val time = Time(1000)
+
+    // Generate block info data for testing
+    val seqNumRanges1 = SequenceNumberRanges(
+      SequenceNumberRange("fakeStream", "fakeShardId", "xxx", "yyy", 67))
+    val blockId1 = StreamBlockId(kinesisStream.id, 123)
+    val blockInfo1 = ReceivedBlockInfo(
+      0, None, Some(seqNumRanges1),
+      new WriteAheadLogBasedStoreResult(blockId1, None, new WriteAheadLogRecordHandle { }))
+
+    val seqNumRanges2 = SequenceNumberRanges(
+      SequenceNumberRange("fakeStream", "fakeShardId", "aaa", "bbb", 89))
+    val blockId2 = StreamBlockId(kinesisStream.id, 345)
+    val blockInfo2 = ReceivedBlockInfo(
+      0, None, Some(seqNumRanges2),
+      new WriteAheadLogBasedStoreResult(blockId2, None, new WriteAheadLogRecordHandle { }))
+
+    // Verify that WriteAheadLogBackedBlockRDD is generated when all block info having WAL info
+    val blockInfos = Seq(blockInfo1, blockInfo2)
+    val nonEmptyRDD = kinesisStream.createBlockRDD(time, blockInfos)
+    nonEmptyRDD shouldBe a [WriteAheadLogBackedBlockRDD[_]]
+    val rdd = nonEmptyRDD.asInstanceOf[WriteAheadLogBackedBlockRDD[_]]
+    assert(rdd.walRecordHandles.toSeq === blockInfos.map { _.walRecordHandleOption.get })
+
+    // Verify that WriteAheadLogBackedBlockRDD is generated even when there are no blocks
+    val emptyRDD = kinesisStream.createBlockRDD(time, Seq.empty)
+    assert(emptyRDD.isInstanceOf[WriteAheadLogBackedBlockRDD[_]])
+    assert(emptyRDD.isEmpty())
+  }
 
   /**
    * Test the stream by sending data to a Kinesis stream and receiving from it.
@@ -236,7 +288,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     ssc.stop(stopSparkContext = false)
   }
 
-  test("Kinesis read with custom configurations") {
+  testWithoutWAL("Kinesis read with custom configurations") {
     try {
       ssc.sc.conf.set(RETRY_WAIT_TIME_KEY, "2000ms")
       ssc.sc.conf.set(RETRY_MAX_ATTEMPTS_KEY, "5")
@@ -431,6 +483,14 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
   }
 }
 
-class WithAggregationKinesisStreamSuite extends KinesisStreamTests(aggregateTestData = true)
+class WithAggregationAndWithWALKinesisStreamSuite
+  extends KinesisStreamTests(aggregateTestData = true, enableWAL = true)
 
-class WithoutAggregationKinesisStreamSuite extends KinesisStreamTests(aggregateTestData = false)
+class WithAggregationAndWithoutWALKinesisStreamSuite
+  extends KinesisStreamTests(aggregateTestData = true, enableWAL = false)
+
+class WithoutAggregationAndWithWALKinesisStreamSuite
+  extends KinesisStreamTests(aggregateTestData = false, enableWAL = true)
+
+class WithoutAggregationAndWithoutWALKinesisStreamSuite
+  extends KinesisStreamTests(aggregateTestData = false, enableWAL = false)
