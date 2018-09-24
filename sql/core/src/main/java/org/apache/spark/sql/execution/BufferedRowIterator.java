@@ -38,6 +38,11 @@ public abstract class BufferedRowIterator {
 
   protected int partitionIndex = -1;
 
+  // This indicates whether the query execution should be stopped even the input rows are still
+  // available. This is used in limit operator. When it reaches the given number of rows to limit,
+  // this flag is set and the execution should be stopped.
+  protected boolean isStopEarly = false;
+
   public boolean hasNext() throws IOException {
     if (currentRows.isEmpty()) {
       processNext();
@@ -74,13 +79,20 @@ public abstract class BufferedRowIterator {
   }
 
   /**
+   * Sets the flag of stopping the query execution early.
+   */
+  public void setStopEarly(boolean value) {
+    isStopEarly = value;
+  }
+
+  /**
    * Returns whether this iterator should stop fetching next row from [[CodegenSupport#inputRDDs]].
    *
    * If it returns true, the caller should exit the loop that [[InputAdapter]] generates.
    * This interface is mainly used to limit the number of input rows.
    */
   public boolean stopEarly() {
-    return false;
+    return isStopEarly;
   }
 
   /**

@@ -556,7 +556,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Seq(Row(1, 2, Seq("a", "b")), Row(3, 2, Seq("c", "c", "d"))))
   }
 
-  test("SPARK-18004 limit + aggregates") {
+  test("SPARK-18528 limit + aggregates") {
     val df = Seq(("a", 1), ("b", 2), ("c", 1), ("d", 5)).toDF("id", "value")
     val limit2Df = df.limit(2)
     checkAnswer(

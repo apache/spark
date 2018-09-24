@@ -2865,6 +2865,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     // The second hash aggregate before local limit outputs 1 record.
     assert(aggNumRecords == 101)
 
+    val aggNoGroupingDF = spark.range(0, 100, 1, 1)
+      .groupBy()
+      .count().limit(1).filter('count > 0)
+    aggNoGroupingDF.collect()
+    val aggNoGroupingNumRecords = aggNoGroupingDF.queryExecution.sparkPlan.collect {
+      case h: HashAggregateExec => h
+    }.map { hashNode =>
+      hashNode.metrics("numOutputRows").value
+    }.sum
+    assert(aggNoGroupingNumRecords == 2)
+
     val filterDF = spark.range(0, 100, 1, 1).filter('id >= 0)
       .selectExpr("id + 1 as id2").limit(1).filter('id > 50)
     filterDF.collect()
@@ -2875,6 +2886,20 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }.head
     // RangeNode and FilterNode both output 1 record.
     assert(filterNumRecords == Tuple2(1, 1))
+
+    val twoLimitsDF = spark.range(0, 100, 1, 1)
+      .limit(1)
+      .filter('id >= 0)
+      .selectExpr("id + 1 as id2")
+      .limit(2)
+      .filter('id > 50)
+    twoLimitsDF.collect()
+    val twoLimitsDFNumRecords = twoLimitsDF.queryExecution.sparkPlan.collect {
+      case r: RangeExec => r
+    }.map { rangeNode =>
+      rangeNode.metrics("numOutputRows").value
+    }.head
+    assert(twoLimitsDFNumRecords == 1)
   }
 }
 

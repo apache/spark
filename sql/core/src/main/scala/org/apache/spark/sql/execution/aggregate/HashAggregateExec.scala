@@ -243,7 +243,7 @@ case class HashAggregateExec(
     val aggTime = metricTerm(ctx, "aggTime")
     val beforeAgg = ctx.freshName("beforeAgg")
     s"""
-       | while (!$initAgg && !stopEarly()) {
+       | while (!$initAgg) {
        |   $initAgg = true;
        |   long $beforeAgg = System.nanoTime();
        |   $doAggFuncName();
@@ -723,6 +723,9 @@ case class HashAggregateExec(
        long $beforeAgg = System.nanoTime();
        $doAggFuncName();
        $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
+
+       // Reset stop early flag set by previous limit operator
+       setStopEarly(false);
      }
 
      // output the result
