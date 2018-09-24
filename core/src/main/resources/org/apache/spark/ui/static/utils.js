@@ -112,7 +112,9 @@ function getStandAloneAppId(cb) {
 
 function getStageAttemptId() {
   var words = document.baseURI.split('?');
-  return words[1].split("&").filter(word => word.includes("attempt="))[0].split("=")[1];
+  var attemptIdStr = words[1].split('&')[1];
+  var stgAttemptId = attemptIdStr.substr(attemptIdStr.indexOf('=') + 1, attemptIdStr.length - 1);
+  return stgAttemptId;
 }
 
 // This function is a helper function for sorting in datatable.
