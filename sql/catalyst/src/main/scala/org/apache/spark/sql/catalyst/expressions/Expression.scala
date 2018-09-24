@@ -235,7 +235,7 @@ abstract class Expression extends TreeNode[Expression] {
   override def simpleString(maxFields: Option[Int]): String = toString
 
   override def toString: String = prettyName + Utils.truncatedString(
-    flatArguments.toSeq, "(", ", ", ")")
+    flatArguments.toSeq, "(", ", ", ")", maxFields = None)
 
   /**
    * Returns SQL representation of this expression.  For expressions extending [[NonSQLExpression]],

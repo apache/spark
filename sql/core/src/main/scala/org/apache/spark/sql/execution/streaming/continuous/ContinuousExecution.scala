@@ -164,8 +164,8 @@ class ContinuousExecution(
         val newOutput = readSupport.fullSchema().toAttributes
 
         assert(output.size == newOutput.size,
-          s"Invalid reader: ${Utils.truncatedString(output, ",")} != " +
-            s"${Utils.truncatedString(newOutput, ",")}")
+          s"Invalid reader: ${Utils.truncatedString(output, ",", maxFields = None)} != " +
+            s"${Utils.truncatedString(newOutput, ",", maxFields = None)}")
         replacements ++= output.zip(newOutput)
 
         val loggedOffset = offsets.offsets(0)

@@ -58,7 +58,7 @@ trait DataSourceV2StringFormat {
     case _ => Utils.getSimpleName(source.getClass)
   }
 
-  def metadataString: String = {
+  def metadataString(maxFields: Option[Int]): String = {
     val entries = scala.collection.mutable.ArrayBuffer.empty[(String, String)]
 
     if (pushedFilters.nonEmpty) {
@@ -72,12 +72,12 @@ trait DataSourceV2StringFormat {
       }.mkString("[", ",", "]")
     }
 
-    val outputStr = Utils.truncatedString(output, "[", ", ", "]")
+    val outputStr = Utils.truncatedString(output, "[", ", ", "]", maxFields)
 
     val entriesStr = if (entries.nonEmpty) {
       Utils.truncatedString(entries.map {
         case (key, value) => key + ": " + StringUtils.abbreviate(value, 100)
-      }, " (", ", ", ")")
+      }, " (", ", ", ")", maxFields)
     } else {
       ""
     }

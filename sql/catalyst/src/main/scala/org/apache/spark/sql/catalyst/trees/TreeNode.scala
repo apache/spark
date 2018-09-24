@@ -668,7 +668,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       t.forall(_.isInstanceOf[Partitioning]) || t.forall(_.isInstanceOf[DataType]) =>
       JArray(t.map(parseToJson).toList)
     case t: Seq[_] if t.length > 0 && t.head.isInstanceOf[String] =>
-      JString(Utils.truncatedString(t, "[", ", ", "]"))
+      JString(Utils.truncatedString(t, "[", ", ", "]", maxFields = None))
     case t: Seq[_] => JNull
     case m: Map[_, _] => JNull
     // if it's a scala object, we can simply keep the full class path.

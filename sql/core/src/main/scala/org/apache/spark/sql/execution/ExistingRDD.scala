@@ -197,6 +197,6 @@ case class RDDScanExec(
   }
 
   override def simpleString(maxFields: Option[Int]): String = {
-    s"$nodeName${Utils.truncatedString(output, "[", ",", "]")}"
+    s"$nodeName${Utils.truncatedString(output, "[", ",", "]", maxFields)}"
   }
 }

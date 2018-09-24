@@ -475,8 +475,8 @@ class MicroBatchExecution(
       case StreamingExecutionRelation(source, output) =>
         newData.get(source).map { dataPlan =>
           assert(output.size == dataPlan.output.size,
-            s"Invalid batch: ${Utils.truncatedString(output, ",")} != " +
-              s"${Utils.truncatedString(dataPlan.output, ",")}")
+            s"Invalid batch: ${Utils.truncatedString(output, ",", maxFields = None)} != " +
+              s"${Utils.truncatedString(dataPlan.output, ",", maxFields = None)}")
 
           val aliases = output.zip(dataPlan.output).map { case (to, from) =>
             Alias(from, to.name)(exprId = to.exprId, explicitMetadata = Some(from.metadata))

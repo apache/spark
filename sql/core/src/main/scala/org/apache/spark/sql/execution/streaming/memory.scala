@@ -117,7 +117,9 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     }
   }
 
-  override def toString: String = s"MemoryStream[${Utils.truncatedString(output, ",")}]"
+  override def toString: String = {
+    s"MemoryStream[${Utils.truncatedString(output, ",", maxFields = None)}]"
+  }
 
   override def deserializeOffset(json: String): OffsetV2 = LongOffset(json.toLong)
 

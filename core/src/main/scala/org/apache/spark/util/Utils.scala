@@ -122,12 +122,13 @@ private[spark] object Utils extends Logging {
       start: String,
       sep: String,
       end: String,
-      maxNumFields: Int = maxNumToStringFields): String = {
+      maxFields: Option[Int]): String = {
+    val maxNumFields = maxFields.getOrElse(maxNumToStringFields)
     if (seq.length > maxNumFields) {
       if (truncationWarningPrinted.compareAndSet(false, true)) {
         logWarning(
           "Truncated the string representation of a plan since it was too large. This " +
-          "behavior can be adjusted by setting 'spark.debug.maxToStringFields' in SparkEnv.conf.")
+            "behavior can be adjusted by setting 'spark.debug.maxToStringFields' in SparkEnv.conf.")
       }
       val numFields = math.max(0, maxNumFields - 1)
       seq.take(numFields).mkString(
@@ -137,19 +138,7 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  def truncatedString[T](
-      seq: Seq[T],
-      start: String,
-      sep: String,
-      end: String,
-      maxFields: Option[Int]): String = {
-    val maxNumFields = maxFields.getOrElse(maxNumToStringFields)
-    truncatedString(seq, start, sep, end, maxNumFields)
-  }
-
   /** Shorthand for calling truncatedString() without start or end strings. */
-  def truncatedString[T](seq: Seq[T], sep: String): String = truncatedString(seq, "", sep, "")
-
   def truncatedString[T](seq: Seq[T], sep: String, maxFields: Option[Int]): String = {
     truncatedString(seq, "", sep, "", maxFields)
   }
