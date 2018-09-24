@@ -2648,7 +2648,6 @@ def from_csv(col, schema, options={}):
     :param schema: a string with schema in DDL format to use when parsing the CSV column.
     :param options: options to control parsing. accepts the same options as the CSV datasource
 
-    >>> from pyspark.sql.types import *
     >>> data = [(1, '1')]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(from_csv(df.value, "a INT").alias("csv")).collect()
