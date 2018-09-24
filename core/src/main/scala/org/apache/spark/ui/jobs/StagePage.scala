@@ -119,7 +119,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
     val totalTasks = stageData.numActiveTasks + stageData.numCompleteTasks +
       stageData.numFailedTasks + stageData.numKilledTasks
-    
     if (totalTasks == 0) {
       val content =
         <div>
