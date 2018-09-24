@@ -1168,7 +1168,7 @@ class SQLTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(
             [(i % 3, PythonOnlyPoint(float(i), float(i))) for i in range(10)],
             schema=schema)
-        df.show()
+        df.collect()
 
     def test_nested_udt_in_df(self):
         schema = StructType().add("key", LongType()).add("val", ArrayType(PythonOnlyUDT()))
@@ -1498,8 +1498,7 @@ class SQLTests(ReusedSQLTestCase):
         from pyspark.sql.functions import array_contains
 
         df = self.spark.createDataFrame([(["1", "2", "3"],), ([],)], ['data'])
-        actual = df.select(array_contains(df.data, 1).alias('b')).collect()
-        # The value argument can be implicitly castable to the element's type of the array.
+        actual = df.select(array_contains(df.data, "1").alias('b')).collect()
         self.assertEqual([Row(b=True), Row(b=False)], actual)
 
     def test_between_function(self):
@@ -1962,6 +1961,9 @@ class SQLTests(ReusedSQLTestCase):
         def __setstate__(self, state):
             self.open_events_dir, self.process_events_dir, self.close_events_dir = state
 
+    # Those foreach tests are failed in Python 3.6 and macOS High Sierra by defined rules
+    # at http://sealiesoftware.com/blog/archive/2017/6/5/Objective-C_and_fork_in_macOS_1013.html
+    # To work around this, OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES.
     def test_streaming_foreach_with_simple_function(self):
         tester = self.ForeachWriterTester(self.spark)
 
@@ -3266,7 +3268,7 @@ class SQLTests(ReusedSQLTestCase):
         import pandas as pd
         from datetime import datetime
         pdf = pd.DataFrame({"ts": [datetime(2017, 10, 31, 1, 1, 1)],
-                            "d": [pd.Timestamp.now().date()]})
+                            "d": [pd.Timestamp.now().date()]}, columns=["d", "ts"])
         # test types are inferred correctly without specifying schema
         df = self.spark.createDataFrame(pdf)
         self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampType))

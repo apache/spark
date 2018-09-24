@@ -27,6 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
 import org.apache.spark.sql.execution.streaming.sources._
@@ -298,23 +299,28 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     } else {
       val ds = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
       val disabledSources = df.sparkSession.sqlContext.conf.disabledV2StreamingWriters.split(",")
+      var options = extraOptions.toMap
       val sink = ds.newInstance() match {
         case w: StreamingWriteSupportProvider
-            if !disabledSources.contains(w.getClass.getCanonicalName) => w
+            if !disabledSources.contains(w.getClass.getCanonicalName) =>
+          val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+            w, df.sparkSession.sessionState.conf)
+          options = sessionOptions ++ extraOptions
+          w
         case _ =>
           val ds = DataSource(
             df.sparkSession,
             className = source,
-            options = extraOptions.toMap,
+            options = options,
             partitionColumns = normalizedParCols.getOrElse(Nil))
           ds.createSink(outputMode)
       }
 
       df.sparkSession.sessionState.streamingQueryManager.startQuery(
-        extraOptions.get("queryName"),
-        extraOptions.get("checkpointLocation"),
+        options.get("queryName"),
+        options.get("checkpointLocation"),
         df,
-        extraOptions.toMap,
+        options,
         sink,
         outputMode,
         useTempCheckpointLocation = source == "console",

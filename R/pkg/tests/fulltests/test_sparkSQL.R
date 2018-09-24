@@ -316,18 +316,6 @@ test_that("create DataFrame from RDD", {
   unsetHiveContext()
 })
 
-test_that("createDataFrame uses files for large objects", {
-  # To simulate a large file scenario, we set spark.r.maxAllocationLimit to a smaller value
-  conf <- callJMethod(sparkSession, "conf")
-  callJMethod(conf, "set", "spark.r.maxAllocationLimit", "100")
-  df <- suppressWarnings(createDataFrame(iris, numPartitions = 3))
-  expect_equal(getNumPartitions(df), 3)
-
-  # Resetting the conf back to default value
-  callJMethod(conf, "set", "spark.r.maxAllocationLimit", toString(.Machine$integer.max / 10))
-  expect_equal(dim(df), dim(iris))
-})
-
 test_that("read/write csv as DataFrame", {
   if (windows_with_hadoop()) {
     csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
@@ -2417,6 +2405,15 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
     explain(join(df1, broadcast(df2), df1$id == df2$id))
   )
   expect_true(any(grepl("BroadcastHashJoin", execution_plan_broadcast)))
+})
+
+test_that("test hint", {
+  df <- sql("SELECT * FROM range(10e10)")
+  hintList <- list("hint2", "hint3", "hint4")
+  execution_plan_hint <- capture.output(
+    explain(hint(df, "hint1", 1.23456, "aaaaaaaaaa", hintList), TRUE)
+  )
+  expect_true(any(grepl("1.23456, aaaaaaaaaa", execution_plan_hint)))
 })
 
 test_that("toJSON() on DataFrame", {
