@@ -22,10 +22,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Common base trait for micro benchmarks that are supposed to run standalone (i.e. not together
- * with other test suites).
+ * Common base trait to run benchmark with the Dataset and DataFrame API.
  */
-trait RunBenchmarkWithCodegen extends BenchmarkBase {
+trait SqlBasedBenchmark extends BenchmarkBase {
 
   val spark: SparkSession = getSparkSession
 
@@ -40,7 +39,7 @@ trait RunBenchmarkWithCodegen extends BenchmarkBase {
   }
 
   /** Runs function `f` with whole stage codegen on and off. */
-  def runBenchmark(name: String, cardinality: Long)(f: => Unit): Unit = {
+  def runBenchmarkWithCodegen(name: String, cardinality: Long)(f: => Unit): Unit = {
     val benchmark = new Benchmark(name, cardinality, output = output)
 
     benchmark.addCase(s"$name wholestage off", numIters = 2) { iter =>

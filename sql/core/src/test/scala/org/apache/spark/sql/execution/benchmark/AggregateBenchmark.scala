@@ -42,12 +42,12 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
  *      Results will be written to "benchmarks/AggregateBenchmark-results.txt".
  * }}}
  */
-object AggregateBenchmark extends RunBenchmarkWithCodegen {
+object AggregateBenchmark extends SqlBasedBenchmark {
 
   override def benchmark(): Unit = {
     runBenchmark("aggregate without grouping") {
       val N = 500L << 22
-      runBenchmark("agg w/o group", N) {
+      runBenchmarkWithCodegen("agg w/o group", N) {
         spark.range(N).selectExpr("sum(id)").collect()
       }
     }
@@ -55,11 +55,11 @@ object AggregateBenchmark extends RunBenchmarkWithCodegen {
     runBenchmark("stat functions") {
       val N = 100L << 20
 
-      runBenchmark("stddev", N) {
+      runBenchmarkWithCodegen("stddev", N) {
         spark.range(N).groupBy().agg("id" -> "stddev").collect()
       }
 
-      runBenchmark("kurtosis", N) {
+      runBenchmarkWithCodegen("kurtosis", N) {
         spark.range(N).groupBy().agg("id" -> "kurtosis").collect()
       }
     }
@@ -283,7 +283,7 @@ object AggregateBenchmark extends RunBenchmarkWithCodegen {
     runBenchmark("cube") {
       val N = 5 << 20
 
-      runBenchmark("cube", N) {
+      runBenchmarkWithCodegen("cube", N) {
         spark.range(N).selectExpr("id", "id % 1000 as k1", "id & 256 as k2")
           .cube("k1", "k2").sum("id").collect()
       }
