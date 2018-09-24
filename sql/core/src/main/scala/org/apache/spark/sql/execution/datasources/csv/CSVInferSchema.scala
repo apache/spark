@@ -149,6 +149,8 @@ private[csv] object CSVInferSchema {
     // This case infers a custom `dataFormat` is set.
     if ((allCatch opt options.timestampFormat.parse(field)).isDefined) {
       TimestampType
+    } else if ((allCatch opt options.dateFormat.parse(field)).isDefined) {
+      DateType
     } else if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
       // We keep this for backwards compatibility.
       TimestampType
