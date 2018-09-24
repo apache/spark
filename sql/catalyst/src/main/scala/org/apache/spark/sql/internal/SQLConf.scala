@@ -1346,7 +1346,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val LITERAL_PICK_MINIMUM_PRECISION =
-    buildConf("spark.sql.literal.pickMinimumPrecision")
+    buildConf("spark.sql.legacy.literal.pickMinimumPrecision")
       .internal()
       .doc("When integral literal is used in decimal operations, pick a minimum precision " +
         "required by the literal if this config is true, to make the resulting precision and/or " +
