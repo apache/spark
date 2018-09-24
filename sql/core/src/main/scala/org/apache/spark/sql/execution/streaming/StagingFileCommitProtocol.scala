@@ -114,11 +114,11 @@ class StagingFileCommitProtocol(jobId: String, path: String)
 
   override def newTaskTempFile(
       taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
-    val targetDir =
-      dir.map(d => new Path(stagingDir.get, stagingReplacementDir(d)))
-        .getOrElse(stagingDir.get)
-    val res =
-      new Path(targetDir, s"part-j$jobId-p${partition(taskContext)}-c$nextCounter$ext").toString
+    val staging = stagingDir.getOrElse(
+      throw new IllegalStateException("Staging dir needs to be initilized in setupTask()"))
+    val targetDir = dir.map(d => new Path(staging, stagingReplacementDir(d))).getOrElse(staging)
+    val res = new Path(targetDir, s"part-j$jobId-p${partition(taskContext)}-c$nextCounter$ext")
+      .toString
     logInfo(s"New file generated $res")
     res
   }
