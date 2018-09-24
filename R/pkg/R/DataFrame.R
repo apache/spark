@@ -246,16 +246,22 @@ setMethod("showDF",
 #' @note show(SparkDataFrame) since 1.4.0
 setMethod("show", "SparkDataFrame",
           function(object) {
-            if (identical(sparkR.conf("spark.sql.repl.eagerEval.enabled", "false")[[1]], "true")) {
+            allConf <- sparkR.conf()
+            if (!is.null(allConf[["spark.sql.repl.eagerEval.enabled"]]) &&
+                identical(allConf[["spark.sql.repl.eagerEval.enabled"]], "true")) {
               argsList <- list()
               argsList$x <- object
-              numRows <- as.numeric(sparkR.conf("spark.sql.repl.eagerEval.maxNumRows", "0")[[1]])
-              if (numRows > 0) {
-                argsList$numRows <- numRows
+              if (!is.null(allConf[["spark.sql.repl.eagerEval.maxNumRows"]])) {
+                numRows <- as.numeric(allConf[["spark.sql.repl.eagerEval.maxNumRows"]])
+                if (numRows > 0) {
+                  argsList$numRows <- numRows
+                }
               }
-              truncate <- as.numeric(sparkR.conf("spark.sql.repl.eagerEval.truncate", "0")[[1]])
-              if (truncate > 0) {
-                argsList$truncate <- truncate
+              if (!is.null(allConf[["spark.sql.repl.eagerEval.truncate"]])) {
+                truncate <- as.numeric(allConf[["spark.sql.repl.eagerEval.truncate"]])
+                if (truncate > 0) {
+                  argsList$truncate <- truncate
+                }
               }
               do.call(showDF, argsList)
             } else {

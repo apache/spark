@@ -38,14 +38,13 @@ test_that("eager execution is not enabled", {
 
 test_that("eager execution is enabled", {
   # Start Spark session with eager execution enabled
+  sparkConfig <- list(spark.sql.repl.eagerEval.enabled = "true",
+                      spark.sql.repl.eagerEval.maxNumRows = as.integer(10))
   sparkSession <- if (windows_with_hadoop()) {
-    sparkR.session(master = sparkRTestMaster,
-                   sparkConfig = list(spark.sql.repl.eagerEval.enabled = "true",
-                                      spark.sql.repl.eagerEval.maxNumRows = as.integer(10)))
+    sparkR.session(master = sparkRTestMaster, sparkConfig = sparkConfig)
   } else {
     sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE, 
-                   sparkConfig = list(spark.sql.repl.eagerEval.enabled = "true",
-                                      spark.sql.repl.eagerEval.maxNumRows = as.integer(10)))
+                   sparkConfig = sparkConfig)
   }
   
   df <- createDataFrame(faithful)
