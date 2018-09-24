@@ -398,7 +398,14 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       prefix: String = "",
       addSuffix: Boolean = false,
       maxFields: Option[Int]): Unit = {
-    child.generateTreeString(depth, lastChildren, writer, verbose, "", false, maxFields)
+    child.generateTreeString(
+      depth,
+      lastChildren,
+      writer,
+      verbose,
+      prefix = "",
+      addSuffix = false,
+      maxFields)
   }
 
   override def needCopyResult: Boolean = false
@@ -680,8 +687,8 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       lastChildren,
       writer,
       verbose,
-      s"*($codegenStageId) ",
-      false,
+      prefix = s"*($codegenStageId) ",
+      addSuffix = false,
       maxFields)
   }
 
