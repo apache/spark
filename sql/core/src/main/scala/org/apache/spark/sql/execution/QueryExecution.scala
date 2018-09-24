@@ -271,7 +271,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
      */
     def toFile(path: String): Unit = {
       val filePath = new Path(path)
-      val fs = FileSystem.get(filePath.toUri, sparkSession.sessionState.newHadoopConf())
+      val fs = filePath.getFileSystem(sparkSession.sessionState.newHadoopConf())
       val writer = new OutputStreamWriter(fs.create(filePath))
 
       try {
