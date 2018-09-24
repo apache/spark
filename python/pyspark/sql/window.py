@@ -88,6 +88,9 @@ class Window(object):
             Sort ascending vs. descending. Specify list for multiple sort orders.
             If a list is specified, length of the list must equal length of the `cols`.
 
+        .. versionchanged:: 2.5
+           Added optional ``ascending`` argument.
+
         >>> from pyspark.sql import functions as F, SparkSession, Window
         >>> spark = SparkSession.builder.getOrCreate()
         >>> df = spark.createDataFrame(
