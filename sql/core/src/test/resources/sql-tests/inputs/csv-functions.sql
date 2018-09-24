@@ -1,7 +1,4 @@
 -- from_csv
-describe function from_csv;
-describe function extended from_csv;
-select from_csv('1', 'a INT');
 select from_csv('1, 3.14', 'a INT, f FLOAT');
 select from_csv('26/08/2015', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
 -- Check if errors handled
