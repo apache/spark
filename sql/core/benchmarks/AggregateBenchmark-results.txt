@@ -7,8 +7,8 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 agg w/o group:                           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-agg w/o group wholestage off                40454 / 44424         51.8          19.3       1.0X
-agg w/o group wholestage on                    907 /  929       2312.8           0.4      44.6X
+agg w/o group wholestage off                40468 / 44934         51.8          19.3       1.0X
+agg w/o group wholestage on                    932 /  949       2249.6           0.4      43.4X
 
 
 ================================================================================================
@@ -20,16 +20,16 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 stddev:                                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-stddev wholestage off                         6281 / 6626         16.7          59.9       1.0X
-stddev wholestage on                           909 /  987        115.4           8.7       6.9X
+stddev wholestage off                         6664 / 6775         15.7          63.6       1.0X
+stddev wholestage on                           907 /  923        115.6           8.6       7.3X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 kurtosis:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-kurtosis wholestage off                     32819 / 33789          3.2         313.0       1.0X
-kurtosis wholestage on                         988 / 1046        106.1           9.4      33.2X
+kurtosis wholestage off                     31339 / 31357          3.3         298.9       1.0X
+kurtosis wholestage on                         982 /  997        106.8           9.4      31.9X
 
 
 ================================================================================================
@@ -41,9 +41,9 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Aggregate w keys:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-codegen = F                                   8490 / 8568          9.9         101.2       1.0X
-codegen = T hashmap = F                       5985 / 6916         14.0          71.4       1.4X
-codegen = T hashmap = T                        943 /  977         88.9          11.2       9.0X
+codegen = F                                   9667 / 9936          8.7         115.2       1.0X
+codegen = T hashmap = F                       4537 / 5353         18.5          54.1       2.1X
+codegen = T hashmap = T                        924 /  946         90.8          11.0      10.5X
 
 
 ================================================================================================
@@ -55,9 +55,9 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Aggregate w keys:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-codegen = F                                   9509 / 9893          8.8         113.4       1.0X
-codegen = T hashmap = F                       5381 / 5715         15.6          64.1       1.8X
-codegen = T hashmap = T                       1792 / 1874         46.8          21.4       5.3X
+codegen = F                                   9298 / 9300          9.0         110.8       1.0X
+codegen = T hashmap = F                       5357 / 5405         15.7          63.9       1.7X
+codegen = T hashmap = T                       1705 / 1860         49.2          20.3       5.5X
 
 
 ================================================================================================
@@ -69,9 +69,9 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Aggregate w string key:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-codegen = F                                   4372 / 4440          4.8         208.5       1.0X
-codegen = T hashmap = F                       2850 / 2940          7.4         135.9       1.5X
-codegen = T hashmap = T                       2033 / 2175         10.3          96.9       2.2X
+codegen = F                                   4019 / 4083          5.2         191.7       1.0X
+codegen = T hashmap = F                       2743 / 2797          7.6         130.8       1.5X
+codegen = T hashmap = T                       1907 / 1955         11.0          91.0       2.1X
 
 
 ================================================================================================
@@ -83,9 +83,9 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Aggregate w decimal key:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-codegen = F                                   3819 / 4047          5.5         182.1       1.0X
-codegen = T hashmap = F                       2080 / 2122         10.1          99.2       1.8X
-codegen = T hashmap = T                        500 /  523         41.9          23.9       7.6X
+codegen = F                                   3229 / 3313          6.5         154.0       1.0X
+codegen = T hashmap = F                       2732 / 2826          7.7         130.3       1.2X
+codegen = T hashmap = T                        435 /  447         48.2          20.7       7.4X
 
 
 ================================================================================================
@@ -97,9 +97,9 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Aggregate w multiple keys:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-codegen = F                                   5815 / 6015          3.6         277.3       1.0X
-codegen = T hashmap = F                       3934 / 3955          5.3         187.6       1.5X
-codegen = T hashmap = T                       3196 / 3307          6.6         152.4       1.8X
+codegen = F                                   6326 / 6800          3.3         301.6       1.0X
+codegen = T hashmap = F                       3915 / 4050          5.4         186.7       1.6X
+codegen = T hashmap = T                       2972 / 3054          7.1         141.7       2.1X
 
 
 ================================================================================================
@@ -111,9 +111,9 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 max function bytecode size:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-codegen = F                                    415 /  511          1.6         632.8       1.0X
-codegen = T hugeMethodLimit = 10000            246 /  281          2.7         375.5       1.7X
-codegen = T hugeMethodLimit = 1500             416 /  472          1.6         635.2       1.0X
+codegen = F                                    436 /  518          1.5         664.6       1.0X
+codegen = T hugeMethodLimit = 10000            259 /  406          2.5         394.8       1.7X
+codegen = T hugeMethodLimit = 1500             458 /  733          1.4         698.4       1.0X
 
 
 ================================================================================================
@@ -125,8 +125,8 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 cube:                                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-cube wholestage off                           2192 / 2270          2.4         418.1       1.0X
-cube wholestage on                             910 / 1001          5.8         173.5       2.4X
+cube wholestage off                           2957 / 2985          1.8         564.1       1.0X
+cube wholestage on                            1146 / 1675          4.6         218.5       2.6X
 
 
 ================================================================================================
@@ -138,17 +138,17 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 BytesToBytesMap:                         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-UnsafeRowhash                                  218 /  225         96.4          10.4       1.0X
-murmur3 hash                                   114 /  121        183.3           5.5       1.9X
-fast hash                                       59 /   64        356.3           2.8       3.7X
-arrayEqual                                     143 /  151        146.6           6.8       1.5X
-Java HashMap (Long)                             99 /  127        211.0           4.7       2.2X
-Java HashMap (two ints)                        101 /  136        207.2           4.8       2.1X
-Java HashMap (UnsafeRow)                       781 /  938         26.9          37.2       0.3X
-LongToUnsafeRowMap (opt=false)                 398 /  412         52.7          19.0       0.5X
-LongToUnsafeRowMap (opt=true)                   88 /   95        238.1           4.2       2.5X
-BytesToBytesMap (off Heap)                    1091 / 1113         19.2          52.0       0.2X
-BytesToBytesMap (on Heap)                      792 /  835         26.5          37.8       0.3X
-Aggregate HashMap                               36 /   41        587.9           1.7       6.1X
+UnsafeRowhash                                  224 /  244         93.8          10.7       1.0X
+murmur3 hash                                   114 /  134        184.2           5.4       2.0X
+fast hash                                       61 /   66        342.8           2.9       3.7X
+arrayEqual                                     150 /  229        139.5           7.2       1.5X
+Java HashMap (Long)                            127 /  305        164.7           6.1       1.8X
+Java HashMap (two ints)                         99 /  156        212.6           4.7       2.3X
+Java HashMap (UnsafeRow)                      1048 / 1472         20.0          50.0       0.2X
+LongToUnsafeRowMap (opt=false)                 517 /  771         40.6          24.7       0.4X
+LongToUnsafeRowMap (opt=true)                   90 /  107        234.1           4.3       2.5X
+BytesToBytesMap (off Heap)                    1417 / 1451         14.8          67.6       0.2X
+BytesToBytesMap (on Heap)                      934 / 1014         22.4          44.6       0.2X
+Aggregate HashMap                               38 /   42        558.6           1.8       6.0X
 
 

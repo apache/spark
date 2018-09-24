@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -38,18 +38,48 @@ trait SqlBasedBenchmark extends BenchmarkBase {
       .getOrCreate()
   }
 
+  /**
+   * Sets all SQL configurations specified in `pairs`, calls `f`, and then restores all SQL
+   * configurations.
+   */
+  protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
+    val conf = SQLConf.get
+    val (keys, values) = pairs.unzip
+    val currentValues = keys.map { key =>
+      if (conf.contains(key)) {
+        Some(conf.getConfString(key))
+      } else {
+        None
+      }
+    }
+    (keys, values).zipped.foreach { (k, v) =>
+      if (SQLConf.staticConfKeys.contains(k)) {
+        throw new AnalysisException(s"Cannot modify the value of a static config: $k")
+      }
+      conf.setConfString(k, v)
+    }
+    try f finally {
+      keys.zip(currentValues).foreach {
+        case (key, Some(value)) => conf.setConfString(key, value)
+        case (key, None) => conf.unsetConf(key)
+      }
+    }
+  }
+
   /** Runs function `f` with whole stage codegen on and off. */
   def runBenchmarkWithCodegen(name: String, cardinality: Long)(f: => Unit): Unit = {
     val benchmark = new Benchmark(name, cardinality, output = output)
 
-    benchmark.addCase(s"$name wholestage off", numIters = 2) { iter =>
-      spark.sqlContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED, value = false)
-      f
+    benchmark.addCase(s"$name wholestage off", numIters = 2) { _ =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> false.toString) {
+        f
+      }
     }
 
-    benchmark.addCase(s"$name wholestage on", numIters = 5) { iter =>
-      spark.sqlContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED, value = true)
-      f
+    benchmark.addCase(s"$name wholestage on", numIters = 5) { _ =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> true.toString) {
+        f
+      }
     }
 
     benchmark.run()
