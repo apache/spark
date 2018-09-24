@@ -469,4 +469,53 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(sql("""select json[0] from jsonTable"""), Seq(Row(null)))
   }
+
+  test("to_json - array of primitive types") {
+    val df = Seq(Array(1, 2, 3)).toDF("a")
+    checkAnswer(df.select(to_json($"a")), Seq(Row("[1,2,3]")))
+  }
+
+  test("roundtrip to_json -> from_json - array of primitive types") {
+    val arr = Array(1, 2, 3)
+    val df = Seq(arr).toDF("a")
+    checkAnswer(df.select(from_json(to_json($"a"), ArrayType(IntegerType))), Row(arr))
+  }
+
+  test("roundtrip from_json -> to_json - array of primitive types") {
+    val json = "[1,2,3]"
+    val df = Seq(json).toDF("a")
+    val schema = new ArrayType(IntegerType, false)
+
+    checkAnswer(df.select(to_json(from_json($"a", schema))), Seq(Row(json)))
+  }
+
+  test("roundtrip from_json -> to_json - array of arrays") {
+    val json = "[[1],[2,3],[4,5,6]]"
+    val jsonDF = Seq(json).toDF("a")
+    val schema = new ArrayType(ArrayType(IntegerType, false), false)
+
+    checkAnswer(
+      jsonDF.select(to_json(from_json($"a", schema))),
+      Seq(Row(json)))
+  }
+
+  test("roundtrip from_json -> to_json - array of maps") {
+    val json = """[{"a":1},{"b":2}]"""
+    val jsonDF = Seq(json).toDF("a")
+    val schema = new ArrayType(MapType(StringType, IntegerType, false), false)
+
+    checkAnswer(
+      jsonDF.select(to_json(from_json($"a", schema))),
+      Seq(Row(json)))
+  }
+
+  test("roundtrip from_json -> to_json - array of structs") {
+    val json = """[{"a":1},{"a":2},{"a":3}]"""
+    val jsonDF = Seq(json).toDF("a")
+    val schema = new ArrayType(new StructType().add("a", IntegerType), false)
+
+    checkAnswer(
+      jsonDF.select(to_json(from_json($"a", schema))),
+      Seq(Row(json)))
+  }
 }

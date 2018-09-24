@@ -106,7 +106,7 @@ class MesosFineGrainedSchedulerBackendSuite
     // uri is null.
     val (executorInfo, _) = mesosSchedulerBackend.createExecutorInfo(resources, "test-id")
     val executorResources = executorInfo.getResourcesList
-    val cpus = executorResources.asScala.find(_.getName.equals("cpus")).get.getScalar.getValue
+    val cpus = executorResources.asScala.find(_.getName == "cpus").get.getScalar.getValue
 
     assert(cpus === mesosExecutorCores)
   }

@@ -41,11 +41,15 @@ import org.apache.spark.sql.types.DataType
 case class UserDefinedFunction protected[sql] (
     f: AnyRef,
     dataType: DataType,
-    inputTypes: Option[Seq[ScalaReflection.Schema]]) {
+    inputTypes: Option[Seq[DataType]]) {
 
   private var _nameOption: Option[String] = None
   private var _nullable: Boolean = true
   private var _deterministic: Boolean = true
+
+  // This is a `var` instead of in the constructor for backward compatibility of this case class.
+  // TODO: revisit this case class in Spark 3.0, and narrow down the public surface.
+  private[sql] var nullableTypes: Option[Seq[Boolean]] = None
 
   /**
    * Returns true when the UDF can return a nullable value.
@@ -69,15 +73,19 @@ case class UserDefinedFunction protected[sql] (
    */
   @scala.annotation.varargs
   def apply(exprs: Column*): Column = {
+    if (inputTypes.isDefined && nullableTypes.isDefined) {
+      require(inputTypes.get.length == nullableTypes.get.length)
+    }
+
     Column(ScalaUDF(
       f,
       dataType,
       exprs.map(_.expr),
-      inputTypes.map(_.map(_.dataType)).getOrElse(Nil),
+      inputTypes.getOrElse(Nil),
       udfName = _nameOption,
       nullable = _nullable,
       udfDeterministic = _deterministic,
-      nullableTypes = inputTypes.map(_.map(_.nullable)).getOrElse(Nil)))
+      nullableTypes = nullableTypes.getOrElse(Nil)))
   }
 
   private def copyAll(): UserDefinedFunction = {
@@ -85,6 +93,7 @@ case class UserDefinedFunction protected[sql] (
     udf._nameOption = _nameOption
     udf._nullable = _nullable
     udf._deterministic = _deterministic
+    udf.nullableTypes = nullableTypes
     udf
   }
 
@@ -127,5 +136,19 @@ case class UserDefinedFunction protected[sql] (
       udf._deterministic = false
       udf
     }
+  }
+}
+
+// We have to use a name different than `UserDefinedFunction` here, to avoid breaking the binary
+// compatibility of the auto-generate UserDefinedFunction object.
+private[sql] object SparkUserDefinedFunction {
+
+  def create(
+      f: AnyRef,
+      dataType: DataType,
+      inputSchemas: Option[Seq[ScalaReflection.Schema]]): UserDefinedFunction = {
+    val udf = new UserDefinedFunction(f, dataType, inputSchemas.map(_.map(_.dataType)))
+    udf.nullableTypes = inputSchemas.map(_.map(_.nullable))
+    udf
   }
 }

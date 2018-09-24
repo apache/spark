@@ -51,3 +51,8 @@ select from_json('[null, {"a":2}]', 'array<struct<a:int>>');
 
 select from_json('[{"a": 1}, {"b":2}]', 'array<map<string,int>>');
 select from_json('[{"a": 1}, 2]', 'array<map<string,int>>');
+
+-- to_json - array type
+select to_json(array('1', '2', '3'));
+select to_json(array(array(1, 2, 3), array(4)));
+

@@ -37,8 +37,11 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   override def afterAll(): Unit = {
-    spark.sessionState.functionRegistry.dropFunction(FunctionIdentifier("dummyPythonUDF"))
-    super.afterAll()
+    try {
+      spark.sessionState.functionRegistry.dropFunction(FunctionIdentifier("dummyPythonUDF"))
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("Python UDF: push down deterministic FilterExec predicates") {

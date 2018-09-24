@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument, SearchArgumentFactory}
+import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
 import org.apache.orc.storage.ql.io.sarg.SearchArgument.Builder
+import org.apache.orc.storage.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.orc.storage.serde2.io.HiveDecimalWritable
 
-import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.sources.{And, Filter}
 import org.apache.spark.sql.types._
 
 /**
@@ -54,7 +55,17 @@ import org.apache.spark.sql.types._
  * builder methods mentioned above can only be found in test code, where all tested filters are
  * known to be convertible.
  */
-private[orc] object OrcFilters {
+private[sql] object OrcFilters {
+  private[sql] def buildTree(filters: Seq[Filter]): Option[Filter] = {
+    filters match {
+      case Seq() => None
+      case Seq(filter) => Some(filter)
+      case Seq(filter1, filter2) => Some(And(filter1, filter2))
+      case _ => // length > 2
+        val (left, right) = filters.splitAt(filters.length / 2)
+        Some(And(buildTree(left).get, buildTree(right).get))
+    }
+  }
 
   /**
    * Create ORC filter as a SearchArgument instance.
@@ -66,14 +77,14 @@ private[orc] object OrcFilters {
     // collect all convertible ones to build the final `SearchArgument`.
     val convertibleFilters = for {
       filter <- filters
-      _ <- buildSearchArgument(dataTypeMap, filter, SearchArgumentFactory.newBuilder())
+      _ <- buildSearchArgument(dataTypeMap, filter, newBuilder)
     } yield filter
 
     for {
       // Combines all convertible filters using `And` to produce a single conjunction
-      conjunction <- convertibleFilters.reduceOption(org.apache.spark.sql.sources.And)
+      conjunction <- buildTree(convertibleFilters)
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
-      builder <- buildSearchArgument(dataTypeMap, conjunction, SearchArgumentFactory.newBuilder())
+      builder <- buildSearchArgument(dataTypeMap, conjunction, newBuilder)
     } yield builder.build()
   }
 
@@ -127,8 +138,6 @@ private[orc] object OrcFilters {
       dataTypeMap: Map[String, DataType],
       expression: Filter,
       builder: Builder): Option[Builder] = {
-    def newBuilder = SearchArgumentFactory.newBuilder()
-
     def getType(attribute: String): PredicateLeaf.Type =
       getPredicateLeafType(dataTypeMap(attribute))
 

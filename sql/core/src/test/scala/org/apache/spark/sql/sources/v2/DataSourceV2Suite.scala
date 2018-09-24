@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources.v2
 
+import java.io.File
+
 import test.org.apache.spark.sql.sources.v2._
 
 import org.apache.spark.SparkException
@@ -317,6 +319,38 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     checkCanonicalizedOutput(df, 2, 2)
     checkCanonicalizedOutput(df.select('i), 2, 1)
   }
+
+  test("SPARK-25425: extra options should override sessions options during reading") {
+    val prefix = "spark.datasource.userDefinedDataSource."
+    val optionName = "optionA"
+    withSQLConf(prefix + optionName -> "true") {
+      val df = spark
+        .read
+        .option(optionName, false)
+        .format(classOf[DataSourceV2WithSessionConfig].getName).load()
+      val options = df.queryExecution.optimizedPlan.collectFirst {
+        case d: DataSourceV2Relation => d.options
+      }
+      assert(options.get.get(optionName) == Some("false"))
+    }
+  }
+
+  test("SPARK-25425: extra options should override sessions options during writing") {
+    withTempPath { path =>
+      val sessionPath = path.getCanonicalPath
+      withSQLConf("spark.datasource.simpleWritableDataSource.path" -> sessionPath) {
+        withTempPath { file =>
+          val optionPath = file.getCanonicalPath
+          val format = classOf[SimpleWritableDataSource].getName
+
+          val df = Seq((1L, 2L)).toDF("i", "j")
+          df.write.format(format).option("path", optionPath).save()
+          assert(!new File(sessionPath).exists)
+          checkAnswer(spark.read.format(format).option("path", optionPath).load(), df)
+        }
+      }
+    }
+  }
 }
 
 
@@ -384,7 +418,6 @@ class SimpleDataSourceV2 extends DataSourceV2 with BatchReadSupportProvider {
     new ReadSupport
   }
 }
-
 
 class AdvancedDataSourceV2 extends DataSourceV2 with BatchReadSupportProvider {
 
