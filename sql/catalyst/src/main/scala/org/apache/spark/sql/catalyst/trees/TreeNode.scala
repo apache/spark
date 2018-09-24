@@ -457,7 +457,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }.mkString(", ")
 
   /** ONE line description of this node. */
-  def simpleString(maxFields: Option[Int] = None): String = {
+  def simpleString(maxFields: Option[Int]): String = {
     s"$nodeName ${argString(maxFields)}".trim
   }
 
@@ -566,7 +566,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     val str = if (verbose) {
       if (addSuffix) verboseStringWithSuffix(maxFields) else verboseString(maxFields)
     } else {
-      simpleString()
+      simpleString(maxFields)
     }
     writer.write(prefix)
     writer.write(str)

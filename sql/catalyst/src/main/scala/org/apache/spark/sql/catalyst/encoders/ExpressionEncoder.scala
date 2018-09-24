@@ -289,8 +289,9 @@ case class ExpressionEncoder[T](
     extractProjection(inputRow)
   } catch {
     case e: Exception =>
+      val encoded = serializer.map(_.simpleString(maxFields = None)).mkString("\n")
       throw new RuntimeException(
-        s"Error while encoding: $e\n${serializer.map(_.simpleString()).mkString("\n")}", e)
+        s"Error while encoding: $e\n${encoded}", e)
   }
 
   /**
@@ -302,7 +303,8 @@ case class ExpressionEncoder[T](
     constructProjection(row).get(0, ObjectType(clsTag.runtimeClass)).asInstanceOf[T]
   } catch {
     case e: Exception =>
-      throw new RuntimeException(s"Error while decoding: $e\n${deserializer.simpleString()}", e)
+      val decoded = deserializer.simpleString(maxFields = None)
+      throw new RuntimeException(s"Error while decoding: $e\n${decoded}", e)
   }
 
   /**

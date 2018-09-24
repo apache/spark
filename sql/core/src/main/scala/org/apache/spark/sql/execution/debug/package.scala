@@ -216,7 +216,7 @@ package object debug {
     val columnStats: Array[ColumnMetrics] = Array.fill(child.output.size)(new ColumnMetrics())
 
     def dumpStats(): Unit = {
-      debugPrint(s"== ${child.simpleString()} ==")
+      debugPrint(s"== ${child.simpleString(maxFields = None)} ==")
       debugPrint(s"Tuples output: ${tupleCount.value}")
       child.output.zip(columnStats).foreach { case (attr, metric) =>
         // This is called on driver. All accumulator updates have a fixed value. So it's safe to use

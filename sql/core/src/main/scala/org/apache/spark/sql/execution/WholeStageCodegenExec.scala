@@ -87,7 +87,7 @@ trait CodegenSupport extends SparkPlan {
     this.parent = parent
     ctx.freshNamePrefix = variablePrefix
     s"""
-       |${ctx.registerComment(s"PRODUCE: ${this.simpleString()}")}
+       |${ctx.registerComment(s"PRODUCE: ${this.simpleString(maxFields = None)}")}
        |${doProduce(ctx)}
      """.stripMargin
   }
@@ -185,7 +185,7 @@ trait CodegenSupport extends SparkPlan {
       parent.doConsume(ctx, inputVars, rowVar)
     }
     s"""
-       |${ctx.registerComment(s"CONSUME: ${parent.simpleString()}")}
+       |${ctx.registerComment(s"CONSUME: ${parent.simpleString(maxFields = None)}")}
        |$evaluated
        |$consumeFunc
      """.stripMargin
