@@ -191,6 +191,7 @@ Starting with Spark 2.4.0, users can mount the following types of Kubernetes [vo
 * [hostPath](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath): mounts a file or directory from the host node’s filesystem into a pod.
 * [emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir): an initially empty volume created when a pod is assigned to a node.
 * [persistentVolumeClaim](https://kubernetes.io/docs/concepts/storage/volumes/#persistentvolumeclaim): used to mount a `PersistentVolume` into a pod.
+* [configMap](https://kubernetes.io/docs/concepts/storage/volumes/#configmap): used to mount a `configMap` into a pod.
 
 To mount a volume of any of the types above into the driver pod, use the following configuration property:
 
@@ -199,7 +200,7 @@ To mount a volume of any of the types above into the driver pod, use the followi
 --conf spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.readOnly=<true|false>
 ``` 
 
-Specifically, `VolumeType` can be one of the following values: `hostPath`, `emptyDir`, and `persistentVolumeClaim`. `VolumeName` is the name you want to use for the volume under the `volumes` field in the pod specification.
+Specifically, `VolumeType` can be one of the following values: `hostPath`, `emptyDir`, `persistentVolumeClaim` and `configMap`. `VolumeName` is the name you want to use for the volume under the `volumes` field in the pod specification.
 
 Each supported type of volumes may have some specific configuration options, which can be specified using configuration properties of the following form:
 
@@ -211,6 +212,12 @@ For example, the claim name of a `persistentVolumeClaim` with volume name `check
 
 ```
 spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.options.claimName=check-point-pvc-claim
+```
+
+The configMap name with volume name `configvolume` can be specified using the following property:
+
+```
+spark.kubernetes.driver.volumes.configMap.configvolume.options.name=test-configmap
 ```
 
 The configuration properties for mounting volumes into the executor pods use prefix `spark.kubernetes.executor.` instead of `spark.kubernetes.driver.`. For a complete list of available options for each supported type of volumes, please refer to the [Spark Properties](#spark-properties) section below. 

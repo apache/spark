@@ -103,4 +103,26 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(volumeSpec.isFailure === true)
     assert(volumeSpec.failed.get.getMessage === "hostPath.volumeName.options.path")
   }
+
+  test("Parses configMap volumes correctly") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.configMap.volumeName.mount.path", "/path")
+    sparkConf.set("test.configMap.volumeName.options.name", "configmap")
+
+    val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head.get
+    assert(volumeSpec.volumeName === "volumeName")
+    assert(volumeSpec.mountPath === "/path")
+    assert(volumeSpec.volumeConf.asInstanceOf[KubernetesEmptyDirVolumeConf] ===
+      KubernetesConfigmapVolumeConf("configmap"))
+  }
+
+  test("Gracefully fails on missing option key for configmap") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.configMap.volumeName.mount.path", "/path")
+    sparkConf.set("test.configMap.volumeName.options.ame", "configmap")
+
+    val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
+    assert(volumeSpec.isFailure === true)
+    assert(volumeSpec.failed.get.getMessage === "configMap.volumeName.options.path")
+  }
 }
