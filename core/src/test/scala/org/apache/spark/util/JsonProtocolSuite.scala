@@ -106,7 +106,7 @@ class JsonProtocolSuite extends SparkFunSuite {
         "In your multitude...", 300), RDDBlockId(0, 0), StorageLevel.MEMORY_ONLY, 100L, 0L))
     val stageExecutorMetrics =
       SparkListenerStageExecutorMetrics("1", 2, 3,
-        new ExecutorMetrics(Array(543L, 123456L, 123456L, 256912L, 12345L, 1234L, 123L, 12L, 432L,
+        new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
           321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L)))
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -2077,8 +2077,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  "Executor Metrics Updated" : {
       |    "JVMHeapMemory" : 543,
       |    "JVMOffHeapMemory" : 123456,
-      |    "ProcessTreeRSSMemory": 123456,
-      |    "ProcessTreeVMemory": 256912,
       |    "OnHeapExecutionMemory" : 12345,
       |    "OffHeapExecutionMemory" : 1234,
       |    "OnHeapStorageMemory" : 123,
@@ -2086,7 +2084,13 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "OnHeapUnifiedMemory" : 432,
       |    "OffHeapUnifiedMemory" : 321,
       |    "DirectPoolMemory" : 654,
-      |    "MappedPoolMemory" : 765
+      |    "MappedPoolMemory" : 765,
+      |    "ProcessTreeJVMVMemory": 256912,
+      |    "ProcessTreeJVMRSSMemory": 123456,
+      |    "ProcessTreePythonVMemory": 123456,
+      |    "ProcessTreePythonRSSMemory": 61728,
+      |    "ProcessTreeOtherVMemory": 30364,
+      |     "ProcessTreeOtherRSSMemory": 15182
       |  }
       |
       |}
