@@ -80,7 +80,8 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       }
 
       benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
           "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
           f()
@@ -88,7 +89,8 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       }
 
       benchmark.addCase(s"codegen = T hashmap = T", numIters = 5) { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
           "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
           f()
@@ -114,7 +116,8 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       }
 
       benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
           "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
           f()
@@ -122,7 +125,8 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       }
 
       benchmark.addCase(s"codegen = T hashmap = T", numIters = 5) { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
           "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
           f()
@@ -148,7 +152,8 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       }
 
       benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
           "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
           f()
@@ -156,7 +161,8 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       }
 
       benchmark.addCase(s"codegen = T hashmap = T", numIters = 5) { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
           "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
           f()
@@ -181,7 +187,8 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       }
 
       benchmark.addCase(s"codegen = T hashmap = F") { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
           "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
           f()
@@ -189,7 +196,8 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       }
 
       benchmark.addCase(s"codegen = T hashmap = T") { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
           "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
           f()
@@ -224,7 +232,8 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       }
 
       benchmark.addCase(s"codegen = T hashmap = F") { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
           "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
           f()
@@ -232,7 +241,8 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       }
 
       benchmark.addCase(s"codegen = T hashmap = T") { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
           "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
           f()
@@ -282,14 +292,16 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       }
 
       benchmark.addCase("codegen = T hugeMethodLimit = 10000") { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> "10000") {
           f()
         }
       }
 
       benchmark.addCase("codegen = T hugeMethodLimit = 1500") { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> "1500") {
           f()
         }
