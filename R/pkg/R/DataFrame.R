@@ -2955,7 +2955,7 @@ setMethod("exceptAll",
 #' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
 #'             save mode (it is 'error' by default)
 #' @param partitionBy a name or a list of names of columns to partition the output by on the file
-#'                    system. If specified, the output is laid out on the file system similar 
+#'                    system. If specified, the output is laid out on the file system similar
 #'                    to Hive's partitioning scheme.
 #' @param ... additional argument(s) passed to the method.
 #'
@@ -2990,7 +2990,7 @@ setMethod("write.df",
             }
             cols <- NULL
             if (!is.null(partitionBy)) {
-              if (!all(sapply(partitionBy, function(c) { is.character(c) }))) {
+              if (!all(sapply(partitionBy, function(c) is.character(c)))) {
                 stop("All partitionBy column names should be characters.")
               }
               cols <- as.list(partitionBy)

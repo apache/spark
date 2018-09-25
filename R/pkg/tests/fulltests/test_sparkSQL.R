@@ -2714,7 +2714,7 @@ test_that("read/write text files", {
   expect_equal(count(df2), count(df) * 2)
 
   df3 <- createDataFrame(list(list(1L, "1"), list(2L, "2"), list(1L, "1"), list(2L, "2")),
-                        schema = c("key", "value"))
+                         schema = c("key", "value"))
   textPath3 <- tempfile(pattern = "textPath3", fileext = ".txt")
   write.df(df3, textPath3, "text", mode = "overwrite", partitionBy = "key")
   df4 <- read.df(textPath3, "text")
