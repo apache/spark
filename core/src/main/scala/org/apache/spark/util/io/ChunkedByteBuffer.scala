@@ -184,7 +184,11 @@ object ChunkedByteBuffer {
     fromFile(file, maxChunkSize, 0, file.length())
   }
 
-  def fromFile(file: File, maxChunkSize: Int, offset: Long, length: Long): ChunkedByteBuffer = {
+  private def fromFile(
+      file: File,
+      maxChunkSize: Int,
+      offset: Long,
+      length: Long): ChunkedByteBuffer = {
     // We do *not* memory map the file, because we may end up putting this into the memory store,
     // and spark currently is not expecting memory-mapped buffers in the memory store, it conflicts
     // with other parts that manage the lifecyle of buffers and dispose them.  See SPARK-25422.
