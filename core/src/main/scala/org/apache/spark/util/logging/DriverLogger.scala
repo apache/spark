@@ -114,7 +114,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       val yarnConf = new YarnConfiguration(hadoopConfiguration)
       val rootDir = yarnConf.get(YarnConfiguration.NM_REMOTE_APP_LOG_DIR)
       if (rootDir != null && !rootDir.isEmpty()) {
-        var parentDir = FileUtils.getFile(
+        val parentDir = FileUtils.getFile(
             rootDir,
             UserGroupInformation.getCurrentUser().getShortUserName(),
             "logs",
