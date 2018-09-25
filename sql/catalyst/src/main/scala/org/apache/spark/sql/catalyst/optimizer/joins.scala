@@ -159,10 +159,13 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
  * type to Cross.
  */
 object HandlePythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
+  def hasPythonUDF(expression: Expression): Boolean = {
+    expression.collectFirst { case udf: PythonUDF => udf }.isDefined
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case j @ Join(_, _, joinType, condition)
-      if condition.map(splitConjunctivePredicates).getOrElse(Nil).exists(
-        _.collectFirst { case udf: PythonUDF => udf }.isDefined) =>
+      if condition.map(splitConjunctivePredicates).getOrElse(Nil).exists(hasPythonUDF) =>
       if (!joinType.isInstanceOf[InnerLike] && joinType != LeftSemi) {
         // The current strategy only support InnerLike and LeftSemi join because for other type,
         // it breaks SQL semantic if we run the join condition as a filter after join. If we pass
@@ -179,8 +182,7 @@ object HandlePythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateHe
           "PythonUDF, it will be moved out and the join plan will be " +
           s"turned to cross join. This plan shows below:\n $j")
         val (udf, rest) =
-          condition.map(splitConjunctivePredicates).get.partition(
-            _.collectFirst { case udf: PythonUDF => udf }.isDefined)
+          condition.map(splitConjunctivePredicates).get.partition(hasPythonUDF)
         val newCondition = if (rest.isEmpty) {
           Option.empty
         } else {
@@ -198,14 +200,8 @@ object HandlePythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateHe
               s" $joinType is not supported.")
         }
       } else {
-        // if the crossJoinEnabled is false, a RuntimeException will be thrown later while
-        // the PythonUDF need to access both side of join, we throw firstly here for better
-        // readable information.
-        throw new AnalysisException(s"Detected the join condition:$condition of this join " +
-          "plan contains PythonUDF, if the PythonUDF need to access both side of join, " +
-          "it will get an invalid PythonUDF RuntimeException with message `requires attributes " +
-          "from more than one child`, we need to cast the join to cross join by setting the" +
-          s" config ${SQLConf.CROSS_JOINS_ENABLED.key}=true")
+        // Just pass through the original join, the checking for crossJoinEnabled will be done
+        // later in CheckCartesianProducts.
         j
       }
   }

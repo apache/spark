@@ -165,6 +165,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation) :+
+    Batch("Extract PythonUDF From JoinCondition", Once,
+        HandlePythonUDFInJoinCondition) :+
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) :+
@@ -173,8 +175,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ColumnPruning,
       CollapseProject,
       RemoveRedundantProject) :+
-    Batch("Extract PythonUDF From JoinCondition", Once,
-      HandlePythonUDFInJoinCondition) :+
     Batch("UpdateAttributeReferences", Once,
       UpdateNullabilityInAttributeReferences)
   }
@@ -1307,10 +1307,27 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  /**
+   * Check if a join contains PythonUDF in join condition.
+   */
+  def hasPythonUDFInJoinCondition(join: Join): Boolean = {
+    val conditions = join.condition.map(splitConjunctivePredicates).getOrElse(Nil)
+    conditions.exists(HandlePythonUDFInJoinCondition.hasPythonUDF)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan =
     if (SQLConf.get.crossJoinEnabled) {
       plan
     } else plan transform {
+      case j @ Join(_, _, _, _) if hasPythonUDFInJoinCondition(j) =>
+        // if the crossJoinEnabled is false, a RuntimeException will be thrown later while
+        // the PythonUDF need to access both side of join, we throw firstly here for better
+        // readable information.
+        throw new AnalysisException(s"Detected the join condition:${j.condition} of this join " +
+          "plan contains PythonUDF, if the PythonUDF need to access both side of join, " +
+          "it will get an invalid PythonUDF RuntimeException with message `requires attributes " +
+          "from more than one child`, we need to cast the join to cross join by setting the" +
+          s" configuration variable ${SQLConf.CROSS_JOINS_ENABLED.key}=true")
       case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _)
         if isCartesianProduct(j) =>
           throw new AnalysisException(
@@ -1321,7 +1338,7 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
                |Join condition is missing or trivial.
                |Either: use the CROSS JOIN syntax to allow cartesian products between these
                |relations, or: enable implicit cartesian products by setting the configuration
-               |variable spark.sql.crossJoin.enabled=true"""
+               |variable ${SQLConf.CROSS_JOINS_ENABLED.key}=true"""
             .stripMargin)
     }
 }

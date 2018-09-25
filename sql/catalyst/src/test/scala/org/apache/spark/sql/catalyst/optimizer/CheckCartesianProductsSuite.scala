@@ -19,14 +19,16 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.scalatest.Matchers._
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{And, Expression, PythonUDF}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf.CROSS_JOINS_ENABLED
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class CheckCartesianProductsSuite extends PlanTest {
 
@@ -78,6 +80,20 @@ class CheckCartesianProductsSuite extends PlanTest {
           performCartesianProductCheck(joinType)
         }
       }
+    }
+  }
+
+  test("CheckCartesianProducts throws an exception for PythonUDF exists in join condition") {
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("a", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_BATCHED_UDF,
+      udfDeterministic = true)
+    withSQLConf(CROSS_JOINS_ENABLED.key -> "false") {
+      val thrownException = the [AnalysisException] thrownBy {
+        performCartesianProductCheck(Inner, Some(Seq(pythonUdf, 'a === 1).reduceLeft(And)))
+      }
+      assert(thrownException.message.contains("this join plan contains PythonUDF"))
     }
   }
 
