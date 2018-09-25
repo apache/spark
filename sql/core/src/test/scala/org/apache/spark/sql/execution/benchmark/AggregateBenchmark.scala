@@ -74,23 +74,23 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       }
 
       benchmark.addCase(s"codegen = F", numIters = 2) { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> false.toString) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
           f()
         }
       }
 
       benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> true.toString,
-          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> false.toString,
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> false.toString) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
+          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
           f()
         }
       }
 
       benchmark.addCase(s"codegen = T hashmap = T", numIters = 5) { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> true.toString,
-          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> true.toString,
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> true.toString) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
           f()
         }
       }
@@ -108,23 +108,23 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       def f(): Unit = spark.sql("select k, k, sum(id) from test group by k, k").collect()
 
       benchmark.addCase(s"codegen = F", numIters = 2) { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> false.toString) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
           f()
         }
       }
 
       benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> true.toString,
-          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> false.toString,
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> false.toString) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
+          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
           f()
         }
       }
 
       benchmark.addCase(s"codegen = T hashmap = T", numIters = 5) { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> true.toString,
-          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> true.toString,
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> true.toString) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
           f()
         }
       }
@@ -142,23 +142,23 @@ object AggregateBenchmark extends SqlBasedBenchmark {
 
       benchmark.addCase(s"codegen = F", numIters = 2) { _ =>
         spark.conf.set("spark.sql.codegen.wholeStage", "false")
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> false.toString) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
           f()
         }
       }
 
       benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> true.toString,
-          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> false.toString,
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> false.toString) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
+          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
           f()
         }
       }
 
       benchmark.addCase(s"codegen = T hashmap = T", numIters = 5) { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> true.toString,
-          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> true.toString,
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> true.toString) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
           f()
         }
       }
@@ -175,23 +175,23 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         .groupBy("k").count().collect()
 
       benchmark.addCase(s"codegen = F") { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> false.toString) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
           f()
         }
       }
 
       benchmark.addCase(s"codegen = T hashmap = F") { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> true.toString,
-          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> false.toString,
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> false.toString) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
+          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
           f()
         }
       }
 
       benchmark.addCase(s"codegen = T hashmap = T") { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> true.toString,
-          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> true.toString,
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> true.toString) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
           f()
         }
       }
@@ -218,23 +218,23 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         .collect()
 
       benchmark.addCase(s"codegen = F") { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> false.toString) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
           f()
         }
       }
 
       benchmark.addCase(s"codegen = T hashmap = F") { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> true.toString,
-          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> false.toString,
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> false.toString) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
+          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
           f()
         }
       }
 
       benchmark.addCase(s"codegen = T hashmap = T") { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> true.toString,
-          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> true.toString,
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> true.toString) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
           f()
         }
       }
@@ -276,20 +276,20 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         .collect()
 
       benchmark.addCase("codegen = F") { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> false.toString) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
           f()
         }
       }
 
       benchmark.addCase("codegen = T hugeMethodLimit = 10000") { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> true.toString,
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> "10000") {
           f()
         }
       }
 
       benchmark.addCase("codegen = T hugeMethodLimit = 1500") { _ =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> true.toString,
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> "1500") {
           f()
         }
