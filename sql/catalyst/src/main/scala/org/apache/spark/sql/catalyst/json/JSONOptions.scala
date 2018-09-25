@@ -114,7 +114,7 @@ private[sql] class JSONOptions(
   val lineSeparatorInWrite: String = lineSeparator.getOrElse("\n")
 
   /**
-   * Generating JSON strings in pretty representation if the parameter enabled.
+   * Generating JSON strings in pretty representation if the parameter is enabled.
    */
   val pretty: Boolean = parameters.get("pretty").map(_.toBoolean).getOrElse(false)
 
