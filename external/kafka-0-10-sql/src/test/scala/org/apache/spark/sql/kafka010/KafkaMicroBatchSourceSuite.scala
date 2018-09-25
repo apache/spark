@@ -902,10 +902,11 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     val q = ds.writeStream.foreachBatch { (ds, epochId) =>
       if (epochId == 0) {
-        // Post more messages to Kafka so that the executors will fetch messages in the next batch
-        // and drop them. In this case, if we forget to reset `FetchedData._nextOffsetInFetchedData`
-        // or `FetchedData._offsetAfterPoll`, the next batch will see incorrect values and fail the
-        // test.
+        // Send more message before the tasks of the current batch start reading the current batch
+        // data, so that the executors will prefetch messages in the next batch and drop them. In
+        // this case, if we forget to reset `FetchedData._nextOffsetInFetchedData` or
+        // `FetchedData._offsetAfterPoll` (See SPARK-25495), the next batch will see incorrect
+        // values and return wrong results hence fail the test.
         testUtils.withTranscationalProducer { producer =>
           producer.beginTransaction()
           (4 to 7).foreach { i =>
