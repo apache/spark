@@ -75,10 +75,11 @@ trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
     s"""
        | if ($countTerm < $limit) {
        |   $countTerm += 1;
+       |   ${consume(ctx, input)}
+       |
        |   if ($countTerm == $limit) {
        |     setStopEarly(true);
        |   }
-       |   ${consume(ctx, input)}
        | }
      """.stripMargin
   }

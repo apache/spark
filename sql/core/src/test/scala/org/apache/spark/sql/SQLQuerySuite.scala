@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.execution.{aggregate, FilterExec, RangeExec}
+import org.apache.spark.sql.execution.{aggregate, FilterExec, LocalLimitExec, RangeExec}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
@@ -2876,30 +2876,51 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }.sum
     assert(aggNoGroupingNumRecords == 2)
 
+    // Sets `TOP_K_SORT_FALLBACK_THRESHOLD` to a low value because we don't want sort + limit
+    // be planned as `TakeOrderedAndProject` node.
+    withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "1") {
+      val sortDF = spark.range(0, 100, 1, 1)
+        .filter('id >= 0)
+        .limit(10)
+        .sortWithinPartitions("id")
+        // use non-deterministic expr to prevent filter be pushed down.
+        .selectExpr("rand() + id as id2")
+        .filter('id2 >= 0)
+        .limit(5)
+        .selectExpr("1 + id2 as id3")
+      sortDF.collect()
+      val sortNumRecords = sortDF.queryExecution.sparkPlan.collect {
+        case l @ LocalLimitExec(_, f: FilterExec) => f
+      }.map { filterNode =>
+        filterNode.metrics("numOutputRows").value
+      }
+      assert(sortNumRecords.sorted === Seq(5, 10))
+    }
+
     val filterDF = spark.range(0, 100, 1, 1).filter('id >= 0)
       .selectExpr("id + 1 as id2").limit(1).filter('id > 50)
     filterDF.collect()
     val filterNumRecords = filterDF.queryExecution.sparkPlan.collect {
-      case f @ FilterExec(_, r: RangeExec) => (f, r)
-    }.map { case (filterNode, rangeNode) =>
-      (filterNode.metrics("numOutputRows").value, rangeNode.metrics("numOutputRows").value)
+      case f @ FilterExec(_, r: RangeExec) => f
+    }.map { case filterNode =>
+      filterNode.metrics("numOutputRows").value
     }.head
-    // RangeNode and FilterNode both output 1 record.
-    assert(filterNumRecords == Tuple2(1, 1))
+    assert(filterNumRecords == 1)
 
     val twoLimitsDF = spark.range(0, 100, 1, 1)
-      .limit(1)
       .filter('id >= 0)
+      .limit(1)
       .selectExpr("id + 1 as id2")
       .limit(2)
-      .filter('id > 50)
+      .filter('id2 >= 0)
     twoLimitsDF.collect()
     val twoLimitsDFNumRecords = twoLimitsDF.queryExecution.sparkPlan.collect {
-      case r: RangeExec => r
-    }.map { rangeNode =>
-      rangeNode.metrics("numOutputRows").value
+      case f @ FilterExec(_, _: RangeExec) => f
+    }.map { filterNode =>
+      filterNode.metrics("numOutputRows").value
     }.head
     assert(twoLimitsDFNumRecords == 1)
+    checkAnswer(twoLimitsDF, Row(1) :: Nil)
   }
 }
 

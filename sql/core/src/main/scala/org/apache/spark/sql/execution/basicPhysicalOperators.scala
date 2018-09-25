@@ -471,8 +471,6 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |     int $localEnd = (int)($range / ${step}L);
       |     for (int $localIdx = 0; $localIdx < $localEnd; $localIdx++) {
       |       long $value = ((long)$localIdx * ${step}L) + $number;
-      |       $numOutput.add(1);
-      |       $inputMetrics.incRecordsRead(1);
       |       ${consume(ctx, Seq(ev))}
       |       if (stopEarly()) {
       |         break;
@@ -493,6 +491,9 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |     $numElementsTodo = 0;
       |     if ($nextBatchTodo == 0) break;
       |   }
+      |   $numOutput.add($nextBatchTodo);
+      |   $inputMetrics.incRecordsRead($nextBatchTodo);
+      |
       |   $batchEnd += $nextBatchTodo * ${step}L;
       | }
      """.stripMargin
