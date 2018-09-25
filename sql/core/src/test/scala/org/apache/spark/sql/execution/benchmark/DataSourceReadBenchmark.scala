@@ -25,6 +25,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.plans.SupportWithSQLConf
 import org.apache.spark.sql.execution.datasources.parquet.{SpecificParquetRecordReaderBase, VectorizedParquetRecordReader}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -37,7 +38,7 @@ import org.apache.spark.util.Utils
  * To run this:
  *  spark-submit --class <this class> <spark sql test jar>
  */
-object DataSourceReadBenchmark {
+object DataSourceReadBenchmark extends SupportWithSQLConf {
   val conf = new SparkConf()
     .setAppName("DataSourceReadBenchmark")
     // Since `spark.master` always exists, overrides this value
@@ -64,17 +65,6 @@ object DataSourceReadBenchmark {
     try f finally tableNames.foreach(spark.catalog.dropTempView)
   }
 
-  def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(spark.conf.get(key)).toOption)
-    (keys, values).zipped.foreach(spark.conf.set)
-    try f finally {
-      keys.zip(currentValues).foreach {
-        case (key, Some(value)) => spark.conf.set(key, value)
-        case (key, None) => spark.conf.unset(key)
-      }
-    }
-  }
   private def prepareTable(dir: File, df: DataFrame, partition: Option[String] = None): Unit = {
     val testDf = if (partition.isDefined) {
       df.write.partitionBy(partition.get)

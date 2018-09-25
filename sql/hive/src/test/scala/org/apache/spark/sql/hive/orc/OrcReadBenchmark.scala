@@ -24,6 +24,7 @@ import scala.util.{Random, Try}
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.catalyst.plans.SupportWithSQLConf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -34,7 +35,7 @@ import org.apache.spark.util.Utils
  * This is in `sql/hive` module in order to compare `sql/core` and `sql/hive` ORC data sources.
  */
 // scalastyle:off line.size.limit
-object OrcReadBenchmark {
+object OrcReadBenchmark extends SupportWithSQLConf {
   val conf = new SparkConf()
   conf.set("orc.compression", "snappy")
 
@@ -55,18 +56,6 @@ object OrcReadBenchmark {
 
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
     try f finally tableNames.foreach(spark.catalog.dropTempView)
-  }
-
-  def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(spark.conf.get(key)).toOption)
-    (keys, values).zipped.foreach(spark.conf.set)
-    try f finally {
-      keys.zip(currentValues).foreach {
-        case (key, Some(value)) => spark.conf.set(key, value)
-        case (key, None) => spark.conf.unset(key)
-      }
-    }
   }
 
   private val NATIVE_ORC_FORMAT = classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName
