@@ -139,8 +139,6 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
       (2, -2)
     )
     forAllRows(fractions) { (windowDuration: Any, slideDuration: Any) =>
-      logInfo(s"windowDuration = $windowDuration slideDuration = $slideDuration")
-
       val thrown = intercept[IllegalArgumentException] {
         (windowDuration, slideDuration) match {
           case (wd: String, sd: String) => TimeWindow(Literal(10L), wd, sd, "0 seconds")

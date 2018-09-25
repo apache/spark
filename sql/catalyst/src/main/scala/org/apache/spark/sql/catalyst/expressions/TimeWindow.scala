@@ -168,8 +168,10 @@ object TimeWindow {
       getIntervalInMicroSeconds(startTime))
   }
 
-  private def checkWindowAndSlideDuration(windowDurationMicroSec: Long, slideDurationMicroSec: Long,
-                                          windowDuration: Any, slideDuration: Any): Unit = {
+  private def checkWindowAndSlideDuration(windowDurationMicroSec: Long,
+      slideDurationMicroSec: Long,
+      windowDuration: Any,
+      slideDuration: Any): Unit = {
     require(windowDurationMicroSec > 0, "The window duration must be " +
       s"a positive integer, long or string literal, found: $windowDuration")
     require(slideDurationMicroSec > 0, "The slide duration must be " +
