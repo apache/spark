@@ -2516,4 +2516,17 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("SPARK-25464 create a database with a non empty location") {
+    val dbName = "dbwithcustomlocation"
+    withTempDir { tmpDir =>
+      val parentDir = tmpDir.getParent
+      val expectedMsg = s"Cannot create database at location $parentDir because the path is not " +
+        "empty."
+      val e = intercept[AnalysisException] {
+        sql(s"CREATE DATABASE $dbName Location '$parentDir' ")
+      }.getMessage
+      assert(e.contains(expectedMsg))
+    }
+  }
 }

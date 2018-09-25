@@ -208,6 +208,14 @@ class SessionCatalog(
           "you cannot create a database with this name.")
     }
     validateName(dbName)
+    // SPARK-25464 fail if DB location exists and is not empty
+    val dbPath = new Path(dbDefinition.locationUri)
+    val fs = dbPath.getFileSystem(hadoopConf)
+    if (!externalCatalog.databaseExists(dbName) && fs.exists(dbPath)
+      && fs.listStatus(dbPath).nonEmpty) {
+      throw new AnalysisException(
+        s"Cannot create database at location $dbPath because the path is not empty.")
+    }
     val qualifiedPath = makeQualifiedPath(dbDefinition.locationUri)
     externalCatalog.createDatabase(
       dbDefinition.copy(name = dbName, locationUri = qualifiedPath),

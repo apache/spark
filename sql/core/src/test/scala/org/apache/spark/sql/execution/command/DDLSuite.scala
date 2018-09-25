@@ -834,12 +834,21 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("create table in default db") {
-    val catalog = spark.sessionState.catalog
-    val tableIdent1 = TableIdentifier("tab1", None)
-    createTable(catalog, tableIdent1)
-    val expectedTableIdent = tableIdent1.copy(database = Some("default"))
-    val expectedTable = generateTable(catalog, expectedTableIdent)
-    checkCatalogTables(expectedTable, catalog.getTableMetadata(tableIdent1))
+    var tablePath: URI = null
+    try {
+      val catalog = spark.sessionState.catalog
+      val tableIdent1 = TableIdentifier("tab1", None)
+      createTable(catalog, tableIdent1)
+      val expectedTableIdent = tableIdent1.copy(database = Some("default"))
+      val expectedTable = generateTable(catalog, expectedTableIdent)
+      tablePath = expectedTable.location
+      checkCatalogTables(expectedTable, catalog.getTableMetadata(tableIdent1))
+    } finally {
+      // This is an external table, so it is required to delete
+      if (null != tablePath) {
+        Utils.deleteRecursively(new File(tablePath))
+      }
+    }
   }
 
   test("create table in a specific db") {

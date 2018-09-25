@@ -416,6 +416,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         statement.execute("USE db1")
         // access test_map2
         statement.executeQuery("SELECT key from test_map2")
+        statement.execute("DROP DATABASE db1 CASCADE")
       }
     )
   }
