@@ -728,9 +728,9 @@ private[spark] object SparkConf extends Logging {
     EXECUTOR_MEMORY_OVERHEAD.key -> Seq(
       AlternateConfig("spark.yarn.executor.memoryOverhead", "2.3")),
     KEYTAB.key -> Seq(
-      AlternateConfig("spark.yarn.keytab", "2.4")),
+      AlternateConfig("spark.yarn.keytab", "2.5")),
     PRINCIPAL.key -> Seq(
-      AlternateConfig("spark.yarn.principal", "2.4"))
+      AlternateConfig("spark.yarn.principal", "2.5"))
   )
 
   /**
