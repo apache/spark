@@ -34,6 +34,8 @@ import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 import org.apache.spark.streaming.util.WriteAheadLogUtils
 
+case class MyDog(name: String)
+
 private[kinesis] class KinesisInputDStream[T: ClassTag](
     _ssc: StreamingContext,
     val streamName: String,
