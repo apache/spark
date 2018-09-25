@@ -349,7 +349,17 @@ private[spark] class AppStatusStore(
   def taskList(stageId: Int, stageAttemptId: Int, maxTasks: Int): Seq[v1.TaskData] = {
     val stageKey = Array(stageId, stageAttemptId)
     store.view(classOf[TaskDataWrapper]).index("stage").first(stageKey).last(stageKey).reverse()
-      .max(maxTasks).asScala.map(_.toApi).toSeq.reverse
+      .max(maxTasks).asScala.map { taskDataWrapper =>
+        val taskDataOld: v1.TaskData = taskDataWrapper.toApi
+        val executorSummaryData: v1.ExecutorSummary = executorSummary(taskDataOld.executorId)
+        new v1.TaskData(taskDataOld.taskId, taskDataOld.index,
+          taskDataOld.attempt, taskDataOld.launchTime, taskDataOld.resultFetchStart,
+          taskDataOld.duration, taskDataOld.executorId, taskDataOld.host, taskDataOld.status,
+          taskDataOld.taskLocality, taskDataOld.speculative, taskDataOld.accumulatorUpdates,
+          taskDataOld.errorMessage, taskDataOld.taskMetrics, executorSummaryData.executorLogs,
+          AppStatusUtils.schedulerDelay(taskDataOld),
+          AppStatusUtils.gettingResultTime(taskDataOld))
+      }.toSeq.reverse
   }
 
   def taskList(
@@ -388,13 +398,33 @@ private[spark] class AppStatusStore(
     }
 
     val ordered = if (ascending) indexed else indexed.reverse()
-    ordered.skip(offset).max(length).asScala.map(_.toApi).toSeq
+    ordered.skip(offset).max(length).asScala.map { taskDataWrapper =>
+      val taskDataOld: v1.TaskData = taskDataWrapper.toApi
+      val executorSummaryData: v1.ExecutorSummary = executorSummary(taskDataOld.executorId)
+      new v1.TaskData(taskDataOld.taskId, taskDataOld.index,
+        taskDataOld.attempt, taskDataOld.launchTime, taskDataOld.resultFetchStart,
+        taskDataOld.duration, taskDataOld.executorId, taskDataOld.host, taskDataOld.status,
+        taskDataOld.taskLocality, taskDataOld.speculative, taskDataOld.accumulatorUpdates,
+        taskDataOld.errorMessage, taskDataOld.taskMetrics, executorSummaryData.executorLogs,
+        AppStatusUtils.schedulerDelay(taskDataOld),
+        AppStatusUtils.gettingResultTime(taskDataOld))
+    }.toSeq
   }
 
   def executorSummary(stageId: Int, attemptId: Int): Map[String, v1.ExecutorStageSummary] = {
     val stageKey = Array(stageId, attemptId)
     store.view(classOf[ExecutorStageSummaryWrapper]).index("stage").first(stageKey).last(stageKey)
-      .asScala.map { exec => (exec.executorId -> exec.info) }.toMap
+      .asScala.map { exec =>
+        val executorSummaryData: v1.ExecutorSummary = executorSummary(exec.executorId)
+        val executorStageSummary = new v1.ExecutorStageSummary(exec.info.taskTime,
+          exec.info.failedTasks, exec.info.succeededTasks, exec.info.killedTasks,
+          exec.info.inputBytes, exec.info.inputRecords, exec.info.outputBytes,
+          exec.info.outputRecords, exec.info.shuffleRead, exec.info.shuffleReadRecords,
+          exec.info.shuffleWrite, exec.info.shuffleWriteRecords, exec.info.memoryBytesSpilled,
+          exec.info.diskBytesSpilled, exec.info.isBlacklistedForStage,
+          executorSummaryData.executorLogs, executorSummaryData.hostPort)
+        (exec.executorId -> executorStageSummary)
+      }.toMap
   }
 
   def rddList(cachedOnly: Boolean = true): Seq[v1.RDDStorageInfo] = {

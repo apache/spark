@@ -75,7 +75,8 @@
           "recordsWritten" : 0
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : { },
+      "schedulerDelay" : 19,
       "gettingResultTime" : 0
     },
     "14" : {
@@ -124,7 +125,8 @@
           "recordsWritten" : 0
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : { },
+      "schedulerDelay" : 13,
       "gettingResultTime" : 0
     },
     "9" : {
@@ -173,7 +175,8 @@
           "recordsWritten" : 0
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : { },
+      "schedulerDelay" : 17,
       "gettingResultTime" : 0
     },
     "13" : {
@@ -222,7 +225,8 @@
           "recordsWritten" : 0
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : { },
+      "schedulerDelay" : 14,
       "gettingResultTime" : 0
     },
     "12" : {
@@ -271,7 +275,8 @@
           "recordsWritten" : 0
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : { },
+      "schedulerDelay" : 17,
       "gettingResultTime" : 0
     },
     "11" : {
@@ -320,7 +325,8 @@
           "recordsWritten" : 0
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : { },
+      "schedulerDelay" : 17,
       "gettingResultTime" : 0
     },
     "8" : {
@@ -369,7 +375,8 @@
           "recordsWritten" : 0
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : { },
+      "schedulerDelay" : 16,
       "gettingResultTime" : 0
     },
     "15" : {
@@ -418,7 +425,8 @@
           "recordsWritten" : 0
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : { },
+      "schedulerDelay" : 13,
       "gettingResultTime" : 0
     }
   },
@@ -438,7 +446,9 @@
       "shuffleWriteRecords" : 0,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : false
+      "isBlacklistedForStage" : false,
+      "executorLogs" : { },
+      "hostPort" : "localhost:57971"
     }
   },
   "killedTasksSummary" : { }

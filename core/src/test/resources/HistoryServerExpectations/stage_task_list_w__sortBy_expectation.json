@@ -44,7 +44,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 38,
   "gettingResultTime" : 0
 }, {
   "taskId" : 5,
@@ -92,7 +93,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 33,
   "gettingResultTime" : 0
 }, {
   "taskId" : 1,
@@ -140,7 +142,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 40,
   "gettingResultTime" : 0
 }, {
   "taskId" : 7,
@@ -188,7 +191,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 43,
   "gettingResultTime" : 0
 }, {
   "taskId" : 4,
@@ -236,7 +240,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 38,
   "gettingResultTime" : 0
 }, {
   "taskId" : 3,
@@ -284,7 +289,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 41,
   "gettingResultTime" : 0
 }, {
   "taskId" : 0,
@@ -332,7 +338,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 53,
   "gettingResultTime" : 0
 }, {
   "taskId" : 2,
@@ -380,7 +387,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 37,
   "gettingResultTime" : 0
 }, {
   "taskId" : 22,
@@ -428,7 +436,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 3,
   "gettingResultTime" : 0
 }, {
   "taskId" : 18,
@@ -476,7 +485,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 3,
   "gettingResultTime" : 0
 }, {
   "taskId" : 17,
@@ -524,7 +534,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 20,
   "gettingResultTime" : 0
 }, {
   "taskId" : 21,
@@ -572,7 +583,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 3,
   "gettingResultTime" : 0
 }, {
   "taskId" : 19,
@@ -620,7 +632,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 5,
   "gettingResultTime" : 0
 }, {
   "taskId" : 16,
@@ -668,7 +681,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 4,
   "gettingResultTime" : 0
 }, {
   "taskId" : 9,
@@ -716,7 +730,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 8,
   "gettingResultTime" : 0
 }, {
   "taskId" : 20,
@@ -764,7 +779,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 4,
   "gettingResultTime" : 0
 }, {
   "taskId" : 14,
@@ -812,7 +828,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 5,
   "gettingResultTime" : 0
 }, {
   "taskId" : 8,
@@ -860,7 +877,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 5,
   "gettingResultTime" : 0
 }, {
   "taskId" : 12,
@@ -908,7 +926,8 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 7,
   "gettingResultTime" : 0
 }, {
   "taskId" : 15,
@@ -956,6 +975,7 @@
       "recordsWritten" : 10
     }
   },
-  "schedulerDelay" : 0,
+  "executorLogs" : { },
+  "schedulerDelay" : 4,
   "gettingResultTime" : 0
 } ]

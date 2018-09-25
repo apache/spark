@@ -220,7 +220,7 @@ function createDataTableForTaskSummaryMetricsTable(task_summary_metrics_table) {
         };
         taskSummaryMetricsDataTable = $(taskMetricsTable).DataTable(task_conf);
     }
-    task_summary_metrics_table_current_state_array = task_summary_metrics_table;
+    task_summary_metrics_table_current_state_array = task_summary_metrics_table.slice();
 }
 
 var task_summary_metrics_table_array = [];
@@ -287,6 +287,14 @@ $(document).ready(function () {
 
             var stageAttemptId = getStageAttemptId();
             var responseBody = response[stageAttemptId];
+            var dataToShow = {};
+            dataToShow.showInputData = responseBody.inputBytes > 0?true:false;
+            dataToShow.showOutputData = responseBody.outputBytes > 0?true:false;
+            dataToShow.showShuffleReadData = responseBody.shuffleReadBytes > 0?true:false;
+            dataToShow.showShuffleWriteData = responseBody.shuffleWriteBytes > 0?true:false;
+            dataToShow.showBytesSpilledData =
+                (responseBody.diskBytesSpilled > 0 || responseBody.memoryBytesSpilled > 0)?true:false;
+
             // prepare data for task aggregated metrics table
             indices = Object.keys(responseBody.executorSummary);
             var executor_summary_table = [];
@@ -324,7 +332,7 @@ $(document).ready(function () {
                             var row1 = {
                                 "metric": columnName,
                                 "data": taskMetricsResponse[ix],
-                                "checkboxId": 0
+                                "checkboxId": 3
                             };
                             var row2 = {
                                 "metric": "Shuffle Read Blocked Time",
@@ -336,7 +344,9 @@ $(document).ready(function () {
                                 "data": taskMetricsResponse[ix],
                                 "checkboxId": 14
                             };
-                            task_summary_metrics_table_array.push(row1);
+                            if (dataToShow.showShuffleReadData) {
+                                task_summary_metrics_table_array.push(row1);
+                            }
                             task_summary_metrics_table_array.push(row2);
                             task_summary_metrics_table_array.push(row3);
                         }
@@ -379,6 +389,56 @@ $(document).ready(function () {
                                 "checkboxId": 17
                             };
                             task_summary_metrics_table_array.push(row);
+                        }
+                        else if (columnName == "Input Size / Records") {
+                            var row = {
+                                "metric": columnName,
+                                "data": taskMetricsResponse[ix],
+                                "checkboxId": 1
+                            };
+                            if (dataToShow.showInputData) {
+                                task_summary_metrics_table_array.push(row);
+                            }
+                        }
+                        else if (columnName == "Output Size / Records") {
+                            var row = {
+                                "metric": columnName,
+                                "data": taskMetricsResponse[ix],
+                                "checkboxId": 2
+                            };
+                            if (dataToShow.showOutputData) {
+                                task_summary_metrics_table_array.push(row);
+                            }
+                        }
+                        else if (columnName == "Shuffle Write Size / Records") {
+                            var row = {
+                                "metric": columnName,
+                                "data": taskMetricsResponse[ix],
+                                "checkboxId": 4
+                            };
+                            if (dataToShow.showShuffleWriteData) {
+                                task_summary_metrics_table_array.push(row);
+                            }
+                        }
+                        else if (columnName == "Shuffle spill (disk)") {
+                            var row = {
+                                "metric": columnName,
+                                "data": taskMetricsResponse[ix],
+                                "checkboxId": 5
+                            };
+                            if (dataToShow.showBytesSpilledData) {
+                                task_summary_metrics_table_array.push(row);
+                            }
+                        }
+                        else if (columnName == "Shuffle spill (memory)") {
+                            var row = {
+                                "metric": columnName,
+                                "data": taskMetricsResponse[ix],
+                                "checkboxId": 6
+                            };
+                            if (dataToShow.showBytesSpilledData) {
+                                task_summary_metrics_table_array.push(row);
+                            }
                         }
                         else if (columnName != "NA") {
                             var row = {
@@ -450,7 +510,8 @@ $(document).ready(function () {
                     ],
                     "order": [[0, "asc"]]
                 }
-                $(executorSummaryTable).DataTable(executor_summary_conf);
+                var executorSummaryTableSelector =
+                  $(executorSummaryTable).DataTable(executor_summary_conf);
                 $('#parent-container [data-toggle="tooltip"]').tooltip();
 
                 // building accumulator update table
@@ -786,7 +847,7 @@ $(document).ready(function () {
                         var task_summary_metrics_table_filtered_array = [];
                         if ($(this).is(":checked")) {
                             task_summary_metrics_table_current_state_array.push(task_summary_metrics_table_array.filter(row => (row.checkboxId).toString() == para)[0]);
-                            task_summary_metrics_table_filtered_array = task_summary_metrics_table_current_state_array;
+                            task_summary_metrics_table_filtered_array = task_summary_metrics_table_current_state_array.slice();
                         } else {
                             task_summary_metrics_table_filtered_array =
                                 task_summary_metrics_table_current_state_array.filter(row => (row.checkboxId).toString() != para);
@@ -806,6 +867,22 @@ $(document).ready(function () {
                     taskTableSelector.column(18).visible(true);
                     $("#accumulator-update-table").show();
                 }
+                // Showing relevant stage data depending on stage type for task table and executor
+                // summary table
+                taskTableSelector.column(19).visible(dataToShow.showInputData);
+                taskTableSelector.column(20).visible(dataToShow.showOutputData);
+                taskTableSelector.column(21).visible(dataToShow.showShuffleWriteData);
+                taskTableSelector.column(22).visible(dataToShow.showShuffleWriteData);
+                taskTableSelector.column(23).visible(dataToShow.showShuffleReadData);
+                taskTableSelector.column(24).visible(dataToShow.showBytesSpilledData);
+                taskTableSelector.column(25).visible(dataToShow.showBytesSpilledData);
+
+                executorSummaryTableSelector.column(9).visible(dataToShow.showInputData);
+                executorSummaryTableSelector.column(10).visible(dataToShow.showOutputData);
+                executorSummaryTableSelector.column(11).visible(dataToShow.showShuffleReadData);
+                executorSummaryTableSelector.column(12).visible(dataToShow.showShuffleWriteData);
+                executorSummaryTableSelector.column(13).visible(dataToShow.showBytesSpilledData);
+                executorSummaryTableSelector.column(14).visible(dataToShow.showBytesSpilledData);
             });
         });
     });

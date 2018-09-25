@@ -75,7 +75,11 @@
           "recordsWritten" : 3
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 68,
       "gettingResultTime" : 0
     },
     "5" : {
@@ -125,7 +129,11 @@
           "recordsWritten" : 0
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : {
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000007/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000007/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 46,
       "gettingResultTime" : 0
     },
     "10" : {
@@ -174,7 +182,11 @@
           "recordsWritten" : 3
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 50,
       "gettingResultTime" : 0
     },
     "1" : {
@@ -224,7 +236,11 @@
           "recordsWritten" : 0
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : {
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000007/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000007/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 174,
       "gettingResultTime" : 0
     },
     "6" : {
@@ -274,7 +290,11 @@
           "recordsWritten" : 0
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : {
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 16,
       "gettingResultTime" : 0
     },
     "9" : {
@@ -323,7 +343,11 @@
           "recordsWritten" : 3
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 42,
       "gettingResultTime" : 0
     },
     "13" : {
@@ -372,7 +396,11 @@
           "recordsWritten" : 3
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 26,
       "gettingResultTime" : 0
     },
     "2" : {
@@ -421,7 +449,11 @@
           "recordsWritten" : 3
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : {
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000004/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000004/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 74,
       "gettingResultTime" : 0
     },
     "12" : {
@@ -470,7 +502,11 @@
           "recordsWritten" : 3
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 22,
       "gettingResultTime" : 0
     },
     "7" : {
@@ -519,7 +555,11 @@
           "recordsWritten" : 3
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 20,
       "gettingResultTime" : 0
     },
     "3" : {
@@ -568,7 +608,11 @@
           "recordsWritten" : 3
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 63,
       "gettingResultTime" : 0
     },
     "11" : {
@@ -617,7 +661,11 @@
           "recordsWritten" : 3
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 12,
       "gettingResultTime" : 0
     },
     "8" : {
@@ -666,7 +714,11 @@
           "recordsWritten" : 3
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 84,
       "gettingResultTime" : 0
     },
     "4" : {
@@ -716,7 +768,11 @@
           "recordsWritten" : 0
         }
       },
-      "schedulerDelay" : 0,
+      "executorLogs" : {
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stderr?start=-4096"
+      },
+      "schedulerDelay" : 338,
       "gettingResultTime" : 0
     }
   },
@@ -736,7 +792,12 @@
       "shuffleWriteRecords" : 0,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : true
+      "isBlacklistedForStage" : true,
+      "executorLogs" : {
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stderr?start=-4096"
+      },
+      "hostPort" : "apiros-2.gce.test.com:33229"
     },
     "5" : {
       "taskTime" : 1579,
@@ -753,7 +814,12 @@
       "shuffleWriteRecords" : 0,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : true
+      "isBlacklistedForStage" : true,
+      "executorLogs" : {
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000007/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000007/attilapiros/stderr?start=-4096"
+      },
+      "hostPort" : "apiros-2.gce.test.com:45147"
     },
     "1" : {
       "taskTime" : 2411,
@@ -770,7 +836,12 @@
       "shuffleWriteRecords" : 12,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : false
+      "isBlacklistedForStage" : false,
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096"
+      },
+      "hostPort" : "apiros-3.gce.test.com:34970"
     },
     "2" : {
       "taskTime" : 2446,
@@ -787,7 +858,12 @@
       "shuffleWriteRecords" : 15,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : false
+      "isBlacklistedForStage" : false,
+      "executorLogs" : {
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stderr?start=-4096"
+      },
+      "hostPort" : "apiros-3.gce.test.com:38670"
     },
     "3" : {
       "taskTime" : 1774,
@@ -804,7 +880,12 @@
       "shuffleWriteRecords" : 3,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : true
+      "isBlacklistedForStage" : true,
+      "executorLogs" : {
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000004/attilapiros/stdout?start=-4096",
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000004/attilapiros/stderr?start=-4096"
+      },
+      "hostPort" : "apiros-2.gce.test.com:38641"
     }
   },
   "killedTasksSummary" : { }

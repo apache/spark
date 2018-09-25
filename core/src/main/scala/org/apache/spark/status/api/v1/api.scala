@@ -72,8 +72,8 @@ class ExecutorStageSummary private[spark](
     val memoryBytesSpilled : Long,
     val diskBytesSpilled : Long,
     val isBlacklistedForStage: Boolean,
-    var executorLogs: Map[String, String],
-    var hostPort: String)
+    val executorLogs: Map[String, String],
+    val hostPort: String)
 
 class ExecutorSummary private[spark](
     val id: String,
@@ -198,8 +198,8 @@ class StageData private[spark](
 
     val rddIds: Seq[Int],
     val accumulatorUpdates: Seq[AccumulableInfo],
-    var tasks: Option[Map[Long, TaskData]],
-    var executorSummary: Option[Map[String, ExecutorStageSummary]],
+    val tasks: Option[Map[Long, TaskData]],
+    val executorSummary: Option[Map[String, ExecutorStageSummary]],
     val killedTasksSummary: Map[String, Int])
 
 class TaskData private[spark](
@@ -218,9 +218,9 @@ class TaskData private[spark](
     val accumulatorUpdates: Seq[AccumulableInfo],
     val errorMessage: Option[String] = None,
     val taskMetrics: Option[TaskMetrics] = None,
-    var executorLogs: Map[String, String],
-    var schedulerDelay: Long,
-    var gettingResultTime: Long)
+    val executorLogs: Map[String, String],
+    val schedulerDelay: Long,
+    val gettingResultTime: Long)
 
 class TaskMetrics private[spark](
     val executorDeserializeTime: Long,

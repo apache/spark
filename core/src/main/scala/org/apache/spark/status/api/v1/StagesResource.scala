@@ -22,7 +22,6 @@ import javax.ws.rs.core.{Context, MediaType, MultivaluedMap, UriInfo}
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.StageInfo
-import org.apache.spark.status.AppStatusUtils
 import org.apache.spark.status.api.v1.StageStatus._
 import org.apache.spark.status.api.v1.TaskSorting._
 import org.apache.spark.ui.SparkUI
@@ -44,27 +43,6 @@ private[v1] class StagesResource extends BaseAppResource {
     withUI { ui =>
       var ret = ui.store.stageData(stageId, details = details)
       if (ret.nonEmpty) {
-        // Some of the data that we want to display for the tasks like executorLogs,
-        // schedulerDelay etc. comes from other sources, thus, we basically add them to the
-        // executor and task data object before passing them to the client.
-        for (r <- ret) {
-          for (execId <- r.executorSummary.get.keys.toArray) {
-            val executorLogs = ui.store.executorSummary(execId).executorLogs
-            val hostPort = ui.store.executorSummary(execId).hostPort
-            val taskDataArray = r.tasks.get.keys.toArray
-            var execStageSummary = r.executorSummary.get.get(execId).get
-            execStageSummary.executorLogs = executorLogs
-            execStageSummary.hostPort = hostPort
-            for (taskData <- taskDataArray) {
-              var taskDataObject = r.tasks.get.get(taskData).get
-              taskDataObject.executorLogs = executorLogs
-              taskDataObject.schedulerDelay =
-                AppStatusUtils.schedulerDelay(taskDataObject)
-              taskDataObject.gettingResultTime =
-                AppStatusUtils.gettingResultTime(taskDataObject)
-            }
-          }
-        }
         ret
       } else {
         throw new NotFoundException(s"unknown stage: $stageId")
@@ -153,15 +131,6 @@ private[v1] class StagesResource extends BaseAppResource {
           totalRecords.toInt)
       }
       if (_tasksToShow.nonEmpty) {
-        val iterator = _tasksToShow.iterator
-        while(iterator.hasNext) {
-          val t1: TaskData = iterator.next()
-          val execId = t1.executorId
-          val executorLogs = ui.store.executorSummary(execId).executorLogs
-          t1.executorLogs = executorLogs
-          t1.schedulerDelay = AppStatusUtils.schedulerDelay(t1)
-          t1.gettingResultTime = AppStatusUtils.gettingResultTime(t1)
-        }
         val ret = new HashMap[String, Object]()
         // Performs server-side search based on input from user
         if (isSearch) {
