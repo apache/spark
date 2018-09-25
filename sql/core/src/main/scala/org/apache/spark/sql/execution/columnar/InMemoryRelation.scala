@@ -27,9 +27,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{LongAccumulator, Utils}
+import org.apache.spark.util.LongAccumulator
 
 
 /**
@@ -209,7 +210,7 @@ case class InMemoryRelation(
   override protected def otherCopyArgs: Seq[AnyRef] = Seq(statsOfPlanToCache)
 
   override def simpleString(maxFields: Option[Int]): String = {
-    val outputStr = Utils.truncatedString(output, ", ", maxFields)
+    val outputStr = truncatedString(output, ", ", maxFields)
     s"InMemoryRelation [${outputStr}], ${cacheBuilder.storageLevel}"
   }
 }

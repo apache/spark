@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, LazilyGeneratedOrdering}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.util.Utils
 
 /**
  * Take the first `limit` elements and collect them to a single partition.
@@ -170,8 +170,8 @@ case class TakeOrderedAndProjectExec(
   override def outputPartitioning: Partitioning = SinglePartition
 
   override def simpleString(maxFields: Option[Int]): String = {
-    val orderByString = Utils.truncatedString(sortOrder, "[", ",", "]", maxFields)
-    val outputString = Utils.truncatedString(output, "[", ",", "]", maxFields)
+    val orderByString = truncatedString(sortOrder, "[", ",", "]", maxFields)
+    val outputString = truncatedString(output, "[", ",", "]", maxFields)
 
     s"TakeOrderedAndProject(limit=$limit, orderBy=$orderByString, output=$outputString)"
   }

@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
@@ -924,10 +925,10 @@ case class HashAggregateExec(
 
     testFallbackStartsAt match {
       case None =>
-        val keyString = Utils.truncatedString(groupingExpressions, "[", ", ", "]", maxFields)
+        val keyString = truncatedString(groupingExpressions, "[", ", ", "]", maxFields)
         val functionString =
-          Utils.truncatedString(allAggregateExpressions, "[", ", ", "]", maxFields)
-        val outputString = Utils.truncatedString(output, "[", ", ", "]", maxFields)
+          truncatedString(allAggregateExpressions, "[", ", ", "]", maxFields)
+        val outputString = truncatedString(output, "[", ", ", "]", maxFields)
         if (verbose) {
           s"HashAggregate(keys=$keyString, functions=$functionString, output=$outputString)"
         } else {

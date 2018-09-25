@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{truncatedString, DateTimeUtils}
 import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
@@ -201,7 +201,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     writer.write("== Parsed Logical Plan ==\n")
     writeOrError(writer)(logical.treeString(_, verbose, addSuffix, maxFields))
     writer.write("\n== Analyzed Logical Plan ==\n")
-    val analyzedOutput = stringOrError(Utils.truncatedString(
+    val analyzedOutput = stringOrError(truncatedString(
       analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields))
     writer.write(analyzedOutput)
     writer.write("\n")

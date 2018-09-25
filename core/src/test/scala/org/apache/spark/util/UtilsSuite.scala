@@ -45,14 +45,6 @@ import org.apache.spark.scheduler.SparkListener
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
-  test("truncatedString") {
-    assert(Utils.truncatedString(Nil, "[", ", ", "]", Some(2)) == "[]")
-    assert(Utils.truncatedString(Seq(1, 2), "[", ", ", "]", Some(2)) == "[1, 2]")
-    assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", Some(2)) == "[1, ... 2 more fields]")
-    assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", Some(-5)) == "[, ... 3 more fields]")
-    assert(Utils.truncatedString(Seq(1, 2, 3), ", ", maxFields = None) == "1, 2, 3")
-  }
-
   test("timeConversion") {
     // Test -1
     assert(Utils.timeStringAsSeconds("-1") === -1)

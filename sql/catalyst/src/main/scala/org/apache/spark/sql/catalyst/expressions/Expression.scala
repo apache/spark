@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the basic expression abstract classes in Catalyst.
@@ -234,7 +234,7 @@ abstract class Expression extends TreeNode[Expression] {
 
   override def simpleString(maxFields: Option[Int]): String = toString
 
-  override def toString: String = prettyName + Utils.truncatedString(
+  override def toString: String = prettyName + truncatedString(
     flatArguments.toSeq, "(", ", ", ")", maxFields = None)
 
   /**
