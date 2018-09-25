@@ -83,6 +83,7 @@ class SparkSession(object):
 
         _lock = RLock()
         _options = {}
+        _sc = None
 
         @since(2.0)
         def config(self, key=None, value=None, conf=None):
@@ -139,6 +140,10 @@ class SparkSession(object):
             """
             return self.config("spark.sql.catalogImplementation", "hive")
 
+        def _sparkContext(self, sc):
+            self._sc = sc
+            return self
+
         @since(2.0)
         def getOrCreate(self):
             """Gets an existing :class:`SparkSession` or, if there is no existing one, creates a
@@ -167,11 +172,14 @@ class SparkSession(object):
                 from pyspark.conf import SparkConf
                 session = SparkSession._instantiatedSession
                 if session is None or session._sc._jsc is None:
-                    sparkConf = SparkConf()
-                    for key, value in self._options.items():
-                        sparkConf.set(key, value)
-                    sc = SparkContext.getOrCreate(sparkConf)
-                    # This SparkContext may be an existing one.
+                    if self._sc is not None:
+                        sc = self._sc
+                    else:
+                        sparkConf = SparkConf()
+                        for key, value in self._options.items():
+                            sparkConf.set(key, value)
+                        sc = SparkContext.getOrCreate(sparkConf)
+                        # This SparkContext may be an existing one.
                     # Do not update `SparkConf` for existing `SparkContext`, as it's shared
                     # by all sessions.
                     session = SparkSession(sc)
