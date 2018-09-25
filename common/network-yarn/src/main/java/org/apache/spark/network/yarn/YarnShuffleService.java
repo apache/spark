@@ -176,7 +176,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
       MetricsSystemImpl metricsSystem = (MetricsSystemImpl) DefaultMetricsSystem.instance();
       metricsSystem.register(
-        "shuffleService", "Metrics on the Spark Shuffle Service", serviceMetrics);
+        "sparkShuffleService", "Metrics on the Spark Shuffle Service", serviceMetrics);
       logger.info("Registered metrics with Hadoop's DefaultMetricsSystem");
 
       // If authentication is enabled, set up the shuffle server to use a

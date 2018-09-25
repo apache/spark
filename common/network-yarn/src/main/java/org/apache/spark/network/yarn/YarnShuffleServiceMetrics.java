@@ -17,17 +17,17 @@
 
 package org.apache.spark.network.yarn;
 
+import java.util.Map;
+
 import com.codahale.metrics.*;
 import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsInfo;
 import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.metrics2.MetricsSource;
-import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler;
-
-import java.util.Map;
 
 /**
- * Forward {@link ExternalShuffleBlockHandler.ShuffleMetrics} to hadoop metrics system.
+ * Forward {@link org.apache.spark.network.shuffle.ExternalShuffleBlockHandler.ShuffleMetrics}
+ * to hadoop metrics system.
  * NodeManager by default exposes JMX endpoint where can be collected.
  */
 class YarnShuffleServiceMetrics implements MetricsSource {
@@ -46,7 +46,7 @@ class YarnShuffleServiceMetrics implements MetricsSource {
    */
   @Override
   public void getMetrics(MetricsCollector collector, boolean all) {
-    MetricsRecordBuilder metricsRecordBuilder = collector.addRecord("shuffleService");
+    MetricsRecordBuilder metricsRecordBuilder = collector.addRecord("sparkShuffleService");
 
     for (Map.Entry<String, Metric> entry : metricSet.getMetrics().entrySet()) {
       collectMetric(metricsRecordBuilder, entry.getKey(), entry.getValue());
@@ -54,9 +54,13 @@ class YarnShuffleServiceMetrics implements MetricsSource {
   }
 
   /**
-   * The metric types used in {@link ExternalShuffleBlockHandler.ShuffleMetrics}
+   * The metric types used in
+   * {@link org.apache.spark.network.shuffle.ExternalShuffleBlockHandler.ShuffleMetrics}.
+   * Visible for testing.
    */
-  public static void collectMetric(MetricsRecordBuilder metricsRecordBuilder, String name, Metric metric) {
+  public static void collectMetric(
+    MetricsRecordBuilder metricsRecordBuilder, String name, Metric metric) {
+
     if (metric instanceof Timer) {
       Timer t = (Timer) metric;
       metricsRecordBuilder
