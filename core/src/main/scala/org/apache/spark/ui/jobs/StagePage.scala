@@ -133,7 +133,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val totalTasksNumStr = if (totalTasks == storedTasks) {
       s"$totalTasks"
     } else {
-      s"$storedTasks, showing ${totalTasks}"
+      s"$totalTasks, showing $storedTasks"
     }
 
     val summary =
