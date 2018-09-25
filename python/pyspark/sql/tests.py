@@ -627,8 +627,10 @@ class SQLTests(ReusedSQLTestCase):
         left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
         right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
         f = udf(lambda a, b: a == b, BooleanType())
+
         def runWithJoinType(join_type, type_string):
-            with self.assertRaisesRegexp(AnalysisException,
+            with self.assertRaisesRegexp(
+                    AnalysisException,
                     'Using PythonUDF.*%s is not supported.' % type_string):
                 left.join(right, [f("a", "b"), left.a1 == right.b1], join_type).collect()
         runWithJoinType("full", "FullOuter")
