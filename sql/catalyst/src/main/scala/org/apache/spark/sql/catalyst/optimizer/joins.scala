@@ -193,6 +193,9 @@ object HandlePythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateHe
           case LeftSemi =>
             Project(
               j.left.output.map(_.toAttribute), Filter(udf.reduceLeft(And), newJoin))
+          case _ =>
+            throw new AnalysisException("Using PythonUDF in join condition of join type" +
+              s" $joinType is not supported.")
         }
       } else {
         // if the crossJoinEnabled is false, a RuntimeException will be thrown later while
