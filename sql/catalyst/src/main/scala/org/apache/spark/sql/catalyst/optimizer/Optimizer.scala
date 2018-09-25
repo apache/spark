@@ -173,6 +173,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ColumnPruning,
       CollapseProject,
       RemoveRedundantProject) :+
+    Batch("Extract PythonUDF From JoinCondition", Once,
+      HandlePythonUDFInJoinCondition) :+
     Batch("UpdateAttributeReferences", Once,
       UpdateNullabilityInAttributeReferences)
   }
@@ -202,7 +204,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ReplaceDistinctWithAggregate.ruleName ::
       PullupCorrelatedPredicates.ruleName ::
       RewriteCorrelatedScalarSubquery.ruleName ::
-      RewritePredicateSubquery.ruleName :: Nil
+      RewritePredicateSubquery.ruleName ::
+      HandlePythonUDFInJoinCondition.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
@@ -1256,6 +1259,59 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         case FullOuter => j
         case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
         case UsingJoin(_, _) => sys.error("Untransformed Using join node")
+      }
+  }
+}
+
+/**
+ * Correctly handle PythonUDF which need access both side of join side by changing the new join
+ * type to Cross.
+ */
+object HandlePythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    case j @ Join(_, _, joinType, condition)
+      if condition.map(splitConjunctivePredicates).getOrElse(Nil).exists(
+        _.collectFirst { case udf: PythonUDF => udf }.isDefined) =>
+      if (!joinType.isInstanceOf[InnerLike] && joinType != LeftSemi) {
+        // The current strategy only support InnerLike and LeftSemi join because other type
+        // can not simply be resolved by adding a Cross join. If we pass the plan here, it'll
+        // still get a an invalid PythonUDF RuntimeException with message `requires attributes
+        // from more than one child`, we throw firstly here for better readable information.
+        throw new AnalysisException("Using PythonUDF in join condition of join type" +
+          s" $joinType is not supported.")
+      }
+      if (SQLConf.get.crossJoinEnabled) {
+        // if condition expression contains python udf, it will be moved out from
+        // the new join conditions, and the join type will be changed to CrossJoin.
+        logWarning(s"The join condition:$condition of the join plan contains " +
+          "PythonUDF, it will be moved out and the join plan will be " +
+          s"turned to cross join. This plan shows below:\n $j")
+        val (udf, rest) =
+          condition.map(splitConjunctivePredicates).get.partition(
+            _.collectFirst { case udf: PythonUDF => udf }.isDefined)
+        val newCondition = if (rest.isEmpty) {
+          Option.empty
+        } else {
+          Some(rest.reduceLeft(And))
+        }
+        val newJoin = j.copy(joinType = Cross, condition = newCondition)
+        joinType match {
+          case _: InnerLike =>
+            Filter(udf.reduceLeft(And), newJoin)
+          case LeftSemi =>
+            Project(
+              j.left.output.map(_.toAttribute), Filter(udf.reduceLeft(And), newJoin))
+        }
+      } else {
+        // if the crossJoinEnabled is false, a RuntimeException will be thrown later while
+        // the PythonUDF need to access both side of join, we throw firstly here for better
+        // readable information.
+        throw new AnalysisException(s"Detected the join condition:$condition of this join " +
+          "plan contains PythonUDF, if the PythonUDF need to access both side of join, " +
+          "it will get an invalid PythonUDF RuntimeException with message `requires attributes " +
+          "from more than one child`, we need to cast the join to cross join by setting the" +
+          s" config ${SQLConf.CROSS_JOINS_ENABLED.key}=true")
+        j
       }
   }
 }

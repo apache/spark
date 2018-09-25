@@ -107,16 +107,24 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
 
   test("SPARK-25314: Python UDF refers to the attributes from more than one child " +
     "in join condition") {
+    def dummyPythonUDFTest(): Unit = {
+      val df = Seq(("Hello", 4)).toDF("a", "b")
+      val df2 = Seq(("Hello", 4)).toDF("c", "d")
+      val joinDF = df.join(df2,
+        dummyPythonUDF(col("a"), col("c")) === dummyPythonUDF(col("d"), col("c")))
+      val qualifiedPlanNodes = joinDF.queryExecution.executedPlan.collect {
+        case b: BatchEvalPythonExec => b
+      }
+      assert(qualifiedPlanNodes.size == 1)
+    }
+    // Test without spark.sql.crossJoin.enabled set
+    val errMsg = intercept[AnalysisException] {
+      dummyPythonUDFTest()
+    }
+    assert(errMsg.getMessage.startsWith("Detected the join condition:"))
     // Test with spark.sql.crossJoin.enabled=true
     spark.conf.set("spark.sql.crossJoin.enabled", "true")
-    val df = Seq(("Hello", 4)).toDF("a", "b")
-    val df2 = Seq(("Hello", 4)).toDF("c", "d")
-    val joinDF = df.join(df2,
-      dummyPythonUDF(col("a"), col("c")) === dummyPythonUDF(col("d"), col("c")))
-    val qualifiedPlanNodes = joinDF.queryExecution.executedPlan.collect {
-      case b: BatchEvalPythonExec => b
-    }
-    assert(qualifiedPlanNodes.size == 1)
+    dummyPythonUDFTest()
   }
 }
 
