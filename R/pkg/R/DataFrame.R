@@ -247,18 +247,20 @@ setMethod("showDF",
 setMethod("show", "SparkDataFrame",
           function(object) {
             allConf <- sparkR.conf()
-            if (!is.null(allConf[["spark.sql.repl.eagerEval.enabled"]]) &&
-                identical(allConf[["spark.sql.repl.eagerEval.enabled"]], "true")) {
+            prop <- allConf[["spark.sql.repl.eagerEval.enabled"]]
+            if (!is.null(prop) && identical(prop, "true")) {
               argsList <- list()
               argsList$x <- object
-              if (!is.null(allConf[["spark.sql.repl.eagerEval.maxNumRows"]])) {
-                numRows <- as.numeric(allConf[["spark.sql.repl.eagerEval.maxNumRows"]])
+              prop <- allConf[["spark.sql.repl.eagerEval.maxNumRows"]]
+              if (!is.null(prop)) {
+                numRows <- as.numeric(prop)
                 if (numRows > 0) {
                   argsList$numRows <- numRows
                 }
               }
-              if (!is.null(allConf[["spark.sql.repl.eagerEval.truncate"]])) {
-                truncate <- as.numeric(allConf[["spark.sql.repl.eagerEval.truncate"]])
+              prop <- allConf[["spark.sql.repl.eagerEval.truncate"]]
+              if (!is.null(prop)) {
+                truncate <- as.numeric(prop)
                 if (truncate > 0) {
                   argsList$truncate <- truncate
                 }

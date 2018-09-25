@@ -490,7 +490,7 @@ df2
 {% endhighlight %} 
 </div>
 
-Note that to enable eager execution through `sparkR` command, add `spark.sql.repl.eagerEval.enabled=true` configuration property to the `--conf` option.
+Note that to enable eager execution in `sparkR` shell, add `spark.sql.repl.eagerEval.enabled=true` configuration property to the `--conf` option.
 
 ## Running SQL Queries from SparkR
 A SparkDataFrame can also be registered as a temporary view in Spark SQL and that allows you to run SQL queries over its data.
