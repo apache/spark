@@ -118,7 +118,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     )
   }
 
-  test("from_csv missing fields") {
+  test("forcing schema nullability") {
     val input = """1,,"foo""""
     val csvSchema = new StructType()
       .add("a", LongType, nullable = false)
@@ -130,5 +130,16 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     val schema = expr.dataType
     val schemaToCompare = csvSchema.asNullable
     assert(schemaToCompare == schema)
+  }
+
+
+  test("from_csv missing columns") {
+    val schema = new StructType()
+      .add("a", IntegerType)
+      .add("b", IntegerType)
+    checkEvaluation(
+      CsvToStructs(schema, Map.empty, Literal.create("1"), gmtId),
+      InternalRow(1, null)
+    )
   }
 }

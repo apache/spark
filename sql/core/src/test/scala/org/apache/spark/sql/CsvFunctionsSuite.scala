@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -24,14 +26,12 @@ import org.apache.spark.sql.types._
 class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  val noOptions = Map[String, String]()
-
-  test("from_csv") {
+  test("from_csv with empty options") {
     val df = Seq("1").toDS()
-    val schema = new StructType().add("a", IntegerType)
+    val schema = "a int"
 
     checkAnswer(
-      df.select(from_csv($"value", schema, noOptions)),
+      df.select(from_csv($"value", schema, Map[String, String]().asJava)),
       Row(Row(1)) :: Nil)
   }
 
@@ -43,32 +43,5 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(from_csv($"value", schema, options)),
       Row(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0"))))
-  }
-
-  test("from_csv missing columns") {
-    val df = Seq("1").toDS()
-    val schema = new StructType()
-      .add("a", IntegerType)
-      .add("b", IntegerType)
-
-    checkAnswer(
-      df.select(from_csv($"value", schema, noOptions)),
-      Row(Row(1, null)) :: Nil)
-  }
-
-  test("from_csv invalid CSV") {
-    val df = Seq("???").toDS()
-    val schema = new StructType().add("a", IntegerType)
-
-    checkAnswer(
-      df.select(from_csv($"value", schema, noOptions)),
-      Row(Row(null)) :: Nil)
-  }
-
-  test("Support from_csv in SQL") {
-    val df1 = Seq("1").toDS()
-    checkAnswer(
-      df1.selectExpr("from_csv(value, 'a INT')"),
-      Row(Row(1)) :: Nil)
   }
 }
