@@ -197,10 +197,7 @@ class CSVOptions(
     settings.setEmptyValue("")
     settings.setMaxCharsPerColumn(maxCharsPerColumn)
     settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
-
-    if (multiLine) {
-      settings.setLineSeparatorDetectionEnabled(true)
-    }
+    settings.setLineSeparatorDetectionEnabled(multiLine)
 
     settings
   }
