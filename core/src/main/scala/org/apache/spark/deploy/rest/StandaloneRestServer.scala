@@ -138,10 +138,16 @@ private[rest] class StandaloneSubmitRequestServlet(
     val driverExtraClassPath = sparkProperties.get("spark.driver.extraClassPath")
     val driverExtraLibraryPath = sparkProperties.get("spark.driver.extraLibraryPath")
     val superviseDriver = sparkProperties.get("spark.driver.supervise")
+    // The semantics of "spark.master" and the masterUrl are different. While the
+    // property "spark.master" could contain all registered masters, masterUrl
+    // contains only the active master. To make sure a Spark driver can recover
+    // in a multi-master setup, we use the "spark.master" property while submitting
+    // the driver.
     val masters = sparkProperties.get("spark.master")
-    val masterPort = Utils.extractHostPortFromSparkUrl(masterUrl)._2.toString
-    val masterRestPort = this.conf.getInt("spark.master.rest.port", 6066).toString
-    val updatedMasters = masters.map(_.replace(masterRestPort, masterPort)).getOrElse(masterUrl)
+    val (_, masterPort) = Utils.extractHostPortFromSparkUrl(masterUrl)
+    val masterRestPort = this.conf.getInt("spark.master.rest.port", 6066)
+    val updatedMasters = masters.map(
+      _.replace(masterRestPort.toString, masterPort.toString)).getOrElse(masterUrl)
     val appArgs = request.appArgs
     // Filter SPARK_LOCAL_(IP|HOSTNAME) environment variables from being set on the remote system.
     val environmentVariables =
