@@ -35,24 +35,16 @@ import org.apache.spark.{Partition, Partitioner, TaskContext}
  * @param isOrderSensitive whether or not the function is order-sensitive. If it's order
  *                         sensitive, it may return totally different result when the input order
  *                         is changed. Mostly stateful functions are order-sensitive.
- * @param knownPartitioner If the result has a known partitioner.
  */
 private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     var prev: RDD[T],
     f: (TaskContext, Int, Iterator[T]) => Iterator[U],  // (TaskContext, partition index, iterator)
     preservesPartitioning: Boolean = false,
     isFromBarrier: Boolean = false,
-    isOrderSensitive: Boolean = false,
-    knownPartitioner: Option[Partitioner] = None)
+    isOrderSensitive: Boolean = false)
   extends RDD[U](prev) {
 
-  override val partitioner = {
-    if (preservesPartitioning) {
-      firstParent[T].partitioner
-    } else {
-      knownPartitioner
-    }
-  }
+  override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 

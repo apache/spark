@@ -350,11 +350,3 @@ private[spark] object RangePartitioner {
     bounds.toArray
   }
 }
-
-// Takes a partitioner on K and uses the same on type partitioner on type K, null
-private[spark] class WrappedPartitioner(original: Partitioner) extends Partitioner {
-  def numPartitions: Int = original.numPartitions
-  def getPartition(key: Any): Int = {
-    original.getPartition(key.asInstanceOf[Tuple2[Any, Any]]._1)
-  }
-}
