@@ -29,6 +29,16 @@ import org.apache.spark.storage.StorageLevel
 class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits {
   import testImplicits._
 
+  /**
+   * Asserts that a cached [[Dataset]] will be built using the given number of other cached results.
+   */
+  private def assertCacheDependency(df: DataFrame, numOfCachesDependedUpon: Int = 1): Unit = {
+    val plan = df.queryExecution.withCachedData
+    assert(plan.isInstanceOf[InMemoryRelation])
+    val internalPlan = plan.asInstanceOf[InMemoryRelation].cacheBuilder.cachedPlan
+    assert(internalPlan.find(_.isInstanceOf[InMemoryTableScanExec]).size == numOfCachesDependedUpon)
+  }
+
   test("get storage level") {
     val ds1 = Seq("1", "2").toDS().as("a")
     val ds2 = Seq(2, 3).toDS().as("b")
@@ -117,7 +127,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
   }
 
   test("cache UDF result correctly") {
-    val expensiveUDF = udf({x: Int => Thread.sleep(10000); x})
+    val expensiveUDF = udf({x: Int => Thread.sleep(5000); x})
     val df = spark.range(0, 10).toDF("a").withColumn("b", expensiveUDF($"a"))
     val df2 = df.agg(sum(df("b")))
 
@@ -126,7 +136,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     assertCached(df2)
 
     // udf has been evaluated during caching, and thus should not be re-evaluated here
-    failAfter(5 seconds) {
+    failAfter(3 seconds) {
       df2.collect()
     }
 
@@ -143,9 +153,57 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     df.count()
     df2.cache()
 
-    val plan = df2.queryExecution.withCachedData
-    assert(plan.isInstanceOf[InMemoryRelation])
-    val internalPlan = plan.asInstanceOf[InMemoryRelation].cacheBuilder.cachedPlan
-    assert(internalPlan.find(_.isInstanceOf[InMemoryTableScanExec]).isDefined)
+    assertCacheDependency(df2)
+  }
+
+  test("SPARK-24596 Non-cascading Cache Invalidation") {
+    val df = Seq(("a", 1), ("b", 2)).toDF("s", "i")
+    val df2 = df.filter('i > 1)
+    val df3 = df.filter('i < 2)
+
+    df2.cache()
+    df.cache()
+    df.count()
+    df3.cache()
+
+    df.unpersist()
+
+    // df un-cached; df2 and df3's cache plan re-compiled
+    assert(df.storageLevel == StorageLevel.NONE)
+    assertCacheDependency(df2, 0)
+    assertCacheDependency(df3, 0)
+  }
+
+  test("SPARK-24596 Non-cascading Cache Invalidation - verify cached data reuse") {
+    val expensiveUDF = udf({ x: Int => Thread.sleep(5000); x })
+    val df = spark.range(0, 5).toDF("a")
+    val df1 = df.withColumn("b", expensiveUDF($"a"))
+    val df2 = df1.groupBy('a).agg(sum('b))
+    val df3 = df.agg(sum('a))
+
+    df1.cache()
+    df2.cache()
+    df2.collect()
+    df3.cache()
+
+    assertCacheDependency(df2)
+
+    df1.unpersist(blocking = true)
+
+    // df1 un-cached; df2's cache plan re-compiled
+    assert(df1.storageLevel == StorageLevel.NONE)
+    assertCacheDependency(df1.groupBy('a).agg(sum('b)), 0)
+
+    val df4 = df1.groupBy('a).agg(sum('b)).agg(sum("sum(b)"))
+    assertCached(df4)
+    // reuse loaded cache
+    failAfter(3 seconds) {
+      checkDataset(df4, Row(10))
+    }
+
+    val df5 = df.agg(sum('a)).filter($"sum(a)" > 1)
+    assertCached(df5)
+    // first time use, load cache
+    checkDataset(df5, Row(10))
   }
 }

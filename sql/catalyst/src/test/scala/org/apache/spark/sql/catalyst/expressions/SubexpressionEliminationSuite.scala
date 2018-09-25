@@ -30,7 +30,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     }
     val b1 = a.withName("name2").withExprId(id)
     val b2 = a.withExprId(id)
-    val b3 = a.withQualifier(Some("qualifierName"))
+    val b3 = a.withQualifier(Seq("qualifierName"))
 
     assert(b1 != b2)
     assert(a != b1)

@@ -54,7 +54,8 @@ abstract class CSVDataSource extends Serializable {
       requiredSchema: StructType,
       // Actual schema of data in the csv file
       dataSchema: StructType,
-      caseSensitive: Boolean): Iterator[InternalRow]
+      caseSensitive: Boolean,
+      columnPruning: Boolean): Iterator[InternalRow]
 
   /**
    * Infers the schema from `inputPaths` files.
@@ -181,25 +182,6 @@ object CSVDataSource extends Logging {
       }
     }
   }
-
-  /**
-   * Checks that CSV header contains the same column names as fields names in the given schema
-   * by taking into account case sensitivity.
-   */
-  def checkHeader(
-      header: String,
-      parser: CsvParser,
-      schema: StructType,
-      fileName: String,
-      enforceSchema: Boolean,
-      caseSensitive: Boolean): Unit = {
-    checkHeaderColumnNames(
-        schema,
-        parser.parseLine(header),
-        fileName,
-        enforceSchema,
-        caseSensitive)
-  }
 }
 
 object TextInputCSVDataSource extends CSVDataSource {
@@ -211,10 +193,11 @@ object TextInputCSVDataSource extends CSVDataSource {
       parser: UnivocityParser,
       requiredSchema: StructType,
       dataSchema: StructType,
-      caseSensitive: Boolean): Iterator[InternalRow] = {
+      caseSensitive: Boolean,
+      columnPruning: Boolean): Iterator[InternalRow] = {
     val lines = {
       val linesReader = new HadoopFileLinesReader(file, conf)
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
       linesReader.map { line =>
         new String(line.getBytes, 0, line.getLength, parser.options.charset)
       }
@@ -227,10 +210,11 @@ object TextInputCSVDataSource extends CSVDataSource {
       // Note: if there are only comments in the first block, the header would probably
       // be not extracted.
       CSVUtils.extractHeader(lines, parser.options).foreach { header =>
-        CSVDataSource.checkHeader(
-          header,
-          parser.tokenizer,
-          dataSchema,
+        val schema = if (columnPruning) requiredSchema else dataSchema
+        val columnNames = parser.tokenizer.parseLine(header)
+        CSVDataSource.checkHeaderColumnNames(
+          schema,
+          columnNames,
           file.filePath,
           parser.options.enforceSchema,
           caseSensitive)
@@ -256,23 +240,25 @@ object TextInputCSVDataSource extends CSVDataSource {
       sparkSession: SparkSession,
       csv: Dataset[String],
       maybeFirstLine: Option[String],
-      parsedOptions: CSVOptions): StructType = maybeFirstLine match {
-    case Some(firstLine) =>
-      val firstRow = new CsvParser(parsedOptions.asParserSettings).parseLine(firstLine)
-      val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-      val header = makeSafeHeader(firstRow, caseSensitive, parsedOptions)
-      val sampled: Dataset[String] = CSVUtils.sample(csv, parsedOptions)
-      val tokenRDD = sampled.rdd.mapPartitions { iter =>
-        val filteredLines = CSVUtils.filterCommentAndEmpty(iter, parsedOptions)
-        val linesWithoutHeader =
-          CSVUtils.filterHeaderLine(filteredLines, firstLine, parsedOptions)
-        val parser = new CsvParser(parsedOptions.asParserSettings)
-        linesWithoutHeader.map(parser.parseLine)
-      }
-      CSVInferSchema.infer(tokenRDD, header, parsedOptions)
-    case None =>
-      // If the first line could not be read, just return the empty schema.
-      StructType(Nil)
+      parsedOptions: CSVOptions): StructType = {
+    val csvParser = new CsvParser(parsedOptions.asParserSettings)
+    maybeFirstLine.map(csvParser.parseLine(_)) match {
+      case Some(firstRow) if firstRow != null =>
+        val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+        val header = makeSafeHeader(firstRow, caseSensitive, parsedOptions)
+        val sampled: Dataset[String] = CSVUtils.sample(csv, parsedOptions)
+        val tokenRDD = sampled.rdd.mapPartitions { iter =>
+          val filteredLines = CSVUtils.filterCommentAndEmpty(iter, parsedOptions)
+          val linesWithoutHeader =
+            CSVUtils.filterHeaderLine(filteredLines, maybeFirstLine.get, parsedOptions)
+          val parser = new CsvParser(parsedOptions.asParserSettings)
+          linesWithoutHeader.map(parser.parseLine)
+        }
+        CSVInferSchema.infer(tokenRDD, header, parsedOptions)
+      case _ =>
+        // If the first line could not be read, just return the empty schema.
+        StructType(Nil)
+    }
   }
 
   private def createBaseDataset(
@@ -308,10 +294,12 @@ object MultiLineCSVDataSource extends CSVDataSource {
       parser: UnivocityParser,
       requiredSchema: StructType,
       dataSchema: StructType,
-      caseSensitive: Boolean): Iterator[InternalRow] = {
+      caseSensitive: Boolean,
+      columnPruning: Boolean): Iterator[InternalRow] = {
     def checkHeader(header: Array[String]): Unit = {
+      val schema = if (columnPruning) requiredSchema else dataSchema
       CSVDataSource.checkHeaderColumnNames(
-        dataSchema,
+        schema,
         header,
         file.filePath,
         parser.options.enforceSchema,

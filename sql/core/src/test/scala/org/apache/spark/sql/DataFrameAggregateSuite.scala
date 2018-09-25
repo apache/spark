@@ -717,4 +717,14 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Row(1, 2, 1) :: Row(2, 2, 2) :: Row(3, 2, 3) :: Nil)
   }
 
+  test("SPARK-24788: RelationalGroupedDataset.toString with unresolved exprs should not fail") {
+    // Checks if these raise no exception
+    assert(testData.groupBy('key).toString.contains(
+      "[grouping expressions: [key], value: [key: int, value: string], type: GroupBy]"))
+    assert(testData.groupBy(col("key")).toString.contains(
+      "[grouping expressions: [key], value: [key: int, value: string], type: GroupBy]"))
+    assert(testData.groupBy(current_date()).toString.contains(
+      "grouping expressions: [current_date(None)], value: [key: int, value: string], " +
+        "type: GroupBy]"))
+  }
 }

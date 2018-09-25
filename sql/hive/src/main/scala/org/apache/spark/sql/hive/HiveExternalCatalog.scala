@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.ql.metadata.HiveException
+import org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_FORMAT
 import org.apache.thrift.TException
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -114,7 +115,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * should interpret these special data source properties and restore the original table metadata
    * before returning it.
    */
-  private[hive] def getRawTable(db: String, table: String): CatalogTable = withClient {
+  private[hive] def getRawTable(db: String, table: String): CatalogTable = {
     client.getTable(db, table)
   }
 
@@ -138,17 +139,37 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /**
-   * Checks the validity of data column names. Hive metastore disallows the table to use comma in
-   * data column names. Partition columns do not have such a restriction. Views do not have such
-   * a restriction.
+   * Checks the validity of data column names. Hive metastore disallows the table to use some
+   * special characters (',', ':', and ';') in data column names, including nested column names.
+   * Partition columns do not have such a restriction. Views do not have such a restriction.
    */
   private def verifyDataSchema(
       tableName: TableIdentifier, tableType: CatalogTableType, dataSchema: StructType): Unit = {
     if (tableType != VIEW) {
-      dataSchema.map(_.name).foreach { colName =>
-        if (colName.contains(",")) {
-          throw new AnalysisException("Cannot create a table having a column whose name contains " +
-            s"commas in Hive metastore. Table: $tableName; Column: $colName")
+      val invalidChars = Seq(",", ":", ";")
+      def verifyNestedColumnNames(schema: StructType): Unit = schema.foreach { f =>
+        f.dataType match {
+          case st: StructType => verifyNestedColumnNames(st)
+          case _ if invalidChars.exists(f.name.contains) =>
+            val invalidCharsString = invalidChars.map(c => s"'$c'").mkString(", ")
+            val errMsg = "Cannot create a table having a nested column whose name contains " +
+              s"invalid characters ($invalidCharsString) in Hive metastore. Table: $tableName; " +
+              s"Column: ${f.name}"
+            throw new AnalysisException(errMsg)
+          case _ =>
+        }
+      }
+
+      dataSchema.foreach { f =>
+        f.dataType match {
+          // Checks top-level column names
+          case _ if f.name.contains(",") =>
+            throw new AnalysisException("Cannot create a table having a column whose name " +
+              s"contains commas in Hive metastore. Table: $tableName; Column: ${f.name}")
+          // Checks nested column names
+          case st: StructType =>
+            verifyNestedColumnNames(st)
+          case _ =>
         }
       }
     }
@@ -765,9 +786,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // schema we read back is different(ignore case and nullability) from the one in table
         // properties which was written when creating table, we should respect the table schema
         // from hive.
-        logWarning(s"The table schema given by Hive metastore(${table.schema.simpleString}) is " +
+        logWarning(s"The table schema given by Hive metastore(${table.schema.catalogString}) is " +
           "different from the schema when this table was created by Spark SQL" +
-          s"(${schemaFromTableProps.simpleString}). We have to fall back to the table schema " +
+          s"(${schemaFromTableProps.catalogString}). We have to fall back to the table schema " +
           "from Hive metastore which is not case preserving.")
         hiveTable.copy(schemaPreservesCase = false)
       }
@@ -786,6 +807,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       updateLocationInStorageProps(table, newPath = None).copy(
         locationUri = tableLocation.map(CatalogUtils.stringToURI(_)))
     }
+    val storageWithoutHiveGeneratedProperties = storageWithLocation.copy(
+      properties = storageWithLocation.properties.filterKeys(!HIVE_GENERATED_STORAGE_PROPERTIES(_)))
     val partitionProvider = table.properties.get(TABLE_PARTITION_PROVIDER)
 
     val schemaFromTableProps = getSchemaFromTableProperties(table)
@@ -794,7 +817,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     table.copy(
       provider = Some(provider),
-      storage = storageWithLocation,
+      storage = storageWithoutHiveGeneratedProperties,
       schema = reorderedSchema,
       partitionColumnNames = partColumnNames,
       bucketSpec = getBucketSpecFromTableProperties(table),
@@ -1288,6 +1311,8 @@ object HiveExternalCatalog {
   val TABLE_PARTITION_PROVIDER_FILESYSTEM = "filesystem"
 
   val CREATED_SPARK_VERSION = SPARK_SQL_PREFIX + "create.version"
+
+  val HIVE_GENERATED_STORAGE_PROPERTIES = Set(SERIALIZATION_FORMAT)
 
   // When storing data source tables in hive metastore, we need to set data schema to empty if the
   // schema is hive-incompatible. However we need a hack to preserve existing behavior. Before

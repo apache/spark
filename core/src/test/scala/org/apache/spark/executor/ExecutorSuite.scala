@@ -275,6 +275,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
       executorId = "",
       name = "",
       index = 0,
+      partitionId = 0,
       addedFiles = Map[String, Long](),
       addedJars = Map[String, Long](),
       properties = new Properties,

@@ -34,7 +34,7 @@ class ChunkedByteBufferSuite extends SparkFunSuite with SharedSparkContext {
     assert(emptyChunkedByteBuffer.getChunks().isEmpty)
     assert(emptyChunkedByteBuffer.toArray === Array.empty)
     assert(emptyChunkedByteBuffer.toByteBuffer.capacity() === 0)
-    assert(emptyChunkedByteBuffer.toNetty.capacity() === 0)
+    assert(emptyChunkedByteBuffer.toNetty.count() === 0)
     emptyChunkedByteBuffer.toInputStream(dispose = false).close()
     emptyChunkedByteBuffer.toInputStream(dispose = true).close()
   }

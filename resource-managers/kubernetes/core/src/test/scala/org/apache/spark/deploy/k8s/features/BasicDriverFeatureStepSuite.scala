@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.LocalObjectReferenceBuilder
+import io.fabric8.kubernetes.api.model.{ContainerPort, ContainerPortBuilder, LocalObjectReferenceBuilder}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkPod}
@@ -26,6 +26,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 import org.apache.spark.deploy.k8s.submit.PythonMainAppResource
+import org.apache.spark.ui.SparkUI
 
 class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
@@ -50,6 +51,11 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     TEST_IMAGE_PULL_SECRETS.map { secret =>
       new LocalObjectReferenceBuilder().withName(secret).build()
     }
+  private val emptyDriverSpecificConf = KubernetesDriverSpecificConf(
+    None,
+    APP_NAME,
+    MAIN_CLASS,
+    APP_ARGS)
 
   test("Check the pod respects all configurations from the user.") {
     val sparkConf = new SparkConf()
@@ -62,11 +68,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS.mkString(","))
     val kubernetesConf = KubernetesConf(
       sparkConf,
-      KubernetesDriverSpecificConf(
-        Some(JavaMainAppResource("")),
-        APP_NAME,
-        MAIN_CLASS,
-        APP_ARGS),
+      emptyDriverSpecificConf,
       RESOURCE_NAME_PREFIX,
       APP_ID,
       DRIVER_LABELS,
@@ -74,6 +76,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       DRIVER_ENVS,
+      Nil,
       Seq.empty[String])
 
     val featureStep = new BasicDriverFeatureStep(kubernetesConf)
@@ -83,6 +86,14 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.container.getName === DRIVER_CONTAINER_NAME)
     assert(configuredPod.container.getImage === "spark-driver:latest")
     assert(configuredPod.container.getImagePullPolicy === CONTAINER_IMAGE_PULL_POLICY)
+
+    val expectedPortNames = Set(
+      containerPort(DRIVER_PORT_NAME, DEFAULT_DRIVER_PORT),
+      containerPort(BLOCK_MANAGER_PORT_NAME, DEFAULT_BLOCKMANAGER_PORT),
+      containerPort(UI_PORT_NAME, SparkUI.DEFAULT_PORT)
+    )
+    val foundPortNames = configuredPod.container.getPorts.asScala.toSet
+    assert(expectedPortNames === foundPortNames)
 
     assert(configuredPod.container.getEnv.size === 3)
     val envs = configuredPod.container
@@ -143,6 +154,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       DRIVER_ENVS,
+      Nil,
       Seq.empty[String])
     val pythonKubernetesConf = KubernetesConf(
       pythonSparkConf,
@@ -158,6 +170,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       DRIVER_ENVS,
+      Nil,
       Seq.empty[String])
     val javaFeatureStep = new BasicDriverFeatureStep(javaKubernetesConf)
     val pythonFeatureStep = new BasicDriverFeatureStep(pythonKubernetesConf)
@@ -176,11 +189,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(CONTAINER_IMAGE, "spark-driver:latest")
     val kubernetesConf = KubernetesConf(
       sparkConf,
-      KubernetesDriverSpecificConf(
-        Some(JavaMainAppResource("")),
-        APP_NAME,
-        MAIN_CLASS,
-        APP_ARGS),
+      emptyDriverSpecificConf,
       RESOURCE_NAME_PREFIX,
       APP_ID,
       DRIVER_LABELS,
@@ -188,7 +197,9 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       DRIVER_ENVS,
+      Nil,
       allFiles)
+
     val step = new BasicDriverFeatureStep(kubernetesConf)
     val additionalProperties = step.getAdditionalPodSystemProperties()
     val expectedSparkConf = Map(
@@ -200,4 +211,11 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       "spark.files" -> "https://localhost:9000/file1.txt,/opt/spark/file2.txt")
     assert(additionalProperties === expectedSparkConf)
   }
+
+  def containerPort(name: String, portNumber: Int): ContainerPort =
+    new ContainerPortBuilder()
+      .withName(name)
+      .withContainerPort(portNumber)
+      .withProtocol("TCP")
+      .build()
 }

@@ -21,7 +21,7 @@ from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, _jvm
 from pyspark.ml.param.shared import *
 
-__all__ = ["FPGrowth", "FPGrowthModel"]
+__all__ = ["FPGrowth", "FPGrowthModel", "PrefixSpan"]
 
 
 class HasMinSupport(Params):
@@ -145,10 +145,11 @@ class FPGrowthModel(JavaModel, JavaMLWritable, JavaMLReadable):
     @since("2.2.0")
     def associationRules(self):
         """
-        DataFrame with three columns:
+        DataFrame with four columns:
         * `antecedent`  - Array of the same type as the input column.
         * `consequent`  - Array of the same type as the input column.
         * `confidence`  - Confidence for the rule (`DoubleType`).
+        * `lift`        - Lift for the rule (`DoubleType`).
         """
         return self._call_java("associationRules")
 
@@ -157,7 +158,7 @@ class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
                HasMinSupport, HasNumPartitions, HasMinConfidence,
                JavaMLWritable, JavaMLReadable):
 
-    """
+    r"""
     .. note:: Experimental
 
     A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
@@ -313,14 +314,15 @@ class PrefixSpan(JavaParams):
     def findFrequentSequentialPatterns(self, dataset):
         """
         .. note:: Experimental
+
         Finds the complete set of frequent sequential patterns in the input sequences of itemsets.
 
         :param dataset: A dataframe containing a sequence column which is
                         `ArrayType(ArrayType(T))` type, T is the item type for the input dataset.
         :return: A `DataFrame` that contains columns of sequence and corresponding frequency.
                  The schema of it will be:
-                  - `sequence: ArrayType(ArrayType(T))` (T is the item type)
-                  - `freq: Long`
+                 - `sequence: ArrayType(ArrayType(T))` (T is the item type)
+                 - `freq: Long`
 
         >>> from pyspark.ml.fpm import PrefixSpan
         >>> from pyspark.sql import Row

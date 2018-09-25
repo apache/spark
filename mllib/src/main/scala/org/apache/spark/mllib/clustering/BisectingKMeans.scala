@@ -25,6 +25,7 @@ import scala.collection.mutable
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -151,13 +152,10 @@ class BisectingKMeans private (
     this
   }
 
-  /**
-   * Runs the bisecting k-means algorithm.
-   * @param input RDD of vectors
-   * @return model for the bisecting kmeans
-   */
-  @Since("1.6.0")
-  def run(input: RDD[Vector]): BisectingKMeansModel = {
+
+  private[spark] def run(
+      input: RDD[Vector],
+      instr: Option[Instrumentation]): BisectingKMeansModel = {
     if (input.getStorageLevel == StorageLevel.NONE) {
       logWarning(s"The input RDD ${input.id} is not directly cached, which may hurt performance if"
         + " its parent RDDs are also not cached.")
@@ -171,6 +169,7 @@ class BisectingKMeans private (
     val vectors = input.zip(norms).map { case (x, norm) => new VectorWithNorm(x, norm) }
     var assignments = vectors.map(v => (ROOT_INDEX, v))
     var activeClusters = summarize(d, assignments, dMeasure)
+    instr.foreach(_.logNumExamples(activeClusters.values.map(_.size).sum))
     val rootSummary = activeClusters(ROOT_INDEX)
     val n = rootSummary.size
     logInfo(s"Number of points: $n.")
@@ -244,6 +243,16 @@ class BisectingKMeans private (
     val clusters = activeClusters ++ inactiveClusters
     val root = buildTree(clusters, dMeasure)
     new BisectingKMeansModel(root, this.distanceMeasure)
+  }
+
+  /**
+   * Runs the bisecting k-means algorithm.
+   * @param input RDD of vectors
+   * @return model for the bisecting kmeans
+   */
+  @Since("1.6.0")
+  def run(input: RDD[Vector]): BisectingKMeansModel = {
+    run(input, None)
   }
 
   /**

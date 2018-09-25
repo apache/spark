@@ -86,23 +86,11 @@ package object expressions  {
   }
 
   /**
-   * Converts a [[InternalRow]] to another Row given a sequence of expression that define each
-   * column of the new row. If the schema of the input row is specified, then the given expression
-   * will be bound to that schema.
-   *
-   * In contrast to a normal projection, a MutableProjection reuses the same underlying row object
-   * each time an input row is added.  This significantly reduces the cost of calculating the
-   * projection, but means that it is not safe to hold on to a reference to a [[InternalRow]] after
-   * `next()` has been called on the [[Iterator]] that produced it. Instead, the user must call
-   * `InternalRow.copy()` and hold on to the returned [[InternalRow]] before calling `next()`.
+   * A helper function to bind given expressions to an input schema.
    */
-  abstract class MutableProjection extends Projection {
-    def currentValue: InternalRow
-
-    /** Uses the given row to store the output of the projection. */
-    def target(row: InternalRow): MutableProjection
+  def toBoundExprs(exprs: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] = {
+    exprs.map(BindReferences.bindReference(_, inputSchema))
   }
-
 
   /**
    * Helper functions for working with `Seq[Attribute]`.
@@ -152,10 +140,22 @@ package object expressions  {
       unique(attrs.groupBy(_.name.toLowerCase(Locale.ROOT)))
     }
 
-    /** Map to use for qualified case insensitive attribute lookups. */
-    @transient private val qualified: Map[(String, String), Seq[Attribute]] = {
-      val grouped = attrs.filter(_.qualifier.isDefined).groupBy { a =>
-        (a.qualifier.get.toLowerCase(Locale.ROOT), a.name.toLowerCase(Locale.ROOT))
+    /** Map to use for qualified case insensitive attribute lookups with 2 part key */
+    @transient private lazy val qualified: Map[(String, String), Seq[Attribute]] = {
+      // key is 2 part: table/alias and name
+      val grouped = attrs.filter(_.qualifier.nonEmpty).groupBy {
+        a => (a.qualifier.last.toLowerCase(Locale.ROOT), a.name.toLowerCase(Locale.ROOT))
+      }
+      unique(grouped)
+    }
+
+    /** Map to use for qualified case insensitive attribute lookups with 3 part key */
+    @transient private val qualified3Part: Map[(String, String, String), Seq[Attribute]] = {
+      // key is 3 part: database name, table name and name
+      val grouped = attrs.filter(_.qualifier.length == 2).groupBy { a =>
+        (a.qualifier.head.toLowerCase(Locale.ROOT),
+          a.qualifier.last.toLowerCase(Locale.ROOT),
+          a.name.toLowerCase(Locale.ROOT))
       }
       unique(grouped)
     }
@@ -169,25 +169,48 @@ package object expressions  {
         })
       }
 
-      // Find matches for the given name assuming that the 1st part is a qualifier (i.e. table name,
-      // alias, or subquery alias) and the 2nd part is the actual name. This returns a tuple of
+      // Find matches for the given name assuming that the 1st two parts are qualifier
+      // (i.e. database name and table name) and the 3rd part is the actual column name.
+      //
+      // For example, consider an example where "db1" is the database name, "a" is the table name
+      // and "b" is the column name and "c" is the struct field name.
+      // If the name parts is db1.a.b.c, then Attribute will match
+      // Attribute(b, qualifier("db1,"a")) and List("c") will be the second element
+      var matches: (Seq[Attribute], Seq[String]) = nameParts match {
+        case dbPart +: tblPart +: name +: nestedFields =>
+          val key = (dbPart.toLowerCase(Locale.ROOT),
+            tblPart.toLowerCase(Locale.ROOT), name.toLowerCase(Locale.ROOT))
+          val attributes = collectMatches(name, qualified3Part.get(key)).filter {
+            a => (resolver(dbPart, a.qualifier.head) && resolver(tblPart, a.qualifier.last))
+          }
+          (attributes, nestedFields)
+        case all =>
+          (Seq.empty, Seq.empty)
+      }
+
+      // If there are no matches, then find matches for the given name assuming that
+      // the 1st part is a qualifier (i.e. table name, alias, or subquery alias) and the
+      // 2nd part is the actual name. This returns a tuple of
       // matched attributes and a list of parts that are to be resolved.
       //
       // For example, consider an example where "a" is the table name, "b" is the column name,
       // and "c" is the struct field name, i.e. "a.b.c". In this case, Attribute will be "a.b",
       // and the second element will be List("c").
-      val matches = nameParts match {
-        case qualifier +: name +: nestedFields =>
-          val key = (qualifier.toLowerCase(Locale.ROOT), name.toLowerCase(Locale.ROOT))
-          val attributes = collectMatches(name, qualified.get(key)).filter { a =>
-            resolver(qualifier, a.qualifier.get)
-          }
-          (attributes, nestedFields)
-        case all =>
-          (Nil, all)
+      if (matches._1.isEmpty) {
+        matches = nameParts match {
+          case qualifier +: name +: nestedFields =>
+            val key = (qualifier.toLowerCase(Locale.ROOT), name.toLowerCase(Locale.ROOT))
+            val attributes = collectMatches(name, qualified.get(key)).filter { a =>
+              resolver(qualifier, a.qualifier.last)
+            }
+            (attributes, nestedFields)
+          case all =>
+            (Seq.empty[Attribute], Seq.empty[String])
+        }
       }
 
-      // If none of attributes match `table.column` pattern, we try to resolve it as a column.
+      // If none of attributes match database.table.column pattern or
+      // `table.column` pattern, we try to resolve it as a column.
       val (candidates, nestedFields) = matches match {
         case (Seq(), _) =>
           val name = nameParts.head

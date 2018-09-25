@@ -240,3 +240,10 @@ test_that("add and get file to be downloaded with Spark job on every node", {
   unlink(path, recursive = TRUE)
   sparkR.session.stop()
 })
+
+test_that("SPARK-25234: parallelize should not have integer overflow", {
+  sc <- sparkR.sparkContext(master = sparkRTestMaster)
+  # 47000 * 47000 exceeds integer range
+  parallelize(sc, 1:47000, 47000)
+  sparkR.session.stop()
+})

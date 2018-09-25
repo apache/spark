@@ -29,7 +29,8 @@ import com.google.common.io.Closeables
 import io.netty.channel.DefaultFileRegion
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.util.Utils
@@ -44,8 +45,7 @@ private[spark] class DiskStore(
     securityManager: SecurityManager) extends Logging {
 
   private val minMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
-  private val maxMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapLimitForTests",
-    Int.MaxValue.toString)
+  private val maxMemoryMapBytes = conf.get(config.MEMORY_MAP_LIMIT_FOR_TESTS)
   private val blockSizes = new ConcurrentHashMap[BlockId, Long]()
 
   def getSize(blockId: BlockId): Long = blockSizes.get(blockId)
@@ -261,7 +261,22 @@ private class EncryptedBlockData(
         throw e
     }
   }
+}
 
+private class EncryptedManagedBuffer(val blockData: EncryptedBlockData) extends ManagedBuffer {
+
+  // This is the size of the decrypted data
+  override def size(): Long = blockData.size
+
+  override def nioByteBuffer(): ByteBuffer = blockData.toByteBuffer()
+
+  override def convertToNetty(): AnyRef = blockData.toNetty()
+
+  override def createInputStream(): InputStream = blockData.toInputStream()
+
+  override def retain(): ManagedBuffer = this
+
+  override def release(): ManagedBuffer = this
 }
 
 private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: Long)
@@ -279,7 +294,7 @@ private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: 
   override def transferred(): Long = _transferred
 
   override def transferTo(target: WritableByteChannel, pos: Long): Long = {
-    assert(pos == transfered(), "Invalid position.")
+    assert(pos == transferred(), "Invalid position.")
 
     var written = 0L
     var lastWrite = -1L

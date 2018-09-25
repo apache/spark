@@ -87,8 +87,6 @@ object Canonicalize {
     case Not(LessThanOrEqual(l, r)) => GreaterThan(l, r)
 
     // order the list in the In operator
-    // In subqueries contain only one element of type ListQuery. So checking that the length > 1
-    // we are not reordering In subqueries.
     case In(value, list) if list.length > 1 => In(value, list.sortBy(_.hashCode()))
 
     case _ => e

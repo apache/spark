@@ -140,11 +140,8 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
         .header("Content-Type", MediaType.APPLICATION_OCTET_STREAM)
         .build()
     } catch {
-      case NonFatal(e) =>
-        Response.serverError()
-          .entity(s"Event logs are not available for app: $appId.")
-          .status(Response.Status.SERVICE_UNAVAILABLE)
-          .build()
+      case NonFatal(_) =>
+        throw new ServiceUnavailable(s"Event logs are not available for app: $appId.")
     }
   }
 
