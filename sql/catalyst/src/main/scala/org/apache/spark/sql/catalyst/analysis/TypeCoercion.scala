@@ -977,12 +977,13 @@ object TypeCoercion {
         // Implicit cast between Map types.
         // Follows the same semantics of implicit casting between two array types.
         // Refer to documentation above.
-        case (MapType(fromKeyType, fromValueType, fn), MapType(toKeyType, toValueType, true)) =>
-          val newFromType = implicitCast(fromKeyType, toKeyType).orNull
+        case (MapType(fromKeyType, fromValueType, fn), MapType(toKeyType, toValueType, true))
+          if !Cast.forceNullable(fromKeyType, toKeyType) =>
+          val newKeyType = implicitCast(fromKeyType, toKeyType).orNull
           val newValueType = implicitCast(fromValueType, toValueType).orNull
-          if (newFromType != null && newValueType != null
-            && (!newFromType.sameType(fromKeyType) || !newValueType.sameType(fromValueType))) {
-            MapType(newFromType, newValueType, true)
+          if (newKeyType != null && newValueType != null
+            && (!newKeyType.sameType(fromKeyType) || !newValueType.sameType(fromValueType))) {
+            MapType(newKeyType, newValueType, true)
           } else {
             null
           }
@@ -991,12 +992,13 @@ object TypeCoercion {
          null
 
         case (MapType(fromKeyType, fromValueType, false), MapType(toKeyType, toValueType, false))
-          if !Cast.forceNullable(fromValueType, toValueType) =>
-          val newFromType = implicitCast(fromKeyType, toKeyType).orNull
+          if (!(Cast.forceNullable(fromKeyType, toKeyType) ||
+            Cast.forceNullable(fromValueType, toValueType))) =>
+          val newKeyType = implicitCast(fromKeyType, toKeyType).orNull
           val newValueType = implicitCast(fromValueType, toValueType).orNull
-          if (newFromType != null && newValueType != null
-            && (!newFromType.sameType(fromKeyType) || !newValueType.sameType(fromValueType))) {
-            MapType(newFromType, newValueType, false)
+          if (newKeyType != null && newValueType != null
+            && (!newKeyType.sameType(fromKeyType) || !newValueType.sameType(fromValueType))) {
+            MapType(newKeyType, newValueType, false)
           } else {
             null
           }
