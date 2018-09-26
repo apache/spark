@@ -2337,7 +2337,8 @@ def schema_of_json(col, options={}):
     :param col: string column in json format
     :param options: options to control parsing. accepts the same options as the JSON datasource
 
-    .. note:: Since Spark 2.5, it accepts options to control schema inferring.
+    .. versionchanged:: 2.5
+       It accepts `options` parameter to control schema inferring.
 
     >>> from pyspark.sql.types import *
     >>> data = [(1, '{"a": 1}')]
