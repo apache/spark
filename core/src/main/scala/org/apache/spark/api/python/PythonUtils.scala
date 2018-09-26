@@ -74,4 +74,8 @@ private[spark] object PythonUtils {
   def toScalaMap[K, V](jm: java.util.Map[K, V]): Map[K, V] = {
     jm.asScala.toMap
   }
+
+  def getEncryptionEnabled(sc: JavaSparkContext): Boolean = {
+    sc.conf.get(org.apache.spark.internal.config.IO_ENCRYPTION_ENABLED)
+  }
 }

@@ -3634,6 +3634,8 @@ object functions {
    * @param e a column containing a struct, an array or a map.
    * @param options options to control how the struct column is converted into a json string.
    *                accepts the same options and the json data source.
+   *                Additionally the function supports the `pretty` option which enables
+   *                pretty JSON generation.
    *
    * @group collection_funcs
    * @since 2.1.0
@@ -3650,6 +3652,8 @@ object functions {
    * @param e a column containing a struct, an array or a map.
    * @param options options to control how the struct column is converted into a json string.
    *                accepts the same options and the json data source.
+   *                Additionally the function supports the `pretty` option which enables
+   *                pretty JSON generation.
    *
    * @group collection_funcs
    * @since 2.1.0

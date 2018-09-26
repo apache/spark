@@ -144,7 +144,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
   private class PlanChangeLogger {
 
-    private val logLevel = SQLConf.get.optimizerPlanChangeLogLevel.toUpperCase
+    private val logLevel = SQLConf.get.optimizerPlanChangeLogLevel
 
     private val logRules = SQLConf.get.optimizerPlanChangeRules.map(Utils.stringToSeq)
 
