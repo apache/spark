@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import org.apache.spark.util.Benchmark
-
+import org.apache.spark.benchmark.Benchmark
 
 /**
  * Benchmark to measure performance for wide table.
@@ -27,7 +26,7 @@ import org.apache.spark.util.Benchmark
  *
  * Benchmarks in this file are skipped in normal builds.
  */
-class BenchmarkWideTable extends BenchmarkBase {
+class BenchmarkWideTable extends BenchmarkWithCodegen {
 
   ignore("project on wide table") {
     val N = 1 << 20

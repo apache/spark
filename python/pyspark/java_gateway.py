@@ -31,9 +31,10 @@ from subprocess import Popen, PIPE
 if sys.version >= '3':
     xrange = range
 
-from py4j.java_gateway import java_import, JavaGateway, GatewayParameters
+from py4j.java_gateway import java_import, JavaGateway, JavaObject, GatewayParameters
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.serializers import read_int, write_with_length, UTF8Deserializer
+from pyspark.util import _exception_message
 
 
 def launch_gateway(conf=None):
@@ -134,7 +135,7 @@ def launch_gateway(conf=None):
     return gateway
 
 
-def do_server_auth(conn, auth_secret):
+def _do_server_auth(conn, auth_secret):
     """
     Performs the authentication protocol defined by the SocketAuthHelper class on the given
     file-like object 'conn'.
@@ -145,3 +146,56 @@ def do_server_auth(conn, auth_secret):
     if reply != "ok":
         conn.close()
         raise Exception("Unexpected reply from iterator server.")
+
+
+def local_connect_and_auth(port, auth_secret):
+    """
+    Connect to local host, authenticate with it, and return a (sockfile,sock) for that connection.
+    Handles IPV4 & IPV6, does some error handling.
+    :param port
+    :param auth_secret
+    :return: a tuple with (sockfile, sock)
+    """
+    sock = None
+    errors = []
+    # Support for both IPv4 and IPv6.
+    # On most of IPv6-ready systems, IPv6 will take precedence.
+    for res in socket.getaddrinfo("127.0.0.1", port, socket.AF_UNSPEC, socket.SOCK_STREAM):
+        af, socktype, proto, _, sa = res
+        try:
+            sock = socket.socket(af, socktype, proto)
+            sock.settimeout(15)
+            sock.connect(sa)
+            sockfile = sock.makefile("rwb", 65536)
+            _do_server_auth(sockfile, auth_secret)
+            return (sockfile, sock)
+        except socket.error as e:
+            emsg = _exception_message(e)
+            errors.append("tried to connect to %s, but an error occured: %s" % (sa, emsg))
+            sock.close()
+            sock = None
+    else:
+        raise Exception("could not open socket: %s" % errors)
+
+
+def ensure_callback_server_started(gw):
+    """
+    Start callback server if not already started. The callback server is needed if the Java
+    driver process needs to callback into the Python driver process to execute Python code.
+    """
+
+    # getattr will fallback to JVM, so we cannot test by hasattr()
+    if "_callback_server" not in gw.__dict__ or gw._callback_server is None:
+        gw.callback_server_parameters.eager_load = True
+        gw.callback_server_parameters.daemonize = True
+        gw.callback_server_parameters.daemonize_connections = True
+        gw.callback_server_parameters.port = 0
+        gw.start_callback_server(gw.callback_server_parameters)
+        cbport = gw._callback_server.server_socket.getsockname()[1]
+        gw._callback_server.port = cbport
+        # gateway with real port
+        gw._python_proxy_port = gw._callback_server.port
+        # get the GatewayServer object in JVM by ID
+        jgws = JavaObject("GATEWAY_SERVER", gw._gateway_client)
+        # update the port of CallbackClient with real port
+        jgws.resetCallbackClient(jgws.getCallbackClient().getAddress(), gw._python_proxy_port)

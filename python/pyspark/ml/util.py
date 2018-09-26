@@ -63,7 +63,7 @@ class Identifiable(object):
         Generate a unique unicode id for the object. The default implementation
         concatenates the class name, "_", and 12 random hex chars.
         """
-        return unicode(cls.__name__ + "_" + uuid.uuid4().hex[12:])
+        return unicode(cls.__name__ + "_" + uuid.uuid4().hex[-12:])
 
 
 @inherit_doc
@@ -149,6 +149,23 @@ class MLWriter(BaseReadWrite):
 
 
 @inherit_doc
+class GeneralMLWriter(MLWriter):
+    """
+    Utility class that can save ML instances in different formats.
+
+    .. versionadded:: 2.4.0
+    """
+
+    def format(self, source):
+        """
+        Specifies the format of ML export (e.g. "pmml", "internal", or the fully qualified class
+        name for export).
+        """
+        self.source = source
+        return self
+
+
+@inherit_doc
 class JavaMLWriter(MLWriter):
     """
     (Private) Specialization of :py:class:`MLWriter` for :py:class:`JavaParams` types
@@ -193,6 +210,24 @@ class JavaMLWriter(MLWriter):
 
 
 @inherit_doc
+class GeneralJavaMLWriter(JavaMLWriter):
+    """
+    (Private) Specialization of :py:class:`GeneralMLWriter` for :py:class:`JavaParams` types
+    """
+
+    def __init__(self, instance):
+        super(GeneralJavaMLWriter, self).__init__(instance)
+
+    def format(self, source):
+        """
+        Specifies the format of ML export (e.g. "pmml", "internal", or the fully qualified class
+        name for export).
+        """
+        self._jwrite.format(source)
+        return self
+
+
+@inherit_doc
 class MLWritable(object):
     """
     Mixin for ML instances that provide :py:class:`MLWriter`.
@@ -218,6 +253,17 @@ class JavaMLWritable(MLWritable):
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
+
+
+@inherit_doc
+class GeneralJavaMLWritable(JavaMLWritable):
+    """
+    (Private) Mixin for ML instances that provide :py:class:`GeneralJavaMLWriter`.
+    """
+
+    def write(self):
+        """Returns an GeneralMLWriter instance for this ML instance."""
+        return GeneralJavaMLWriter(self)
 
 
 @inherit_doc

@@ -144,6 +144,13 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(CreateArray(byteWithNull), byteSeq :+ null, EmptyRow)
     checkEvaluation(CreateArray(strWithNull), strSeq :+ null, EmptyRow)
     checkEvaluation(CreateArray(Literal.create(null, IntegerType) :: Nil), null :: Nil)
+
+    val array = CreateArray(Seq(
+      Literal.create(intSeq, ArrayType(IntegerType, containsNull = false)),
+      Literal.create(intSeq :+ null, ArrayType(IntegerType, containsNull = true))))
+    assert(array.dataType ===
+      ArrayType(ArrayType(IntegerType, containsNull = true), containsNull = false))
+    checkEvaluation(array, Seq(intSeq, intSeq :+ null))
   }
 
   test("CreateMap") {
@@ -183,6 +190,62 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluationWithUnsafeProjection(
         CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
         null, null)
+    }
+
+    val map = CreateMap(Seq(
+      Literal.create(intSeq, ArrayType(IntegerType, containsNull = false)),
+      Literal.create(strSeq, ArrayType(StringType, containsNull = false)),
+      Literal.create(intSeq :+ null, ArrayType(IntegerType, containsNull = true)),
+      Literal.create(strSeq :+ null, ArrayType(StringType, containsNull = true))))
+    assert(map.dataType ===
+      MapType(
+        ArrayType(IntegerType, containsNull = true),
+        ArrayType(StringType, containsNull = true),
+        valueContainsNull = false))
+    checkEvaluation(map, createMap(Seq(intSeq, intSeq :+ null), Seq(strSeq, strSeq :+ null)))
+  }
+
+  test("MapFromArrays") {
+    def createMap(keys: Seq[Any], values: Seq[Any]): Map[Any, Any] = {
+      // catalyst map is order-sensitive, so we create ListMap here to preserve the elements order.
+      scala.collection.immutable.ListMap(keys.zip(values): _*)
+    }
+
+    val intSeq = Seq(5, 10, 15, 20, 25)
+    val longSeq = intSeq.map(_.toLong)
+    val strSeq = intSeq.map(_.toString)
+    val integerSeq = Seq[java.lang.Integer](5, 10, 15, 20, 25)
+    val intWithNullSeq = Seq[java.lang.Integer](5, 10, null, 20, 25)
+    val longWithNullSeq = intSeq.map(java.lang.Long.valueOf(_))
+
+    val intArray = Literal.create(intSeq, ArrayType(IntegerType, false))
+    val longArray = Literal.create(longSeq, ArrayType(LongType, false))
+    val strArray = Literal.create(strSeq, ArrayType(StringType, false))
+
+    val integerArray = Literal.create(integerSeq, ArrayType(IntegerType, true))
+    val intWithNullArray = Literal.create(intWithNullSeq, ArrayType(IntegerType, true))
+    val longWithNullArray = Literal.create(longWithNullSeq, ArrayType(LongType, true))
+
+    val nullArray = Literal.create(null, ArrayType(StringType, false))
+
+    checkEvaluation(MapFromArrays(intArray, longArray), createMap(intSeq, longSeq))
+    checkEvaluation(MapFromArrays(intArray, strArray), createMap(intSeq, strSeq))
+    checkEvaluation(MapFromArrays(integerArray, strArray), createMap(integerSeq, strSeq))
+
+    checkEvaluation(
+      MapFromArrays(strArray, intWithNullArray), createMap(strSeq, intWithNullSeq))
+    checkEvaluation(
+      MapFromArrays(strArray, longWithNullArray), createMap(strSeq, longWithNullSeq))
+    checkEvaluation(
+      MapFromArrays(strArray, longWithNullArray), createMap(strSeq, longWithNullSeq))
+    checkEvaluation(MapFromArrays(nullArray, nullArray), null)
+
+    intercept[RuntimeException] {
+      checkEvaluation(MapFromArrays(intWithNullArray, strArray), null)
+    }
+    intercept[RuntimeException] {
+      checkEvaluation(
+        MapFromArrays(intArray, Literal.create(Seq(1), ArrayType(IntegerType))), null)
     }
   }
 

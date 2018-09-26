@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.TypeUtils
@@ -44,7 +44,7 @@ import org.apache.spark.sql.types._
        1
   """)
 // scalastyle:on line.size.limit
-case class Coalesce(children: Seq[Expression]) extends Expression {
+case class Coalesce(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   /** Coalesce is nullable if all of its children are nullable, or if it has no children. */
   override def nullable: Boolean = children.forall(_.nullable)
@@ -60,8 +60,6 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
       TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
     }
   }
-
-  override def dataType: DataType = children.head.dataType
 
   override def eval(input: InternalRow): Any = {
     var result: Any = null

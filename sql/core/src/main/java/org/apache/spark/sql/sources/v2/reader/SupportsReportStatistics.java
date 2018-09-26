@@ -20,14 +20,18 @@ package org.apache.spark.sql.sources.v2.reader;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A mix in interface for {@link DataSourceReader}. Data source readers can implement this
- * interface to report statistics to Spark.
+ * A mix in interface for {@link BatchReadSupport}. Data sources can implement this interface to
+ * report statistics to Spark.
+ *
+ * As of Spark 2.4, statistics are reported to the optimizer before any operator is pushed to the
+ * data source. Implementations that return more accurate statistics based on pushed operators will
+ * not improve query performance until the planner can push operators before getting stats.
  */
 @InterfaceStability.Evolving
-public interface SupportsReportStatistics extends DataSourceReader {
+public interface SupportsReportStatistics extends ReadSupport {
 
   /**
-   * Returns the basic statistics of this data source.
+   * Returns the estimated statistics of this data source scan.
    */
-  Statistics getStatistics();
+  Statistics estimateStatistics(ScanConfig config);
 }

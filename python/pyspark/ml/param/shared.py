@@ -790,3 +790,27 @@ class DecisionTreeParams(Params):
         """
         return self.getOrDefault(self.cacheNodeIds)
 
+
+class HasDistanceMeasure(Params):
+    """
+    Mixin for param distanceMeasure: the distance measure. Supported options: 'euclidean' and 'cosine'.
+    """
+
+    distanceMeasure = Param(Params._dummy(), "distanceMeasure", "the distance measure. Supported options: 'euclidean' and 'cosine'.", typeConverter=TypeConverters.toString)
+
+    def __init__(self):
+        super(HasDistanceMeasure, self).__init__()
+        self._setDefault(distanceMeasure='euclidean')
+
+    def setDistanceMeasure(self, value):
+        """
+        Sets the value of :py:attr:`distanceMeasure`.
+        """
+        return self._set(distanceMeasure=value)
+
+    def getDistanceMeasure(self):
+        """
+        Gets the value of distanceMeasure or its default value.
+        """
+        return self.getOrDefault(self.distanceMeasure)
+

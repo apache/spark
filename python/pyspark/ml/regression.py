@@ -95,6 +95,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     True
     >>> model.numFeatures
     1
+    >>> model.write().format("pmml").save(model_path + "_2")
 
     .. versionadded:: 1.4.0
     """
@@ -161,7 +162,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         return self.getOrDefault(self.epsilon)
 
 
-class LinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable, JavaMLReadable):
+class LinearRegressionModel(JavaModel, JavaPredictionModel, GeneralJavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`LinearRegression`.
 
@@ -187,8 +188,8 @@ class LinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable, Java
     @property
     @since("2.3.0")
     def scale(self):
-        """
-        The value by which \|y - X'w\| is scaled down when loss is "huber", otherwise 1.0.
+        r"""
+        The value by which :math:`\|y - X'w\|` is scaled down when loss is "huber", otherwise 1.0.
         """
         return self._call_java("scale")
 
@@ -278,12 +279,12 @@ class LinearRegressionSummary(JavaWrapper):
     @property
     @since("2.0.0")
     def explainedVariance(self):
-        """
+        r"""
         Returns the explained variance regression score.
-        explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
+        explainedVariance = :math:`1 - \frac{variance(y - \hat{y})}{variance(y)}`
 
-        .. seealso:: `Wikipedia explain variation \
-        <http://en.wikipedia.org/wiki/Explained_variation>`_
+        .. seealso:: `Wikipedia explain variation
+            <http://en.wikipedia.org/wiki/Explained_variation>`_
 
         .. note:: This ignores instance weights (setting all to 1.0) from
             `LinearRegression.weightCol`. This will change in later Spark
@@ -338,8 +339,8 @@ class LinearRegressionSummary(JavaWrapper):
         """
         Returns R^2, the coefficient of determination.
 
-        .. seealso:: `Wikipedia coefficient of determination \
-        <http://en.wikipedia.org/wiki/Coefficient_of_determination>`_
+        .. seealso:: `Wikipedia coefficient of determination
+            <http://en.wikipedia.org/wiki/Coefficient_of_determination>`_
 
         .. note:: This ignores instance weights (setting all to 1.0) from
             `LinearRegression.weightCol`. This will change in later Spark
@@ -353,8 +354,8 @@ class LinearRegressionSummary(JavaWrapper):
         """
         Returns Adjusted R^2, the adjusted coefficient of determination.
 
-        .. seealso:: `Wikipedia coefficient of determination, Adjusted R^2 \
-        <https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2>`_
+        .. seealso:: `Wikipedia coefficient of determination, Adjusted R^2
+            <https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2>`_
 
         .. note:: This ignores instance weights (setting all to 1.0) from
             `LinearRegression.weightCol`. This will change in later Spark versions.
@@ -607,8 +608,13 @@ class TreeEnsembleParams(DecisionTreeParams):
     featureSubsetStrategy = \
         Param(Params._dummy(), "featureSubsetStrategy",
               "The number of features to consider for splits at each tree node. Supported " +
-              "options: " + ", ".join(supportedFeatureSubsetStrategies) + ", (0.0-1.0], [1-n].",
-              typeConverter=TypeConverters.toString)
+              "options: 'auto' (choose automatically for task: If numTrees == 1, set to " +
+              "'all'. If numTrees > 1 (forest), set to 'sqrt' for classification and to " +
+              "'onethird' for regression), 'all' (use all features), 'onethird' (use " +
+              "1/3 of the features), 'sqrt' (use sqrt(number of features)), 'log2' (use " +
+              "log2(number of features)), 'n' (when n is in the range (0, 1.0], use " +
+              "n * number of features. When n is in the range (1, number of features), use" +
+              " n features). default = 'auto'", typeConverter=TypeConverters.toString)
 
     def __init__(self):
         super(TreeEnsembleParams, self).__init__()
@@ -1369,7 +1375,7 @@ class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     @since("1.6.0")
     def scale(self):
         """
-        Model scale paramter.
+        Model scale parameter.
         """
         return self._call_java("scale")
 

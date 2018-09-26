@@ -53,12 +53,7 @@ def _get_argspec(f):
     """
     Get argspec of a function. Supports both Python 2 and Python 3.
     """
-
-    if hasattr(f, '_argspec'):
-        # only used for pandas UDF: they wrap the user function, losing its signature
-        # workers need this signature, so UDF saves it here
-        argspec = f._argspec
-    elif sys.version_info[0] < 3:
+    if sys.version_info[0] < 3:
         argspec = inspect.getargspec(f)
     else:
         # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
@@ -85,7 +80,7 @@ class VersionUtils(object):
         (2, 3)
 
         """
-        m = re.search('^(\d+)\.(\d+)(\..*)?$', sparkVersion)
+        m = re.search(r'^(\d+)\.(\d+)(\..*)?$', sparkVersion)
         if m is not None:
             return (int(m.group(1)), int(m.group(2)))
         else:
@@ -97,7 +92,7 @@ class VersionUtils(object):
 def fail_on_stopiteration(f):
     """
     Wraps the input function to fail on 'StopIteration' by raising a 'RuntimeError'
-    prevents silent loss of data when 'f' is used in a for loop
+    prevents silent loss of data when 'f' is used in a for loop in Spark code
     """
     def wrapper(*args, **kwargs):
         try:

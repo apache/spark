@@ -27,14 +27,16 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlanV2
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.StreamingQuery
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -73,12 +75,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             if limit < conf.topKSortFallbackThreshold =>
           TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
         case Limit(IntegerLiteral(limit), child) =>
-          // With whole stage codegen, Spark releases resources only when all the output data of the
-          // query plan are consumed. It's possible that `CollectLimitExec` only consumes a little
-          // data from child plan and finishes the query without releasing resources. Here we wrap
-          // the child plan with `LocalLimitExec`, to stop the processing of whole stage codegen and
-          // trigger the resource releasing work, after we consume `limit` rows.
-          CollectLimitExec(limit, LocalLimitExec(limit, planLater(child))) :: Nil
+          CollectLimitExec(limit, planLater(child)) :: Nil
         case other => planLater(other) :: Nil
       }
       case Limit(IntegerLiteral(limit), Sort(order, true, child))
@@ -327,15 +324,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
-        if (aggregateExpressions.exists(PythonUDF.isGroupAggPandasUDF)) {
+        if (aggregateExpressions.exists(PythonUDF.isGroupedAggPandasUDF)) {
           throw new AnalysisException(
             "Streaming aggregation doesn't support group aggregate pandas UDF")
         }
+
+        val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
 
         aggregate.AggUtils.planStreamingAggregation(
           namedGroupingExpressions,
           aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
           rewrittenResultExpressions,
+          stateVersion,
           planLater(child))
 
       case _ => Nil
@@ -350,6 +350,29 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case Deduplicate(keys, child) if child.isStreaming =>
         StreamingDeduplicateExec(keys, planLater(child)) :: Nil
 
+      case _ => Nil
+    }
+  }
+
+  /**
+   * Used to plan the streaming global limit operator for streams in append mode.
+   * We need to check for either a direct Limit or a Limit wrapped in a ReturnAnswer operator,
+   * following the example of the SpecialLimits Strategy above.
+   * Streams with limit in Append mode use the stateful StreamingGlobalLimitExec.
+   * Streams with limit in Complete mode use the stateless CollectLimitExec operator.
+   * Limit is unsupported for streams in Update mode.
+   */
+  case class StreamingGlobalLimitStrategy(outputMode: OutputMode) extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case ReturnAnswer(rootPlan) => rootPlan match {
+        case Limit(IntegerLiteral(limit), child)
+            if plan.isStreaming && outputMode == InternalOutputModes.Append =>
+          StreamingGlobalLimitExec(limit, LocalLimitExec(limit, planLater(child))) :: Nil
+        case _ => Nil
+      }
+      case Limit(IntegerLiteral(limit), child)
+          if plan.isStreaming && outputMode == InternalOutputModes.Append =>
+        StreamingGlobalLimitExec(limit, LocalLimitExec(limit, planLater(child))) :: Nil
       case _ => Nil
     }
   }
@@ -428,6 +451,22 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  object Window extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case PhysicalWindow(
+        WindowFunctionType.SQL, windowExprs, partitionSpec, orderSpec, child) =>
+        execution.window.WindowExec(
+          windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
+
+      case PhysicalWindow(
+        WindowFunctionType.Python, windowExprs, partitionSpec, orderSpec, child) =>
+        execution.python.WindowInPandasExec(
+          windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
+
+      case _ => Nil
+    }
+  }
+
   protected lazy val singleRowRdd = sparkContext.parallelize(Seq(InternalRow()), 1)
 
   object InMemoryScans extends Strategy {
@@ -469,16 +508,30 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case FlatMapGroupsWithState(
         func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, stateEnc, outputMode, _,
         timeout, child) =>
+        val stateVersion = conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
         val execPlan = FlatMapGroupsWithStateExec(
-          func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, None, stateEnc, outputMode,
-          timeout, batchTimestampMs = None, eventTimeWatermark = None, planLater(child))
+          func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, None, stateEnc, stateVersion,
+          outputMode, timeout, batchTimestampMs = None, eventTimeWatermark = None, planLater(child))
         execPlan :: Nil
       case _ =>
         Nil
     }
   }
 
-  // Can we automate these 'pass through' operations?
+  /**
+   * Strategy to convert EvalPython logical operator to physical operator.
+   */
+  object PythonEvals extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case ArrowEvalPython(udfs, output, child) =>
+        ArrowEvalPythonExec(udfs, output, planLater(child)) :: Nil
+      case BatchEvalPython(udfs, output, child) =>
+        BatchEvalPythonExec(udfs, output, planLater(child)) :: Nil
+      case _ =>
+        Nil
+    }
+  }
+
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case d: DataWritingCommand => DataWritingCommandExec(d, planLater(d.query)) :: Nil
@@ -494,12 +547,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Distinct(child) =>
         throw new IllegalStateException(
           "logical distinct operator should have been replaced by aggregate in the optimizer")
-      case logical.Intersect(left, right) =>
+      case logical.Intersect(left, right, false) =>
         throw new IllegalStateException(
-          "logical intersect operator should have been replaced by semi-join in the optimizer")
-      case logical.Except(left, right) =>
+          "logical intersect  operator should have been replaced by semi-join in the optimizer")
+      case logical.Intersect(left, right, true) =>
+        throw new IllegalStateException(
+          "logical intersect operator should have been replaced by union, aggregate" +
+            " and generate operators in the optimizer")
+      case logical.Except(left, right, false) =>
         throw new IllegalStateException(
           "logical except operator should have been replaced by anti-join in the optimizer")
+      case logical.Except(left, right, true) =>
+        throw new IllegalStateException(
+          "logical except (all) operator should have been replaced by union, aggregate" +
+            " and generate operators in the optimizer")
 
       case logical.DeserializeToObject(deserializer, objAttr, child) =>
         execution.DeserializeToObjectExec(deserializer, objAttr, planLater(child)) :: Nil
@@ -548,8 +609,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.FilterExec(f.typedCondition(f.deserializer), planLater(f.child)) :: Nil
       case e @ logical.Expand(_, _, child) =>
         execution.ExpandExec(e.projections, e.output, planLater(child)) :: Nil
-      case logical.Window(windowExprs, partitionSpec, orderSpec, child) =>
-        execution.window.WindowExec(windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child) =>
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data, _) =>

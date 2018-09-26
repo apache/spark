@@ -22,6 +22,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class CatalystTypeConvertersSuite extends SparkFunSuite {
 
@@ -138,5 +139,12 @@ class CatalystTypeConvertersSuite extends SparkFunSuite {
     }
     assert(exception.getMessage.contains("The value (0.1) of the type "
       + "(java.lang.Double) cannot be converted to the string type"))
+  }
+
+  test("SPARK-24571: convert Char to String") {
+    val chr: Char = 'X'
+    val converter = CatalystTypeConverters.createToCatalystConverter(StringType)
+    val expected = UTF8String.fromString("X")
+    assert(converter(chr) === expected)
   }
 }

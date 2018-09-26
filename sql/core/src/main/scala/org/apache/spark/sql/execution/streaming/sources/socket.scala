@@ -19,25 +19,28 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.io.{BufferedReader, InputStreamReader, IOException}
 import java.net.Socket
-import java.sql.Timestamp
 import java.text.SimpleDateFormat
-import java.util.{Calendar, List => JList, Locale, Optional}
+import java.util.{Calendar, Locale}
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.streaming.LongOffset
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.streaming.{LongOffset, SimpleStreamingScanConfig, SimpleStreamingScanConfigBuilder}
+import org.apache.spark.sql.execution.streaming.continuous.TextSocketContinuousReadSupport
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, MicroBatchReadSupport}
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, InputPartitionReader}
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
+import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceOptions, DataSourceV2, MicroBatchReadSupportProvider}
+import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, MicroBatchReadSupport, Offset}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
+import org.apache.spark.unsafe.types.UTF8String
 
-object TextSocketMicroBatchReader {
+object TextSocketReader {
   val SCHEMA_REGULAR = StructType(StructField("value", StringType) :: Nil)
   val SCHEMA_TIMESTAMP = StructType(StructField("value", StringType) ::
     StructField("timestamp", TimestampType) :: Nil)
@@ -45,14 +48,12 @@ object TextSocketMicroBatchReader {
 }
 
 /**
- * A MicroBatchReader that reads text lines through a TCP socket, designed only for tutorials and
- * debugging. This MicroBatchReader will *not* work in production applications due to multiple
- * reasons, including no support for fault recovery.
+ * A MicroBatchReadSupport that reads text lines through a TCP socket, designed only for tutorials
+ * and debugging. This MicroBatchReadSupport will *not* work in production applications due to
+ * multiple reasons, including no support for fault recovery.
  */
-class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchReader with Logging {
-
-  private var startOffset: Offset = _
-  private var endOffset: Offset = _
+class TextSocketMicroBatchReadSupport(options: DataSourceOptions)
+  extends MicroBatchReadSupport with Logging {
 
   private val host: String = options.get("host").get()
   private val port: Int = options.get("port").get().toInt
@@ -68,7 +69,7 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
    * Stored in a ListBuffer to facilitate removing committed batches.
    */
   @GuardedBy("this")
-  private val batches = new ListBuffer[(String, Timestamp)]
+  private val batches = new ListBuffer[(UTF8String, Long)]
 
   @GuardedBy("this")
   private var currentOffset: LongOffset = LongOffset(-1L)
@@ -76,7 +77,7 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
   @GuardedBy("this")
   private var lastOffsetCommitted: LongOffset = LongOffset(-1L)
 
-  initialize()
+  private val initialized: AtomicBoolean = new AtomicBoolean(false)
 
   /** This method is only used for unit test */
   private[sources] def getCurrentOffset(): LongOffset = synchronized {
@@ -98,10 +99,10 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
               logWarning(s"Stream closed by $host:$port")
               return
             }
-            TextSocketMicroBatchReader.this.synchronized {
-              val newData = (line,
-                Timestamp.valueOf(
-                  TextSocketMicroBatchReader.DATE_FORMAT.format(Calendar.getInstance().getTime()))
+            TextSocketMicroBatchReadSupport.this.synchronized {
+              val newData = (
+                UTF8String.fromString(line),
+                DateTimeUtils.fromMillis(Calendar.getInstance().getTimeInMillis)
               )
               currentOffset += 1
               batches.append(newData)
@@ -115,40 +116,37 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
     readThread.start()
   }
 
-  override def setOffsetRange(start: Optional[Offset], end: Optional[Offset]): Unit = synchronized {
-    startOffset = start.orElse(LongOffset(-1L))
-    endOffset = end.orElse(currentOffset)
-  }
+  override def initialOffset(): Offset = LongOffset(-1L)
 
-  override def getStartOffset(): Offset = {
-    Option(startOffset).getOrElse(throw new IllegalStateException("start offset not set"))
-  }
-
-  override def getEndOffset(): Offset = {
-    Option(endOffset).getOrElse(throw new IllegalStateException("end offset not set"))
-  }
+  override def latestOffset(): Offset = currentOffset
 
   override def deserializeOffset(json: String): Offset = {
     LongOffset(json.toLong)
   }
 
-  override def readSchema(): StructType = {
+  override def fullSchema(): StructType = {
     if (options.getBoolean("includeTimestamp", false)) {
-      TextSocketMicroBatchReader.SCHEMA_TIMESTAMP
+      TextSocketReader.SCHEMA_TIMESTAMP
     } else {
-      TextSocketMicroBatchReader.SCHEMA_REGULAR
+      TextSocketReader.SCHEMA_REGULAR
     }
   }
 
-  override def planInputPartitions(): JList[InputPartition[Row]] = {
-    assert(startOffset != null && endOffset != null,
-      "start offset and end offset should already be set before create read tasks.")
+  override def newScanConfigBuilder(start: Offset, end: Offset): ScanConfigBuilder = {
+    new SimpleStreamingScanConfigBuilder(fullSchema(), start, Some(end))
+  }
 
-    val startOrdinal = LongOffset.convert(startOffset).get.offset.toInt + 1
-    val endOrdinal = LongOffset.convert(endOffset).get.offset.toInt + 1
+  override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
+    val sc = config.asInstanceOf[SimpleStreamingScanConfig]
+    val startOrdinal = sc.start.asInstanceOf[LongOffset].offset.toInt + 1
+    val endOrdinal = sc.end.get.asInstanceOf[LongOffset].offset.toInt + 1
 
     // Internal buffer only holds the batches after lastOffsetCommitted
     val rawList = synchronized {
+      if (initialized.compareAndSet(false, true)) {
+        initialize()
+      }
+
       val sliceStart = startOrdinal - lastOffsetCommitted.offset.toInt - 1
       val sliceEnd = endOrdinal - lastOffsetCommitted.offset.toInt - 1
       batches.slice(sliceStart, sliceEnd)
@@ -158,31 +156,34 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
     val spark = SparkSession.getActiveSession.get
     val numPartitions = spark.sparkContext.defaultParallelism
 
-    val slices = Array.fill(numPartitions)(new ListBuffer[(String, Timestamp)])
+    val slices = Array.fill(numPartitions)(new ListBuffer[(UTF8String, Long)])
     rawList.zipWithIndex.foreach { case (r, idx) =>
       slices(idx % numPartitions).append(r)
     }
 
-    (0 until numPartitions).map { i =>
-      val slice = slices(i)
-      new InputPartition[Row] {
-        override def createPartitionReader(): InputPartitionReader[Row] =
-          new InputPartitionReader[Row] {
-            private var currentIdx = -1
+    slices.map(TextSocketInputPartition)
+  }
 
-            override def next(): Boolean = {
-              currentIdx += 1
-              currentIdx < slice.size
-            }
+  override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
+    new PartitionReaderFactory {
+      override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+        val slice = partition.asInstanceOf[TextSocketInputPartition].slice
+        new PartitionReader[InternalRow] {
+          private var currentIdx = -1
 
-            override def get(): Row = {
-              Row(slice(currentIdx)._1, slice(currentIdx)._2)
-            }
-
-            override def close(): Unit = {}
+          override def next(): Boolean = {
+            currentIdx += 1
+            currentIdx < slice.size
           }
+
+          override def get(): InternalRow = {
+            InternalRow(slice(currentIdx)._1, slice(currentIdx)._2)
+          }
+
+          override def close(): Unit = {}
+        }
       }
-    }.toList.asJava
+    }
   }
 
   override def commit(end: Offset): Unit = synchronized {
@@ -218,8 +219,11 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
   override def toString: String = s"TextSocketV2[host: $host, port: $port]"
 }
 
+case class TextSocketInputPartition(slice: ListBuffer[(UTF8String, Long)]) extends InputPartition
+
 class TextSocketSourceProvider extends DataSourceV2
-  with MicroBatchReadSupport with DataSourceRegister with Logging {
+  with MicroBatchReadSupportProvider with ContinuousReadSupportProvider
+  with DataSourceRegister with Logging {
 
   private def checkParameters(params: DataSourceOptions): Unit = {
     logWarning("The socket source should not be used for production applications! " +
@@ -239,16 +243,18 @@ class TextSocketSourceProvider extends DataSourceV2
     }
   }
 
-  override def createMicroBatchReader(
-      schema: Optional[StructType],
+  override def createMicroBatchReadSupport(
       checkpointLocation: String,
-      options: DataSourceOptions): MicroBatchReader = {
+      options: DataSourceOptions): MicroBatchReadSupport = {
     checkParameters(options)
-    if (schema.isPresent) {
-      throw new AnalysisException("The socket source does not support a user-specified schema.")
-    }
+    new TextSocketMicroBatchReadSupport(options)
+  }
 
-    new TextSocketMicroBatchReader(options)
+  override def createContinuousReadSupport(
+      checkpointLocation: String,
+      options: DataSourceOptions): ContinuousReadSupport = {
+    checkParameters(options)
+    new TextSocketContinuousReadSupport(options)
   }
 
   /** String that represents the format that this data source provider uses. */

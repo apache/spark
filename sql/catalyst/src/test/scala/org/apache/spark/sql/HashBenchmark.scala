@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Benchmark
 
 /**
  * Benchmark for the previous interpreted hash function(InternalRow.hashCode) vs codegened

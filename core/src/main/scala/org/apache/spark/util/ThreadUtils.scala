@@ -19,12 +19,15 @@ package org.apache.spark.util
 
 import java.util.concurrent._
 
-import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor}
-import scala.concurrent.duration.Duration
-import scala.concurrent.forkjoin.{ForkJoinPool => SForkJoinPool, ForkJoinWorkerThread => SForkJoinWorkerThread}
-import scala.util.control.NonFatal
+import scala.collection.TraversableLike
+import scala.collection.generic.CanBuildFrom
+import scala.language.higherKinds
 
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
+import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.forkjoin.{ForkJoinPool => SForkJoinPool, ForkJoinWorkerThread => SForkJoinWorkerThread}
+import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 
@@ -97,6 +100,22 @@ private[spark] object ThreadUtils {
   def newDaemonSingleThreadScheduledExecutor(threadName: String): ScheduledExecutorService = {
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
     val executor = new ScheduledThreadPoolExecutor(1, threadFactory)
+    // By default, a cancelled task is not automatically removed from the work queue until its delay
+    // elapses. We have to enable it manually.
+    executor.setRemoveOnCancelPolicy(true)
+    executor
+  }
+
+  /**
+   * Wrapper over ScheduledThreadPoolExecutor.
+   */
+  def newDaemonThreadPoolScheduledExecutor(threadNamePrefix: String, numThreads: Int)
+      : ScheduledExecutorService = {
+    val threadFactory = new ThreadFactoryBuilder()
+      .setDaemon(true)
+      .setNameFormat(s"$threadNamePrefix-%d")
+      .build()
+    val executor = new ScheduledThreadPoolExecutor(numThreads, threadFactory)
     // By default, a cancelled task is not automatically removed from the work queue until its delay
     // elapses. We have to enable it manually.
     executor.setRemoveOnCancelPolicy(true)
@@ -229,4 +248,48 @@ private[spark] object ThreadUtils {
     }
   }
   // scalastyle:on awaitready
+
+  def shutdown(
+      executor: ExecutorService,
+      gracePeriod: Duration = FiniteDuration(30, TimeUnit.SECONDS)): Unit = {
+    executor.shutdown()
+    executor.awaitTermination(gracePeriod.toMillis, TimeUnit.MILLISECONDS)
+    if (!executor.isShutdown) {
+      executor.shutdownNow()
+    }
+  }
+
+  /**
+   * Transforms input collection by applying the given function to each element in parallel fashion.
+   * Comparing to the map() method of Scala parallel collections, this method can be interrupted
+   * at any time. This is useful on canceling of task execution, for example.
+   *
+   * @param in - the input collection which should be transformed in parallel.
+   * @param prefix - the prefix assigned to the underlying thread pool.
+   * @param maxThreads - maximum number of thread can be created during execution.
+   * @param f - the lambda function will be applied to each element of `in`.
+   * @tparam I - the type of elements in the input collection.
+   * @tparam O - the type of elements in resulted collection.
+   * @return new collection in which each element was given from the input collection `in` by
+   *         applying the lambda function `f`.
+   */
+  def parmap[I, O, Col[X] <: TraversableLike[X, Col[X]]]
+      (in: Col[I], prefix: String, maxThreads: Int)
+      (f: I => O)
+      (implicit
+        cbf: CanBuildFrom[Col[I], Future[O], Col[Future[O]]], // For in.map
+        cbf2: CanBuildFrom[Col[Future[O]], O, Col[O]] // for Future.sequence
+      ): Col[O] = {
+    val pool = newForkJoinPool(prefix, maxThreads)
+    try {
+      implicit val ec = ExecutionContext.fromExecutor(pool)
+
+      val futures = in.map(x => Future(f(x)))
+      val futureSeq = Future.sequence(futures)
+
+      awaitResult(futureSeq, Duration.Inf)
+    } finally {
+      pool.shutdownNow()
+    }
+  }
 }

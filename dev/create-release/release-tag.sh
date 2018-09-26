@@ -17,6 +17,9 @@
 # limitations under the License.
 #
 
+SELF=$(cd $(dirname $0) && pwd)
+. "$SELF/release-util.sh"
+
 function exit_with_usage {
   cat << EOF
 usage: tag-release.sh
@@ -36,6 +39,7 @@ EOF
 }
 
 set -e
+set -o pipefail
 
 if [[ $@ == *"help"* ]]; then
   exit_with_usage
@@ -54,8 +58,10 @@ for env in ASF_USERNAME ASF_PASSWORD RELEASE_VERSION RELEASE_TAG NEXT_VERSION GI
   fi
 done
 
+init_java
+init_maven_sbt
+
 ASF_SPARK_REPO="git-wip-us.apache.org/repos/asf/spark.git"
-MVN="build/mvn --force"
 
 rm -rf spark
 git clone "https://$ASF_USERNAME:$ASF_PASSWORD@$ASF_SPARK_REPO" -b $GIT_BRANCH
@@ -94,9 +100,15 @@ sed -i".tmp7" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$R_NEXT_VERSION"
 
 git commit -a -m "Preparing development version $NEXT_VERSION"
 
-# Push changes
-git push origin $RELEASE_TAG
-git push origin HEAD:$GIT_BRANCH
+if ! is_dry_run; then
+  # Push changes
+  git push origin $RELEASE_TAG
+  git push origin HEAD:$GIT_BRANCH
 
-cd ..
-rm -rf spark
+  cd ..
+  rm -rf spark
+else
+  cd ..
+  mv spark spark.tag
+  echo "Clone with version changes and tag available as spark.tag in the output directory."
+fi

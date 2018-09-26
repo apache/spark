@@ -1727,7 +1727,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
 
   override val dataType: DataType = RowEncoder.externalDataTypeForInput(expected)
 
-  private val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
+  private val errMsg = s" is not a valid external type for schema of ${expected.catalogString}"
 
   private lazy val checkType: (Any) => Boolean = expected match {
     case _: DecimalType =>
