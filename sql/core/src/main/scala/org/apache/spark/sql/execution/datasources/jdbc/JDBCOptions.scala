@@ -22,6 +22,7 @@ import java.util.{Locale, Properties}
 
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * Options for the JDBC data source.
@@ -186,6 +187,11 @@ class JDBCOptions(
 
   // An option to allow/disallow pushing down predicate into JDBC data source
   val pushDownPredicate = parameters.getOrElse(JDBC_PUSHDOWN_PREDICATE, "true").toBoolean
+
+  val connectionFactoryProvider: ConnectionFactoryProvider =
+    parameters.get(JDBC_CONNECTION_FACTORY_PROVIDER).map { className =>
+      Utils.classForName(className).newInstance.asInstanceOf[ConnectionFactoryProvider]
+    }.getOrElse(DefaultConnectionFactoryProvider)
 }
 
 class JdbcOptionsInWrite(
@@ -238,4 +244,5 @@ object JDBCOptions {
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
   val JDBC_SESSION_INIT_STATEMENT = newOption("sessionInitStatement")
   val JDBC_PUSHDOWN_PREDICATE = newOption("pushDownPredicate")
+  val JDBC_CONNECTION_FACTORY_PROVIDER = newOption("connectionFactoryProvider")
 }

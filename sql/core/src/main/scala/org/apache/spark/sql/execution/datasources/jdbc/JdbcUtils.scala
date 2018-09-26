@@ -40,28 +40,45 @@ import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
 
+trait ConnectionFactoryProvider {
+  def createConnectionFactory(options: JDBCOptions): () => Connection
+}
+
+object LoadDriver {
+  def apply(options: JDBCOptions): Driver = {
+    val driverClass = options.driverClass
+    DriverRegistry.register(driverClass)
+    DriverManager.getDrivers.asScala.collectFirst {
+      case d: DriverWrapper if d.wrapped.getClass.getCanonicalName == driverClass => d
+      case d if d.getClass.getCanonicalName == driverClass => d
+    }.getOrElse {
+      throw new IllegalStateException(
+        s"Did not find registered driver with class $driverClass")
+    }
+  }
+}
+
+object DefaultConnectionFactoryProvider extends ConnectionFactoryProvider {
+  def createConnectionFactory(options: JDBCOptions): () => Connection = {
+    () => LoadDriver(options).connect(options.url, options.asConnectionProperties)
+  }
+}
+
 /**
  * Util functions for JDBC tables.
  */
 object JdbcUtils extends Logging {
   /**
    * Returns a factory for creating connections to the given JDBC URL.
+   * You can provide a custom factory by setting the classname in JDBCOptions
+   * using JDBCOption.JDBC_CONNECTION_FACTORY_PROVIDER. This class must implement
+   * the ConnectionFactoryProvider trait. If not specified DefaultConnectionFactoryProvider
+   * will be used.
    *
    * @param options - JDBC options that contains url, table and other information.
    */
   def createConnectionFactory(options: JDBCOptions): () => Connection = {
-    val driverClass: String = options.driverClass
-    () => {
-      DriverRegistry.register(driverClass)
-      val driver: Driver = DriverManager.getDrivers.asScala.collectFirst {
-        case d: DriverWrapper if d.wrapped.getClass.getCanonicalName == driverClass => d
-        case d if d.getClass.getCanonicalName == driverClass => d
-      }.getOrElse {
-        throw new IllegalStateException(
-          s"Did not find registered driver with class $driverClass")
-      }
-      driver.connect(options.url, options.asConnectionProperties)
-    }
+    options.connectionFactoryProvider.createConnectionFactory(options)
   }
 
   /**
