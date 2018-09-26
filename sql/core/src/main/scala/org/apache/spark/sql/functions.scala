@@ -2218,7 +2218,7 @@ object functions {
    * Returns the value of the column `e` truncated to 0 places.
    *
    * @group math_funcs
-   * @since 2.4.0
+   * @since 2.5.0
    */
   def truncate(e: Column): Column = truncate(e, 0)
 
@@ -2228,7 +2228,7 @@ object functions {
    * Scale can be negative to truncate (make zero) scale digits left of the decimal point.
    *
    * @group math_funcs
-   * @since 2.4.0
+   * @since 2.5.0
    */
   def truncate(e: Column, scale: Int): Column = withExpr {
     Truncate(e.expr, Literal(scale))
