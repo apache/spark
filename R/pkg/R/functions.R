@@ -204,10 +204,11 @@ NULL
 #'              also supported for the schema.
 #'          \item \code{from_csv}: a DDL-formatted string
 #'          }
-#' @param ... additional argument(s). In \code{to_json}, \code{from_json} and \code{from_csv},
-#'            this contains additional named properties to control how it is converted, accepts
-#'            the same options as the JSON and CSV data source.  In \code{arrays_zip},
-#'            this contains additional Columns of arrays to be merged.
+#' @param ... additional argument(s). In \code{to_json} and \code{from_json}, this contains
+#'            additional named properties to control how it is converted, accepts the same
+#'            options as the JSON data source. Additionally \code{to_json} supports the "pretty"
+#'            option which enables pretty JSON generation. In \code{arrays_zip}, this contains
+#'            additional Columns of arrays to be merged.
 #' @name column_collection_functions
 #' @rdname column_collection_functions
 #' @family collection functions
