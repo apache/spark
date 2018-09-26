@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, GreaterThan, In}
 import org.apache.spark.sql.execution.{FilterExec, InputAdapter, SparkPlanTest, WholeStageCodegenExec}
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.BooleanType
 
@@ -123,8 +124,9 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
     }
     assert(errMsg.getMessage.startsWith("Detected implicit cartesian product"))
     // Test with spark.sql.crossJoin.enabled=true
-    spark.conf.set("spark.sql.crossJoin.enabled", "true")
-    dummyPythonUDFTest()
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      dummyPythonUDFTest()
+    }
   }
 }
 
