@@ -2954,6 +2954,9 @@ setMethod("exceptAll",
 #' @param source a name for external data source.
 #' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
 #'             save mode (it is 'error' by default)
+#' @param partitionBy a name or a list of names of columns to partition the output by on the file
+#'                    system. If specified, the output is laid out on the file system similar
+#'                    to Hive's partitioning scheme.
 #' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
@@ -2965,13 +2968,13 @@ setMethod("exceptAll",
 #' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' write.df(df, "myfile", "parquet", "overwrite")
+#' write.df(df, "myfile", "parquet", "overwrite", partitionBy = c("col1", "col2"))
 #' saveDF(df, parquetPath2, "parquet", mode = "append", mergeSchema = TRUE)
 #' }
 #' @note write.df since 1.4.0
 setMethod("write.df",
           signature(df = "SparkDataFrame"),
-          function(df, path = NULL, source = NULL, mode = "error", ...) {
+          function(df, path = NULL, source = NULL, mode = "error", partitionBy = NULL, ...) {
             if (!is.null(path) && !is.character(path)) {
               stop("path should be character, NULL or omitted.")
             }
@@ -2985,8 +2988,18 @@ setMethod("write.df",
             if (is.null(source)) {
               source <- getDefaultSqlSource()
             }
+            cols <- NULL
+            if (!is.null(partitionBy)) {
+              if (!all(sapply(partitionBy, function(c) is.character(c)))) {
+                stop("All partitionBy column names should be characters.")
+              }
+              cols <- as.list(partitionBy)
+            }
             write <- callJMethod(df@sdf, "write")
             write <- callJMethod(write, "format", source)
+            if (!is.null(cols)) {
+              write <- callJMethod(write, "partitionBy", cols)
+            }
             write <- setWriteOptions(write, path = path, mode = mode, ...)
             write <- handledCallJMethod(write, "save")
           })
