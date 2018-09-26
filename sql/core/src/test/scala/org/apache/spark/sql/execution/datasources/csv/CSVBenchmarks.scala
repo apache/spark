@@ -16,21 +16,19 @@
  */
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.io.File
-
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{Column, Row, SparkSession}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 /**
  * Benchmark to measure CSV read/write performance.
  * To run this:
  *  spark-submit --class <this class> --jars <spark sql test jar>
  */
-object CSVBenchmarks {
+object CSVBenchmarks extends SQLHelper {
   val conf = new SparkConf()
 
   val spark = SparkSession.builder
@@ -39,12 +37,6 @@ object CSVBenchmarks {
     .config(conf)
     .getOrCreate()
   import spark.implicits._
-
-  def withTempPath(f: File => Unit): Unit = {
-    val path = Utils.createTempDir()
-    path.delete()
-    try f(path) finally Utils.deleteRecursively(path)
-  }
 
   def quotedValuesBenchmark(rowsNum: Int, numIters: Int): Unit = {
     val benchmark = new Benchmark(s"Parsing quoted values", rowsNum)
