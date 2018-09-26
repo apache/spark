@@ -4637,6 +4637,44 @@ class PandasUDFTests(ReusedSQLTestCase):
             ).collect
         )
 
+    def test_pandas_udf_when_input_has_none(self):
+        import math
+        from pyspark.sql.functions import pandas_udf
+        import pandas as pd
+
+        values = [1.0] * 10 + [None] * 10 + [2.0] * 10
+        pdf = pd.DataFrame({'A': values})
+        df = self.spark.createDataFrame(pdf).repartition(1)
+
+        @pandas_udf(returnType=DoubleType())
+        def gt_2_double(column):
+            return (column >= 2).where(column.notnull())
+
+        # This pandas udf returns Pandas.Series of dtype as float64.
+        # If we define the pandas udf with incorrect data type BooleanType,
+        # we should see an exception.
+        @pandas_udf(returnType=BooleanType())
+        def gt_2_boolean(column):
+            return (column >= 2).where(column.notnull())
+
+        udf_double = df.select(['A']).withColumn('udf', gt_2_double('A'))
+        udf_boolean = df.select(['A']).withColumn('udf', gt_2_boolean('A'))
+
+        result = udf_double.collect()
+        result_part1 = [x[1] for x in result if x[0] == 1.0]
+        self.assertEqual(set(result_part1), set([0.0]))
+        result_part2 = [x[1] for x in result if x[0] == 2.0]
+        self.assertEqual(set(result_part2), set([1.0]))
+        result_part3 = [x[1] for x in result if math.isnan(x[0])]
+        self.assertEqual(set(result_part3), set([None]))
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, "Return Pandas.Series of the user-defined " +
+                                                    "function's dtype is float64 which doesn't " +
+                                                    "match the arrow type bool of defined type " +
+                                                    "BooleanType"):
+                udf_boolean.collect()
+
 
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,

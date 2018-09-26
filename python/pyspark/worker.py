@@ -84,6 +84,7 @@ def wrap_scalar_pandas_udf(f, return_type):
     arrow_return_type = to_arrow_type(return_type)
 
     def verify_result_length(*a):
+        import pyarrow as pa
         result = f(*a)
         if not hasattr(result, "__len__"):
             raise TypeError("Return type of the user-defined function should be "
@@ -91,6 +92,15 @@ def wrap_scalar_pandas_udf(f, return_type):
         if len(result) != len(a[0]):
             raise RuntimeError("Result vector from pandas_udf was not the required length: "
                                "expected %d, got %d" % (len(a[0]), len(result)))
+
+        # Ensure return type of Pandas.Series matches the arrow return type of the user-defined
+        # function. Otherwise, we may produce incorrect serialized data.
+        arrow_type_of_result = pa.from_numpy_dtype(result.dtype)
+        if arrow_return_type != arrow_type_of_result:
+            raise TypeError("Return Pandas.Series of the user-defined function's dtype is %s "
+                            "which doesn't match the arrow type %s "
+                            "of defined type %s" % (result.dtype, arrow_return_type, return_type))
+
         return result
 
     return lambda *a: (verify_result_length(*a), arrow_return_type)
