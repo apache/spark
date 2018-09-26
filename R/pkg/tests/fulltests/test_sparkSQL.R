@@ -3711,6 +3711,18 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   dropTempView("cars")
 })
 
+test_that("Set default show() method for SparkDataFrame", {
+  df <- createDataFrame(faithful)
+  expected <- "eruptions:double, waiting:double"
+  expect_output(show(df), expected)
+
+  options(sparkr.SparkDataFrame.base_show_func =
+          function(x) {print(paste0("Class of ", class(x)))})
+  expected <- "Class of SparkDataFrame"
+  expect_output(show(df), expected)
+  options(sparkr.SparkDataFrame.base_show_func = NULL)
+})
+
 compare_list <- function(list1, list2) {
   # get testthat to show the diff by first making the 2 lists equal in length
   expect_equal(length(list1), length(list2))
