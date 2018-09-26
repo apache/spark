@@ -1004,6 +1004,17 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     </p>
   </td>
 </tr>
+<tr>
+  <td><code>spark.sql.parquet.writeLegacyFormat</code></td>
+  <td>false</td>
+  <td>
+    If true, data will be written in a way of Spark 1.4 and earlier. For example, decimal values
+    will be written in Apache Parquet's fixed-length byte array format, which other systems such as
+    Apache Hive and Apache Impala use. If false, the newer format in Parquet will be used. For
+    example, decimals will be written in int-based format. If Parquet output is intended for use
+    with systems that do not support this newer format, set to true.
+  </td>
+</tr>
 </table>
 
 ## ORC Files
