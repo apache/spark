@@ -374,10 +374,11 @@ private[spark] class AppStatusListener(
 
       job.completionTime = if (event.time > 0) Some(new Date(event.time)) else None
       update(job, now, last = true)
+      if (job.status == JobExecutionStatus.SUCCEEDED) {
+        appSummary = new AppSummary(appSummary.numCompletedJobs + 1, appSummary.numCompletedStages)
+        kvstore.write(appSummary)
+      }
     }
-
-    appSummary = new AppSummary(appSummary.numCompletedJobs + 1, appSummary.numCompletedStages)
-    kvstore.write(appSummary)
   }
 
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
@@ -639,10 +640,11 @@ private[spark] class AppStatusListener(
       if (removeStage) {
         liveStages.remove((event.stageInfo.stageId, event.stageInfo.attemptNumber))
       }
+      if (stage.status == v1.StageStatus.COMPLETE) {
+        appSummary = new AppSummary(appSummary.numCompletedJobs, appSummary.numCompletedStages + 1)
+        kvstore.write(appSummary)
+      }
     }
-
-    appSummary = new AppSummary(appSummary.numCompletedJobs, appSummary.numCompletedStages + 1)
-    kvstore.write(appSummary)
   }
 
   private def removeBlackListedStageFrom(exec: LiveExecutor, stageId: Int, now: Long) = {
