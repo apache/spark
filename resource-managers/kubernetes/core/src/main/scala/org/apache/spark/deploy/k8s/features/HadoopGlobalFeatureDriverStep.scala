@@ -41,9 +41,8 @@ private[spark] class HadoopGlobalFeatureDriverStep(
     extends KubernetesFeatureConfigStep with Logging {
 
     private val conf = kubernetesConf.sparkConf
-    private val maybePrincipal = conf.get(KUBERNETES_KERBEROS_PRINCIPAL)
-    private val maybeKeytab = conf.get(KUBERNETES_KERBEROS_KEYTAB)
-      .map(k => new File(k))
+    private val maybePrincipal = conf.get(org.apache.spark.internal.config.PRINCIPAL)
+    private val maybeKeytab = conf.get(org.apache.spark.internal.config.KEYTAB)
     private val maybeExistingSecretName = conf.get(KUBERNETES_KERBEROS_DT_SECRET_NAME)
     private val maybeExistingSecretItemKey =
       conf.get(KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY)
@@ -90,8 +89,6 @@ private[spark] class HadoopGlobalFeatureDriverStep(
          Some(HadoopKerberosLogin.buildSpec(
              conf,
              kubernetesConf.appResourceNamePrefix,
-             maybePrincipal,
-             maybeKeytab,
              kubeTokenManager))
        } else None )
 

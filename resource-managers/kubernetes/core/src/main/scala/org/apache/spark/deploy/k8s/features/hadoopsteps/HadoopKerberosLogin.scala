@@ -45,37 +45,22 @@ private[spark] object HadoopKerberosLogin {
    def buildSpec(
      submissionSparkConf: SparkConf,
      kubernetesResourceNamePrefix : String,
-     maybePrincipal: Option[String],
-     maybeKeytab: Option[File],
      tokenManager: KubernetesHadoopDelegationTokenManager): KerberosConfigSpec = {
      val hadoopConf = SparkHadoopUtil.get.newConfiguration(submissionSparkConf)
      if (!tokenManager.isSecurityEnabled) {
        throw new SparkException("Hadoop not configured with Kerberos")
      }
-     val maybeJobUserUGI =
-       for {
-         principal <- maybePrincipal
-         keytab <- maybeKeytab
-       } yield {
-         tokenManager.loginUserFromKeytabAndReturnUGI(
-           principal,
-           keytab.toURI.toString)
-       }
-     // In the case that keytab is not specified we will read from Local Ticket Cache
-     val jobUserUGI = maybeJobUserUGI.getOrElse(tokenManager.getCurrentUser)
+     // The JobUserUGI will be taken fom the Local Ticket Cache or via keytab+principal
+     // The login happens in the SparkSubmit so login logic is not necessary
+     val jobUserUGI = tokenManager.getCurrentUser
      val originalCredentials = jobUserUGI.getCredentials
-     // It is necessary to run as jobUserUGI because logged in user != Current User
-     val (tokenData, renewalInterval) = jobUserUGI.doAs(
-       new PrivilegedExceptionAction[(Array[Byte], Long)] {
-         override def run(): (Array[Byte], Long) = {
-           val hadoopTokenManager: HadoopDelegationTokenManager =
-             new HadoopDelegationTokenManager(submissionSparkConf, hadoopConf)
-           tokenManager.getDelegationTokens(
-             originalCredentials,
-             submissionSparkConf,
-             hadoopConf,
-             hadoopTokenManager)
-         }})
+     val hadoopTokenManager: HadoopDelegationTokenManager =
+       new HadoopDelegationTokenManager(submissionSparkConf, hadoopConf)
+     val (tokenData, renewalInterval) = tokenManager.getDelegationTokens(
+       originalCredentials,
+       submissionSparkConf,
+       hadoopConf,
+       hadoopTokenManager)
      require(tokenData.nonEmpty, "Did not obtain any delegation tokens")
      val currentTime = tokenManager.getCurrentTime
      val initialTokenDataKeyName = s"$KERBEROS_SECRET_LABEL_PREFIX-$currentTime-$renewalInterval"

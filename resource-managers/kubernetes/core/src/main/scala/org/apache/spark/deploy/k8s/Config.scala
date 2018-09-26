@@ -233,18 +233,6 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
-  val KUBERNETES_KERBEROS_KEYTAB =
-    ConfigBuilder("spark.kubernetes.kerberos.keytab")
-      .doc("Specify the location of keytab for Kerberos in order to access Secure HDFS")
-      .stringConf
-      .createOptional
-
-  val KUBERNETES_KERBEROS_PRINCIPAL =
-    ConfigBuilder("spark.kubernetes.kerberos.principal")
-      .doc("Specify the principal for Kerberos in order to access Secure HDFS")
-      .stringConf
-      .createOptional
-
   val KUBERNETES_KERBEROS_DT_SECRET_NAME =
     ConfigBuilder("spark.kubernetes.kerberos.tokensecret.name")
       .doc("Specify the name of the secret where your existing delegation token is stored. " +
