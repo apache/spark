@@ -157,7 +157,7 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 /**
  * PythonUDF in join condition can not be evaluated, this rule will detect the PythonUDF
  * and pull them out from join condition. For python udf accessing attributes from only one side,
- * they would be pushed down by operation push down rules. If not(e.g. user disables filter push
+ * they are pushed down by operation push down rules. If not (e.g. user disables filter push
  * down rules), we need to pull them out in this rule too.
  */
 object PullOutPythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
@@ -178,14 +178,12 @@ object PullOutPythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateH
           s" $joinType is not supported.")
       }
       // If condition expression contains python udf, it will be moved out from
-      // the new join conditions. If join condition has python udf only, it will be turned
-      // to cross join and the crossJoinEnable will be checked in CheckCartesianProducts.
+      // the new join conditions.
       val (udf, rest) =
-        condition.map(splitConjunctivePredicates).get.partition(hasPythonUDF)
+        splitConjunctivePredicates(condition.get).partition(hasPythonUDF)
       val newCondition = if (rest.isEmpty) {
-        logWarning(s"The join condition:$condition of the join plan contains " +
-          "PythonUDF only, it will be moved out and the join plan will be turned to cross " +
-          s"join. This plan shows below:\n $j")
+        logWarning(s"The join condition:$condition of the join plan contains PythonUDF only," +
+          s" it will be moved out and the join plan will be turned to cross join.")
         None
       } else {
         Some(rest.reduceLeft(And))
@@ -196,7 +194,7 @@ object PullOutPythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateH
         case LeftSemi =>
           Project(
             j.left.output.map(_.toAttribute),
-              Filter(udf.reduceLeft(And), newJoin.copy(joinType = Inner)))
+            Filter(udf.reduceLeft(And), newJoin.copy(joinType = Inner)))
         case _ =>
           throw new AnalysisException("Using PythonUDF in join condition of join type" +
             s" $joinType is not supported.")
