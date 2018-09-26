@@ -38,9 +38,14 @@ import org.apache.spark.util.SerializableConfiguration
  * Each task writes data to `target/_temporary/jobId/$jobId-$partitionId-$attemptNumber`.
  * Each job moves files from `target/_temporary/jobId/` to `target`.
  */
-class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteSupport {
+class SimpleWritableDataSource extends DataSourceV2
+  with ReadSupport
+  with WriteSupport
+  with SessionConfigSupport {
 
   private val schema = new StructType().add("i", "long").add("j", "long")
+
+  override def keyPrefix: String = "simpleWritableDataSource"
 
   class Reader(path: String, conf: Configuration) extends DataSourceReader {
     override def readSchema(): StructType = schema

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.sources.v2
 
+import java.io.File
 import java.util.{ArrayList, List => JList}
 
 import test.org.apache.spark.sql.sources.v2._
@@ -315,19 +316,52 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     checkCanonicalizedOutput(df, 2)
     checkCanonicalizedOutput(df.select('i), 1)
   }
-}
 
-class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {
-
-  class Reader extends DataSourceReader {
-    override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
-
-    override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
-      java.util.Arrays.asList(new SimpleDataReaderFactory(0, 5), new SimpleDataReaderFactory(5, 10))
+  test("SPARK-25425: extra options should override sessions options during reading") {
+    val prefix = "spark.datasource.userDefinedDataSource."
+    val optionName = "optionA"
+    withSQLConf(prefix + optionName -> "true") {
+      val df = spark
+        .read
+        .option(optionName, false)
+        .format(classOf[DataSourceV2WithSessionConfig].getName).load()
+      val options = df.queryExecution.optimizedPlan.collectFirst {
+        case DataSourceV2Relation(_, SimpleDataSourceV2Reader(options)) => options
+      }
+      assert(options.get.getBoolean(optionName, true) == false)
     }
   }
 
-  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
+  test("SPARK-25425: extra options should override sessions options during writing") {
+    withTempPath { path =>
+      val sessionPath = path.getCanonicalPath
+      withSQLConf("spark.datasource.simpleWritableDataSource.path" -> sessionPath) {
+        withTempPath { file =>
+          val optionPath = file.getCanonicalPath
+          val format = classOf[SimpleWritableDataSource].getName
+
+          val df = Seq((1L, 2L)).toDF("i", "j")
+          df.write.format(format).option("path", optionPath).save()
+          assert(!new File(sessionPath).exists)
+          checkAnswer(spark.read.format(format).option("path", optionPath).load(), df)
+        }
+      }
+    }
+  }
+}
+
+case class SimpleDataSourceV2Reader(options: DataSourceOptions) extends DataSourceReader {
+  override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
+
+  override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
+    java.util.Arrays.asList(new SimpleDataReaderFactory(0, 5), new SimpleDataReaderFactory(5, 10))
+  }
+}
+
+class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {
+  override def createReader(options: DataSourceOptions): DataSourceReader = {
+    SimpleDataSourceV2Reader(options)
+  }
 }
 
 class SimpleDataReaderFactory(start: Int, end: Int)
