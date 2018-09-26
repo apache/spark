@@ -16,10 +16,13 @@
  */
 package org.apache.spark.sql.catalyst.plans
 
+import java.io.File
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
-trait SupportWithSQLConf {
+trait SQLHelper {
 
   /**
    * Sets all SQL configurations specified in `pairs`, calls `f`, and then restores all SQL
@@ -47,5 +50,15 @@ trait SupportWithSQLConf {
         case (key, None) => conf.unsetConf(key)
       }
     }
+  }
+
+  /**
+   * Generates a temporary path without creating the actual file/directory, then pass it to `f`. If
+   * a file/directory is created there by `f`, it will be delete after `f` returns.
+   */
+  protected def withTempPath(f: File => Unit): Unit = {
+    val path = Utils.createTempDir()
+    path.delete()
+    try f(path) finally Utils.deleteRecursively(path)
   }
 }

@@ -19,17 +19,16 @@ package org.apache.spark.sql.execution.benchmark
 
 import java.io.File
 
-import scala.util.{Random, Try}
+import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.catalyst.plans.SupportWithSQLConf
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.functions.monotonically_increasing_id
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType}
-import org.apache.spark.util.Utils
 
 /**
  * Benchmark to measure read performance with Filter pushdown.
@@ -41,7 +40,7 @@ import org.apache.spark.util.Utils
  *      Results will be written to "benchmarks/FilterPushdownBenchmark-results.txt".
  * }}}
  */
-object FilterPushdownBenchmark extends BenchmarkBase with SupportWithSQLConf {
+object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
 
   private val conf = new SparkConf()
     .setAppName(this.getClass.getSimpleName)
@@ -60,12 +59,6 @@ object FilterPushdownBenchmark extends BenchmarkBase with SupportWithSQLConf {
   private val blockSize = org.apache.parquet.hadoop.ParquetWriter.DEFAULT_PAGE_SIZE
 
   private val spark = SparkSession.builder().config(conf).getOrCreate()
-
-  def withTempPath(f: File => Unit): Unit = {
-    val path = Utils.createTempDir()
-    path.delete()
-    try f(path) finally Utils.deleteRecursively(path)
-  }
 
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
     try f finally tableNames.foreach(spark.catalog.dropTempView)

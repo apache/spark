@@ -19,18 +19,17 @@ package org.apache.spark.sql.execution.benchmark
 import java.io.File
 
 import scala.collection.JavaConverters._
-import scala.util.{Random, Try}
+import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.plans.SupportWithSQLConf
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.datasources.parquet.{SpecificParquetRecordReaderBase, VectorizedParquetRecordReader}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnVector
-import org.apache.spark.util.Utils
 
 
 /**
@@ -38,7 +37,7 @@ import org.apache.spark.util.Utils
  * To run this:
  *  spark-submit --class <this class> <spark sql test jar>
  */
-object DataSourceReadBenchmark extends SupportWithSQLConf {
+object DataSourceReadBenchmark extends SQLHelper {
   val conf = new SparkConf()
     .setAppName("DataSourceReadBenchmark")
     // Since `spark.master` always exists, overrides this value
@@ -54,12 +53,6 @@ object DataSourceReadBenchmark extends SupportWithSQLConf {
   spark.conf.set(SQLConf.ORC_COPY_BATCH_TO_SPARK.key, "false")
   spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
   spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
-
-  def withTempPath(f: File => Unit): Unit = {
-    val path = Utils.createTempDir()
-    path.delete()
-    try f(path) finally Utils.deleteRecursively(path)
-  }
 
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
     try f finally tableNames.foreach(spark.catalog.dropTempView)

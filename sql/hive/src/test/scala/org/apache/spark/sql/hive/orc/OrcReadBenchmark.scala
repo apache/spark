@@ -19,15 +19,15 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 
-import scala.util.{Random, Try}
+import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.catalyst.plans.SupportWithSQLConf
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+
 
 /**
  * Benchmark to measure ORC read performance.
@@ -35,7 +35,7 @@ import org.apache.spark.util.Utils
  * This is in `sql/hive` module in order to compare `sql/core` and `sql/hive` ORC data sources.
  */
 // scalastyle:off line.size.limit
-object OrcReadBenchmark extends SupportWithSQLConf {
+object OrcReadBenchmark extends SQLHelper {
   val conf = new SparkConf()
   conf.set("orc.compression", "snappy")
 
@@ -47,12 +47,6 @@ object OrcReadBenchmark extends SupportWithSQLConf {
 
   // Set default configs. Individual cases will change them if necessary.
   spark.conf.set(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key, "true")
-
-  def withTempPath(f: File => Unit): Unit = {
-    val path = Utils.createTempDir()
-    path.delete()
-    try f(path) finally Utils.deleteRecursively(path)
-  }
 
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
     try f finally tableNames.foreach(spark.catalog.dropTempView)
