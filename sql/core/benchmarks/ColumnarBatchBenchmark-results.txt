@@ -2,62 +2,58 @@
 Int Read/Write
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
-Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Int Read/Write:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Java Array                                     197 /  201       1667.2           0.6       1.0X
-ByteBuffer Unsafe                              336 /  339        974.3           1.0       0.6X
-ByteBuffer API                                1419 / 1423        231.0           4.3       0.1X
-DirectByteBuffer                               557 /  561        588.3           1.7       0.4X
-Unsafe Buffer                                  194 /  200       1687.0           0.6       1.0X
-Column(on heap)                                193 /  199       1700.6           0.6       1.0X
-Column(off heap)                               374 /  387        876.8           1.1       0.5X
-Column(off heap direct)                        191 /  201       1711.8           0.6       1.0X
-UnsafeRow (on heap)                            386 /  395        849.5           1.2       0.5X
-UnsafeRow (off heap)                           411 /  417        796.7           1.3       0.5X
-Column On Heap Append                          341 /  347        959.6           1.0       0.6X
+Java Array                                     244 /  244       1342.3           0.7       1.0X
+ByteBuffer Unsafe                              445 /  445        736.5           1.4       0.5X
+ByteBuffer API                                2124 / 2125        154.3           6.5       0.1X
+DirectByteBuffer                               750 /  750        437.2           2.3       0.3X
+Unsafe Buffer                                  234 /  236       1401.3           0.7       1.0X
+Column(on heap)                                245 /  245       1335.6           0.7       1.0X
+Column(off heap)                               489 /  489        670.3           1.5       0.5X
+Column(off heap direct)                        236 /  236       1388.1           0.7       1.0X
+UnsafeRow (on heap)                            532 /  534        616.0           1.6       0.5X
+UnsafeRow (off heap)                           564 /  565        580.7           1.7       0.4X
+Column On Heap Append                          489 /  489        670.6           1.5       0.5X
 
 
 ================================================================================================
 Boolean Read/Write
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
-Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Boolean Read/Write:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Bitset                                         750 /  755        447.2           2.2       1.0X
-Byte Array                                     470 /  482        713.5           1.4       1.6X
+Bitset                                         879 /  879        381.9           2.6       1.0X
+Byte Array                                     794 /  794        422.6           2.4       1.1X
 
 
 ================================================================================================
 String Read/Write
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
-Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 String Read/Write:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-On Heap                                        379 /  385         43.2          23.1       1.0X
-Off Heap                                       501 /  504         32.7          30.6       0.8X
+On Heap                                        449 /  449         36.5          27.4       1.0X
+Off Heap                                       679 /  679         24.1          41.4       0.7X
 
 
 ================================================================================================
 Array Vector Read
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
-Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Array Vector Read:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-On Heap Read Size Only                         513 /  523        319.2           3.1       1.0X
-Off Heap Read Size Only                        568 /  576        288.6           3.5       0.9X
-On Heap Read Elements                         3107 / 3109         52.7          19.0       0.2X
-Off Heap Read Elements                        3964 / 3966         41.3          24.2       0.1X
+On Heap Read Size Only                         713 /  713        229.8           4.4       1.0X
+Off Heap Read Size Only                        757 /  757        216.5           4.6       0.9X
+On Heap Read Elements                         3648 / 3650         44.9          22.3       0.2X
+Off Heap Read Elements                        5263 / 5265         31.1          32.1       0.1X
 
 
