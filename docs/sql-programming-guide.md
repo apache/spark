@@ -1006,15 +1006,11 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   <td><code>spark.sql.parquet.writeLegacyFormat</code></td>
   <td>false</td>
   <td>
-    This configuration indicates whether we should use legacy Parquet format adopted by Spark 1.4
-    and prior versions or the standard format defined in parquet-format specification to write
-    Parquet files. This is not only related to compatibility with old Spark ones, but also other
-    systems like Hive, Impala, Presto, etc. This is especially important for decimals. If this
-    configuration is not enabled, decimals will be written in int-based format in Spark 1.5 and
-    above, other systems that only support legacy decimal format (fixed length byte array) will not
-    be able to read what Spark has written. Note other systems may have added support for the
-    standard format in more recent versions, which will make this configuration unnecessary. Please
-    consult documentation of related systems for details.
+    If true, data will be written in a way of Spark 1.4 and earlier. For example, decimal values
+    will be written in Apache Parquet's fixed-length byte array format, which other systems such as
+    Apache Hive and Apache Impala use. If false, the newer format in Parquet will be used. For
+    example, decimals will be written in int-based format. If Parquet output is intended for use
+    with systems that do not support this newer format, set to true.
   </td>
 </tr>
 </table>
