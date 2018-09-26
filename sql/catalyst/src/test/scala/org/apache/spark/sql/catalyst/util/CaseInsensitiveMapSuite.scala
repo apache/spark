@@ -21,28 +21,33 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.JavaSerializer
 
 class CaseInsensitiveMapSuite extends SparkFunSuite {
+  private def shouldBeSerializable(m: Map[String, String]): Unit = {
+    new JavaSerializer(new SparkConf()).newInstance().serialize(m)
+  }
+
   test("Keys are case insensitive") {
     val m = CaseInsensitiveMap(Map("a" -> "b", "foO" -> "bar"))
     assert(m("FOO") == "bar")
     assert(m("fOo") == "bar")
     assert(m("A") == "b")
+    shouldBeSerializable(m)
   }
 
   test("CaseInsensitiveMap should be serializable after '-' operator") {
     val m = CaseInsensitiveMap(Map("a" -> "b", "foo" -> "bar")) - "a"
     assert(m == Map("foo" -> "bar"))
-    new JavaSerializer(new SparkConf()).newInstance().serialize(m)
+    shouldBeSerializable(m)
   }
 
   test("CaseInsensitiveMap should be serializable after '+' operator") {
     val m = CaseInsensitiveMap(Map("a" -> "b", "foo" -> "bar")) + ("x" -> "y")
     assert(m == Map("a" -> "b", "foo" -> "bar", "x" -> "y"))
-    new JavaSerializer(new SparkConf()).newInstance().serialize(m)
+    shouldBeSerializable(m)
   }
 
   test("CaseInsensitiveMap should be serializable after 'filterKeys' method") {
     val m = CaseInsensitiveMap(Map("a" -> "b", "foo" -> "bar")).filterKeys(_ == "foo")
     assert(m == Map("foo" -> "bar"))
-    new JavaSerializer(new SparkConf()).newInstance().serialize(m)
+    shouldBeSerializable(m)
   }
 }
