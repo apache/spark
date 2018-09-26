@@ -431,8 +431,11 @@ object SQLConf {
       .createWithDefault(10)
 
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
-    .doc("Whether to be compatible with the legacy Parquet format adopted by Spark 1.4 and prior " +
-      "versions, when converting Parquet schema to Spark SQL schema and vice versa.")
+    .doc("If true, data will be written in a way of Spark 1.4 and earlier. For example, decimal " +
+      "values will be written in Apache Parquet's fixed-length byte array format, which other " +
+      "systems such as Apache Hive and Apache Impala use. If false, the newer format in Parquet " +
+      "will be used. For example, decimals will be written in int-based format. If Parquet " +
+      "output is intended for use with systems that do not support this newer format, set to true.")
     .booleanConf
     .createWithDefault(false)
 
