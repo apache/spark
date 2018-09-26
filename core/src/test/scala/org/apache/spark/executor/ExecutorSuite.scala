@@ -39,6 +39,7 @@ import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.internal.config._
 import org.apache.spark.memory.MemoryManager
 import org.apache.spark.metrics.{JVMHeapMemory, JVMOffHeapMemory, MetricsSystem}
 import org.apache.spark.rdd.RDD
@@ -307,7 +308,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
   }
 
   private def heartbeatZeroMetricTest(dropZeroMetrics: Boolean): Unit = {
-    val c = "spark.executor.heartbeat.dropZeroMetrics" -> dropZeroMetrics.toString
+    val c = EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES.key -> dropZeroMetrics.toString
     withHeartbeatExecutor(c) { (executor, heartbeats) =>
       // When no tasks are running, there should be no accumulators sent in heartbeat
       invokeReportHeartbeat(executor)
