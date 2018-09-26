@@ -971,18 +971,17 @@ object TypeCoercion {
         case (ArrayType(fromType, true), ArrayType(toType: DataType, false)) => null
 
         case (ArrayType(fromType, false), ArrayType(toType: DataType, false))
-          if !Cast.forceNullable(fromType, toType) =>
+            if !Cast.forceNullable(fromType, toType) =>
           implicitCast(fromType, toType).map(ArrayType(_, false)).orNull
 
         // Implicit cast between Map types.
         // Follows the same semantics of implicit casting between two array types.
         // Refer to documentation above.
         case (MapType(fromKeyType, fromValueType, fn), MapType(toKeyType, toValueType, true))
-          if !Cast.forceNullable(fromKeyType, toKeyType) =>
+            if !Cast.forceNullable(fromKeyType, toKeyType) =>
           val newKeyType = implicitCast(fromKeyType, toKeyType).orNull
           val newValueType = implicitCast(fromValueType, toValueType).orNull
-          if (newKeyType != null && newValueType != null
-            && (!newKeyType.sameType(fromKeyType) || !newValueType.sameType(fromValueType))) {
+          if (newKeyType != null && newValueType != null) {
             MapType(newKeyType, newValueType, true)
           } else {
             null
@@ -992,12 +991,11 @@ object TypeCoercion {
          null
 
         case (MapType(fromKeyType, fromValueType, false), MapType(toKeyType, toValueType, false))
-          if (!(Cast.forceNullable(fromKeyType, toKeyType) ||
-            Cast.forceNullable(fromValueType, toValueType))) =>
+            if (!(Cast.forceNullable(fromKeyType, toKeyType) ||
+              Cast.forceNullable(fromValueType, toValueType))) =>
           val newKeyType = implicitCast(fromKeyType, toKeyType).orNull
           val newValueType = implicitCast(fromValueType, toValueType).orNull
-          if (newKeyType != null && newValueType != null
-            && (!newKeyType.sameType(fromKeyType) || !newValueType.sameType(fromValueType))) {
+          if (newKeyType != null && newValueType != null) {
             MapType(newKeyType, newValueType, false)
           } else {
             null

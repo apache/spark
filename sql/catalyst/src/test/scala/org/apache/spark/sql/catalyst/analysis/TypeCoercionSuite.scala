@@ -289,16 +289,11 @@ class TypeCoercionSuite extends AnalysisTest {
       CreateMap(Seq(Literal.default(sourceType.keyType),
         Literal.create(null, sourceType.valueType)))
     targetNotNullableTypes.foreach { targetType =>
-      val x = 10
       val castDefault =
         TypeCoercion.ImplicitTypeCasts.implicitCast(sourceMapExprWithValueNull, targetType)
       assert(castDefault.isEmpty,
-        s"Should not be able to cast $sourceType to $sourceType, but got $castDefault")
+        s"Should not be able to cast $sourceType to $targetType, but got $castDefault")
     }
-
-    shouldNotCast(MapType(DoubleType, DoubleType, valueContainsNull = false),
-      CalendarIntervalType)
-
   }
 
   test("implicit type cast - StructType().add(\"a1\", StringType)") {
