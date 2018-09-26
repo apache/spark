@@ -18,13 +18,14 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Common base trait to run benchmark with the Dataset and DataFrame API.
  */
-trait SqlBasedBenchmark extends BenchmarkBase {
+trait SqlBasedBenchmark extends BenchmarkBase with SQLHelper {
 
   val spark: SparkSession = getSparkSession
 
@@ -36,34 +37,6 @@ trait SqlBasedBenchmark extends BenchmarkBase {
       .config(SQLConf.SHUFFLE_PARTITIONS.key, 1)
       .config(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, 1)
       .getOrCreate()
-  }
-
-  /**
-   * Sets all SQL configurations specified in `pairs`, calls `f`, and then restores all SQL
-   * configurations.
-   */
-  protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    val conf = SQLConf.get
-    val (keys, values) = pairs.unzip
-    val currentValues = keys.map { key =>
-      if (conf.contains(key)) {
-        Some(conf.getConfString(key))
-      } else {
-        None
-      }
-    }
-    (keys, values).zipped.foreach { (k, v) =>
-      if (SQLConf.staticConfKeys.contains(k)) {
-        throw new AnalysisException(s"Cannot modify the value of a static config: $k")
-      }
-      conf.setConfString(k, v)
-    }
-    try f finally {
-      keys.zip(currentValues).foreach {
-        case (key, Some(value)) => conf.setConfString(key, value)
-        case (key, None) => conf.unsetConf(key)
-      }
-    }
   }
 
   /** Runs function `f` with whole stage codegen on and off. */
