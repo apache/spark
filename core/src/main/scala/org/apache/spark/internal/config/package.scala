@@ -160,6 +160,10 @@ package object config {
     .doc("Name of the Kerberos principal.")
     .stringConf.createOptional
 
+  private[spark] val KAFKA_BOOTSTRAP_SERVERS = ConfigBuilder("bootstrap.servers")
+    .doc("Name of the kafka boostrap servers.")
+    .stringConf.createOptional
+
   private[spark] val EXECUTOR_INSTANCES = ConfigBuilder("spark.executor.instances")
     .intConf
     .createOptional

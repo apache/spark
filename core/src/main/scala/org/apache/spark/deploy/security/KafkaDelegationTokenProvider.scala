@@ -22,8 +22,10 @@ import java.util.Properties
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
+
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 import scala.reflect.runtime._
@@ -36,7 +38,7 @@ class KafkaDelegationTokenProvider
   override def serviceName: String = "kafka"
 
   override  def obtainDelegationTokens(
-     kafkaConfig: Configuration,
+     hadoopConf: Configuration,
      sparkConf: SparkConf,
      creds: Credentials): Option[Long] = {
 
@@ -46,7 +48,7 @@ class KafkaDelegationTokenProvider
       val clientClass = mirror.classLoader.
         loadClass("org.apache.kafka.clients.admin.AdminClient")
       val createMethod = clientClass.getMethod("create", classOf[java.util.Properties])
-      val clientInstance = createMethod.invoke(null, kafkaConfig)
+      val clientInstance = createMethod.invoke(null, kafakaConf(sparkConf))
 
       val obtainToken = mirror.classLoader.
         loadClass("org.apache.kafka.clients.admin.AdminClient").
@@ -76,8 +78,32 @@ class KafkaDelegationTokenProvider
      sparkConf: SparkConf,
      kafkaConf: Configuration): Boolean = {
 
-    kafkaConf.get("com.sun.security.auth.module.Krb5LoginModule") == "kerberos"
+    sparkConf.get(KAFKA_BOOTSTRAP_SERVERS) != null
 
+  }
+
+  private def kafakaConf(sparkConf: SparkConf): Properties = {
+    val principal = sparkConf.get(PRINCIPAL).orNull
+    val keytab = sparkConf.get(KEYTAB).orNull
+    val protocol = "SASL_PLAINTEXT"
+    val bootstrapServer = sparkConf.get(KAFKA_BOOTSTRAP_SERVERS).orNull
+
+    val jaasConfig =
+      s"""
+         |com.sun.security.auth.module.Krb5LoginModule required
+         | useKeyTab=true
+         | storeKey=true
+         | serviceName="kafka"
+         | keyTab="$keytab"
+         | principal="$principal";
+      """.stripMargin.replace("\n", "")
+
+    val adminClientProperties = new Properties
+    adminClientProperties.put("bootstrap.servers", bootstrapServer)
+    adminClientProperties.put("security.protocol", protocol)
+    adminClientProperties.put("sasl.jaas.config", jaasConfig)
+
+    adminClientProperties
   }
 
 }
