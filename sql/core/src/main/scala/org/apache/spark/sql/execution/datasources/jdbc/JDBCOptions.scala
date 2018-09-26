@@ -189,8 +189,12 @@ class JDBCOptions(
   val pushDownPredicate = parameters.getOrElse(JDBC_PUSHDOWN_PREDICATE, "true").toBoolean
 
   val connectionFactoryProvider: ConnectionFactoryProvider =
-    parameters.get(JDBC_CONNECTION_FACTORY_PROVIDER).map { className =>
-      Utils.classForName(className).newInstance.asInstanceOf[ConnectionFactoryProvider]
+    parameters.get(JDBC_CONNECTION_FACTORY_PROVIDER).map { className => try {
+        Utils.classForName(className).newInstance.asInstanceOf[ConnectionFactoryProvider]
+      } catch {
+        case _ =>
+          throw new IllegalArgumentException(s"$className is not a valid ConnectionFactoryProvider")
+      }
     }.getOrElse(DefaultConnectionFactoryProvider)
 }
 

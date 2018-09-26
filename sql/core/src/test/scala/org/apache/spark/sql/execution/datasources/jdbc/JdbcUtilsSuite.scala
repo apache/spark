@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
+import java.sql.Connection
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -65,4 +67,60 @@ class JdbcUtilsSuite extends SparkFunSuite {
     }
     assert(mismatchedInput.getMessage.contains("mismatched input '.' expecting"))
   }
+
+  test("Custom ConnectionFactory falls back to default when no factory specified") {
+    val options = new JDBCOptions(Map[String, String](
+      "url" -> "jdbc:mysql://foo.com/bar",
+      "dbtable" -> "table")
+    )
+    assert(options.connectionFactoryProvider eq DefaultConnectionFactoryProvider)
+  }
+
+  test("JdbcUtils uses the specified connection factory") {
+    val options = new JDBCOptions(Map[String, String](
+      "url" -> "jdbc:mysql://foo.com/bar",
+      "dbtable" -> "table",
+      JDBCOptions.JDBC_CONNECTION_FACTORY_PROVIDER ->
+        "org.apache.spark.sql.execution.datasources.jdbc.TestFactory")
+    )
+    val x = intercept[RuntimeException] {
+      JdbcUtils.createConnectionFactory(options)()
+    }
+    assert(x.getMessage == "This message will be tested in test")
+  }
+
+  test("invalid connection factory throws IllegalArgumentException") {
+
+    val nonexisting = intercept[IllegalArgumentException] {
+      new JDBCOptions(Map[String, String](
+        "url" -> "jdbc:mysql://foo.com/bar",
+        "dbtable" -> "table",
+        JDBCOptions.JDBC_CONNECTION_FACTORY_PROVIDER -> "notexistingclass")
+      )
+    }
+    assert(nonexisting.getMessage == "notexistingclass is not a valid ConnectionFactoryProvider")
+
+    val missingTrait = intercept[IllegalArgumentException] {
+      new JDBCOptions(Map[String, String](
+        "url" -> "jdbc:mysql://foo.com/bar",
+        "dbtable" -> "table",
+        JDBCOptions.JDBC_CONNECTION_FACTORY_PROVIDER ->
+          "org.apache.spark.sql.execution.datasources.jdbc.BadFactory")
+      )
+    }
+    assert(missingTrait.getMessage ==
+      "org.apache.spark.sql.execution.datasources.jdbc.BadFactory" +
+        " is not a valid ConnectionFactoryProvider")
+
+  }
+}
+
+// this one does not implement ConnectionFactoryProvider
+class BadFactory {
+
+}
+
+class TestFactory extends ConnectionFactoryProvider {
+  override def createConnectionFactory(options: JDBCOptions): () => Connection =
+    () => throw new RuntimeException("This message will be tested in test")
 }
