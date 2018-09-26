@@ -2141,8 +2141,8 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
 
   override def inputTypes: Seq[AbstractDataType] = {
     (left.dataType, right.dataType) match {
-      case (ArrayType(e1, hasNull), e2: IntegralType) if (e2 != LongType) =>
-        Seq(ArrayType(e1, hasNull), IntegerType)
+      case (arr: ArrayType, e2: IntegralType) if (e2 != LongType) =>
+        Seq(arr, IntegerType)
       case (MapType(keyType, valueType, hasNull), e2) =>
         TypeCoercion.findTightestCommonType(keyType, e2) match {
           case Some(dt) => Seq(MapType(dt, valueType, hasNull), dt)

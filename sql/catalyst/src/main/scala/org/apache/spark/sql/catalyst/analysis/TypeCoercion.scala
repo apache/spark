@@ -976,29 +976,21 @@ object TypeCoercion {
 
         // Implicit cast between Map types.
         // Follows the same semantics of implicit casting between two array types.
-        // Refer to documentation above.
-        case (MapType(fromKeyType, fromValueType, fn), MapType(toKeyType, toValueType, true))
-            if !Cast.forceNullable(fromKeyType, toKeyType) =>
-          val newKeyType = implicitCast(fromKeyType, toKeyType).orNull
-          val newValueType = implicitCast(fromValueType, toValueType).orNull
-          if (newKeyType != null && newValueType != null) {
-            MapType(newKeyType, newValueType, true)
-          } else {
+        // Refer to documentation above. Make sure that both key and values
+        // can not by null after the implicit cast operation by calling forceNullable
+        // method.
+        case (MapType(fromKeyType, fromValueType, fn), MapType(toKeyType, toValueType, tn))
+            if !Cast.forceNullable(fromKeyType, toKeyType) && Cast.resolvableNullability(fn, tn) =>
+          if (Cast.forceNullable(fromValueType, toValueType) && !tn) {
             null
-          }
-
-        case (MapType(fromKeyType, fromValueType, true), MapType(toKeyType, toValueType, false)) =>
-         null
-
-        case (MapType(fromKeyType, fromValueType, false), MapType(toKeyType, toValueType, false))
-            if (!(Cast.forceNullable(fromKeyType, toKeyType) ||
-              Cast.forceNullable(fromValueType, toValueType))) =>
-          val newKeyType = implicitCast(fromKeyType, toKeyType).orNull
-          val newValueType = implicitCast(fromValueType, toValueType).orNull
-          if (newKeyType != null && newValueType != null) {
-            MapType(newKeyType, newValueType, false)
           } else {
-            null
+            val newKeyType = implicitCast(fromKeyType, toKeyType).orNull
+            val newValueType = implicitCast(fromValueType, toValueType).orNull
+            if (newKeyType != null && newValueType != null) {
+              MapType(newKeyType, newValueType, tn)
+            } else {
+              null
+            }
           }
 
         case _ => null
