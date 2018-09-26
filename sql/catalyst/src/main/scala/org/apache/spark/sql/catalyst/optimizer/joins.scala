@@ -155,8 +155,10 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Correctly handle PythonUDF which need access both side of join side by changing the new join
- * type to Cross.
+ * PythonUDF in join condition can not be evaluated, this rule will detect the PythonUDF
+ * and pull them out from join condition. For python udf accessing attributes from only one side,
+ * they would be pushed down by operation push down rules. If not(e.g. user disables filter push
+ * down rules), we need to pull them out in this rule too.
  */
 object PullOutPythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
   def hasPythonUDF(expression: Expression): Boolean = {
@@ -175,22 +177,22 @@ object PullOutPythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateH
         throw new AnalysisException("Using PythonUDF in join condition of join type" +
           s" $joinType is not supported.")
       }
-      // if condition expression contains python udf, it will be moved out from
-      // the new join conditions, and the join type will be changed to CrossJoin.
-      logWarning(s"The join condition:$condition of the join plan contains " +
-        "PythonUDF, it will be moved out and the join plan will be turned to cross " +
-        s"join when its the only condition. This plan shows below:\n $j")
+      // If condition expression contains python udf, it will be moved out from
+      // the new join conditions. If join condition has python udf only, it will be turned
+      // to cross join and the crossJoinEnable will be checked in CheckCartesianProducts.
       val (udf, rest) =
         condition.map(splitConjunctivePredicates).get.partition(hasPythonUDF)
       val newCondition = if (rest.isEmpty) {
-        Option.empty
+        logWarning(s"The join condition:$condition of the join plan contains " +
+          "PythonUDF only, it will be moved out and the join plan will be turned to cross " +
+          s"join. This plan shows below:\n $j")
+        None
       } else {
         Some(rest.reduceLeft(And))
       }
       val newJoin = j.copy(condition = newCondition)
       joinType match {
-        case _: InnerLike =>
-          Filter(udf.reduceLeft(And), newJoin)
+        case _: InnerLike => Filter(udf.reduceLeft(And), newJoin)
         case LeftSemi =>
           Project(
             j.left.output.map(_.toAttribute),
