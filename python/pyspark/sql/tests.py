@@ -5799,7 +5799,8 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         import pandas as pd
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
-        with self.sql_conf({"spark.sql.execution.pandas.groupedMap.assignColumnsByPosition": True}):
+        with self.sql_conf({
+                "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}):
 
             @pandas_udf("a string, b float", PandasUDFType.GROUPED_MAP)
             def foo(_):
