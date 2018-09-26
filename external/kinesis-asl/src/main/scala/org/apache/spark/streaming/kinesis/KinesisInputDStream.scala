@@ -29,8 +29,12 @@ import org.apache.spark.streaming.{Duration, StreamingContext, Time}
 import org.apache.spark.streaming.api.java.JavaStreamingContext
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.kinesis.KinesisInitialPositions.Latest
+import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
+import org.apache.spark.streaming.util.WriteAheadLogUtils
+
+case class MyDog(name: String)
 
 private[kinesis] class KinesisInputDStream[T: ClassTag](
     _ssc: StreamingContext,
@@ -51,29 +55,45 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
 
   private[streaming]
   override def createBlockRDD(time: Time, blockInfos: Seq[ReceivedBlockInfo]): RDD[T] = {
+    val blockIds = blockInfos.map { _.blockId.asInstanceOf[BlockId] }.toArray
+    val isBlockIdValid = blockInfos.map { _.isBlockIdValid() }.toArray
 
-    // This returns true even for when blockInfos is empty
-    val allBlocksHaveRanges = blockInfos.map { _.metadataOption }.forall(_.nonEmpty)
+    // Check whether WAL is enabled
+    if (WriteAheadLogUtils.enableReceiverLog(ssc.conf)) {
+      val areWALRecordHandlesPresent = blockInfos.forall { _.walRecordHandleOption.nonEmpty }
+      if (areWALRecordHandlesPresent) {
+        // If all the blocks have WAL record handle, then create a WALBackedBlockRDD
+        val walRecordHandles = blockInfos.map { _.walRecordHandleOption.get }.toArray
+        logInfo(s"Creating WriteAheadLogBackedBlockRDD for $time.")
 
-    if (allBlocksHaveRanges) {
-      // Create a KinesisBackedBlockRDD, even when there are no blocks
-      val blockIds = blockInfos.map { _.blockId.asInstanceOf[BlockId] }.toArray
-      val seqNumRanges = blockInfos.map {
-        _.metadataOption.get.asInstanceOf[SequenceNumberRanges] }.toArray
-      val isBlockIdValid = blockInfos.map { _.isBlockIdValid() }.toArray
-      logDebug(s"Creating KinesisBackedBlockRDD for $time with ${seqNumRanges.length} " +
+        new WriteAheadLogBackedBlockRDD(
+          ssc.sparkContext, blockIds, walRecordHandles, isBlockIdValid)
+      } else {
+        logWarning("Some blocks do not have Write Ahead Log information; " +
+          "this is unexpected and data may not be recoverable after driver failures")
+        super.createBlockRDD(time, blockInfos)
+      }
+    } else {
+      // This returns true even for when blockInfos is empty
+      val allBlocksHaveRanges = blockInfos.map { _.metadataOption }.forall(_.nonEmpty)
+      if (allBlocksHaveRanges) {
+        // Create a KinesisBackedBlockRDD, even when there are no blocks
+        val seqNumRanges = blockInfos.map {
+          _.metadataOption.get.asInstanceOf[SequenceNumberRanges] }.toArray
+        logDebug(s"Creating KinesisBackedBlockRDD for $time with ${seqNumRanges.length} " +
           s"seq number ranges: ${seqNumRanges.mkString(", ")} ")
 
-      new KinesisBackedBlockRDD(
-        context.sc, regionName, endpointUrl, blockIds, seqNumRanges,
-        isBlockIdValid = isBlockIdValid,
-        messageHandler = messageHandler,
-        kinesisCreds = kinesisCreds,
-        kinesisReadConfigs = KinesisReadConfigurations(ssc))
-    } else {
-      logWarning("Kinesis sequence number information was not present with some block metadata," +
-        " it may not be possible to recover from failures")
-      super.createBlockRDD(time, blockInfos)
+        new KinesisBackedBlockRDD(
+          context.sc, regionName, endpointUrl, blockIds, seqNumRanges,
+          isBlockIdValid = isBlockIdValid,
+          messageHandler = messageHandler,
+          kinesisCreds = kinesisCreds,
+          kinesisReadConfigs = KinesisReadConfigurations(ssc))
+      } else {
+        logWarning("Kinesis sequence number information was not present with some block metadata," +
+          " it may not be possible to recover from failures")
+        super.createBlockRDD(time, blockInfos)
+      }
     }
   }
 
