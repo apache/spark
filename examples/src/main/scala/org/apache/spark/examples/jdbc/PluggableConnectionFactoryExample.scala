@@ -26,14 +26,16 @@ object RDS {
 }
 
 /*
-In real life the above would be something like the below but I did not want to introduce a dependency on AWS-RDS:
+In real life the above would be something like the below but I did not want to introduce a
+dependency on AWS-RDS:
 
 object RDS extends Logging {
   lazy val config: Config = ConfigFactory.load(s"typesafe_configfile").getConfig("myconfig")
 
   lazy val clusterId = config.getString("rds.cluster")
 
-  lazy val rds = AmazonRDSClientBuilder.defaultClient() // requires AWS_REGION environment variable as well as AWS creds
+  lazy val rds = AmazonRDSClientBuilder.defaultClient() // requires AWS_REGION environment variable
+                                                        // as well as AWS credentials
 
   private var endpoints: Seq[String] = null
 
