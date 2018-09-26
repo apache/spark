@@ -121,7 +121,7 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
     val errMsg = intercept[AnalysisException] {
       dummyPythonUDFTest()
     }
-    assert(errMsg.getMessage.startsWith("Detected the join condition:"))
+    assert(errMsg.getMessage.startsWith("Detected implicit cartesian product"))
     // Test with spark.sql.crossJoin.enabled=true
     spark.conf.set("spark.sql.crossJoin.enabled", "true")
     dummyPythonUDFTest()

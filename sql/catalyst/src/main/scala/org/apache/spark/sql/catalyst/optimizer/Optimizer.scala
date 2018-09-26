@@ -1312,16 +1312,6 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
     if (SQLConf.get.crossJoinEnabled) {
       plan
     } else plan transform {
-      case j @ Join(_, _, _, condition)
-          if condition.isDefined && PullOutPythonUDFInJoinCondition.hasPythonUDF(condition.get) =>
-        // if the crossJoinEnabled is false, a RuntimeException will be thrown later while
-        // the PythonUDF need to access both side of join, we throw firstly here for better
-        // readable information.
-        throw new AnalysisException(s"Detected the join condition:${j.condition} of this join " +
-          "plan contains PythonUDF, if the PythonUDF need to access both side of join, " +
-          "it will get an invalid PythonUDF RuntimeException with message `requires attributes " +
-          "from more than one child`, we need to cast the join to cross join by setting the" +
-          s" configuration variable ${SQLConf.CROSS_JOINS_ENABLED.key}=true")
       case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _)
         if isCartesianProduct(j) =>
           throw new AnalysisException(
@@ -1332,7 +1322,7 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
                |Join condition is missing or trivial.
                |Either: use the CROSS JOIN syntax to allow cartesian products between these
                |relations, or: enable implicit cartesian products by setting the configuration
-               |variable ${SQLConf.CROSS_JOINS_ENABLED.key}=true"""
+               |variable spark.sql.crossJoin.enabled=true"""
             .stripMargin)
     }
 }

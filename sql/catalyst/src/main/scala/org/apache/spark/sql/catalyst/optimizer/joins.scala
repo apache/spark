@@ -175,34 +175,29 @@ object PullOutPythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateH
         throw new AnalysisException("Using PythonUDF in join condition of join type" +
           s" $joinType is not supported.")
       }
-      if (SQLConf.get.crossJoinEnabled) {
-        // if condition expression contains python udf, it will be moved out from
-        // the new join conditions, and the join type will be changed to CrossJoin.
-        logWarning(s"The join condition:$condition of the join plan contains " +
-          "PythonUDF, it will be moved out and the join plan will be " +
-          s"turned to cross join. This plan shows below:\n $j")
-        val (udf, rest) =
-          condition.map(splitConjunctivePredicates).get.partition(hasPythonUDF)
-        val newCondition = if (rest.isEmpty) {
-          Option.empty
-        } else {
-          Some(rest.reduceLeft(And))
-        }
-        val newJoin = j.copy(joinType = Cross, condition = newCondition)
-        joinType match {
-          case _: InnerLike =>
-            Filter(udf.reduceLeft(And), newJoin)
-          case LeftSemi =>
-            Project(
-              j.left.output.map(_.toAttribute), Filter(udf.reduceLeft(And), newJoin))
-          case _ =>
-            throw new AnalysisException("Using PythonUDF in join condition of join type" +
-              s" $joinType is not supported.")
-        }
+      // if condition expression contains python udf, it will be moved out from
+      // the new join conditions, and the join type will be changed to CrossJoin.
+      logWarning(s"The join condition:$condition of the join plan contains " +
+        "PythonUDF, it will be moved out and the join plan will be turned to cross " +
+        s"join when its the only condition. This plan shows below:\n $j")
+      val (udf, rest) =
+        condition.map(splitConjunctivePredicates).get.partition(hasPythonUDF)
+      val newCondition = if (rest.isEmpty) {
+        Option.empty
       } else {
-        // Just pass through the original join, the checking for crossJoinEnabled will be done
-        // later in CheckCartesianProducts.
-        j
+        Some(rest.reduceLeft(And))
+      }
+      val newJoin = j.copy(condition = newCondition)
+      joinType match {
+        case _: InnerLike =>
+          Filter(udf.reduceLeft(And), newJoin)
+        case LeftSemi =>
+          Project(
+            j.left.output.map(_.toAttribute),
+              Filter(udf.reduceLeft(And), newJoin.copy(joinType = Inner)))
+        case _ =>
+          throw new AnalysisException("Using PythonUDF in join condition of join type" +
+            s" $joinType is not supported.")
       }
   }
 }
