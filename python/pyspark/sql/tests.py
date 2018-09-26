@@ -574,8 +574,7 @@ class SQLTests(ReusedSQLTestCase):
 
     def test_udf_and_filter_in_join_condition(self):
         # regression test for SPARK-25314
-        # test the complex scenario with both udf(non-deterministic)
-        # and normal filter(deterministic)
+        # test the complex scenario with both udf and normal filter
         from pyspark.sql.functions import udf
         left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
         right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=2, b1=1, b2=2)])
@@ -586,8 +585,7 @@ class SQLTests(ReusedSQLTestCase):
 
     def test_udf_and_filter_in_left_semi_join_condition(self):
         # regression test for SPARK-25314
-        # test the complex scenario with both udf(non-deterministic)
-        # and normal filter(deterministic)
+        # test the complex scenario with both udf and normal filter
         from pyspark.sql.functions import udf
         left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
         right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=2, b1=1, b2=2)])
@@ -598,8 +596,7 @@ class SQLTests(ReusedSQLTestCase):
 
     def test_udf_and_common_filter_in_join_condition(self):
         # regression test for SPARK-25314
-        # test the complex scenario with both udf(non-deterministic)
-        # and common filter(deterministic)
+        # test the complex scenario with both udf and common filter
         from pyspark.sql.functions import udf
         left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
         right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
@@ -610,8 +607,7 @@ class SQLTests(ReusedSQLTestCase):
 
     def test_udf_and_common_filter_in_left_semi_join_condition(self):
         # regression test for SPARK-25314
-        # test the complex scenario with both udf(non-deterministic)
-        # and common filter(deterministic)
+        # test the complex scenario with both udf and common filter
         from pyspark.sql.functions import udf
         left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
         right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])

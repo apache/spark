@@ -166,8 +166,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ConvertToLocalRelation,
       PropagateEmptyRelation) :+
     Batch("Extract PythonUDF From JoinCondition", Once,
-        HandlePythonUDFInJoinCondition) :+
-    // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
+      PullOutPythonUDFInJoinCondition) :+
+    // The following batch should be executed after batch "Join Reorder" "LocalRelation" and
+    // "Extract PythonUDF From JoinCondition".
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) :+
     Batch("RewriteSubquery", Once,
@@ -205,7 +206,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       PullupCorrelatedPredicates.ruleName ::
       RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName ::
-      HandlePythonUDFInJoinCondition.ruleName :: Nil
+      PullOutPythonUDFInJoinCondition.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
@@ -1307,19 +1308,12 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  /**
-   * Check if a join contains PythonUDF in join condition.
-   */
-  def hasPythonUDFInJoinCondition(join: Join): Boolean = {
-    val conditions = join.condition.map(splitConjunctivePredicates).getOrElse(Nil)
-    conditions.exists(HandlePythonUDFInJoinCondition.hasPythonUDF)
-  }
-
   def apply(plan: LogicalPlan): LogicalPlan =
     if (SQLConf.get.crossJoinEnabled) {
       plan
     } else plan transform {
-      case j @ Join(_, _, _, _) if hasPythonUDFInJoinCondition(j) =>
+      case j @ Join(_, _, _, condition)
+          if condition.isDefined && PullOutPythonUDFInJoinCondition.hasPythonUDF(condition.get) =>
         // if the crossJoinEnabled is false, a RuntimeException will be thrown later while
         // the PythonUDF need to access both side of join, we throw firstly here for better
         // readable information.

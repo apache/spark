@@ -158,14 +158,14 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
  * Correctly handle PythonUDF which need access both side of join side by changing the new join
  * type to Cross.
  */
-object HandlePythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
+object PullOutPythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
   def hasPythonUDF(expression: Expression): Boolean = {
     expression.collectFirst { case udf: PythonUDF => udf }.isDefined
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case j @ Join(_, _, joinType, condition)
-      if condition.map(splitConjunctivePredicates).getOrElse(Nil).exists(hasPythonUDF) =>
+        if condition.isDefined && hasPythonUDF(condition.get) =>
       if (!joinType.isInstanceOf[InnerLike] && joinType != LeftSemi) {
         // The current strategy only support InnerLike and LeftSemi join because for other type,
         // it breaks SQL semantic if we run the join condition as a filter after join. If we pass
