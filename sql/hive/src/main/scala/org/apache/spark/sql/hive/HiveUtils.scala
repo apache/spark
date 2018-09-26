@@ -129,7 +129,7 @@ private[spark] object HiveUtils extends Logging {
       "declared in a prefix that typically would be shared (i.e. <code>org.apache.spark.*</code>).")
     .stringConf
     .toSequence
-    .createWithDefault(Nil)
+    .createWithDefault(Seq("javax.jdo"))
 
   val HIVE_THRIFT_SERVER_ASYNC = buildConf("spark.sql.hive.thriftServer.async")
     .doc("When set to true, Hive Thrift server executes SQL queries in an asynchronous way.")
