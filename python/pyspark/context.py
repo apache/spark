@@ -537,8 +537,10 @@ class SparkContext(object):
             # parallelize from there.
             tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
             try:
-                serializer.dump_stream(data, tempFile)
-                tempFile.close()
+                try:
+                    serializer.dump_stream(data, tempFile)
+                finally:
+                    tempFile.close()
                 return reader_func(tempFile.name)
             finally:
                 # we eagerily reads the file so we can delete right after.

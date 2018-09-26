@@ -198,8 +198,9 @@ NULL
 #'          }
 #' @param ... additional argument(s). In \code{to_json} and \code{from_json}, this contains
 #'            additional named properties to control how it is converted, accepts the same
-#'            options as the JSON data source.  In \code{arrays_zip}, this contains additional
-#'            Columns of arrays to be merged.
+#'            options as the JSON data source. Additionally \code{to_json} supports the "pretty"
+#'            option which enables pretty JSON generation. In \code{arrays_zip}, this contains
+#'            additional Columns of arrays to be merged.
 #' @name column_collection_functions
 #' @rdname column_collection_functions
 #' @family collection functions

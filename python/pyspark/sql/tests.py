@@ -1961,6 +1961,9 @@ class SQLTests(ReusedSQLTestCase):
         def __setstate__(self, state):
             self.open_events_dir, self.process_events_dir, self.close_events_dir = state
 
+    # Those foreach tests are failed in Python 3.6 and macOS High Sierra by defined rules
+    # at http://sealiesoftware.com/blog/archive/2017/6/5/Objective-C_and_fork_in_macOS_1013.html
+    # To work around this, OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES.
     def test_streaming_foreach_with_simple_function(self):
         tester = self.ForeachWriterTester(self.spark)
 
@@ -5799,7 +5802,8 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         import pandas as pd
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
-        with self.sql_conf({"spark.sql.execution.pandas.groupedMap.assignColumnsByPosition": True}):
+        with self.sql_conf({
+                "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}):
 
             @pandas_udf("a string, b float", PandasUDFType.GROUPED_MAP)
             def foo(_):
