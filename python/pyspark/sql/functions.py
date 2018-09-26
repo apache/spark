@@ -1296,8 +1296,6 @@ def from_utc_timestamp(timestamp, tz):
     according to the timezone in the string, and finally display the result by converting the
     timestamp to string according to the session local timezone.
 
-    We may remove this function in Spark 3.0.
-
     :param timestamp: the column that contains timestamps
     :param tz: a string that has the ID of timezone, e.g. "GMT", "America/Los_Angeles", etc
 
@@ -1331,8 +1329,6 @@ def to_utc_timestamp(timestamp, tz):
     '2018-03-13T06:18:23+00:00'. The reason is that, Spark firstly cast the string to timestamp
     according to the timezone in the string, and finally display the result by converting the
     timestamp to string according to the session local timezone.
-
-    We may remove this function in Spark 3.0.
 
     :param timestamp: the column that contains timestamps
     :param tz: a string that has the ID of timezone, e.g. "GMT", "America/Los_Angeles", etc

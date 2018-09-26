@@ -2213,7 +2213,6 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructType")
 #' (\code{2018-03-13T06:18:23+00:00}). The reason is that, Spark firstly cast the string to
 #' timestamp according to the timezone in the string, and finally display the result by converting
 #' the timestamp to string according to the session local timezone.
-#' We may remove this function in Spark 3.0.
 #'
 #' @rdname column_datetime_diff_functions
 #'
@@ -2279,7 +2278,6 @@ setMethod("next_day", signature(y = "Column", x = "character"),
 #' (\code{2018-03-13T06:18:23+00:00}). The reason is that, Spark firstly cast the string to
 #' timestamp according to the timezone in the string, and finally display the result by converting
 #' the timestamp to string according to the session local timezone.
-#' We may remove this function in Spark 3.0.
 #'
 #' @rdname column_datetime_diff_functions
 #' @aliases to_utc_timestamp to_utc_timestamp,Column,character-method

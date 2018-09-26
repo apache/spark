@@ -1030,8 +1030,6 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
  * '2018-03-13T06:18:23+00:00'. The reason is that, Spark firstly cast the string to timestamp
  * according to the timezone in the string, and finally display the result by converting the
  * timestamp to string according to the session local timezone.
- *
- * We may remove this function in Spark 3.0.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -1238,8 +1236,6 @@ case class MonthsBetween(
  * '2018-03-13T06:18:23+00:00'. The reason is that, Spark firstly cast the string to timestamp
  * according to the timezone in the string, and finally display the result by converting the
  * timestamp to string according to the session local timezone.
- *
- * We may remove this function in Spark 3.0.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
