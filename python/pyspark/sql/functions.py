@@ -1283,9 +1283,18 @@ def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
 @since(1.5)
 def from_utc_timestamp(timestamp, tz):
     """
-    Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
-    that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
-    '2017-07-14 03:40:00.0'.
+    This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
+    takes a timestamp which is timezone-agnostic, and interprets it as a timestamp in UTC, and
+    renders that timestamp as a timestamp in the given time zone.
+
+    However, timestamp in Spark represents number of microseconds from the Unix epoch, which is not
+    timezone-agnostic. So in Spark this function just shift the timestamp value from UTC timezone to
+    the given timezone.
+
+    This function may return confusing result if the input is a string with timezone, e.g.
+    '2018-03-13T06:18:23+00:00'. The reason is that, Spark firstly cast the string to timestamp
+    according to the timezone in the string, and finally display the result by converting the
+    timestamp to string according to the session local timezone.
 
     :param timestamp: the column that contains timestamps
     :param tz: a string that has the ID of timezone, e.g. "GMT", "America/Los_Angeles", etc
@@ -1308,9 +1317,18 @@ def from_utc_timestamp(timestamp, tz):
 @since(1.5)
 def to_utc_timestamp(timestamp, tz):
     """
-    Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time
-    zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
-    '2017-07-14 01:40:00.0'.
+    This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
+    takes a timestamp which is timezone-agnostic, and interprets it as a timestamp in the given
+    timezone, and renders that timestamp as a timestamp in UTC.
+
+    However, timestamp in Spark represents number of microseconds from the Unix epoch, which is not
+    timezone-agnostic. So in Spark this function just shift the timestamp value from the given
+    timezone to UTC timezone.
+
+    This function may return confusing result if the input is a string with timezone, e.g.
+    '2018-03-13T06:18:23+00:00'. The reason is that, Spark firstly cast the string to timestamp
+    according to the timezone in the string, and finally display the result by converting the
+    timestamp to string according to the session local timezone.
 
     :param timestamp: the column that contains timestamps
     :param tz: a string that has the ID of timezone, e.g. "GMT", "America/Los_Angeles", etc
