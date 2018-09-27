@@ -184,9 +184,11 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
     intercept[InternalError] {
       errorHandler.read(out)
     }
-    intercept[IOException] {
+
+    val e = intercept[IOException] {
       errorHandler.read(out)
     }
+    assert(e.getMessage().contains("is closed"))
     errorHandler.close()
 
     verify(decrypted, times(2)).read(any(classOf[ByteBuffer]))

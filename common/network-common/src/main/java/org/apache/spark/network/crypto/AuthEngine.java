@@ -264,7 +264,7 @@ class AuthEngine implements Closeable {
         throw new IllegalArgumentException(String.valueOf(mode));
     }
 
-    Preconditions.checkState(cipher != null);
+    Preconditions.checkState(cipher != null, "Cipher is invalid because of previous error.");
 
     try {
       int scale = 1;

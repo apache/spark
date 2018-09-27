@@ -178,8 +178,14 @@ private[spark] object CryptoStreamUtils extends Logging {
 
     private var closed = false
 
+    /** The encrypted stream that may get into an unhealthy state. */
     protected def cipherStream: Closeable
-    protected def wrapped: Closeable
+
+    /**
+     * The underlying stream that is being wrapped by the encrypted stream, so that it can be
+     * closed even if there's an error in the crypto layer.
+     */
+    protected def original: Closeable
 
     protected def safeCall[T](fn: => T): T = {
       if (closed) {
@@ -190,7 +196,7 @@ private[spark] object CryptoStreamUtils extends Logging {
       } catch {
         case ie: InternalError =>
           closed = true
-          wrapped.close()
+          original.close()
           throw ie
       }
     }
@@ -206,7 +212,7 @@ private[spark] object CryptoStreamUtils extends Logging {
   // Visible for testing.
   class ErrorHandlingReadableChannel(
       protected val cipherStream: ReadableByteChannel,
-      protected val wrapped: ReadableByteChannel)
+      protected val original: ReadableByteChannel)
     extends ReadableByteChannel with BaseErrorHandler {
 
     override def read(src: ByteBuffer): Int = safeCall {
@@ -219,7 +225,7 @@ private[spark] object CryptoStreamUtils extends Logging {
 
   private class ErrorHandlingInputStream(
       protected val cipherStream: InputStream,
-      protected val wrapped: InputStream)
+      protected val original: InputStream)
     extends InputStream with BaseErrorHandler {
 
     override def read(b: Array[Byte]): Int = safeCall {
@@ -237,7 +243,7 @@ private[spark] object CryptoStreamUtils extends Logging {
 
   private class ErrorHandlingWritableChannel(
       protected val cipherStream: WritableByteChannel,
-      protected val wrapped: WritableByteChannel)
+      protected val original: WritableByteChannel)
     extends WritableByteChannel with BaseErrorHandler {
 
     override def write(src: ByteBuffer): Int = safeCall {
@@ -250,7 +256,7 @@ private[spark] object CryptoStreamUtils extends Logging {
 
   private class ErrorHandlingOutputStream(
       protected val cipherStream: OutputStream,
-      protected val wrapped: OutputStream)
+      protected val original: OutputStream)
     extends OutputStream with BaseErrorHandler {
 
     override def flush(): Unit = safeCall {
