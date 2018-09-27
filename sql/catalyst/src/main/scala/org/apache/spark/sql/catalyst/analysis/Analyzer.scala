@@ -557,7 +557,7 @@ class Analyzer(
         val groupByExprs = groupByExprsOpt.getOrElse {
           val pivotColAndAggRefs =
             (pivotColumn.references ++ aggregates.flatMap(_.references)).toSet
-          child.output.filterNot(pivotColAndAggRefs.contains(_))
+          child.output.filterNot(pivotColAndAggRefs.contains)
         }
         val singleAgg = aggregates.size == 1
         def outputName(value: Expression, aggregate: Expression): String = {
