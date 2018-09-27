@@ -331,16 +331,16 @@ object SQLConf {
 
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
     .doc("When true, the Parquet data source merges schemas collected from all data files, " +
-      "otherwise the schema is picked from the summary file or a random data file " +
-      "if no summary file is available.")
+         "otherwise the schema is picked from the summary file or a random data file " +
+         "if no summary file is available.")
     .booleanConf
     .createWithDefault(false)
 
   val PARQUET_SCHEMA_RESPECT_SUMMARIES = buildConf("spark.sql.parquet.respectSummaryFiles")
     .doc("When true, we make assumption that all part-files of Parquet are consistent with " +
-      "summary files and we will ignore them when merging schema. Otherwise, if this is " +
-      "false, which is the default, we will merge all part-files. This should be considered " +
-      "as expert-only option, and shouldn't be enabled before knowing what it means exactly.")
+         "summary files and we will ignore them when merging schema. Otherwise, if this is " +
+         "false, which is the default, we will merge all part-files. This should be considered " +
+         "as expert-only option, and shouldn't be enabled before knowing what it means exactly.")
     .booleanConf
     .createWithDefault(false)
 
@@ -418,9 +418,9 @@ object SQLConf {
       .doc("If true, enables Parquet filter push-down optimization for Timestamp. " +
         "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is " +
         "enabled and Timestamp stored as TIMESTAMP_MICROS or TIMESTAMP_MILLIS type.")
-      .internal()
-      .booleanConf
-      .createWithDefault(true)
+    .internal()
+    .booleanConf
+    .createWithDefault(true)
 
   val PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED =
     buildConf("spark.sql.parquet.filterPushdown.decimal")
@@ -432,11 +432,11 @@ object SQLConf {
 
   val PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED =
     buildConf("spark.sql.parquet.filterPushdown.string.startsWith")
-      .doc("If true, enables Parquet filter push-down optimization for string startsWith function. " +
-        "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
-      .internal()
-      .booleanConf
-      .createWithDefault(true)
+    .doc("If true, enables Parquet filter push-down optimization for string startsWith function. " +
+      "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
+    .internal()
+    .booleanConf
+    .createWithDefault(true)
 
   val PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD =
     buildConf("spark.sql.parquet.pushdown.inFilterThreshold")
@@ -530,34 +530,34 @@ object SQLConf {
 
   val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
     .doc("When true, check all the partition paths under the table\'s root directory " +
-      "when reading data stored in HDFS. This configuration will be deprecated in the future " +
-      "releases and replaced by spark.files.ignoreMissingFiles.")
+         "when reading data stored in HDFS. This configuration will be deprecated in the future " +
+         "releases and replaced by spark.files.ignoreMissingFiles.")
     .booleanConf
     .createWithDefault(false)
 
   val HIVE_METASTORE_PARTITION_PRUNING =
     buildConf("spark.sql.hive.metastorePartitionPruning")
       .doc("When true, some predicates will be pushed down into the Hive metastore so that " +
-        "unmatching partitions can be eliminated earlier. This only affects Hive tables " +
-        "not converted to filesource relations (see HiveUtils.CONVERT_METASTORE_PARQUET and " +
-        "HiveUtils.CONVERT_METASTORE_ORC for more information).")
+           "unmatching partitions can be eliminated earlier. This only affects Hive tables " +
+           "not converted to filesource relations (see HiveUtils.CONVERT_METASTORE_PARQUET and " +
+           "HiveUtils.CONVERT_METASTORE_ORC for more information).")
       .booleanConf
       .createWithDefault(true)
 
   val HIVE_MANAGE_FILESOURCE_PARTITIONS =
     buildConf("spark.sql.hive.manageFilesourcePartitions")
       .doc("When true, enable metastore partition management for file source tables as well. " +
-        "This includes both datasource and converted Hive tables. When partition management " +
-        "is enabled, datasource tables store partition in the Hive metastore, and use the " +
-        "metastore to prune partitions during query planning.")
+           "This includes both datasource and converted Hive tables. When partition management " +
+           "is enabled, datasource tables store partition in the Hive metastore, and use the " +
+           "metastore to prune partitions during query planning.")
       .booleanConf
       .createWithDefault(true)
 
   val HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE =
     buildConf("spark.sql.hive.filesourcePartitionFileCacheSize")
       .doc("When nonzero, enable caching of partition file metadata in memory. All tables share " +
-        "a cache that can use up to specified num bytes for file metadata. This conf only " +
-        "has an effect when hive filesource partition management is enabled.")
+           "a cache that can use up to specified num bytes for file metadata. This conf only " +
+           "has an effect when hive filesource partition management is enabled.")
       .longConf
       .createWithDefault(250 * 1024 * 1024)
 
@@ -646,12 +646,12 @@ object SQLConf {
     .createWithDefault(false)
 
   val GATHER_FASTSTAT = buildConf("spark.sql.hive.gatherFastStats")
-    .internal()
-    .doc("When true, fast stats (number of files and total size of all files) will be gathered" +
-      " in parallel while repairing table partitions to avoid the sequential listing in Hive" +
-      " metastore.")
-    .booleanConf
-    .createWithDefault(true)
+      .internal()
+      .doc("When true, fast stats (number of files and total size of all files) will be gathered" +
+        " in parallel while repairing table partitions to avoid the sequential listing in Hive" +
+        " metastore.")
+      .booleanConf
+      .createWithDefault(true)
 
   val PARTITION_COLUMN_TYPE_INFERENCE =
     buildConf("spark.sql.sources.partitionColumnTypeInference.enabled")
@@ -672,13 +672,13 @@ object SQLConf {
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
-      "explicit CROSS JOIN syntax.")
+        "explicit CROSS JOIN syntax.")
     .booleanConf
     .createWithDefault(false)
 
   val ORDER_BY_ORDINAL = buildConf("spark.sql.orderByOrdinal")
     .doc("When true, the ordinal numbers are treated as the position in the select list. " +
-      "When false, the ordinal numbers in order/sort by clause are ignored.")
+         "When false, the ordinal numbers in order/sort by clause are ignored.")
     .booleanConf
     .createWithDefault(true)
 
@@ -730,10 +730,10 @@ object SQLConf {
   // Whether to automatically resolve ambiguity in join conditions for self-joins.
   // See SPARK-6231.
   val DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY =
-  buildConf("spark.sql.selfJoinAutoResolveAmbiguity")
-    .internal()
-    .booleanConf
-    .createWithDefault(true)
+    buildConf("spark.sql.selfJoinAutoResolveAmbiguity")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
 
   // Whether to retain group by columns or not in GroupedData.agg.
   val DATAFRAME_RETAIN_GROUP_COLUMNS = buildConf("spark.sql.retainGroupColumns")
@@ -762,11 +762,11 @@ object SQLConf {
 
   val WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME =
     buildConf("spark.sql.codegen.useIdInClassName")
-      .internal()
-      .doc("When true, embed the (whole-stage) codegen stage ID into " +
-        "the class name of the generated class as a suffix")
-      .booleanConf
-      .createWithDefault(true)
+    .internal()
+    .doc("When true, embed the (whole-stage) codegen stage ID into " +
+      "the class name of the generated class as a suffix")
+    .booleanConf
+    .createWithDefault(true)
 
   val WHOLESTAGE_MAX_NUM_FIELDS = buildConf("spark.sql.codegen.maxFields")
     .internal()
@@ -1261,7 +1261,7 @@ object SQLConf {
     buildConf("spark.sql.execution.rangeExchange.sampleSizePerPartition")
       .internal()
       .doc("Number of points to sample per partition in order to determine the range boundaries" +
-        " for range partitioning, typically used in global sorting (without limit).")
+          " for range partitioning, typically used in global sorting (without limit).")
       .intConf
       .createWithDefault(100)
 
@@ -1346,8 +1346,8 @@ object SQLConf {
         "information. The values of options whose names that match this regex will be redacted " +
         "in the explain output. This redaction is applied on top of the global redaction " +
         s"configuration defined by ${SECRET_REDACTION_PATTERN.key}.")
-      .regexConf
-      .createWithDefault("(?i)url".r)
+    .regexConf
+    .createWithDefault("(?i)url".r)
 
   val SQL_STRING_REDACTION_PATTERN =
     buildConf("spark.sql.redaction.string.regex")
@@ -1371,19 +1371,19 @@ object SQLConf {
 
   val ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION =
     buildConf("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation")
-      .internal()
-      .doc("When this option is set to true, creating managed tables with nonempty location " +
-        "is allowed. Otherwise, an analysis exception is thrown. ")
-      .booleanConf
-      .createWithDefault(false)
+    .internal()
+    .doc("When this option is set to true, creating managed tables with nonempty location " +
+      "is allowed. Otherwise, an analysis exception is thrown. ")
+    .booleanConf
+    .createWithDefault(false)
 
   val CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE =
     buildConf("spark.sql.streaming.continuous.executorQueueSize")
-      .internal()
-      .doc("The size (measured in number of rows) of the queue used in continuous execution to" +
-        " buffer the results of a ContinuousDataReader.")
-      .intConf
-      .createWithDefault(1024)
+    .internal()
+    .doc("The size (measured in number of rows) of the queue used in continuous execution to" +
+      " buffer the results of a ContinuousDataReader.")
+    .intConf
+    .createWithDefault(1024)
 
   val CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS =
     buildConf("spark.sql.streaming.continuous.executorPollIntervalMs")
@@ -1441,8 +1441,8 @@ object SQLConf {
         "issues. Turn on this config to insert a local sort before actually doing repartition " +
         "to generate consistent repartition results. The performance of repartition() may go " +
         "down since we insert extra local sort before it.")
-      .booleanConf
-      .createWithDefault(true)
+        .booleanConf
+        .createWithDefault(true)
 
   val NESTED_SCHEMA_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.nestedSchemaPruning.enabled")
@@ -1458,8 +1458,8 @@ object SQLConf {
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
       .internal()
       .doc("In SQL queries with a SORT followed by a LIMIT like " +
-        "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, do a top-K sort" +
-        " in memory, otherwise do a global sort which spills to disk if necessary.")
+          "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, do a top-K sort" +
+          " in memory, otherwise do a global sort which spills to disk if necessary.")
       .intConf
       .createWithDefault(Int.MaxValue)
 
