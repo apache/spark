@@ -15,6 +15,21 @@
  * limitations under the License.
  */
 
+var blockUICount = 0;
+
+$(document).ajaxStop(function () {
+    if (blockUICount == 0) {
+        $.unblockUI();
+        blockUICount++;
+    }
+});
+
+$(document).ajaxStart(function () {
+    if (blockUICount == 0) {
+        $.blockUI({message: '<h3>Loading Stage Page...</h3>'});
+    }
+});
+
 $.extend( $.fn.dataTable.ext.type.order, {
     "duration-pre": ConvertDurationString,
 
@@ -807,7 +822,7 @@ $(document).ready(function () {
                     window.clearTimeout(searchEvent);
                   }
                   var value = this.value;
-                  window.setTimeout(function(){taskTableSelector.search( value ).draw();}, 2000);
+                  window.setTimeout(function(){taskTableSelector.search( value ).draw();}, 2500);
                 });
 
                 var optionalColumns = [11, 12, 13, 14, 15, 16, 17];

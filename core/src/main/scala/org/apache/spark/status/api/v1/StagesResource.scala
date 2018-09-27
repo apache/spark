@@ -41,7 +41,7 @@ private[v1] class StagesResource extends BaseAppResource {
       @PathParam("stageId") stageId: Int,
       @QueryParam("details") @DefaultValue("true") details: Boolean): Seq[StageData] = {
     withUI { ui =>
-      var ret = ui.store.stageData(stageId, details = details)
+      val ret = ui.store.stageData(stageId, details = details)
       if (ret.nonEmpty) {
         ret
       } else {
@@ -185,6 +185,11 @@ private[v1] class StagesResource extends BaseAppResource {
     taskDataList: Seq[TaskData],
     searchValue: String): Seq[TaskData] = {
     val defaultOptionString: String = "d"
+    // The task metrics dummy object below has been added to avoid throwing exception in cases
+    // when task metrics for a particular task do not exist as of yet
+    val dummyTaskMetrics: TaskMetrics = new TaskMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      new InputMetrics(0, 0), new OutputMetrics(0, 0),
+      new ShuffleReadMetrics(0, 0, 0, 0, 0, 0, 0), new ShuffleWriteMetrics(0, 0, 0))
     val filteredTaskDataSequence: Seq[TaskData] = taskDataList.filter(f =>
       (f.taskId.toString.contains(searchValue) || f.index.toString.contains(searchValue)
         || f.attempt.toString.contains(searchValue) || f.launchTime.toString.contains(searchValue)
@@ -194,22 +199,22 @@ private[v1] class StagesResource extends BaseAppResource {
         || f.status.contains(searchValue) || f.taskLocality.contains(searchValue)
         || f.speculative.toString.contains(searchValue)
         || f.errorMessage.getOrElse(defaultOptionString).contains(searchValue)
-        || f.taskMetrics.get.executorDeserializeTime.toString.contains(searchValue)
-        || f.taskMetrics.get.executorRunTime.toString.contains(searchValue)
-        || f.taskMetrics.get.jvmGcTime.toString.contains(searchValue)
-        || f.taskMetrics.get.resultSerializationTime.toString.contains(searchValue)
-        || f.taskMetrics.get.memoryBytesSpilled.toString.contains(searchValue)
-        || f.taskMetrics.get.diskBytesSpilled.toString.contains(searchValue)
-        || f.taskMetrics.get.peakExecutionMemory.toString.contains(searchValue)
-        || f.taskMetrics.get.inputMetrics.bytesRead.toString.contains(searchValue)
-        || f.taskMetrics.get.inputMetrics.recordsRead.toString.contains(searchValue)
-        || f.taskMetrics.get.outputMetrics.bytesWritten.toString.contains(searchValue)
-        || f.taskMetrics.get.outputMetrics.recordsWritten.toString.contains(searchValue)
-        || f.taskMetrics.get.shuffleReadMetrics.fetchWaitTime.toString.contains(searchValue)
-        || f.taskMetrics.get.shuffleReadMetrics.recordsRead.toString.contains(searchValue)
-        || f.taskMetrics.get.shuffleWriteMetrics.bytesWritten.toString.contains(searchValue)
-        || f.taskMetrics.get.shuffleWriteMetrics.recordsWritten.toString.contains(searchValue)
-        || f.taskMetrics.get.shuffleWriteMetrics.writeTime.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).executorDeserializeTime.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).executorRunTime.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).jvmGcTime.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).resultSerializationTime.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).memoryBytesSpilled.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).diskBytesSpilled.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).peakExecutionMemory.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).inputMetrics.bytesRead.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).inputMetrics.recordsRead.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).outputMetrics.bytesWritten.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).outputMetrics.recordsWritten.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).shuffleReadMetrics.fetchWaitTime.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).shuffleReadMetrics.recordsRead.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).shuffleWriteMetrics.bytesWritten.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).shuffleWriteMetrics.recordsWritten.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).shuffleWriteMetrics.writeTime.toString.contains(searchValue)
         || f.schedulerDelay.toString.contains(searchValue)
         || f.gettingResultTime.toString.contains(searchValue)))
     filteredTaskDataSequence
