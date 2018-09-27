@@ -33,7 +33,8 @@ import org.apache.spark.sql.types._
 
 /**
  * Analyzes the given columns of the given table to generate statistics, which will be used in
- * query optimizations.
+ * query optimizations. Parameter `allColumns` may be specified to generate statistics of all the
+ * columns of a given table.
  */
 case class AnalyzeColumnCommand(
     tableIdent: TableIdentifier,
