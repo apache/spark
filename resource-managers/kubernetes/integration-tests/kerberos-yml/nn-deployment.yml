@@ -1,0 +1,35 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: nn
+spec:
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        pod.beta.kubernetes.io/hostname: nn
+      labels:
+        name: hdfs-nn
+        kerberosService: nn
+        job: kerberostest
+    spec:
+      containers:
+      - command:
+        - /start-namenode.sh
+        name: nn
+        ports:
+        - containerPort: 9000
+        image: ifilonenko/hadoop-base:latest
+        imagePullPolicy: IfNotPresent
+        runAsNonRoot: false
+        volumeMounts:
+        - mountPath: /var/keytabs
+          name: nn-keytab
+      restartPolicy: Always
+      volumes:
+      - name: nn-keytab
+        persistentVolumeClaim:
+          claimName: server-keytab
+      - name: nn-hadoop
+        persistentVolumeClaim:
+          claimName: nn-hadoop

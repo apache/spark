@@ -1,0 +1,30 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: dn1
+spec:
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        pod.beta.kubernetes.io/hostname: dn1
+      labels:
+        name: hdfs-dn1
+        kerberosService: dn1
+        job: kerberostest
+    spec:
+      containers:
+      - command:
+        - /start-datanode.sh
+        name: dn1
+        image: ifilonenko/hadoop-base:latest
+        imagePullPolicy: IfNotPresent
+        runAsNonRoot: false
+        volumeMounts:
+        - mountPath: /var/keytabs
+          name: dn1-keytab
+      restartPolicy: Always
+      volumes:
+      - name: dn1-keytab
+        persistentVolumeClaim:
+          claimName: server-keytab

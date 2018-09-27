@@ -1,0 +1,25 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: kerberos-test
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: kerberos-test
+    spec:
+      containers:
+      - command: ["/bin/bash"]
+        args: ["/opt/spark/run-kerberos-test.sh"]
+        name: kerberos-test
+        image: kerberos-test:latest
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - mountPath: /var/keytabs
+          name: kerberos-test-keytab
+      restartPolicy: Always
+      volumes:
+      - name: kerberos-test-keytab
+        persistentVolumeClaim:
+          claimName: server-keytab

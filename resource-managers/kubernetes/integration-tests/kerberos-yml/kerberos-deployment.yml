@@ -1,0 +1,30 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: kerberos
+spec:
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        pod.beta.kubernetes.io/hostname: kerberos
+      labels:
+        name: hdfs-kerberos
+        kerberosService: kerberos
+        job: kerberostest
+    spec:
+      containers:
+      - command:
+        - /start-kdc.sh
+        name: kerberos
+        image: ifilonenko/hadoop-base:latest
+        imagePullPolicy: IfNotPresent
+        runAsNonRoot: false
+        volumeMounts:
+        - mountPath: /var/keytabs
+          name: kerb-keytab
+      restartPolicy: Always
+      volumes:
+      - name: kerb-keytab
+        persistentVolumeClaim:
+          claimName: server-keytab

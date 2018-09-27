@@ -1,0 +1,30 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: data-populator
+spec:
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        pod.beta.kubernetes.io/hostname: data-populator
+      labels:
+        name: hdfs-data-populator
+        kerberosService: data-populator
+        job: kerberostest
+    spec:
+      containers:
+      - command:
+        - /populate-data.sh
+        name: data-populator
+        image: ifilonenko/hadoop-base:latest
+        imagePullPolicy: IfNotPresent
+        runAsNonRoot: false
+        volumeMounts:
+        - mountPath: /var/keytabs
+          name: data-populator-keytab
+      restartPolicy: Always
+      volumes:
+      - name: data-populator-keytab
+        persistentVolumeClaim:
+          claimName: server-keytab

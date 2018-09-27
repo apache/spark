@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!--
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License. See accompanying LICENSE file.
+-->
+
+<!-- Put site-specific property overrides in this file. -->
+
+<configuration>
+
+  <property>
+    <name>dfs.replication</name>
+    <value>1</value>
+  </property>
+
+  <!-- General HDFS security config -->
+  <property> 
+    <name>dfs.permissions</name> 
+    <value>true</value> 
+  </property>
+  <property>
+    <name>dfs.block.access.token.enable</name>
+    <value>true</value>
+  </property>
+
+  <!-- NameNode security config -->
+  <property>
+    <name>dfs.namenode.keytab.file</name>
+    <value>/var/keytabs/hdfs.keytab</value>
+  </property>
+  <property>
+    <name>dfs.namenode.kerberos.principal</name>
+    <value>hdfs/nn.REPLACE_ME.svc.cluster.local@CLUSTER.LOCAL</value>
+  </property>
+  <property>
+    <name>dfs.namenode.kerberos.internal.spnego.principal</name>
+    <value>HTTP/nn.REPLACE_ME.svc.cluster.local@CLUSTER.LOCAL</value>
+  </property>
+  <property>
+    <name>dfs.namenode.rpc-address</name>
+    <value>nn.REPLACE_ME.svc.cluster.local:9000</value>
+  </property>
+
+
+  <!-- For testing, we want tokens to expire FAST -->
+  <property>
+    <name>dfs.namenode.delegation.token.max-lifetime</name>
+    <value>3600000</value><!-- 1 hour -->
+  </property>
+  <property>
+    <name>dfs.namenode.delegation.token.renew-interval</name>
+    <value>3600000</value><!-- 1 hour -->
+  </property>
+
+
+
+  <!-- DataNode security config -->
+  <property>
+    <name>dfs.data.transfer.protection</name>
+    <value>integrity</value>
+  </property>
+  <property>
+    <name>dfs.datanode.address</name>
+    <value>0.0.0.0:10019</value>
+  </property>
+   
+  <property>
+    <name>dfs.datanode.http.address</name>
+    <value>0.0.0.0:10022</value>
+  </property>
+   
+  <property>
+    <name>dfs.http.policy</name>
+    <value>HTTPS_ONLY</value>
+  </property>
+
+
+  <property>
+    <name>dfs.namenode.keytab.file</name>
+    <value>/var/keytabs/hdfs.keytab</value>
+  </property>
+  <property>
+    <name>dfs.namenode.kerberos.principal</name>
+    <value>hdfs/nn.REPLACE_ME.svc.cluster.local@CLUSTER.LOCAL</value>
+  </property>
+  <property>
+    <name>dfs.namenode.kerberos.internal.spnego.principal</name>
+    <value>HTTP/nn.REPLACE_ME.svc.cluster.local@CLUSTER.LOCAL</value>
+  </property>
+
+  <!-- prevent those errors -->
+  <property>
+    <name>dfs.namenode.datanode.registration.ip-hostname-check</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>dfs.datanode.data.dir.perm</name>
+    <value>700</value> 
+  </property>
+  <property>
+    <name>dfs.namenode.name.dir</name>
+    <value>file:///hadoop/etc/data</value>
+  </property>
+  <property>
+    <name>dfs.datanode.name.dir</name>
+    <value>file:///hadoop/etc/data</value>
+  </property>
+  <property>
+    <name>dfs.data.dir</name>
+    <value>file:///hadoop/etc/data</value>
+  </property>
+  <property>
+    <name>dfs.datanode.keytab.file</name>
+    <value>/var/keytabs/hdfs.keytab</value> <!-- path to the HDFS keytab -->
+  </property>
+  <property>
+    <name>dfs.datanode.kerberos.principal</name>
+    <value>hdfs/dn1.REPLACE_ME.svc.cluster.local@CLUSTER.LOCAL</value>
+  </property>
+  <property>
+    <name>dfs.encrypt.data.transfer</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>dfs.encrypt.data.transfer.cipher.suites</name>
+    <value>AES/CTR/NoPadding</value>
+  </property>
+  <property>
+    <name>dfs.encrypt.data.transfer.cipher.key.bitlength</name>
+    <value>256</value>
+  </property>
+
+  <!-- Web Authentication config -->
+  <property>
+    <name>dfs.webhdfs.enabled</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>dfs.web.authentication.kerberos.principal</name>
+    <value>HTTP/dn1.REPLACE_ME.svc.cluster.local@CLUSTER.LOCAL</value>
+  </property>
+  <property>
+    <name>dfs.web.authentication.kerberos.keytab</name>
+    <value>/var/keytabs/hdfs.keytab</value> <!-- path to the HTTP keytab -->
+  </property>
+
+</configuration>
