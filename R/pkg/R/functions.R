@@ -2226,10 +2226,6 @@ setMethod("from_csv", signature(x = "Column", schema = "character"),
             column(jc)
           })
 
-#' @details
-#' \code{from_utc_timestamp}: Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a
-#' time in UTC, and renders that time as a timestamp in the given time zone. For example, 'GMT+1'
-#' would yield '2017-07-14 03:40:00.0'.
 #' \code{from_utc_timestamp}: This is a common function for databases supporting TIMESTAMP WITHOUT
 #' TIMEZONE. This function takes a timestamp which is timezone-agnostic, and interprets it as a
 #' timestamp in UTC, and renders that timestamp as a timestamp in the given time zone.
