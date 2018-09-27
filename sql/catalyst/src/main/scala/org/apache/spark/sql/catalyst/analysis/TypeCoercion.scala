@@ -950,6 +950,25 @@ object TypeCoercion {
             if !Cast.forceNullable(fromType, toType) =>
           implicitCast(fromType, toType).map(ArrayType(_, false)).orNull
 
+        // Implicit cast between Map types.
+        // Follows the same semantics of implicit casting between two array types.
+        // Refer to documentation above. Make sure that both key and values
+        // can not be null after the implicit cast operation by calling forceNullable
+        // method.
+        case (MapType(fromKeyType, fromValueType, fn), MapType(toKeyType, toValueType, tn))
+            if !Cast.forceNullable(fromKeyType, toKeyType) && Cast.resolvableNullability(fn, tn) =>
+          if (Cast.forceNullable(fromValueType, toValueType) && !tn) {
+            null
+          } else {
+            val newKeyType = implicitCast(fromKeyType, toKeyType).orNull
+            val newValueType = implicitCast(fromValueType, toValueType).orNull
+            if (newKeyType != null && newValueType != null) {
+              MapType(newKeyType, newValueType, tn)
+            } else {
+              null
+            }
+          }
+
         case _ => null
       }
       Option(ret)
