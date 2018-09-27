@@ -770,7 +770,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           sources.GreaterThan("c", 1.5D)))
     }
 
-    assertResult(None) {
+    assertResult(Some(lt(intColumn("a"), 10: Integer))) {
       parquetFilters.createFilter(
         parquetSchema,
         sources.And(
