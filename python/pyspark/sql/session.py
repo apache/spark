@@ -256,7 +256,7 @@ class SparkSession(object):
         """
         return self.__class__(self._sc, self._jsparkSession.newSession())
 
-    @since(3.0)
+    @since(2.5)
     def getActiveSession(self):
         """
         Returns the active SparkSession for the current thread, returned by the builder.
