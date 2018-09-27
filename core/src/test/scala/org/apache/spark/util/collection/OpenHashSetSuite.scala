@@ -263,8 +263,8 @@ class OpenHashSetSuite extends SparkFunSuite with Matchers {
       set.add(i)
       assert(set.contains(i))
 
-      val pos1 = set.addWithoutResize(i) & OpenHashSet.POSITION_MASK
-      val pos2 = set.getPos(i)
+      val pos1 = set.getPos(i)
+      val pos2 = set.addWithoutResize(i) & OpenHashSet.POSITION_MASK
       assert(pos1 == pos2)
     }
   }
