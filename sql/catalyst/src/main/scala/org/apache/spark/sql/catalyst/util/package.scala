@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NumericType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -178,11 +179,14 @@ package object util extends Logging {
   val DEFAULT_MAX_TO_STRING_FIELDS = 25
 
   private[spark] def maxNumToStringFields = {
-    if (SparkEnv.get != null) {
+    val legacyLimit = if (SparkEnv.get != null) {
       SparkEnv.get.conf.getInt("spark.debug.maxToStringFields", DEFAULT_MAX_TO_STRING_FIELDS)
     } else {
       DEFAULT_MAX_TO_STRING_FIELDS
     }
+    val sqlConfLimit = SQLConf.get.maxToStringFields
+
+    Math.max(sqlConfLimit, legacyLimit)
   }
 
   /** Whether we have warned about plan string truncation yet. */

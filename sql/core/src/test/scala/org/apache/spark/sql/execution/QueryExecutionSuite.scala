@@ -20,6 +20,7 @@ import scala.io.Source
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 case class QueryExecutionTestRecord(
@@ -99,6 +100,21 @@ class QueryExecutionSuite extends SharedSQLContext {
       val localRelations = Source.fromFile(path).getLines().filter(_.contains("LocalRelation"))
 
       assert(!localRelations.exists(_.contains("more fields")))
+    }
+  }
+
+  test("limit number of fields by sql config") {
+    def relationPlans: String = {
+      val ds = spark.createDataset(Seq(QueryExecutionTestRecord(
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)))
+      ds.queryExecution.toString
+    }
+    withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "26") {
+      assert(relationPlans.contains("more fields"))
+    }
+    withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "27") {
+      assert(!relationPlans.contains("more fields"))
     }
   }
 
