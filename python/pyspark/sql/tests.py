@@ -5525,22 +5525,22 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             .withColumn("v", explode(col('vs'))).drop('vs')
 
     def test_supported_types(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
         from decimal import Decimal
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
 
         input_values_with_schema = (
-            (1,                       StructField('id',     IntegerType())),
-            (2,                       StructField('byte',   ByteType())),
-            (3,                       StructField('short',  ShortType())),
-            (4,                       StructField('int',    IntegerType())),
-            (5,                       StructField('long',   LongType())),
-            (1.1,                     StructField('float',  FloatType())),
-            (2.2,                     StructField('double', DoubleType())),
-            (Decimal(1.123),          StructField('decim',  DecimalType(10, 3))),
-            ([1, 2, 3],               StructField('array',  ArrayType(IntegerType()))),
-            (True,                    StructField('bool',   BooleanType())),
-            (bytearray([0x01, 0x02]), StructField('bin',    BinaryType())),
-            ('hello',                 StructField('str',    StringType())),
+            (1, StructField('id', IntegerType())),
+            (2, StructField('byte', ByteType())),
+            (3, StructField('short', ShortType())),
+            (4, StructField('int', IntegerType())),
+            (5, StructField('long', LongType())),
+            (1.1, StructField('float', FloatType())),
+            (2.2, StructField('double', DoubleType())),
+            (Decimal(1.123), StructField('decim', DecimalType(10, 3))),
+            ([1, 2, 3], StructField('array', ArrayType(IntegerType()))),
+            (True, StructField('bool', BooleanType())),
+            (bytearray([0x01, 0x02]), StructField('bin', BinaryType())),
+            ('hello', StructField('str', StringType())),
         )
 
         values = [[x[0] for x in input_values_with_schema]]
@@ -5752,28 +5752,19 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
     def test_unsupported_types(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
-        # type, error message regexp
-        unsupported_types_with_msg = (
-            (
-                StructField('map', MapType(StringType(), IntegerType())),
-                'Invalid returnType.*grouped map Pandas UDF.*MapType'
-            ),
-            (
-                StructField('arr_ts', ArrayType(TimestampType())),
-                'Invalid returnType.*grouped map Pandas UDF.*ArrayType.*TimestampType'
-            ),
-            (
-                StructField('null', NullType()),
-                'Invalid returnType.*grouped map Pandas UDF.*NullType'
-            ),
+        common_err_msg = 'Invalid returnType.*grouped map Pandas UDF.*'
+        unsupported_types = (
+            StructField('map', MapType(StringType(), IntegerType())),
+            StructField('arr_ts', ArrayType(TimestampType())),
+            StructField('null', NullType()),
         )
-        for unsupported_type, err_message in unsupported_types_with_msg:
+        for unsupported_type in unsupported_types:
             schema = StructType([
                 StructField('id', LongType(), True),
                 unsupported_type
             ])
             with QuietTest(self.sc):
-                with self.assertRaisesRegexp(NotImplementedError, err_message):
+                with self.assertRaisesRegexp(NotImplementedError, common_err_msg):
                     pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
 
     # Regression test for SPARK-23314
