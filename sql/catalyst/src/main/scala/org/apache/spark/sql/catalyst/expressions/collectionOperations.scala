@@ -2155,7 +2155,7 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
-      case (ArrayType(e1, _), e2) if e2 != IntegerType =>
+      case (_: ArrayType, e2) if e2 != IntegerType =>
         TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
           s"been ${ArrayType.simpleString} followed by a ${IntegerType.simpleString}, but it's " +
           s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")

@@ -977,7 +977,7 @@ object TypeCoercion {
         // Implicit cast between Map types.
         // Follows the same semantics of implicit casting between two array types.
         // Refer to documentation above. Make sure that both key and values
-        // can not by null after the implicit cast operation by calling forceNullable
+        // can not be null after the implicit cast operation by calling forceNullable
         // method.
         case (MapType(fromKeyType, fromValueType, fn), MapType(toKeyType, toValueType, tn))
             if !Cast.forceNullable(fromKeyType, toKeyType) && Cast.resolvableNullability(fn, tn) =>
