@@ -145,7 +145,7 @@ private[spark] class BarrierCoordinator(
       logInfo(s"Current barrier epoch for $barrierId is $barrierEpoch.")
       if (epoch != barrierEpoch) {
         requester.sendFailure(new SparkException(s"The request to sync of $barrierId with " +
-          s"barrier epoch $barrierEpoch has already finished. Maybe task $taskId is not " +
+          s"barrier epoch $epoch has already finished. Maybe task $taskId is not " +
           "properly killed."))
       } else {
         // If this is the first sync message received for a barrier() call, start timer to ensure
