@@ -80,7 +80,7 @@ _have_pandas = _pandas_requirement_message is None
 _have_pyarrow = _pyarrow_requirement_message is None
 _test_compiled = _test_not_compiled_message is None
 
-from pyspark import SparkContext
+from pyspark import SparkConf, SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type, _make_type_verifier
@@ -281,6 +281,50 @@ class DataTypeTests(unittest.TestCase):
     def test_invalid_create_row(self):
         row_class = Row("c1", "c2")
         self.assertRaises(ValueError, lambda: row_class(1, 2, 3))
+
+
+class SparkSessionBuilderTests(unittest.TestCase):
+
+    def test_create_spark_context_first_then_spark_session(self):
+        sc = None
+        session = None
+        try:
+            conf = SparkConf().set("key1", "value1")
+            sc = SparkContext('local[4]', "SessionBuilderTests", conf=conf)
+            session = SparkSession.builder.config("key2", "value2").getOrCreate()
+
+            self.assertEqual(session.conf.get("key1"), "value1")
+            self.assertEqual(session.conf.get("key2"), "value2")
+            self.assertEqual(session.sparkContext, sc)
+
+            self.assertFalse(sc.getConf().contains("key2"))
+            self.assertEqual(sc.getConf().get("key1"), "value1")
+        finally:
+            if session is not None:
+                session.stop()
+            if sc is not None:
+                sc.stop()
+
+    def test_another_spark_session(self):
+        session1 = None
+        session2 = None
+        try:
+            session1 = SparkSession.builder.config("key1", "value1").getOrCreate()
+            session2 = SparkSession.builder.config("key2", "value2").getOrCreate()
+
+            self.assertEqual(session1.conf.get("key1"), "value1")
+            self.assertEqual(session2.conf.get("key1"), "value1")
+            self.assertEqual(session1.conf.get("key2"), "value2")
+            self.assertEqual(session2.conf.get("key2"), "value2")
+            self.assertEqual(session1.sparkContext, session2.sparkContext)
+
+            self.assertEqual(session1.sparkContext.getConf().get("key1"), "value1")
+            self.assertFalse(session1.sparkContext.getConf().contains("key2"))
+        finally:
+            if session1 is not None:
+                session1.stop()
+            if session2 is not None:
+                session2.stop()
 
 
 class SQLTests(ReusedSQLTestCase):
@@ -551,6 +595,70 @@ class SQLTests(ReusedSQLTestCase):
         f = udf(lambda a, b: a == b, BooleanType())
         df = left.crossJoin(right).filter(f("a", "b"))
         self.assertEqual(df.collect(), [Row(a=1, b=1)])
+
+    def test_udf_in_join_condition(self):
+        # regression test for SPARK-25314
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1)])
+        right = self.spark.createDataFrame([Row(b=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+        df = left.join(right, f("a", "b"))
+        with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
+            df.collect()
+        with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
+            self.assertEqual(df.collect(), [Row(a=1, b=1)])
+
+    def test_udf_in_left_semi_join_condition(self):
+        # regression test for SPARK-25314
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+        df = left.join(right, f("a", "b"), "leftsemi")
+        with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
+            df.collect()
+        with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
+            self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1)])
+
+    def test_udf_and_common_filter_in_join_condition(self):
+        # regression test for SPARK-25314
+        # test the complex scenario with both udf and common filter
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+        df = left.join(right, [f("a", "b"), left.a1 == right.b1])
+        # do not need spark.sql.crossJoin.enabled=true for udf is not the only join condition.
+        self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1, b=1, b1=1, b2=1)])
+
+    def test_udf_and_common_filter_in_left_semi_join_condition(self):
+        # regression test for SPARK-25314
+        # test the complex scenario with both udf and common filter
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+        df = left.join(right, [f("a", "b"), left.a1 == right.b1], "left_semi")
+        # do not need spark.sql.crossJoin.enabled=true for udf is not the only join condition.
+        self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1)])
+
+    def test_udf_not_supported_in_join_condition(self):
+        # regression test for SPARK-25314
+        # test python udf is not supported in join type besides left_semi and inner join.
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+
+        def runWithJoinType(join_type, type_string):
+            with self.assertRaisesRegexp(
+                    AnalysisException,
+                    'Using PythonUDF.*%s is not supported.' % type_string):
+                left.join(right, [f("a", "b"), left.a1 == right.b1], join_type).collect()
+        runWithJoinType("full", "FullOuter")
+        runWithJoinType("left", "LeftOuter")
+        runWithJoinType("right", "RightOuter")
+        runWithJoinType("leftanti", "LeftAnti")
 
     def test_udf_without_arguments(self):
         self.spark.catalog.registerFunction("foo", lambda: "bar")

@@ -253,15 +253,20 @@ a.expandbutton {
   max-width: 600px;
 }
 
+.paginate_button.active > a {
+    color: #999999;
+    text-decoration: underline;
+}
+
 .title-table {
   clear: left;
   display: inline-block;
 }
 
-.table-dataTable{
+.table-dataTable {
   width="100%";
 }
 
-.container-fluid-div{
+.container-fluid-div {
   width: 200px;
 }
