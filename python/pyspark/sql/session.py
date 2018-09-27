@@ -141,8 +141,9 @@ class SparkSession(object):
             return self.config("spark.sql.catalogImplementation", "hive")
 
         def _sparkContext(self, sc):
-            self._sc = sc
-            return self
+            with self._lock:
+                self._sc = sc
+                return self
 
         @since(2.0)
         def getOrCreate(self):
