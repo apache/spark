@@ -22,76 +22,178 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
 
   test("translate simple expression") {
-    val attrInt = 'cint.int
-    val attrStr = 'cstr.string
+    val fields = StructField("cint", IntegerType, nullable = true) ::
+      StructField("cstr", StringType, nullable = true) :: Nil
 
-    testTranslateFilter(EqualTo(attrInt, 1), Some(sources.EqualTo("cint", 1)))
-    testTranslateFilter(EqualTo(1, attrInt), Some(sources.EqualTo("cint", 1)))
+    val attrNested1 = 'a.struct(StructType(fields))
+    val attrNested2 = 'b.struct(StructType(
+      StructField("c", StructType(fields), nullable = true) :: Nil))
 
-    testTranslateFilter(EqualNullSafe(attrStr, Literal(null)),
-      Some(sources.EqualNullSafe("cstr", null)))
-    testTranslateFilter(EqualNullSafe(Literal(null), attrStr),
-      Some(sources.EqualNullSafe("cstr", null)))
+    val attrIntNested1 = GetStructField(attrNested1, 0, None)
+    val attrStrNested1 = GetStructField(attrNested1, 1, None)
 
-    testTranslateFilter(GreaterThan(attrInt, 1), Some(sources.GreaterThan("cint", 1)))
-    testTranslateFilter(GreaterThan(1, attrInt), Some(sources.LessThan("cint", 1)))
+    val attrIntNested2 = GetStructField(GetStructField(attrNested2, 0, None), 0, None)
+    val attrStrNested2 = GetStructField(GetStructField(attrNested2, 0, None), 1, None)
 
-    testTranslateFilter(LessThan(attrInt, 1), Some(sources.LessThan("cint", 1)))
-    testTranslateFilter(LessThan(1, attrInt), Some(sources.GreaterThan("cint", 1)))
-
-    testTranslateFilter(GreaterThanOrEqual(attrInt, 1), Some(sources.GreaterThanOrEqual("cint", 1)))
-    testTranslateFilter(GreaterThanOrEqual(1, attrInt), Some(sources.LessThanOrEqual("cint", 1)))
-
-    testTranslateFilter(LessThanOrEqual(attrInt, 1), Some(sources.LessThanOrEqual("cint", 1)))
-    testTranslateFilter(LessThanOrEqual(1, attrInt), Some(sources.GreaterThanOrEqual("cint", 1)))
-
-    testTranslateFilter(InSet(attrInt, Set(1, 2, 3)), Some(sources.In("cint", Array(1, 2, 3))))
-
-    testTranslateFilter(In(attrInt, Seq(1, 2, 3)), Some(sources.In("cint", Array(1, 2, 3))))
-
-    testTranslateFilter(IsNull(attrInt), Some(sources.IsNull("cint")))
-    testTranslateFilter(IsNotNull(attrInt), Some(sources.IsNotNull("cint")))
-
-    // cint > 1 AND cint < 10
-    testTranslateFilter(And(
-      GreaterThan(attrInt, 1),
-      LessThan(attrInt, 10)),
-      Some(sources.And(
-        sources.GreaterThan("cint", 1),
-        sources.LessThan("cint", 10))))
-
-    // cint >= 8 OR cint <= 2
-    testTranslateFilter(Or(
-      GreaterThanOrEqual(attrInt, 8),
-      LessThanOrEqual(attrInt, 2)),
-      Some(sources.Or(
-        sources.GreaterThanOrEqual("cint", 8),
-        sources.LessThanOrEqual("cint", 2))))
-
-    testTranslateFilter(Not(GreaterThanOrEqual(attrInt, 8)),
-      Some(sources.Not(sources.GreaterThanOrEqual("cint", 8))))
-
-    testTranslateFilter(StartsWith(attrStr, "a"), Some(sources.StringStartsWith("cstr", "a")))
-
-    testTranslateFilter(EndsWith(attrStr, "a"), Some(sources.StringEndsWith("cstr", "a")))
-
-    testTranslateFilter(Contains(attrStr, "a"), Some(sources.StringContains("cstr", "a")))
+    Seq(('cint.int, 'cstr.string, "cint", "cstr"), // no nesting
+      (attrIntNested1, attrStrNested1, "a.cint", "a.cstr"), // one level nesting
+      (attrIntNested2, attrStrNested2, "b.c.cint", "b.c.cstr") // two level nesting
+    ).foreach { case (attrInt, attrStr, attrIntString, attrStrString) =>
+      testTranslateSimpleExpression(
+        attrInt, attrStr, attrIntString, attrStrString, isResultNone = false)
+    }
   }
 
   test("translate complex expression") {
-    val attrInt = 'cint.int
+    val fields = StructField("cint", IntegerType, nullable = true) :: Nil
 
-    // ABS(cint) - 2 <= 1
+    val attrNested1 = 'a.struct(StructType(fields))
+    val attrNested2 = 'b.struct(StructType(
+      StructField("c", StructType(fields), nullable = true) :: Nil))
+
+    val attrIntNested1 = GetStructField(attrNested1, 0, None)
+    val attrIntNested2 = GetStructField(GetStructField(attrNested2, 0, None), 0, None)
+
+    StructField("cint", IntegerType, nullable = true)
+
+    Seq(('cint.int, "cint"), // no nesting
+      (attrIntNested1, "a.cint"), // one level nesting
+      (attrIntNested2, "b.c.cint") // two level nesting
+    ).foreach { case (attrInt, attrIntString) =>
+      testTranslateComplexExpression(attrInt, attrIntString, isResultNone = false)
+    }
+  }
+
+  test("column name containing dot can not be pushed down") {
+    val fieldsWithoutDot = StructField("cint", IntegerType, nullable = true) ::
+      StructField("cstr", StringType, nullable = true) :: Nil
+
+    val fieldsWithDot = StructField("column.cint", IntegerType, nullable = true) ::
+      StructField("column.cstr", StringType, nullable = true) :: Nil
+
+    val attrNested1 = 'a.struct(StructType(fieldsWithDot))
+    val attrIntNested1 = GetStructField(attrNested1, 0, None)
+    val attrStrNested1 = GetStructField(attrNested1, 1, None)
+
+    val attrNested2 = 'b.struct(StructType(
+      StructField("c", StructType(fieldsWithDot), nullable = true) :: Nil))
+    val attrIntNested2 = GetStructField(GetStructField(attrNested2, 0, None), 0, None)
+    val attrStrNested2 = GetStructField(GetStructField(attrNested2, 0, None), 1, None)
+
+    val attrNestedWithDotInTopLevel = Symbol("column.a").struct(StructType(fieldsWithoutDot))
+    val attrIntNested1WithDotInTopLevel = GetStructField(attrNestedWithDotInTopLevel, 0, None)
+    val attrStrNested1WithDotInTopLevel = GetStructField(attrNestedWithDotInTopLevel, 1, None)
+
+    Seq((Symbol("column.cint").int, Symbol("column.cstr").string), // no nesting
+      (attrIntNested1, attrStrNested1), // one level nesting
+      (attrIntNested1WithDotInTopLevel, attrStrNested1WithDotInTopLevel), // one level nesting
+      (attrIntNested2, attrStrNested2) // two level nesting
+    ).foreach { case (attrInt, attrStr) =>
+      testTranslateSimpleExpression(
+        attrInt, attrStr, "", "", isResultNone = true)
+      testTranslateComplexExpression(attrInt, "", isResultNone = true)
+    }
+  }
+
+  // `isResultNone` is used when testing invalid input expression
+  // containing dots which translates into None
+  private def testTranslateSimpleExpression(
+      attrInt: Expression, attrStr: Expression,
+      attrIntString: String, attrStrString: String, isResultNone: Boolean): Unit = {
+
+    def result(result: sources.Filter): Option[sources.Filter] = {
+      if (isResultNone) {
+        None
+      } else {
+        Some(result)
+      }
+    }
+
+    testTranslateFilter(EqualTo(attrInt, 1), result(sources.EqualTo(attrIntString, 1)))
+    testTranslateFilter(EqualTo(1, attrInt), result(sources.EqualTo(attrIntString, 1)))
+
+    testTranslateFilter(EqualNullSafe(attrStr, Literal(null)),
+      result(sources.EqualNullSafe(attrStrString, null)))
+    testTranslateFilter(EqualNullSafe(Literal(null), attrStr),
+      result(sources.EqualNullSafe(attrStrString, null)))
+
+    testTranslateFilter(GreaterThan(attrInt, 1), result(sources.GreaterThan(attrIntString, 1)))
+    testTranslateFilter(GreaterThan(1, attrInt), result(sources.LessThan(attrIntString, 1)))
+
+    testTranslateFilter(LessThan(attrInt, 1), result(sources.LessThan(attrIntString, 1)))
+    testTranslateFilter(LessThan(1, attrInt), result(sources.GreaterThan(attrIntString, 1)))
+
+    testTranslateFilter(GreaterThanOrEqual(attrInt, 1),
+      result(sources.GreaterThanOrEqual(attrIntString, 1)))
+    testTranslateFilter(GreaterThanOrEqual(1, attrInt),
+      result(sources.LessThanOrEqual(attrIntString, 1)))
+
+    testTranslateFilter(LessThanOrEqual(attrInt, 1),
+      result(sources.LessThanOrEqual(attrIntString, 1)))
+    testTranslateFilter(LessThanOrEqual(1, attrInt),
+      result(sources.GreaterThanOrEqual(attrIntString, 1)))
+
+    testTranslateFilter(InSet(attrInt, Set(1, 2, 3)),
+      result(sources.In(attrIntString, Array(1, 2, 3))))
+
+    testTranslateFilter(In(attrInt, Seq(1, 2, 3)),
+      result(sources.In(attrIntString, Array(1, 2, 3))))
+
+    testTranslateFilter(IsNull(attrInt), result(sources.IsNull(attrIntString)))
+    testTranslateFilter(IsNotNull(attrInt), result(sources.IsNotNull(attrIntString)))
+
+    // attrInt > 1 AND attrInt < 10
+    testTranslateFilter(And(
+      GreaterThan(attrInt, 1),
+      LessThan(attrInt, 10)),
+      result(sources.And(
+        sources.GreaterThan(attrIntString, 1),
+        sources.LessThan(attrIntString, 10))))
+
+    // attrInt >= 8 OR attrInt <= 2
+    testTranslateFilter(Or(
+      GreaterThanOrEqual(attrInt, 8),
+      LessThanOrEqual(attrInt, 2)),
+      result(sources.Or(
+        sources.GreaterThanOrEqual(attrIntString, 8),
+        sources.LessThanOrEqual(attrIntString, 2))))
+
+    testTranslateFilter(Not(GreaterThanOrEqual(attrInt, 8)),
+      result(sources.Not(sources.GreaterThanOrEqual(attrIntString, 8))))
+
+    testTranslateFilter(StartsWith(attrStr, "a"),
+      result(sources.StringStartsWith(attrStrString, "a")))
+
+    testTranslateFilter(EndsWith(attrStr, "a"), result(sources.StringEndsWith(attrStrString, "a")))
+
+    testTranslateFilter(Contains(attrStr, "a"), result(sources.StringContains(attrStrString, "a")))
+  }
+
+  // `isResultNone` is used when testing invalid input expression
+  // containing dots which translates into None
+  private def testTranslateComplexExpression(
+      attrInt: Expression, attrIntString: String, isResultNone: Boolean): Unit = {
+
+    def result(result: sources.Filter): Option[sources.Filter] = {
+      if (isResultNone) {
+        None
+      } else {
+        Some(result)
+      }
+    }
+
+    // ABS(attrInt) - 2 <= 1
     testTranslateFilter(LessThanOrEqual(
       // Expressions are not supported
       // Functions such as 'Abs' are not supported
       Subtract(Abs(attrInt), 2), 1), None)
 
-    // (cin1 > 1 AND cint < 10) OR (cint > 50 AND cint > 100)
+    // (attrInt > 1 AND attrInt < 10) OR (attrInt > 50 AND attrInt > 100)
     testTranslateFilter(Or(
       And(
         GreaterThan(attrInt, 1),
@@ -100,16 +202,16 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
       And(
         GreaterThan(attrInt, 50),
         LessThan(attrInt, 100))),
-      Some(sources.Or(
+      result(sources.Or(
         sources.And(
-          sources.GreaterThan("cint", 1),
-          sources.LessThan("cint", 10)),
+          sources.GreaterThan(attrIntString, 1),
+          sources.LessThan(attrIntString, 10)),
         sources.And(
-          sources.GreaterThan("cint", 50),
-          sources.LessThan("cint", 100)))))
+          sources.GreaterThan(attrIntString, 50),
+          sources.LessThan(attrIntString, 100)))))
 
     // SPARK-22548 Incorrect nested AND expression pushed down to JDBC data source
-    // (cint > 1 AND ABS(cint) < 10) OR (cint < 50 AND cint > 100)
+    // (attrInt > 1 AND ABS(attrInt) < 10) OR (attrInt < 50 AND attrInt > 100)
     testTranslateFilter(Or(
       And(
         GreaterThan(attrInt, 1),
@@ -120,7 +222,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
         GreaterThan(attrInt, 50),
         LessThan(attrInt, 100))), None)
 
-    // NOT ((cint <= 1 OR ABS(cint) >= 10) AND (cint <= 50 OR cint >= 100))
+    // NOT ((attrInt <= 1 OR ABS(attrInt) >= 10) AND (attrInt <= 50 OR attrInt >= 100))
     testTranslateFilter(Not(And(
       Or(
         LessThanOrEqual(attrInt, 1),
@@ -131,7 +233,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
         LessThanOrEqual(attrInt, 50),
         GreaterThanOrEqual(attrInt, 100)))), None)
 
-    // (cint = 1 OR cint = 10) OR (cint > 0 OR cint < -10)
+    // (attrInt = 1 OR attrInt = 10) OR (attrInt > 0 OR attrInt < -10)
     testTranslateFilter(Or(
       Or(
         EqualTo(attrInt, 1),
@@ -140,15 +242,15 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
       Or(
         GreaterThan(attrInt, 0),
         LessThan(attrInt, -10))),
-      Some(sources.Or(
+      result(sources.Or(
         sources.Or(
-          sources.EqualTo("cint", 1),
-          sources.EqualTo("cint", 10)),
+          sources.EqualTo(attrIntString, 1),
+          sources.EqualTo(attrIntString, 10)),
         sources.Or(
-          sources.GreaterThan("cint", 0),
-          sources.LessThan("cint", -10)))))
+          sources.GreaterThan(attrIntString, 0),
+          sources.LessThan(attrIntString, -10)))))
 
-    // (cint = 1 OR ABS(cint) = 10) OR (cint > 0 OR cint < -10)
+    // (attrInt = 1 OR ABS(attrInt) = 10) OR (attrInt > 0 OR attrInt < -10)
     testTranslateFilter(Or(
       Or(
         EqualTo(attrInt, 1),
@@ -162,7 +264,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
     // In end-to-end testing, conjunctive predicate should has been split
     // before reaching DataSourceStrategy.translateFilter.
     // This is for UT purpose to test each [[case]].
-    // (cint > 1 AND cint < 10) AND (cint = 6 AND cint IS NOT NULL)
+    // (attrInt > 1 AND attrInt < 10) AND (attrInt = 6 AND attrInt IS NOT NULL)
     testTranslateFilter(And(
       And(
         GreaterThan(attrInt, 1),
@@ -171,15 +273,15 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
       And(
         EqualTo(attrInt, 6),
         IsNotNull(attrInt))),
-      Some(sources.And(
+      result(sources.And(
         sources.And(
-          sources.GreaterThan("cint", 1),
-          sources.LessThan("cint", 10)),
+          sources.GreaterThan(attrIntString, 1),
+          sources.LessThan(attrIntString, 10)),
         sources.And(
-          sources.EqualTo("cint", 6),
-          sources.IsNotNull("cint")))))
+          sources.EqualTo(attrIntString, 6),
+          sources.IsNotNull(attrIntString)))))
 
-    // (cint > 1 AND cint < 10) AND (ABS(cint) = 6 AND cint IS NOT NULL)
+    // (attrInt > 1 AND attrInt < 10) AND (ABS(attrInt) = 6 AND attrInt IS NOT NULL)
     testTranslateFilter(And(
       And(
         GreaterThan(attrInt, 1),
@@ -190,7 +292,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
         EqualTo(Abs(attrInt), 6),
         IsNotNull(attrInt))), None)
 
-    // (cint > 1 OR cint < 10) AND (cint = 6 OR cint IS NOT NULL)
+    // (attrInt > 1 OR attrInt < 10) AND (attrInt = 6 OR attrInt IS NOT NULL)
     testTranslateFilter(And(
       Or(
         GreaterThan(attrInt, 1),
@@ -199,15 +301,15 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
       Or(
         EqualTo(attrInt, 6),
         IsNotNull(attrInt))),
-      Some(sources.And(
+      result(sources.And(
         sources.Or(
-          sources.GreaterThan("cint", 1),
-          sources.LessThan("cint", 10)),
+          sources.GreaterThan(attrIntString, 1),
+          sources.LessThan(attrIntString, 10)),
         sources.Or(
-          sources.EqualTo("cint", 6),
-          sources.IsNotNull("cint")))))
+          sources.EqualTo(attrIntString, 6),
+          sources.IsNotNull(attrIntString)))))
 
-    // (cint > 1 OR cint < 10) AND (cint = 6 OR cint IS NOT NULL)
+    // (attrInt > 1 OR attrInt < 10) AND (attrInt = 6 OR attrInt IS NOT NULL)
     testTranslateFilter(And(
       Or(
         GreaterThan(attrInt, 1),
