@@ -73,13 +73,13 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         spark.range(N).selectExpr("(id & 65535) as k").groupBy("k").sum().collect()
       }
 
-      benchmark.addCase(s"codegen = F", numIters = 2) { _ =>
+      benchmark.addCase("codegen = F", numIters = 2) { _ =>
         withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
           f()
         }
       }
 
-      benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { _ =>
+      benchmark.addCase("codegen = T hashmap = F", numIters = 3) { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
@@ -88,7 +88,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase(s"codegen = T hashmap = T", numIters = 5) { _ =>
+      benchmark.addCase("codegen = T hashmap = T", numIters = 5) { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
@@ -109,13 +109,13 @@ object AggregateBenchmark extends SqlBasedBenchmark {
 
       def f(): Unit = spark.sql("select k, k, sum(id) from test group by k, k").collect()
 
-      benchmark.addCase(s"codegen = F", numIters = 2) { _ =>
+      benchmark.addCase("codegen = F", numIters = 2) { _ =>
         withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
           f()
         }
       }
 
-      benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { _ =>
+      benchmark.addCase("codegen = T hashmap = F", numIters = 3) { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
@@ -124,7 +124,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase(s"codegen = T hashmap = T", numIters = 5) { _ =>
+      benchmark.addCase("codegen = T hashmap = T", numIters = 5) { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
@@ -144,14 +144,13 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       def f(): Unit = spark.range(N).selectExpr("id", "cast(id & 1023 as string) as k")
         .groupBy("k").count().collect()
 
-      benchmark.addCase(s"codegen = F", numIters = 2) { _ =>
-        spark.conf.set("spark.sql.codegen.wholeStage", "false")
+      benchmark.addCase("codegen = F", numIters = 2) { _ =>
         withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
           f()
         }
       }
 
-      benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { _ =>
+      benchmark.addCase("codegen = T hashmap = F", numIters = 3) { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
@@ -160,7 +159,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase(s"codegen = T hashmap = T", numIters = 5) { _ =>
+      benchmark.addCase("codegen = T hashmap = T", numIters = 5) { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
@@ -180,13 +179,13 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       def f(): Unit = spark.range(N).selectExpr("id", "cast(id & 65535 as decimal) as k")
         .groupBy("k").count().collect()
 
-      benchmark.addCase(s"codegen = F") { _ =>
+      benchmark.addCase("codegen = F") { _ =>
         withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
           f()
         }
       }
 
-      benchmark.addCase(s"codegen = T hashmap = F") { _ =>
+      benchmark.addCase("codegen = T hashmap = F") { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
@@ -195,7 +194,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase(s"codegen = T hashmap = T") { _ =>
+      benchmark.addCase("codegen = T hashmap = T") { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
@@ -225,13 +224,13 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         .sum()
         .collect()
 
-      benchmark.addCase(s"codegen = F") { _ =>
+      benchmark.addCase("codegen = F") { _ =>
         withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
           f()
         }
       }
 
-      benchmark.addCase(s"codegen = T hashmap = F") { _ =>
+      benchmark.addCase("codegen = T hashmap = F") { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
@@ -240,7 +239,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase(s"codegen = T hashmap = T") { _ =>
+      benchmark.addCase("codegen = T hashmap = T") { _ =>
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
