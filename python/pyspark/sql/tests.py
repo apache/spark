@@ -576,32 +576,6 @@ class SQLTests(ReusedSQLTestCase):
         with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
             self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1)])
 
-    def test_udf_and_filter_in_join_condition(self):
-        # regression test for SPARK-25314
-        # test the complex scenario with both udf and normal filter
-        from pyspark.sql.functions import udf
-        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
-        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=2, b1=1, b2=2)])
-        f = udf(lambda a, b: a == b, BooleanType())
-        df = left.join(right, [f("a", "b1"), left.a == 1, right.b == 2])
-        with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
-            df.collect()
-        with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
-            self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1, b=2, b1=1, b2=2)])
-
-    def test_udf_and_filter_in_left_semi_join_condition(self):
-        # regression test for SPARK-25314
-        # test the complex scenario with both udf and normal filter
-        from pyspark.sql.functions import udf
-        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
-        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=2, b1=1, b2=2)])
-        f = udf(lambda a, b: a == b, BooleanType())
-        df = left.join(right, [f("a", "b1"), left.a == 1, right.b == 2], "left_semi")
-        with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
-            df.collect()
-        with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
-            self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1)])
-
     def test_udf_and_common_filter_in_join_condition(self):
         # regression test for SPARK-25314
         # test the complex scenario with both udf and common filter
