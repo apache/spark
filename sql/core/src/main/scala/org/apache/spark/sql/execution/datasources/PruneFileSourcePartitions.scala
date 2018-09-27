@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.types.BooleanType
 
 private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
@@ -39,21 +40,31 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
             _,
             _))
         if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
-      // The attribute name of predicate could be different than the one in schema in case of
-      // case insensitive, we should change them to match the one in schema, so we donot need to
-      // worry about case sensitivity anymore.
-      val normalizedFilters = filters.map { e =>
-        e transform {
-          case a: AttributeReference =>
-            a.withName(logicalRelation.output.find(_.semanticEquals(a)).get.name)
-        }
-      }
 
       val sparkSession = fsRelation.sparkSession
       val partitionColumns =
         logicalRelation.resolve(
           partitionSchema, sparkSession.sessionState.analyzer.resolver)
       val partitionSet = AttributeSet(partitionColumns)
+      // The attribute name of predicate could be different than the one in schema in case of
+      // case insensitive, we should change them to match the one in schema, so we donot need to
+      // worry about case sensitivity anymore.
+      val normalizedFilters = filters.map { e =>
+        e transformUp {
+          case a: AttributeReference =>
+            a.withName(logicalRelation.output.find(_.semanticEquals(a)).get.name)
+          // Replace the nonPartitionOps field with true in the And(partitionOps, nonPartitionOps)
+          // to make the partition can be pruned
+          case and @And(left, right) =>
+            val leftPartition = left.references.filter(partitionSet.contains(_))
+            val rightPartition = right.references.filter(partitionSet.contains(_))
+            if (leftPartition.size == left.references.size && rightPartition.size == 0) {
+              and.withNewChildren(Seq(left, Literal(true, BooleanType)))
+            } else if (leftPartition.size == 0 && rightPartition.size == right.references.size) {
+              and.withNewChildren(Seq(Literal(true, BooleanType), right))
+            } else and
+        }
+      }
       val partitionKeyFilters =
         ExpressionSet(normalizedFilters
           .filterNot(SubqueryExpression.hasSubquery(_))
