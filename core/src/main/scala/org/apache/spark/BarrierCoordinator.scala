@@ -192,8 +192,8 @@ private[spark] class BarrierCoordinator(
       cancelTimerTask()
     }
 
-    // Check for clearing internal data, visible for test only.
-    private[spark] def cleanCheck(): Boolean = requesters.isEmpty && timerTask == null
+    // Check for internal state clear, visible for test only.
+    private[spark] def isInternalStateClear(): Boolean = requesters.isEmpty && timerTask == null
 
     // Get currently barrier epoch, visible for test only.
     private[spark] def getBarrierEpoch(): Int = barrierEpoch

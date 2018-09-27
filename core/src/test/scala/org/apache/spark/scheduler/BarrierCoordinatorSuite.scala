@@ -63,7 +63,7 @@ class BarrierCoordinatorSuite extends SparkFunSuite with LocalSparkContext with 
     // Ensure barrierEpoch value have been changed.
     val barrierState = getBarrierState(stageId, stageAttemptNumber, barrierCoordinator)
     assert(barrierState.getBarrierEpoch() == 1)
-    assert(barrierState.cleanCheck())
+    assert(barrierState.isInternalStateClear())
   }
 
   test("normal test for multi tasks") {
@@ -85,7 +85,7 @@ class BarrierCoordinatorSuite extends SparkFunSuite with LocalSparkContext with 
     // Ensure barrierEpoch value have been changed.
     val barrierState = getBarrierState(stageId, stageAttemptNumber, barrierCoordinator)
     assert(barrierState.getBarrierEpoch() == 1)
-    assert(barrierState.cleanCheck())
+    assert(barrierState.isInternalStateClear())
   }
 
   test("abnormal test for syncing with illegal barrierId") {
@@ -133,7 +133,7 @@ class BarrierCoordinatorSuite extends SparkFunSuite with LocalSparkContext with 
     // Ensure barrierEpoch value have been changed.
     val barrierState = getBarrierState(stageId, stageAttemptNumber, barrierCoordinator)
     assert(barrierState.getBarrierEpoch() == 1)
-    assert(barrierState.cleanCheck())
+    assert(barrierState.isInternalStateClear())
     barrierCoordinator.receiveAndReply(rpcCallContext)(
       RequestToSync(
         numTasks,
