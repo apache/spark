@@ -2890,7 +2890,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         .selectExpr("1 + id2 as id3")
       sortDF.collect()
       val sortNumRecords = sortDF.queryExecution.sparkPlan.collect {
-        case l @ LocalLimitExec(_, f: FilterExec) => f
+        case l@LocalLimitExec(_, f: FilterExec) => f
       }.map { filterNode =>
         filterNode.metrics("numOutputRows").value
       }
@@ -2901,7 +2901,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       .selectExpr("id + 1 as id2").limit(1).filter('id > 50)
     filterDF.collect()
     val filterNumRecords = filterDF.queryExecution.sparkPlan.collect {
-      case f @ FilterExec(_, r: RangeExec) => f
+      case f@FilterExec(_, r: RangeExec) => f
     }.map { case filterNode =>
       filterNode.metrics("numOutputRows").value
     }.head
@@ -2915,12 +2915,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       .filter('id2 >= 0)
     twoLimitsDF.collect()
     val twoLimitsDFNumRecords = twoLimitsDF.queryExecution.sparkPlan.collect {
-      case f @ FilterExec(_, _: RangeExec) => f
+      case f@FilterExec(_, _: RangeExec) => f
     }.map { filterNode =>
       filterNode.metrics("numOutputRows").value
     }.head
     assert(twoLimitsDFNumRecords == 1)
     checkAnswer(twoLimitsDF, Row(1) :: Nil)
+  }
+
+  test("SPARK-25454: decimal division with negative scale") {
+    // TODO: completely fix this issue even when LITERAL_PRECISE_PRECISION is true.
+    withSQLConf(SQLConf.LITERAL_PICK_MINIMUM_PRECISION.key -> "false") {
+      checkAnswer(sql("select 26393499451 / (1e6 * 1000)"), Row(BigDecimal("26.3934994510000")))
+    }
   }
 }
 

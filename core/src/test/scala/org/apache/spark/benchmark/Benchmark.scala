@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.benchmark
 
 import java.io.{OutputStream, PrintStream}
 
@@ -26,6 +26,8 @@ import scala.util.Try
 
 import org.apache.commons.io.output.TeeOutputStream
 import org.apache.commons.lang3.SystemUtils
+
+import org.apache.spark.util.Utils
 
 /**
  * Utility class to benchmark components. An example of how to use this is:
