@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NumericType, StringType}
@@ -174,15 +175,14 @@ package object util extends Logging {
   /**
    * The performance overhead of creating and logging strings for wide schemas can be large. To
    * limit the impact, we bound the number of fields to include by default. This can be overridden
-   * by setting the 'spark.debug.maxToStringFields' conf in SparkEnv.
+   * by setting the 'spark.debug.maxToStringFields' conf in SparkEnv or by settings the SQL config
+   * `spark.sql.debug.maxToStringFields`.
    */
-  val DEFAULT_MAX_TO_STRING_FIELDS = 25
-
-  private[spark] def maxNumToStringFields = {
+  private[spark] def maxNumToStringFields: Int = {
     val legacyLimit = if (SparkEnv.get != null) {
-      SparkEnv.get.conf.getInt("spark.debug.maxToStringFields", DEFAULT_MAX_TO_STRING_FIELDS)
+      SparkEnv.get.conf.get(config.MAX_TO_STRING_FIELDS)
     } else {
-      DEFAULT_MAX_TO_STRING_FIELDS
+      config.MAX_TO_STRING_FIELDS.defaultValue.get
     }
     val sqlConfLimit = SQLConf.get.maxToStringFields
 
