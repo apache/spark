@@ -34,6 +34,7 @@ import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito.{inOrder, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually
 import org.scalatest.mockito.MockitoSugar
 
@@ -50,7 +51,8 @@ import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockManager, BlockManagerId}
 import org.apache.spark.util.{LongAccumulator, UninterruptibleThread, Utils}
 
-class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar with Eventually {
+class ExecutorSuite extends SparkFunSuite
+    with LocalSparkContext with MockitoSugar with Eventually with PrivateMethodTester {
 
   test("SPARK-15963: Catch `TaskKilledException` correctly in Executor.TaskRunner") {
     // mock some objects to make Executor.launchTask() happy
@@ -300,18 +302,14 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     f(executor, heartbeats)
   }
 
-  private def invokeReportHeartbeat(executor: Executor): Unit = {
-    val method = classOf[Executor]
-      .getDeclaredMethod("org$apache$spark$executor$Executor$$reportHeartBeat")
-    method.setAccessible(true)
-    method.invoke(executor)
-  }
-
   private def heartbeatZeroAccumulatorUpdateTest(dropZeroMetrics: Boolean): Unit = {
     val c = EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES.key -> dropZeroMetrics.toString
     withHeartbeatExecutor(c) { (executor, heartbeats) =>
+      val reportHeartbeat = PrivateMethod[Unit]('reportHeartBeat)
+
       // When no tasks are running, there should be no accumulators sent in heartbeat
-      invokeReportHeartbeat(executor)
+      executor.invokePrivate(reportHeartbeat())
+      // invokeReportHeartbeat(executor)
       assert(heartbeats.length == 1)
       assert(heartbeats(0).accumUpdates.length == 0,
         "No updates should be sent when no tasks are running")
@@ -337,7 +335,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
       when(mockTaskRunner.startGCTime).thenReturn(1)
       tasksMap.put(6, mockTaskRunner)
 
-      invokeReportHeartbeat(executor)
+      executor.invokePrivate(reportHeartbeat())
       assert(heartbeats.length == 2)
       val updates = heartbeats(1).accumUpdates
       assert(updates.length == 1 && updates(0)._1 == 6,
