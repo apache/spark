@@ -729,6 +729,15 @@ so that non-local processes can authenticate. These delegation tokens in Kuberne
 shared by the Driver and its Executors. As such, there are three ways of submitting a kerberos job: 
 
 In all cases you must define the environment variable: `HADOOP_CONF_DIR`.
+It also important to note that the KDC needs to be visible from inside the containers if the user uses a local
+krb5 file. 
+
+If a user wishes to use a remote HADOOP_CONF directory, that contains the Hadoop configuration files, or 
+a remote krb5 file, this could be achieved by mounting a pre-defined ConfigMap and mounting the volume in the
+desired location that you can point to via the appropriate configs. This method is useful for those who wish to not
+rebuild their Docker images, but instead point to a ConfigMap that they could modify. This strategy is supported
+via the pod-template feature. 
+
 1. Submitting with a $kinit that stores a TGT in the Local Ticket Cache:
 ```bash
 /usr/bin/kinit -kt <keytab_file> <username>/<krb5 realm>
@@ -740,7 +749,7 @@ In all cases you must define the environment variable: `HADOOP_CONF_DIR`.
     --conf spark.app.name=spark-hdfs \
     --conf spark.kubernetes.container.image=spark:latest \
     --conf spark.kubernetes.kerberos.krb5location=/etc/krb5.conf \
-    local:///opt/spark/examples/jars/spark-examples_2.11-2.4.0-SNAPSHOT.jar \
+    local:///opt/spark/examples/jars/spark-examples_<VERSION>-SNAPSHOT.jar \
     <HDFS_FILE_LOCATION>
 ```
 2. Submitting with a local keytab and principal
@@ -752,10 +761,10 @@ In all cases you must define the environment variable: `HADOOP_CONF_DIR`.
     --conf spark.executor.instances=1 \
     --conf spark.app.name=spark-hdfs \
     --conf spark.kubernetes.container.image=spark:latest \
-    --conf spark.kubernetes.kerberos.keytab=<KEYTAB_FILE> \
-    --conf spark.kubernetes.kerberos.principal=<PRINCIPLE> \
+    --conf spark.kerberos.keytab=<KEYTAB_FILE> \
+    --conf spark.kerberos.principal=<PRINCIPLE> \
     --conf spark.kubernetes.kerberos.krb5location=/etc/krb5.conf \
-    local:///opt/spark/examples/jars/spark-examples_2.11-2.4.0-SNAPSHOT.jar \
+    local:///opt/spark/examples/jars/spark-examples_<VERSION>-SNAPSHOT.jar \
     <HDFS_FILE_LOCATION>
 ```
 
@@ -771,14 +780,9 @@ In all cases you must define the environment variable: `HADOOP_CONF_DIR`.
     --conf spark.kubernetes.kerberos.tokensecret.name=<SECRET_TOKEN_NAME> \
     --conf spark.kubernetes.kerberos.tokensecret.itemkey=<SECRET_ITEM_KEY> \
     --conf spark.kubernetes.kerberos.krb5location=/etc/krb5.conf \
-    local:///opt/spark/examples/jars/spark-examples_2.11-2.4.0-SNAPSHOT.jar \
-    
+    local:///opt/spark/examples/jars/spark-examples_<VERSION>-SNAPSHOT.jar \
     <HDFS_FILE_LOCATION>
 ```
-
-
-
-
 
 # Event Logging
 

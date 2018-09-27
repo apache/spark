@@ -200,7 +200,7 @@ private[spark] class Client(
 /**
  * Main class and entry point of application submission in KUBERNETES mode.
  */
-private[spark] class KubernetesClientApplication extends SparkApplication with Logging {
+private[spark] class KubernetesClientApplication extends SparkApplication {
 
   override def start(args: Array[String], conf: SparkConf): Unit = {
     val parsedArguments = ClientArguments.fromCommandLineArgs(args)

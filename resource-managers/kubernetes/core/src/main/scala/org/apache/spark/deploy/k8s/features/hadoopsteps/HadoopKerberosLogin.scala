@@ -16,9 +16,6 @@
  */
 package org.apache.spark.deploy.k8s.features.hadoopsteps
 
-import java.io._
-import java.security.PrivilegedExceptionAction
-
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.SecretBuilder
@@ -33,13 +30,11 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
  /**
   * This logic does all the heavy lifting for Delegation Token creation. This step
   * assumes that the job user has either specified a principal and keytab or ran
-  * $kinit before running spark-submit. With a TGT stored locally, by running
-  * UGI.getCurrentUser you are able to obtain the current user, alternatively
-  * you can run UGI.loginUserFromKeytabAndReturnUGI and by running .doAs run
-  * as the logged into user instead of the current user. With the Job User principal
-  * you then retrieve the delegation token from the NameNode and store values in
-  * DelegationToken. Lastly, the class puts the data into a secret. All this is
-  * defined in a KerberosConfigSpec
+  * $kinit before running spark-submit. By running UGI.getCurrentUser we are able
+  * to obtain the current user, either signed in via $kinit or keytab. With the
+  * Job User principal you then retrieve the delegation token from the NameNode
+  * and store values in DelegationToken. Lastly, the class puts the data into
+  * a secret. All this is defined in a KerberosConfigSpec.
   */
 private[spark] object HadoopKerberosLogin {
    def buildSpec(

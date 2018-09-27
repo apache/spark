@@ -820,4 +820,28 @@ specific to Spark on Kubernetes.
    This sets the major Python version of the docker image used to run the driver and executor containers. Can either be 2 or 3. 
   </td>
 </tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.krb5location</code></td>
+  <td><code>(none)</code></td>
+  <td>
+   Specify the location of the krb5 file to be mounted on the driver and executors for Kerberos interaction.
+   It is important to note that for local files, the KDC defined needs to be visible from inside the containers.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.tokensecret.name</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Specify the name of the secret where your existing delegation token is stored. This removes the need for the job user
+    to provide any keytab for launching a job. 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.tokensecret.itemkey</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Specify the item key of the data where your existing delegation token is stored. This removes the need for the job user 
+    to provide any keytab for launching a job.
+  </td>
+</tr>
 </table>

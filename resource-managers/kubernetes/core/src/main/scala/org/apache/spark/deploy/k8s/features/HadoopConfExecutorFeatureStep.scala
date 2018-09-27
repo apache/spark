@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import io.fabric8.kubernetes.api.model.HasMetadata
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesRoleSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features.hadoopsteps.HadoopBootstrapUtil
 import org.apache.spark.internal.Logging
@@ -26,11 +26,10 @@ import org.apache.spark.internal.Logging
  /**
   * This step is responsible for bootstraping the container with ConfigMaps
   * containing Hadoop config files mounted as volumes and an ENV variable
-  * pointed to the mounted file directory. This is run by both the driver
-  * and executor, as they both require Hadoop config files.
+  * pointed to the mounted file directory.
   */
 private[spark] class HadoopConfExecutorFeatureStep(
-  kubernetesConf: KubernetesConf[_ <: KubernetesRoleSpecificConf])
+  kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
   extends KubernetesFeatureConfigStep with Logging{
 
   override def configurePod(pod: SparkPod): SparkPod = {

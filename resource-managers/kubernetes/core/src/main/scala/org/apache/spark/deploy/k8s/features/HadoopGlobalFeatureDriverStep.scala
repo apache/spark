@@ -32,9 +32,8 @@ import org.apache.spark.deploy.k8s.features.hadoopsteps._
 import org.apache.spark.internal.Logging
 
  /**
-  * This is the main method that runs the hadoopConfigurationSteps defined
-  * by the HadoopStepsOrchestrator. These steps are run to modify the
-  * SparkPod and Kubernetes Resources using the additive method of the feature steps
+  * Runs the necessary Hadoop-based logic based on Kerberos configs and the presence of the
+  * HADOOP_CONF_DIR. This runs various bootstrap methods defined in HadoopBootstrapUtil.
   */
 private[spark] class HadoopGlobalFeatureDriverStep(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf])
@@ -69,7 +68,6 @@ private[spark] class HadoopGlobalFeatureDriverStep(
       "If a secret storing a Kerberos Delegation Token is specified you must also" +
         " specify the item-key where the data is stored")
 
-    // TODO: Using pre-existing configMaps instead of local HADOOP_CONF_DIR
     require(kubernetesConf.hadoopConfDir.isDefined, "Ensure that HADOOP_CONF_DIR is defined")
     private val hadoopConfDir = kubernetesConf.hadoopConfDir.get
     private val hadoopConfigurationFiles = kubeTokenManager.getHadoopConfFiles(hadoopConfDir)
@@ -118,13 +116,13 @@ private[spark] class HadoopGlobalFeatureDriverStep(
     override def getAdditionalPodSystemProperties(): Map[String, String] = {
       val resolvedConfValues = hadoopSpec.map{ hSpec =>
          Map(KERBEROS_KEYTAB_SECRET_NAME -> hSpec.dtSecretName,
-          KERBEROS_KEYTAB_SECRET_KEY -> hSpec.dtSecretItemKey,
-          KERBEROS_SPARK_USER_NAME -> hSpec.jobUserName)
+            KERBEROS_KEYTAB_SECRET_KEY -> hSpec.dtSecretItemKey,
+            KERBEROS_SPARK_USER_NAME -> hSpec.jobUserName)
       }.getOrElse(
           Map(KERBEROS_SPARK_USER_NAME ->
             kubernetesConf.tokenManager.getCurrentUser.getShortUserName))
       Map(HADOOP_CONFIG_MAP_SPARK_CONF_NAME -> kubernetesConf.hadoopConfigMapName,
-        HADOOP_CONF_DIR_LOC -> kubernetesConf.hadoopConfDir.get) ++ resolvedConfValues
+          HADOOP_CONF_DIR_LOC -> kubernetesConf.hadoopConfDir.get) ++ resolvedConfValues
     }
 
     override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {

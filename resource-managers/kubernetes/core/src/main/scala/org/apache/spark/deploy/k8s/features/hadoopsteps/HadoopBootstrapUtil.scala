@@ -100,14 +100,14 @@ private[spark] object HadoopBootstrapUtil {
     * @return a modified SparkPod
     */
   def bootstrapSparkUserPod(
-     sparkUserName: String,
-     pod: SparkPod) : SparkPod = {
-     val envModifiedContainer = new ContainerBuilder(pod.container)
-         .addNewEnv()
-           .withName(ENV_SPARK_USER)
-           .withValue(sparkUserName)
-           .endEnv()
-         .build()
+    sparkUserName: String,
+    pod: SparkPod) : SparkPod = {
+    val envModifiedContainer = new ContainerBuilder(pod.container)
+      .addNewEnv()
+        .withName(ENV_SPARK_USER)
+        .withValue(sparkUserName)
+        .endEnv()
+      .build()
     SparkPod(pod.pod, envModifiedContainer)
   }
 
