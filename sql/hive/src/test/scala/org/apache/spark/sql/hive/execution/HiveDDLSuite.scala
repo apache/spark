@@ -2356,7 +2356,7 @@ class HiveDDLSuite
         Seq(
           Row("Type", "VIEW", ""),
           Row("View Text", "SELECT 1 AS value", ""),
-          Row("View Original Text:", "SELECT 1 AS value", "")
+          Row("View Original Text", "SELECT 1 AS value", "")
         )
       ))
 
@@ -2365,7 +2365,7 @@ class HiveDDLSuite
         Seq(
           Row("Type", "VIEW", ""),
           Row("View Text", "SELECT `t`.`_c0` FROM (SELECT 1) `T`", ""),
-          Row("View Original Text:", "SELECT * FROM (SELECT 1) T", "")
+          Row("View Original Text", "SELECT * FROM (SELECT 1) T", "")
         )
       ))
     }

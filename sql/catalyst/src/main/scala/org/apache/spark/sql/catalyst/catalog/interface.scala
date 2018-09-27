@@ -332,7 +332,7 @@ case class CatalogTable(
     comment.foreach(map.put("Comment", _))
     if (tableType == CatalogTableType.VIEW) {
       viewText.foreach(map.put("View Text", _))
-      viewOriginalText.foreach(map.put("View Original Text:", _))
+      viewOriginalText.foreach(map.put("View Original Text", _))
       viewDefaultDatabase.foreach(map.put("View Default Database", _))
       if (viewQueryColumnNames.nonEmpty) {
         map.put("View Query Output Columns", viewQueryColumnNames.mkString("[", ", ", "]"))
