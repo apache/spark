@@ -442,7 +442,7 @@ private[spark] class Executor(
         executorSource.METRIC_OUTPUT_BYTES_WRITTEN
           .inc(task.metrics.outputMetrics.bytesWritten)
         executorSource.METRIC_OUTPUT_RECORDS_WRITTEN
-          .inc(task.metrics.inputMetrics.recordsRead)
+          .inc(task.metrics.outputMetrics.recordsWritten)
         executorSource.METRIC_RESULT_SIZE.inc(task.metrics.resultSize)
         executorSource.METRIC_DISK_BYTES_SPILLED.inc(task.metrics.diskBytesSpilled)
         executorSource.METRIC_MEMORY_BYTES_SPILLED.inc(task.metrics.memoryBytesSpilled)
