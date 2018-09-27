@@ -254,12 +254,12 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     }
   }
 
-  test("Heartbeat should drop zero metrics") {
-    heartbeatZeroMetricTest(true)
+  test("Heartbeat should drop zero accumulator updates") {
+    heartbeatZeroAccumulatorUpdateTest(true)
   }
 
-  test("Heartbeat should not drop zero metrics when the conf is set to false") {
-    heartbeatZeroMetricTest(false)
+  test("Heartbeat should not drop zero accumulator updates when the conf is disabled") {
+    heartbeatZeroAccumulatorUpdateTest(false)
   }
 
   private def withHeartbeatExecutor(confs: (String, String)*)
@@ -307,7 +307,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     method.invoke(executor)
   }
 
-  private def heartbeatZeroMetricTest(dropZeroMetrics: Boolean): Unit = {
+  private def heartbeatZeroAccumulatorUpdateTest(dropZeroMetrics: Boolean): Unit = {
     val c = EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES.key -> dropZeroMetrics.toString
     withHeartbeatExecutor(c) { (executor, heartbeats) =>
       // When no tasks are running, there should be no accumulators sent in heartbeat
