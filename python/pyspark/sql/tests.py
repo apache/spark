@@ -3961,16 +3961,6 @@ class SparkSessionTests2(unittest.TestCase):
         finally:
             newSession.stop()
 
-    def test_create_SparkContext_then_SparkSession(self):
-        sc = SparkContext('local', 'test')
-        session = SparkSession.builder \
-            .config("key1", "value1") \
-            .getOrCreate()
-        self.assertEqual(session.conf.get("key1"), "value1")
-        self.assertEqual(session.sparkContext, sc)
-        self.assertEqual(sc._conf.get("key1"), "value1")
-        session.stop()
-
 
 class UDFInitializationTests(unittest.TestCase):
     def tearDown(self):
