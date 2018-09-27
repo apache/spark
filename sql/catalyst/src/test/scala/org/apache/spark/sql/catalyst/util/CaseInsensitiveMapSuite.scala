@@ -44,10 +44,4 @@ class CaseInsensitiveMapSuite extends SparkFunSuite {
     assert(m == Map("a" -> "b", "foo" -> "bar", "x" -> "y"))
     shouldBeSerializable(m)
   }
-
-  test("CaseInsensitiveMap should be serializable after 'filterKeys' method") {
-    val m = CaseInsensitiveMap(Map("a" -> "b", "foo" -> "bar")).filterKeys(_ == "foo")
-    assert(m == Map("foo" -> "bar"))
-    shouldBeSerializable(m)
-  }
 }
