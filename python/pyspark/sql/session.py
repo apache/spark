@@ -179,8 +179,8 @@ class SparkSession(object):
                         sparkConf = SparkConf()
                         for key, value in self._options.items():
                             sparkConf.set(key, value)
-                        sc = SparkContext.getOrCreate(sparkConf)
                         # This SparkContext may be an existing one.
+                        sc = SparkContext.getOrCreate(sparkConf)
                     # Do not update `SparkConf` for existing `SparkContext`, as it's shared
                     # by all sessions.
                     session = SparkSession(sc)
