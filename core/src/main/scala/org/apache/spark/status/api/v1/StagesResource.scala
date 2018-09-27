@@ -199,22 +199,38 @@ private[v1] class StagesResource extends BaseAppResource {
         || f.status.contains(searchValue) || f.taskLocality.contains(searchValue)
         || f.speculative.toString.contains(searchValue)
         || f.errorMessage.getOrElse(defaultOptionString).contains(searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).executorDeserializeTime.toString.contains(searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).executorRunTime.toString.contains(searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).jvmGcTime.toString.contains(searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).resultSerializationTime.toString.contains(searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).memoryBytesSpilled.toString.contains(searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).diskBytesSpilled.toString.contains(searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).peakExecutionMemory.toString.contains(searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).inputMetrics.bytesRead.toString.contains(searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).inputMetrics.recordsRead.toString.contains(searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).outputMetrics.bytesWritten.toString.contains(searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).outputMetrics.recordsWritten.toString.contains(searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).shuffleReadMetrics.fetchWaitTime.toString.contains(searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).shuffleReadMetrics.recordsRead.toString.contains(searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).shuffleWriteMetrics.bytesWritten.toString.contains(searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).shuffleWriteMetrics.recordsWritten.toString.contains(searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).shuffleWriteMetrics.writeTime.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).executorDeserializeTime.toString.contains(
+        searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).executorRunTime.toString.contains(
+        searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).jvmGcTime.toString.contains(
+        searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).resultSerializationTime.toString.contains(
+        searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).memoryBytesSpilled.toString.contains(
+        searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).diskBytesSpilled.toString.contains(
+        searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).peakExecutionMemory.toString.contains(
+        searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).inputMetrics.bytesRead.toString.contains(
+        searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).inputMetrics.recordsRead.toString.contains(
+        searchValue)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).outputMetrics.bytesWritten.toString.contains(
+        searchValue)
+        || f.taskMetrics.getOrElse(
+        dummyTaskMetrics).outputMetrics.recordsWritten.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(
+        dummyTaskMetrics).shuffleReadMetrics.fetchWaitTime.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(
+        dummyTaskMetrics).shuffleReadMetrics.recordsRead.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(
+        dummyTaskMetrics).shuffleWriteMetrics.bytesWritten.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(
+        dummyTaskMetrics).shuffleWriteMetrics.recordsWritten.toString.contains(searchValue)
+        || f.taskMetrics.getOrElse(
+        dummyTaskMetrics).shuffleWriteMetrics.writeTime.toString.contains(searchValue)
         || f.schedulerDelay.toString.contains(searchValue)
         || f.gettingResultTime.toString.contains(searchValue)))
     filteredTaskDataSequence
