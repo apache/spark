@@ -141,10 +141,14 @@ private[spark] class AppStatusListener(
       jvmInfo.get("Java Version").orNull,
       jvmInfo.get("Java Home").orNull,
       jvmInfo.get("Scala Version").orNull)
-
+    val sparkProperties = if (!live) {
+      (details.getOrElse("Spark Properties", Nil).toMap ++ conf.getAll.toMap).toSeq
+    } else {
+      details.getOrElse("Spark Properties", Nil)
+    }
     val envInfo = new v1.ApplicationEnvironmentInfo(
       runtime,
-      details.getOrElse("Spark Properties", Nil),
+      sparkProperties,
       details.getOrElse("System Properties", Nil),
       details.getOrElse("Classpath Entries", Nil))
 
