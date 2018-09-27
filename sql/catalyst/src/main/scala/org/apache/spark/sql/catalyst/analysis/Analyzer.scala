@@ -1436,21 +1436,7 @@ class Analyzer(
           val expr = resolveSubQuery(l, plans)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output)
           })
-          val subqueryOutput = expr.plan.output
-          val resolvedIn = InSubquery(values, expr.asInstanceOf[ListQuery])
-          if (values.length != subqueryOutput.length) {
-            throw new AnalysisException(
-              s"""Cannot analyze ${resolvedIn.sql}.
-                 |The number of columns in the left hand side of an IN subquery does not match the
-                 |number of columns in the output of subquery.
-                 |#columns in left hand side: ${values.length}
-                 |#columns in right hand side: ${subqueryOutput.length}
-                 |Left side columns:
-                 |[${values.map(_.sql).mkString(", ")}]
-                 |Right side columns:
-                 |[${subqueryOutput.map(_.sql).mkString(", ")}]""".stripMargin)
-          }
-          resolvedIn
+          InSubquery(values, expr.asInstanceOf[ListQuery])
       }
     }
 
