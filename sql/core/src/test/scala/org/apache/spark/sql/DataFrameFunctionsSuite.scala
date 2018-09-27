@@ -1211,11 +1211,80 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row("3"), Row(""), Row(null))
     )
 
-    val e = intercept[AnalysisException] {
+    val e1 = intercept[AnalysisException] {
       Seq(("a string element", 1)).toDF().selectExpr("element_at(_1, _2)")
     }
-    assert(e.message.contains(
-      "argument 1 requires (array or map) type, however, '`_1`' is of string type"))
+    val errorMsg1 =
+      s"""
+         |The first argument to function element_at should have been array or map type, but
+         |its string type.
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e1.message.contains(errorMsg1))
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(array(2, 1), 2S)"),
+      Seq(Row(1))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(array('a', 'b'), 1Y)"),
+      Seq(Row("a"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(array(1, 2, 3), 3)"),
+      Seq(Row(3))
+    )
+
+    val e2 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("element_at(array('a', 'b'), 1L)")
+    }
+    val errorMsg2 =
+      s"""
+         |Input to function element_at should have been array followed by a int, but it's
+         |[array<string>, bigint].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e2.message.contains(errorMsg2))
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 2Y)"),
+      Seq(Row("b"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 1S)"),
+      Seq(Row("a"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 2)"),
+      Seq(Row("b"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 2L)"),
+      Seq(Row("b"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 1.0D)"),
+      Seq(Row("a"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 1.23D)"),
+      Seq(Row(null))
+    )
+
+    val e3 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), '1')")
+    }
+    val errorMsg3 =
+      s"""
+         |Input to function element_at should have been map followed by a value of same
+         |key type, but it's [map<int,string>, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e3.message.contains(errorMsg3))
   }
 
   test("array_union functions") {
