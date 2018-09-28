@@ -494,8 +494,17 @@ private[parquet] class ParquetFilters(
           .map(_(nameToParquetField(name).fieldName, value))
 
       case sources.And(lhs, rhs) =>
-        // If the unsupported predicate is in the top level `And` condition or in the child
-        // `And` condition before hitting `Not` or `Or` condition, it can be safely removed.
+        // At here, it is not safe to just convert one side and remove the other side
+        // if we do not understand what the parent filters are.
+        //
+        // Here is an example used to explain the reason.
+        // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
+        // convert b in ('1'). If we only convert a = 2, we will end up with a filter
+        // NOT(a = 2), which will generate wrong results.
+        //
+        // Pushing one side of AND down is only safe to do at the top level or in the child
+        // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
+        // can be safely removed.
         val lhsFilterOption = createFilterHelper(nameToParquetField, lhs, canRemoveOneSideInAnd)
         val rhsFilterOption = createFilterHelper(nameToParquetField, rhs, canRemoveOneSideInAnd)
 
