@@ -104,7 +104,6 @@ class FPGrowth(object):
     FreqItemset = FreqItemset
 
 
-
 @inherit_doc
 @ignore_unicode_prefix
 class PrefixSpanModel(JavaModelWrapper):
