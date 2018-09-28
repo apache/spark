@@ -1311,6 +1311,7 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
        |  int $j = $numElements - $i - 1;
        |  $assignment
        |}
+       |// $arrayData.setNullAt(1);
        |${ev.value} = $arrayData;
      """.stripMargin
   }
