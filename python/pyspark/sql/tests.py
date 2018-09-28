@@ -1170,15 +1170,6 @@ class SQLTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(nestedRdd2)
         self.assertEqual(Row(f1=[[1, 2], [2, 3]], f2=[1, 2]), df.collect()[0])
 
-        from collections import namedtuple
-        global CustomRow
-        CustomRow = namedtuple('CustomRow', 'field1 field2')
-        rdd = self.sc.parallelize([CustomRow(field1=1, field2="row1"),
-                                   CustomRow(field1=2, field2="row2"),
-                                   CustomRow(field1=3, field2="row3")])
-        df = self.spark.createDataFrame(rdd)
-        self.assertEqual(Row(field1=1, field2=u'row1'), df.first())
-
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{'a': 1}], ["b"])
         self.assertEqual(df.columns, ['b'])
