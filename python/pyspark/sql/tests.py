@@ -5547,8 +5547,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         # TODO: Add BinaryType to 'input_values_with_schema' once minimum pyarrow version is 0.10.0
         if LooseVersion(pa.__version__) >= LooseVersion("0.10.0"):
             input_values_with_schema.append(
-                (bytearray([0x01, 0x02]), StructField('bin', BinaryType()))
-            )
+                (bytearray([0x01, 0x02]), StructField('bin', BinaryType())))
 
         values = [[x[0] for x in input_values_with_schema]]
         output_schema = StructType([x[1] for x in input_values_with_schema])
@@ -5558,10 +5557,13 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         # Different forms of group map pandas UDF, results of these are the same
         udf1 = pandas_udf(
             lambda pdf: pdf.assign(
-                decim=pdf.decim + pdf.decim,
-                double=pdf.double + pdf.float,
-                byte=pdf.byte + 1,
-                long=pdf.byte + pdf.int + pdf.long + pdf.short,
+                byte=pdf.byte * 2,
+                short=pdf.short * 2,
+                int=pdf.int * 2,
+                long=pdf.long * 2,
+                float=pdf.float * 2,
+                double=pdf.double * 2,
+                decim=pdf.decim * 2,
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
             ),
@@ -5571,10 +5573,13 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         udf2 = pandas_udf(
             lambda _, pdf: pdf.assign(
-                decim=pdf.decim + pdf.decim,
-                double=pdf.double + pdf.float,
-                byte=pdf.byte + 1,
-                long=pdf.byte + pdf.int + pdf.long + pdf.short,
+                byte=pdf.byte * 2,
+                short=pdf.short * 2,
+                int=pdf.int * 2,
+                long=pdf.long * 2,
+                float=pdf.float * 2,
+                double=pdf.double * 2,
+                decim=pdf.decim * 2,
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
             ),
@@ -5585,10 +5590,13 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         udf3 = pandas_udf(
             lambda key, pdf: pdf.assign(
                 id=key[0],
-                decim=pdf.decim + pdf.decim,
-                double=pdf.double + pdf.float,
-                byte=pdf.byte + 1,
-                long=pdf.byte + pdf.int + pdf.long + pdf.short,
+                byte=pdf.byte * 2,
+                short=pdf.short * 2,
+                int=pdf.int * 2,
+                long=pdf.long * 2,
+                float=pdf.float * 2,
+                double=pdf.double * 2,
+                decim=pdf.decim * 2,
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
             ),
@@ -5768,15 +5776,10 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         # TODO: Remove this if-statement once minimum pyarrow version is 0.10.0
         if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            unsupported_types.append(
-                StructField('bin', BinaryType())
-            )
+            unsupported_types.append(StructField('bin', BinaryType()))
 
         for unsupported_type in unsupported_types:
-            schema = StructType([
-                StructField('id', LongType(), True),
-                unsupported_type
-            ])
+            schema = StructType([StructField('id', LongType(), True), unsupported_type])
             with QuietTest(self.sc):
                 with self.assertRaisesRegexp(NotImplementedError, common_err_msg):
                     pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
