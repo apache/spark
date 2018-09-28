@@ -41,15 +41,15 @@ import org.scalatest.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.config._
-import org.apache.spark.memory.MemoryManager
-import org.apache.spark.metrics.{JVMHeapMemory, JVMOffHeapMemory, MetricsSystem}
+import org.apache.spark.memory.TestMemoryManager
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcTimeout}
 import org.apache.spark.scheduler.{FakeTask, ResultTask, Task, TaskDescription}
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockManager, BlockManagerId}
-import org.apache.spark.util.{LongAccumulator, UninterruptibleThread, Utils}
+import org.apache.spark.util.{LongAccumulator, UninterruptibleThread}
 
 class ExecutorSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar with Eventually with PrivateMethodTester {
@@ -274,15 +274,6 @@ class ExecutorSuite extends SparkFunSuite
       new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true)
     val executorClass = classOf[Executor]
 
-    // Set ExecutorMetricType.values to be a minimal set to avoid get null exceptions
-    val metricClass =
-      Utils.classForName(classOf[org.apache.spark.metrics.ExecutorMetricType].getName() + "$")
-    val metricTypeValues = metricClass.getDeclaredField("values")
-    metricTypeValues.setAccessible(true)
-    metricTypeValues.set(
-      org.apache.spark.metrics.ExecutorMetricType,
-      IndexedSeq(JVMHeapMemory, JVMOffHeapMemory))
-
     // Save all heartbeats sent into an ArrayBuffer for verification
     val heartbeats = ArrayBuffer[Heartbeat]()
     val mockReceiver = mock[RpcEndpointRef]
@@ -356,14 +347,13 @@ class ExecutorSuite extends SparkFunSuite
     val mockEnv = mock[SparkEnv]
     val mockRpcEnv = mock[RpcEnv]
     val mockMetricsSystem = mock[MetricsSystem]
-    val mockMemoryManager = mock[MemoryManager]
     val mockBlockManager = mock[BlockManager]
     when(mockEnv.conf).thenReturn(conf)
     when(mockEnv.serializer).thenReturn(serializer)
     when(mockEnv.serializerManager).thenReturn(mock[SerializerManager])
     when(mockEnv.rpcEnv).thenReturn(mockRpcEnv)
     when(mockEnv.metricsSystem).thenReturn(mockMetricsSystem)
-    when(mockEnv.memoryManager).thenReturn(mockMemoryManager)
+    when(mockEnv.memoryManager).thenReturn(new TestMemoryManager(conf))
     when(mockEnv.closureSerializer).thenReturn(serializer)
     when(mockBlockManager.blockManagerId).thenReturn(BlockManagerId("1", "hostA", 1234))
     when(mockEnv.blockManager).thenReturn(mockBlockManager)
