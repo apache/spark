@@ -554,8 +554,11 @@ class Analyzer(
           Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
         }
         // Group-by expressions coming from SQL are implicit and need to be deduced.
-        val groupByExprs = groupByExprsOpt.getOrElse(
-          (child.outputSet -- aggregates.flatMap(_.references) -- pivotColumn.references).toSeq)
+        val groupByExprs = groupByExprsOpt.getOrElse {
+          val pivotColAndAggRefs =
+            (pivotColumn.references ++ aggregates.flatMap(_.references)).toSet
+          child.output.filterNot(pivotColAndAggRefs.contains)
+        }
         val singleAgg = aggregates.size == 1
         def outputName(value: Expression, aggregate: Expression): String = {
           val stringValue = value match {
