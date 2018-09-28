@@ -496,8 +496,10 @@ private[parquet] class ParquetFilters(
       case sources.And(lhs, rhs) =>
         // If the unsupported predicate is in the top level `And` condition or in the child
         // `And` condition before hitting `Not` or `Or` condition, it can be safely removed.
-        (createFilterHelper(nameToParquetField, lhs, canRemoveOneSideInAnd = true),
-          createFilterHelper(nameToParquetField, rhs, canRemoveOneSideInAnd = true)) match {
+        val lhsFilterOption = createFilterHelper(nameToParquetField, lhs, canRemoveOneSideInAnd)
+        val rhsFilterOption = createFilterHelper(nameToParquetField, rhs, canRemoveOneSideInAnd)
+
+        (lhsFilterOption, rhsFilterOption) match {
           case (Some(lhsFilter), Some(rhsFilter)) => Some(FilterApi.and(lhsFilter, rhsFilter))
           case (Some(lhsFilter), None) if canRemoveOneSideInAnd => Some(lhsFilter)
           case (None, Some(rhsFilter)) if canRemoveOneSideInAnd => Some(rhsFilter)
