@@ -5548,7 +5548,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             values.append(bytearray([0x01, 0x02]))
             output_fields.append(('bin', BinaryType()))
 
-        output_schema = StructType(map(lambda x: StructField(*x), output_fields))
+        output_schema = StructType([StructField(*x) for x in output_fields])
         df = self.spark.createDataFrame([values], schema=output_schema)
 
         # Different forms of group map pandas UDF, results of these are the same
