@@ -18,7 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
-import java.util.{Date, NoSuchElementException}
+import java.util.Date
 import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletRequest
 
@@ -105,30 +105,15 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val stageAttemptId = parameterAttempt.toInt
 
     val stageHeader = s"Details for Stage $stageId (Attempt $stageAttemptId)"
-    var stageDataTuple: Option[Tuple2[StageData, Seq[Int]]] = try {
-      Some(parent.store.stageAttempt(stageId, stageAttemptId, details = false))
-    } catch {
-      case e: NoSuchElementException => e.getMessage
-      None
-    }
-    var stageData: StageData = null
-    var stageJobIds: Seq[Int] = null
-    stageDataTuple match {
-      case Some(stageTuple) =>
-        stageData = stageTuple._1
-        stageJobIds = stageTuple._2
-      case None =>
-        stageData = {
-          val content =
-            <div id="no-info">
-              <p>No information to display for Stage
-                {stageId}
-                (Attempt
-                {stageAttemptId})</p>
-            </div>
-          return UIUtils.headerSparkPage(request, stageHeader, content, parent)
-        }
-    }
+    val (stageData, stageJobIds) = parent.store
+      .asOption(parent.store.stageAttempt(stageId, stageAttemptId, details = false))
+      .getOrElse {
+        val content =
+          <div id="no-info">
+            <p>No information to display for Stage {stageId} (Attempt {stageAttemptId})</p>
+          </div>
+        return UIUtils.headerSparkPage(request, stageHeader, content, parent)
+      }
 
     val localitySummary = store.localitySummary(stageData.stageId, stageData.attemptId)
 
