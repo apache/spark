@@ -5530,12 +5530,12 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         import pyarrow as pa
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
-        values = [[
+        values = [
             1, 2, 3,
             4, 5, 1.1,
             2.2, Decimal(1.123),
             [1, 2, 2], True, 'hello'
-        ]]
+        ]
         output_fields = [
             ('id', IntegerType()), ('byte', ByteType()), ('short', ShortType()),
             ('int', IntegerType()), ('long', LongType()), ('float', FloatType()),
@@ -5549,7 +5549,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             output_fields.append(('bin', BinaryType()))
 
         output_schema = StructType(map(lambda x: StructField(*x), output_fields))
-        df = self.spark.createDataFrame(values, schema=output_schema)
+        df = self.spark.createDataFrame([values], schema=output_schema)
 
         # Different forms of group map pandas UDF, results of these are the same
         udf1 = pandas_udf(
