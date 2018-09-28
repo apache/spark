@@ -631,6 +631,33 @@ object SQLConf {
     .intConf
     .createWithDefault(200)
 
+  val SQLSTREAM_OUTPUTMODE = buildConf("spark.sqlstreaming.outputMode")
+    .doc("The output mode used in sqlstreaming")
+    .stringConf
+    .createWithDefault("append")
+
+  val SQLSTREAM_TRIGGER = buildConf("spark.sqlstreaming.trigger")
+    .doc("The structstreaming trigger used in sqlstreaming")
+    .stringConf
+    .createWithDefault("0s")
+
+  val SQLSTREAM_QUERY_NAME = buildConf("spark.sqlstreaming.queryName")
+    .doc("The structstreaming query name used in sqlstreaming. " +
+      "User must use spark.sql.streaming.checkpointLocation and " +
+      "spark.sqlstreaming.queryName to ensure the unique checkpointLocation")
+    .stringConf
+    .createOptional
+
+  val SQLSTREAM_CONSOLE_OUTPUT_ROWS = buildConf("spark.sqlstreaming.console.numRows")
+    .doc("The num of rows showed to console sink in sqlstreaming")
+    .stringConf
+    .createWithDefault("20")
+
+  val SQLSTREAM_QUERY_ENABLE = buildConf("spark.sqlstreaming.query.enable")
+    .doc("Whether to enable use sqlstreaming in spark")
+    .booleanConf
+    .createWithDefault(false)
+
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
     .doc("The default data source to use in input/output.")
@@ -1812,6 +1839,16 @@ class SQLConf extends Serializable with Logging {
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
 
   def broadcastTimeout: Long = getConf(BROADCAST_TIMEOUT)
+
+  def sqlStreamOutputMode: String = getConf(SQLSTREAM_OUTPUTMODE)
+
+  def sqlStreamTrigger: String = getConf(SQLSTREAM_TRIGGER)
+
+  def sqlStreamQueryName: Option[String] = getConf(SQLSTREAM_QUERY_NAME)
+
+  def sqlStreamConsoleOutputRows: String = getConf(SQLSTREAM_CONSOLE_OUTPUT_ROWS)
+
+  def sqlStreamQueryEnable: Boolean = getConf(SQLSTREAM_QUERY_ENABLE)
 
   def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
 

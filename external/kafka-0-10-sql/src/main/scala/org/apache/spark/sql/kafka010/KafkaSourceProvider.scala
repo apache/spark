@@ -63,7 +63,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       providerName: String,
       parameters: Map[String, String]): (String, StructType) = {
     validateStreamOptions(parameters)
-    require(schema.isEmpty, "Kafka source has a fixed schema and cannot be set with a custom one")
+    if(schema.isDefined) {
+      logError("Kafka source has a fixed schema and cannot be set with a custom one")
+    }
     (shortName(), KafkaOffsetReader.kafkaSchema)
   }
 

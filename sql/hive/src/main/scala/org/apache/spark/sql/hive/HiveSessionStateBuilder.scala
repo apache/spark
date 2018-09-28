@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.hive.execution.{ResolveStreamRelation, ValidSQLStreaming}
 import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState}
 
 /**
@@ -68,7 +69,15 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
    */
   override protected def analyzer: Analyzer = new Analyzer(catalog, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
-      new ResolveHiveSerdeTable(session) +:
+      /** Used to resolve UnResolvedStreamRelation, which is used in SQLstreaming */
+      new ResolveStreamRelation(catalog, conf, session) +:
+        /**
+         * Check whether sqlstreaming plan is valid and
+         * change InsertIntoTable to specific Stream Sink,
+         * or add Console Sink when user just select
+         */
+        new ValidSQLStreaming(session, conf) +:
+        new ResolveHiveSerdeTable(session) +:
         new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         customResolutionRules
