@@ -139,8 +139,7 @@ private[v1] class StagesResource extends BaseAppResource {
           if (filteredTaskList.length > 0) {
             val pageStartIndex = uriQueryParameters.getFirst("start").toInt
             val pageLength = uriQueryParameters.getFirst("length").toInt
-            ret.put("aaData", filteredTaskList.filter(f =>
-              (f.index >= pageStartIndex && f.index < (pageStartIndex + pageLength))))
+            ret.put("aaData", filteredTaskList.slice(pageStartIndex, pageStartIndex + pageLength))
           } else {
             ret.put("aaData", filteredTaskList)
           }

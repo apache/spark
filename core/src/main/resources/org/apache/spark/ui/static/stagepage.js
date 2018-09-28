@@ -822,7 +822,8 @@ $(document).ready(function () {
                     window.clearTimeout(searchEvent);
                   }
                   var value = this.value;
-                  window.setTimeout(function(){taskTableSelector.search( value ).draw();}, 2500);
+                  searchEvent = window.setTimeout(function(){
+                    taskTableSelector.search( value ).draw();}, 2500);
                 });
 
                 var optionalColumns = [11, 12, 13, 14, 15, 16, 17];
