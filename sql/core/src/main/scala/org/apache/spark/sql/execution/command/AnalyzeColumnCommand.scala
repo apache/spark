@@ -52,7 +52,6 @@ case class AnalyzeColumnCommand(
       throw new AnalysisException("ANALYZE TABLE is not supported on views.")
     }
     val sizeInBytes = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
-    val conf = sparkSession.sessionState.conf
     val relation = sparkSession.table(tableIdent).logicalPlan
     val columnsToAnalyze = getColumnsToAnalyze(tableIdent, relation, columnNames, allColumns)
 

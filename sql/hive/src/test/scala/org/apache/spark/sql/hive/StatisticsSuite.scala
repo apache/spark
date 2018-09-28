@@ -682,18 +682,20 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           nullCount = Some(1), avgLen = Some(8), maxLen = Some(8)),
         "c2" -> CatalogColumnStat(distinctCount = Some(2), min = None, max = None,
           nullCount = Some(0), avgLen = Some(1), maxLen = Some(1))))
-
-      val e1 = intercept[IllegalArgumentException] {
-        AnalyzeColumnCommand(TableIdentifier(table), Option(Seq("c1")), true).run(spark)
-      }
-      assert(e1.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
-        " mutually exclusive"))
-      val e2 = intercept[IllegalArgumentException] {
-        AnalyzeColumnCommand(TableIdentifier(table), None, false).run(spark)
-      }
-      assert(e1.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
-        " mutually exclusive"))
     }
+  }
+
+  test("analyze column command paramaters validation") {
+    val e1 = intercept[IllegalArgumentException] {
+      AnalyzeColumnCommand(TableIdentifier("test"), Option(Seq("c1")), true).run(spark)
+    }
+    assert(e1.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
+      " mutually exclusive"))
+    val e2 = intercept[IllegalArgumentException] {
+      AnalyzeColumnCommand(TableIdentifier("test"), None, false).run(spark)
+    }
+    assert(e1.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
+      " mutually exclusive"))
   }
 
   private def createNonPartitionedTable(
