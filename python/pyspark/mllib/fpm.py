@@ -68,6 +68,12 @@ class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         return FPGrowthModel(wrapper)
 
 
+#: Represents an (items, freq) tuple.
+#:
+#: .. versionadded:: 1.4.0
+FreqItemset = namedtuple("FreqItemset", ["items", "freq"])
+
+
 class FPGrowth(object):
     """
     A Parallel FP-growth algorithm to mine frequent itemsets.
@@ -94,12 +100,9 @@ class FPGrowth(object):
         model = callMLlibFunc("trainFPGrowthModel", data, float(minSupport), int(numPartitions))
         return FPGrowthModel(model)
 
-    class FreqItemset(namedtuple("FreqItemset", ["items", "freq"])):
-        """
-        Represents an (items, freq) tuple.
+    # Backward-compatible alias.
+    FreqItemset = FreqItemset
 
-        .. versionadded:: 1.4.0
-        """
 
 
 @inherit_doc
