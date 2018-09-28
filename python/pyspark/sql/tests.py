@@ -4642,7 +4642,7 @@ class PandasUDFTests(ReusedSQLTestCase):
 
         udf = pandas_udf(lambda x: x, DoubleType()).asNonNullable()
         self.assertEqual(udf.returnType, DoubleType())
-        self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
         self.assertFalse(udf.nullable)
 
     def test_pandas_udf_decorator(self):
