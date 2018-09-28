@@ -975,7 +975,7 @@ object SQLConf {
         "checkpoint location.")
       .stringConf
       .checkValue(
-        str => Set("min", "max").contains(str.toLowerCase),
+        str => Set("min", "max").contains(str.toLowerCase(Locale.ROOT)),
         "Invalid value for 'spark.sql.streaming.multipleWatermarkPolicy'. " +
           "Valid values are 'min' and 'max'")
       .createWithDefault("min") // must be same as MultipleWatermarkPolicy.DEFAULT_POLICY_NAME
