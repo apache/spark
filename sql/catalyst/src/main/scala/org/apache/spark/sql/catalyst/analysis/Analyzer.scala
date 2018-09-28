@@ -2753,7 +2753,7 @@ object SessionWindowing extends Rule[LogicalPlan] {
 
   private final val WINDOW_COL_NAME = "session_window"
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
     case p @ Aggregate(groupingExpr, aggregateExpr, _) if hasWindowFunction(groupingExpr) =>
       val child = p.child
       val windowExpressions =
