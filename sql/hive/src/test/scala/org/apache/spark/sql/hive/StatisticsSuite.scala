@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, HiveTableRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, HistogramBin, HistogramSerializer}
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, StringUtils}
-import org.apache.spark.sql.execution.command.{CommandUtils, DDLUtils}
+import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, CommandUtils, DDLUtils}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.HiveExternalCatalog._
@@ -651,6 +651,51 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         "c3" -> CatalogColumnStat(distinctCount = Some(2), min = Some("10.0"), max = Some("20.0"),
           nullCount = Some(0), avgLen = Some(8), maxLen = Some(8))))
     }
+  }
+
+  test("collecting statistics for all columns") {
+    val table = "update_col_stats_table"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (c1 INT, c2 STRING, c3 DOUBLE)")
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
+      val fetchedStats0 =
+        checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
+      assert(fetchedStats0.get.colStats == Map(
+        "c1" -> CatalogColumnStat(distinctCount = Some(0), min = None, max = None,
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+        "c3" -> CatalogColumnStat(distinctCount = Some(0), min = None, max = None,
+          nullCount = Some(0), avgLen = Some(8), maxLen = Some(8)),
+        "c2" -> CatalogColumnStat(distinctCount = Some(0), min = None, max = None,
+          nullCount = Some(0), avgLen = Some(20), maxLen = Some(20))))
+
+      // Insert new data and analyze: have the latest column stats.
+      sql(s"INSERT INTO TABLE $table SELECT 1, 'a', 10.0")
+      sql(s"INSERT INTO TABLE $table SELECT 1, 'b', null")
+
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
+      val fetchedStats1 =
+        checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(2))
+      assert(fetchedStats1.get.colStats == Map(
+        "c1" -> CatalogColumnStat(distinctCount = Some(1), min = Some("1"), max = Some("1"),
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+        "c3" -> CatalogColumnStat(distinctCount = Some(1), min = Some("10.0"), max = Some("10.0"),
+          nullCount = Some(1), avgLen = Some(8), maxLen = Some(8)),
+        "c2" -> CatalogColumnStat(distinctCount = Some(2), min = None, max = None,
+          nullCount = Some(0), avgLen = Some(1), maxLen = Some(1))))
+    }
+  }
+
+  test("analyze column command paramaters validation") {
+    val e1 = intercept[IllegalArgumentException] {
+      AnalyzeColumnCommand(TableIdentifier("test"), Option(Seq("c1")), true).run(spark)
+    }
+    assert(e1.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
+      " mutually exclusive"))
+    val e2 = intercept[IllegalArgumentException] {
+      AnalyzeColumnCommand(TableIdentifier("test"), None, false).run(spark)
+    }
+    assert(e1.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
+      " mutually exclusive"))
   }
 
   private def createNonPartitionedTable(
