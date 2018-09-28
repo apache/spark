@@ -251,6 +251,7 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
   var totalDuration = 0L
   var totalGcTime = 0L
   var totalInputBytes = 0L
+  var totalOutputBytes = 0L
   var totalShuffleRead = 0L
   var totalShuffleWrite = 0L
   var isBlacklisted = false
@@ -295,6 +296,7 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
       totalDuration,
       totalGcTime,
       totalInputBytes,
+      totalOutputBytes,
       totalShuffleRead,
       totalShuffleWrite,
       isBlacklisted,

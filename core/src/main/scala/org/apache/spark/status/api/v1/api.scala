@@ -94,6 +94,7 @@ class ExecutorSummary private[spark](
     val totalDuration: Long,
     val totalGCTime: Long,
     val totalInputBytes: Long,
+    val totalOutputBytes: Long,
     val totalShuffleRead: Long,
     val totalShuffleWrite: Long,
     val isBlacklisted: Boolean,

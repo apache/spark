@@ -14,6 +14,7 @@
   "totalDuration" : 8820,
   "totalGCTime" : 352,
   "totalInputBytes" : 28000288,
+  "totalOutputBytes" : 0,
   "totalShuffleRead" : 0,
   "totalShuffleWrite" : 13180,
   "isBlacklisted" : false,

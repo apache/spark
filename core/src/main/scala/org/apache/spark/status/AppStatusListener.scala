@@ -592,6 +592,7 @@ private[spark] class AppStatusListener(
           val readMetrics = event.taskMetrics.shuffleReadMetrics
           exec.totalGcTime += event.taskMetrics.jvmGCTime
           exec.totalInputBytes += event.taskMetrics.inputMetrics.bytesRead
+          exec.totalOutputBytes += event.taskMetrics.outputMetrics.bytesWritten
           exec.totalShuffleRead += readMetrics.localBytesRead + readMetrics.remoteBytesRead
           exec.totalShuffleWrite += event.taskMetrics.shuffleWriteMetrics.bytesWritten
         }
