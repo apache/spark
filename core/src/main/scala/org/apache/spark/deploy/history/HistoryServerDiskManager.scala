@@ -18,8 +18,6 @@
 package org.apache.spark.deploy.history
 
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.attribute.PosixFilePermissions
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
@@ -107,9 +105,8 @@ private class HistoryServerDiskManager(
     val needed = approximateSize(eventLogSize, isCompressed)
     makeRoom(needed)
 
-    val perms = PosixFilePermissions.fromString("rwx------")
-    val tmp = Files.createTempDirectory(tmpStoreDir.toPath(), "appstore",
-      PosixFilePermissions.asFileAttribute(perms)).toFile()
+    val tmp = Utils.createTempDir(tmpStoreDir.getPath(), "appstore")
+    Utils.chmod700(tmp)
 
     updateUsage(needed)
     val current = currentUsage.get()
