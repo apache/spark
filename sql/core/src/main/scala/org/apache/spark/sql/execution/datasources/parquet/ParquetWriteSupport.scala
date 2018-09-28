@@ -33,7 +33,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter.minBytesForPrecision
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -73,7 +72,8 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
   private val timestampBuffer = new Array[Byte](12)
 
   // Reusable byte array used to write decimal values
-  private val decimalBuffer = new Array[Byte](minBytesForPrecision(DecimalType.MAX_PRECISION))
+  private val decimalBuffer =
+    new Array[Byte](Decimal.minBytesForPrecision(DecimalType.MAX_PRECISION))
 
   override def init(configuration: Configuration): WriteContext = {
     val schemaString = configuration.get(ParquetWriteSupport.SPARK_ROW_SCHEMA)
@@ -212,7 +212,7 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
       precision <= DecimalType.MAX_PRECISION,
       s"Decimal precision $precision exceeds max precision ${DecimalType.MAX_PRECISION}")
 
-    val numBytes = minBytesForPrecision(precision)
+    val numBytes = Decimal.minBytesForPrecision(precision)
 
     val int32Writer =
       (row: SpecializedGetters, ordinal: Int) => {

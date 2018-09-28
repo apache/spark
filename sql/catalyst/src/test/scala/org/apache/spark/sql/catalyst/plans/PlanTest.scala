@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import org.scalactic.source
 import org.scalatest.Suite
+import org.scalatest.Tag
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
@@ -33,11 +35,28 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait PlanTest extends SparkFunSuite with PlanTestBase
 
+trait CodegenInterpretedPlanTest extends PlanTest {
+
+  override protected def test(
+      testName: String,
+      testTags: Tag*)(testFun: => Any)(implicit pos: source.Position): Unit = {
+    val codegenMode = CodegenObjectFactoryMode.CODEGEN_ONLY.toString
+    val interpretedMode = CodegenObjectFactoryMode.NO_CODEGEN.toString
+
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+      super.test(testName + " (codegen path)", testTags: _*)(testFun)(pos)
+    }
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> interpretedMode) {
+      super.test(testName + " (interpreted path)", testTags: _*)(testFun)(pos)
+    }
+  }
+}
+
 /**
  * Provides helper methods for comparing plans, but without the overhead of
  * mandating a FunSuite.
  */
-trait PlanTestBase extends PredicateHelper { self: Suite =>
+trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
 
   // TODO(gatorsmile): remove this from PlanTest and all the analyzer rules
   protected def conf = SQLConf.get
@@ -61,7 +80,7 @@ trait PlanTestBase extends PredicateHelper { self: Suite =>
       case ae: AggregateExpression =>
         ae.copy(resultId = ExprId(0))
       case lv: NamedLambdaVariable =>
-        lv.copy(value = null, exprId = ExprId(0))
+        lv.copy(exprId = ExprId(0), value = null)
     }
   }
 
@@ -152,34 +171,6 @@ trait PlanTestBase extends PredicateHelper { self: Suite =>
         p1.projectList == p2.projectList && sameJoinPlan(p1.child, p2.child)
       case _ =>
         plan1 == plan2
-    }
-  }
-
-  /**
-   * Sets all SQL configurations specified in `pairs`, calls `f`, and then restores all SQL
-   * configurations.
-   */
-  protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    val conf = SQLConf.get
-    val (keys, values) = pairs.unzip
-    val currentValues = keys.map { key =>
-      if (conf.contains(key)) {
-        Some(conf.getConfString(key))
-      } else {
-        None
-      }
-    }
-    (keys, values).zipped.foreach { (k, v) =>
-      if (SQLConf.staticConfKeys.contains(k)) {
-        throw new AnalysisException(s"Cannot modify the value of a static config: $k")
-      }
-      conf.setConfString(k, v)
-    }
-    try f finally {
-      keys.zip(currentValues).foreach {
-        case (key, Some(value)) => conf.setConfString(key, value)
-        case (key, None) => conf.unsetConf(key)
-      }
     }
   }
 }

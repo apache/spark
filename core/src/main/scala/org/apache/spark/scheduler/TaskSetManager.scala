@@ -901,6 +901,10 @@ private[spark] class TaskSetManager(
         None
     }
 
+    if (tasks(index).isBarrier) {
+      isZombie = true
+    }
+
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
 
     if (!isZombie && reason.countTowardsTaskFailures) {

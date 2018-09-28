@@ -267,6 +267,7 @@ object FunctionRegistry {
     expression[Subtract]("-"),
     expression[Multiply]("*"),
     expression[Divide]("/"),
+    expression[IntegralDivide]("div"),
     expression[Remainder]("%"),
 
     // aggregate functions
@@ -299,15 +300,6 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
-    expression[RegrCount]("regr_count"),
-    expression[RegrSXX]("regr_sxx"),
-    expression[RegrSYY]("regr_syy"),
-    expression[RegrAvgX]("regr_avgx"),
-    expression[RegrAvgY]("regr_avgy"),
-    expression[RegrSXY]("regr_sxy"),
-    expression[RegrSlope]("regr_slope"),
-    expression[RegrR2]("regr_r2"),
-    expression[RegrIntercept]("regr_intercept"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -442,8 +434,15 @@ object FunctionRegistry {
     expression[ArrayRemove]("array_remove"),
     expression[ArrayDistinct]("array_distinct"),
     expression[ArrayTransform]("transform"),
+    expression[MapFilter]("map_filter"),
     expression[ArrayFilter]("filter"),
+    expression[ArrayExists]("exists"),
     expression[ArrayAggregate]("aggregate"),
+    expression[TransformValues]("transform_values"),
+    expression[TransformKeys]("transform_keys"),
+    expression[MapZipWith]("map_zip_with"),
+    expression[ZipWith]("zip_with"),
+
     CreateStruct.registryEntry,
 
     // misc functions

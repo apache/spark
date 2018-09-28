@@ -386,6 +386,11 @@ class GaussianMixture @Since("2.0.0") (
       bcWeights.destroy(blocking = false)
       bcGaussians.destroy(blocking = false)
 
+      if (iter == 0) {
+        val numSamples = sums.count
+        instr.logNumExamples(numSamples)
+      }
+
       /*
          Create new distributions based on the partial assignments
          (often referred to as the "M" step in literature)

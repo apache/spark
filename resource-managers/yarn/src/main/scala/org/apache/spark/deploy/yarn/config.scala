@@ -192,6 +192,12 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
+  private[spark] val AM_FINAL_MSG_LIMIT = ConfigBuilder("spark.yarn.am.finalMessageLimit")
+    .doc("The limit size of final diagnostic message for our ApplicationMaster to unregister from" +
+      " the ResourceManager.")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefaultString("1m")
+
   /* Client-mode AM configuration. */
 
   private[spark] val AM_CORES = ConfigBuilder("spark.yarn.am.cores")

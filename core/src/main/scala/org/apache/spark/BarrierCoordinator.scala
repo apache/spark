@@ -123,6 +123,7 @@ private[spark] class BarrierCoordinator(
     private def cancelTimerTask(): Unit = {
       if (timerTask != null) {
         timerTask.cancel()
+        timer.purge()
         timerTask = null
       }
     }

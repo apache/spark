@@ -515,14 +515,13 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
      * The reweight function used to update working labels and weights
      * at each iteration of [[IterativelyReweightedLeastSquares]].
      */
-    val reweightFunc: (OffsetInstance, WeightedLeastSquaresModel) => (Double, Double) = {
-      (instance: OffsetInstance, model: WeightedLeastSquaresModel) => {
-        val eta = model.predict(instance.features) + instance.offset
-        val mu = fitted(eta)
-        val newLabel = eta - instance.offset + (instance.label - mu) * link.deriv(mu)
-        val newWeight = instance.weight / (math.pow(this.link.deriv(mu), 2.0) * family.variance(mu))
-        (newLabel, newWeight)
-      }
+    def reweightFunc(
+        instance: OffsetInstance, model: WeightedLeastSquaresModel): (Double, Double) = {
+      val eta = model.predict(instance.features) + instance.offset
+      val mu = fitted(eta)
+      val newLabel = eta - instance.offset + (instance.label - mu) * link.deriv(mu)
+      val newWeight = instance.weight / (math.pow(this.link.deriv(mu), 2.0) * family.variance(mu))
+      (newLabel, newWeight)
     }
   }
 

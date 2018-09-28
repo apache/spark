@@ -61,7 +61,7 @@ In `cluster` mode, the driver runs on a different machine than the client, so `S
 # Preparations
 
 Running Spark on YARN requires a binary distribution of Spark which is built with YARN support.
-Binary distributions can be downloaded from the [downloads page](http://spark.apache.org/downloads.html) of the project website.
+Binary distributions can be downloaded from the [downloads page](https://spark.apache.org/downloads.html) of the project website.
 To build Spark yourself, refer to [Building Spark](building-spark.html).
 
 To make Spark runtime jars accessible from YARN side, you can specify `spark.yarn.archive` or `spark.yarn.jars`. For details please refer to [Spark Properties](running-on-yarn.html#spark-properties). If neither `spark.yarn.archive` nor `spark.yarn.jars` is specified, Spark will create a zip file with all jars under `$SPARK_HOME/jars` and upload it to the distributed cache.
@@ -465,7 +465,7 @@ providers can be disabled individually by setting `spark.security.credentials.{s
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.yarn.keytab</code></td>
+  <td><code>spark.kerberos.keytab</code></td>
   <td>(none)</td>
   <td>
   The full path to the file that contains the keytab for the principal specified above. This keytab
@@ -477,7 +477,7 @@ providers can be disabled individually by setting `spark.security.credentials.{s
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.principal</code></td>
+  <td><code>spark.kerberos.principal</code></td>
   <td>(none)</td>
   <td>
   Principal to be used to login to KDC, while running on secure clusters. Equivalent to the

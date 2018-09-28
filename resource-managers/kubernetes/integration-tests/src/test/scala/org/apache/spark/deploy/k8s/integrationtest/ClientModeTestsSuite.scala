@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{k8sTestTag, INTERVAL, TIMEOUT}
 
-trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
+private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
 
   test("Run in client mode.", k8sTestTag) {
     val labels = Map("spark-app-selector" -> driverPodName)
