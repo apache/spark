@@ -94,8 +94,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
         }
       case (result: ArrayData, expected: ArrayData) =>
         result.numElements == expected.numElements && {
-          val et = dataType.asInstanceOf[ArrayType].elementType
-          val cn = dataType.asInstanceOf[ArrayType].containsNull
+          val ArrayType(et, cn) = dataType.asInstanceOf[ArrayType]
           var isSame = true
           var i = 0
           while (isSame && i < result.numElements) {
@@ -105,9 +104,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
           isSame
         }
       case (result: MapData, expected: MapData) =>
-        val kt = dataType.asInstanceOf[MapType].keyType
-        val vt = dataType.asInstanceOf[MapType].valueType
-        val vcn = dataType.asInstanceOf[MapType].valueContainsNull
+        val MapType(kt, vt, vcn) = dataType.asInstanceOf[MapType]
         checkResult(result.keyArray, expected.keyArray, ArrayType(kt, false), false) &&
           checkResult(result.valueArray, expected.valueArray, ArrayType(vt, vcn), false)
       case (result: Double, expected: Double) =>
@@ -230,6 +227,12 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
         val unsafeRow = evaluateWithUnsafeProjection(expression, inputRow)
         val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
 
+        val dataType = expression.dataType
+        if (!checkResult(unsafeRow.get(0, dataType), expected, dataType, expression.nullable)) {
+          fail("Incorrect evaluation in unsafe mode (fallback mode = $fallbackMode): " +
+            s"$expression, actual: $unsafeRow, expected: $expected, " +
+            s"dataType: $dataType, nullable: ${expression.nullable}")
+        }
         if (expected == null) {
           if (!unsafeRow.isNullAt(0)) {
             val expectedRow = InternalRow(expected, expected)
@@ -238,8 +241,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
           }
         } else {
           val lit = InternalRow(expected, expected)
-          val expectedRow =
-            UnsafeProjection.create(Array(expression.dataType, expression.dataType)).apply(lit)
+          val expectedRow = UnsafeProjection.create(Array(dataType, dataType)).apply(lit)
           if (unsafeRow != expectedRow) {
             fail(s"Incorrect evaluation in unsafe mode (fallback mode = $fallbackMode): " +
               s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
