@@ -783,6 +783,17 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         parquetSchema,
         sources.Not(
           sources.And(
+            sources.And(
+              sources.GreaterThan("a", 1),
+              sources.StringContains("b", "prefix")),
+            sources.GreaterThan("a", 2))))
+    }
+
+    assertResult(None) {
+      parquetFilters.createFilter(
+        parquetSchema,
+        sources.Not(
+          sources.And(
             sources.GreaterThan("a", 1),
             sources.StringContains("b", "prefix"))))
     }
