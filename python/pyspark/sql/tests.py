@@ -5530,28 +5530,25 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         import pyarrow as pa
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
-        input_values_with_schema = [
-            (1, StructField('id', IntegerType())),
-            (2, StructField('byte', ByteType())),
-            (3, StructField('short', ShortType())),
-            (4, StructField('int', IntegerType())),
-            (5, StructField('long', LongType())),
-            (1.1, StructField('float', FloatType())),
-            (2.2, StructField('double', DoubleType())),
-            (Decimal(1.123), StructField('decim', DecimalType(10, 3))),
-            ([1, 2, 3], StructField('array', ArrayType(IntegerType()))),
-            (True, StructField('bool', BooleanType())),
-            ('hello', StructField('str', StringType())),
+        values = [[
+            1, 2, 3,
+            4, 5, 1.1,
+            2.2, Decimal(1.123),
+            [1, 2, 2], True, 'hello'
+        ]]
+        output_fields = [
+            ('id', IntegerType()), ('byte', ByteType()), ('short', ShortType()),
+            ('int', IntegerType()), ('long', LongType()), ('float', FloatType()),
+            ('double', DoubleType()), ('decim', DecimalType(10, 3)),
+            ('array', ArrayType(IntegerType())), ('bool', BooleanType()), ('str', StringType())
         ]
 
-        # TODO: Add BinaryType to 'input_values_with_schema' once minimum pyarrow version is 0.10.0
+        # TODO: Add BinaryType to variables above once minimum pyarrow version is 0.10.0
         if LooseVersion(pa.__version__) >= LooseVersion("0.10.0"):
-            input_values_with_schema.append(
-                (bytearray([0x01, 0x02]), StructField('bin', BinaryType())))
+            values.append(bytearray([0x01, 0x02]))
+            output_fields.append(('bin', BinaryType()))
 
-        values = [[x[0] for x in input_values_with_schema]]
-        output_schema = StructType([x[1] for x in input_values_with_schema])
-
+        output_schema = StructType(map(lambda x: StructField(*x), output_fields))
         df = self.spark.createDataFrame(values, schema=output_schema)
 
         # Different forms of group map pandas UDF, results of these are the same
