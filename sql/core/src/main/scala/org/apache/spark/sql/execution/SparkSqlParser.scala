@@ -133,7 +133,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       }
     } else {
       checkPartitionSpec()
-      AnalyzeColumnCommand(table, Option(visitIdentifierSeq(ctx.identifierSeq())))
+      AnalyzeColumnCommand(table,
+        Option(visitIdentifierSeq(ctx.identifierSeq())), allColumns = false)
     }
   }
 

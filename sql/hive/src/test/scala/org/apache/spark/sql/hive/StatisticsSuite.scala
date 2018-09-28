@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, HiveTableRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, HistogramBin, HistogramSerializer}
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, StringUtils}
-import org.apache.spark.sql.execution.command.{CommandUtils, DDLUtils}
+import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, CommandUtils, DDLUtils}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.HiveExternalCatalog._
@@ -682,6 +682,17 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           nullCount = Some(1), avgLen = Some(8), maxLen = Some(8)),
         "c2" -> CatalogColumnStat(distinctCount = Some(2), min = None, max = None,
           nullCount = Some(0), avgLen = Some(1), maxLen = Some(1))))
+
+      val e1 = intercept[IllegalArgumentException] {
+        AnalyzeColumnCommand(TableIdentifier(table), Option(Seq("c1")), true).run(spark)
+      }
+      assert(e1.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
+        " mutually exclusive"))
+      val e2 = intercept[IllegalArgumentException] {
+        AnalyzeColumnCommand(TableIdentifier(table), None, false).run(spark)
+      }
+      assert(e1.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
+        " mutually exclusive"))
     }
   }
 
