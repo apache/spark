@@ -52,6 +52,20 @@ case class UnresolvedRelation(tableIdentifier: TableIdentifier)
 }
 
 /**
+ * Holds the name of a stream relation that has yet to be looked up in a catalog.
+ * @param tableIdentifier
+ */
+case class UnresolvedStreamRelation(tableIdentifier: TableIdentifier) extends LeafNode {
+
+  /** Returns a `.` separated name for this relation. */
+  def tableName: String = tableIdentifier.unquotedString
+
+  override def output: Seq[Attribute] = Nil
+
+  override lazy val resolved = false
+}
+
+/**
  * An inline table that has not been resolved yet. Once resolved, it is turned by the analyzer into
  * a [[org.apache.spark.sql.catalyst.plans.logical.LocalRelation]].
  *

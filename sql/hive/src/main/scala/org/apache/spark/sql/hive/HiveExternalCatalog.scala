@@ -296,6 +296,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     //         it to Hive. If it fails, treat it as not hive compatible and go back to 2.1
     val tableProperties = tableMetaToTableProps(table)
 
+    if (table.isStreaming) {
+      tableProperties.put(DATASOURCE_STREAM_TABLE, "true")
+    }
+
     // put table provider and partition provider in table properties.
     tableProperties.put(DATASOURCE_PROVIDER, provider)
     if (table.tracksPartitionsInCatalog) {
@@ -1313,6 +1317,7 @@ object HiveExternalCatalog {
   val CREATED_SPARK_VERSION = SPARK_SQL_PREFIX + "create.version"
 
   val HIVE_GENERATED_STORAGE_PROPERTIES = Set(SERIALIZATION_FORMAT)
+  val DATASOURCE_STREAM_TABLE = DATASOURCE_PREFIX + "isStreaming"
 
   // When storing data source tables in hive metastore, we need to set data schema to empty if the
   // schema is hive-incompatible. However we need a hack to preserve existing behavior. Before

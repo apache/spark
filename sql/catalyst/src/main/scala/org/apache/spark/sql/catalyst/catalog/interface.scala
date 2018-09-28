@@ -258,6 +258,11 @@ case class CatalogTable(
     StructType(partitionFields)
   }
 
+  /** Return true if the table is stream table */
+  def isStreaming: Boolean = {
+    provider.isDefined && storage.properties.getOrElse("isStreaming", "false").toBoolean
+  }
+
   /**
    * schema of this table's data columns
    */
