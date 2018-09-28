@@ -1,1 +1,0 @@
-BUILD_SUBMITTER -u . -x  -c "cd baidu/inf-spark/spark-source && sh -x build.sh 2.3.2.0-bsc-SNAPSHOT" -m baidu/inf-spark/spark-source
