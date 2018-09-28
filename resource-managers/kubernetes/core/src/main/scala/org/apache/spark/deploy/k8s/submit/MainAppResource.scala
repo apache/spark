@@ -24,3 +24,6 @@ private[spark] case class JavaMainAppResource(primaryResource: String) extends M
 
 private[spark] case class PythonMainAppResource(primaryResource: String)
   extends MainAppResource with NonJVMResource
+
+private[spark] case class RMainAppResource(primaryResource: String)
+  extends MainAppResource with NonJVMResource

@@ -26,6 +26,7 @@ import scala.util.Random
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -85,14 +86,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
 
     val df5 = Seq((Seq("a", null), Seq(1, 2))).toDF("k", "v")
-    intercept[RuntimeException] {
+    val msg1 = intercept[Exception] {
       df5.select(map_from_arrays($"k", $"v")).collect
-    }
+    }.getMessage
+    assert(msg1.contains("Cannot use null as map key!"))
 
     val df6 = Seq((Seq(1, 2), Seq("a"))).toDF("k", "v")
-    intercept[RuntimeException] {
+    val msg2 = intercept[Exception] {
       df6.select(map_from_arrays($"k", $"v")).collect
-    }
+    }.getMessage
+    assert(msg2.contains("The given two arrays should have the same length"))
   }
 
   test("struct with column name") {
@@ -733,6 +736,56 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_contains(array(1, null), array(1, null)[0])"),
       Seq(Row(true), Row(true))
     )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(1), 1.23D)"),
+      Seq(Row(false))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(1), 1.0D)"),
+      Seq(Row(true))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(1.0D), 1)"),
+      Seq(Row(true))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(1.23D), 1)"),
+      Seq(Row(false))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(array(1)), array(1.0D))"),
+      Seq(Row(true))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(array(1)), array(1.23D))"),
+      Seq(Row(false))
+    )
+
+    val e1 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("array_contains(array(1), .01234567890123456790123456780)")
+    }
+    val errorMsg1 =
+      s"""
+         |Input to function array_contains should have been array followed by a
+         |value with same element type, but it's [array<int>, decimal(29,29)].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e1.message.contains(errorMsg1))
+
+    val e2 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("array_contains(array(1), 'foo')")
+    }
+    val errorMsg2 =
+      s"""
+         |Input to function array_contains should have been array followed by a
+         |value with same element type, but it's [array<int>, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e2.message.contains(errorMsg2))
   }
 
   test("arrays_overlap function") {
@@ -1044,18 +1097,63 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
 
     checkAnswer(
-      df.selectExpr("array_position(array(array(1), null)[0], 1)"),
-      Seq(Row(1L), Row(1L))
-    )
-    checkAnswer(
-      df.selectExpr("array_position(array(1, null), array(1, null)[0])"),
-      Seq(Row(1L), Row(1L))
+      OneRowRelation().selectExpr("array_position(array(1), 1.23D)"),
+      Seq(Row(0L))
     )
 
-    val e = intercept[AnalysisException] {
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(1), 1.0D)"),
+      Seq(Row(1L))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(1.D), 1)"),
+      Seq(Row(1L))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(1.23D), 1)"),
+      Seq(Row(0L))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(array(1)), array(1.0D))"),
+      Seq(Row(1L))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(array(1)), array(1.23D))"),
+      Seq(Row(0L))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(array(1), null)[0], 1)"),
+      Seq(Row(1L))
+    )
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(1, null), array(1, null)[0])"),
+      Seq(Row(1L))
+    )
+
+    val e1 = intercept[AnalysisException] {
       Seq(("a string element", "a")).toDF().selectExpr("array_position(_1, _2)")
     }
-    assert(e.message.contains("argument 1 requires array type, however, '`_1`' is of string type"))
+    val errorMsg1 =
+      s"""
+         |Input to function array_position should have been array followed by a
+         |value with same element type, but it's [string, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e1.message.contains(errorMsg1))
+
+    val e2 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("array_position(array(1), '1')")
+    }
+    val errorMsg2 =
+      s"""
+         |Input to function array_position should have been array followed by a
+         |value with same element type, but it's [array<int>, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e2.message.contains(errorMsg2))
   }
 
   test("element_at function") {
@@ -1113,11 +1211,80 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row("3"), Row(""), Row(null))
     )
 
-    val e = intercept[AnalysisException] {
+    val e1 = intercept[AnalysisException] {
       Seq(("a string element", 1)).toDF().selectExpr("element_at(_1, _2)")
     }
-    assert(e.message.contains(
-      "argument 1 requires (array or map) type, however, '`_1`' is of string type"))
+    val errorMsg1 =
+      s"""
+         |The first argument to function element_at should have been array or map type, but
+         |its string type.
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e1.message.contains(errorMsg1))
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(array(2, 1), 2S)"),
+      Seq(Row(1))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(array('a', 'b'), 1Y)"),
+      Seq(Row("a"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(array(1, 2, 3), 3)"),
+      Seq(Row(3))
+    )
+
+    val e2 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("element_at(array('a', 'b'), 1L)")
+    }
+    val errorMsg2 =
+      s"""
+         |Input to function element_at should have been array followed by a int, but it's
+         |[array<string>, bigint].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e2.message.contains(errorMsg2))
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 2Y)"),
+      Seq(Row("b"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 1S)"),
+      Seq(Row("a"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 2)"),
+      Seq(Row("b"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 2L)"),
+      Seq(Row("b"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 1.0D)"),
+      Seq(Row("a"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 1.23D)"),
+      Seq(Row(null))
+    )
+
+    val e3 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), '1')")
+    }
+    val errorMsg3 =
+      s"""
+         |Input to function element_at should have been map followed by a value of same
+         |key type, but it's [map<int,string>, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e3.message.contains(errorMsg3))
   }
 
   test("array_union functions") {
@@ -1477,6 +1644,34 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
 
     checkAnswer(
+      OneRowRelation().selectExpr("array_remove(array(1, 2), 1.23D)"),
+      Seq(
+        Row(Seq(1.0, 2.0))
+      )
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_remove(array(1, 2), 1.0D)"),
+      Seq(
+        Row(Seq(2.0))
+      )
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_remove(array(1.0D, 2.0D), 2)"),
+      Seq(
+        Row(Seq(1.0))
+      )
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_remove(array(1.1D, 1.2D), 1)"),
+      Seq(
+        Row(Seq(1.1, 1.2))
+      )
+    )
+
+    checkAnswer(
       df.selectExpr("array_remove(a, 2)", "array_remove(b, \"a\")",
         "array_remove(c, \"\")"),
       Seq(
@@ -1485,10 +1680,26 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(null, null, null))
     )
 
-    val e = intercept[AnalysisException] {
+    val e1 = intercept[AnalysisException] {
       Seq(("a string element", "a")).toDF().selectExpr("array_remove(_1, _2)")
     }
-    assert(e.message.contains("argument 1 requires array type, however, '`_1`' is of string type"))
+    val errorMsg1 =
+      s"""
+         |Input to function array_remove should have been array followed by a
+         |value with same element type, but it's [string, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e1.message.contains(errorMsg1))
+
+    val e2 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("array_remove(array(1, 2), '1')")
+    }
+
+    val errorMsg2 =
+      s"""
+         |Input to function array_remove should have been array followed by a
+         |value with same element type, but it's [array<int>, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e2.message.contains(errorMsg2))
   }
 
   test("array_distinct functions") {
@@ -1852,6 +2063,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("transform(i, x -> x)")
     }
     assert(ex2.getMessage.contains("data type mismatch: argument 1 requires array type"))
+
+    val ex3 = intercept[AnalysisException] {
+      df.selectExpr("transform(a, x -> x)")
+    }
+    assert(ex3.getMessage.contains("cannot resolve '`a`'"))
   }
 
   test("map_filter") {
@@ -1898,6 +2114,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("map_filter(i, (k, v) -> k > v)")
     }
     assert(ex3.getMessage.contains("data type mismatch: argument 1 requires map type"))
+
+    val ex4 = intercept[AnalysisException] {
+      df.selectExpr("map_filter(a, (k, v) -> k > v)")
+    }
+    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
   }
 
   test("filter function - array for primitive type not containing null") {
@@ -1994,6 +2215,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("filter(s, x -> x)")
     }
     assert(ex3.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
+
+    val ex4 = intercept[AnalysisException] {
+      df.selectExpr("filter(a, x -> x)")
+    }
+    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
   }
 
   test("exists function - array for primitive type not containing null") {
@@ -2090,6 +2316,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("exists(s, x -> x)")
     }
     assert(ex3.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
+
+    val ex4 = intercept[AnalysisException] {
+      df.selectExpr("exists(a, x -> x)")
+    }
+    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
   }
 
   test("aggregate function - array for primitive type not containing null") {
@@ -2211,6 +2442,396 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("aggregate(s, 0, (acc, x) -> x)")
     }
     assert(ex4.getMessage.contains("data type mismatch: argument 3 requires int type"))
+
+    val ex5 = intercept[AnalysisException] {
+      df.selectExpr("aggregate(a, 0, (acc, x) -> x)")
+    }
+    assert(ex5.getMessage.contains("cannot resolve '`a`'"))
+  }
+
+  test("map_zip_with function - map of primitive types") {
+    val df = Seq(
+      (Map(8 -> 6L, 3 -> 5L, 6 -> 2L), Map[Integer, Integer]((6, 4), (8, 2), (3, 2))),
+      (Map(10 -> 6L, 8 -> 3L), Map[Integer, Integer]((8, 4), (4, null))),
+      (Map.empty[Int, Long], Map[Integer, Integer]((5, 1))),
+      (Map(5 -> 1L), null)
+    ).toDF("m1", "m2")
+
+    checkAnswer(df.selectExpr("map_zip_with(m1, m2, (k, v1, v2) -> k == v1 + v2)"),
+      Seq(
+        Row(Map(8 -> true, 3 -> false, 6 -> true)),
+        Row(Map(10 -> null, 8 -> false, 4 -> null)),
+        Row(Map(5 -> null)),
+        Row(null)))
+  }
+
+  test("map_zip_with function - map of non-primitive types") {
+    val df = Seq(
+      (Map("z" -> "a", "y" -> "b", "x" -> "c"), Map("x" -> "a", "z" -> "c")),
+      (Map("b" -> "a", "c" -> "d"), Map("c" -> "a", "b" -> null, "d" -> "k")),
+      (Map("a" -> "d"), Map.empty[String, String]),
+      (Map("a" -> "d"), null)
+    ).toDF("m1", "m2")
+
+    checkAnswer(df.selectExpr("map_zip_with(m1, m2, (k, v1, v2) -> (v1, v2))"),
+      Seq(
+        Row(Map("z" -> Row("a", "c"), "y" -> Row("b", null), "x" -> Row("c", "a"))),
+        Row(Map("b" -> Row("a", null), "c" -> Row("d", "a"), "d" -> Row(null, "k"))),
+        Row(Map("a" -> Row("d", null))),
+        Row(null)))
+  }
+
+  test("map_zip_with function - invalid") {
+    val df = Seq(
+      (Map(1 -> 2), Map(1 -> "a"), Map("a" -> "b"), Map(Map(1 -> 2) -> 2), 1)
+    ).toDF("mii", "mis", "mss", "mmi", "i")
+
+    val ex1 = intercept[AnalysisException] {
+      df.selectExpr("map_zip_with(mii, mis, (x, y) -> x + y)")
+    }
+    assert(ex1.getMessage.contains("The number of lambda function arguments '2' does not match"))
+
+    val ex2 = intercept[AnalysisException] {
+      df.selectExpr("map_zip_with(mis, mmi, (x, y, z) -> concat(x, y, z))")
+    }
+    assert(ex2.getMessage.contains("The input to function map_zip_with should have " +
+      "been two maps with compatible key types"))
+
+    val ex3 = intercept[AnalysisException] {
+      df.selectExpr("map_zip_with(i, mis, (x, y, z) -> concat(x, y, z))")
+    }
+    assert(ex3.getMessage.contains("type mismatch: argument 1 requires map type"))
+
+    val ex4 = intercept[AnalysisException] {
+      df.selectExpr("map_zip_with(mis, i, (x, y, z) -> concat(x, y, z))")
+    }
+    assert(ex4.getMessage.contains("type mismatch: argument 2 requires map type"))
+
+    val ex5 = intercept[AnalysisException] {
+      df.selectExpr("map_zip_with(mmi, mmi, (x, y, z) -> x)")
+    }
+    assert(ex5.getMessage.contains("function map_zip_with does not support ordering on type map"))
+  }
+
+  test("transform keys function - primitive data types") {
+    val dfExample1 = Seq(
+      Map[Int, Int](1 -> 1, 9 -> 9, 8 -> 8, 7 -> 7)
+    ).toDF("i")
+
+    val dfExample2 = Seq(
+      Map[Int, Double](1 -> 1.0, 2 -> 1.40, 3 -> 1.70)
+    ).toDF("j")
+
+    val dfExample3 = Seq(
+      Map[Int, Boolean](25 -> true, 26 -> false)
+    ).toDF("x")
+
+    val dfExample4 = Seq(
+      Map[Array[Int], Boolean](Array(1, 2) -> false)
+    ).toDF("y")
+
+
+    def testMapOfPrimitiveTypesCombination(): Unit = {
+      checkAnswer(dfExample1.selectExpr("transform_keys(i, (k, v) -> k + v)"),
+        Seq(Row(Map(2 -> 1, 18 -> 9, 16 -> 8, 14 -> 7))))
+
+      checkAnswer(dfExample2.selectExpr("transform_keys(j, " +
+        "(k, v) -> map_from_arrays(ARRAY(1, 2, 3), ARRAY('one', 'two', 'three'))[k])"),
+        Seq(Row(Map("one" -> 1.0, "two" -> 1.4, "three" -> 1.7))))
+
+      checkAnswer(dfExample2.selectExpr("transform_keys(j, (k, v) -> CAST(v * 2 AS BIGINT) + k)"),
+        Seq(Row(Map(3 -> 1.0, 4 -> 1.4, 6 -> 1.7))))
+
+      checkAnswer(dfExample2.selectExpr("transform_keys(j, (k, v) -> k + v)"),
+        Seq(Row(Map(2.0 -> 1.0, 3.4 -> 1.4, 4.7 -> 1.7))))
+
+      checkAnswer(dfExample3.selectExpr("transform_keys(x, (k, v) ->  k % 2 = 0 OR v)"),
+        Seq(Row(Map(true -> true, true -> false))))
+
+      checkAnswer(dfExample3.selectExpr("transform_keys(x, (k, v) -> if(v, 2 * k, 3 * k))"),
+        Seq(Row(Map(50 -> true, 78 -> false))))
+
+      checkAnswer(dfExample3.selectExpr("transform_keys(x, (k, v) -> if(v, 2 * k, 3 * k))"),
+        Seq(Row(Map(50 -> true, 78 -> false))))
+
+      checkAnswer(dfExample4.selectExpr("transform_keys(y, (k, v) -> array_contains(k, 3) AND v)"),
+        Seq(Row(Map(false -> false))))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testMapOfPrimitiveTypesCombination()
+    dfExample1.cache()
+    dfExample2.cache()
+    dfExample3.cache()
+    dfExample4.cache()
+    // Test with cached relation, the Project will be evaluated with codegen
+    testMapOfPrimitiveTypesCombination()
+  }
+
+  test("transform keys function - Invalid lambda functions and exceptions") {
+    val dfExample1 = Seq(
+      Map[String, String]("a" -> null)
+    ).toDF("i")
+
+    val dfExample2 = Seq(
+      Seq(1, 2, 3, 4)
+    ).toDF("j")
+
+    val ex1 = intercept[AnalysisException] {
+      dfExample1.selectExpr("transform_keys(i, k -> k)")
+    }
+    assert(ex1.getMessage.contains("The number of lambda function arguments '1' does not match"))
+
+    val ex2 = intercept[AnalysisException] {
+      dfExample1.selectExpr("transform_keys(i, (k, v, x) -> k + 1)")
+    }
+    assert(ex2.getMessage.contains(
+      "The number of lambda function arguments '3' does not match"))
+
+    val ex3 = intercept[Exception] {
+      dfExample1.selectExpr("transform_keys(i, (k, v) -> v)").show()
+    }
+    assert(ex3.getMessage.contains("Cannot use null as map key!"))
+
+    val ex4 = intercept[AnalysisException] {
+      dfExample2.selectExpr("transform_keys(j, (k, v) -> k + 1)")
+    }
+    assert(ex4.getMessage.contains(
+      "data type mismatch: argument 1 requires map type"))
+  }
+
+  test("transform values function - test primitive data types") {
+    val dfExample1 = Seq(
+      Map[Int, Int](1 -> 1, 9 -> 9, 8 -> 8, 7 -> 7)
+    ).toDF("i")
+
+    val dfExample2 = Seq(
+      Map[Boolean, String](false -> "abc", true -> "def")
+    ).toDF("x")
+
+    val dfExample3 = Seq(
+      Map[String, Int]("a" -> 1, "b" -> 2, "c" -> 3)
+    ).toDF("y")
+
+    val dfExample4 = Seq(
+      Map[Int, Double](1 -> 1.0, 2 -> 1.40, 3 -> 1.70)
+    ).toDF("z")
+
+    val dfExample5 = Seq(
+      Map[Int, Array[Int]](1 -> Array(1, 2))
+    ).toDF("c")
+
+    def testMapOfPrimitiveTypesCombination(): Unit = {
+      checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> k + v)"),
+        Seq(Row(Map(1 -> 2, 9 -> 18, 8 -> 16, 7 -> 14))))
+
+      checkAnswer(dfExample2.selectExpr(
+        "transform_values(x, (k, v) -> if(k, v, CAST(k AS String)))"),
+        Seq(Row(Map(false -> "false", true -> "def"))))
+
+      checkAnswer(dfExample2.selectExpr("transform_values(x, (k, v) -> NOT k AND v = 'abc')"),
+        Seq(Row(Map(false -> true, true -> false))))
+
+      checkAnswer(dfExample3.selectExpr("transform_values(y, (k, v) -> v * v)"),
+        Seq(Row(Map("a" -> 1, "b" -> 4, "c" -> 9))))
+
+      checkAnswer(dfExample3.selectExpr(
+        "transform_values(y, (k, v) -> k || ':' || CAST(v as String))"),
+        Seq(Row(Map("a" -> "a:1", "b" -> "b:2", "c" -> "c:3"))))
+
+      checkAnswer(
+        dfExample3.selectExpr("transform_values(y, (k, v) -> concat(k, cast(v as String)))"),
+        Seq(Row(Map("a" -> "a1", "b" -> "b2", "c" -> "c3"))))
+
+      checkAnswer(
+        dfExample4.selectExpr(
+          "transform_values(" +
+            "z,(k, v) -> map_from_arrays(ARRAY(1, 2, 3), " +
+            "ARRAY('one', 'two', 'three'))[k] || '_' || CAST(v AS String))"),
+        Seq(Row(Map(1 -> "one_1.0", 2 -> "two_1.4", 3 ->"three_1.7"))))
+
+      checkAnswer(
+        dfExample4.selectExpr("transform_values(z, (k, v) -> k-v)"),
+        Seq(Row(Map(1 -> 0.0, 2 -> 0.6000000000000001, 3 -> 1.3))))
+
+      checkAnswer(
+        dfExample5.selectExpr("transform_values(c, (k, v) -> k + cardinality(v))"),
+        Seq(Row(Map(1 -> 3))))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testMapOfPrimitiveTypesCombination()
+    dfExample1.cache()
+    dfExample2.cache()
+    dfExample3.cache()
+    dfExample4.cache()
+    dfExample5.cache()
+    // Test with cached relation, the Project will be evaluated with codegen
+    testMapOfPrimitiveTypesCombination()
+  }
+
+  test("transform values function - test empty") {
+    val dfExample1 = Seq(
+      Map.empty[Integer, Integer]
+    ).toDF("i")
+
+    val dfExample2 = Seq(
+      Map.empty[BigInt, String]
+    ).toDF("j")
+
+    def testEmpty(): Unit = {
+      checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> NULL)"),
+        Seq(Row(Map.empty[Integer, Integer])))
+
+      checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> k)"),
+        Seq(Row(Map.empty[Integer, Integer])))
+
+      checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> v)"),
+        Seq(Row(Map.empty[Integer, Integer])))
+
+      checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> 0)"),
+        Seq(Row(Map.empty[Integer, Integer])))
+
+      checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> 'value')"),
+        Seq(Row(Map.empty[Integer, String])))
+
+      checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> true)"),
+        Seq(Row(Map.empty[Integer, Boolean])))
+
+      checkAnswer(dfExample2.selectExpr("transform_values(j, (k, v) -> k + cast(v as BIGINT))"),
+        Seq(Row(Map.empty[BigInt, BigInt])))
+    }
+
+    testEmpty()
+    dfExample1.cache()
+    dfExample2.cache()
+    testEmpty()
+  }
+
+  test("transform values function - test null values") {
+    val dfExample1 = Seq(
+      Map[Int, Integer](1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4)
+    ).toDF("a")
+
+    val dfExample2 = Seq(
+      Map[Int, String](1 -> "a", 2 -> "b", 3 -> null)
+    ).toDF("b")
+
+    def testNullValue(): Unit = {
+      checkAnswer(dfExample1.selectExpr("transform_values(a, (k, v) -> null)"),
+        Seq(Row(Map[Int, Integer](1 -> null, 2 -> null, 3 -> null, 4 -> null))))
+
+      checkAnswer(dfExample2.selectExpr(
+        "transform_values(b, (k, v) -> IF(v IS NULL, k + 1, k + 2))"),
+        Seq(Row(Map(1 -> 3, 2 -> 4, 3 -> 4))))
+    }
+
+    testNullValue()
+    dfExample1.cache()
+    dfExample2.cache()
+    testNullValue()
+  }
+
+  test("transform values function - test invalid functions") {
+    val dfExample1 = Seq(
+      Map[Int, Int](1 -> 1, 9 -> 9, 8 -> 8, 7 -> 7)
+    ).toDF("i")
+
+    val dfExample2 = Seq(
+      Map[String, String]("a" -> "b")
+    ).toDF("j")
+
+    val dfExample3 = Seq(
+      Seq(1, 2, 3, 4)
+    ).toDF("x")
+
+    def testInvalidLambdaFunctions(): Unit = {
+
+      val ex1 = intercept[AnalysisException] {
+        dfExample1.selectExpr("transform_values(i, k -> k)")
+      }
+      assert(ex1.getMessage.contains("The number of lambda function arguments '1' does not match"))
+
+      val ex2 = intercept[AnalysisException] {
+        dfExample2.selectExpr("transform_values(j, (k, v, x) -> k + 1)")
+      }
+      assert(ex2.getMessage.contains("The number of lambda function arguments '3' does not match"))
+
+      val ex3 = intercept[AnalysisException] {
+        dfExample3.selectExpr("transform_values(x, (k, v) -> k + 1)")
+      }
+      assert(ex3.getMessage.contains(
+        "data type mismatch: argument 1 requires map type"))
+    }
+
+    testInvalidLambdaFunctions()
+    dfExample1.cache()
+    dfExample2.cache()
+    dfExample3.cache()
+    testInvalidLambdaFunctions()
+  }
+
+  test("arrays zip_with function - for primitive types") {
+    val df1 = Seq[(Seq[Integer], Seq[Integer])](
+      (Seq(9001, 9002, 9003), Seq(4, 5, 6)),
+      (Seq(1, 2), Seq(3, 4)),
+      (Seq.empty, Seq.empty),
+      (null, null)
+    ).toDF("val1", "val2")
+    val df2 = Seq[(Seq[Integer], Seq[Long])](
+      (Seq(1, null, 3), Seq(1L, 2L)),
+      (Seq(1, 2, 3), Seq(4L, 11L))
+    ).toDF("val1", "val2")
+    val expectedValue1 = Seq(
+      Row(Seq(9005, 9007, 9009)),
+      Row(Seq(4, 6)),
+      Row(Seq.empty),
+      Row(null))
+    checkAnswer(df1.selectExpr("zip_with(val1, val2, (x, y) -> x + y)"), expectedValue1)
+    val expectedValue2 = Seq(
+      Row(Seq(Row(1L, 1), Row(2L, null), Row(null, 3))),
+      Row(Seq(Row(4L, 1), Row(11L, 2), Row(null, 3))))
+    checkAnswer(df2.selectExpr("zip_with(val1, val2, (x, y) -> (y, x))"), expectedValue2)
+  }
+
+  test("arrays zip_with function - for non-primitive types") {
+    val df = Seq(
+      (Seq("a"), Seq("x", "y", "z")),
+      (Seq("a", null), Seq("x", "y")),
+      (Seq.empty[String], Seq.empty[String]),
+      (Seq("a", "b", "c"), null)
+    ).toDF("val1", "val2")
+    val expectedValue1 = Seq(
+      Row(Seq(Row("x", "a"), Row("y", null), Row("z", null))),
+      Row(Seq(Row("x", "a"), Row("y", null))),
+      Row(Seq.empty),
+      Row(null))
+    checkAnswer(df.selectExpr("zip_with(val1, val2, (x, y) -> (y, x))"), expectedValue1)
+  }
+
+  test("arrays zip_with function - invalid") {
+    val df = Seq(
+      (Seq("c", "a", "b"), Seq("x", "y", "z"), 1),
+      (Seq("b", null, "c", null), Seq("x"), 2),
+      (Seq.empty, Seq("x", "z"), 3),
+      (null, Seq("x", "z"), 4)
+    ).toDF("a1", "a2", "i")
+    val ex1 = intercept[AnalysisException] {
+      df.selectExpr("zip_with(a1, a2, x -> x)")
+    }
+    assert(ex1.getMessage.contains("The number of lambda function arguments '1' does not match"))
+    val ex2 = intercept[AnalysisException] {
+      df.selectExpr("zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)")
+    }
+    assert(ex2.getMessage.contains("Invalid number of arguments for function zip_with"))
+    val ex3 = intercept[AnalysisException] {
+      df.selectExpr("zip_with(i, a2, (acc, x) -> x)")
+    }
+    assert(ex3.getMessage.contains("data type mismatch: argument 1 requires array type"))
+    val ex4 = intercept[AnalysisException] {
+      df.selectExpr("zip_with(a1, a, (acc, x) -> x)")
+    }
+    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
@@ -2265,8 +2886,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val funcsMustHaveAtLeastOneArg =
       ("coalesce", (df: DataFrame) => df.select(coalesce())) ::
       ("coalesce", (df: DataFrame) => df.selectExpr("coalesce()")) ::
-      ("named_struct", (df: DataFrame) => df.select(struct())) ::
-      ("named_struct", (df: DataFrame) => df.selectExpr("named_struct()")) ::
       ("hash", (df: DataFrame) => df.select(hash())) ::
       ("hash", (df: DataFrame) => df.selectExpr("hash()")) :: Nil
     funcsMustHaveAtLeastOneArg.foreach { case (name, func) =>
@@ -2287,7 +2906,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-24734: Fix containsNull of Concat for array type") {
     val df = Seq((Seq(1), Seq[Integer](null), Seq("a", "b"))).toDF("k1", "k2", "v")
-    val ex = intercept[RuntimeException] {
+    val ex = intercept[Exception] {
       df.select(map_from_arrays(concat($"k1", $"k2"), $"v")).show()
     }
     assert(ex.getMessage.contains("Cannot use null as map key"))

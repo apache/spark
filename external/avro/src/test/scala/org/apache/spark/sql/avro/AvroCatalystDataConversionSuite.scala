@@ -17,15 +17,12 @@
 
 package org.apache.spark.sql.avro
 
-import org.apache.avro.Schema
-
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{AvroDataToCatalyst, CatalystDataToAvro, RandomDataGenerator}
+import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 class AvroCatalystDataConversionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -64,8 +61,6 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite with ExpressionEvalH
     BinaryType)
 
   protected def prepareExpectedResult(expected: Any): Any = expected match {
-    // Spark decimal is converted to avro string=
-    case d: Decimal => UTF8String.fromString(d.toString)
     // Spark byte and short both map to avro int
     case b: Byte => b.toInt
     case s: Short => s.toInt

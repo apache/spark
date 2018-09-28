@@ -41,10 +41,19 @@ trait ExpectsInputTypes extends Expression {
   def inputTypes: Seq[AbstractDataType]
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val mismatches = children.zip(inputTypes).zipWithIndex.collect {
-      case ((child, expected), idx) if !expected.acceptsType(child.dataType) =>
+    ExpectsInputTypes.checkInputDataTypes(children, inputTypes)
+  }
+}
+
+object ExpectsInputTypes {
+
+  def checkInputDataTypes(
+      inputs: Seq[Expression],
+      inputTypes: Seq[AbstractDataType]): TypeCheckResult = {
+    val mismatches = inputs.zip(inputTypes).zipWithIndex.collect {
+      case ((input, expected), idx) if !expected.acceptsType(input.dataType) =>
         s"argument ${idx + 1} requires ${expected.simpleString} type, " +
-          s"however, '${child.sql}' is of ${child.dataType.catalogString} type."
+          s"however, '${input.sql}' is of ${input.dataType.catalogString} type."
     }
 
     if (mismatches.isEmpty) {
@@ -54,7 +63,6 @@ trait ExpectsInputTypes extends Expression {
     }
   }
 }
-
 
 /**
  * A mixin for the analyzer to perform implicit type casting using

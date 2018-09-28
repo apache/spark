@@ -206,15 +206,4 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     // first time use, load cache
     checkDataset(df5, Row(10))
   }
-
-  test("SPARK-24850 InMemoryRelation string representation does not include cached plan") {
-    val df = Seq(1).toDF("a").cache()
-    val outputStream = new java.io.ByteArrayOutputStream()
-    Console.withOut(outputStream) {
-      df.explain(false)
-    }
-    assert(outputStream.toString.replaceAll("#\\d+", "#x").contains(
-      "InMemoryRelation [a#x], StorageLevel(disk, memory, deserialized, 1 replicas)"
-    ))
-  }
 }

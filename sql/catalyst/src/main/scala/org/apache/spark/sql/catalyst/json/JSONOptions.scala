@@ -113,6 +113,11 @@ private[sql] class JSONOptions(
   }
   val lineSeparatorInWrite: String = lineSeparator.getOrElse("\n")
 
+  /**
+   * Generating JSON strings in pretty representation if the parameter is enabled.
+   */
+  val pretty: Boolean = parameters.get("pretty").map(_.toBoolean).getOrElse(false)
+
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {
     factory.configure(JsonParser.Feature.ALLOW_COMMENTS, allowComments)

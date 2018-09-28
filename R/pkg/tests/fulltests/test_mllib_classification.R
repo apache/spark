@@ -382,10 +382,10 @@ test_that("spark.mlp", {
   trainidxs <- base::sample(nrow(data), nrow(data) * 0.7)
   traindf <- as.DataFrame(data[trainidxs, ])
   testdf <- as.DataFrame(rbind(data[-trainidxs, ], c(0, "the other")))
-  model <- spark.mlp(traindf, clicked ~ ., layers = c(1, 3))
+  model <- spark.mlp(traindf, clicked ~ ., layers = c(1, 2))
   predictions <- predict(model, testdf)
   expect_error(collect(predictions))
-  model <- spark.mlp(traindf, clicked ~ ., layers = c(1, 3), handleInvalid = "skip")
+  model <- spark.mlp(traindf, clicked ~ ., layers = c(1, 2), handleInvalid = "skip")
   predictions <- predict(model, testdf)
   expect_equal(class(collect(predictions)$clicked[1]), "list")
 

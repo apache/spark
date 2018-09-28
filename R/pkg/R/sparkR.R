@@ -626,6 +626,8 @@ sparkConfToSubmitOps[["spark.driver.extraLibraryPath"]] <- "--driver-library-pat
 sparkConfToSubmitOps[["spark.master"]] <- "--master"
 sparkConfToSubmitOps[["spark.yarn.keytab"]] <- "--keytab"
 sparkConfToSubmitOps[["spark.yarn.principal"]] <- "--principal"
+sparkConfToSubmitOps[["spark.kerberos.keytab"]] <- "--keytab"
+sparkConfToSubmitOps[["spark.kerberos.principal"]] <- "--principal"
 
 
 # Utility function that returns Spark Submit arguments as a string

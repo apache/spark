@@ -258,6 +258,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     def continuedPromptWithDBSpaces: String = continuedPrompt + ReflectionUtils.invokeStatic(
       classOf[CliDriver], "spacesForString", classOf[String] -> currentDB)
 
+    cli.printMasterAndAppId
+
     var currentPrompt = promptWithCurrentDB
     var line = reader.readLine(currentPrompt + "> ")
 
@@ -321,6 +323,12 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
   override def setHiveVariables(hiveVariables: java.util.Map[String, String]): Unit = {
     hiveVariables.asScala.foreach(kv => SparkSQLEnv.sqlContext.conf.setConfString(kv._1, kv._2))
+  }
+
+  def printMasterAndAppId(): Unit = {
+    val master = SparkSQLEnv.sparkContext.master
+    val appId = SparkSQLEnv.sparkContext.applicationId
+    console.printInfo(s"Spark master: $master, Application Id: $appId")
   }
 
   override def processCmd(cmd: String): Int = {

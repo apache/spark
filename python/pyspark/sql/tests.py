@@ -26,6 +26,7 @@ import subprocess
 import pydoc
 import shutil
 import tempfile
+import threading
 import pickle
 import functools
 import time
@@ -68,10 +69,18 @@ except ImportError as e:
     # If Arrow version requirement is not satisfied, skip related tests.
     _pyarrow_requirement_message = _exception_message(e)
 
+_test_not_compiled_message = None
+try:
+    from pyspark.sql.utils import require_test_compiled
+    require_test_compiled()
+except Exception as e:
+    _test_not_compiled_message = _exception_message(e)
+
 _have_pandas = _pandas_requirement_message is None
 _have_pyarrow = _pyarrow_requirement_message is None
+_test_compiled = _test_not_compiled_message is None
 
-from pyspark import SparkContext
+from pyspark import SparkConf, SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type, _make_type_verifier
@@ -220,12 +229,12 @@ class SQLTestUtils(object):
 class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils):
     @classmethod
     def setUpClass(cls):
-        ReusedPySparkTestCase.setUpClass()
+        super(ReusedSQLTestCase, cls).setUpClass()
         cls.spark = SparkSession(cls.sc)
 
     @classmethod
     def tearDownClass(cls):
-        ReusedPySparkTestCase.tearDownClass()
+        super(ReusedSQLTestCase, cls).tearDownClass()
         cls.spark.stop()
 
     def assertPandasEqual(self, expected, result):
@@ -268,6 +277,54 @@ class DataTypeTests(unittest.TestCase):
     def test_struct_field_type_name(self):
         struct_field = StructField("a", IntegerType())
         self.assertRaises(TypeError, struct_field.typeName)
+
+    def test_invalid_create_row(self):
+        row_class = Row("c1", "c2")
+        self.assertRaises(ValueError, lambda: row_class(1, 2, 3))
+
+
+class SparkSessionBuilderTests(unittest.TestCase):
+
+    def test_create_spark_context_first_then_spark_session(self):
+        sc = None
+        session = None
+        try:
+            conf = SparkConf().set("key1", "value1")
+            sc = SparkContext('local[4]', "SessionBuilderTests", conf=conf)
+            session = SparkSession.builder.config("key2", "value2").getOrCreate()
+
+            self.assertEqual(session.conf.get("key1"), "value1")
+            self.assertEqual(session.conf.get("key2"), "value2")
+            self.assertEqual(session.sparkContext, sc)
+
+            self.assertFalse(sc.getConf().contains("key2"))
+            self.assertEqual(sc.getConf().get("key1"), "value1")
+        finally:
+            if session is not None:
+                session.stop()
+            if sc is not None:
+                sc.stop()
+
+    def test_another_spark_session(self):
+        session1 = None
+        session2 = None
+        try:
+            session1 = SparkSession.builder.config("key1", "value1").getOrCreate()
+            session2 = SparkSession.builder.config("key2", "value2").getOrCreate()
+
+            self.assertEqual(session1.conf.get("key1"), "value1")
+            self.assertEqual(session2.conf.get("key1"), "value1")
+            self.assertEqual(session1.conf.get("key2"), "value2")
+            self.assertEqual(session2.conf.get("key2"), "value2")
+            self.assertEqual(session1.sparkContext, session2.sparkContext)
+
+            self.assertEqual(session1.sparkContext.getConf().get("key1"), "value1")
+            self.assertFalse(session1.sparkContext.getConf().contains("key2"))
+        finally:
+            if session1 is not None:
+                session1.stop()
+            if session2 is not None:
+                session2.stop()
 
 
 class SQLTests(ReusedSQLTestCase):
@@ -538,6 +595,70 @@ class SQLTests(ReusedSQLTestCase):
         f = udf(lambda a, b: a == b, BooleanType())
         df = left.crossJoin(right).filter(f("a", "b"))
         self.assertEqual(df.collect(), [Row(a=1, b=1)])
+
+    def test_udf_in_join_condition(self):
+        # regression test for SPARK-25314
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1)])
+        right = self.spark.createDataFrame([Row(b=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+        df = left.join(right, f("a", "b"))
+        with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
+            df.collect()
+        with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
+            self.assertEqual(df.collect(), [Row(a=1, b=1)])
+
+    def test_udf_in_left_semi_join_condition(self):
+        # regression test for SPARK-25314
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+        df = left.join(right, f("a", "b"), "leftsemi")
+        with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
+            df.collect()
+        with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
+            self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1)])
+
+    def test_udf_and_common_filter_in_join_condition(self):
+        # regression test for SPARK-25314
+        # test the complex scenario with both udf and common filter
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+        df = left.join(right, [f("a", "b"), left.a1 == right.b1])
+        # do not need spark.sql.crossJoin.enabled=true for udf is not the only join condition.
+        self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1, b=1, b1=1, b2=1)])
+
+    def test_udf_and_common_filter_in_left_semi_join_condition(self):
+        # regression test for SPARK-25314
+        # test the complex scenario with both udf and common filter
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+        df = left.join(right, [f("a", "b"), left.a1 == right.b1], "left_semi")
+        # do not need spark.sql.crossJoin.enabled=true for udf is not the only join condition.
+        self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1)])
+
+    def test_udf_not_supported_in_join_condition(self):
+        # regression test for SPARK-25314
+        # test python udf is not supported in join type besides left_semi and inner join.
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+
+        def runWithJoinType(join_type, type_string):
+            with self.assertRaisesRegexp(
+                    AnalysisException,
+                    'Using PythonUDF.*%s is not supported.' % type_string):
+                left.join(right, [f("a", "b"), left.a1 == right.b1], join_type).collect()
+        runWithJoinType("full", "FullOuter")
+        runWithJoinType("left", "LeftOuter")
+        runWithJoinType("right", "RightOuter")
+        runWithJoinType("leftanti", "LeftAnti")
 
     def test_udf_without_arguments(self):
         self.spark.catalog.registerFunction("foo", lambda: "bar")
@@ -1191,7 +1312,7 @@ class SQLTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(
             [(i % 3, PythonOnlyPoint(float(i), float(i))) for i in range(10)],
             schema=schema)
-        df.show()
+        df.collect()
 
     def test_nested_udt_in_df(self):
         schema = StructType().add("key", LongType()).add("val", ArrayType(PythonOnlyUDT()))
@@ -1521,8 +1642,7 @@ class SQLTests(ReusedSQLTestCase):
         from pyspark.sql.functions import array_contains
 
         df = self.spark.createDataFrame([(["1", "2", "3"],), ([],)], ['data'])
-        actual = df.select(array_contains(df.data, 1).alias('b')).collect()
-        # The value argument can be implicitly castable to the element's type of the array.
+        actual = df.select(array_contains(df.data, "1").alias('b')).collect()
         self.assertEqual([Row(b=True), Row(b=False)], actual)
 
     def test_between_function(self):
@@ -1985,6 +2105,9 @@ class SQLTests(ReusedSQLTestCase):
         def __setstate__(self, state):
             self.open_events_dir, self.process_events_dir, self.close_events_dir = state
 
+    # Those foreach tests are failed in Python 3.6 and macOS High Sierra by defined rules
+    # at http://sealiesoftware.com/blog/archive/2017/6/5/Objective-C_and_fork_in_macOS_1013.html
+    # To work around this, OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES.
     def test_streaming_foreach_with_simple_function(self):
         tester = self.ForeachWriterTester(self.spark)
 
@@ -3289,7 +3412,7 @@ class SQLTests(ReusedSQLTestCase):
         import pandas as pd
         from datetime import datetime
         pdf = pd.DataFrame({"ts": [datetime(2017, 10, 31, 1, 1, 1)],
-                            "d": [pd.Timestamp.now().date()]})
+                            "d": [pd.Timestamp.now().date()]}, columns=["d", "ts"])
         # test types are inferred correctly without specifying schema
         df = self.spark.createDataFrame(pdf)
         self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampType))
@@ -3400,6 +3523,47 @@ class SQLTests(ReusedSQLTestCase):
                 StructField('c', StringType(), nullable=True)])
             readback = self.spark.read.json(path, dropFieldIfAllNull=True)
             self.assertEquals(readback.schema, schema)
+        finally:
+            shutil.rmtree(path)
+
+    # SPARK-24721
+    @unittest.skipIf(not _test_compiled, _test_not_compiled_message)
+    def test_datasource_with_udf(self):
+        from pyspark.sql.functions import udf, lit, col
+
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+
+        try:
+            self.spark.range(1).write.mode("overwrite").format('csv').save(path)
+            filesource_df = self.spark.read.option('inferSchema', True).csv(path).toDF('i')
+            datasource_df = self.spark.read \
+                .format("org.apache.spark.sql.sources.SimpleScanSource") \
+                .option('from', 0).option('to', 1).load().toDF('i')
+            datasource_v2_df = self.spark.read \
+                .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+                .load().toDF('i', 'j')
+
+            c1 = udf(lambda x: x + 1, 'int')(lit(1))
+            c2 = udf(lambda x: x + 1, 'int')(col('i'))
+
+            f1 = udf(lambda x: False, 'boolean')(lit(1))
+            f2 = udf(lambda x: False, 'boolean')(col('i'))
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                result = df.withColumn('c', c1)
+                expected = df.withColumn('c', lit(2))
+                self.assertEquals(expected.collect(), result.collect())
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                result = df.withColumn('c', c2)
+                expected = df.withColumn('c', col('i') + 1)
+                self.assertEquals(expected.collect(), result.collect())
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                for f in [f1, f2]:
+                    result = df.filter(f)
+                    self.assertEquals(0, result.count())
         finally:
             shutil.rmtree(path)
 
@@ -4086,7 +4250,10 @@ class ArrowTests(ReusedSQLTestCase):
     def setUpClass(cls):
         from datetime import date, datetime
         from decimal import Decimal
-        ReusedSQLTestCase.setUpClass()
+        from distutils.version import LooseVersion
+        import pyarrow as pa
+        super(ArrowTests, cls).setUpClass()
+        cls.warnings_lock = threading.Lock()
 
         # Synchronize default timezone between Python and Java
         cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
@@ -4114,13 +4281,20 @@ class ArrowTests(ReusedSQLTestCase):
                     (u"c", 3, 30, 0.8, 6.0, Decimal("6.0"),
                      date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
 
+        # TODO: remove version check once minimum pyarrow version is 0.10.0
+        if LooseVersion("0.10.0") <= LooseVersion(pa.__version__):
+            cls.schema.add(StructField("9_binary_t", BinaryType(), True))
+            cls.data[0] = cls.data[0] + (bytearray(b"a"),)
+            cls.data[1] = cls.data[1] + (bytearray(b"bb"),)
+            cls.data[2] = cls.data[2] + (bytearray(b"ccc"),)
+
     @classmethod
     def tearDownClass(cls):
         del os.environ["TZ"]
         if cls.tz_prev is not None:
             os.environ["TZ"] = cls.tz_prev
         time.tzset()
-        ReusedSQLTestCase.tearDownClass()
+        super(ArrowTests, cls).tearDownClass()
 
     def create_pandas_data_frame(self):
         import pandas as pd
@@ -4140,22 +4314,37 @@ class ArrowTests(ReusedSQLTestCase):
             schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
             df = self.spark.createDataFrame([({u'a': 1},)], schema=schema)
             with QuietTest(self.sc):
-                with warnings.catch_warnings(record=True) as warns:
-                    pdf = df.toPandas()
-                    # Catch and check the last UserWarning.
-                    user_warns = [
-                        warn.message for warn in warns if isinstance(warn.message, UserWarning)]
-                    self.assertTrue(len(user_warns) > 0)
-                    self.assertTrue(
-                        "Attempting non-optimization" in _exception_message(user_warns[-1]))
-                    self.assertPandasEqual(pdf, pd.DataFrame({u'map': [{u'a': 1}]}))
+                with self.warnings_lock:
+                    with warnings.catch_warnings(record=True) as warns:
+                        # we want the warnings to appear even if this test is run from a subclass
+                        warnings.simplefilter("always")
+                        pdf = df.toPandas()
+                        # Catch and check the last UserWarning.
+                        user_warns = [
+                            warn.message for warn in warns if isinstance(warn.message, UserWarning)]
+                        self.assertTrue(len(user_warns) > 0)
+                        self.assertTrue(
+                            "Attempting non-optimization" in _exception_message(user_warns[-1]))
+                        self.assertPandasEqual(pdf, pd.DataFrame({u'map': [{u'a': 1}]}))
 
     def test_toPandas_fallback_disabled(self):
+        from distutils.version import LooseVersion
+        import pyarrow as pa
+
         schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'Unsupported type'):
-                df.toPandas()
+            with self.warnings_lock:
+                with self.assertRaisesRegexp(Exception, 'Unsupported type'):
+                    df.toPandas()
+
+        # TODO: remove BinaryType check once minimum pyarrow version is 0.10.0
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            schema = StructType([StructField("binary", BinaryType(), True)])
+            df = self.spark.createDataFrame([(None,)], schema=schema)
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(Exception, 'Unsupported type.*BinaryType'):
+                    df.toPandas()
 
     def test_null_conversion(self):
         df_null = self.spark.createDataFrame([tuple([None for _ in range(len(self.data[0]))])] +
@@ -4268,19 +4457,22 @@ class ArrowTests(ReusedSQLTestCase):
 
     def test_createDataFrame_with_incorrect_schema(self):
         pdf = self.create_pandas_data_frame()
-        wrong_schema = StructType(list(reversed(self.schema)))
+        fields = list(self.schema)
+        fields[0], fields[7] = fields[7], fields[0]  # swap str with timestamp
+        wrong_schema = StructType(fields)
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, ".*No cast.*string.*timestamp.*"):
                 self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):
         pdf = self.create_pandas_data_frame()
+        new_names = list(map(str, range(len(self.schema.fieldNames()))))
         # Test that schema as a list of column names gets applied
-        df = self.spark.createDataFrame(pdf, schema=list('abcdefgh'))
-        self.assertEquals(df.schema.fieldNames(), list('abcdefgh'))
+        df = self.spark.createDataFrame(pdf, schema=list(new_names))
+        self.assertEquals(df.schema.fieldNames(), new_names)
         # Test that schema as tuple of column names gets applied
-        df = self.spark.createDataFrame(pdf, schema=tuple('abcdefgh'))
-        self.assertEquals(df.schema.fieldNames(), list('abcdefgh'))
+        df = self.spark.createDataFrame(pdf, schema=tuple(new_names))
+        self.assertEquals(df.schema.fieldNames(), new_names)
 
     def test_createDataFrame_column_name_encoding(self):
         import pandas as pd
@@ -4356,6 +4548,8 @@ class ArrowTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.sql_conf({"spark.sql.execution.arrow.fallback.enabled": True}):
                 with warnings.catch_warnings(record=True) as warns:
+                    # we want the warnings to appear even if this test is run from a subclass
+                    warnings.simplefilter("always")
                     df = self.spark.createDataFrame(
                         pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
                     # Catch and check the last UserWarning.
@@ -4367,12 +4561,21 @@ class ArrowTests(ReusedSQLTestCase):
                     self.assertEqual(df.collect(), [Row(a={u'a': 1})])
 
     def test_createDataFrame_fallback_disabled(self):
+        from distutils.version import LooseVersion
         import pandas as pd
+        import pyarrow as pa
 
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(TypeError, 'Unsupported type'):
                 self.spark.createDataFrame(
                     pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
+
+        # TODO: remove BinaryType check once minimum pyarrow version is 0.10.0
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(TypeError, 'Unsupported type.*BinaryType'):
+                    self.spark.createDataFrame(
+                        pd.DataFrame([[{'a': b'aaa'}]]), "a: binary")
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
@@ -4390,10 +4593,18 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertPandasEqual(pdf, df_from_pandas.toPandas())
 
 
+class EncryptionArrowTests(ArrowTests):
+
+    @classmethod
+    def conf(cls):
+        return super(EncryptionArrowTests, cls).conf().set("spark.io.encryption.enabled", "true")
+
+
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,
     _pandas_requirement_message or _pyarrow_requirement_message)
 class PandasUDFTests(ReusedSQLTestCase):
+
     def test_pandas_udf_basic(self):
         from pyspark.rdd import PythonEvalType
         from pyspark.sql.functions import pandas_udf, PandasUDFType
@@ -4614,6 +4825,24 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         random_udf = random_udf.asNondeterministic()
         return random_udf
 
+    def test_pandas_udf_tokenize(self):
+        from pyspark.sql.functions import pandas_udf
+        tokenize = pandas_udf(lambda s: s.apply(lambda str: str.split(' ')),
+                              ArrayType(StringType()))
+        self.assertEqual(tokenize.returnType, ArrayType(StringType()))
+        df = self.spark.createDataFrame([("hi boo",), ("bye boo",)], ["vals"])
+        result = df.select(tokenize("vals").alias("hi"))
+        self.assertEqual([Row(hi=[u'hi', u'boo']), Row(hi=[u'bye', u'boo'])], result.collect())
+
+    def test_pandas_udf_nested_arrays(self):
+        from pyspark.sql.functions import pandas_udf
+        tokenize = pandas_udf(lambda s: s.apply(lambda str: [str.split(' ')]),
+                              ArrayType(ArrayType(StringType())))
+        self.assertEqual(tokenize.returnType, ArrayType(ArrayType(StringType())))
+        df = self.spark.createDataFrame([("hi boo",), ("bye boo",)], ["vals"])
+        result = df.select(tokenize("vals").alias("hi"))
+        self.assertEqual([Row(hi=[[u'hi', u'boo']]), Row(hi=[[u'bye', u'boo']])], result.collect())
+
     def test_vectorized_udf_basic(self):
         from pyspark.sql.functions import pandas_udf, col, array
         df = self.spark.range(10).select(
@@ -4770,6 +4999,24 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                         bool_f(col('bool')))
         self.assertEquals(df.collect(), res.collect())
 
+    def test_vectorized_udf_null_binary(self):
+        from distutils.version import LooseVersion
+        import pyarrow as pa
+        from pyspark.sql.functions import pandas_udf, col
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(
+                        NotImplementedError,
+                        'Invalid returnType.*scalar Pandas UDF.*BinaryType'):
+                    pandas_udf(lambda x: x, BinaryType())
+        else:
+            data = [(bytearray(b"a"),), (None,), (bytearray(b"bb"),), (bytearray(b"ccc"),)]
+            schema = StructType().add("binary", BinaryType())
+            df = self.spark.createDataFrame(data, schema)
+            str_f = pandas_udf(lambda x: x, BinaryType())
+            res = df.select(str_f(col('binary')))
+            self.assertEquals(df.collect(), res.collect())
+
     def test_vectorized_udf_array_type(self):
         from pyspark.sql.functions import pandas_udf, col
         data = [([1, 2],), ([3, 4],)]
@@ -4875,12 +5122,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                     NotImplementedError,
                     'Invalid returnType.*scalar Pandas UDF.*MapType'):
                 pandas_udf(lambda x: x, MapType(StringType(), IntegerType()))
-
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
-                    NotImplementedError,
-                    'Invalid returnType.*scalar Pandas UDF.*BinaryType'):
-                pandas_udf(lambda x: x, BinaryType())
 
     def test_vectorized_udf_dates(self):
         from pyspark.sql.functions import pandas_udf, col
@@ -5265,6 +5506,51 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             .withColumn('f3_f2_f1', df['v'] + 111)
 
         self.assertEquals(expected.collect(), df1.collect())
+
+    # SPARK-24721
+    @unittest.skipIf(not _test_compiled, _test_not_compiled_message)
+    def test_datasource_with_udf(self):
+        # Same as SQLTests.test_datasource_with_udf, but with Pandas UDF
+        # This needs to a separate test because Arrow dependency is optional
+        import pandas as pd
+        import numpy as np
+        from pyspark.sql.functions import pandas_udf, lit, col
+
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+
+        try:
+            self.spark.range(1).write.mode("overwrite").format('csv').save(path)
+            filesource_df = self.spark.read.option('inferSchema', True).csv(path).toDF('i')
+            datasource_df = self.spark.read \
+                .format("org.apache.spark.sql.sources.SimpleScanSource") \
+                .option('from', 0).option('to', 1).load().toDF('i')
+            datasource_v2_df = self.spark.read \
+                .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+                .load().toDF('i', 'j')
+
+            c1 = pandas_udf(lambda x: x + 1, 'int')(lit(1))
+            c2 = pandas_udf(lambda x: x + 1, 'int')(col('i'))
+
+            f1 = pandas_udf(lambda x: pd.Series(np.repeat(False, len(x))), 'boolean')(lit(1))
+            f2 = pandas_udf(lambda x: pd.Series(np.repeat(False, len(x))), 'boolean')(col('i'))
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                result = df.withColumn('c', c1)
+                expected = df.withColumn('c', lit(2))
+                self.assertEquals(expected.collect(), result.collect())
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                result = df.withColumn('c', c2)
+                expected = df.withColumn('c', col('i') + 1)
+                self.assertEquals(expected.collect(), result.collect())
+
+            for df in [filesource_df, datasource_df, datasource_v2_df]:
+                for f in [f1, f2]:
+                    result = df.filter(f)
+                    self.assertEquals(0, result.count())
+        finally:
+            shutil.rmtree(path)
 
 
 @unittest.skipIf(
@@ -5665,7 +5951,8 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         import pandas as pd
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
-        with self.sql_conf({"spark.sql.execution.pandas.groupedMap.assignColumnsByPosition": True}):
+        with self.sql_conf({
+                "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}):
 
             @pandas_udf("a string, b float", PandasUDFType.GROUPED_MAP)
             def foo(_):

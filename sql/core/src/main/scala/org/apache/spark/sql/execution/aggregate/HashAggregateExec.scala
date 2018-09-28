@@ -579,6 +579,7 @@ case class HashAggregateExec(
         case _ =>
       }
     }
+    val bitMaxCapacity = sqlContext.conf.fastHashAggregateRowMaxCapacityBit
 
     val thisPlan = ctx.addReferenceObj("plan", this)
 
@@ -588,7 +589,7 @@ case class HashAggregateExec(
       val fastHashMapClassName = ctx.freshName("FastHashMap")
       if (isVectorizedHashMapEnabled) {
         val generatedMap = new VectorizedHashMapGenerator(ctx, aggregateExpressions,
-          fastHashMapClassName, groupingKeySchema, bufferSchema).generate()
+          fastHashMapClassName, groupingKeySchema, bufferSchema, bitMaxCapacity).generate()
         ctx.addInnerClass(generatedMap)
 
         // Inline mutable state since not many aggregation operations in a task
@@ -598,7 +599,7 @@ case class HashAggregateExec(
           forceInline = true)
       } else {
         val generatedMap = new RowBasedHashMapGenerator(ctx, aggregateExpressions,
-          fastHashMapClassName, groupingKeySchema, bufferSchema).generate()
+          fastHashMapClassName, groupingKeySchema, bufferSchema, bitMaxCapacity).generate()
         ctx.addInnerClass(generatedMap)
 
         // Inline mutable state since not many aggregation operations in a task

@@ -19,17 +19,16 @@ package org.apache.spark.util.io
 
 import java.io.{File, FileInputStream, InputStream}
 import java.nio.ByteBuffer
-import java.nio.channels.{FileChannel, WritableByteChannel}
-import java.nio.file.StandardOpenOption
+import java.nio.channels.WritableByteChannel
 
-import scala.collection.mutable.ListBuffer
-
+import com.google.common.io.ByteStreams
 import com.google.common.primitives.UnsignedBytes
+import org.apache.commons.io.IOUtils
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.config
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
-import org.apache.spark.network.util.ByteArrayWritableChannel
+import org.apache.spark.network.util.{ByteArrayWritableChannel, LimitedInputStream}
 import org.apache.spark.storage.StorageUtils
 import org.apache.spark.util.Utils
 
@@ -175,26 +174,36 @@ object ChunkedByteBuffer {
   def fromManagedBuffer(data: ManagedBuffer, maxChunkSize: Int): ChunkedByteBuffer = {
     data match {
       case f: FileSegmentManagedBuffer =>
-        map(f.getFile, maxChunkSize, f.getOffset, f.getLength)
+        fromFile(f.getFile, maxChunkSize, f.getOffset, f.getLength)
       case other =>
         new ChunkedByteBuffer(other.nioByteBuffer())
     }
   }
 
-  def map(file: File, maxChunkSize: Int, offset: Long, length: Long): ChunkedByteBuffer = {
-    Utils.tryWithResource(FileChannel.open(file.toPath, StandardOpenOption.READ)) { channel =>
-      var remaining = length
-      var pos = offset
-      val chunks = new ListBuffer[ByteBuffer]()
-      while (remaining > 0) {
-        val chunkSize = math.min(remaining, maxChunkSize)
-        val chunk = channel.map(FileChannel.MapMode.READ_ONLY, pos, chunkSize)
-        pos += chunkSize
-        remaining -= chunkSize
-        chunks += chunk
-      }
-      new ChunkedByteBuffer(chunks.toArray)
+  def fromFile(file: File, maxChunkSize: Int): ChunkedByteBuffer = {
+    fromFile(file, maxChunkSize, 0, file.length())
+  }
+
+  private def fromFile(
+      file: File,
+      maxChunkSize: Int,
+      offset: Long,
+      length: Long): ChunkedByteBuffer = {
+    // We do *not* memory map the file, because we may end up putting this into the memory store,
+    // and spark currently is not expecting memory-mapped buffers in the memory store, it conflicts
+    // with other parts that manage the lifecyle of buffers and dispose them.  See SPARK-25422.
+    val is = new FileInputStream(file)
+    ByteStreams.skipFully(is, offset)
+    val in = new LimitedInputStream(is, length)
+    val chunkSize = math.min(maxChunkSize, length).toInt
+    val out = new ChunkedByteBufferOutputStream(chunkSize, ByteBuffer.allocate _)
+    Utils.tryWithSafeFinally {
+      IOUtils.copy(in, out)
+    } {
+      in.close()
+      out.close()
     }
+    out.toChunkedByteBuffer
   }
 }
 

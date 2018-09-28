@@ -69,4 +69,13 @@ private[spark] trait SchedulerBackend {
    */
   def getDriverLogUrls: Option[Map[String, String]] = None
 
+  /**
+   * Get the max number of tasks that can be concurrent launched currently.
+   * Note that please don't cache the value returned by this method, because the number can change
+   * due to add/remove executors.
+   *
+   * @return The max number of tasks that can be concurrent launched currently.
+   */
+  def maxNumConcurrentTasks(): Int
+
 }

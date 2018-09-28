@@ -95,15 +95,15 @@ case class ResolveLambdaVariables(conf: SQLConf) extends Rule[LogicalPlan] {
    */
   private def createLambda(
       e: Expression,
-      partialArguments: Seq[(DataType, Boolean)]): LambdaFunction = e match {
+      argInfo: Seq[(DataType, Boolean)]): LambdaFunction = e match {
     case f: LambdaFunction if f.bound => f
 
     case LambdaFunction(function, names, _) =>
-      if (names.size != partialArguments.size) {
+      if (names.size != argInfo.size) {
         e.failAnalysis(
           s"The number of lambda function arguments '${names.size}' does not " +
             "match the number of arguments expected by the higher order function " +
-            s"'${partialArguments.size}'.")
+            s"'${argInfo.size}'.")
       }
 
       if (names.map(a => canonicalizer(a.name)).distinct.size < names.size) {
@@ -111,7 +111,7 @@ case class ResolveLambdaVariables(conf: SQLConf) extends Rule[LogicalPlan] {
           "Lambda function arguments should not have names that are semantically the same.")
       }
 
-      val arguments = partialArguments.zip(names).map {
+      val arguments = argInfo.zip(names).map {
         case ((dataType, nullable), ne) =>
           NamedLambdaVariable(ne.name, dataType, nullable)
       }
@@ -122,7 +122,7 @@ case class ResolveLambdaVariables(conf: SQLConf) extends Rule[LogicalPlan] {
       // create a lambda function with default parameters because this is expected by the higher
       // order function. Note that we hide the lambda variables produced by this function in order
       // to prevent accidental naming collisions.
-      val arguments = partialArguments.zipWithIndex.map {
+      val arguments = argInfo.zipWithIndex.map {
         case ((dataType, nullable), i) =>
           NamedLambdaVariable(s"col$i", dataType, nullable)
       }
@@ -135,7 +135,7 @@ case class ResolveLambdaVariables(conf: SQLConf) extends Rule[LogicalPlan] {
   private def resolve(e: Expression, parentLambdaMap: LambdaVariableMap): Expression = e match {
     case _ if e.resolved => e
 
-    case h: HigherOrderFunction if h.inputResolved =>
+    case h: HigherOrderFunction if h.argumentsResolved && h.checkArgumentDataTypes().isSuccess =>
       h.bind(createLambda).mapChildren(resolve(_, parentLambdaMap))
 
     case l: LambdaFunction if !l.bound =>

@@ -121,9 +121,17 @@ private[deploy] class Master(
   }
 
   // Alternative application submission gateway that is stable across Spark versions
-  private val restServerEnabled = conf.getBoolean("spark.master.rest.enabled", true)
+  private val restServerEnabled = conf.getBoolean("spark.master.rest.enabled", false)
   private var restServer: Option[StandaloneRestServer] = None
   private var restServerBoundPort: Option[Int] = None
+
+  {
+    val authKey = SecurityManager.SPARK_AUTH_SECRET_CONF
+    require(conf.getOption(authKey).isEmpty || !restServerEnabled,
+      s"The RestSubmissionServer does not support authentication via ${authKey}.  Either turn " +
+        "off the RestSubmissionServer with spark.master.rest.enabled=false, or do not use " +
+        "authentication.")
+  }
 
   override def onStart(): Unit = {
     logInfo("Starting Spark master at " + masterUrl)

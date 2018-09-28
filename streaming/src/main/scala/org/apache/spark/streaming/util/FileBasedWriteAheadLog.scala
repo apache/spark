@@ -312,10 +312,11 @@ private[streaming] object FileBasedWriteAheadLog {
       handler: I => Iterator[O]): Iterator[O] = {
     val taskSupport = new ExecutionContextTaskSupport(executionContext)
     val groupSize = taskSupport.parallelismLevel.max(8)
-    implicit val ec = executionContext
 
     source.grouped(groupSize).flatMap { group =>
-      ThreadUtils.parmap(group)(handler)
+      val parallelCollection = group.par
+      parallelCollection.tasksupport = taskSupport
+      parallelCollection.map(handler)
     }.flatten
   }
 }

@@ -240,19 +240,23 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
       val source = cls.newInstance().asInstanceOf[DataSourceV2]
       source match {
-        case ws: WriteSupport =>
-          val options = extraOptions ++
-              DataSourceV2Utils.extractSessionConfigs(source, df.sparkSession.sessionState.conf)
+        case provider: BatchWriteSupportProvider =>
+          val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+            source,
+            df.sparkSession.sessionState.conf)
+          val options = sessionOptions ++ extraOptions
 
-          val relation = DataSourceV2Relation.create(source, options.toMap)
+          val relation = DataSourceV2Relation.create(source, options)
           if (mode == SaveMode.Append) {
             runCommand(df.sparkSession, "save") {
               AppendData.byName(relation, df.logicalPlan)
             }
 
           } else {
-            val writer = ws.createWriter(
-              UUID.randomUUID.toString, df.logicalPlan.output.toStructType, mode,
+            val writer = provider.createBatchWriteSupport(
+              UUID.randomUUID().toString,
+              df.logicalPlan.output.toStructType,
+              mode,
               new DataSourceOptions(options.asJava))
 
             if (writer.isPresent) {
@@ -633,6 +637,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * enclosed in quotes. Default is to only escape values containing a quote character.</li>
    * <li>`header` (default `false`): writes the names of columns as the first line.</li>
    * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
+   * <li>`emptyValue` (default `""`): sets the string representation of an empty value.</li>
    * <li>`encoding` (by default it is not set): specifies encoding (charset) of saved csv
    * files. If it is not set, the UTF-8 charset will be used.</li>
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be

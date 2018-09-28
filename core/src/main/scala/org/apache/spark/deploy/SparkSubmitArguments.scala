@@ -82,7 +82,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var driverCores: String = null
   var submissionToKill: String = null
   var submissionToRequestStatusFor: String = null
-  var useRest: Boolean = true // used internally
+  var useRest: Boolean = false // used internally
 
   /** Default properties present in the currently defined defaults file. */
   lazy val defaultSparkProperties: HashMap[String, String] = {
@@ -114,6 +114,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   ignoreNonSparkProperties()
   // Use `sparkProperties` map along with env vars to fill in any missing parameters
   loadEnvironmentArguments()
+
+  useRest = sparkProperties.getOrElse("spark.master.rest.enabled", "false").toBoolean
 
   validateArguments()
 
@@ -197,8 +199,14 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     numExecutors = Option(numExecutors)
       .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
     queue = Option(queue).orElse(sparkProperties.get("spark.yarn.queue")).orNull
-    keytab = Option(keytab).orElse(sparkProperties.get("spark.yarn.keytab")).orNull
-    principal = Option(principal).orElse(sparkProperties.get("spark.yarn.principal")).orNull
+    keytab = Option(keytab)
+      .orElse(sparkProperties.get("spark.kerberos.keytab"))
+      .orElse(sparkProperties.get("spark.yarn.keytab"))
+      .orNull
+    principal = Option(principal)
+      .orElse(sparkProperties.get("spark.kerberos.principal"))
+      .orElse(sparkProperties.get("spark.yarn.principal"))
+      .orNull
     dynamicAllocationEnabled =
       sparkProperties.get("spark.dynamicAllocation.enabled").exists("true".equalsIgnoreCase)
 

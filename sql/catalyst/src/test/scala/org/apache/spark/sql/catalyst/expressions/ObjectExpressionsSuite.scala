@@ -72,7 +72,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val cls = classOf[Tuple2[Boolean, java.lang.Integer]]
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
     val invoke = Invoke(inputObject, "_2", IntegerType)
-    checkEvaluationWithGeneratedMutableProjection(invoke, null, inputRow)
+    checkEvaluationWithMutableProjection(invoke, null, inputRow)
   }
 
   test("MapObjects should make copies of unsafe-backed data") {
@@ -233,13 +233,13 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.fromObject(new TestBean),
       Map("setNonPrimitive" -> Literal(null)))
     evaluateWithoutCodegen(initializeBean, InternalRow.fromSeq(Seq()))
-    evaluateWithGeneratedMutableProjection(initializeBean, InternalRow.fromSeq(Seq()))
+    evaluateWithMutableProjection(initializeBean, InternalRow.fromSeq(Seq()))
 
     val initializeBean2 = InitializeJavaBean(
       Literal.fromObject(new TestBean),
       Map("setNonPrimitive" -> Literal("string")))
     evaluateWithoutCodegen(initializeBean2, InternalRow.fromSeq(Seq()))
-    evaluateWithGeneratedMutableProjection(initializeBean2, InternalRow.fromSeq(Seq()))
+    evaluateWithMutableProjection(initializeBean2, InternalRow.fromSeq(Seq()))
   }
 
   test("SPARK-23585: UnwrapOption should support interpreted execution") {
@@ -273,7 +273,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val resolver = ResolveTimeZone(new SQLConf)
     val expr = resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
     checkEvaluationWithoutCodegen(expr, expected, inputRow)
-    checkEvaluationWithGeneratedMutableProjection(expr, expected, inputRow)
+    checkEvaluationWithMutableProjection(expr, expected, inputRow)
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
       checkEvaluationWithUnsafeProjection(
         expr,

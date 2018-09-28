@@ -554,8 +554,11 @@ class Analyzer(
           Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
         }
         // Group-by expressions coming from SQL are implicit and need to be deduced.
-        val groupByExprs = groupByExprsOpt.getOrElse(
-          (child.outputSet -- aggregates.flatMap(_.references) -- pivotColumn.references).toSeq)
+        val groupByExprs = groupByExprsOpt.getOrElse {
+          val pivotColAndAggRefs =
+            (pivotColumn.references ++ aggregates.flatMap(_.references)).toSet
+          child.output.filterNot(pivotColAndAggRefs.contains)
+        }
         val singleAgg = aggregates.size == 1
         def outputName(value: Expression, aggregate: Expression): String = {
           val stringValue = value match {
@@ -1045,7 +1048,7 @@ class Analyzer(
     // support CURRENT_DATE and CURRENT_TIMESTAMP
     val literalFunctions = Seq(CurrentDate(), CurrentTimestamp())
     val name = nameParts.head
-    val func = literalFunctions.find(e => resolver(e.prettyName, name))
+    val func = literalFunctions.find(e => caseInsensitiveResolution(e.prettyName, name))
     func.map(wrapper)
   }
 
@@ -1436,21 +1439,7 @@ class Analyzer(
           val expr = resolveSubQuery(l, plans)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output)
           })
-          val subqueryOutput = expr.plan.output
-          val resolvedIn = InSubquery(values, expr.asInstanceOf[ListQuery])
-          if (values.length != subqueryOutput.length) {
-            throw new AnalysisException(
-              s"""Cannot analyze ${resolvedIn.sql}.
-                 |The number of columns in the left hand side of an IN subquery does not match the
-                 |number of columns in the output of subquery.
-                 |#columns in left hand side: ${values.length}
-                 |#columns in right hand side: ${subqueryOutput.length}
-                 |Left side columns:
-                 |[${values.map(_.sql).mkString(", ")}]
-                 |Right side columns:
-                 |[${subqueryOutput.map(_.sql).mkString(", ")}]""".stripMargin)
-          }
-          resolvedIn
+          InSubquery(values, expr.asInstanceOf[ListQuery])
       }
     }
 
@@ -2149,28 +2138,34 @@ class Analyzer(
 
       case p => p transformExpressionsUp {
 
-        case udf @ ScalaUDF(func, _, inputs, _, _, _, _) =>
-          val parameterTypes = ScalaReflection.getParameterTypes(func)
-          assert(parameterTypes.length == inputs.length)
+        case udf@ScalaUDF(func, _, inputs, _, _, _, _, nullableTypes) =>
+          if (nullableTypes.isEmpty) {
+            // If no nullability info is available, do nothing. No fields will be specially
+            // checked for null in the plan. If nullability info is incorrect, the results
+            // of the UDF could be wrong.
+            udf
+          } else {
+            // Otherwise, add special handling of null for fields that can't accept null.
+            // The result of operations like this, when passed null, is generally to return null.
+            assert(nullableTypes.length == inputs.length)
 
-          // TODO: skip null handling for not-nullable primitive inputs after we can completely
-          // trust the `nullable` information.
-          // (cls, expr) => cls.isPrimitive && expr.nullable
-          val needsNullCheck = (cls: Class[_], expr: Expression) =>
-            cls.isPrimitive && !expr.isInstanceOf[KnownNotNull]
-          val inputsNullCheck = parameterTypes.zip(inputs)
-            .filter { case (cls, expr) => needsNullCheck(cls, expr) }
-            .map { case (_, expr) => IsNull(expr) }
-            .reduceLeftOption[Expression]((e1, e2) => Or(e1, e2))
-          // Once we add an `If` check above the udf, it is safe to mark those checked inputs
-          // as not nullable (i.e., wrap them with `KnownNotNull`), because the null-returning
-          // branch of `If` will be called if any of these checked inputs is null. Thus we can
-          // prevent this rule from being applied repeatedly.
-          val newInputs = parameterTypes.zip(inputs).map{ case (cls, expr) =>
-            if (needsNullCheck(cls, expr)) KnownNotNull(expr) else expr }
-          inputsNullCheck
-            .map(If(_, Literal.create(null, udf.dataType), udf.copy(children = newInputs)))
-            .getOrElse(udf)
+            // TODO: skip null handling for not-nullable primitive inputs after we can completely
+            // trust the `nullable` information.
+            val inputsNullCheck = nullableTypes.zip(inputs)
+              .filter { case (nullable, _) => !nullable }
+              .map { case (_, expr) => IsNull(expr) }
+              .reduceLeftOption[Expression]((e1, e2) => Or(e1, e2))
+            // Once we add an `If` check above the udf, it is safe to mark those checked inputs
+            // as not nullable (i.e., wrap them with `KnownNotNull`), because the null-returning
+            // branch of `If` will be called if any of these checked inputs is null. Thus we can
+            // prevent this rule from being applied repeatedly.
+            val newInputs = nullableTypes.zip(inputs).map { case (nullable, expr) =>
+              if (nullable) expr else KnownNotNull(expr)
+            }
+            inputsNullCheck
+              .map(If(_, Literal.create(null, udf.dataType), udf.copy(children = newInputs)))
+              .getOrElse(udf)
+          }
       }
     }
   }
