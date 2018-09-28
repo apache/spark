@@ -1264,7 +1264,14 @@ private[spark] class DAGScheduler(
         }
       } catch {
         case NonFatal(e) =>
-          logError(s"Failed to update accumulator $id for task ${task.partitionId}", e)
+          // Log the class name to make it easy to find the bad implementation
+          val accumClassName = AccumulatorContext.get(id) match {
+            case Some(accum) => accum.getClass.getName
+            case None => ""
+          }
+          logError(
+            s"Failed to update accumulator $id ($accumClassName) for task ${task.partitionId}",
+            e)
       }
     }
   }
