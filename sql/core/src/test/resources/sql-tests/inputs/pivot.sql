@@ -297,3 +297,13 @@ PIVOT (
   sum(earnings)
   FOR course IN ('dotNET', 'Java')
 );
+
+-- correctly handle pivot columns with different cases
+SELECT * FROM (
+  SELECT course, earnings, "a" as a, "z" as z, "b" as b, "y" as y, "c" as c, "x" as x, "d" as d, "w" as w
+  FROM courseSales
+)
+PIVOT (
+  sum(Earnings)
+  FOR Course IN ('dotNET', 'Java')
+);
