@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
-import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NumericType, StructType}
 
@@ -423,10 +422,14 @@ class RelationalGroupedDataset protected[sql](
   def pivot(pivotColumn: Column, values: Seq[Any]): RelationalGroupedDataset = {
     groupType match {
       case RelationalGroupedDataset.GroupByType =>
+        val valueExprs = values.map(_ match {
+          case c: Column => c.expr
+          case v => Literal.apply(v)
+        })
         new RelationalGroupedDataset(
           df,
           groupingExprs,
-          RelationalGroupedDataset.PivotType(pivotColumn.expr, values.map(lit(_).expr)))
+          RelationalGroupedDataset.PivotType(pivotColumn.expr, valueExprs))
       case _: RelationalGroupedDataset.PivotType =>
         throw new UnsupportedOperationException("repeated pivots are not supported")
       case _ =>
