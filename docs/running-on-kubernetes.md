@@ -800,7 +800,7 @@ specific to Spark on Kubernetes.
 </tr>
 <tr>
   <td><code>spark.kubernetes.local.dirs.tmpfs</code></td>
-  <td><code>false</code>
+  <td><code>false</code></td>
   <td>
    Configure the <code>emptyDir</code> volumes used to back <code>SPARK_LOCAL_DIRS</code> within the Spark driver and executor pods to use <code>tmpfs</code> backing i.e. RAM.  See <a href="#local-storage">Local Storage</a> earlier on this page
    for more discussion of this.
