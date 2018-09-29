@@ -505,7 +505,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         sql(s"ANALYZE TABLE $tableName $partitionSpec COMPUTE STATISTICS")
       }.getMessage
       assert(message.contains("The list of partition columns with values " +
-        s"in partition specification for table '${tableName.toLowerCase(Locale.ROOT)}' in" +
+        s"in partition specification for table '${tableName.toLowerCase(Locale.ROOT)}' in " +
         "database 'default' is not a prefix of the list of partition columns defined in " +
         "the table schema"))
     }
