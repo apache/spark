@@ -56,3 +56,7 @@ select from_json('[{"a": 1}, 2]', 'array<map<string,int>>');
 select to_json(array('1', '2', '3'));
 select to_json(array(array(1, 2, 3), array(4)));
 
+-- infer schema of json literal using options
+select schema_of_json('{"c1":1}', map('primitivesAsString', 'true'));
+select schema_of_json('{"c1":01, "c2":0.1}', map('allowNumericLeadingZeros', 'true', 'prefersDecimal', 'true'));
+
