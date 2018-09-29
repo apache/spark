@@ -5563,6 +5563,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                 decim=pdf.decim * 2,
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
+                array=pdf.array,
             ),
             output_schema,
             PandasUDFType.GROUPED_MAP
@@ -5579,6 +5580,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                 decim=pdf.decim * 2,
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
+                array=pdf.array,
             ),
             output_schema,
             PandasUDFType.GROUPED_MAP
@@ -5596,6 +5598,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                 decim=pdf.decim * 2,
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
+                array=pdf.array,
             ),
             output_schema,
             PandasUDFType.GROUPED_MAP
