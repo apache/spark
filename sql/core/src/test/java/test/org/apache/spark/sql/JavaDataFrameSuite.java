@@ -317,6 +317,22 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(30000.0, actual.get(1).getDouble(2), 0.01);
   }
 
+  @Test
+  public void pivotColumnValues() {
+    Dataset<Row> df = spark.table("courseSales");
+    List<Row> actual = df.groupBy("year")
+      .pivot(col("course"), Arrays.asList(lit("dotNET"), lit("Java")))
+      .agg(sum("earnings")).orderBy("year").collectAsList();
+
+    Assert.assertEquals(2012, actual.get(0).getInt(0));
+    Assert.assertEquals(15000.0, actual.get(0).getDouble(1), 0.01);
+    Assert.assertEquals(20000.0, actual.get(0).getDouble(2), 0.01);
+
+    Assert.assertEquals(2013, actual.get(1).getInt(0));
+    Assert.assertEquals(48000.0, actual.get(1).getDouble(1), 0.01);
+    Assert.assertEquals(30000.0, actual.get(1).getDouble(2), 0.01);
+  }
+
   private String getResource(String resource) {
     try {
       // The following "getResource" has different behaviors in SBT and Maven.
