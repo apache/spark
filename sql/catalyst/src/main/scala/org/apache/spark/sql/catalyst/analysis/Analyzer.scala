@@ -554,8 +554,11 @@ class Analyzer(
           Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
         }
         // Group-by expressions coming from SQL are implicit and need to be deduced.
-        val groupByExprs = groupByExprsOpt.getOrElse(
-          (child.outputSet -- aggregates.flatMap(_.references) -- pivotColumn.references).toSeq)
+        val groupByExprs = groupByExprsOpt.getOrElse {
+          val pivotColAndAggRefs =
+            (pivotColumn.references ++ aggregates.flatMap(_.references)).toSet
+          child.output.filterNot(pivotColAndAggRefs.contains)
+        }
         val singleAgg = aggregates.size == 1
         def outputName(value: Expression, aggregate: Expression): String = {
           val stringValue = value match {
@@ -1436,21 +1439,7 @@ class Analyzer(
           val expr = resolveSubQuery(l, plans)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output)
           })
-          val subqueryOutput = expr.plan.output
-          val resolvedIn = InSubquery(values, expr.asInstanceOf[ListQuery])
-          if (values.length != subqueryOutput.length) {
-            throw new AnalysisException(
-              s"""Cannot analyze ${resolvedIn.sql}.
-                 |The number of columns in the left hand side of an IN subquery does not match the
-                 |number of columns in the output of subquery.
-                 |#columns in left hand side: ${values.length}
-                 |#columns in right hand side: ${subqueryOutput.length}
-                 |Left side columns:
-                 |[${values.map(_.sql).mkString(", ")}]
-                 |Right side columns:
-                 |[${subqueryOutput.map(_.sql).mkString(", ")}]""".stripMargin)
-          }
-          resolvedIn
+          InSubquery(values, expr.asInstanceOf[ListQuery])
       }
     }
 

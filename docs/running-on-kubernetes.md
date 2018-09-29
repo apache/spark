@@ -691,6 +691,7 @@ specific to Spark on Kubernetes.
     Example values include 0.1, 500m, 1.5, 5, etc., with the definition of cpu units documented in [CPU units](https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/#cpu-units).   
     This is distinct from <code>spark.executor.cores</code>: it is only used and takes precedence over <code>spark.executor.cores</code> for specifying the executor pod cpu request if set. Task 
     parallelism, e.g., number of tasks an executor can run concurrently is not affected by this.
+  </td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.limit.cores</code></td>
@@ -799,7 +800,7 @@ specific to Spark on Kubernetes.
 </tr>
 <tr>
   <td><code>spark.kubernetes.local.dirs.tmpfs</code></td>
-  <td><code>false</code>
+  <td><code>false</code></td>
   <td>
    Configure the <code>emptyDir</code> volumes used to back <code>SPARK_LOCAL_DIRS</code> within the Spark driver and executor pods to use <code>tmpfs</code> backing i.e. RAM.  See <a href="#local-storage">Local Storage</a> earlier on this page
    for more discussion of this.
