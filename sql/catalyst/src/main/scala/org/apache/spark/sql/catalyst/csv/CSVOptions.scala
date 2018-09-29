@@ -191,6 +191,10 @@ class CSVOptions(
    * The value is used instead of an empty string in write. Default value is `""`
    */
   val emptyValueInWrite = emptyValue.getOrElse("\"\"")
+  /**
+   * This option only effects on quotes which are on the begin and end.
+   */
+  val keepQuotes = getBool("keepQuotes", false)
 
   /**
    * A string between two consecutive JSON records.
@@ -249,6 +253,7 @@ class CSVOptions(
     lineSeparatorInRead.foreach { _ =>
       settings.setNormalizeLineEndingsWithinQuotes(!multiLine)
     }
+    settings.setKeepQuotes(keepQuotes)
 
     settings
   }

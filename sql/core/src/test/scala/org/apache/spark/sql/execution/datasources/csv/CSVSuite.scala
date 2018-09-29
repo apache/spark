@@ -63,6 +63,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   private val datesFile = "test-data/dates.csv"
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
   private val valueMalformedFile = "test-data/value-malformed.csv"
+  private val keepQuotesFile = "test-data/keep-quotes.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -193,6 +194,22 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     val expectedRows = Seq(Row("\"a\"b", "ccc", "ddd"), Row("ab", "cc\"c", "ddd\""))
 
     checkAnswer(rows, expectedRows)
+  }
+
+  test("keep escaped quotes") {
+    val notKeepQuotes = spark.read
+      .format("csv")
+      .option("keepQuotes", false)
+      .load(testFile(keepQuotesFile))
+    var expectedRows = Seq(Row("\"a\"b", "ccc", null, "ddd"), Row("ab", "cc", null, "c,ddd"))
+    checkAnswer(notKeepQuotes, expectedRows)
+
+    val keepQuotes = spark.read
+      .format("csv")
+      .option("keepQuotes", true)
+      .load(testFile(keepQuotesFile))
+    expectedRows = Seq(Row("\"a\"b", "ccc", "\"\"", "ddd"), Row("ab", "cc", null, "\"c,ddd\""))
+    checkAnswer(keepQuotes, expectedRows)
   }
 
   test("bad encoding name") {
