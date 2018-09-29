@@ -3612,6 +3612,21 @@ object functions {
   def schema_of_json(e: Column): Column = withExpr(new SchemaOfJson(e.expr))
 
   /**
+   * Parses a column containing a JSON string and infers its schema using options.
+   *
+   * @param e a string column containing JSON data.
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source. See [[DataFrameReader#json]].
+   * @return a column with string literal containing schema in DDL format.
+   *
+   * @group collection_funcs
+   * @since 2.5.0
+   */
+  def schema_of_json(e: Column, options: java.util.Map[String, String]): Column = {
+    withExpr(SchemaOfJson(e.expr, options.asScala.toMap))
+  }
+
+  /**
    * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` or
    * a `MapType` into a JSON string with the specified schema.
    * Throws an exception, in the case of an unsupported type.
