@@ -2301,6 +2301,60 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * (Scala-specific) Returns a new Dataset with renamed columns.
+   * This is a no-op if schema doesn't contain any columns in map.
+   *
+   * {{{
+   *   ds.withColumnsRenamed(
+   *     "exist_column1" -> "new_column1",
+   *     "exist_column2" -> "new_column2"
+   *   )
+   * }}}
+   *
+   * @group untypedrel
+   * @since 3.0.0
+   */
+  @scala.annotation.varargs
+  def withColumnsRenamed(columnMap: (String, String), columnMaps: (String, String)*): DataFrame = {
+    withColumnsRenamed((columnMap +: columnMaps).toMap)
+  }
+
+  /**
+   * (Scala-specific) Returns a new Dataset with renamed columns.
+   * This is a no-op if schema doesn't contain any columns in map.
+   *
+   * {{{
+   *   ds.withColumnsRenamed(Map(
+   *     "exist_column1" -> "new_column1",
+   *     "exist_column2" -> "new_column2"
+   *   ))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 3.0.0
+   */
+  def withColumnsRenamed(columnMap: Map[String, String]): DataFrame = {
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    val allColumns = queryExecution.analyzed.output
+
+    val shouldRename = allColumns.exists { attribute =>
+      columnMap.exists(m => resolver(attribute.name, m._1))
+    }
+
+    if (shouldRename) {
+      val newColumns = allColumns.map { attribute =>
+        columnMap
+          .find(m => resolver(attribute.name, m._1))
+          .map(m => Column(attribute).as(m._2))
+          .getOrElse(Column(attribute))
+      }
+      select(newColumns: _*)
+    } else {
+      toDF()
+    }
+  }
+
+  /**
    * Returns a new Dataset with a column dropped. This is a no-op if schema doesn't contain
    * column name.
    *

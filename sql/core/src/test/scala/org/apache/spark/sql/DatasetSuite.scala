@@ -1547,6 +1547,36 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       df.where($"city".contains(new java.lang.Character('A'))),
       Seq(Row("Amsterdam")))
   }
+
+  test("SPARK-25571: Add withColumnsRenamed method to Dataset") {
+    val df1 = testData
+      .withColumn("key_squared", col("key") * col("key"))
+      .withColumnsRenamed(
+        "key" -> "newKey",
+        "value" -> "newValue",
+        "key_squared" -> "newKeySquared",
+        "not_exist_column" -> "notExistColumn"
+      )
+
+    val df2 = testData
+      .withColumn("key_squared", col("key") * col("key"))
+      .withColumnsRenamed(Map(
+        "key" -> "newKey",
+        "value" -> "newValue",
+        "key_squared" -> "newKeySquared",
+        "not_exist_column" -> "notExistColumn"
+      ))
+
+    val expectedColumns = Seq("newKey", "newValue", "newKeySquared")
+    val expectedRows = testData.collect().map { case Row(key: Int, value: String) =>
+      Row(key, value, key * key)
+    }.toSeq
+
+    assert(df1.schema.map(_.name) === expectedColumns)
+    assert(df2.schema.map(_.name) === expectedColumns)
+    checkAnswer(df1, expectedRows)
+    checkAnswer(df2, expectedRows)
+  }
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)
