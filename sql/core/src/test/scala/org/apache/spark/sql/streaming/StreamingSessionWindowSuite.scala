@@ -104,7 +104,6 @@ class StreamingSessionWindowSuite extends StateStoreMetricsTest
              $"session_window.end".cast(StringType), $"key", $"res")
 
     aggregated.explain(true)
-    val acc = new EventTimeStatsAccum()
     testStream(aggregated, Append)(
       AddData(inputData,
         ("2018-08-22 19:39:27", "a", 4),
@@ -168,6 +167,47 @@ class StreamingSessionWindowSuite extends StateStoreMetricsTest
       assertEventStats { e =>
         assert(e.get("watermark") === formatTimestamp("2018-08-22 19:40:35"))
       },
+      StopStream
+    )
+  }
+
+  test("session window with watermark and single key in append model with unordered timestamp") {
+    val inputData = MemoryStream[(String, String, Int)]
+    val aggregated =
+      inputData.toDS().toDF("time", "key", "value")
+        .selectExpr("CAST(time as TIMESTAMP)", "key", "value")
+        .withWatermark("time", "10 seconds")
+        .groupBy(session_window($"time", "10 seconds"), $"key")
+        .agg(sum($"value").as("res"))
+        .select($"session_window.start".cast(StringType),
+             $"session_window.end".cast(StringType), $"key", $"res")
+
+    aggregated.explain(true)
+    testStream(aggregated, Append)(
+      AddData(inputData,
+          ("2018-08-22 19:39:27", "a", 4),
+          ("2018-08-22 19:39:28", "a", 1),
+          ("2018-08-22 19:39:27", "b", 2)),
+      CheckLastBatch(),
+      assertNumStateRows(2),
+      assertEventStats { e =>
+        assert(e.get("max") === formatTimestamp("2018-08-22 19:39:28"))
+        assert(e.get("min") === formatTimestamp("2018-08-22 19:39:27"))
+        assert(e.get("watermark") === formatTimestamp(0))
+      },
+      AddData(inputData, ("2018-08-22 19:39:23", "a", 1)),
+      AddData(inputData, ("2018-08-22 19:39:58", "c", 1)),
+      CheckLastBatch(),
+      assertNumStateRows(3),
+      assertEventStats { e =>
+        assert(e.get("max") === formatTimestamp("2018-08-22 19:39:58"))
+        assert(e.get("min") === formatTimestamp("2018-08-22 19:39:23"))
+        assert(e.get("watermark") === formatTimestamp("2018-08-22 19:39:18"))
+      },
+      AddData(inputData, ("2018-08-22 19:39:58", "c", 1)),
+      CheckLastBatch(
+          ("2018-08-22 19:39:23", "2018-08-22 19:39:38", "a", 6),
+          ("2018-08-22 19:39:27", "2018-08-22 19:39:37", "b", 2)),
       StopStream
     )
   }
