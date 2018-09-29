@@ -754,7 +754,7 @@ case class SchemaOfJson(
 
   def this(child: Expression, options: Expression) = this(
       child = child,
-      options = JsonExprUtils.convertToMapData(options))
+      options = ExprUtils.convertToMapData(options))
 
   @transient
   private lazy val jsonOptions = new JSONOptions(options, "UTC")
@@ -777,7 +777,6 @@ case class SchemaOfJson(
 }
 
 object JsonExprUtils {
-
   def evalSchemaExpr(exp: Expression): DataType = exp match {
     case Literal(s, StringType) => DataType.fromDDL(s.toString)
     case e @ SchemaOfJson(_: Literal, _) =>
