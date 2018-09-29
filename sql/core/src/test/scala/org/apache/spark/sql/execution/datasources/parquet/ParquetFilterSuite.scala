@@ -750,7 +750,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("SPARK-12218 Converting conjunctions into Parquet filter predicates") {
+  test("SPARK-12218 and SPARK-25559 Converting conjunctions into Parquet filter predicates") {
     val schema = StructType(Seq(
       StructField("a", IntegerType, nullable = false),
       StructField("b", StringType, nullable = true),
@@ -770,7 +770,11 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           sources.GreaterThan("c", 1.5D)))
     }
 
-    assertResult(None) {
+    // Testing when `canRemoveOneSideInAnd == true`
+    // case sources.And(lhs, rhs) =>
+    //   ...
+    //     case (Some(lhsFilter), None) if canRemoveOneSideInAnd => Some(lhsFilter)
+    assertResult(Some(lt(intColumn("a"), 10: Integer))) {
       parquetFilters.createFilter(
         parquetSchema,
         sources.And(
@@ -778,6 +782,83 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           sources.StringContains("b", "prefix")))
     }
 
+    // Testing when `canRemoveOneSideInAnd == true`
+    // case sources.And(lhs, rhs) =>
+    //   ...
+    //     case (None, Some(rhsFilter)) if canRemoveOneSideInAnd => Some(rhsFilter)
+    assertResult(Some(lt(intColumn("a"), 10: Integer))) {
+      parquetFilters.createFilter(
+        parquetSchema,
+        sources.And(
+          sources.StringContains("b", "prefix"),
+          sources.LessThan("a", 10)))
+    }
+
+    // Testing complex And conditions
+    assertResult(Some(
+      FilterApi.and(lt(intColumn("a"), 10: Integer), gt(intColumn("a"), 5: Integer)))) {
+      parquetFilters.createFilter(
+        parquetSchema,
+        sources.And(
+          sources.And(
+            sources.LessThan("a", 10),
+            sources.StringContains("b", "prefix")
+          ),
+          sources.GreaterThan("a", 5)))
+    }
+
+    // Testing complex And conditions
+    assertResult(Some(
+      FilterApi.and(gt(intColumn("a"), 5: Integer), lt(intColumn("a"), 10: Integer)))) {
+      parquetFilters.createFilter(
+        parquetSchema,
+        sources.And(
+          sources.GreaterThan("a", 5),
+          sources.And(
+            sources.StringContains("b", "prefix"),
+            sources.LessThan("a", 10)
+          )))
+    }
+
+    // Testing
+    // case sources.Or(lhs, rhs) =>
+    //   ...
+    //     lhsFilter <- createFilterHelper(nameToParquetField, lhs, canRemoveOneSideInAnd = false)
+    assertResult(None) {
+      parquetFilters.createFilter(
+        parquetSchema,
+        sources.Or(
+          sources.And(
+            sources.GreaterThan("a", 1),
+            sources.StringContains("b", "prefix")),
+          sources.GreaterThan("a", 2)))
+    }
+
+    // Testing
+    // case sources.Or(lhs, rhs) =>
+    //   ...
+    //     rhsFilter <- createFilterHelper(nameToParquetField, rhs, canRemoveOneSideInAnd = false)
+    assertResult(None) {
+      parquetFilters.createFilter(
+        parquetSchema,
+        sources.Or(
+          sources.GreaterThan("a", 2),
+          sources.And(
+            sources.GreaterThan("a", 1),
+            sources.StringContains("b", "prefix"))))
+    }
+
+    // Testing
+    // case sources.Not(pred) =>
+    //   createFilterHelper(nameToParquetField, pred, canRemoveOneSideInAnd = false)
+    //     .map(FilterApi.not)
+    //
+    // and
+    //
+    // Testing when `canRemoveOneSideInAnd == false`
+    // case sources.And(lhs, rhs) =>
+    //   ...
+    //     case (Some(lhsFilter), None) if canRemoveOneSideInAnd => Some(lhsFilter)
     assertResult(None) {
       parquetFilters.createFilter(
         parquetSchema,
@@ -785,6 +866,68 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           sources.And(
             sources.GreaterThan("a", 1),
             sources.StringContains("b", "prefix"))))
+    }
+
+    // Testing
+    // case sources.Not(pred) =>
+    //   createFilterHelper(nameToParquetField, pred, canRemoveOneSideInAnd = false)
+    //     .map(FilterApi.not)
+    //
+    // and
+    //
+    // Testing when `canRemoveOneSideInAnd == false`
+    // case sources.And(lhs, rhs) =>
+    //   ...
+    //     case (None, Some(rhsFilter)) if canRemoveOneSideInAnd => Some(rhsFilter)
+    assertResult(None) {
+      parquetFilters.createFilter(
+        parquetSchema,
+        sources.Not(
+          sources.And(
+            sources.StringContains("b", "prefix"),
+            sources.GreaterThan("a", 1))))
+    }
+
+    // Testing
+    // case sources.Not(pred) =>
+    //   createFilterHelper(nameToParquetField, pred, canRemoveOneSideInAnd = false)
+    //     .map(FilterApi.not)
+    //
+    // and
+    //
+    // Testing passing `canRemoveOneSideInAnd = false` into
+    // case sources.And(lhs, rhs) =>
+    //   val lhsFilterOption = createFilterHelper(nameToParquetField, lhs, canRemoveOneSideInAnd)
+    assertResult(None) {
+      parquetFilters.createFilter(
+        parquetSchema,
+        sources.Not(
+          sources.And(
+            sources.And(
+              sources.GreaterThan("a", 1),
+              sources.StringContains("b", "prefix")),
+            sources.GreaterThan("a", 2))))
+    }
+
+    // Testing
+    // case sources.Not(pred) =>
+    //   createFilterHelper(nameToParquetField, pred, canRemoveOneSideInAnd = false)
+    //     .map(FilterApi.not)
+    //
+    // and
+    //
+    // Testing passing `canRemoveOneSideInAnd = false` into
+    // case sources.And(lhs, rhs) =>
+    //   val rhsFilterOption = createFilterHelper(nameToParquetField, rhs, canRemoveOneSideInAnd)
+    assertResult(None) {
+      parquetFilters.createFilter(
+        parquetSchema,
+        sources.Not(
+          sources.And(
+            sources.GreaterThan("a", 2),
+            sources.And(
+              sources.GreaterThan("a", 1),
+              sources.StringContains("b", "prefix")))))
     }
   }
 

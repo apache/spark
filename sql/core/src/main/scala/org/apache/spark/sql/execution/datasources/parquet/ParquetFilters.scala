@@ -394,7 +394,13 @@ private[parquet] class ParquetFilters(
    */
   def createFilter(schema: MessageType, predicate: sources.Filter): Option[FilterPredicate] = {
     val nameToParquetField = getFieldMap(schema)
+    createFilterHelper(nameToParquetField, predicate, canRemoveOneSideInAnd = true)
+  }
 
+  private def createFilterHelper(
+      nameToParquetField: Map[String, ParquetField],
+      predicate: sources.Filter,
+      canRemoveOneSideInAnd: Boolean): Option[FilterPredicate] = {
     // Decimal type must make sure that filter value's scale matched the file.
     // If doesn't matched, which would cause data corruption.
     def isDecimalMatched(value: Any, decimalMeta: DecimalMetadata): Boolean = value match {
@@ -488,26 +494,36 @@ private[parquet] class ParquetFilters(
           .map(_(nameToParquetField(name).fieldName, value))
 
       case sources.And(lhs, rhs) =>
-        // At here, it is not safe to just convert one side if we do not understand the
-        // other side. Here is an example used to explain the reason.
+        // At here, it is not safe to just convert one side and remove the other side
+        // if we do not understand what the parent filters are.
+        //
+        // Here is an example used to explain the reason.
         // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
         // convert b in ('1'). If we only convert a = 2, we will end up with a filter
         // NOT(a = 2), which will generate wrong results.
-        // Pushing one side of AND down is only safe to do at the top level.
-        // You can see ParquetRelation's initializeLocalJobFunc method as an example.
-        for {
-          lhsFilter <- createFilter(schema, lhs)
-          rhsFilter <- createFilter(schema, rhs)
-        } yield FilterApi.and(lhsFilter, rhsFilter)
+        //
+        // Pushing one side of AND down is only safe to do at the top level or in the child
+        // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
+        // can be safely removed.
+        val lhsFilterOption = createFilterHelper(nameToParquetField, lhs, canRemoveOneSideInAnd)
+        val rhsFilterOption = createFilterHelper(nameToParquetField, rhs, canRemoveOneSideInAnd)
+
+        (lhsFilterOption, rhsFilterOption) match {
+          case (Some(lhsFilter), Some(rhsFilter)) => Some(FilterApi.and(lhsFilter, rhsFilter))
+          case (Some(lhsFilter), None) if canRemoveOneSideInAnd => Some(lhsFilter)
+          case (None, Some(rhsFilter)) if canRemoveOneSideInAnd => Some(rhsFilter)
+          case _ => None
+        }
 
       case sources.Or(lhs, rhs) =>
         for {
-          lhsFilter <- createFilter(schema, lhs)
-          rhsFilter <- createFilter(schema, rhs)
+          lhsFilter <- createFilterHelper(nameToParquetField, lhs, canRemoveOneSideInAnd = false)
+          rhsFilter <- createFilterHelper(nameToParquetField, rhs, canRemoveOneSideInAnd = false)
         } yield FilterApi.or(lhsFilter, rhsFilter)
 
       case sources.Not(pred) =>
-        createFilter(schema, pred).map(FilterApi.not)
+        createFilterHelper(nameToParquetField, pred, canRemoveOneSideInAnd = false)
+          .map(FilterApi.not)
 
       case sources.In(name, values) if canMakeFilterOn(name, values.head)
         && values.distinct.length <= pushDownInFilterThreshold =>
