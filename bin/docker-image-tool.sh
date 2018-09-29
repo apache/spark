@@ -71,7 +71,7 @@ function build {
   )
   local BASEDOCKERFILE=${BASEDOCKERFILE:-"$IMG_PATH/main/dockerfiles/spark/Dockerfile"}
   local PYDOCKERFILE=${PYDOCKERFILE:-"$IMG_PATH/main/dockerfiles/spark/bindings/python/Dockerfile"}
-  local RDOCKERFILE=${RDOCKERFILE:-"$IMG_PATH/main/dockerfiles/spark/bindings/R/Dockerfile"}
+#  local RDOCKERFILE=${RDOCKERFILE:-"$IMG_PATH/main/dockerfiles/spark/bindings/R/Dockerfile"}
   local KDOCKERFILE=${KDOCKERFILE:-"$IMG_PATH/test/dockerfiles/spark/kerberos/Dockerfile"}
 
   docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
@@ -82,9 +82,9 @@ function build {
     -t $(image_ref spark-py) \
     -f "$PYDOCKERFILE" .
 
-  docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
-    -t $(image_ref spark-r) \
-    -f "$RDOCKERFILE" .
+#  docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+#    -t $(image_ref spark-r) \
+#    -f "$RDOCKERFILE" .
 
   docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
     -t $(image_ref spark-kerberos) \
@@ -94,7 +94,7 @@ function build {
 function push {
   docker push "$(image_ref spark)"
   docker push "$(image_ref spark-py)"
-  docker push "$(image_ref spark-r)"
+#  docker push "$(image_ref spark-r)"
   docker push "$(image_ref spark-kerberos)"
 }
 
