@@ -524,15 +524,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     sortTest()
   }
 
-  test("limit for skew dataframe") {
-    // Create a skew dataframe.
-    val df = testData.repartition(100).union(testData).limit(50)
-    // Because `rdd` of dataframe will add a `DeserializeToObject` on top of `GlobalLimit`,
-    // the `GlobalLimit` will not be replaced with `CollectLimit`. So we can test if `GlobalLimit`
-    // work on skew partitions.
-    assert(df.rdd.count() == 50L)
-  }
-
   test("CTE feature") {
     checkAnswer(
       sql("with q1 as (select * from testData limit 10) select * from q1"),
@@ -1944,7 +1935,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     // TODO: support subexpression elimination in whole stage codegen
     withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
       // select from a table to prevent constant folding.
-      val df = sql("SELECT a, b from testData2 order by a, b limit 1")
+      val df = sql("SELECT a, b from testData2 limit 1")
       checkAnswer(df, Row(1, 1))
 
       checkAnswer(df.selectExpr("a + 1", "a + 1"), Row(2, 2))
@@ -2857,6 +2848,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val ds = List(Foo(Some("bar"))).toDS
     val result = ds.flatMap(_.bar).distinct
     result.rdd.isEmpty
+  }
+
+  test("SPARK-25454: decimal division with negative scale") {
+    // TODO: completely fix this issue even when LITERAL_PRECISE_PRECISION is true.
+    withSQLConf(SQLConf.LITERAL_PICK_MINIMUM_PRECISION.key -> "false") {
+      checkAnswer(sql("select 26393499451 / (1e6 * 1000)"), Row(BigDecimal("26.3934994510000")))
+    }
   }
 }
 
