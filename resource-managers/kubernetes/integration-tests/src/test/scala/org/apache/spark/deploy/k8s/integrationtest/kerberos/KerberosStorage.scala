@@ -19,5 +19,6 @@ package org.apache.spark.deploy.k8s.integrationtest.kerberos
 import io.fabric8.kubernetes.api.model.{PersistentVolume, PersistentVolumeClaim}
 
 private[spark] case class KerberosStorage(
+  name: String,
   persistentVolumeClaim: PersistentVolumeClaim,
   persistentVolume: PersistentVolume)

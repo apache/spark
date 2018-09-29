@@ -13,7 +13,6 @@ spec:
       - command: ["/bin/bash"]
         args: ["/opt/spark/run-kerberos-test.sh"]
         name: kerberos-test
-        image: kerberos-test:latest
         imagePullPolicy: IfNotPresent
         volumeMounts:
         - mountPath: /var/keytabs

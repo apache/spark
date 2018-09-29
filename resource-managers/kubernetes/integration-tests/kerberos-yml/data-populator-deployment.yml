@@ -17,9 +17,8 @@ spec:
       - command:
         - /populate-data.sh
         name: data-populator
-        image: ifilonenko/hadoop-base:latest
+        image: hadoop-base:latest
         imagePullPolicy: IfNotPresent
-        runAsNonRoot: false
         volumeMounts:
         - mountPath: /var/keytabs
           name: data-populator-keytab

@@ -34,11 +34,11 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.integrationtest.TestConfig._
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
+import org.apache.spark.deploy.k8s.integrationtest.kerberos.{KerberizedHadoopClusterLauncher, KerberosUtils}
 import org.apache.spark.internal.Logging
 
 private[spark] class KubernetesSuite extends SparkFunSuite
-  with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
-  with PythonTestsSuite with ClientModeTestsSuite
+  with BeforeAndAfterAll with BeforeAndAfter with KerberosTestSuite
   with Logging with Eventually with Matchers {
 
   import KubernetesSuite._
@@ -46,6 +46,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   private var sparkHomeDir: Path = _
   private var pyImage: String = _
   private var rImage: String = _
+  private var kImage: String = _
 
   protected var image: String = _
   protected var testBackend: IntegrationTestBackend = _
@@ -54,6 +55,9 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   protected var sparkAppConf: SparkAppConf = _
   protected var containerLocalSparkDistroExamplesJar: String = _
   protected var appLocator: String = _
+  // Kerberos related testing
+  protected var kerberizedHadoopClusterLauncher: KerberizedHadoopClusterLauncher = _
+  protected var kerberosUtils: KerberosUtils = _
 
   // Default memory limit is 1024M + 384M (minimum overhead constant)
   private val baseMemory = s"${1024 + 384}Mi"
@@ -87,6 +91,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     image = s"$imageRepo/spark:$imageTag"
     pyImage = s"$imageRepo/spark-py:$imageTag"
     rImage = s"$imageRepo/spark-r:$imageTag"
+    kImage = s"$imageRepo/spark-kerberos:$imageTag"
 
     val sparkDistroExamplesJarFile: File = sparkHomeDir.resolve(Paths.get("examples", "jars"))
       .toFile
@@ -96,6 +101,13 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     testBackend = IntegrationTestBackendFactory.getTestBackend
     testBackend.initialize()
     kubernetesTestComponents = new KubernetesTestComponents(testBackend.getKubernetesClient)
+    kerberizedHadoopClusterLauncher = new KerberizedHadoopClusterLauncher(
+      kubernetesTestComponents.kubernetesClient.inNamespace(kubernetesTestComponents.namespace),
+      kubernetesTestComponents.namespace)
+    kerberosUtils = new KerberosUtils(
+      kImage,
+      kubernetesTestComponents.kubernetesClient,
+      kubernetesTestComponents.namespace)
   }
 
   override def afterAll(): Unit = {

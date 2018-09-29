@@ -25,21 +25,23 @@ import org.apache.spark.deploy.k8s.integrationtest.kerberos._
 private[spark] trait KerberosTestSuite { k8sSuite: KubernetesSuite =>
 
   test("Secure HDFS test with HDFS keytab", k8sTestTag) {
-    kerberizedHadoopClusterLauncher.launchKerberizedCluster()
-    kerberosTestLauncher.startKerberosTest(
+    val kubernetesClient = kubernetesTestComponents.kubernetesClient
+    // Launches single-noded psuedo-distributed kerberized hadoop cluster
+    kerberizedHadoopClusterLauncher.launchKerberizedCluster(kerberosUtils)
+
+    // Launches Kerberos test
+    val driverWatcherCache = new KerberosDriverWatcherCache(
+      kerberosUtils,
+      Map("spark-app-locator" -> appLocator))
+    driverWatcherCache.deploy(kerberosUtils.getKerberosTest(
       containerLocalSparkDistroExamplesJar,
       HDFS_TEST_CLASS,
       appLocator,
-      KERB_YAML_LOCATION)
-    val kubernetesClient = kubernetesTestComponents.kubernetesClient
-    val driverWatcherCache = new KerberosDriverWatcherCache(
-      kubernetesClient,
-      Map("spark-app-locator" -> appLocator))
-    driverWatcherCache.start()
-    driverWatcherCache.stop()
+      KERB_YAML_LOCATION))
+    driverWatcherCache.stopWatch()
     val expectedLogOnCompletion = Seq(
-      "Returned length(s) of: 1",
-      "File contents: [This is an awesome word count file]")
+      "Returned length(s) of: [1, 1, 1]",
+      "Other stuff")
     val driverPod = kubernetesClient
       .pods()
       .inNamespace(kubernetesTestComponents.namespace)

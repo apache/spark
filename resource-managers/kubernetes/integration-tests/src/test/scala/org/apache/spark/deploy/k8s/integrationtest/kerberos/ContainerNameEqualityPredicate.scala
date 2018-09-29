@@ -16,10 +16,14 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest.kerberos
 
-import io.fabric8.kubernetes.api.model.Service
-import io.fabric8.kubernetes.api.model.extensions.Deployment
+import java.lang.Boolean
 
-private[spark] case class KerberosDeployment(
-  name: String,
-  podDeployment: Deployment,
-  service: Service)
+import io.fabric8.kubernetes.api.builder.Predicate
+import io.fabric8.kubernetes.api.model.ContainerBuilder
+
+private[spark] class ContainerNameEqualityPredicate(containerName: String)
+  extends Predicate[ContainerBuilder] {
+  override def apply(item: ContainerBuilder): Boolean = {
+    item.getName == containerName
+  }
+}

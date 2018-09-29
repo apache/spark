@@ -19,9 +19,8 @@ spec:
         name: nn
         ports:
         - containerPort: 9000
-        image: ifilonenko/hadoop-base:latest
+        image: hadoop-base:latest
         imagePullPolicy: IfNotPresent
-        runAsNonRoot: false
         volumeMounts:
         - mountPath: /var/keytabs
           name: nn-keytab

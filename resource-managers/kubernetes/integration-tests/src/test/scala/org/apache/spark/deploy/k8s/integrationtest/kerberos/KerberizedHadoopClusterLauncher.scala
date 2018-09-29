@@ -14,11 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.integrationtest
+package org.apache.spark.deploy.k8s.integrationtest.kerberos
 
+import io.fabric8.kubernetes.api.builder.Predicate
+import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.deploy.k8s.integrationtest.kerberos._
 import org.apache.spark.internal.Logging
 
  /**
@@ -31,27 +32,28 @@ import org.apache.spark.internal.Logging
 private[spark] class KerberizedHadoopClusterLauncher(
     kubernetesClient: KubernetesClient,
     namespace: String) extends Logging {
-   private val LABELS = Map("job" -> "kerberostest")
+    private val LABELS = Map("job" -> "kerberostest")
 
-   def launchKerberizedCluster(): Unit = {
-     // These Utils allow for each step in this launch process to re-use
-     // common functionality for setting up hadoop nodes.
-     val kerberosUtils = new KerberosUtils(kubernetesClient, namespace)
-     // Launches persistent volumes and its claims for sharing keytabs across pods
-     val pvWatcherCache = new KerberosPVWatcherCache(kerberosUtils, LABELS)
-     pvWatcherCache.start()
-     pvWatcherCache.stop()
-     // Launches config map for the files in HADOOP_CONF_DIR
-     val cmWatcherCache = new KerberosCMWatcherCache(kerberosUtils)
-     cmWatcherCache.start()
-     cmWatcherCache.stop()
-     // Launches the Hadoop cluster pods: KDC --> NN --> DN1 --> Data-Populator
-     val podWatcherCache = new KerberosPodWatcherCache(kerberosUtils, LABELS)
-     podWatcherCache.start()
-     val dpNode = podWatcherCache.stop()
-     while (!podWatcherCache.hasInLogs(dpNode, "")) {
-       logInfo("Waiting for data-populator to be formatted")
-       Thread.sleep(500)
-     }
+    def launchKerberizedCluster(kerberosUtils: KerberosUtils): Unit = {
+      // These Utils allow for each step in this launch process to re-use
+      // common functionality for setting up hadoop nodes.
+      // Launches persistent volumes and its claims for sharing keytabs across pods
+      val pvWatcherCache = new KerberosPVWatcherCache(kerberosUtils, LABELS)
+      pvWatcherCache.deploy(kerberosUtils.getNNStorage)
+      pvWatcherCache.deploy(kerberosUtils.getKTStorage)
+      pvWatcherCache.stopWatch()
+
+      // Launches config map for the files in HADOOP_CONF_DIR
+      val cmWatcherCache = new KerberosCMWatcherCache(kerberosUtils)
+      cmWatcherCache.deploy(kerberosUtils.getConfigMap)
+      cmWatcherCache.stopWatch()
+
+      // Launches the Hadoop cluster pods: KDC --> NN --> DN1 --> Data-Populator
+      val podWatcherCache = new KerberosPodWatcherCache(kerberosUtils, LABELS)
+      podWatcherCache.deploy(kerberosUtils.getKDC)
+      podWatcherCache.deploy(kerberosUtils.getNN)
+      podWatcherCache.deploy(kerberosUtils.getDN)
+      podWatcherCache.deploy(kerberosUtils.getDP)
+      podWatcherCache.stopWatch()
    }
 }

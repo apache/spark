@@ -18,7 +18,7 @@
 FROM openjdk:8-alpine
 
 ARG spark_jars=jars
-ARG img_path=kubernetes/dockerfiles
+ARG img_path=kubernetes/src/main/dockerfiles
 
 # Before building the docker image, first build and make a Spark distribution following
 # the instructions in http://spark.apache.org/docs/latest/building-spark.html.

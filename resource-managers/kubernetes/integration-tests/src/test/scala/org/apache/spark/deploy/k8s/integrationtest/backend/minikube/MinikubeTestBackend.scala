@@ -17,10 +17,15 @@
 package org.apache.spark.deploy.k8s.integrationtest.backend.minikube
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
+import org.scalatest.Matchers
+import org.scalatest.concurrent.Eventually
+import scala.collection.JavaConverters._
 
+import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, TIMEOUT}
 import org.apache.spark.deploy.k8s.integrationtest.backend.IntegrationTestBackend
 
-private[spark] object MinikubeTestBackend extends IntegrationTestBackend {
+private[spark] object MinikubeTestBackend
+  extends IntegrationTestBackend with Eventually with Matchers {
 
   private var defaultClient: DefaultKubernetesClient = _
 
@@ -33,10 +38,25 @@ private[spark] object MinikubeTestBackend extends IntegrationTestBackend {
   }
 
   override def cleanUp(): Unit = {
+    deleteKubernetesPVs()
     super.cleanUp()
   }
 
   override def getKubernetesClient: DefaultKubernetesClient = {
     defaultClient
+  }
+
+  private def deleteKubernetesPVs(): Unit = {
+    // Temporary hack until client library for fabric8 is updated to get around
+    // the NPE that comes about when I do .list().getItems().asScala
+    try {
+      val pvList = defaultClient.persistentVolumes().list().getItems.asScala
+      if (pvList.nonEmpty) {
+        defaultClient.persistentVolumes().delete()
+        Eventually.eventually(TIMEOUT, INTERVAL) { pvList.isEmpty should be (true) }
+      }
+    } catch {
+      case ex: java.lang.NullPointerException =>
+    }
   }
 }
