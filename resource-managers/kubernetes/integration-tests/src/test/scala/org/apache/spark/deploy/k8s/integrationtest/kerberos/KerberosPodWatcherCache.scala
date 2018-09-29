@@ -33,8 +33,9 @@ import org.apache.spark.internal.Logging
   * is running before launching the Kerberos test.
   */
 private[spark] class KerberosPodWatcherCache(
-  kerberosUtils: KerberosUtils,
-  labels: Map[String, String]) extends Logging with Eventually with Matchers {
+   kerberosUtils: KerberosUtils,
+   labels: Map[String, String])
+   extends WatcherCacheConfiguration with Logging with Eventually with Matchers {
 
    private val kubernetesClient = kerberosUtils.getClient
    private val namespace = kerberosUtils.getNamespace
@@ -92,25 +93,25 @@ private[spark] class KerberosPodWatcherCache(
      }
    }
 
-   private def check(name: String): Boolean = {
+   override def check(name: String): Boolean = {
      podCache.get(name).contains("Running") &&
      serviceCache.get(name).contains(name) &&
      additionalCheck(name)
     }
 
-   def deploy(kdc: KerberosDeployment) : Unit = {
+   override def deploy[T <: ServiceStorage](srvc: T) : Unit = {
      logInfo("Launching the Deployment")
      kubernetesClient
-       .extensions().deployments().inNamespace(namespace).create(kdc.podDeployment)
+       .extensions().deployments().inNamespace(namespace).create(srvc.podDeployment)
      // Making sure Pod is running
      Eventually.eventually(TIMEOUT, INTERVAL) {
-       (podCache(kdc.name) == "Running") should be (true) }
+       (podCache(srvc.name) == "Running") should be (true) }
      kubernetesClient
-       .services().inNamespace(namespace).create(kdc.service)
-     Eventually.eventually(TIMEOUT, INTERVAL) { check(kdc.name) should be (true) }
+       .services().inNamespace(namespace).create(srvc.service)
+     Eventually.eventually(TIMEOUT, INTERVAL) { check(srvc.name) should be (true) }
   }
 
-   def stopWatch(): Unit = {
+   override def stopWatch(): Unit = {
      // Closing Watchers
      podWatcher.close()
      serviceWatcher.close()

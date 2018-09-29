@@ -34,7 +34,8 @@ import org.apache.spark.internal.Logging
   */
 private[spark] class KerberosDriverWatcherCache(
    kerberosUtils: KerberosUtils,
-   labels: Map[String, String]) extends Logging with Eventually with Matchers {
+   labels: Map[String, String])
+   extends WatcherCacheConfiguration with Logging with Eventually with Matchers {
    private val kubernetesClient = kerberosUtils.getClient
    private val namespace = kerberosUtils.getNamespace
    private var driverName: String = ""
@@ -59,13 +60,14 @@ private[spark] class KerberosDriverWatcherCache(
              if (name.contains("driver")) { driverName = name }
           }}})
 
-   private def check(name: String): Boolean = podCache.get(name).contains("Running")
+   override def check(name: String): Boolean = podCache.get(name).contains("Running")
 
-   def deploy(deployment: Deployment): Unit = {
-     kubernetesClient.extensions().deployments().inNamespace(namespace).create(deployment)
+   override def deploy[T <: ResourceStorage[Deployment]](storage: T): Unit = {
+     kubernetesClient.extensions().deployments()
+       .inNamespace(namespace).create(storage.resource)
      Eventually.eventually(TIMEOUT, INTERVAL) { check(driverName) should be (true) }
    }
-   def stopWatch(): Unit = {
+   override def stopWatch(): Unit = {
      // Closing Watch
      watcher.close()
    }

@@ -16,10 +16,11 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest.kerberos
 
-import io.fabric8.kubernetes.api.model.Service
-import io.fabric8.kubernetes.api.model.extensions.Deployment
+private[spark] trait WatcherCacheConfiguration {
 
-private[spark] case class KerberosDeployment(
-  name: String,
-  podDeployment: Deployment,
-  service: Service)
+  def check(name: String): Boolean
+
+  def deploy[T <: KerberosStorage](storage: T) : Unit
+
+  def stopWatch(): Unit
+}

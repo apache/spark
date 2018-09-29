@@ -34,7 +34,8 @@ import org.apache.spark.internal.Logging
   */
 private[spark] class KerberosPVWatcherCache(
     kerberosUtils: KerberosUtils,
-    labels: Map[String, String]) extends Logging with Eventually with Matchers {
+    labels: Map[String, String])
+    extends WatcherCacheConfiguration with Logging with Eventually with Matchers {
     private val kubernetesClient = kerberosUtils.getClient
     private val namespace = kerberosUtils.getNamespace
 
@@ -84,24 +85,24 @@ private[spark] class KerberosPVWatcherCache(
               pvcCache(name) = s"$volumeName $state"}}})
 
     // Check for PVC being bounded to correct PV
-    private def check(name: String): Boolean = {
+    override def check(name: String): Boolean = {
       pvCache.get(name).contains("Bound") &&
       pvcCache.get(name).contains(s"$name Bound")
     }
 
-    def deploy(kbs: KerberosStorage) : Unit = {
+    override def deploy[T <: PVStorage](pv: T) : Unit = {
       logInfo("Launching the Persistent Storage")
       kubernetesClient
-        .persistentVolumes().create(kbs.persistentVolume)
+        .persistentVolumes().create(pv.persistentVolume)
       // Making sure PV is Available for creation of PVC
       Eventually.eventually(TIMEOUT, INTERVAL) {
-        (pvCache(kbs.name) == "Available") should be (true) }
+        (pvCache(pv.name) == "Available") should be (true) }
       kubernetesClient
-        .persistentVolumeClaims().inNamespace(namespace).create(kbs.persistentVolumeClaim)
-      Eventually.eventually(TIMEOUT, INTERVAL) { check(kbs.name) should be (true) }
+        .persistentVolumeClaims().inNamespace(namespace).create(pv.persistentVolumeClaim)
+      Eventually.eventually(TIMEOUT, INTERVAL) { check(pv.name) should be (true) }
     }
 
-     def stopWatch(): Unit = {
+     override def stopWatch(): Unit = {
        // Closing Watchers
        pvWatcher.close()
        pvcWatcher.close()

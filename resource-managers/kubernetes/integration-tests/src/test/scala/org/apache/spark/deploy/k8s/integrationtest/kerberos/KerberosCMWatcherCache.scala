@@ -32,13 +32,12 @@ import org.apache.spark.internal.Logging
   * until a configmap with the HADOOP_CONF_DIR specifications has been created.
   */
 private[spark] class KerberosCMWatcherCache(kerberosUtils: KerberosUtils)
-   extends Logging with Eventually with Matchers {
+   extends WatcherCacheConfiguration with Logging with Eventually with Matchers {
    private val kubernetesClient = kerberosUtils.getClient
    private val namespace = kerberosUtils.getNamespace
    private val requiredFiles = Seq("core-site.xml", "hdfs-site.xml", "krb5.conf")
    private val cmCache = scala.collection.mutable.Map[String, Map[String, String]]()
-   private val configMap = kerberosUtils.getConfigMap
-   private val configMapName = configMap.getMetadata.getName
+   private val configMapName = kerberosUtils.getConfigMap.resource.getMetadata.getName
    // Watching ConfigMaps
    logInfo("Beginning the watch of the Kerberos Config Map")
    private val watcher: Watch = kubernetesClient
@@ -59,19 +58,20 @@ private[spark] class KerberosCMWatcherCache(kerberosUtils: KerberosUtils)
              cmCache(name) = data
          }}})
    // Check for CM to have proper files
-   private def check(name: String): Boolean = {
+   override def check(name: String): Boolean = {
      cmCache.get(name).exists{ data => requiredFiles.forall(data.keys.toSeq.contains)}
    }
 
-   def deploy(configMap: ConfigMap): Unit = {
+   override def deploy[T <: ResourceStorage[ConfigMap]](storage: T): Unit = {
      logInfo("Launching the ConfigMap")
-     kerberosUtils.getClient.configMaps().inNamespace(namespace).createOrReplace(configMap)
+     kerberosUtils.getClient.configMaps()
+       .inNamespace(namespace).createOrReplace(storage.resource)
      // Making sure CM has correct files
      Eventually.eventually(TIMEOUT, INTERVAL) {
-       check(configMap.getMetadata.getName) should be (true) }
+       check(configMapName) should be (true) }
    }
 
-   def stopWatch() : Unit = {
+   override def stopWatch() : Unit = {
      // Closing Watcher
      watcher.close()
    }

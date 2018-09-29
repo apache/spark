@@ -16,9 +16,20 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest.kerberos
 
-import io.fabric8.kubernetes.api.model.{PersistentVolume, PersistentVolumeClaim}
+import io.fabric8.kubernetes.api.model.{HasMetadata, PersistentVolume, PersistentVolumeClaim, Service}
+import io.fabric8.kubernetes.api.model.extensions._
 
-private[spark] case class KerberosStorage(
+private[spark] sealed trait KerberosStorage
+
+private[spark] case class PVStorage(
   name: String,
   persistentVolumeClaim: PersistentVolumeClaim,
-  persistentVolume: PersistentVolume)
+  persistentVolume: PersistentVolume) extends KerberosStorage
+
+private[spark] case class ServiceStorage(
+  name: String,
+  podDeployment: Deployment,
+  service: Service) extends KerberosStorage
+
+private[spark] case class ResourceStorage[T <: HasMetadata](
+  resource: T) extends KerberosStorage
