@@ -69,7 +69,7 @@ private[spark] class KerberosUtils(
         .withCapacity(Map("storage" -> new Quantity("1Gi")).asJava)
         .withAccessModes("ReadWriteMany")
         .withHostPath(
-          new HostPathVolumeSource(s"/mnt/$namespace/$pathType"))
+          new HostPathVolumeSource(s"$KRB_FILE_DIR/$namespace/$pathType"))
         .endSpec()
       .build()
     private def createPVCTemplate(name: String) : PersistentVolumeClaim =

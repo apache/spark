@@ -17,7 +17,7 @@ spec:
       - command:
         - /start-datanode.sh
         name: dn1
-        image: hadoop-base:latest
+        image: ifilonenko/hadoop-base:latest
         imagePullPolicy: IfNotPresent
         volumeMounts:
         - mountPath: /var/keytabs

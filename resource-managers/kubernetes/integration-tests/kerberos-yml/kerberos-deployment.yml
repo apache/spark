@@ -17,7 +17,7 @@ spec:
       - command:
         - /start-kdc.sh
         name: kerberos
-        image: hadoop-base:latest
+        image: ifilonenko/hadoop-base:latest
         imagePullPolicy: IfNotPresent
         volumeMounts:
         - mountPath: /var/keytabs
