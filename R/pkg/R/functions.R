@@ -2221,7 +2221,7 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructType")
 #' \dontrun{
 #' df <- sql("SELECT 'Amsterdam,2018' as csv")
 #' schema <- "city STRING, year INT"
-#' head(select(df, from_csv(df$csv, schema)))
+#' head(select(df, from_csv(df$csv, schema)))}
 #' @note from_csv since 2.5.0
 setMethod("from_csv", signature(x = "Column", schema = "character"),
           function(x, schema, ...) {
