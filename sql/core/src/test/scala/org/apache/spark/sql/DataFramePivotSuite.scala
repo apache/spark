@@ -308,4 +308,27 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
 
     assert(exception.getMessage.contains("aggregate functions are not allowed"))
   }
+
+  test("pivoting column list with values") {
+    val expected = Row(2012, 10000.0, null) :: Row(2013, 48000.0, 30000.0) :: Nil
+    val df = trainingSales
+      .groupBy($"sales.year")
+      .pivot(struct(lower($"sales.course"), $"training"), Seq(
+        struct(lit("dotnet"), lit("Experts")),
+        struct(lit("java"), lit("Dummies")))
+      ).agg(sum($"sales.earnings"))
+
+    checkAnswer(df, expected)
+  }
+
+  test("pivoting column list") {
+    val exception = intercept[RuntimeException] {
+      trainingSales
+        .groupBy($"sales.year")
+        .pivot(struct(lower($"sales.course"), $"training"))
+        .agg(sum($"sales.earnings"))
+        .collect()
+    }
+    assert(exception.getMessage.contains("Unsupported literal type"))
+  }
 }
