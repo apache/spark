@@ -316,18 +316,6 @@ test_that("create DataFrame from RDD", {
   unsetHiveContext()
 })
 
-test_that("createDataFrame uses files for large objects", {
-  # To simulate a large file scenario, we set spark.r.maxAllocationLimit to a smaller value
-  conf <- callJMethod(sparkSession, "conf")
-  callJMethod(conf, "set", "spark.r.maxAllocationLimit", "100")
-  df <- suppressWarnings(createDataFrame(iris, numPartitions = 3))
-  expect_equal(getNumPartitions(df), 3)
-
-  # Resetting the conf back to default value
-  callJMethod(conf, "set", "spark.r.maxAllocationLimit", toString(.Machine$integer.max / 10))
-  expect_equal(dim(df), dim(iris))
-})
-
 test_that("read/write csv as DataFrame", {
   if (windows_with_hadoop()) {
     csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
@@ -2713,8 +2701,16 @@ test_that("read/write text files", {
   expect_equal(colnames(df2), c("value"))
   expect_equal(count(df2), count(df) * 2)
 
+  df3 <- createDataFrame(list(list(1L, "1"), list(2L, "2"), list(1L, "1"), list(2L, "2")),
+                         schema = c("key", "value"))
+  textPath3 <- tempfile(pattern = "textPath3", fileext = ".txt")
+  write.df(df3, textPath3, "text", mode = "overwrite", partitionBy = "key")
+  df4 <- read.df(textPath3, "text")
+  expect_equal(count(df3), count(df4))
+
   unlink(textPath)
   unlink(textPath2)
+  unlink(textPath3)
 })
 
 test_that("read/write text files - compression option", {

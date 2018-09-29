@@ -19,17 +19,17 @@ package org.apache.spark.sql.execution.benchmark
 import java.io.File
 
 import scala.collection.JavaConverters._
-import scala.util.{Random, Try}
+import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.datasources.parquet.{SpecificParquetRecordReaderBase, VectorizedParquetRecordReader}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnVector
-import org.apache.spark.util.Utils
 
 
 /**
@@ -37,7 +37,7 @@ import org.apache.spark.util.Utils
  * To run this:
  *  spark-submit --class <this class> <spark sql test jar>
  */
-object DataSourceReadBenchmark {
+object DataSourceReadBenchmark extends SQLHelper {
   val conf = new SparkConf()
     .setAppName("DataSourceReadBenchmark")
     // Since `spark.master` always exists, overrides this value
@@ -54,27 +54,10 @@ object DataSourceReadBenchmark {
   spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
   spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
 
-  def withTempPath(f: File => Unit): Unit = {
-    val path = Utils.createTempDir()
-    path.delete()
-    try f(path) finally Utils.deleteRecursively(path)
-  }
-
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
     try f finally tableNames.foreach(spark.catalog.dropTempView)
   }
 
-  def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(spark.conf.get(key)).toOption)
-    (keys, values).zipped.foreach(spark.conf.set)
-    try f finally {
-      keys.zip(currentValues).foreach {
-        case (key, Some(value)) => spark.conf.set(key, value)
-        case (key, None) => spark.conf.unset(key)
-      }
-    }
-  }
   private def prepareTable(dir: File, df: DataFrame, partition: Option[String] = None): Unit = {
     val testDf = if (partition.isDefined) {
       df.write.partitionBy(partition.get)
