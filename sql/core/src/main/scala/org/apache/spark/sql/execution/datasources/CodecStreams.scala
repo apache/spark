@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.io.{InputStream, OutputStream, OutputStreamWriter}
 import java.nio.charset.{Charset, StandardCharsets}
 
+import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.compress._
@@ -41,7 +42,12 @@ object CodecStreams {
 
     getDecompressionCodec(config, file)
       .map(codec => codec.createInputStream(inputStream))
-      .getOrElse(inputStream)
+      .orElse {
+        if (file.getName.toLowerCase.endsWith(".zip")) {
+          val zip = new ZipArchiveInputStream(inputStream)
+          if (zip.getNextEntry != null) Some(zip) else None
+        } else None
+      }.getOrElse(inputStream)
   }
 
   /**

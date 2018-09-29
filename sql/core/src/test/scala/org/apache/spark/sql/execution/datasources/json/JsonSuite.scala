@@ -22,6 +22,7 @@ import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.util.Locale
+import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import com.fasterxml.jackson.core.JsonFactory
 import org.apache.hadoop.fs.{Path, PathFilter}
@@ -2514,5 +2515,19 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     checkCount(2)
     countForMalformedJSON(0, Seq(""))
+  }
+
+  test("read zip archive containing one JSON file") {
+    withTempDir { path =>
+      val zippedJSON = new File(path.getAbsolutePath, "test.json.zip")
+      val out = new ZipOutputStream(new FileOutputStream(zippedJSON));
+      val entry = new ZipEntry("test.json")
+      out.putNextEntry(entry)
+      val content = """{"a":1, "b":2}""".stripMargin.getBytes(StandardCharsets.UTF_8)
+      out.write(content, 0, content.length)
+      out.close()
+
+      checkAnswer(spark.read.option("multiLine", true).json(path.getAbsolutePath), Row(1, 2))
+    }
   }
 }
