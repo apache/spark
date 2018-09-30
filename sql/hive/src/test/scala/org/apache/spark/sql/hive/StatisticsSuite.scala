@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.{File, PrintWriter}
 import java.sql.Timestamp
+import java.util.Locale
 
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
@@ -489,7 +490,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           sql(s"ANALYZE TABLE $tableName PARTITION (DS='2010-01-01') COMPUTE STATISTICS")
         }.getMessage
         assert(message.contains(
-          s"DS is not a valid partition column in table `default`.`${tableName.toLowerCase}`"))
+          "DS is not a valid partition column in table " +
+            s"`default`.`${tableName.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -503,8 +505,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         sql(s"ANALYZE TABLE $tableName $partitionSpec COMPUTE STATISTICS")
       }.getMessage
       assert(message.contains("The list of partition columns with values " +
-        s"in partition specification for table '${tableName.toLowerCase}' in database 'default' " +
-        "is not a prefix of the list of partition columns defined in the table schema"))
+        s"in partition specification for table '${tableName.toLowerCase(Locale.ROOT)}' in " +
+        "database 'default' is not a prefix of the list of partition columns defined in " +
+        "the table schema"))
     }
 
     withTable(tableName) {
@@ -550,12 +553,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       assertAnalysisException(
         s"ANALYZE TABLE $tableName PARTITION (hour=20) COMPUTE STATISTICS",
-        s"hour is not a valid partition column in table `default`.`${tableName.toLowerCase}`"
+        "hour is not a valid partition column in table " +
+          s"`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
       )
 
       assertAnalysisException(
         s"ANALYZE TABLE $tableName PARTITION (hour) COMPUTE STATISTICS",
-        s"hour is not a valid partition column in table `default`.`${tableName.toLowerCase}`"
+        "hour is not a valid partition column in table " +
+          s"`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
       )
 
       intercept[NoSuchPartitionException] {

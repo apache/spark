@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.expressions.aggregate.PivotFirst
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -272,7 +274,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
     val expected = Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
     val df = trainingSales
       .groupBy($"sales.year")
-      .pivot(lower($"sales.course"), Seq("dotNet", "Java").map(_.toLowerCase))
+      .pivot(lower($"sales.course"), Seq("dotNet", "Java").map(_.toLowerCase(Locale.ROOT)))
       .agg(sum($"sales.earnings"))
 
     checkAnswer(df, expected)
