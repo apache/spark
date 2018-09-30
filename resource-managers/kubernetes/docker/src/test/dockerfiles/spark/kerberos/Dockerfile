@@ -20,5 +20,5 @@ FROM $base_img
 
 ARG k_img_path=kubernetes/src/test
 
-COPY ${k_img_path}/scripts/test-env.sh /opt/spark/
+COPY ${k_img_path}/scripts/run-kerberos-test.sh /opt/spark/
 COPY ${k_img_path}/hadoop/conf /opt/spark/hconf

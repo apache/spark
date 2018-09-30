@@ -102,8 +102,8 @@ private[spark] class KerberosUtils(
     def getKTStorage: PVStorage = buildKerberosPV(pvKT)
     def getLabels: Map[String, String] = PV_LABELS
     def getKeyPaths: Seq[KeyToPath] = keyPaths
-    def getConfigMap: ResourceStorage[ConfigMap] =
-      ResourceStorage(
+    def getConfigMap: ConfigMapStorage =
+      ConfigMapStorage(
         new ConfigMapBuilder()
         .withNewMetadata()
           .withName(KRB_CONFIG_MAP_NAME)
@@ -177,11 +177,11 @@ private[spark] class KerberosUtils(
       resource: String,
       className: String,
       appLabel: String,
-      yamlLocation: String): ResourceStorage[Deployment] = {
+      yamlLocation: String): DeploymentStorage = {
       kubernetesClient.load(new FileInputStream(new File(yamlLocation)))
         .get().get(0) match {
         case deployment: Deployment =>
-          ResourceStorage(
+          DeploymentStorage(
             new DeploymentBuilder(deployment)
               .editSpec()
                 .editTemplate()

@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
   * until a configmap with the HADOOP_CONF_DIR specifications has been created.
   */
 private[spark] class KerberosCMWatcherCache(kerberosUtils: KerberosUtils)
-   extends WatcherCacheConfiguration with Logging with Eventually with Matchers {
+   extends WatcherCacheConfiguration[ConfigMapStorage] with Logging with Eventually with Matchers {
    private val kubernetesClient = kerberosUtils.getClient
    private val namespace = kerberosUtils.getNamespace
    private val requiredFiles = Seq("core-site.xml", "hdfs-site.xml", "krb5.conf")
@@ -62,7 +62,7 @@ private[spark] class KerberosCMWatcherCache(kerberosUtils: KerberosUtils)
      cmCache.get(name).exists{ data => requiredFiles.forall(data.keys.toSeq.contains)}
    }
 
-   override def deploy[T <: ResourceStorage[ConfigMap]](storage: T): Unit = {
+   def deploy(storage: ConfigMapStorage): Unit = {
      logInfo("Launching the ConfigMap")
      kerberosUtils.getClient.configMaps()
        .inNamespace(namespace).createOrReplace(storage.resource)

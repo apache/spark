@@ -35,7 +35,7 @@ import org.apache.spark.internal.Logging
 private[spark] class KerberosPVWatcherCache(
     kerberosUtils: KerberosUtils,
     labels: Map[String, String])
-    extends WatcherCacheConfiguration with Logging with Eventually with Matchers {
+    extends WatcherCacheConfiguration[PVStorage] with Logging with Eventually with Matchers {
     private val kubernetesClient = kerberosUtils.getClient
     private val namespace = kerberosUtils.getNamespace
 
@@ -90,7 +90,7 @@ private[spark] class KerberosPVWatcherCache(
       pvcCache.get(name).contains(s"$name Bound")
     }
 
-    override def deploy[T <: PVStorage](pv: T) : Unit = {
+    override def deploy(pv: PVStorage) : Unit = {
       logInfo("Launching the Persistent Storage")
       kubernetesClient
         .persistentVolumes().create(pv.persistentVolume)

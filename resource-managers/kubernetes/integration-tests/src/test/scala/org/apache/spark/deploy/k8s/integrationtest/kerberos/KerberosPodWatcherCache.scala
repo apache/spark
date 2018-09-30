@@ -35,7 +35,7 @@ import org.apache.spark.internal.Logging
 private[spark] class KerberosPodWatcherCache(
    kerberosUtils: KerberosUtils,
    labels: Map[String, String])
-   extends WatcherCacheConfiguration with Logging with Eventually with Matchers {
+   extends WatcherCacheConfiguration[ServiceStorage] with Logging with Eventually with Matchers {
 
    private val kubernetesClient = kerberosUtils.getClient
    private val namespace = kerberosUtils.getNamespace
@@ -99,7 +99,7 @@ private[spark] class KerberosPodWatcherCache(
      additionalCheck(name)
     }
 
-   override def deploy[T <: ServiceStorage](srvc: T) : Unit = {
+   override def deploy(srvc: ServiceStorage) : Unit = {
      logInfo("Launching the Deployment")
      kubernetesClient
        .extensions().deployments().inNamespace(namespace).create(srvc.podDeployment)

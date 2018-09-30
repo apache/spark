@@ -16,11 +16,11 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest.kerberos
 
-private[spark] trait WatcherCacheConfiguration {
+private[spark] trait WatcherCacheConfiguration[T <: KerberosStorage] {
 
   def check(name: String): Boolean
 
-  def deploy[T <: KerberosStorage](storage: T) : Unit
+  def deploy(storage: T) : Unit
 
   def stopWatch(): Unit
 }
