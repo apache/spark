@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.csv
+package org.apache.spark.sql.catalyst.csv
 
 import java.io.Writer
 
@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
-private[csv] class UnivocityGenerator(
+private[sql] class UnivocityGenerator(
     schema: StructType,
     writer: Writer,
     options: CSVOptions) {
