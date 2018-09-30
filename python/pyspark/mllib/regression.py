@@ -203,7 +203,6 @@ class LinearRegressionModel(LinearRegressionModelBase):
     def setIntercept(self, intercept):
         self._intercept = intercept
 
-
 # train_func should take two parameters, namely data and initial_weights, and
 # return the result of a call to the appropriate JVM stub.
 # _regression_train_wrapper is responsible for setup and error checking.
