@@ -73,7 +73,9 @@ case class ResolveLambdaVariables(conf: SQLConf) extends Rule[LogicalPlan] {
 
   private val canonicalizer = {
     if (!conf.caseSensitiveAnalysis) {
+      // scalastyle:off caselocale
       s: String => s.toLowerCase
+      // scalastyle:on caselocale
     } else {
       s: String => s
     }
