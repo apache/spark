@@ -83,6 +83,10 @@ private[sql] class UnivocityGenerator(
     printHeader = false
   }
 
+  def writeToString(row: InternalRow): String = {
+    gen.writeRowToString(convertRow(row): _*)
+  }
+
   def close(): Unit = gen.close()
 
   def flush(): Unit = gen.flush()

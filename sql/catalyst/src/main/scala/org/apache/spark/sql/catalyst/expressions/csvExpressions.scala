@@ -74,16 +74,7 @@ case class StructsToCsv(
   // This converts rows to the CSV output according to the given schema.
   @transient
   lazy val converter: Any => UTF8String = {
-    def getAndReset(): UTF8String = {
-      gen.flush()
-      val csv = writer.toString
-      writer.reset()
-      UTF8String.fromString(csv)
-    }
-
-    (row: Any) =>
-      gen.write(row.asInstanceOf[InternalRow])
-      getAndReset()
+    (row: Any) => UTF8String.fromString(gen.writeToString(row.asInstanceOf[InternalRow]))
   }
 
   override def dataType: DataType = StringType
