@@ -1086,9 +1086,10 @@ class DAGScheduler(
   private def updateAccumulators(event: CompletionEvent): Unit = {
     val task = event.task
     val stage = stageIdToStage(task.stageId)
-    try {
-      event.accumUpdates.foreach { updates =>
-        val id = updates.id
+
+    event.accumUpdates.foreach { updates =>
+      val id = updates.id
+      try {
         // Find the corresponding accumulator on the driver and update it
         val acc: AccumulatorV2[Any, Any] = AccumulatorContext.get(id) match {
           case Some(accum) => accum.asInstanceOf[AccumulatorV2[Any, Any]]
@@ -1102,10 +1103,17 @@ class DAGScheduler(
           event.taskInfo.setAccumulables(
             acc.toInfo(Some(updates.value), Some(acc.value)) +: event.taskInfo.accumulables)
         }
+      } catch {
+        case NonFatal(e) =>
+          // Log the class name to make it easy to find the bad implementation
+          val accumClassName = AccumulatorContext.get(id) match {
+            case Some(accum) => accum.getClass.getName
+            case None => "Unknown class"
+          }
+          logError(
+            s"Failed to update accumulator $id ($accumClassName) for task ${task.partitionId}",
+            e)
       }
-    } catch {
-      case NonFatal(e) =>
-        logError(s"Failed to update accumulators for task ${task.partitionId}", e)
     }
   }
 
