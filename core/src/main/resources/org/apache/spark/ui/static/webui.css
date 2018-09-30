@@ -210,6 +210,11 @@ span.additional-metric-title {
   display: none;
 }
 
+/* Additional columns will be hidden by default */
+.additional_column {
+  display: none;
+}
+
 .accordion-inner {
   background: #f5f5f5;
 }

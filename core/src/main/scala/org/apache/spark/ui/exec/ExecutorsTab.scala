@@ -48,8 +48,12 @@ private[ui] class ExecutorsPage(
     val content =
       <div>
         {
+          <div><input type="checkbox" id="show-additional-columns">
+            Show additional columns</input></div> ++
           <div id="active-executors" class="row-fluid"></div> ++
           <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
+          <script src={UIUtils.prependBaseUri(request,
+              "/static/executorspage-common.js")}></script> ++
           <script src={UIUtils.prependBaseUri(request, "/static/executorspage.js")}></script> ++
           <script>setThreadDumpEnabled({threadDumpEnabled})</script>
         }
