@@ -66,7 +66,8 @@ private[spark] class HadoopDelegationTokenManager(
   private def getDelegationTokenProviders: Map[String, HadoopDelegationTokenProvider] = {
     val providers = Seq(new HadoopFSDelegationTokenProvider(fileSystems)) ++
       safeCreateProvider(new HiveDelegationTokenProvider) ++
-      safeCreateProvider(new HBaseDelegationTokenProvider)
+      safeCreateProvider(new HBaseDelegationTokenProvider) ++
+      safeCreateProvider(new KafkaDelegationTokenProvider)
 
     // Filter out providers for which spark.security.credentials.{service}.enabled is false.
     providers

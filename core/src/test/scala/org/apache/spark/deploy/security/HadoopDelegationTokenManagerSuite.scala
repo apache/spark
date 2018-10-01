@@ -24,6 +24,7 @@ import org.apache.hadoop.security.Credentials
 import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config._
 
 class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
   private var delegationTokenManager: HadoopDelegationTokenManager = null
@@ -46,6 +47,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
     delegationTokenManager.getServiceDelegationTokenProvider("hadoopfs") should not be (None)
     delegationTokenManager.getServiceDelegationTokenProvider("hbase") should not be (None)
     delegationTokenManager.getServiceDelegationTokenProvider("hive") should not be (None)
+    delegationTokenManager.getServiceDelegationTokenProvider("kafka") should not be (None)
     delegationTokenManager.getServiceDelegationTokenProvider("bogus") should be (None)
   }
 
@@ -81,7 +83,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
       hadoopFSsToAccess)
     val creds = new Credentials()
 
-    // Tokens cannot be obtained from HDFS, Hive, HBase in unit tests.
+    // Tokens cannot be obtained from HDFS, Hive, HBase, Kafka in unit tests.
     delegationTokenManager.obtainDelegationTokens(hadoopConf, creds)
     val tokens = creds.getAllTokens
     tokens.size() should be (0)
@@ -107,6 +109,17 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
     val hbaseTokenProvider = new HBaseDelegationTokenProvider()
     val creds = new Credentials()
     hbaseTokenProvider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
+
+    creds.getAllTokens.size should be (0)
+  }
+
+  test("Obtain tokens For Kafka") {
+    val hadoopConf = new Configuration()
+    sparkConf.set(KAFKA_DELEGATION_TOKEN_ENABLED, true)
+
+    val kafkaTokenProvider = new KafkaDelegationTokenProvider()
+    val creds = new Credentials()
+    kafkaTokenProvider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
 
     creds.getAllTokens.size should be (0)
   }
