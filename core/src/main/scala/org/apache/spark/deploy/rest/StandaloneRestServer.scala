@@ -147,7 +147,7 @@ private[rest] class StandaloneSubmitRequestServlet(
     val (_, masterPort) = Utils.extractHostPortFromSparkUrl(masterUrl)
     val masterRestPort = this.conf.getInt("spark.master.rest.port", 6066)
     val updatedMasters = masters.map(
-      _.replace(masterRestPort.toString, masterPort.toString)).getOrElse(masterUrl)
+      _.replace(s":${masterRestPort.toString}", s":${masterPort.toString}")).getOrElse(masterUrl)
     val appArgs = request.appArgs
     // Filter SPARK_LOCAL_(IP|HOSTNAME) environment variables from being set on the remote system.
     val environmentVariables =
