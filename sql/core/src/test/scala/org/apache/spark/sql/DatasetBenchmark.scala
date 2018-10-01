@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
@@ -33,7 +34,7 @@ import org.apache.spark.sql.types.StringType
  *      Results will be written to "benchmarks/DatasetBenchmark-results.txt".
  * }}}
  */
-object DatasetBenchmark extends BenchmarkBase {
+object DatasetBenchmark extends SqlBasedBenchmark {
 
   case class Data(l: Long, s: String)
 
@@ -248,10 +249,12 @@ object DatasetBenchmark extends BenchmarkBase {
     benchmark
   }
 
-  val spark = SparkSession.builder
-    .master("local[*]")
-    .appName("Dataset benchmark")
-    .getOrCreate()
+  override def getSparkSession: SparkSession = {
+    SparkSession.builder
+      .master("local[*]")
+      .appName("Dataset benchmark")
+      .getOrCreate()
+  }
 
   override def benchmark(): Unit = {
     val numRows = 100000000
