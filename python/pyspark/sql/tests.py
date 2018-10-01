@@ -5525,32 +5525,81 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             .withColumn("v", explode(col('vs'))).drop('vs')
 
     def test_supported_types(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType, array, col
-        df = self.data.withColumn("arr", array(col("id")))
+        from decimal import Decimal
+        from distutils.version import LooseVersion
+        import pyarrow as pa
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        values = [
+            1, 2, 3,
+            4, 5, 1.1,
+            2.2, Decimal(1.123),
+            [1, 2, 2], True, 'hello'
+        ]
+        output_fields = [
+            ('id', IntegerType()), ('byte', ByteType()), ('short', ShortType()),
+            ('int', IntegerType()), ('long', LongType()), ('float', FloatType()),
+            ('double', DoubleType()), ('decim', DecimalType(10, 3)),
+            ('array', ArrayType(IntegerType())), ('bool', BooleanType()), ('str', StringType())
+        ]
+
+        # TODO: Add BinaryType to variables above once minimum pyarrow version is 0.10.0
+        if LooseVersion(pa.__version__) >= LooseVersion("0.10.0"):
+            values.append(bytearray([0x01, 0x02]))
+            output_fields.append(('bin', BinaryType()))
+
+        output_schema = StructType([StructField(*x) for x in output_fields])
+        df = self.spark.createDataFrame([values], schema=output_schema)
 
         # Different forms of group map pandas UDF, results of these are the same
-
-        output_schema = StructType(
-            [StructField('id', LongType()),
-             StructField('v', IntegerType()),
-             StructField('arr', ArrayType(LongType())),
-             StructField('v1', DoubleType()),
-             StructField('v2', LongType())])
-
         udf1 = pandas_udf(
-            lambda pdf: pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
+            lambda pdf: pdf.assign(
+                byte=pdf.byte * 2,
+                short=pdf.short * 2,
+                int=pdf.int * 2,
+                long=pdf.long * 2,
+                float=pdf.float * 2,
+                double=pdf.double * 2,
+                decim=pdf.decim * 2,
+                bool=False if pdf.bool else True,
+                str=pdf.str + 'there',
+                array=pdf.array,
+            ),
             output_schema,
             PandasUDFType.GROUPED_MAP
         )
 
         udf2 = pandas_udf(
-            lambda _, pdf: pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
+            lambda _, pdf: pdf.assign(
+                byte=pdf.byte * 2,
+                short=pdf.short * 2,
+                int=pdf.int * 2,
+                long=pdf.long * 2,
+                float=pdf.float * 2,
+                double=pdf.double * 2,
+                decim=pdf.decim * 2,
+                bool=False if pdf.bool else True,
+                str=pdf.str + 'there',
+                array=pdf.array,
+            ),
             output_schema,
             PandasUDFType.GROUPED_MAP
         )
 
         udf3 = pandas_udf(
-            lambda key, pdf: pdf.assign(id=key[0], v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
+            lambda key, pdf: pdf.assign(
+                id=key[0],
+                byte=pdf.byte * 2,
+                short=pdf.short * 2,
+                int=pdf.int * 2,
+                long=pdf.long * 2,
+                float=pdf.float * 2,
+                double=pdf.double * 2,
+                decim=pdf.decim * 2,
+                bool=False if pdf.bool else True,
+                str=pdf.str + 'there',
+                array=pdf.array,
+            ),
             output_schema,
             PandasUDFType.GROUPED_MAP
         )
@@ -5714,24 +5763,26 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                     pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
 
     def test_unsupported_types(self):
+        from distutils.version import LooseVersion
+        import pyarrow as pa
         from pyspark.sql.functions import pandas_udf, PandasUDFType
-        schema = StructType(
-            [StructField("id", LongType(), True),
-             StructField("map", MapType(StringType(), IntegerType()), True)])
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
-                    NotImplementedError,
-                    'Invalid returnType.*grouped map Pandas UDF.*MapType'):
-                pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
 
-        schema = StructType(
-            [StructField("id", LongType(), True),
-             StructField("arr_ts", ArrayType(TimestampType()), True)])
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
-                    NotImplementedError,
-                    'Invalid returnType.*grouped map Pandas UDF.*ArrayType.*TimestampType'):
-                pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
+        common_err_msg = 'Invalid returnType.*grouped map Pandas UDF.*'
+        unsupported_types = [
+            StructField('map', MapType(StringType(), IntegerType())),
+            StructField('arr_ts', ArrayType(TimestampType())),
+            StructField('null', NullType()),
+        ]
+
+        # TODO: Remove this if-statement once minimum pyarrow version is 0.10.0
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            unsupported_types.append(StructField('bin', BinaryType()))
+
+        for unsupported_type in unsupported_types:
+            schema = StructType([StructField('id', LongType(), True), unsupported_type])
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(NotImplementedError, common_err_msg):
+                    pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
