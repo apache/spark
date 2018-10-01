@@ -55,7 +55,7 @@ class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         """
         Returns the frequent itemsets of this model.
         """
-        return self.call("getFreqItemsets").map(lambda x: (FPGrowth.FreqItemset(x[0], x[1])))
+        return self.call("getFreqItemsets").map(lambda x: (FreqItemset(x[0], x[1])))
 
     @classmethod
     @since("2.0.0")
@@ -126,7 +126,13 @@ class PrefixSpanModel(JavaModelWrapper):
     @since("1.6.0")
     def freqSequences(self):
         """Gets frequent sequences"""
-        return self.call("getFreqSequences").map(lambda x: PrefixSpan.FreqSequence(x[0], x[1]))
+        return self.call("getFreqSequences").map(lambda x: FreqSequence(x[0], x[1]))
+
+
+#: Represents a (sequence, freq) tuple.
+#:
+#: .. versionadded:: 1.6.0
+FreqSequence = namedtuple("FreqSequence", ["sequence", "freq"])
 
 
 class PrefixSpan(object):
@@ -169,12 +175,8 @@ class PrefixSpan(object):
                               data, minSupport, maxPatternLength, maxLocalProjDBSize)
         return PrefixSpanModel(model)
 
-    class FreqSequence(namedtuple("FreqSequence", ["sequence", "freq"])):
-        """
-        Represents a (sequence, freq) tuple.
-
-        .. versionadded:: 1.6.0
-        """
+    # Backward-compatible alias.
+    FreqSequence = FreqSequence
 
 
 def _test():
