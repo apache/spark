@@ -83,8 +83,8 @@ public abstract class BufferedRowIterator {
    *
    * This has two use cases:
    * 1. Limit operators should call it with true when the given limit number is reached.
-   * 2. Blocking operators (sort, aggregate, etc.) should call it with false to reset it after consuming
-   *    all records from upstream.
+   * 2. Blocking operators (sort, aggregate, etc.) should call it with false to reset it after
+   *    consuming all records from upstream.
    */
   public void setStopEarly(boolean value) {
     isStopEarly = value;
