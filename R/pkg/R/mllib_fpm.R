@@ -26,7 +26,7 @@ setClass("FPGrowthModel", slots = list(jobj = "jobj"))
 #' S4 class that represents a PrefixSpan
 #'
 #' @param jobj a Java object reference to the backing Scala PrefixSpan
-#' @note PrefixSpan since 2.4.0
+#' @note PrefixSpan since 2.5.0
 setClass("PrefixSpan", slots = list(jobj = "jobj"))
 
 #' FP-growth
@@ -193,7 +193,7 @@ setMethod("write.ml", signature(object = "FPGrowthModel", path = "character"),
 #' frequency <- spark.findFrequentSequentialPatterns(prefix_Span, df)
 #' showDF(frequency)
 #' }
-#' @note spark.prefixSpan since 2.4.0
+#' @note spark.prefixSpan since 2.5.0
 setMethod("spark.prefixSpan", signature(),
           function(minSupport=0.1, maxPatternLength=10L,
                    maxLocalProjDBSize=32000000L, sequenceCol="sequence") {
@@ -224,7 +224,7 @@ setMethod("spark.prefixSpan", signature(),
 #'         \code{freq: Long}
 #' @rdname spark.prefixSpan
 #' @aliases findFrequentSequentialPatterns,PrefixSpan,SparkDataFrame-method
-#' @note spark.findFrequentSequentialPatterns(PrefixSpan, SparkDataFrame) since 2.4.0
+#' @note spark.findFrequentSequentialPatterns(PrefixSpan, SparkDataFrame) since 2.5.0
 
 setMethod("spark.findFrequentSequentialPatterns",
           signature(object = "PrefixSpan", data = "SparkDataFrame"),
