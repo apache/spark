@@ -555,8 +555,7 @@ class Analyzer(
         }
         // Group-by expressions coming from SQL are implicit and need to be deduced.
         val groupByExprs = groupByExprsOpt.getOrElse {
-          val pivotColAndAggRefs =
-            (pivotColumn.references ++ aggregates.flatMap(_.references)).toSet
+          val pivotColAndAggRefs = pivotColumn.references ++ AttributeSet(aggregates)
           child.output.filterNot(pivotColAndAggRefs.contains)
         }
         val singleAgg = aggregates.size == 1
