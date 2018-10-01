@@ -3401,7 +3401,8 @@ setMethod("collect_set",
 
 #' @details
 #' \code{split_string}: Splits string on regular expression.
-#' Equivalent to \code{split} SQL function.
+#' Equivalent to \code{split} SQL function. Optionally a
+#' \code{limit} can be specified
 #'
 #' @rdname column_string_functions
 #' @param limit determines the length of the returned array.
@@ -3414,9 +3415,9 @@ setMethod("collect_set",
 #' @examples
 #'
 #' \dontrun{
+#' head(select(df, split_string(df$Class, "\\d", 2)))
 #' head(select(df, split_string(df$Sex, "a")))
 #' head(select(df, split_string(df$Class, "\\d")))
-#' head(select(df, split_string(df$Class, "\\d", 2)))
 #' # This is equivalent to the following SQL expression
 #' head(selectExpr(df, "split(Class, '\\\\d')"))}
 #' @note split_string 2.3.0
