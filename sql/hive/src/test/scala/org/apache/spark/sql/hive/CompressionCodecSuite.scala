@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 
@@ -50,23 +51,29 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
 
   private val maxRecordNum = 50
 
-  private def getConvertMetastoreConfName(format: String): String = format.toLowerCase match {
-    case "parquet" => HiveUtils.CONVERT_METASTORE_PARQUET.key
-    case "orc" => HiveUtils.CONVERT_METASTORE_ORC.key
+  private def getConvertMetastoreConfName(format: String): String = {
+    format.toLowerCase(Locale.ROOT) match {
+      case "parquet" => HiveUtils.CONVERT_METASTORE_PARQUET.key
+      case "orc" => HiveUtils.CONVERT_METASTORE_ORC.key
+    }
   }
 
-  private def getSparkCompressionConfName(format: String): String = format.toLowerCase match {
-    case "parquet" => SQLConf.PARQUET_COMPRESSION.key
-    case "orc" => SQLConf.ORC_COMPRESSION.key
+  private def getSparkCompressionConfName(format: String): String = {
+    format.toLowerCase(Locale.ROOT) match {
+      case "parquet" => SQLConf.PARQUET_COMPRESSION.key
+      case "orc" => SQLConf.ORC_COMPRESSION.key
+    }
   }
 
-  private def getHiveCompressPropName(format: String): String = format.toLowerCase match {
-    case "parquet" => ParquetOutputFormat.COMPRESSION
-    case "orc" => COMPRESS.getAttribute
+  private def getHiveCompressPropName(format: String): String = {
+    format.toLowerCase(Locale.ROOT) match {
+      case "parquet" => ParquetOutputFormat.COMPRESSION
+      case "orc" => COMPRESS.getAttribute
+    }
   }
 
   private def normalizeCodecName(format: String, name: String): String = {
-    format.toLowerCase match {
+    format.toLowerCase(Locale.ROOT) match {
       case "parquet" => ParquetOptions.getParquetCompressionCodecName(name)
       case "orc" => OrcOptions.getORCCompressionCodecName(name)
     }
@@ -74,7 +81,7 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
 
   private def getTableCompressionCodec(path: String, format: String): Seq[String] = {
     val hadoopConf = spark.sessionState.newHadoopConf()
-    val codecs = format.toLowerCase match {
+    val codecs = format.toLowerCase(Locale.ROOT) match {
       case "parquet" => for {
         footer <- readAllFootersWithoutSummaryFiles(new Path(path), hadoopConf)
         block <- footer.getParquetMetadata.getBlocks.asScala

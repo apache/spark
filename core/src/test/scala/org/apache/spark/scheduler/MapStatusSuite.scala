@@ -188,32 +188,4 @@ class MapStatusSuite extends SparkFunSuite {
       assert(count === 3000)
     }
   }
-
-  test("SPARK-24519: HighlyCompressedMapStatus has configurable threshold") {
-    val conf = new SparkConf()
-    val env = mock(classOf[SparkEnv])
-    doReturn(conf).when(env).conf
-    SparkEnv.set(env)
-    val sizes = Array.fill[Long](500)(150L)
-    // Test default value
-    val status = MapStatus(null, sizes)
-    assert(status.isInstanceOf[CompressedMapStatus])
-    // Test Non-positive values
-    for (s <- -1 to 0) {
-      assertThrows[IllegalArgumentException] {
-        conf.set(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS, s)
-        val status = MapStatus(null, sizes)
-      }
-    }
-    // Test positive values
-    Seq(1, 100, 499, 500, 501).foreach { s =>
-      conf.set(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS, s)
-      val status = MapStatus(null, sizes)
-      if(sizes.length > s) {
-        assert(status.isInstanceOf[HighlyCompressedMapStatus])
-      } else {
-        assert(status.isInstanceOf[CompressedMapStatus])
-      }
-    }
-  }
 }

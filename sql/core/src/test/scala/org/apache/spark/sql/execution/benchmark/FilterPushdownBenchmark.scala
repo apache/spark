@@ -19,25 +19,28 @@ package org.apache.spark.sql.execution.benchmark
 
 import java.io.File
 
-import scala.util.{Random, Try}
+import scala.util.Random
 
 import org.apache.spark.SparkConf
+import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.functions.monotonically_increasing_id
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType}
-import org.apache.spark.util.{Benchmark, BenchmarkBase => FileBenchmarkBase, Utils}
 
 /**
  * Benchmark to measure read performance with Filter pushdown.
  * To run this benchmark:
- * 1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
- * 2. build/sbt "sql/test:runMain <this class>"
- * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
- *    Results will be written to "benchmarks/FilterPushdownBenchmark-results.txt".
+ * {{{
+ *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
+ *   2. build/sbt "sql/test:runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      Results will be written to "benchmarks/FilterPushdownBenchmark-results.txt".
+ * }}}
  */
-object FilterPushdownBenchmark extends FileBenchmarkBase {
+object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
 
   private val conf = new SparkConf()
     .setAppName(this.getClass.getSimpleName)
@@ -57,26 +60,8 @@ object FilterPushdownBenchmark extends FileBenchmarkBase {
 
   private val spark = SparkSession.builder().config(conf).getOrCreate()
 
-  def withTempPath(f: File => Unit): Unit = {
-    val path = Utils.createTempDir()
-    path.delete()
-    try f(path) finally Utils.deleteRecursively(path)
-  }
-
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
     try f finally tableNames.foreach(spark.catalog.dropTempView)
-  }
-
-  def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(spark.conf.get(key)).toOption)
-    (keys, values).zipped.foreach(spark.conf.set)
-    try f finally {
-      keys.zip(currentValues).foreach {
-        case (key, Some(value)) => spark.conf.set(key, value)
-        case (key, None) => spark.conf.unset(key)
-      }
-    }
   }
 
   private def prepareTable(

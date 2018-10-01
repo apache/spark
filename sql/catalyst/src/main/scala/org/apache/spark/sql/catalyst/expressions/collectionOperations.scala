@@ -1268,11 +1268,15 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
 
   override def dataType: DataType = child.dataType
 
-  @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+  override def nullSafeEval(input: Any): Any = doReverse(input)
 
-  override def nullSafeEval(input: Any): Any = input match {
-    case a: ArrayData => new GenericArrayData(a.toObjectArray(elementType).reverse)
-    case s: UTF8String => s.reverse()
+  @transient private lazy val doReverse: Any => Any = dataType match {
+    case ArrayType(elementType, _) =>
+      input => {
+        val arrayData = input.asInstanceOf[ArrayData]
+        new GenericArrayData(arrayData.toObjectArray(elementType).reverse)
+      }
+    case StringType => _.asInstanceOf[UTF8String].reverse()
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1294,6 +1298,7 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
     val i = ctx.freshName("i")
     val j = ctx.freshName("j")
 
+    val elementType = dataType.asInstanceOf[ArrayType].elementType
     val initialization = CodeGenerator.createArrayData(
       arrayData, elementType, numElements, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(
@@ -2066,18 +2071,23 @@ case class ArrayPosition(left: Expression, right: Expression)
   override def dataType: DataType = LongType
 
   override def inputTypes: Seq[AbstractDataType] = {
-    val elementType = left.dataType match {
-      case t: ArrayType => t.elementType
-      case _ => AnyDataType
+    (left.dataType, right.dataType) match {
+      case (ArrayType(e1, hasNull), e2) =>
+        TypeCoercion.findTightestCommonType(e1, e2) match {
+          case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
+          case _ => Seq.empty
+        }
+      case _ => Seq.empty
     }
-    Seq(ArrayType, elementType)
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case f: TypeCheckResult.TypeCheckFailure => f
-      case TypeCheckResult.TypeCheckSuccess =>
-        TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
+    (left.dataType, right.dataType) match {
+      case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
+        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
+      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
+        s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
+        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
     }
   }
 
@@ -2144,29 +2154,44 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
   }
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(TypeCollection(ArrayType, MapType),
-      left.dataType match {
-        case _: ArrayType => IntegerType
-        case _: MapType => mapKeyType
-        case _ => AnyDataType // no match for a wrong 'left' expression type
-      }
-    )
+    (left.dataType, right.dataType) match {
+      case (arr: ArrayType, e2: IntegralType) if (e2 != LongType) =>
+        Seq(arr, IntegerType)
+      case (MapType(keyType, valueType, hasNull), e2) =>
+        TypeCoercion.findTightestCommonType(keyType, e2) match {
+          case Some(dt) => Seq(MapType(dt, valueType, hasNull), dt)
+          case _ => Seq.empty
+        }
+      case (l, r) => Seq.empty
+
+    }
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case f: TypeCheckResult.TypeCheckFailure => f
-      case TypeCheckResult.TypeCheckSuccess if left.dataType.isInstanceOf[MapType] =>
-        TypeUtils.checkForOrderingExpr(mapKeyType, s"function $prettyName")
-      case TypeCheckResult.TypeCheckSuccess => TypeCheckResult.TypeCheckSuccess
+    (left.dataType, right.dataType) match {
+      case (_: ArrayType, e2) if e2 != IntegerType =>
+        TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
+          s"been ${ArrayType.simpleString} followed by a ${IntegerType.simpleString}, but it's " +
+          s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+      case (MapType(e1, _, _), e2) if (!e2.sameType(e1)) =>
+        TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
+          s"been ${MapType.simpleString} followed by a value of same key type, but it's " +
+          s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+      case (e1, _) if (!e1.isInstanceOf[MapType] && !e1.isInstanceOf[ArrayType]) =>
+        TypeCheckResult.TypeCheckFailure(s"The first argument to function $prettyName should " +
+          s"have been ${ArrayType.simpleString} or ${MapType.simpleString} type, but its " +
+          s"${left.dataType.catalogString} type.")
+      case _ => TypeCheckResult.TypeCheckSuccess
     }
   }
 
   override def nullable: Boolean = true
 
-  override def nullSafeEval(value: Any, ordinal: Any): Any = {
-    left.dataType match {
-      case _: ArrayType =>
+  override def nullSafeEval(value: Any, ordinal: Any): Any = doElementAt(value, ordinal)
+
+  @transient private lazy val doElementAt: (Any, Any) => Any = left.dataType match {
+    case _: ArrayType =>
+      (value, ordinal) => {
         val array = value.asInstanceOf[ArrayData]
         val index = ordinal.asInstanceOf[Int]
         if (array.numElements() < math.abs(index)) {
@@ -2185,9 +2210,9 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
             array.get(idx, dataType)
           }
         }
-      case _: MapType =>
-        getValueEval(value, ordinal, mapKeyType, ordering)
-    }
+      }
+    case _: MapType =>
+      (value, ordinal) => getValueEval(value, ordinal, mapKeyType, ordering)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2278,33 +2303,41 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
 
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override def eval(input: InternalRow): Any = dataType match {
+  override def eval(input: InternalRow): Any = doConcat(input)
+
+  @transient private lazy val doConcat: InternalRow => Any = dataType match {
     case BinaryType =>
-      val inputs = children.map(_.eval(input).asInstanceOf[Array[Byte]])
-      ByteArray.concat(inputs: _*)
+      input => {
+        val inputs = children.map(_.eval(input).asInstanceOf[Array[Byte]])
+        ByteArray.concat(inputs: _*)
+      }
     case StringType =>
-      val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
-      UTF8String.concat(inputs : _*)
+      input => {
+        val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
+        UTF8String.concat(inputs: _*)
+      }
     case ArrayType(elementType, _) =>
-      val inputs = children.toStream.map(_.eval(input))
-      if (inputs.contains(null)) {
-        null
-      } else {
-        val arrayData = inputs.map(_.asInstanceOf[ArrayData])
-        val numberOfElements = arrayData.foldLeft(0L)((sum, ad) => sum + ad.numElements())
-        if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-          throw new RuntimeException(s"Unsuccessful try to concat arrays with $numberOfElements" +
-            " elements due to exceeding the array size limit " +
-            ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH + ".")
+      input => {
+        val inputs = children.toStream.map(_.eval(input))
+        if (inputs.contains(null)) {
+          null
+        } else {
+          val arrayData = inputs.map(_.asInstanceOf[ArrayData])
+          val numberOfElements = arrayData.foldLeft(0L)((sum, ad) => sum + ad.numElements())
+          if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+            throw new RuntimeException(s"Unsuccessful try to concat arrays with $numberOfElements" +
+              " elements due to exceeding the array size limit " +
+              ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH + ".")
+          }
+          val finalData = new Array[AnyRef](numberOfElements.toInt)
+          var position = 0
+          for (ad <- arrayData) {
+            val arr = ad.toObjectArray(elementType)
+            Array.copy(arr, 0, finalData, position, arr.length)
+            position += arr.length
+          }
+          new GenericArrayData(finalData)
         }
-        val finalData = new Array[AnyRef](numberOfElements.toInt)
-        var position = 0
-        for(ad <- arrayData) {
-          val arr = ad.toObjectArray(elementType)
-          Array.copy(arr, 0, finalData, position, arr.length)
-          position += arr.length
-        }
-        new GenericArrayData(finalData)
       }
   }
 
@@ -3068,25 +3101,30 @@ case class ArrayRemove(left: Expression, right: Expression)
   override def dataType: DataType = left.dataType
 
   override def inputTypes: Seq[AbstractDataType] = {
-    val elementType = left.dataType match {
-      case t: ArrayType => t.elementType
-      case _ => AnyDataType
+    (left.dataType, right.dataType) match {
+      case (ArrayType(e1, hasNull), e2) =>
+        TypeCoercion.findTightestCommonType(e1, e2) match {
+          case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
+          case _ => Seq.empty
+        }
+      case _ => Seq.empty
     }
-    Seq(ArrayType, elementType)
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
+        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
+      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
+        s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
+        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+    }
   }
 
   private def elementType: DataType = left.dataType.asInstanceOf[ArrayType].elementType
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(right.dataType)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case f: TypeCheckResult.TypeCheckFailure => f
-      case TypeCheckResult.TypeCheckSuccess =>
-        TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
-    }
-  }
 
   override def nullSafeEval(arr: Any, value: Any): Any = {
     val newArray = new Array[Any](arr.asInstanceOf[ArrayData].numElements())
