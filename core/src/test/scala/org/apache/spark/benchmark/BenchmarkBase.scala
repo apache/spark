@@ -25,7 +25,10 @@ import java.io.{File, FileOutputStream, OutputStream}
 abstract class BenchmarkBase {
   var output: Option[OutputStream] = None
 
-  def benchmark(): Unit
+  /**
+   * Main process of the whole benchmark.
+   */
+  def benchmarkSuite(): Unit
 
   final def runBenchmark(benchmarkName: String)(func: => Any): Unit = {
     val separator = "=" * 96
@@ -46,7 +49,7 @@ abstract class BenchmarkBase {
       output = Some(new FileOutputStream(file))
     }
 
-    benchmark()
+    benchmarkSuite()
 
     output.foreach { o =>
       if (o != null) {
