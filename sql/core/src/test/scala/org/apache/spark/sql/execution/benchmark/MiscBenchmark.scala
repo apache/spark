@@ -27,47 +27,30 @@ import org.apache.spark.benchmark.Benchmark
  * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
  *    Results will be written to "benchmarks/MiscBenchmark-results.txt".
  */
-class MiscBenchmark extends SqlBasedBenchmark {
-
-  /** Runs function `f` with whole stage codegen on and off. */
-  def runMiscBenchmark(name: String, cardinality: Long)(f: => Unit): Unit = {
-    val benchmark = new Benchmark(name, cardinality, output = output)
-
-    benchmark.addCase(s"$name wholestage off", numIters = 2) { iter =>
-      spark.conf.set("spark.sql.codegen.wholeStage", value = false)
-      f
-    }
-
-    benchmark.addCase(s"$name wholestage on", numIters = 5) { iter =>
-      spark.conf.set("spark.sql.codegen.wholeStage", value = true)
-      f
-    }
-
-    benchmark.run()
-  }
+object MiscBenchmark extends SqlBasedBenchmark {
 
   override def benchmark(): Unit = {
     runBenchmark("filter & aggregate without group") {
       val N = 500L << 22
-      runMiscBenchmark("range/filter/sum", N) {
+      codegenBenchmark("range/filter/sum", N) {
         spark.range(N).filter("(id & 1) = 1").groupBy().sum().collect()
       }
     }
 
     runBenchmark("range/limit/sum") {
       val N = 500L << 20
-      runMiscBenchmark("range/limit/sum", N) {
+      codegenBenchmark("range/limit/sum", N) {
         spark.range(N).limit(1000000).groupBy().sum().collect()
       }
     }
 
     runBenchmark("sample") {
       val N = 500 << 18
-      runMiscBenchmark("sample with replacement", N) {
+      codegenBenchmark("sample with replacement", N) {
         spark.range(N).sample(withReplacement = true, 0.01).groupBy().sum().collect()
       }
 
-      runMiscBenchmark("sample without replacement", N) {
+      codegenBenchmark("sample without replacement", N) {
         spark.range(N).sample(withReplacement = false, 0.01).groupBy().sum().collect()
       }
     }
@@ -103,28 +86,28 @@ class MiscBenchmark extends SqlBasedBenchmark {
 
     runBenchmark("generate explode") {
       val N = 1 << 24
-      runMiscBenchmark("generate explode array", N) {
+      codegenBenchmark("generate explode array", N) {
         val df = spark.range(N).selectExpr(
           "id as key",
           "array(rand(), rand(), rand(), rand(), rand()) as values")
         df.selectExpr("key", "explode(values) value").count()
       }
 
-      runMiscBenchmark("generate explode map", N) {
+      codegenBenchmark("generate explode map", N) {
         val df = spark.range(N).selectExpr(
           "id as key",
           "map('a', rand(), 'b', rand(), 'c', rand(), 'd', rand(), 'e', rand()) pairs")
         df.selectExpr("key", "explode(pairs) as (k, v)").count()
       }
 
-      runMiscBenchmark("generate posexplode array", N) {
+      codegenBenchmark("generate posexplode array", N) {
         val df = spark.range(N).selectExpr(
           "id as key",
           "array(rand(), rand(), rand(), rand(), rand()) as values")
         df.selectExpr("key", "posexplode(values) as (idx, value)").count()
       }
 
-      runMiscBenchmark("generate inline array", N) {
+      codegenBenchmark("generate inline array", N) {
         val df = spark.range(N).selectExpr(
           "id as key",
           "array((rand(), rand()), (rand(), rand()), (rand(), 0.0d)) as values")
@@ -132,7 +115,7 @@ class MiscBenchmark extends SqlBasedBenchmark {
       }
 
       val M = 60000
-      runMiscBenchmark("generate big struct array", M) {
+      codegenBenchmark("generate big struct array", M) {
         import spark.implicits._
         val df = spark.sparkContext.parallelize(Seq(("1",
           Array.fill(M)({
@@ -147,7 +130,7 @@ class MiscBenchmark extends SqlBasedBenchmark {
 
     runBenchmark("generate regular generator") {
       val N = 1 << 24
-      runMiscBenchmark("generate stack", N) {
+      codegenBenchmark("generate stack", N) {
         val df = spark.range(N).selectExpr(
           "id as key",
           "id % 2 as t1",
