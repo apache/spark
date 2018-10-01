@@ -97,8 +97,9 @@ def wrap_scalar_pandas_udf(f, return_type):
 
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
-    assign_cols_by_pos = runner_conf.get(
-        "spark.sql.execution.pandas.groupedMap.assignColumnsByPosition", False)
+    assign_cols_by_name = runner_conf.get(
+        "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "true")
+    assign_cols_by_name = assign_cols_by_name.lower() == "true"
 
     def wrapped(key_series, value_series):
         import pandas as pd
@@ -119,7 +120,7 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
                 "Expected: {} Actual: {}".format(len(return_type), len(result.columns)))
 
         # Assign result columns by schema name if user labeled with strings, else use position
-        if not assign_cols_by_pos and any(isinstance(name, basestring) for name in result.columns):
+        if assign_cols_by_name and any(isinstance(name, basestring) for name in result.columns):
             return [(result[field.name], to_arrow_type(field.dataType)) for field in return_type]
         else:
             return [(result[result.columns[i]], to_arrow_type(field.dataType))
