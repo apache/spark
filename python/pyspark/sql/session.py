@@ -192,6 +192,7 @@ class SparkSession(object):
     """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances"""
 
     _instantiatedSession = None
+    _activeSession = None
 
     @ignore_unicode_prefix
     def __init__(self, sparkContext, jsparkSession=None):
@@ -233,6 +234,7 @@ class SparkSession(object):
         if SparkSession._instantiatedSession is None \
                 or SparkSession._instantiatedSession._sc._jsc is None:
             SparkSession._instantiatedSession = self
+            SparkSession._activeSession = self
             self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
             self._jvm.SparkSession.setActiveSession(self._jsparkSession)
 
@@ -256,21 +258,20 @@ class SparkSession(object):
         """
         return self.__class__(self._sc, self._jsparkSession.newSession())
 
+    @classmethod
     @since(2.5)
-    def getActiveSession(self):
+    def getActiveSession(cls):
         """
         Returns the active SparkSession for the current thread, returned by the builder.
-        >>> s = spark.getActiveSession()
+        >>> s = SparkSession.getActiveSession()
         >>> l = [('Alice', 1)]
         >>> rdd = s.sparkContext.parallelize(l)
-        >>> df = spark.createDataFrame(rdd, ['name', 'age'])
+        >>> df = s.createDataFrame(rdd, ['name', 'age'])
+        >>> df.show()
         >>> df.select("age").collect()
         [Row(age=1)]
         """
-        if self._jsparkSession.getActiveSession().isDefined():
-            return self.__class__(self._sc, self._jsparkSession.getActiveSession().get())
-        else:
-            return None
+        return cls._activeSession
 
     @property
     @since(2.0)
@@ -845,6 +846,7 @@ class SparkSession(object):
         self._jvm.SparkSession.clearDefaultSession()
         self._jvm.SparkSession.clearActiveSession()
         SparkSession._instantiatedSession = None
+        SparkSession._activeSession = None
 
     @since(2.0)
     def __enter__(self):

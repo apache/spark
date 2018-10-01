@@ -3870,18 +3870,22 @@ class SparkSessionTests2(unittest.TestCase):
             .master("local") \
             .getOrCreate()
         try:
-            activeSession = spark.getActiveSession()
+            activeSession = SparkSession.getActiveSession()
             df = activeSession.createDataFrame([(1, 'Alice')], ['age', 'name'])
             self.assertEqual(df.collect(), [Row(age=1, name=u'Alice')])
         finally:
             spark.stop()
 
     def test_get_active_session_when_no_active_session(self):
+        active = SparkSession.getActiveSession()
+        self.assertEqual(active, None)
         spark = SparkSession.builder \
             .master("local") \
             .getOrCreate()
+        active = SparkSession.getActiveSession()
+        self.assertEqual(active, spark)
         spark.stop()
-        active = spark.getActiveSession()
+        active = SparkSession.getActiveSession()
         self.assertEqual(active, None)
 
     def test_SparkSession(self):
