@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait SqlBasedBenchmark extends BenchmarkBase with SQLHelper {
 
-  val spark: SparkSession = getSparkSession
+  protected val spark: SparkSession = getSparkSession
 
   /** Subclass can override this function to build their own SparkSession */
   def getSparkSession: SparkSession = {
@@ -40,7 +40,7 @@ trait SqlBasedBenchmark extends BenchmarkBase with SQLHelper {
   }
 
   /** Runs function `f` with whole stage codegen on and off. */
-  def runBenchmarkWithCodegen(name: String, cardinality: Long)(f: => Unit): Unit = {
+  final def codegenBenchmark(name: String, cardinality: Long)(f: => Unit): Unit = {
     val benchmark = new Benchmark(name, cardinality, output = output)
 
     benchmark.addCase(s"$name wholestage off", numIters = 2) { _ =>

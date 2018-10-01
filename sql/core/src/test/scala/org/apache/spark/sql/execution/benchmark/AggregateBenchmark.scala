@@ -47,7 +47,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
   override def benchmark(): Unit = {
     runBenchmark("aggregate without grouping") {
       val N = 500L << 22
-      runBenchmarkWithCodegen("agg w/o group", N) {
+      codegenBenchmark("agg w/o group", N) {
         spark.range(N).selectExpr("sum(id)").collect()
       }
     }
@@ -55,11 +55,11 @@ object AggregateBenchmark extends SqlBasedBenchmark {
     runBenchmark("stat functions") {
       val N = 100L << 20
 
-      runBenchmarkWithCodegen("stddev", N) {
+      codegenBenchmark("stddev", N) {
         spark.range(N).groupBy().agg("id" -> "stddev").collect()
       }
 
-      runBenchmarkWithCodegen("kurtosis", N) {
+      codegenBenchmark("kurtosis", N) {
         spark.range(N).groupBy().agg("id" -> "kurtosis").collect()
       }
     }
@@ -313,7 +313,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
     runBenchmark("cube") {
       val N = 5 << 20
 
-      runBenchmarkWithCodegen("cube", N) {
+      codegenBenchmark("cube", N) {
         spark.range(N).selectExpr("id", "id % 1000 as k1", "id & 256 as k2")
           .cube("k1", "k2").sum("id").collect()
       }
