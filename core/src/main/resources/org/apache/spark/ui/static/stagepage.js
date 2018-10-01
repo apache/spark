@@ -551,6 +551,7 @@ $(document).ready(function () {
                     "paging": true,
                     "info": true,
                     "processing": true,
+                    "lengthMenu": [[20, 40, 60, 100, responseBody.numTasks], [20, 40, 60, 100, "All"]],
                     "ajax": {
                         "url": stageEndPoint(appId) + "/" + stageAttemptId + "/taskTable",
                         "data": {

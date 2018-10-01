@@ -130,8 +130,8 @@ private[v1] class StagesResource extends BaseAppResource {
         _tasksToShow = doPagination(uriQueryParameters, stageId, stageAttemptId, false,
           totalRecords.toInt)
       }
+      val ret = new HashMap[String, Object]()
       if (_tasksToShow.nonEmpty) {
-        val ret = new HashMap[String, Object]()
         // Performs server-side search based on input from user
         if (isSearch) {
           val filteredTaskList = filterTaskList(_tasksToShow, searchValue)
@@ -146,12 +146,12 @@ private[v1] class StagesResource extends BaseAppResource {
         } else {
           ret.put("aaData", _tasksToShow)
         }
-        ret.put("recordsTotal", totalRecords)
-        ret.put("recordsFiltered", filteredRecords)
-        ret
       } else {
-        throw new NotFoundException(s"unknown stage: $stageId")
+        ret.put("aaData", _tasksToShow)
       }
+      ret.put("recordsTotal", totalRecords)
+      ret.put("recordsFiltered", filteredRecords)
+      ret
     }
   }
 
