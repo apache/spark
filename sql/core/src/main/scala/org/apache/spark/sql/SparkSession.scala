@@ -86,10 +86,7 @@ class SparkSession private(
 
   private[sql] def this(sc: SparkContext) {
     this(sc, None, None, new SparkSessionExtensions)
-  }
-
-  private[sql] def this(sc: SparkContext, extensions: SparkSessionExtensions) {
-    this(sc, None, None, extensions)
+    SparkSession.applyExtensionsFromConf(sc.getConf, this.extensions)
   }
 
   sparkContext.assertNotStopped()
@@ -939,7 +936,7 @@ object SparkSession extends Logging {
           // Do not update `SparkConf` for existing `SparkContext`, as it's shared by all sessions.
         }
 
-        SparkSessionExtensions.applyExtensionsFromConf(sparkContext.conf, extensions)
+        applyExtensionsFromConf(sparkContext.conf, extensions)
 
         session = new SparkSession(sparkContext, None, None, extensions)
         options.foreach { case (k, v) => session.initialSessionOptions.put(k, v) }
@@ -1122,6 +1119,29 @@ object SparkSession extends Logging {
       session.get.stop()
       SparkSession.clearActiveSession()
       SparkSession.clearDefaultSession()
+    }
+  }
+
+  /**
+   * Initialize extensions if the user has defined a configurator class in their SparkConf.
+   * This class will be applied to the extensions passed into this function.
+   */
+  private[sql] def applyExtensionsFromConf(conf: SparkConf, extensions: SparkSessionExtensions) {
+    val extensionConfOption = conf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
+    if (extensionConfOption.isDefined) {
+      val extensionConfClassName = extensionConfOption.get
+      try {
+        val extensionConfClass = Utils.classForName(extensionConfClassName)
+        val extensionConf = extensionConfClass.newInstance()
+          .asInstanceOf[SparkSessionExtensions => Unit]
+        extensionConf(extensions)
+      } catch {
+        // Ignore the error if we cannot find the class or when the class has the wrong type.
+        case e@(_: ClassCastException |
+                _: ClassNotFoundException |
+                _: NoClassDefFoundError) =>
+          logWarning(s"Cannot use $extensionConfClassName to configure session extensions.", e)
+      }
     }
   }
 }

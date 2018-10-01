@@ -212,16 +212,13 @@ class SparkSession(object):
         self._sc = sparkContext
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
-
         if jsparkSession is None:
             if self._jvm.SparkSession.getDefaultSession().isDefined() \
                     and not self._jvm.SparkSession.getDefaultSession().get() \
                         .sparkContext().isStopped():
                 jsparkSession = self._jvm.SparkSession.getDefaultSession().get()
             else:
-                extensions = self._sc._jvm.org.apache.spark.sql\
-                    .SparkSessionExtensions(self._jsc.getConf())
-                jsparkSession = self._jvm.SparkSession(self._jsc.sc(), extensions)
+                jsparkSession = self._jvm.SparkSession(self._jsc.sc())
 
         self._jsparkSession = jsparkSession
         self._jwrapped = self._jsparkSession.sqlContext()
