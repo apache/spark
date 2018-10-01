@@ -21,7 +21,7 @@ import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually
 import scala.collection.JavaConverters._
 
-import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, TIMEOUT}
+import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, KERBEROS_LABEL, TIMEOUT}
 import org.apache.spark.deploy.k8s.integrationtest.backend.IntegrationTestBackend
 
 private[spark] object MinikubeTestBackend
@@ -53,8 +53,9 @@ private[spark] object MinikubeTestBackend
       val pvList = defaultClient.persistentVolumes().list().getItems.asScala
       if (pvList.nonEmpty) {
         defaultClient.persistentVolumes().delete()
-        Eventually.eventually(TIMEOUT, INTERVAL) { pvList.isEmpty should be (true) }
       }
+      Eventually.eventually(TIMEOUT, INTERVAL) {
+        defaultClient.persistentVolumes().list().getItems.asScala.isEmpty should be (true) }
     } catch {
       case ex: java.lang.NullPointerException =>
     }

@@ -18,16 +18,21 @@ package org.apache.spark.deploy.k8s.integrationtest.kerberos
 
 import java.io.{File, FileInputStream}
 
+import scala.collection.JavaConverters._
+
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.api.model.extensions.{Deployment, DeploymentBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.openshift.api.model.{ClusterRoleBinding, ClusterRoleBindingBuilder}
 import org.apache.commons.io.FileUtils.readFileToString
-import scala.collection.JavaConverters._
+
+import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.KERBEROS_LABEL
 
   /**
     * This class is responsible for handling all Utils and Constants necessary for testing
   */
 private[spark] class KerberosUtils(
+  sparkImage: String,
   kerberosImage: String,
   kubernetesClient: KubernetesClient,
   namespace: String) {
@@ -49,7 +54,6 @@ private[spark] class KerberosUtils(
   private val KRB_VOLUME = "krb5-conf"
   private val KRB_FILE_DIR = "/mnt"
   private val KRB_CONFIG_MAP_NAME = "krb-config-map"
-  private val PV_LABELS = Map("job" -> "kerberostest")
   private val keyPaths: Seq[KeyToPath] = (kerberosFiles ++ Seq("krb5-dp.conf"))
     .map(file =>
     new KeyToPathBuilder()
@@ -100,7 +104,7 @@ private[spark] class KerberosUtils(
       persistentVolumeMap(pvType)) }
     def getNNStorage: PVStorage = buildKerberosPV(pvNN)
     def getKTStorage: PVStorage = buildKerberosPV(pvKT)
-    def getLabels: Map[String, String] = PV_LABELS
+    def getLabels: Map[String, String] = KERBEROS_LABEL
     def getKeyPaths: Seq[KeyToPath] = keyPaths
     def getConfigMap: ConfigMapStorage =
       ConfigMapStorage(
@@ -173,6 +177,23 @@ private[spark] class KerberosUtils(
         .withKey(file)
         .withPath(file)
         .build()).toList
+    def getKerberosRoleBinding: ClusterRoleBinding =
+      new ClusterRoleBindingBuilder()
+        .withNewMetadata()
+        .withName(s"default-admin-$namespace")
+        .withLabels(getLabels.asJava)
+        .endMetadata()
+        .withNewRoleRef()
+        .withKind("ClusterRole")
+        .withName("cluster-admin")
+        .endRoleRef()
+        .withSubjects(
+          new ObjectReferenceBuilder()
+            .withKind("ServiceAccount")
+            .withName("default")
+            .withNamespace(namespace)
+            .build())
+        .build()
     def getKerberosTest(
       resource: String,
       className: String,
@@ -182,6 +203,7 @@ private[spark] class KerberosUtils(
         .get().get(0) match {
         case deployment: Deployment =>
           DeploymentStorage(
+            getKerberosRoleBinding,
             new DeploymentBuilder(deployment)
               .editSpec()
                 .editTemplate()
@@ -238,6 +260,10 @@ private[spark] class KerberosUtils(
                         .withName("TMP_HDFS_LOC")
                         .withValue(s"$KRB_FILE_DIR/${kerberosFiles(2)}")
                         .endEnv()
+                      .addNewEnv()
+                        .withName("BASE_SPARK_IMAGE")
+                        .withValue(sparkImage)
+                        .endEnv()
                       .addNewVolumeMount()
                         .withName(KRB_VOLUME)
                         .withMountPath(KRB_FILE_DIR)
@@ -249,4 +275,5 @@ private[spark] class KerberosUtils(
                 .endSpec()
               .build())
       }}
+
 }

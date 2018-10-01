@@ -18,6 +18,7 @@ package org.apache.spark.deploy.k8s.integrationtest.kerberos
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.api.model.extensions._
+import io.fabric8.openshift.api.model.ClusterRoleBinding
 
 private[spark] sealed trait KerberosStorage
 
@@ -32,6 +33,7 @@ private[spark] case class ServiceStorage(
   service: Service) extends KerberosStorage
 
 private[spark] case class DeploymentStorage(
+  clusterRoleBinding: ClusterRoleBinding,
   resource: Deployment) extends KerberosStorage
 
 private[spark] case class ConfigMapStorage(

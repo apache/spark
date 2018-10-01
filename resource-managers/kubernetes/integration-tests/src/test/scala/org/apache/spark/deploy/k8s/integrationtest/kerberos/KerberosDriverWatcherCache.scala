@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.k8s.integrationtest.kerberos
 
 import io.fabric8.kubernetes.api.model.Pod
-import io.fabric8.kubernetes.api.model.extensions.Deployment
 import io.fabric8.kubernetes.client.{KubernetesClientException, Watch, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
 import org.scalatest.Matchers

@@ -16,11 +16,27 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest.kerberos
 
+/**
+ * A collection of functions that together represent a WatcherCache. The functin of these
+ * WatcherCaches are to watch the KerberosStorage object and insure they are properly created
+ * by blocking with a condition.
+ */
 private[spark] trait WatcherCacheConfiguration[T <: KerberosStorage] {
 
+  /**
+   * This function defines the boolean condition which would block the
+   * completion of the deploy() block
+   */
   def check(name: String): Boolean
 
+  /**
+   * This functions deploys the KerberosStorage object by having the KubernetesClient
+   * create the resulting KerberosStorage object.
+   */
   def deploy(storage: T) : Unit
 
+  /**
+   * This function closes all Watcher threads.
+   */
   def stopWatch(): Unit
 }

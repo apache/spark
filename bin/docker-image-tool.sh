@@ -71,31 +71,36 @@ function build {
   )
   local BASEDOCKERFILE=${BASEDOCKERFILE:-"$IMG_PATH/main/dockerfiles/spark/Dockerfile"}
   local PYDOCKERFILE=${PYDOCKERFILE:-"$IMG_PATH/main/dockerfiles/spark/bindings/python/Dockerfile"}
-#  local RDOCKERFILE=${RDOCKERFILE:-"$IMG_PATH/main/dockerfiles/spark/bindings/R/Dockerfile"}
   local KDOCKERFILE=${KDOCKERFILE:-"$IMG_PATH/test/dockerfiles/spark/kerberos/Dockerfile"}
+  local RDOCKERFILE=${RDOCKERFILE:-"$IMG_PATH/main/dockerfiles/spark/bindings/R/Dockerfile"}
 
+  # Spark Base
   docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
     -f "$BASEDOCKERFILE" .
 
+  # PySpark
   docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
     -t $(image_ref spark-py) \
     -f "$PYDOCKERFILE" .
 
-#  docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
-#    -t $(image_ref spark-r) \
-#    -f "$RDOCKERFILE" .
+  # The following are optional docker builds for Kerberos Testing
+  docker pull ifilonenko/hadoop-base:latest
 
   docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
     -t $(image_ref spark-kerberos) \
     -f "$KDOCKERFILE" .
+
+  # SparkR
+#  docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+#    -t $(image_ref spark-r) \
+#    -f "$RDOCKERFILE" .
 }
 
 function push {
   docker push "$(image_ref spark)"
   docker push "$(image_ref spark-py)"
 #  docker push "$(image_ref spark-r)"
-  docker push "$(image_ref spark-kerberos)"
 }
 
 function usage {

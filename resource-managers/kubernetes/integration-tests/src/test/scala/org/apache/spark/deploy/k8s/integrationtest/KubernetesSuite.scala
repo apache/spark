@@ -102,9 +102,11 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     testBackend.initialize()
     kubernetesTestComponents = new KubernetesTestComponents(testBackend.getKubernetesClient)
     kerberizedHadoopClusterLauncher = new KerberizedHadoopClusterLauncher(
+      KERBEROS_LABEL,
       kubernetesTestComponents.kubernetesClient.inNamespace(kubernetesTestComponents.namespace),
       kubernetesTestComponents.namespace)
     kerberosUtils = new KerberosUtils(
+      image,
       kImage,
       kubernetesTestComponents.kubernetesClient,
       kubernetesTestComponents.namespace)
@@ -365,4 +367,5 @@ private[spark] object KubernetesSuite {
   val SPARK_DRIVER_MAIN_CLASS: String = "org.apache.spark.examples.DriverSubmissionTest"
   val TIMEOUT = PatienceConfiguration.Timeout(Span(2, Minutes))
   val INTERVAL = PatienceConfiguration.Interval(Span(2, Seconds))
+  val KERBEROS_LABEL = Map("job" -> "kerberostest")
 }

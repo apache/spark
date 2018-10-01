@@ -16,8 +16,6 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest.kerberos
 
-import io.fabric8.kubernetes.api.builder.Predicate
-import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.internal.Logging
@@ -30,15 +28,15 @@ import org.apache.spark.internal.Logging
   * to ensure that order is always preserved and the cluster is the same for every run.
   */
 private[spark] class KerberizedHadoopClusterLauncher(
+    labels: Map[String, String],
     kubernetesClient: KubernetesClient,
     namespace: String) extends Logging {
-    private val LABELS = Map("job" -> "kerberostest")
 
     def launchKerberizedCluster(kerberosUtils: KerberosUtils): Unit = {
       // These Utils allow for each step in this launch process to re-use
       // common functionality for setting up hadoop nodes.
       // Launches persistent volumes and its claims for sharing keytabs across pods
-      val pvWatcherCache = new KerberosPVWatcherCache(kerberosUtils, LABELS)
+      val pvWatcherCache = new KerberosPVWatcherCache(kerberosUtils, labels)
       pvWatcherCache.deploy(kerberosUtils.getNNStorage)
       pvWatcherCache.deploy(kerberosUtils.getKTStorage)
       pvWatcherCache.stopWatch()
@@ -49,7 +47,7 @@ private[spark] class KerberizedHadoopClusterLauncher(
       cmWatcherCache.stopWatch()
 
       // Launches the Hadoop cluster pods: KDC --> NN --> DN1 --> Data-Populator
-      val podWatcherCache = new KerberosPodWatcherCache(kerberosUtils, LABELS)
+      val podWatcherCache = new KerberosPodWatcherCache(kerberosUtils, labels)
       podWatcherCache.deploy(kerberosUtils.getKDC)
       podWatcherCache.deploy(kerberosUtils.getNN)
       podWatcherCache.deploy(kerberosUtils.getDN)

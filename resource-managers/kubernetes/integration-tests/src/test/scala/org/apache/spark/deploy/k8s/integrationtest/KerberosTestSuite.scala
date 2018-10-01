@@ -24,8 +24,9 @@ import org.apache.spark.deploy.k8s.integrationtest.kerberos._
 
 private[spark] trait KerberosTestSuite { k8sSuite: KubernetesSuite =>
 
-  test("Secure HDFS test with HDFS keytab", k8sTestTag) {
+  test("Secure HDFS test with HDFS keytab (Cluster Mode)", k8sTestTag) {
     val kubernetesClient = kubernetesTestComponents.kubernetesClient
+
     // Launches single-noded psuedo-distributed kerberized hadoop cluster
     kerberizedHadoopClusterLauncher.launchKerberizedCluster(kerberosUtils)
 
@@ -39,9 +40,10 @@ private[spark] trait KerberosTestSuite { k8sSuite: KubernetesSuite =>
       appLocator,
       KERB_YAML_LOCATION))
     driverWatcherCache.stopWatch()
+
     val expectedLogOnCompletion = Seq(
-      "Returned length(s) of: [1, 1, 1]",
-      "Other stuff")
+      "File contents: [Michael, 29],[Andy, 30],[Justin, 19]",
+      "Returned length(s) of: 1,1,1")
     val driverPod = kubernetesClient
       .pods()
       .inNamespace(kubernetesTestComponents.namespace)

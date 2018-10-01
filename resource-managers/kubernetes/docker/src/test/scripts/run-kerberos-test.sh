@@ -16,9 +16,10 @@ until /usr/bin/kinit -kt /var/keytabs/hdfs.keytab hdfs/nn.${NAMESPACE}.svc.clust
       --conf spark.executor.instances=1 \
       --conf spark.app.name=spark-hdfs \
       --conf spark.driver.extraClassPath=/opt/spark/hconf/core-site.xml:/opt/spark/hconf/hdfs-site.xml:/opt/spark/hconf/yarn-site.xml:/etc/krb5.conf \
-      --conf spark.kubernetes.container.image=spark:latest \
+      --conf spark.kubernetes.container.image=${BASE_SPARK_IMAGE} \
+      --conf spark.kubernetes.kerberos.krb5location=/etc/krb5.conf \
       --conf spark.kerberos.keytab=/var/keytabs/hdfs.keytab \
       --conf spark.kerberos.principal=hdfs/nn.${NAMESPACE}.svc.cluster.local@CLUSTER.LOCAL \
       --conf spark.kubernetes.driver.label.spark-app-locator=${APP_LOCATOR_LABEL} \
       ${SUBMIT_RESOURCE} \
-      hdfs://nn.${NAMESPACE}.svc.cluster.local:9000/user/ifilonenko/wordcount.txt
+      hdfs://nn.${NAMESPACE}.svc.cluster.local:9000/user/ifilonenko/people.txt
