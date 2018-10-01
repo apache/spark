@@ -618,8 +618,7 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         """
         Returns the cluster assignments of this model.
         """
-        return self.call("getAssignments").map(
-            lambda x: (PowerIterationClustering.Assignment(*x)))
+        return self.call("getAssignments").map(lambda x: Assignment(*x))
 
     @classmethod
     @since('1.5.0')
@@ -631,6 +630,12 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         wrapper =\
             sc._jvm.org.apache.spark.mllib.api.python.PowerIterationClusteringModelWrapper(model)
         return PowerIterationClusteringModel(wrapper)
+
+
+#: Represents an (id, cluster) tuple.
+#:
+#: .. versionadded:: 1.5.0
+Assignment = namedtuple("Assignment", ["id", "cluster"])
 
 
 class PowerIterationClustering(object):
@@ -671,12 +676,8 @@ class PowerIterationClustering(object):
                               rdd.map(_convert_to_vector), int(k), int(maxIterations), initMode)
         return PowerIterationClusteringModel(model)
 
-    class Assignment(namedtuple("Assignment", ["id", "cluster"])):
-        """
-        Represents an (id, cluster) tuple.
-
-        .. versionadded:: 1.5.0
-        """
+    # Backward-compatible alias.
+    Assignment = Assignment
 
 
 class StreamingKMeansModel(KMeansModel):
