@@ -267,7 +267,6 @@ class SparkSession(object):
         >>> l = [('Alice', 1)]
         >>> rdd = s.sparkContext.parallelize(l)
         >>> df = s.createDataFrame(rdd, ['name', 'age'])
-        >>> df.show()
         >>> df.select("age").collect()
         [Row(age=1)]
         """
