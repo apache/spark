@@ -1501,7 +1501,7 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
     }
   }
 
-  override def toString: String = {
+  def summarize(): String = {
     if (isNormalSolver) {
 
       def round(x: Double): String = {
