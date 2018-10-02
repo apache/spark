@@ -32,11 +32,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
@@ -59,36 +60,12 @@ private[avro] class AvroFileFormat extends FileFormat
     val conf = spark.sessionState.newHadoopConf()
     val parsedOptions = new AvroOptions(options, conf)
 
-    // Schema evolution is not supported yet. Here we only pick a single random sample file to
-    // figure out the schema of the whole dataset.
-    val sampleFile =
-      if (parsedOptions.ignoreExtension) {
-        files.headOption.getOrElse {
-          throw new FileNotFoundException("Files for schema inferring have been not found.")
-        }
-      } else {
-        files.find(_.getPath.getName.endsWith(".avro")).getOrElse {
-          throw new FileNotFoundException(
-            "No Avro files found. If files don't have .avro extension, set ignoreExtension to true")
-        }
-      }
-
     // User can specify an optional avro json schema.
     val avroSchema = parsedOptions.schema
       .map(new Schema.Parser().parse)
       .getOrElse {
-        val in = new FsInput(sampleFile.getPath, conf)
-        try {
-          val reader = DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]())
-          try {
-            reader.getSchema
-          } finally {
-            reader.close()
-          }
-        } finally {
-          in.close()
-        }
-      }
+        inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension)
+    }
 
     SchemaConverters.toSqlType(avroSchema).dataType match {
       case t: StructType => Some(t)
@@ -97,6 +74,50 @@ private[avro] class AvroFileFormat extends FileFormat
            |
            |${avroSchema.toString(true)}
            |""".stripMargin)
+    }
+  }
+
+  private def inferAvroSchemaFromFiles(
+      files: Seq[FileStatus],
+      conf: Configuration,
+      ignoreExtension: Boolean): Schema = {
+    val ignoreCorruptFiles = SQLConf.get.ignoreCorruptFiles
+    // Schema evolution is not supported yet. Here we only pick first random readable sample file to
+    // figure out the schema of the whole dataset.
+    val avroReader = files.iterator.map { f =>
+      val path = f.getPath
+      if (!ignoreExtension && !path.getName.endsWith(".avro")) {
+        None
+      } else {
+        val in = new FsInput(path, conf)
+        try {
+          Some(DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]()))
+        } catch {
+          case e: IOException =>
+            if (ignoreCorruptFiles) {
+              logWarning(s"Skipped the footer in the corrupted file: $path", e)
+              None
+            } else {
+              throw new SparkException(s"Could not read file: $path", e)
+            }
+        } finally {
+          in.close()
+        }
+      }
+    }.collectFirst {
+      case Some(reader) => reader
+    }
+
+    avroReader match {
+      case Some(reader) =>
+        try {
+          reader.getSchema
+        } finally {
+          reader.close()
+        }
+      case None =>
+        throw new FileNotFoundException(
+          "No Avro files found. If files don't have .avro extension, set ignoreExtension to true")
     }
   }
 

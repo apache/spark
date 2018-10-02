@@ -342,6 +342,47 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  private def createDummyCorruptFile(dir: File): Unit = {
+    FileUtils.forceMkdir(dir)
+    val corruptFile = new File(dir, "corrupt.avro")
+    val writer = new BufferedWriter(new FileWriter(corruptFile))
+    writer.write("corrupt")
+    writer.close()
+  }
+
+  test("Ignore corrupt Avro file if flag IGNORE_CORRUPT_FILES enabled") {
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+      withTempPath { dir =>
+        val srcFile = new File("src/test/resources/episodes.avro")
+        val destFile = new File(dir, "episodes.avro")
+        FileUtils.copyFile(srcFile, destFile)
+
+        createDummyCorruptFile(dir)
+
+        val df = spark.read.format("avro").load(srcFile.getAbsolutePath)
+        val schema = df.schema
+        val result = df.collect()
+        (1 to 5).foreach { _ =>
+          assert(spark.read.format("avro").load(dir.getAbsolutePath).schema == schema)
+          checkAnswer(spark.read.format("avro").load(dir.getAbsolutePath), result)
+        }
+      }
+    }
+  }
+
+  test("Throws IOException on reading corrupt Avro file if flag IGNORE_CORRUPT_FILES disabled") {
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+      withTempPath { dir =>
+        createDummyCorruptFile(dir)
+        val message = intercept[org.apache.spark.SparkException] {
+          spark.read.format("avro").load(dir.getAbsolutePath).schema
+        }.getMessage
+
+        assert(message.contains("Could not read file"))
+      }
+    }
+  }
+
   test("Date field type") {
     withTempPath { dir =>
       val schema = StructType(Seq(
