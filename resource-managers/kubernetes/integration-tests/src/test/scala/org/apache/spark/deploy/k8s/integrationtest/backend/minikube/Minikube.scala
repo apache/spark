@@ -16,7 +16,6 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest.backend.minikube
 
-import java.io.File
 import java.nio.file.Paths
 
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient}

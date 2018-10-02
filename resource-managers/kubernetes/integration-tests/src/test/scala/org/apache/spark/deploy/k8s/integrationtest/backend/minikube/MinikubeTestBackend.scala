@@ -50,12 +50,14 @@ private[spark] object MinikubeTestBackend
     // Temporary hack until client library for fabric8 is updated to get around
     // the NPE that comes about when I do .list().getItems().asScala
     try {
-      val pvList = defaultClient.persistentVolumes().list().getItems.asScala
+      val pvList = defaultClient.persistentVolumes().withLabels(KERBEROS_LABEL.asJava)
+        .list().getItems.asScala
       if (pvList.nonEmpty) {
         defaultClient.persistentVolumes().delete()
       }
       Eventually.eventually(TIMEOUT, INTERVAL) {
-        defaultClient.persistentVolumes().list().getItems.asScala.isEmpty should be (true) }
+        defaultClient.persistentVolumes().withLabels(KERBEROS_LABEL.asJava)
+          .list().getItems.asScala.isEmpty should be (true) }
     } catch {
       case ex: java.lang.NullPointerException =>
     }

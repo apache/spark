@@ -177,6 +177,7 @@ private[spark] class KerberosUtils(
         .withKey(file)
         .withPath(file)
         .build()).toList
+    // RoleBinding in the case of RBAC problems
     def getKerberosRoleBinding: ClusterRoleBinding =
       new ClusterRoleBindingBuilder()
         .withNewMetadata()
