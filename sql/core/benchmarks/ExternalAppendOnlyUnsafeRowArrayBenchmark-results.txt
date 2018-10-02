@@ -1,0 +1,50 @@
+================================================================================================
+WITHOUT SPILL
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
+
+Array with 100000 rows:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+ArrayBuffer                                   4810 / 5120         21.3          47.0       1.0X
+ExternalAppendOnlyUnsafeRowArray              4996 / 5043         20.5          48.8       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
+
+Array with 1000 rows:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+ArrayBuffer                                   8839 / 8951         29.7          33.7       1.0X
+ExternalAppendOnlyUnsafeRowArray              9884 / 9888         26.5          37.7       0.9X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
+
+Array with 30000 rows:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+ArrayBuffer                                 19980 / 20061         24.6          40.6       1.0X
+ExternalAppendOnlyUnsafeRowArray            21630 / 21645         22.7          44.0       0.9X
+
+
+================================================================================================
+WITH SPILL
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
+
+Spilling with 1000 rows:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+UnsafeExternalSorter                        15829 / 15845         16.6          60.4       1.0X
+ExternalAppendOnlyUnsafeRowArray            10158 / 10174         25.8          38.7       1.6X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
+
+Spilling with 10000 rows:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+UnsafeExternalSorter                             6 /    6         28.3          35.3       1.0X
+ExternalAppendOnlyUnsafeRowArray                 6 /    7         27.7          36.1       1.0X
+
+
