@@ -2890,7 +2890,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         .selectExpr("1 + id2 as id3")
       sortDF.collect()
       val sortNumRecords = sortDF.queryExecution.sparkPlan.collect {
-        case l@LocalLimitExec(_, f: FilterExec) => f
+        case l @ LocalLimitExec(_, f: FilterExec) => f
       }.map { filterNode =>
         filterNode.metrics("numOutputRows").value
       }
@@ -2901,7 +2901,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       .selectExpr("id + 1 as id2").limit(1).filter('id > 50)
     filterDF.collect()
     val filterNumRecords = filterDF.queryExecution.sparkPlan.collect {
-      case f@FilterExec(_, r: RangeExec) => f
+      case f @ FilterExec(_, r: RangeExec) => f
     }.map { case filterNode =>
       filterNode.metrics("numOutputRows").value
     }.head
@@ -2915,7 +2915,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       .filter('id2 >= 0)
     twoLimitsDF.collect()
     val twoLimitsDFNumRecords = twoLimitsDF.queryExecution.sparkPlan.collect {
-      case f@FilterExec(_, _: RangeExec) => f
+      case f @ FilterExec(_, _: RangeExec) => f
     }.map { filterNode =>
       filterNode.metrics("numOutputRows").value
     }.head
