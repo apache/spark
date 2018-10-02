@@ -17,16 +17,27 @@
 
 package org.apache.spark.executor
 
-private[spark] trait ProcessTreeMetrics {
-  def isAvailable: Boolean
-  def pid: Int
-  def computePid(): Int
-  def createProcessTree()
-  def updateProcessTree()
-  def getJVMRSSInfo(): Long
-  def getJVMVirtualMemInfo(): Long
-  def getPythonRSSInfo(): Long
-  def getPythonVirtualMemInfo(): Long
-  def getOtherRSSInfo(): Long
-  def getOtherVirtualMemInfo(): Long
+import org.apache.spark.SparkFunSuite
+
+
+class ProcfsBasedSystemsSuite extends SparkFunSuite {
+
+ val p = new ProcfsBasedSystems
+  p.pageSize = 4096
+  p.procfsDir = getTestResourcePath("ProcessTree")
+
+  test("testGetProcessInfo") {
+   p.getProcessInfo(26109)
+   assert(p.getJVMVirtualMemInfo == 4769947648L)
+   assert(p.getJVMRSSInfo == 262610944)
+   assert(p.getPythonVirtualMemInfo == 0)
+   assert(p.getPythonRSSInfo == 0)
+
+   p.getProcessInfo(22763)
+   assert(p.getPythonVirtualMemInfo == 360595456)
+   assert(p.getPythonRSSInfo == 7831552)
+   assert(p.getJVMVirtualMemInfo == 4769947648L)
+   assert(p.getJVMRSSInfo == 262610944)
+
+  }
 }

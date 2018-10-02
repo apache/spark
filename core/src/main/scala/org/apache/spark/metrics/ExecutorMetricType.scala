@@ -19,7 +19,7 @@ package org.apache.spark.metrics
 import java.lang.management.{BufferPoolMXBean, ManagementFactory}
 import javax.management.ObjectName
 
-import org.apache.spark.executor.{ProcessTreeMetrics, ProcfsBasedSystems}
+import org.apache.spark.executor.ProcfsBasedSystems
 import org.apache.spark.memory.MemoryManager
 
 /**
@@ -62,37 +62,38 @@ case object JVMOffHeapMemory extends ExecutorMetricType {
 
 case object ProcessTreeJVMRSSMemory extends ExecutorMetricType {
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
-    ExecutorMetricType.pTreeInfo.getJVMRSSInfo()
+    ExecutorMetricType.pTreeInfo.updateAllMetrics()
+    ExecutorMetricType.pTreeInfo.allMetrics.jvmRSSTotal
   }
 }
 
 case object ProcessTreeJVMVMemory extends ExecutorMetricType {
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
-    ExecutorMetricType.pTreeInfo.getJVMVirtualMemInfo()
+    ExecutorMetricType.pTreeInfo.allMetrics.jvmVmemTotal
   }
 }
 
 case object ProcessTreePythonRSSMemory extends ExecutorMetricType {
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
-    ExecutorMetricType.pTreeInfo.getPythonRSSInfo()
+    ExecutorMetricType.pTreeInfo.allMetrics.pythonRSSTotal
   }
 }
 
 case object ProcessTreePythonVMemory extends ExecutorMetricType {
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
-    ExecutorMetricType.pTreeInfo.getPythonVirtualMemInfo()
+    ExecutorMetricType.pTreeInfo.allMetrics.pythonVmemTotal
   }
 }
 
 case object ProcessTreeOtherRSSMemory extends ExecutorMetricType {
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
-    ExecutorMetricType.pTreeInfo.getOtherRSSInfo()
+    ExecutorMetricType.pTreeInfo.allMetrics.otherRSSTotal
   }
 }
 
 case object ProcessTreeOtherVMemory extends ExecutorMetricType {
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
-    ExecutorMetricType.pTreeInfo.getOtherVirtualMemInfo()
+    ExecutorMetricType.pTreeInfo.allMetrics.otherVmemTotal
   }
 }
 
@@ -121,7 +122,7 @@ case object MappedPoolMemory extends MBeanExecutorMetricType(
   "java.nio:type=BufferPool,name=mapped")
 
 private[spark] object ExecutorMetricType {
-  final val pTreeInfo: ProcessTreeMetrics = new ProcfsBasedSystems
+  final val pTreeInfo = new ProcfsBasedSystems
 
   // List of all executor metric types
   val values = IndexedSeq(

@@ -25,28 +25,38 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Queue
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.SparkEnv
+import org.apache.spark.internal.{config, Logging}
 
+private[spark] case class ProcfsBasedSystemsMetrics(jvmVmemTotal: Long,
+                                             jvmRSSTotal: Long,
+                                             pythonVmemTotal: Long,
+                                             pythonRSSTotal: Long,
+                                             otherVmemTotal: Long,
+                                             otherRSSTotal: Long)
 
 // Some of the ideas here are taken from the ProcfsBasedProcessTree class in hadoop
 // project.
-class ProcfsBasedSystems  extends ProcessTreeMetrics with Logging {
-  val procfsDir = "/proc/"
+private[spark] class ProcfsBasedSystems extends Logging {
+  var procfsDir = "/proc/"
+  val procfsStatFile = "stat"
+  var pageSize = 0
   var isAvailable: Boolean = isItProcfsBased
-  val pid: Int = computePid()
-  val ptree: scala.collection.mutable.Map[ Int, Set[Int]] =
+  private val pid: Int = computePid()
+  private val ptree: scala.collection.mutable.Map[ Int, Set[Int]] =
     scala.collection.mutable.Map[ Int, Set[Int]]()
-  val PROCFS_STAT_FILE = "stat"
-  var latestJVMVmemTotal: Long = 0
-  var latestJVMRSSTotal: Long = 0
-  var latestPythonVmemTotal: Long = 0
-  var latestPythonRSSTotal: Long = 0
-  var latestOtherVmemTotal: Long = 0
-  var latestOtherRSSTotal: Long = 0
 
-  createProcessTree
+  var allMetrics: ProcfsBasedSystemsMetrics = ProcfsBasedSystemsMetrics(0, 0, 0, 0, 0, 0)
+  private var latestJVMVmemTotal: Long = 0
+  private var latestJVMRSSTotal: Long = 0
+  private var latestPythonVmemTotal: Long = 0
+  private var latestPythonRSSTotal: Long = 0
+  private var latestOtherVmemTotal: Long = 0
+  private var latestOtherRSSTotal: Long = 0
 
-  def isItProcfsBased: Boolean = {
+  computeProcessTree()
+
+  private def isItProcfsBased: Boolean = {
     val testing = sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
     if (testing) {
       return true
@@ -59,14 +69,14 @@ class ProcfsBasedSystems  extends ProcessTreeMetrics with Logging {
     catch {
       case f: FileNotFoundException => return false
     }
-
-    val shouldLogStageExecutorProcessTreeMetrics = org.apache.spark.SparkEnv.get.conf.
-      getBoolean("spark.eventLog.logStageExecutorProcessTreeMetrics.enabled", true)
-    true && shouldLogStageExecutorProcessTreeMetrics
+    val shouldLogStageExecutorMetrics =
+      SparkEnv.get.conf.get(config.EVENT_LOG_STAGE_EXECUTOR_METRICS)
+    val shouldLogStageExecutorProcessTreeMetrics =
+      SparkEnv.get.conf.get(config.EVENT_LOG_PROCESS_TREE_METRICS)
+    shouldLogStageExecutorProcessTreeMetrics && shouldLogStageExecutorMetrics
   }
 
-
-  def computePid(): Int = {
+  private def computePid(): Int = {
     if (!isAvailable) {
       return -1;
     }
@@ -75,7 +85,7 @@ class ProcfsBasedSystems  extends ProcessTreeMetrics with Logging {
       // https://docs.oracle.com/javase/9/docs/api/java/lang/ProcessHandle.html
       val cmd = Array("bash", "-c", "echo $PPID")
       val length = 10
-      var out: Array[Byte] = Array.fill[Byte](length)(0)
+      val out: Array[Byte] = Array.fill[Byte](length)(0)
       Runtime.getRuntime.exec(cmd).getInputStream.read(out)
       val pid = Integer.parseInt(new String(out, "UTF-8").trim)
       return pid;
@@ -92,11 +102,18 @@ class ProcfsBasedSystems  extends ProcessTreeMetrics with Logging {
     }
   }
 
+  private def computePageSize(): Unit = {
+    val cmd = Array("getconf", "PAGESIZE")
+    val out: Array[Byte] = Array.fill[Byte](10)(0)
+    Runtime.getRuntime.exec(cmd).getInputStream.read(out)
+    pageSize = Integer.parseInt(new String(out, "UTF-8").trim)
+  }
 
-  def createProcessTree(): Unit = {
+  private def computeProcessTree(): Unit = {
     if (!isAvailable) {
       return
     }
+    computePageSize
     val queue: Queue[Int] = new Queue[Int]()
     queue += pid
     while( !queue.isEmpty ) {
@@ -112,133 +129,7 @@ class ProcfsBasedSystems  extends ProcessTreeMetrics with Logging {
     }
   }
 
-
-  def updateProcessTree(): Unit = {
-    if (!isAvailable) {
-      return
-    }
-    val queue: Queue[Int] = new Queue[Int]()
-    queue += pid
-    while( !queue.isEmpty ) {
-      val p = queue.dequeue()
-      val c = getChildPIds(p)
-      if(!c.isEmpty) {
-        queue ++= c
-        val preChildren = ptree.get(p)
-        preChildren match {
-          case Some(children) => if (!c.toSet.equals(children)) {
-            val diff: Set[Int] = children -- c.toSet
-            ptree.update(p, c.toSet )
-            diff.foreach(ptree.remove(_))
-          }
-          case None => ptree.update(p, c.toSet )
-        }
-      }
-      else {
-        ptree.update(p, Set[Int]())
-      }
-    }
-  }
-
-
-  /**
-   * Hadoop ProcfsBasedProcessTree class used regex and pattern matching to retrive the memory
-   * info. I tried that but found it not correct during tests, so I used normal string analysis
-   * instead. The computation of RSS and Vmem are based on proc(5):
-   * http://man7.org/linux/man-pages/man5/proc.5.html
-   */
-  def getProcessInfo(pid: Int): Unit = {
-    try {
-      val pidDir: File = new File(procfsDir, pid.toString)
-      val fReader = new InputStreamReader(
-        new FileInputStream(
-          new File(pidDir, PROCFS_STAT_FILE)), Charset.forName("UTF-8"))
-      val in: BufferedReader = new BufferedReader(fReader)
-      val procInfo = in.readLine
-      in.close
-      fReader.close
-      val procInfoSplit = procInfo.split(" ")
-      if ( procInfoSplit != null ) {
-        if (procInfoSplit(1).toLowerCase.contains("java")) {
-          latestJVMVmemTotal += procInfoSplit(22).toLong
-          latestJVMRSSTotal += procInfoSplit(23).toLong
-        }
-        else if (procInfoSplit(1).toLowerCase.contains("python")) {
-          latestPythonVmemTotal += procInfoSplit(22).toLong
-          latestPythonRSSTotal += procInfoSplit(23).toLong
-        }
-        else {
-        latestOtherVmemTotal += procInfoSplit(22).toLong
-        latestOtherRSSTotal += procInfoSplit(23).toLong }
-      }
-    } catch {
-      case f: FileNotFoundException => return null
-    }
-  }
-
-
-  def getOtherRSSInfo(): Long = {
-    if (!isAvailable) {
-      return -1
-    }
-    updateProcessTree
-    val pids = ptree.keySet
-    latestJVMRSSTotal = 0
-    latestJVMVmemTotal = 0
-    latestPythonRSSTotal = 0
-    latestPythonVmemTotal = 0
-    latestOtherRSSTotal = 0
-    latestOtherVmemTotal = 0
-    for (p <- pids) {
-       getProcessInfo(p)
-    }
-    latestOtherRSSTotal
-  }
-
-
-  def getOtherVirtualMemInfo(): Long = {
-    if (!isAvailable) {
-      return -1
-    }
-    // We won't call updateProcessTree and also compute total virtual memory here
-    // since we already did all of this when we computed RSS info
-    latestOtherVmemTotal
-  }
-
-
-  def getJVMRSSInfo(): Long = {
-    if (!isAvailable) {
-      return -1
-    }
-    latestJVMRSSTotal
-  }
-
-
-  def getJVMVirtualMemInfo(): Long = {
-    if (!isAvailable) {
-      return -1
-    }
-    latestJVMVmemTotal
-  }
-
-
-  def getPythonRSSInfo(): Long = {
-    if (!isAvailable) {
-      return -1
-    }
-    latestPythonRSSTotal
-  }
-
-
-  def getPythonVirtualMemInfo(): Long = {
-    if (!isAvailable) {
-      return -1
-    }
-    latestPythonVmemTotal
-  }
-
-
-  def getChildPIds(pid: Int): ArrayBuffer[Int] = {
+  private def getChildPIds(pid: Int): ArrayBuffer[Int] = {
     try {
       val cmd = Array("pgrep", "-P", pid.toString)
       val input = Runtime.getRuntime.exec(cmd).getInputStream
@@ -258,14 +149,120 @@ class ProcfsBasedSystems  extends ProcessTreeMetrics with Logging {
       }
       childPidsInInt
     } catch {
-    case e: IOException => logDebug("IO Exception when trying to compute process tree." +
-      " As a result reporting of ProcessTree metrics is stopped")
-      isAvailable = false
-      return new mutable.ArrayBuffer()
-    case _ => logDebug("Some exception occurred when trying to compute process tree. As a result" +
-      "  reporting of ProcessTree metrics is stopped")
-      isAvailable = false
-      return new mutable.ArrayBuffer()
+      case e: IOException => logDebug("IO Exception when trying to compute process tree." +
+        " As a result reporting of ProcessTree metrics is stopped")
+        isAvailable = false
+        return new mutable.ArrayBuffer()
+      case _ => logDebug("Some exception occurred when trying to compute process tree." +
+        " As a result reporting of ProcessTree metrics is stopped")
+        isAvailable = false
+        return new mutable.ArrayBuffer()
     }
+  }
+
+  /**
+   * Hadoop ProcfsBasedProcessTree class used regex and pattern matching to retrive the memory
+   * info. I tried that but found it not correct during tests, so I used normal string analysis
+   * instead. The computation of RSS and Vmem are based on proc(5):
+   * http://man7.org/linux/man-pages/man5/proc.5.html
+   */
+  def getProcessInfo(pid: Int): Unit = {
+    try {
+      val pidDir: File = new File(procfsDir, pid.toString)
+      val fReader = new InputStreamReader(
+        new FileInputStream(
+          new File(pidDir, procfsStatFile)), Charset.forName("UTF-8"))
+      val in: BufferedReader = new BufferedReader(fReader)
+      val procInfo = in.readLine
+      in.close
+      fReader.close
+      val procInfoSplit = procInfo.split(" ")
+      if ( procInfoSplit != null ) {
+        if (procInfoSplit(1).toLowerCase.contains("java")) {
+          latestJVMVmemTotal += procInfoSplit(22).toLong
+          latestJVMRSSTotal += procInfoSplit(23).toLong
+        }
+        else if (procInfoSplit(1).toLowerCase.contains("python")) {
+          latestPythonVmemTotal += procInfoSplit(22).toLong
+          latestPythonRSSTotal += procInfoSplit(23).toLong
+        }
+        else {
+        latestOtherVmemTotal += procInfoSplit(22).toLong
+        latestOtherRSSTotal += procInfoSplit(23).toLong }
+      }
+    } catch {
+      case f: FileNotFoundException =>
+    }
+  }
+
+  def updateAllMetrics(): Unit = {
+    allMetrics = computeAllMetrics
+  }
+
+  private def computeAllMetrics(): ProcfsBasedSystemsMetrics = {
+    if (!isAvailable) {
+      return ProcfsBasedSystemsMetrics(-1, -1, -1, -1, -1, -1)
+    }
+    computeProcessTree
+    val pids = ptree.keySet
+    latestJVMRSSTotal = 0
+    latestJVMVmemTotal = 0
+    latestPythonRSSTotal = 0
+    latestPythonVmemTotal = 0
+    latestOtherRSSTotal = 0
+    latestOtherVmemTotal = 0
+    for (p <- pids) {
+      getProcessInfo(p)
+    }
+    ProcfsBasedSystemsMetrics(
+      getJVMVirtualMemInfo,
+      getJVMRSSInfo,
+      getPythonVirtualMemInfo,
+      getPythonRSSInfo,
+      getOtherVirtualMemInfo,
+      getOtherRSSInfo)
+
+  }
+
+  def getOtherRSSInfo(): Long = {
+    if (!isAvailable) {
+      return -1
+    }
+    latestOtherRSSTotal*pageSize
+  }
+
+  def getOtherVirtualMemInfo(): Long = {
+    if (!isAvailable) {
+      return -1
+    }
+    latestOtherVmemTotal
+  }
+
+  def getJVMRSSInfo(): Long = {
+    if (!isAvailable) {
+      return -1
+    }
+    latestJVMRSSTotal*pageSize
+  }
+
+  def getJVMVirtualMemInfo(): Long = {
+    if (!isAvailable) {
+      return -1
+    }
+    latestJVMVmemTotal
+  }
+
+  def getPythonRSSInfo(): Long = {
+    if (!isAvailable) {
+      return -1
+    }
+    latestPythonRSSTotal*pageSize
+  }
+
+  def getPythonVirtualMemInfo(): Long = {
+    if (!isAvailable) {
+      return -1
+    }
+    latestPythonVmemTotal
   }
 }

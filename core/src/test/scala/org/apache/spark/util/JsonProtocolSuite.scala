@@ -2090,7 +2090,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "ProcessTreePythonVMemory": 123456,
       |    "ProcessTreePythonRSSMemory": 61728,
       |    "ProcessTreeOtherVMemory": 30364,
-      |     "ProcessTreeOtherRSSMemory": 15182
+      |    "ProcessTreeOtherRSSMemory": 15182
       |  }
       |
       |}

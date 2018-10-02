@@ -272,27 +272,6 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val eventLogger = new EventLoggingListener(logName, None, testDirPath.toUri(), conf)
     val listenerBus = new LiveListenerBus(conf)
 
-
-    // expected StageExecutorMetrics, for the given stage id and executor id
-    val expectedMetricsEvents: Map[(Int, String), SparkListenerStageExecutorMetrics] =
-      Map(
-        ((0, "1"),
-          new SparkListenerStageExecutorMetrics("1", 0, 0,
-            new ExecutorMetrics(Array(5000L, 50L, 4000L, 8000L, 50L, 20L, 50L, 10L, 100L, 30L,
-              70L, 20L)))),
-        ((0, "2"),
-          new SparkListenerStageExecutorMetrics("2", 0, 0,
-            new ExecutorMetrics(Array(7000L, 70L, 4000L, 9000L, 50L, 20L, 10L, 10L, 50L, 30L,
-              80L, 40L)))),
-        ((1, "1"),
-          new SparkListenerStageExecutorMetrics("1", 1, 0,
-            new ExecutorMetrics(Array(7000L, 70L, 3000L, 5000L, 50L, 30L, 60L, 30L, 80L, 55L,
-              50L, 0L)))),
-        ((1, "2"),
-          new SparkListenerStageExecutorMetrics("2", 1, 0,
-            new ExecutorMetrics(Array(7000L, 70L, 5000L, 8000L, 50L, 40L, 10L, 30L, 50L, 60L,
-              40L, 40L)))))
-
     // Events to post.
     val events = Array(
       SparkListenerApplicationStart("executionMetrics", None,
