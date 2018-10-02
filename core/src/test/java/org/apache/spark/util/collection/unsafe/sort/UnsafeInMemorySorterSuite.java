@@ -174,14 +174,12 @@ public class UnsafeInMemorySorterSuite {
       }
     };
     UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(consumer, memoryManager,
-            recordComparator, prefixComparator,
-            100, shouldUseRadixSort());
+            recordComparator, prefixComparator, 100, shouldUseRadixSort());
 
     testMemoryManager.markExecutionAsOutOfMemoryOnce();
     try {
       sorter.reset();
-        fail("expected OutOfMmoryError " +
-                "but it seems operation surprisingly succeeded");
+      fail("expected OutOfMmoryError but it seems operation surprisingly succeeded");
     } catch (OutOfMemoryError oom) {
       // as expected
     }
