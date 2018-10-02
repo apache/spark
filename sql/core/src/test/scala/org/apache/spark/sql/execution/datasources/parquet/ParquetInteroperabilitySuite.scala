@@ -31,6 +31,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
 
 class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedSQLContext {
   test("parquet files with different physical schemas but share the same logical schema") {
@@ -212,12 +213,21 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
       val expectedPath = Thread.currentThread()
         .getContextClassLoader.getResource("test-data/" + file + ".txt").toURI.getPath
 
+      val schema = StructType(Array(
+        StructField("rawValue", LongType, false),
+        StructField("millisUtc", TimestampType, false),
+        StructField("millisNonUtc", TimestampType, false),
+        StructField("microsUtc", TimestampType, false),
+        StructField("microsNonUtc", TimestampType, false)))
+
       withTempPath {tableDir =>
         val textValues = spark.read
-          .option("header", false).option("inferSchema", true)
+          .schema(schema)
+          .option("inferSchema", false)
+          .option("header", false)
           .option("delimiter", ";").csv(expectedPath).collect
         val timestamps = textValues.map(
-          row => (row.getInt(0),
+          row => (row.getLong(0),
             row.getTimestamp(1),
             row.getTimestamp(2),
             row.getTimestamp(3),
@@ -234,7 +244,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
 
             val expected = timestamps.map(_.toString).sorted
             val actual = readBack.map(
-              row => (row.getInt(0),
+              row => (row.getLong(0),
                 row.getTimestamp(1),
                 row.getTimestamp(2),
                 row.getTimestamp(3),
