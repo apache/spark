@@ -25,7 +25,12 @@ import java.io.{File, FileOutputStream, OutputStream}
 abstract class BenchmarkBase {
   var output: Option[OutputStream] = None
 
-  def benchmark(): Unit
+  /**
+   * Main process of the whole benchmark.
+   * Implementations of this method are supposed to use the wrapper method `runBenchmark`
+   * for each benchmark scenario.
+   */
+  def runBenchmarkSuite(): Unit
 
   final def runBenchmark(benchmarkName: String)(func: => Any): Unit = {
     val separator = "=" * 96
@@ -46,7 +51,7 @@ abstract class BenchmarkBase {
       output = Some(new FileOutputStream(file))
     }
 
-    benchmark()
+    runBenchmarkSuite()
 
     output.foreach { o =>
       if (o != null) {
