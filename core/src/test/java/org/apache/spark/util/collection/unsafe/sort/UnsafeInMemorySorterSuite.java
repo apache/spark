@@ -174,16 +174,19 @@ public class UnsafeInMemorySorterSuite {
       }
     };
     UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(consumer, memoryManager,
-            recordComparator, prefixComparator, 100, shouldUseRadixSort());
+            recordComparator, prefixComparator,
+            100, shouldUseRadixSort());
 
     testMemoryManager.markExecutionAsOutOfMemoryOnce();
     try {
       sorter.reset();
-      fail("expected OutOfMmoryError but it seems operation surprisingly succeeded");
+        fail("expected OutOfMmoryError " +
+                "but it seems operation surprisingly succeeded");
     } catch (OutOfMemoryError oom) {
       // as expected
     }
-    // [SPARK-21907] this failed on NPE at org.apache.spark.memory.MemoryConsumer.freeArray(MemoryConsumer.java:108)
+    // [SPARK-21907] this failed on NPE at
+    // org.apache.spark.memory.MemoryConsumer.freeArray(MemoryConsumer.java:108)
     sorter.free();
     // simulate a 'back to back' free.
     sorter.free();

@@ -470,25 +470,28 @@ public class UnsafeExternalSorterSuite {
       insertNumber(sorter, i);
     }
     // We expect the next insert to attempt growing the pointerssArray
-    // first allocation is expected to fail, then a spill is 
+    // first allocation is expected to fail, then a spill is
     // triggered which attempts another allocation
     // which also fails and we expect to see this OOM here.
     // the original code messed with a released array within the spill code
     // and ended up with a failed assertion.
-    // We also expect the location of the OOM to be 
+    // We also expect the location of the OOM to be
     // org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset
     memoryManager.markconsequentOOM(2);
     try {
       insertNumber(sorter, 1024);
-      fail("expected OutOfMmoryError but it seems operation surprisingly succeeded");
+        fail("expected OutOfMmoryError but " +
+                "it seems operation surprisingly succeeded");
     }
-    // We expect an OutOfMemoryError here, anything else 
+    // We expect an OutOfMemoryError here, anything else
     // (i.e the original NPE is a failure)
     catch (OutOfMemoryError oom){
       String oomStackTrace = Utils.exceptionString(oom);
-      assertThat("expected OutOfMemoryError in org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset",
+        assertThat("expected OutOfMemoryError in " +
+                   "org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset",
               oomStackTrace,
-              Matchers.containsString("org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset"));
+              Matchers.containsString("org.apache.spark.util.collection." +
+                      "unsafe.sort.UnsafeInMemorySorter.reset"));
     }
   }
 }
