@@ -330,7 +330,7 @@ class RelationalGroupedDataset protected[sql](
    *   df.groupBy("year").pivot("course").sum("earnings")
    * }}}
    *
-   * From Spark 2.5.0, values can be literal columns, for instance, struct. For pivoting by
+   * From Spark 3.0.0, values can be literal columns, for instance, struct. For pivoting by
    * multiple columns, use the `struct` function to combine the columns and values:
    *
    * {{{
