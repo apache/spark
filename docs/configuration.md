@@ -794,6 +794,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.ui.dagGraph.retainedRootRDDs</code></td>
+  <td>Int.MaxValue</td>
+  <td>
+    How many DAG graph nodes the Spark UI and status APIs remember before garbage collecting.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.enabled</code></td>
   <td>true</td>
   <td>
@@ -805,6 +812,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>true</td>
   <td>
     Allows jobs and stages to be killed from the web UI.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.liveUpdate.period</code></td>
+  <td>100ms</td>
+  <td>
+    How often to update live entities. -1 means "never update" when replaying applications,
+    meaning only the last write will happen. For live applications, this avoids a few
+    operations that we can live without when rapidly processing incoming task events.
   </td>
 </tr>
 <tr>
