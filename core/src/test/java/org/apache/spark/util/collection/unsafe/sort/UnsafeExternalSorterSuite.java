@@ -480,18 +480,17 @@ public class UnsafeExternalSorterSuite {
     memoryManager.markconsequentOOM(2);
     try {
       insertNumber(sorter, 1024);
-        fail("expected OutOfMmoryError but " +
-                "it seems operation surprisingly succeeded");
+      fail("expected OutOfMmoryError but it seems operation surprisingly succeeded");
     }
     // We expect an OutOfMemoryError here, anything else
     // (i.e the original NPE is a failure)
     catch (OutOfMemoryError oom){
       String oomStackTrace = Utils.exceptionString(oom);
-        assertThat("expected OutOfMemoryError in " +
-                   "org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset",
-              oomStackTrace,
-              Matchers.containsString("org.apache.spark.util.collection." +
-                      "unsafe.sort.UnsafeInMemorySorter.reset"));
+      assertThat("expected OutOfMemoryError in " +
+        "org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset",
+        oomStackTrace,
+        Matchers.containsString(
+          "org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset"));
     }
   }
 }
