@@ -119,7 +119,7 @@ object SortBenchmark extends BenchmarkBase {
     benchmark.run()
   }
 
-  override def benchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(): Unit = {
     runBenchmark("radix sort") {
       sortBenchmark()
     }
