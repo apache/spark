@@ -19,6 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
+import org.apache.kafka.common.security.scram.ScramLoginModule
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
@@ -43,7 +44,7 @@ private[kafka010] object KafkaSecurityHelper extends Logging {
 
     val params =
       s"""
-      |com.sun.security.auth.module.Krb5LoginModule required
+      |${getKrb5LoginModuleName} required
       | useKeyTab=true
       | serviceName="${serviceName.get}"
       | keyTab="${keytab.get}"
@@ -52,6 +53,14 @@ private[kafka010] object KafkaSecurityHelper extends Logging {
     logInfo(s"Krb JAAS params: $params")
 
     params
+  }
+
+  private def getKrb5LoginModuleName(): String = {
+    if (System.getProperty("java.vendor").contains("IBM")) {
+      "com.ibm.security.auth.module.Krb5LoginModule"
+    } else {
+      "com.sun.security.auth.module.Krb5LoginModule"
+    }
   }
 
   def getTokenJaasParams(sparkConf: SparkConf): Option[String] = {
@@ -71,9 +80,10 @@ private[kafka010] object KafkaSecurityHelper extends Logging {
     val username = new String(token.getIdentifier)
     val password = new String(token.getPassword)
 
+    val loginModuleName = classOf[ScramLoginModule].getName
     val params =
       s"""
-      |org.apache.kafka.common.security.scram.ScramLoginModule required
+      |$loginModuleName required
       | tokenauth=true
       | serviceName="${serviceName.get}"
       | username="$username"

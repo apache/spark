@@ -61,6 +61,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
     delegationTokenManager.getServiceDelegationTokenProvider("hadoopfs") should not be (None)
     delegationTokenManager.getServiceDelegationTokenProvider("hbase") should not be (None)
     delegationTokenManager.getServiceDelegationTokenProvider("hive") should be (None)
+    delegationTokenManager.getServiceDelegationTokenProvider("kafka") should not be (None)
   }
 
   test("using deprecated configurations") {
@@ -74,6 +75,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
     delegationTokenManager.getServiceDelegationTokenProvider("hadoopfs") should be (None)
     delegationTokenManager.getServiceDelegationTokenProvider("hive") should be (None)
     delegationTokenManager.getServiceDelegationTokenProvider("hbase") should not be (None)
+    delegationTokenManager.getServiceDelegationTokenProvider("kafka") should not be (None)
   }
 
   test("verify no credentials are obtained") {

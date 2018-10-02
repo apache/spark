@@ -36,7 +36,7 @@ private[kafka010] object TokenUtil extends Logging {
   val TOKEN_KIND = new Text("KAFKA_DELEGATION_TOKEN")
   val TOKEN_SERVICE = new Text("kafka.server.delegation.token")
 
-  class KafkaDelegationTokenIdentifier extends AbstractDelegationTokenIdentifier {
+  private class KafkaDelegationTokenIdentifier extends AbstractDelegationTokenIdentifier {
     override def getKind: Text = TOKEN_KIND;
   }
 
