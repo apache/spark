@@ -29,18 +29,20 @@ class UnsafeWriterSuite extends SparkFunSuite {
     // This decimal holds 11 bytes
     val decimal2 = Decimal(123456789.1232456789)
     decimal2.changePrecision(38, 18)
-    val unsafeRowWriter = new UnsafeRowWriter(1)
-    unsafeRowWriter.resetRowWriter()
-    unsafeRowWriter.write(0, decimal2, decimal2.precision, decimal2.scale)
-    unsafeRowWriter.reset()
-    unsafeRowWriter.write(0, decimal1, decimal1.precision, decimal1.scale)
-    val res = unsafeRowWriter.getRow
-    assert(res.getDecimal(0, decimal1.precision, decimal1.scale) == decimal1)
-    // Check that the bytes which are not used by decimal1 (but are allocated) are zero-ed out.
-    // The first 16 bytes are used for the offset and size, then 8 bytes contain the value of
-    // decimal1. So from byte 25 to byte 32 there is the leftover of decimal2 which should have
-    // been zero-ed.
-    assert(res.getBytes()(25) == 0x00)
+    // On an UnsafeRowWriter we write decimal2 first and then decimal1
+    val unsafeRowWriter1 = new UnsafeRowWriter(1)
+    unsafeRowWriter1.resetRowWriter()
+    unsafeRowWriter1.write(0, decimal2, decimal2.precision, decimal2.scale)
+    unsafeRowWriter1.reset()
+    unsafeRowWriter1.write(0, decimal1, decimal1.precision, decimal1.scale)
+    val res1 = unsafeRowWriter1.getRow
+    // On a second UnsafeRowWriter we write directly decimal2
+    val unsafeRowWriter2 = new UnsafeRowWriter(1)
+    unsafeRowWriter2.resetRowWriter()
+    unsafeRowWriter2.write(0, decimal1, decimal1.precision, decimal1.scale)
+    val res2 = unsafeRowWriter2.getRow
+    // The two rows should be the equal
+    assert(res1 == res2)
   }
 
 }
