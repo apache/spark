@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.lang.reflect.Method
 import java.util.Properties
 
 import scala.collection.immutable
@@ -1099,26 +1098,24 @@ object SQLContext {
       data: Iterator[_],
       beanClass: Class[_],
       attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
-    val extractors =
-      JavaTypeInference.getJavaBeanReadableProperties(beanClass).map(_.getReadMethod)
-    val methodsToTypes = extractors.zip(attrs).map { case (e, attr) =>
-      (e, attr.dataType)
+    def createStructConverter(cls: Class[_], fieldTypes: Iterator[DataType]): Any => InternalRow = {
+      val methodConverters =
+        JavaTypeInference.getJavaBeanReadableProperties(cls).iterator.zip(fieldTypes)
+          .map { case (property, fieldType) =>
+            val method = property.getReadMethod
+            method -> createConverter(method.getReturnType, fieldType)
+          }.toArray
+      value => new GenericInternalRow(
+        methodConverters.map { case (method, converter) =>
+          converter(method.invoke(value))
+        })
     }
-    def invoke(element: Any)(tuple: (Method, DataType)): Any = tuple match {
-      case (e, structType: StructType) =>
-        val value = e.invoke(element)
-        val nestedExtractors =
-          JavaTypeInference.getJavaBeanReadableProperties(value.getClass).map(_.getReadMethod)
-        new GenericInternalRow(structType.zipWithIndex.map { case (field, index) =>
-          invoke(value)(nestedExtractors(index) -> field.dataType)
-        }.toArray)
-      case (e, dataType) =>
-        CatalystTypeConverters.createToCatalystConverter(dataType)(e.invoke(element))
+    def createConverter(cls: Class[_], dataType: DataType): Any => Any = dataType match {
+      case struct: StructType => createStructConverter(cls, struct.iterator.map(_.dataType))
+      case _ => CatalystTypeConverters.createToCatalystConverter(dataType)
     }
-    data.map { element =>
-      new GenericInternalRow(
-        methodsToTypes.map(invoke(element))): InternalRow
-    }
+    val dataConverter = createStructConverter(beanClass, attrs.iterator.map(_.dataType))
+    data.map(dataConverter)
   }
 
   /**
