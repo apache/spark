@@ -336,7 +336,7 @@ object OrcReadBenchmark extends BenchmarkBase with SQLHelper {
     }
   }
 
-  override def benchmark(): Unit = {
+  override def runBenchmarkSuite(): Unit = {
     runBenchmark("SQL Single Numeric Column Scan") {
       Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach { dataType =>
         numericScanBenchmark(1024 * 1024 * 15, dataType)
