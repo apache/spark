@@ -277,8 +277,10 @@ if [[ "$1" == "package" ]]; then
   declare -A BINARY_PKGS_ARGS
   BINARY_PKGS_ARGS["hadoop2.7"]="-Phadoop-2.7 $HIVE_PROFILES"
   if ! is_dry_run; then
-    BINARY_PKGS_ARGS["hadoop2.6"]="-Phadoop-2.6 $HIVE_PROFILES"
     BINARY_PKGS_ARGS["without-hadoop"]="-Phadoop-provided"
+    if [[ $SPARK_VERSION < "3.0." ]]; then
+      BINARY_PKGS_ARGS["hadoop2.6"]="-Phadoop-2.6 $HIVE_PROFILES"
+    fi
     if [[ $SPARK_VERSION < "2.2." ]]; then
       BINARY_PKGS_ARGS["hadoop2.4"]="-Phadoop-2.4 $HIVE_PROFILES"
       BINARY_PKGS_ARGS["hadoop2.3"]="-Phadoop-2.3 $HIVE_PROFILES"
@@ -288,7 +290,9 @@ if [[ "$1" == "package" ]]; then
   declare -A BINARY_PKGS_EXTRA
   BINARY_PKGS_EXTRA["hadoop2.7"]="withpip"
   if ! is_dry_run; then
-    BINARY_PKGS_EXTRA["hadoop2.6"]="withr"
+    if [[ $SPARK_VERSION < "3.0." ]]; then
+      BINARY_PKGS_EXTRA["hadoop2.6"]="withr"
+    fi
   fi
 
   echo "Packages to build: ${!BINARY_PKGS_ARGS[@]}"
