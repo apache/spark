@@ -185,7 +185,7 @@ public final class UnsafeRowWriter extends UnsafeWriter {
       // grow the global buffer before writing data.
       holder.grow(16);
 
-      // zero-out the bytes
+      // always zero-out the 16-byte buffer
       Platform.putLong(getBuffer(), cursor(), 0L);
       Platform.putLong(getBuffer(), cursor() + 8, 0L);
 
