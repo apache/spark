@@ -244,3 +244,31 @@ private[spark] object HighlyCompressedMapStatus {
       hugeBlockSizesArray.toMap)
   }
 }
+
+private[spark] class RelocatedMapStatus private(
+    private[this] var original: MapStatus,
+    private[this] var newLocation: BlockManagerId)
+  extends MapStatus with Externalizable {
+
+  protected def this() = this(null, null)
+
+  override def location: BlockManagerId = newLocation
+
+  override def getSizeForBlock(reduceId: Int): Long = original.getSizeForBlock(reduceId)
+
+  override def writeExternal(out: ObjectOutput): Unit = {
+    out.writeObject(original)
+    out.writeObject(newLocation)
+  }
+
+  override def readExternal(in: ObjectInput): Unit = {
+    this.original = in.readObject().asInstanceOf[MapStatus]
+    this.newLocation = in.readObject().asInstanceOf[BlockManagerId]
+  }
+}
+
+private[spark] object RelocatedMapStatus {
+  def apply(original: MapStatus, newLocation: BlockManagerId): MapStatus = {
+    new RelocatedMapStatus(original, newLocation)
+  }
+}

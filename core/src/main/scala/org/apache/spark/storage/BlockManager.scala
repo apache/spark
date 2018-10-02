@@ -19,11 +19,13 @@ package org.apache.spark.storage
 
 import java.io._
 import java.lang.ref.{ReferenceQueue => JReferenceQueue, WeakReference}
+import java.net.URI
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
+import com.codahale.metrics.{MetricRegistry, MetricSet}
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.concurrent.{ExecutionContext, Future}
@@ -31,9 +33,6 @@ import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.Random
 import scala.util.control.NonFatal
-
-import com.codahale.metrics.{MetricRegistry, MetricSet}
-import com.google.common.io.CountingOutputStream
 
 import org.apache.spark._
 import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
@@ -50,7 +49,7 @@ import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.ShuffleManager
+import org.apache.spark.shuffle.{ExternalFallbackShuffleClient, ShuffleManager}
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util._
@@ -138,6 +137,15 @@ private[spark] class BlockManager(
   private val remoteReadNioBufferConversion =
     conf.getBoolean("spark.network.remoteReadNioBufferConversion", false)
 
+  // TODO auto-discovery
+  private val availableBackupShuffleServices: Seq[String] = conf
+    .getOption("spark.shuffle.backupShuffleServices.addresses")
+    .map(_.split(",").toSeq)
+    .getOrElse(Seq.empty[String])
+
+  private val selectedBackupShuffleService =
+    Random.shuffle(availableBackupShuffleServices).headOption
+
   val diskBlockManager = {
     // Only perform cleanup if an external service is not serving our shuffle files.
     val deleteFilesOnStop =
@@ -188,12 +196,23 @@ private[spark] class BlockManager(
   // Client to read other executors' shuffle files. This is either an external service, or just the
   // standard BlockTransferService to directly connect to other Executors.
   private[spark] val shuffleClient = if (externalShuffleServiceEnabled) {
+    require(availableBackupShuffleServices.isEmpty, "Cannot use backup shuffle services and the" +
+      " external shuffle service mode.")
     val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores)
     new ExternalShuffleClient(transConf, securityManager,
       securityManager.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT))
-  } else {
-    blockTransferService
-  }
+  } else if (availableBackupShuffleServices.nonEmpty) {
+    require(!externalShuffleServiceEnabled, "Cannot use the external shuffle service with backup" +
+      " shuffle services.")
+    val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores)
+    val externalShuffleClient = new ExternalShuffleClient(transConf, securityManager,
+      securityManager.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT))
+    val shuffleServiceUris = availableBackupShuffleServices.map(URI.create).toSet
+    new ExternalFallbackShuffleClient(
+      shuffleServiceUris,
+      externalShuffleClient,
+      blockTransferService)
+  } else blockTransferService
 
   // Max number of failures before this block manager refreshes the block locations from the driver
   private val maxFailuresBeforeLocationRefresh =
@@ -267,6 +286,11 @@ private[spark] class BlockManager(
       registerWithExternalShuffleServer()
     }
 
+    selectedBackupShuffleService.foreach(address => {
+      if (!blockManagerId.isDriver) {
+        registerWithBackupShuffleServer(address)
+      }
+    })
     logInfo(s"Initialized BlockManager: $blockManagerId")
   }
 
@@ -295,6 +319,33 @@ private[spark] class BlockManager(
         // Synchronous and will throw an exception if we cannot connect.
         shuffleClient.asInstanceOf[ExternalShuffleClient].registerWithShuffleServer(
           shuffleServerId.host, shuffleServerId.port, shuffleServerId.executorId, shuffleConfig)
+        return
+      } catch {
+        case e: Exception if i < MAX_ATTEMPTS =>
+          logError(s"Failed to connect to external shuffle server, will retry ${MAX_ATTEMPTS - i}"
+            + s" more times after waiting $SLEEP_TIME_SECS seconds...", e)
+          Thread.sleep(SLEEP_TIME_SECS * 1000L)
+        case NonFatal(e) =>
+          throw new SparkException("Unable to register with external shuffle server due to : " +
+            e.getMessage, e)
+      }
+    }
+  }
+
+  private def registerWithBackupShuffleServer(shuffleServerAddress: String): Unit = {
+    val MAX_ATTEMPTS = conf.get(config.SHUFFLE_REGISTRATION_MAX_ATTEMPTS)
+    val SLEEP_TIME_SECS = 5
+    val shuffleServerURI = URI.create(shuffleServerAddress)
+    for (i <- 1 to MAX_ATTEMPTS) {
+      try {
+        // Synchronous and will throw an exception if we cannot connect.
+        shuffleClient
+          .asInstanceOf[ExternalFallbackShuffleClient]
+          .registerWithShuffleServerForBackups(
+            shuffleServerURI.getHost,
+            shuffleServerURI.getPort,
+            shuffleServerId.executorId,
+            shuffleManager.getClass.getName)
         return
       } catch {
         case e: Exception if i < MAX_ATTEMPTS =>
@@ -358,6 +409,10 @@ private[spark] class BlockManager(
         }(futureExecutionContext)
       }
     }
+  }
+
+  def backupShuffleServiceAddress(): Option[String] = {
+    selectedBackupShuffleService.filterNot( _ => blockManagerId.isDriver)
   }
 
   /**

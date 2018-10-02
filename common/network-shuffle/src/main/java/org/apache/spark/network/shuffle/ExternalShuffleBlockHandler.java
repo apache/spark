@@ -35,6 +35,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
@@ -106,7 +107,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
 
     } else if (msgObj instanceof RegisterExecutor) {
       final Timer.Context responseDelayContext =
-        metrics.registerExecutorRequestLatencyMillis.time();
+          metrics.registerExecutorRequestLatencyMillis.time();
       try {
         RegisterExecutor msg = (RegisterExecutor) msgObj;
         checkAuth(client, msg.appId);
@@ -116,8 +117,48 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         responseDelayContext.stop();
       }
 
+    } else if (msgObj instanceof RegisterExecutorForBackupsOnly) {
+      final Timer.Context responseDelayContext =
+          metrics.registerExecutorRequestLatencyMillis.time();
+      try {
+        RegisterExecutorForBackupsOnly msg = (RegisterExecutorForBackupsOnly) msgObj;
+        checkAuth(client, msg.appId);
+        blockManager.registerExecutorForBackups(msg.appId, msg.execId, msg.shuffleManager);
+        callback.onSuccess(ByteBuffer.wrap(new byte[0]));
+      } finally {
+        responseDelayContext.stop();
+      }
+
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
+    }
+
+  }
+
+  @Override
+  public StreamCallbackWithID receiveStream(
+      TransportClient client,
+      ByteBuffer messageHeader,
+      RpcResponseCallback callback) {
+    BlockTransferMessage header = BlockTransferMessage.Decoder.fromByteBuffer(messageHeader);
+    if (header instanceof UploadShuffleFileStream) {
+      UploadShuffleFileStream msg = (UploadShuffleFileStream) header;
+      checkAuth(client, msg.appId);
+      return blockManager.openShuffleFileForBackup(
+          msg.appId,
+          msg.execId,
+          msg.shuffleId,
+          msg.mapId);
+    } else if (header instanceof UploadShuffleIndexFileStream) {
+      UploadShuffleIndexFileStream msg = (UploadShuffleIndexFileStream) header;
+      checkAuth(client, msg.appId);
+      return blockManager.openShuffleIndexFileForBackup(
+          msg.appId,
+          msg.execId,
+          msg.shuffleId,
+          msg.mapId);
+    } else {
+      throw new UnsupportedOperationException("Unexpected message header: " + header);
     }
   }
 

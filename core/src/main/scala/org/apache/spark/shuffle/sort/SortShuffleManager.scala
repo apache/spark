@@ -17,11 +17,16 @@
 
 package org.apache.spark.shuffle.sort
 
+import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.TransportContext
+import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.network.server.NoOpRpcHandler
 import org.apache.spark.shuffle._
+import org.apache.spark.util.ThreadUtils
 
 /**
  * In sort-based shuffle, incoming records are sorted according to their target partition ids, then
@@ -81,6 +86,23 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
 
   override val shuffleBlockResolver = new IndexShuffleBlockResolver(conf)
 
+  private val backupShuffleTransportConf = SparkTransportConf.fromSparkConf(
+    conf, "shuffle", 2)
+
+  private lazy val maybeBackupShuffleTransportClient = SparkEnv
+    .get
+    .blockManager
+    .backupShuffleServiceAddress()
+    .map(address => {
+      val addressAsUri = URI.create(address)
+      val transportContext = new TransportContext(
+        backupShuffleTransportConf,
+        new NoOpRpcHandler(),
+        true)
+      transportContext.createClientFactory().createClient(
+        addressAsUri.getHost, addressAsUri.getPort)
+    })
+
   /**
    * Obtains a [[ShuffleHandle]] to pass to tasks.
    */
@@ -127,7 +149,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
     numMapsForShuffle.putIfAbsent(
       handle.shuffleId, handle.asInstanceOf[BaseShuffleHandle[_, _, _]].numMaps)
     val env = SparkEnv.get
-    handle match {
+    val baseWriter = handle match {
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
         new UnsafeShuffleWriter(
           env.blockManager,
@@ -148,6 +170,24 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       case other: BaseShuffleHandle[K @unchecked, V @unchecked, _] =>
         new SortShuffleWriter(shuffleBlockResolver, other, mapId, context)
     }
+    env.blockManager.backupShuffleServiceAddress()
+      .map(address => {
+        require(maybeBackupShuffleTransportClient.isDefined,
+          "Should have a backup shuffle transport client to use.")
+        new BackingUpShuffleWriter(
+          shuffleBlockResolver,
+          baseWriter,
+          maybeBackupShuffleTransportClient.get,
+          backupShuffleTransportConf,
+          env.mapOutputTracker,
+          ThreadUtils.newDaemonCachedThreadPool("backup-shuffle-files"),
+          URI.create(address).getHost,
+          URI.create(address).getPort,
+          conf.getAppId,
+          env.blockManager.blockManagerId.executorId,
+          handle.shuffleId,
+          mapId)
+      }).getOrElse(baseWriter)
   }
 
   /** Remove a shuffle's metadata from the ShuffleManager. */
@@ -163,6 +203,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   /** Shut down this ShuffleManager. */
   override def stop(): Unit = {
     shuffleBlockResolver.stop()
+    maybeBackupShuffleTransportClient.foreach(_.close)
   }
 }
 

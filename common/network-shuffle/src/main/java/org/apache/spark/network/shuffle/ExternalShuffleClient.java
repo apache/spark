@@ -35,6 +35,7 @@ import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.NoOpRpcHandler;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
+import org.apache.spark.network.shuffle.protocol.RegisterExecutorForBackupsOnly;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -141,6 +142,19 @@ public class ExternalShuffleClient extends ShuffleClient {
     checkInit();
     try (TransportClient client = clientFactory.createUnmanagedClient(host, port)) {
       ByteBuffer registerMessage = new RegisterExecutor(appId, execId, executorInfo).toByteBuffer();
+      client.sendRpcSync(registerMessage, registrationTimeoutMs);
+    }
+  }
+
+  public void registerWithShuffleServerForBackups(
+      String host,
+      int port,
+      String execId,
+      String shuffleManager) throws IOException, InterruptedException{
+    checkInit();
+    try (TransportClient client = clientFactory.createUnmanagedClient(host, port)) {
+      ByteBuffer registerMessage = new RegisterExecutorForBackupsOnly(
+          appId, execId, shuffleManager).toByteBuffer();
       client.sendRpcSync(registerMessage, registrationTimeoutMs);
     }
   }
