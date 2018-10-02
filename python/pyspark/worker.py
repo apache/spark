@@ -95,11 +95,23 @@ def wrap_scalar_pandas_udf(f, return_type):
 
         # Ensure return type of Pandas.Series matches the arrow return type of the user-defined
         # function. Otherwise, we may produce incorrect serialized data.
-        arrow_type_of_result = pa.from_numpy_dtype(result.dtype)
-        if arrow_return_type != arrow_type_of_result:
-            raise TypeError("Return Pandas.Series of the user-defined function's dtype is %s "
-                            "which doesn't match the arrow type %s "
-                            "of defined type %s" % (result.dtype, arrow_return_type, return_type))
+        # Note: for timestamp type, we only need to ensure both types are timestamp because the
+        # serializer will do conversion.
+        try:
+            arrow_type_of_result = pa.from_numpy_dtype(result.dtype)
+            both_are_timestamp = pa.types.is_timestamp(arrow_type_of_result) and \
+                                 pa.types.is_timestamp(arrow_return_type)
+            if not both_are_timestamp and arrow_return_type != arrow_type_of_result:
+                print("WARN: Arrow type %s of return Pandas.Series of the user-defined function's "
+                      "dtype %s doesn't match the arrow type %s "
+                      "of defined return type %s" % (arrow_type_of_result, result.dtype,
+                                                     arrow_return_type, return_type),
+                      file=sys.stderr)
+        except:
+            print("WARN: Can't infer arrow type of Pandas.Series's dtype: %s, which might not match "
+                  "the arrow type %s of defined return type %s" % (result.dtype, arrow_return_type,
+                                                                   return_type),
+                  file=sys.stderr)
 
         return result
 
