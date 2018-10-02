@@ -36,7 +36,10 @@ class UnsafeWriterSuite extends SparkFunSuite {
     unsafeRowWriter.write(0, decimal1, decimal1.precision, decimal1.scale)
     val res = unsafeRowWriter.getRow
     assert(res.getDecimal(0, decimal1.precision, decimal1.scale) == decimal1)
-    // Check that the bytes which are not used by decimal1 (but are allocated) are zero-ed out
+    // Check that the bytes which are not used by decimal1 (but are allocated) are zero-ed out.
+    // The first 16 bytes are used for the offset and size, then 8 bytes contain the value of
+    // decimal1. So from byte 25 to byte 32 there is the leftover of decimal2 which should have
+    // been zero-ed.
     assert(res.getBytes()(25) == 0x00)
   }
 
