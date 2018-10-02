@@ -44,7 +44,7 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
  */
 object AggregateBenchmark extends SqlBasedBenchmark {
 
-  override def benchmark(): Unit = {
+  override def runBenchmarkSuite(): Unit = {
     runBenchmark("aggregate without grouping") {
       val N = 500L << 22
       codegenBenchmark("agg w/o group", N) {
