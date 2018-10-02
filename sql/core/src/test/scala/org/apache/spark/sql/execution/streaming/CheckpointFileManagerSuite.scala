@@ -25,12 +25,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.util.Utils
 
-abstract class CheckpointFileManagerTests extends SparkFunSuite {
+abstract class CheckpointFileManagerTests extends SparkFunSuite with SQLHelper {
 
   def createManager(path: Path): CheckpointFileManager
 
@@ -87,12 +87,6 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite {
       }
       fm.delete(path) // should not throw exception
     }
-  }
-
-  protected def withTempPath(f: File => Unit): Unit = {
-    val path = Utils.createTempDir()
-    path.delete()
-    try f(path) finally Utils.deleteRecursively(path)
   }
 }
 

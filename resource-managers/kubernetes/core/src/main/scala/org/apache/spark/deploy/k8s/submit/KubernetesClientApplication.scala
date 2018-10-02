@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.k8s.submit
 
 import java.io.StringWriter
-import java.util.{Collections, UUID}
+import java.util.{Collections, Locale, UUID}
 import java.util.Properties
 
 import io.fabric8.kubernetes.api.model._
@@ -260,7 +260,7 @@ private[spark] object KubernetesClientApplication {
     val launchTime = System.currentTimeMillis()
     s"$appName-$launchTime"
       .trim
-      .toLowerCase
+      .toLowerCase(Locale.ROOT)
       .replaceAll("\\s+", "-")
       .replaceAll("\\.", "-")
       .replaceAll("[^a-z0-9\\-]", "")
