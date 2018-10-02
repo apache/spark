@@ -29,7 +29,7 @@ import org.apache.spark.benchmark.Benchmark
  */
 object MiscBenchmark extends SqlBasedBenchmark {
 
-  override def benchmark(): Unit = {
+  override def runBenchmarkSuite(): Unit = {
     runBenchmark("filter & aggregate without group") {
       val N = 500L << 22
       codegenBenchmark("range/filter/sum", N) {
