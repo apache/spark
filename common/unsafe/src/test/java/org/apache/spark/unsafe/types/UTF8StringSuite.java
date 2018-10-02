@@ -63,7 +63,9 @@ public class UTF8StringSuite {
     checkBasic("hello", 5); // 5 * 1 byte chars
     checkBasic("大 千 世 界", 7);
     checkBasic("︽﹋％", 3); // 3 * 3 bytes chars
+    // checkstyle.off: AvoidEscapedUnicodeCharacters
     checkBasic("\uD83E\uDD19", 1); // 4 bytes char
+    // checkstyle.on: AvoidEscapedUnicodeCharacters
   }
 
   @Test
