@@ -316,20 +316,20 @@ private[spark] object ClosureCleaner extends Logging {
       if (outerPairs.nonEmpty) {
         val (outermostClass, outermostObject) = outerPairs.head
         if (isClosure(outermostClass)) {
-          logDebug(s" + outermost object is a closure, so we clone it: ${outerPairs.head._1}")
+          logDebug(s" + outermost object is a closure, so we clone it: ${outermostClass}")
         } else if (outermostClass.getName.startsWith("$line")) {
           // SPARK-14558: if the outermost object is a REPL line object, we should clone
           // and clean it as it may carray a lot of unnecessary information,
           // e.g. hadoop conf, spark conf, etc.
           logDebug(s" + outermost object is a REPL line object, so we clone it:" +
-            s" ${outerPairs.head._1}")
+            s" ${outermostClass}")
         } else {
           // The closure is ultimately nested inside a class; keep the object of that
           // class without cloning it since we don't want to clone the user's objects.
           // Note that we still need to keep around the outermost object itself because
           // we need it to clone its child closure later (see below).
           logDebug(" + outermost object is not a closure or REPL line object," +
-            "so do not clone it: " +  outerPairs.head._1)
+            "so do not clone it: " +  outermostClass)
           parent = outermostObject // e.g. SparkContext
           outerPairs = outerPairs.tail
         }
