@@ -92,15 +92,15 @@ function build {
     -f "$KDOCKERFILE" .
 
   # SparkR
-#  docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
-#    -t $(image_ref spark-r) \
-#    -f "$RDOCKERFILE" .
+  docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+    -t $(image_ref spark-r) \
+    -f "$RDOCKERFILE" .
 }
 
 function push {
   docker push "$(image_ref spark)"
   docker push "$(image_ref spark-py)"
-#  docker push "$(image_ref spark-r)"
+  docker push "$(image_ref spark-r)"
 }
 
 function usage {
