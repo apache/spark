@@ -107,12 +107,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
     case Some(cr) =>
       // Set the context class loader so that the token renewer has access to jars distributed
       // by the user.
-      val currentLoader = Thread.currentThread().getContextClassLoader()
-      Thread.currentThread().setContextClassLoader(userClassLoader)
-      try {
+      Utils.withContextClassLoader(userClassLoader) {
         cr.start()
-      } finally {
-        Thread.currentThread().setContextClassLoader(currentLoader)
       }
 
     case _ =>

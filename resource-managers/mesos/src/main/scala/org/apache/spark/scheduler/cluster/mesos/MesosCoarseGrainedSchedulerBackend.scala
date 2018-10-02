@@ -60,8 +60,13 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
     with org.apache.mesos.Scheduler with MesosSchedulerUtils {
 
-  private lazy val hadoopDelegationTokenManager: MesosHadoopDelegationTokenManager =
-    new MesosHadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint)
+  private val tokenManager: MesosHadoopDelegationTokenManager = {
+    if (UserGroupInformation.isSecurityEnabled()) {
+      new MesosHadoopDelegationTokenManager(conf, sc.hadoopConfiguration)
+    } else {
+      null
+    }
+  }
 
   // Blacklist a slave after this many failures
   private val MAX_SLAVE_FAILURES = 2
@@ -193,6 +198,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   override def start() {
     super.start()
+
+    if (tokenManager != null) {
+      tokenManager.start(driverEndpoint)
+    }
 
     if (sc.deployMode == "client") {
       launcherBackend.connect()
@@ -678,7 +687,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     launcherBackend.close()
   }
 
-  private def stopSchedulerBackend() {
+  private def stopSchedulerBackend(): Unit = {
     // Make sure we're not launching tasks during shutdown
     stateLock.synchronized {
       if (stopCalled) {
@@ -687,6 +696,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       }
       stopCalled = true
       super.stop()
+    }
+
+    if (tokenManager != null) {
+      tokenManager.stop()
     }
 
     // Wait for executors to report done, or else mesosDriver.stop() will forcefully kill them.
@@ -787,14 +800,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       "0.0.0.0"
     } else {
       offer.getHostname
-    }
-  }
-
-  override def fetchHadoopDelegationTokens(): Option[Array[Byte]] = {
-    if (UserGroupInformation.isSecurityEnabled) {
-      Some(hadoopDelegationTokenManager.getTokens())
-    } else {
-      None
     }
   }
 }
