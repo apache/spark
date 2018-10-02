@@ -30,6 +30,7 @@ import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
@@ -1098,12 +1099,19 @@ object SQLContext {
       data: Iterator[_],
       beanClass: Class[_],
       attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
+    import scala.collection.JavaConverters._
+    import java.lang.reflect.{Type, ParameterizedType, Array => JavaArray}
+    def interfaceParameters(t: Type, interface: Class[_]): Array[Type] = t match {
+      case parType: ParameterizedType if parType.getRawType == interface =>
+        parType.getActualTypeArguments
+      case _ => throw new UnsupportedOperationException(s"$t is not an $interface")
+    }
     def createStructConverter(cls: Class[_], fieldTypes: Seq[DataType]): Any => InternalRow = {
       val methodConverters =
         JavaTypeInference.getJavaBeanReadableProperties(cls).zip(fieldTypes)
           .map { case (property, fieldType) =>
             val method = property.getReadMethod
-            method -> createConverter(method.getReturnType, fieldType)
+            method -> createConverter(method.getGenericReturnType, fieldType)
           }
       value =>
         if (value == null) {
@@ -1115,8 +1123,31 @@ object SQLContext {
             })
         }
     }
-    def createConverter(cls: Class[_], dataType: DataType): Any => Any = dataType match {
-      case struct: StructType => createStructConverter(cls, struct.map(_.dataType))
+    def createConverter(t: Type, dataType: DataType): Any => Any = (t, dataType) match {
+      case (cls: Class[_], struct: StructType) =>
+        createStructConverter(cls, struct.map(_.dataType))
+      case (arrayType: Class[_], array: ArrayType) =>
+        val converter = createConverter(arrayType.getComponentType, array.elementType)
+        value => new GenericArrayData(
+          (0 until JavaArray.getLength(value)).map(i =>
+            converter(JavaArray.get(value, i))).toArray)
+      case (_, array: ArrayType) =>
+        val cls = classOf[java.util.List[_]]
+        val params = interfaceParameters(t, cls)
+        val converter = createConverter(params(0), array.elementType)
+        value => new GenericArrayData(
+          value.asInstanceOf[java.util.List[_]].asScala.map(converter).toArray)
+      case (_, map: MapType) =>
+        val cls = classOf[java.util.Map[_, _]]
+        val params = interfaceParameters(t, cls)
+        val keyConverter = createConverter(params(0), map.keyType)
+        val valueConverter = createConverter(params(1), map.valueType)
+        value => {
+          val (keys, values) = value.asInstanceOf[java.util.Map[_, _]].asScala.unzip[Any, Any]
+          new ArrayBasedMapData(
+            new GenericArrayData(keys.map(keyConverter).toArray),
+            new GenericArrayData(values.map(valueConverter).toArray))
+        }
       case _ => CatalystTypeConverters.createToCatalystConverter(dataType)
     }
     val dataConverter = createStructConverter(beanClass, attrs.map(_.dataType))

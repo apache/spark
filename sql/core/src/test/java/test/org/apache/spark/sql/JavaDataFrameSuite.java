@@ -136,6 +136,9 @@ public class JavaDataFrameSuite {
     private BigInteger e = new BigInteger("1234567");
     private NestedBean f = new NestedBean();
     private NestedBean g = null;
+    private NestedBean[] h = new NestedBean[] { new NestedBean() };
+    private List<NestedBean> i = Collections.singletonList(new NestedBean());
+    private Map<Integer, NestedBean> j = Collections.singletonMap(1, new NestedBean());
 
     public double getA() {
       return a;
@@ -161,6 +164,18 @@ public class JavaDataFrameSuite {
 
     public NestedBean getG() {
       return g;
+    }
+
+    public NestedBean[] getH() {
+      return h;
+    }
+
+    public List<NestedBean> getI() {
+      return i;
+    }
+
+    public Map<Integer, NestedBean> getJ() {
+      return j;
     }
 
     public static class NestedBean implements Serializable {
@@ -196,7 +211,18 @@ public class JavaDataFrameSuite {
       schema.apply("f"));
     Assert.assertEquals(new StructField("g", nestedBeanType, true, Metadata.empty()),
       schema.apply("g"));
-    Row first = df.select("a", "b", "c", "d", "e", "f", "g").first();
+    ArrayType nestedBeanTypeList = new ArrayType(nestedBeanType, true);
+    Assert.assertEquals(
+      new StructField("h", nestedBeanTypeList, true, Metadata.empty()),
+      schema.apply("h"));
+    Assert.assertEquals(
+      new StructField("i", nestedBeanTypeList, true, Metadata.empty()),
+      schema.apply("i"));
+    Assert.assertEquals(
+      new StructField("j", new MapType(IntegerType$.MODULE$, nestedBeanType, true),
+        true, Metadata.empty()),
+      schema.apply("j"));
+    Row first = df.select("a", "b", "c", "d", "e", "f", "g", "h", "i", "j").first();
     Assert.assertEquals(bean.getA(), first.getDouble(0), 0.0);
     // Now Java lists and maps are converted to Scala Seq's and Map's. Once we get a Seq below,
     // verify that it has the expected length, and contains expected elements.
@@ -220,6 +246,21 @@ public class JavaDataFrameSuite {
     Row nested = first.getStruct(5);
     Assert.assertEquals(bean.getF().getA(), nested.getInt(0));
     Assert.assertTrue(first.isNullAt(6));
+    List<Row> nestedList = first.getList(7);
+    Assert.assertEquals(bean.getH().length, nestedList.size());
+    for (int i = 0; i < bean.getH().length; ++i) {
+      Assert.assertEquals(bean.getH()[i].getA(), nestedList.get(i).getInt(0));
+    }
+    nestedList = first.getList(8);
+    Assert.assertEquals(bean.getI().size(), nestedList.size());
+    for (int i = 0; i < bean.getI().size(); ++i) {
+      Assert.assertEquals(bean.getI().get(i).getA(), nestedList.get(i).getInt(0));
+    }
+    Map<Integer, Row> nestedMap = first.getJavaMap(9);
+    Assert.assertEquals(bean.getJ().size(), nestedMap.size());
+    for (Map.Entry<Integer, Bean.NestedBean> entry : bean.getJ().entrySet()) {
+      Assert.assertEquals(entry.getValue().getA(), nestedMap.get(entry.getKey()).getInt(0));
+    }
   }
 
   @Test
