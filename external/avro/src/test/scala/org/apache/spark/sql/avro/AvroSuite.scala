@@ -353,15 +353,21 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("Ignore corrupt Avro file if flag IGNORE_CORRUPT_FILES enabled") {
     withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
       withTempPath { dir =>
+        createDummyCorruptFile(dir)
+        val message = intercept[FileNotFoundException] {
+          spark.read.format("avro").load(dir.getAbsolutePath).schema
+        }.getMessage
+        assert(message.contains("No Avro files found."))
+
         val srcFile = new File("src/test/resources/episodes.avro")
         val destFile = new File(dir, "episodes.avro")
         FileUtils.copyFile(srcFile, destFile)
 
-        createDummyCorruptFile(dir)
-
         val df = spark.read.format("avro").load(srcFile.getAbsolutePath)
         val schema = df.schema
         val result = df.collect()
+        // Schema inference picks random readable sample file.
+        // Here we use a loop to eliminate randomness.
         (1 to 5).foreach { _ =>
           assert(spark.read.format("avro").load(dir.getAbsolutePath).schema == schema)
           checkAnswer(spark.read.format("avro").load(dir.getAbsolutePath), result)
