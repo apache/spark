@@ -48,6 +48,9 @@ private[spark] class AppStatusListener(
 
   import config._
 
+  // If UI is disabled (not history server and explicitly disabled), then ignore task events
+  private val uiDisabled = live && !conf.getBoolean("spark.ui.enabled", true)
+
   private var sparkVersion = SPARK_VERSION
   private var appInfo: v1.ApplicationInfo = null
   private var appSummary = new AppSummary(0, 0)
@@ -433,6 +436,7 @@ private[spark] class AppStatusListener(
   }
 
   override def onTaskStart(event: SparkListenerTaskStart): Unit = {
+    if (uiDisabled) return
     val now = System.nanoTime()
     val task = new LiveTask(event.taskInfo, event.stageId, event.stageAttemptId, lastUpdateTime)
     liveTasks.put(event.taskInfo.taskId, task)
@@ -468,6 +472,7 @@ private[spark] class AppStatusListener(
   }
 
   override def onTaskGettingResult(event: SparkListenerTaskGettingResult): Unit = {
+    if (uiDisabled) return
     // Call update on the task so that the "getting result" time is written to the store; the
     // value is part of the mutable TaskInfo state that the live entity already references.
     liveTasks.get(event.taskInfo.taskId).foreach { task =>
@@ -476,6 +481,7 @@ private[spark] class AppStatusListener(
   }
 
   override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
+    if (uiDisabled) return
     // TODO: can this really happen?
     if (event.taskInfo == null) {
       return
@@ -723,6 +729,7 @@ private[spark] class AppStatusListener(
   }
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
+    if (uiDisabled) return
     val now = System.nanoTime()
 
     event.accumUpdates.foreach { case (taskId, sid, sAttempt, accumUpdates) =>
