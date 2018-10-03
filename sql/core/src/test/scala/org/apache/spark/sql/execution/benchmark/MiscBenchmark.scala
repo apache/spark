@@ -29,86 +29,88 @@ import org.apache.spark.benchmark.Benchmark
  */
 object MiscBenchmark extends SqlBasedBenchmark {
 
-  override def runBenchmarkSuite(): Unit = {
+  def filterAndAggregateWithoutGroup(numRows: Long): Unit = {
     runBenchmark("filter & aggregate without group") {
-      val N = 500L << 22
-      codegenBenchmark("range/filter/sum", N) {
-        spark.range(N).filter("(id & 1) = 1").groupBy().sum().collect()
+      codegenBenchmark("range/filter/sum", numRows) {
+        spark.range(numRows).filter("(id & 1) = 1").groupBy().sum().collect()
       }
     }
+  }
 
+  def limitAndAggregateWithoutGroup(numRows: Long): Unit = {
     runBenchmark("range/limit/sum") {
-      val N = 500L << 20
-      codegenBenchmark("range/limit/sum", N) {
-        spark.range(N).limit(1000000).groupBy().sum().collect()
+      codegenBenchmark("range/limit/sum", numRows) {
+        spark.range(numRows).limit(1000000).groupBy().sum().collect()
       }
     }
+  }
 
+  def sample(numRows: Int): Unit = {
     runBenchmark("sample") {
-      val N = 500 << 18
-      codegenBenchmark("sample with replacement", N) {
-        spark.range(N).sample(withReplacement = true, 0.01).groupBy().sum().collect()
+      codegenBenchmark("sample with replacement", numRows) {
+        spark.range(numRows).sample(withReplacement = true, 0.01).groupBy().sum().collect()
       }
 
-      codegenBenchmark("sample without replacement", N) {
-        spark.range(N).sample(withReplacement = false, 0.01).groupBy().sum().collect()
+      codegenBenchmark("sample without replacement", numRows) {
+        spark.range(numRows).sample(withReplacement = false, 0.01).groupBy().sum().collect()
       }
     }
+  }
 
+  def collect(numRows: Int): Unit = {
     runBenchmark("collect") {
-      val N = 1 << 20
-
-      val benchmark = new Benchmark("collect", N, output = output)
+      val benchmark = new Benchmark("collect", numRows, output = output)
       benchmark.addCase("collect 1 million") { iter =>
-        spark.range(N).collect()
+        spark.range(numRows).collect()
       }
       benchmark.addCase("collect 2 millions") { iter =>
-        spark.range(N * 2).collect()
+        spark.range(numRows * 2).collect()
       }
       benchmark.addCase("collect 4 millions") { iter =>
-        spark.range(N * 4).collect()
+        spark.range(numRows * 4).collect()
       }
       benchmark.run()
     }
+  }
 
+  def collectLimit(numRows: Int): Unit = {
     runBenchmark("collect limit") {
-      val N = 1 << 20
-
-      val benchmark = new Benchmark("collect limit", N, output = output)
+      val benchmark = new Benchmark("collect limit", numRows, output = output)
       benchmark.addCase("collect limit 1 million") { iter =>
-        spark.range(N * 4).limit(N).collect()
+        spark.range(numRows * 4).limit(numRows).collect()
       }
       benchmark.addCase("collect limit 2 millions") { iter =>
-        spark.range(N * 4).limit(N * 2).collect()
+        spark.range(numRows * 4).limit(numRows * 2).collect()
       }
       benchmark.run()
     }
+  }
 
+  def explode(numRows: Int): Unit = {
     runBenchmark("generate explode") {
-      val N = 1 << 24
-      codegenBenchmark("generate explode array", N) {
-        val df = spark.range(N).selectExpr(
+      codegenBenchmark("generate explode array", numRows) {
+        val df = spark.range(numRows).selectExpr(
           "id as key",
           "array(rand(), rand(), rand(), rand(), rand()) as values")
         df.selectExpr("key", "explode(values) value").count()
       }
 
-      codegenBenchmark("generate explode map", N) {
-        val df = spark.range(N).selectExpr(
+      codegenBenchmark("generate explode map", numRows) {
+        val df = spark.range(numRows).selectExpr(
           "id as key",
           "map('a', rand(), 'b', rand(), 'c', rand(), 'd', rand(), 'e', rand()) pairs")
         df.selectExpr("key", "explode(pairs) as (k, v)").count()
       }
 
-      codegenBenchmark("generate posexplode array", N) {
-        val df = spark.range(N).selectExpr(
+      codegenBenchmark("generate posexplode array", numRows) {
+        val df = spark.range(numRows).selectExpr(
           "id as key",
           "array(rand(), rand(), rand(), rand(), rand()) as values")
         df.selectExpr("key", "posexplode(values) as (idx, value)").count()
       }
 
-      codegenBenchmark("generate inline array", N) {
-        val df = spark.range(N).selectExpr(
+      codegenBenchmark("generate inline array", numRows) {
+        val df = spark.range(numRows).selectExpr(
           "id as key",
           "array((rand(), rand()), (rand(), rand()), (rand(), 0.0d)) as values")
         df.selectExpr("key", "inline(values) as (r1, r2)").count()
@@ -127,11 +129,12 @@ object MiscBenchmark extends SqlBasedBenchmark {
           .select("col", "arr_col.*").count
       }
     }
+  }
 
+  def stack(numRows: Int): Unit = {
     runBenchmark("generate regular generator") {
-      val N = 1 << 24
-      codegenBenchmark("generate stack", N) {
-        val df = spark.range(N).selectExpr(
+      codegenBenchmark("generate stack", numRows) {
+        val df = spark.range(numRows).selectExpr(
           "id as key",
           "id % 2 as t1",
           "id % 3 as t2",
@@ -141,5 +144,15 @@ object MiscBenchmark extends SqlBasedBenchmark {
         df.selectExpr("key", "stack(4, t1, t2, t3, t4, t5)").count()
       }
     }
+  }
+
+  override def runBenchmarkSuite(): Unit = {
+    filterAndAggregateWithoutGroup(500L << 22)
+    limitAndAggregateWithoutGroup(500L << 20)
+    sample(500 << 18)
+    collect(1 << 20)
+    collectLimit(1 << 20)
+    explode(1 << 24)
+    stack(1 << 24)
   }
 }
