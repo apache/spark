@@ -21,7 +21,7 @@ context("Show SparkDataFrame when eager execution is enabled.")
 
 test_that("eager execution is not enabled", {
   # Start Spark session without eager execution enabled
-  sparkR.session(master = sparkRTestMaster)
+  sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
   
   df <- createDataFrame(faithful)
   expect_is(df, "SparkDataFrame")
@@ -37,7 +37,7 @@ test_that("eager execution is enabled", {
   sparkConfig <- list(spark.sql.repl.eagerEval.enabled = "true",
                       spark.sql.repl.eagerEval.maxNumRows = as.integer(10))
   
-  sparkR.session(master = sparkRTestMaster, sparkConfig = sparkConfig)
+  sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE, sparkConfig = sparkConfig)
   
   df <- createDataFrame(faithful)
   expect_is(df, "SparkDataFrame")
