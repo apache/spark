@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.OrcFile
+import org.apache.orc.OrcProto.ColumnEncoding.Kind.{DICTIONARY_V2, DIRECT, DIRECT_V2}
 import org.apache.orc.OrcProto.Stream.Kind
 import org.apache.orc.impl.RecordReaderImpl
 import org.scalatest.BeforeAndAfterAll
@@ -106,6 +107,71 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
           // Check the types and counts of bloom filters
           assert(orcIndex.getBloomFilterKinds.forall(_ === bloomFilterKind))
           assert(orcIndex.getBloomFilterIndex.forall(_.getBloomFilterCount > 0))
+        } finally {
+          if (recordReader != null) {
+            recordReader.close()
+          }
+        }
+      }
+    }
+  }
+
+  protected def testSelectiveDictionaryEncoding(isSelective: Boolean) {
+    val tableName = "orcTable"
+
+    withTempDir { dir =>
+      withTable(tableName) {
+        val sqlStatement = orcImp match {
+          case "native" =>
+            s"""
+               |CREATE TABLE $tableName (zipcode STRING, uuid STRING, value DOUBLE)
+               |USING ORC
+               |OPTIONS (
+               |  path '${dir.toURI}',
+               |  orc.dictionary.key.threshold '1.0',
+               |  orc.column.encoding.direct 'uuid'
+               |)
+            """.stripMargin
+          case "hive" =>
+            s"""
+               |CREATE TABLE $tableName (zipcode STRING, uuid STRING, value DOUBLE)
+               |STORED AS ORC
+               |LOCATION '${dir.toURI}'
+               |TBLPROPERTIES (
+               |  orc.dictionary.key.threshold '1.0',
+               |  hive.exec.orc.dictionary.key.size.threshold '1.0',
+               |  orc.column.encoding.direct 'uuid'
+               |)
+            """.stripMargin
+          case impl =>
+            throw new UnsupportedOperationException(s"Unknown ORC implementation: $impl")
+        }
+
+        sql(sqlStatement)
+        sql(s"INSERT INTO $tableName VALUES ('94086', 'random-uuid-string', 0.0)")
+
+        val partFiles = dir.listFiles()
+          .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+        assert(partFiles.length === 1)
+
+        val orcFilePath = new Path(partFiles.head.getAbsolutePath)
+        val readerOptions = OrcFile.readerOptions(new Configuration())
+        val reader = OrcFile.createReader(orcFilePath, readerOptions)
+        var recordReader: RecordReaderImpl = null
+        try {
+          recordReader = reader.rows.asInstanceOf[RecordReaderImpl]
+
+          // Check the kind
+          val stripe = recordReader.readStripeFooter(reader.getStripes.get(0))
+          if (isSelective) {
+            assert(stripe.getColumns(1).getKind === DICTIONARY_V2)
+            assert(stripe.getColumns(2).getKind === DIRECT_V2)
+            assert(stripe.getColumns(3).getKind === DIRECT)
+          } else {
+            assert(stripe.getColumns(1).getKind === DICTIONARY_V2)
+            assert(stripe.getColumns(2).getKind === DICTIONARY_V2)
+            assert(stripe.getColumns(3).getKind === DIRECT)
+          }
         } finally {
           if (recordReader != null) {
             recordReader.close()
@@ -283,5 +349,9 @@ class OrcSourceSuite extends OrcSuite with SharedSQLContext {
 
   test("Check BloomFilter creation") {
     testBloomFilterCreation(Kind.BLOOM_FILTER_UTF8) // After ORC-101
+  }
+
+  test("Enforce direct encoding column-wise selectively") {
+    testSelectiveDictionaryEncoding(true)
   }
 }
