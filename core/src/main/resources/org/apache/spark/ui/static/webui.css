@@ -270,3 +270,31 @@ a.expandbutton {
 .container-fluid-div {
   width: 200px;
 }
+
+.scheduler-delay-checkbox-div {
+  width: 120px;
+}
+
+.task-deserialization-time-checkbox-div {
+  width: 175px;
+}
+
+.shuffle-read-blocked-time-checkbox-div {
+  width: 187px;
+}
+
+.shuffle-remote-reads-checkbox-div {
+  width: 157px;
+}
+
+.result-serialization-time-checkbox-div {
+  width: 171px;
+}
+
+.getting-result-time-checkbox-div {
+  width: 141px;
+}
+
+.peak-execution-memory-checkbox-div {
+  width: 170px;
+}

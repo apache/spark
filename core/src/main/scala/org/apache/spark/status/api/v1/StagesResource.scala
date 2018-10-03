@@ -189,49 +189,68 @@ private[v1] class StagesResource extends BaseAppResource {
     val dummyTaskMetrics: TaskMetrics = new TaskMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
       new InputMetrics(0, 0), new OutputMetrics(0, 0),
       new ShuffleReadMetrics(0, 0, 0, 0, 0, 0, 0), new ShuffleWriteMetrics(0, 0, 0))
+    val searchValueLowerCase = searchValue.toLowerCase
     val filteredTaskDataSequence: Seq[TaskData] = taskDataList.filter(f =>
-      (f.taskId.toString.contains(searchValue) || f.index.toString.contains(searchValue)
-        || f.attempt.toString.contains(searchValue) || f.launchTime.toString.contains(searchValue)
-        || f.resultFetchStart.getOrElse(defaultOptionString).toString.contains(searchValue)
-        || f.duration.getOrElse(defaultOptionString).toString.contains(searchValue)
-        || f.executorId.contains(searchValue) || f.host.contains(searchValue)
-        || f.status.contains(searchValue) || f.taskLocality.contains(searchValue)
-        || f.speculative.toString.contains(searchValue)
-        || f.errorMessage.getOrElse(defaultOptionString).contains(searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).executorDeserializeTime.toString.contains(
-        searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).executorRunTime.toString.contains(
-        searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).jvmGcTime.toString.contains(
-        searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).resultSerializationTime.toString.contains(
-        searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).memoryBytesSpilled.toString.contains(
-        searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).diskBytesSpilled.toString.contains(
-        searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).peakExecutionMemory.toString.contains(
-        searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).inputMetrics.bytesRead.toString.contains(
-        searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).inputMetrics.recordsRead.toString.contains(
-        searchValue)
-        || f.taskMetrics.getOrElse(dummyTaskMetrics).outputMetrics.bytesWritten.toString.contains(
-        searchValue)
+      (f.taskId.toString.toLowerCase.contains(searchValueLowerCase)
+        || f.index.toString.toLowerCase.contains(searchValueLowerCase)
+        || f.attempt.toString.toLowerCase.contains(searchValueLowerCase)
+        || f.launchTime.toString.toLowerCase.contains(searchValueLowerCase)
+        || f.resultFetchStart.getOrElse(defaultOptionString).toString.toLowerCase.contains(
+        searchValueLowerCase)
+        || f.duration.getOrElse(defaultOptionString).toString.toLowerCase.contains(
+        searchValueLowerCase)
+        || f.executorId.toLowerCase.contains(searchValueLowerCase)
+        || f.host.toLowerCase.contains(searchValueLowerCase)
+        || f.status.toLowerCase.contains(searchValueLowerCase)
+        || f.taskLocality.toLowerCase.contains(searchValueLowerCase)
+        || f.speculative.toString.toLowerCase.contains(searchValueLowerCase)
+        || f.errorMessage.getOrElse(defaultOptionString).toLowerCase.contains(
+        searchValueLowerCase)
         || f.taskMetrics.getOrElse(
-        dummyTaskMetrics).outputMetrics.recordsWritten.toString.contains(searchValue)
+        dummyTaskMetrics).executorDeserializeTime.toString.toLowerCase.contains(
+        searchValueLowerCase)
         || f.taskMetrics.getOrElse(
-        dummyTaskMetrics).shuffleReadMetrics.fetchWaitTime.toString.contains(searchValue)
+        dummyTaskMetrics).executorRunTime.toString.toLowerCase.contains(searchValueLowerCase)
+        || f.taskMetrics.getOrElse(dummyTaskMetrics).jvmGcTime.toString.toLowerCase.contains(
+        searchValueLowerCase)
         || f.taskMetrics.getOrElse(
-        dummyTaskMetrics).shuffleReadMetrics.recordsRead.toString.contains(searchValue)
+        dummyTaskMetrics).resultSerializationTime.toString.toLowerCase.contains(
+        searchValueLowerCase)
         || f.taskMetrics.getOrElse(
-        dummyTaskMetrics).shuffleWriteMetrics.bytesWritten.toString.contains(searchValue)
+        dummyTaskMetrics).memoryBytesSpilled.toString.toLowerCase.contains(searchValueLowerCase)
         || f.taskMetrics.getOrElse(
-        dummyTaskMetrics).shuffleWriteMetrics.recordsWritten.toString.contains(searchValue)
+        dummyTaskMetrics).diskBytesSpilled.toString.toLowerCase.contains(searchValueLowerCase)
         || f.taskMetrics.getOrElse(
-        dummyTaskMetrics).shuffleWriteMetrics.writeTime.toString.contains(searchValue)
-        || f.schedulerDelay.toString.contains(searchValue)
-        || f.gettingResultTime.toString.contains(searchValue)))
+        dummyTaskMetrics).peakExecutionMemory.toString.toLowerCase.contains(searchValueLowerCase)
+        || f.taskMetrics.getOrElse(
+        dummyTaskMetrics).inputMetrics.bytesRead.toString.toLowerCase.contains(
+        searchValueLowerCase)
+        || f.taskMetrics.getOrElse(
+        dummyTaskMetrics).inputMetrics.recordsRead.toString.toLowerCase.contains(
+        searchValueLowerCase)
+        || f.taskMetrics.getOrElse(
+        dummyTaskMetrics).outputMetrics.bytesWritten.toString.toLowerCase.contains(
+        searchValueLowerCase)
+        || f.taskMetrics.getOrElse(
+        dummyTaskMetrics).outputMetrics.recordsWritten.toString.toLowerCase.contains(
+        searchValueLowerCase)
+        || f.taskMetrics.getOrElse(
+        dummyTaskMetrics).shuffleReadMetrics.fetchWaitTime.toString.toLowerCase.contains(
+        searchValueLowerCase)
+        || f.taskMetrics.getOrElse(
+        dummyTaskMetrics).shuffleReadMetrics.recordsRead.toString.toLowerCase.contains(
+        searchValueLowerCase)
+        || f.taskMetrics.getOrElse(
+        dummyTaskMetrics).shuffleWriteMetrics.bytesWritten.toString.toLowerCase.contains(
+        searchValueLowerCase)
+        || f.taskMetrics.getOrElse(
+        dummyTaskMetrics).shuffleWriteMetrics.recordsWritten.toString.toLowerCase.contains(
+        searchValueLowerCase)
+        || f.taskMetrics.getOrElse(
+        dummyTaskMetrics).shuffleWriteMetrics.writeTime.toString.toLowerCase.contains(
+        searchValueLowerCase)
+        || f.schedulerDelay.toString.toLowerCase.contains(searchValueLowerCase)
+        || f.gettingResultTime.toString.toLowerCase.contains(searchValueLowerCase)))
     filteredTaskDataSequence
   }
 

@@ -231,11 +231,21 @@ function createDataTableForTaskSummaryMetricsTable(task_summary_metrics_table) {
             ],
             "paging": false,
             "searching": false,
-            "order": [[0, "asc"]]
+            "order": [[0, "asc"]],
+            "bSort": false
         };
         taskSummaryMetricsDataTable = $(taskMetricsTable).DataTable(task_conf);
     }
     task_summary_metrics_table_current_state_array = task_summary_metrics_table.slice();
+}
+
+function createRowMetadataForColumn(columnName, data, checkboxId) {
+  var row = {
+      "metric": columnName,
+      "data": data,
+      "checkboxId": checkboxId
+  };
+  return row;
 }
 
 var task_summary_metrics_table_array = [];
@@ -252,36 +262,36 @@ $(document).ready(function () {
         "</a></div>" +
         "<div class='container-fluid container-fluid-div' id='toggle-metrics' hidden>" +
         "<div><input type='checkbox' class='toggle-vis' id='box-0' data-column='0'> Select All</div>" +
-        "<div id='scheduler_delay'><input type='checkbox' class='toggle-vis' id='box-11' data-column='11'> Scheduler Delay</div>" +
-        "<div id='task_deserialization_time'><input type='checkbox' class='toggle-vis' id='box-12' data-column='12'> Task Deserialization Time</div>" +
-        "<div id='shuffle_read_blocked_time'><input type='checkbox' class='toggle-vis' id='box-13' data-column='13'> Shuffle Read Blocked Time</div>" +
-        "<div id='shuffle_remote_reads'><input type='checkbox' class='toggle-vis' id='box-14' data-column='14'> Shuffle Remote Reads</div>" +
-        "<div id='result_serialization_time'><input type='checkbox' class='toggle-vis' id='box-15' data-column='15'> Result Serialization Time</div>" +
-        "<div id='getting_result_time'><input type='checkbox' class='toggle-vis' id='box-16' data-column='16'> Getting Result Time</div>" +
-        "<div id='peak_execution_memory'><input type='checkbox' class='toggle-vis' id='box-17' data-column='17'> Peak Execution Memory</div>" +
+        "<div id='scheduler_delay' class='scheduler-delay-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-11' data-column='11'> Scheduler Delay</div>" +
+        "<div id='task_deserialization_time' class='task-deserialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-12' data-column='12'> Task Deserialization Time</div>" +
+        "<div id='shuffle_read_blocked_time' class='shuffle-read-blocked-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-13' data-column='13'> Shuffle Read Blocked Time</div>" +
+        "<div id='shuffle_remote_reads' class='shuffle-remote-reads-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-14' data-column='14'> Shuffle Remote Reads</div>" +
+        "<div id='result_serialization_time' class='result-serialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-15' data-column='15'> Result Serialization Time</div>" +
+        "<div id='getting_result_time' class='getting-result-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-16' data-column='16'> Getting Result Time</div>" +
+        "<div id='peak_execution_memory' class='peak-execution-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-17' data-column='17'> Peak Execution Memory</div>" +
         "</div>");
 
     $('#scheduler_delay').attr("data-toggle", "tooltip")
-        .attr("data-placement", "bottom")
+        .attr("data-placement", "right")
         .attr("title", "Scheduler delay includes time to ship the task from the scheduler to the executor, and time to send " +
             "the task result from the executor to the scheduler. If scheduler delay is large, consider decreasing the size of tasks or decreasing the size of task results.");
     $('#task_deserialization_time').attr("data-toggle", "tooltip")
-        .attr("data-placement", "bottom")
+        .attr("data-placement", "right")
         .attr("title", "Time spent deserializing the task closure on the executor, including the time to read the broadcasted task.");
     $('#shuffle_read_blocked_time').attr("data-toggle", "tooltip")
-        .attr("data-placement", "bottom")
+        .attr("data-placement", "right")
         .attr("title", "Time that the task spent blocked waiting for shuffle data to be read from remote machines.");
     $('#shuffle_remote_reads').attr("data-toggle", "tooltip")
-        .attr("data-placement", "bottom")
+        .attr("data-placement", "right")
         .attr("title", "Total shuffle bytes read from remote executors. This is a subset of the shuffle read bytes; the remaining shuffle data is read locally. ");
     $('#result_serialization_time').attr("data-toggle", "tooltip")
-            .attr("data-placement", "bottom")
+            .attr("data-placement", "right")
             .attr("title", "Time spent serializing the task result on the executor before sending it back to the driver.");
     $('#getting_result_time').attr("data-toggle", "tooltip")
-            .attr("data-placement", "bottom")
+            .attr("data-placement", "right")
             .attr("title", "Time that the driver spends fetching task results from workers. If this is large, consider decreasing the amount of data returned from each task.");
     $('#peak_execution_memory').attr("data-toggle", "tooltip")
-            .attr("data-placement", "bottom")
+            .attr("data-placement", "right")
             .attr("title", "Execution memory refers to the memory used by internal data structures created during " +
                 "shuffles, aggregations and joins when Tungsten is enabled. The value of this accumulator " +
                 "should be approximately the sum of the peak sizes across all such data structures created " +
@@ -303,19 +313,19 @@ $(document).ready(function () {
             var stageAttemptId = getStageAttemptId();
             var responseBody = response[stageAttemptId];
             var dataToShow = {};
-            dataToShow.showInputData = responseBody.inputBytes > 0?true:false;
-            dataToShow.showOutputData = responseBody.outputBytes > 0?true:false;
-            dataToShow.showShuffleReadData = responseBody.shuffleReadBytes > 0?true:false;
-            dataToShow.showShuffleWriteData = responseBody.shuffleWriteBytes > 0?true:false;
+            dataToShow.showInputData = responseBody.inputBytes > 0;
+            dataToShow.showOutputData = responseBody.outputBytes > 0;
+            dataToShow.showShuffleReadData = responseBody.shuffleReadBytes > 0;
+            dataToShow.showShuffleWriteData = responseBody.shuffleWriteBytes > 0;
             dataToShow.showBytesSpilledData =
-                (responseBody.diskBytesSpilled > 0 || responseBody.memoryBytesSpilled > 0)?true:false;
+                (responseBody.diskBytesSpilled > 0 || responseBody.memoryBytesSpilled > 0);
 
             // prepare data for task aggregated metrics table
             indices = Object.keys(responseBody.executorSummary);
             var executor_summary_table = [];
-            indices.forEach(function (ix) {
-               responseBody.executorSummary[ix].id = ix;
-               executor_summary_table.push(responseBody.executorSummary[ix]);
+            indices.forEach(function (columnKeyIndex) {
+               responseBody.executorSummary[columnKeyIndex].id = columnKeyIndex;
+               executor_summary_table.push(responseBody.executorSummary[columnKeyIndex]);
             });
 
             // prepare data for accumulatorUpdates
@@ -341,126 +351,83 @@ $(document).ready(function () {
                 $.getJSON(stageEndPoint(appId) + "/"+stageAttemptId+"/taskSummary?quantiles="+quantiles,
                   function(taskMetricsResponse, status, jqXHR) {
                     var taskMetricKeys = Object.keys(taskMetricsResponse);
-                    taskMetricKeys.forEach(function (ix) {
-                        var columnName = getColumnNameForTaskMetricSummary(ix);
-                        if (columnName == "Shuffle Read Size / Records") {
-                            var row1 = {
-                                "metric": columnName,
-                                "data": taskMetricsResponse[ix],
-                                "checkboxId": 3
-                            };
-                            var row2 = {
-                                "metric": "Shuffle Read Blocked Time",
-                                "data": taskMetricsResponse[ix],
-                                "checkboxId": 13
-                            };
-                            var row3 = {
-                                "metric": "Shuffle Remote Reads",
-                                "data": taskMetricsResponse[ix],
-                                "checkboxId": 14
-                            };
+                    taskMetricKeys.forEach(function (columnKey) {
+                        if (columnKey == "shuffleReadMetrics") {
+                            var row1 = createRowMetadataForColumn(
+                                getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 3);
+                            var row2 = createRowMetadataForColumn(
+                                "Shuffle Read Blocked Time", taskMetricsResponse[columnKey], 13);
+                            var row3 = createRowMetadataForColumn(
+                                "Shuffle Remote Reads", taskMetricsResponse[columnKey], 14);
                             if (dataToShow.showShuffleReadData) {
                                 task_summary_metrics_table_array.push(row1);
                             }
                             task_summary_metrics_table_array.push(row2);
                             task_summary_metrics_table_array.push(row3);
                         }
-                        else if (columnName == "Scheduler Delay") {
-                            var row = {
-                                "metric": columnName,
-                                "data": taskMetricsResponse[ix],
-                                "checkboxId": 11
-                            };
+                        else if (columnKey == "schedulerDelay") {
+                            var row = createRowMetadataForColumn(
+                                getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 11);
                             task_summary_metrics_table_array.push(row);
                         }
-                        else if (columnName == "Task Deserialization Time") {
-                            var row = {
-                                "metric": columnName,
-                                "data": taskMetricsResponse[ix],
-                                "checkboxId": 12
-                            };
+                        else if (columnKey == "executorDeserializeTime") {
+                            var row = createRowMetadataForColumn(
+                                getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 12);
                             task_summary_metrics_table_array.push(row);
                         }
-                        else if (columnName == "Result Serialization Time") {
-                            var row = {
-                                "metric": columnName,
-                                "data": taskMetricsResponse[ix],
-                                "checkboxId": 15
-                            };
+                        else if (columnKey == "resultSerializationTime") {
+                            var row = createRowMetadataForColumn(
+                                getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 15);
                             task_summary_metrics_table_array.push(row);
                         }
-                        else if (columnName == "Getting Result Time") {
-                            var row = {
-                                "metric": columnName,
-                                "data": taskMetricsResponse[ix],
-                                "checkboxId": 16
-                            };
+                        else if (columnKey == "gettingResultTime") {
+                            var row = createRowMetadataForColumn(
+                                getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 16);
                             task_summary_metrics_table_array.push(row);
                         }
-                        else if (columnName == "Peak Execution Memory") {
-                            var row = {
-                                "metric": columnName,
-                                "data": taskMetricsResponse[ix],
-                                "checkboxId": 17
-                            };
+                        else if (columnKey == "peakExecutionMemory") {
+                            var row = createRowMetadataForColumn(
+                                getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 17);
                             task_summary_metrics_table_array.push(row);
                         }
-                        else if (columnName == "Input Size / Records") {
-                            var row = {
-                                "metric": columnName,
-                                "data": taskMetricsResponse[ix],
-                                "checkboxId": 1
-                            };
+                        else if (columnKey == "inputMetrics") {
+                            var row = createRowMetadataForColumn(
+                                getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 1);
                             if (dataToShow.showInputData) {
                                 task_summary_metrics_table_array.push(row);
                             }
                         }
-                        else if (columnName == "Output Size / Records") {
-                            var row = {
-                                "metric": columnName,
-                                "data": taskMetricsResponse[ix],
-                                "checkboxId": 2
-                            };
+                        else if (columnKey == "outputMetrics") {
+                            var row = createRowMetadataForColumn(
+                                getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 2);
                             if (dataToShow.showOutputData) {
                                 task_summary_metrics_table_array.push(row);
                             }
                         }
-                        else if (columnName == "Shuffle Write Size / Records") {
-                            var row = {
-                                "metric": columnName,
-                                "data": taskMetricsResponse[ix],
-                                "checkboxId": 4
-                            };
+                        else if (columnKey == "shuffleWriteMetrics") {
+                            var row = createRowMetadataForColumn(
+                                getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 4);
                             if (dataToShow.showShuffleWriteData) {
                                 task_summary_metrics_table_array.push(row);
                             }
                         }
-                        else if (columnName == "Shuffle spill (disk)") {
-                            var row = {
-                                "metric": columnName,
-                                "data": taskMetricsResponse[ix],
-                                "checkboxId": 5
-                            };
+                        else if (columnKey == "diskBytesSpilled") {
+                            var row = createRowMetadataForColumn(
+                                getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 5);
                             if (dataToShow.showBytesSpilledData) {
                                 task_summary_metrics_table_array.push(row);
                             }
                         }
-                        else if (columnName == "Shuffle spill (memory)") {
-                            var row = {
-                                "metric": columnName,
-                                "data": taskMetricsResponse[ix],
-                                "checkboxId": 6
-                            };
+                        else if (columnKey == "memoryBytesSpilled") {
+                            var row = createRowMetadataForColumn(
+                                getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 6);
                             if (dataToShow.showBytesSpilledData) {
                                 task_summary_metrics_table_array.push(row);
                             }
                         }
-                        else if (columnName != "NA") {
-                            var row = {
-                                "metric": columnName,
-                                "data": taskMetricsResponse[ix],
-                                "checkboxId": 0
-                            };
+                        else if (getColumnNameForTaskMetricSummary(columnKey) != "NA") {
+                            var row = createRowMetadataForColumn(
+                                getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 0);
                             task_summary_metrics_table_array.push(row);
                         }
                     });
@@ -494,22 +461,22 @@ $(document).ready(function () {
                         {data : "isBlacklistedForStage"},
                         {
                             data : function (row, type) {
-                                return row.inputRecords != 0 ? formatBytes(row.inputBytes, type) + " / " + row.inputRecords : 0;
+                                return row.inputRecords != 0 ? formatBytes(row.inputBytes, type) + " / " + row.inputRecords : "";
                             }
                         },
                         {
                             data : function (row, type) {
-                                return row.outputRecords != 0 ? formatBytes(row.outputBytes, type) + " / " + row.outputRecords : 0;
+                                return row.outputRecords != 0 ? formatBytes(row.outputBytes, type) + " / " + row.outputRecords : "";
                             }
                         },
                         {
                             data : function (row, type) {
-                                return row.shuffleReadRecords != 0 ? formatBytes(row.shuffleRead, type) + " / " + row.shuffleReadRecords : 0;
+                                return row.shuffleReadRecords != 0 ? formatBytes(row.shuffleRead, type) + " / " + row.shuffleReadRecords : "";
                             }
                         },
                         {
                             data : function (row, type) {
-                                return row.shuffleWriteRecords != 0 ? formatBytes(row.shuffleWrite, type) + " / " + row.shuffleWriteRecords : 0;
+                                return row.shuffleWriteRecords != 0 ? formatBytes(row.shuffleWrite, type) + " / " + row.shuffleWriteRecords : "";
                             }
                         },
                         {
@@ -676,15 +643,11 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
-                                if ("taskMetrics" in row) {
-                                    if (row.taskMetrics.inputMetrics.bytesRead > 0) {
-                                        if (type === 'display') {
-                                            return formatBytes(row.taskMetrics.inputMetrics.bytesRead, type) + " / " + row.taskMetrics.inputMetrics.recordsRead;
-                                        } else {
-                                            return row.taskMetrics.inputMetrics.bytesRead + " / " + row.taskMetrics.inputMetrics.recordsRead;
-                                        }
+                                if (row.taskMetrics && row.taskMetrics.inputMetrics.bytesRead > 0) {
+                                    if (type === 'display') {
+                                        return formatBytes(row.taskMetrics.inputMetrics.bytesRead, type) + " / " + row.taskMetrics.inputMetrics.recordsRead;
                                     } else {
-                                        return "";
+                                        return row.taskMetrics.inputMetrics.bytesRead + " / " + row.taskMetrics.inputMetrics.recordsRead;
                                     }
                                 } else {
                                     return "";
@@ -694,15 +657,11 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
-                                if ("taskMetrics" in row) {
-                                    if (row.taskMetrics.outputMetrics.bytesWritten > 0) {
-                                        if (type === 'display') {
-                                            return formatBytes(row.taskMetrics.outputMetrics.bytesWritten, type) + " / " + row.taskMetrics.outputMetrics.recordsWritten;
-                                        } else {
-                                            return row.taskMetrics.outputMetrics.bytesWritten + " / " + row.taskMetrics.outputMetrics.recordsWritten;
-                                        }
+                                if (row.taskMetrics && row.taskMetrics.outputMetrics.bytesWritten > 0) {
+                                    if (type === 'display') {
+                                        return formatBytes(row.taskMetrics.outputMetrics.bytesWritten, type) + " / " + row.taskMetrics.outputMetrics.recordsWritten;
                                     } else {
-                                        return "";
+                                        return row.taskMetrics.outputMetrics.bytesWritten + " / " + row.taskMetrics.outputMetrics.recordsWritten;
                                     }
                                 } else {
                                     return "";
@@ -712,12 +671,8 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
-                                if ("taskMetrics" in row) {
-                                    if (row.taskMetrics.shuffleWriteMetrics.writeTime > 0) {
-                                        return type === 'display' ? formatDuration(parseInt(row.taskMetrics.shuffleWriteMetrics.writeTime) / 1000000) : row.taskMetrics.shuffleWriteMetrics.writeTime;
-                                    } else {
-                                        return "";
-                                    }
+                                if (row.taskMetrics && row.taskMetrics.shuffleWriteMetrics.writeTime > 0) {
+                                    return type === 'display' ? formatDuration(parseInt(row.taskMetrics.shuffleWriteMetrics.writeTime) / 1000000) : row.taskMetrics.shuffleWriteMetrics.writeTime;
                                 } else {
                                     return "";
                                 }
@@ -726,15 +681,11 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
-                                if ("taskMetrics" in row) {
-                                    if (row.taskMetrics.shuffleWriteMetrics.bytesWritten > 0) {
-                                        if (type === 'display') {
-                                            return formatBytes(row.taskMetrics.shuffleWriteMetrics.bytesWritten, type) + " / " + row.taskMetrics.shuffleWriteMetrics.recordsWritten;
-                                        } else {
-                                            return row.taskMetrics.shuffleWriteMetrics.bytesWritten + " / " + row.taskMetrics.shuffleWriteMetrics.recordsWritten;
-                                        }
+                                if (row.taskMetrics && row.taskMetrics.shuffleWriteMetrics.bytesWritten > 0) {
+                                    if (type === 'display') {
+                                        return formatBytes(row.taskMetrics.shuffleWriteMetrics.bytesWritten, type) + " / " + row.taskMetrics.shuffleWriteMetrics.recordsWritten;
                                     } else {
-                                        return "";
+                                        return row.taskMetrics.shuffleWriteMetrics.bytesWritten + " / " + row.taskMetrics.shuffleWriteMetrics.recordsWritten;
                                     }
                                 } else {
                                     return "";
@@ -744,16 +695,12 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
-                                if ("taskMetrics" in row) {
-                                    if (row.taskMetrics.shuffleReadMetrics.localBytesRead > 0) {
-                                        var totalBytesRead = parseInt(row.taskMetrics.shuffleReadMetrics.localBytesRead) + parseInt(row.taskMetrics.shuffleReadMetrics.remoteBytesRead);
-                                        if (type === 'display') {
-                                            return formatBytes(totalBytesRead, type) + " / " + row.taskMetrics.shuffleReadMetrics.recordsRead;
-                                        } else {
-                                            return totalBytesRead + " / " + row.taskMetrics.shuffleReadMetrics.recordsRead;
-                                        }
+                                if (row.taskMetrics && row.taskMetrics.shuffleReadMetrics.localBytesRead > 0) {
+                                    var totalBytesRead = parseInt(row.taskMetrics.shuffleReadMetrics.localBytesRead) + parseInt(row.taskMetrics.shuffleReadMetrics.remoteBytesRead);
+                                    if (type === 'display') {
+                                        return formatBytes(totalBytesRead, type) + " / " + row.taskMetrics.shuffleReadMetrics.recordsRead;
                                     } else {
-                                        return "";
+                                        return totalBytesRead + " / " + row.taskMetrics.shuffleReadMetrics.recordsRead;
                                     }
                                 } else {
                                     return "";
@@ -763,12 +710,8 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
-                                if ("taskMetrics" in row) {
-                                    if (row.taskMetrics.memoryBytesSpilled > 0) {
-                                        return type === 'display' ? formatBytes(row.taskMetrics.memoryBytesSpilled, type) : row.taskMetrics.memoryBytesSpilled;
-                                    } else {
-                                        return "";
-                                    }
+                                if (row.taskMetrics && row.taskMetrics.memoryBytesSpilled > 0) {
+                                    return type === 'display' ? formatBytes(row.taskMetrics.memoryBytesSpilled, type) : row.taskMetrics.memoryBytesSpilled;
                                 } else {
                                     return "";
                                 }
@@ -777,12 +720,8 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
-                                if ("taskMetrics" in row) {
-                                    if (row.taskMetrics.diskBytesSpilled > 0) {
-                                        return type === 'display' ? formatBytes(row.taskMetrics.diskBytesSpilled, type) : row.taskMetrics.diskBytesSpilled;
-                                    } else {
-                                        return "";
-                                    }
+                                if (row.taskMetrics && row.taskMetrics.diskBytesSpilled > 0) {
+                                    return type === 'display' ? formatBytes(row.taskMetrics.diskBytesSpilled, type) : row.taskMetrics.diskBytesSpilled;
                                 } else {
                                     return "";
                                 }
@@ -792,13 +731,13 @@ $(document).ready(function () {
                         {
                             data : function (row, type) {
                                 var msg = row.errorMessage;
-                                if (typeof msg === 'undefined'){
+                                if (typeof msg === 'undefined') {
                                     return "";
                                 } else {
-                                        var form_head = msg.substring(0, msg.indexOf("at"));
-                                        var form = "<span onclick=\"this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')\" class=\"expand-details\">+details</span>";
-                                        var form_msg = "<div class=\"stacktrace-details collapsed\"><pre>" + row.errorMessage + "</pre></div>";
-                                        return form_head + form + form_msg;
+                                    var form_head = msg.substring(0, msg.indexOf("at"));
+                                    var form = "<span onclick=\"this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')\" class=\"expand-details\">+details</span>";
+                                    var form_msg = "<div class=\"stacktrace-details collapsed\"><pre>" + row.errorMessage + "</pre></div>";
+                                    return form_head + form + form_msg;
                                 }
                             },
                             name: "Errors"
@@ -831,13 +770,13 @@ $(document).ready(function () {
                 var allChecked = true;
                 for(k = 0; k < optionalColumns.length; k++) {
                     if (taskTableSelector.column(optionalColumns[k]).visible()) {
-                        $("#box-"+optionalColumns[k]).checked = true;
+                        $("#box-"+optionalColumns[k]).prop('checked', true);
                     } else {
                         allChecked = false;
                     }
                 }
                 if (allChecked) {
-                    $("#box-0").checked = true;
+                    $("#box-0").prop('checked', true);
                 }
 
                 // hide or show columns dynamically event
@@ -895,9 +834,33 @@ $(document).ready(function () {
                 taskTableSelector.column(25).visible(dataToShow.showBytesSpilledData);
 
                 executorSummaryTableSelector.column(9).visible(dataToShow.showInputData);
+                if (dataToShow.showInputData) {
+                    $('#executor-summary-input').attr("data-toggle", "tooltip")
+                            .attr("data-placement", "top")
+                            .attr("title", "Bytes and records read from Hadoop or from Spark storage.");
+                    $('#executor-summary-input').tooltip(true);
+                }
                 executorSummaryTableSelector.column(10).visible(dataToShow.showOutputData);
+                if (dataToShow.showOutputData) {
+                    $('#executor-summary-output').attr("data-toggle", "tooltip")
+                            .attr("data-placement", "top")
+                            .attr("title", "Bytes and records written to Hadoop.");
+                    $('#executor-summary-output').tooltip(true);
+                }
                 executorSummaryTableSelector.column(11).visible(dataToShow.showShuffleReadData);
+                if (dataToShow.showShuffleReadData) {
+                    $('#executor-summary-shuffle-read').attr("data-toggle", "tooltip")
+                            .attr("data-placement", "top")
+                            .attr("title", "Total shuffle bytes and records read (includes both data read locally and data read from remote executors).");
+                    $('#executor-summary-shuffle-read').tooltip(true);
+                }
                 executorSummaryTableSelector.column(12).visible(dataToShow.showShuffleWriteData);
+                if (dataToShow.showShuffleWriteData) {
+                    $('#executor-summary-shuffle-write').attr("data-toggle", "tooltip")
+                            .attr("data-placement", "top")
+                            .attr("title", "Bytes and records written to disk in order to be read by a shuffle in a future stage.");
+                    $('#executor-summary-shuffle-write').tooltip(true);
+                }
                 executorSummaryTableSelector.column(13).visible(dataToShow.showBytesSpilledData);
                 executorSummaryTableSelector.column(14).visible(dataToShow.showBytesSpilledData);
             });

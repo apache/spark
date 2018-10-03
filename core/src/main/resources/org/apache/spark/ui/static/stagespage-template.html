@@ -55,18 +55,10 @@ limitations under the License.
                 title="Shows if this executor has been blacklisted by the scheduler due to task failures.">
             Blacklisted</span>
                 </th>
-                <th>
-          <span data-toggle="tooltip" data-placement="top"
-                title="Bytes and records read from Hadoop or from Spark storage.">
-            Input Size / Records</span>
-                </th>
-                <th>Output Size / Records</th>
-                <th>Shuffle Read Size / Records</th>
-                <th>
-          <span data-toggle="tooltip" data-placement="top"
-                title="Bytes and records written to disk in order to be read by a shuffle in a future stage.">
-            Shuffle Write Size / Records</span>
-                </th>
+                <th><span id="executor-summary-input">Input Size / Records</span></th>
+                <th><span id="executor-summary-output">Output Size / Records</span></th>
+                <th><span id="executor-summary-shuffle-read">Shuffle Read Size / Records</span></th>
+                <th><span id="executor-summary-shuffle-write">Shuffle Write Size / Records</span></th>
                 <th>Shuffle Spill (Memory) </th>
                 <th>Shuffle Spill (Disk) </th>
                 </thead>
@@ -104,9 +96,9 @@ limitations under the License.
                     <th>Host</th>
                     <th>Logs</th>
                     <th>Launch Time</th>
-                    <th>Duration</span></th>
-                    <th>GC Time</span></th>
-                    <th>Scheduler Delay</span></th>
+                    <th>Duration</th>
+                    <th>GC Time</th>
+                    <th>Scheduler Delay</th>
                     <th>Task Deserialization Time</th>
                     <th>Shuffle Read Blocked Time</th>
                     <th>Shuffle Remote Reads</th>
