@@ -843,6 +843,8 @@ private[spark] class SparkSubmit extends Logging {
         if (e.getCause() != null) findCause(e.getCause()) else e
       case e: InvocationTargetException =>
         if (e.getCause() != null) findCause(e.getCause()) else e
+      case e: SparkException =>
+        if (e.getCause() != null) findCause(e.getCause()) else e
       case e: Throwable =>
         e
     }
