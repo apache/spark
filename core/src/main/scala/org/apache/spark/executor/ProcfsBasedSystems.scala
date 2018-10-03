@@ -28,20 +28,20 @@ import scala.collection.mutable.Queue
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.{config, Logging}
 
-private[spark] case class ProcfsBasedSystemsMetrics(jvmVmemTotal: Long,
-                                             jvmRSSTotal: Long,
-                                             pythonVmemTotal: Long,
-                                             pythonRSSTotal: Long,
-                                             otherVmemTotal: Long,
-                                             otherRSSTotal: Long)
+private[spark] case class ProcfsBasedSystemsMetrics(
+    jvmVmemTotal: Long,
+    jvmRSSTotal: Long,
+    pythonVmemTotal: Long,
+    pythonRSSTotal: Long,
+    otherVmemTotal: Long,
+    otherRSSTotal: Long)
 
 // Some of the ideas here are taken from the ProcfsBasedProcessTree class in hadoop
 // project.
-private[spark] class ProcfsBasedSystems extends Logging {
-  var procfsDir = "/proc/"
+private[spark] class ProcfsBasedSystems(procfsDir: String = "/proc/") extends Logging {
   val procfsStatFile = "stat"
-  var pageSize = 0
-  var isAvailable: Boolean = isItProcfsBased
+  var pageSize: Long = computePageSize()
+  var isAvailable: Boolean = isProcfsAvailable
   private val pid: Int = computePid()
   private val ptree: scala.collection.mutable.Map[ Int, Set[Int]] =
     scala.collection.mutable.Map[ Int, Set[Int]]()
@@ -56,7 +56,7 @@ private[spark] class ProcfsBasedSystems extends Logging {
 
   computeProcessTree()
 
-  private def isItProcfsBased: Boolean = {
+  private def isProcfsAvailable: Boolean = {
     val testing = sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
     if (testing) {
       return true
@@ -92,33 +92,36 @@ private[spark] class ProcfsBasedSystems extends Logging {
     }
     catch {
       case e: IOException => logDebug("IO Exception when trying to compute process tree." +
-        " As a result reporting of ProcessTree metrics is stopped")
+        " As a result reporting of ProcessTree metrics is stopped", e)
         isAvailable = false
         return -1
-      case _ => logDebug("Some exception occurred when trying to compute process tree. " +
-        "As a result reporting of ProcessTree metrics is stopped")
+      case t: Throwable => logDebug("Some exception occurred when trying to" +
+        " compute process tree. As a result reporting of ProcessTree metrics is stopped", t)
         isAvailable = false
         return -1
     }
   }
 
-  private def computePageSize(): Unit = {
+  private def computePageSize(): Long = {
+    val testing = sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
+    if (testing) {
+      return 0;
+    }
     val cmd = Array("getconf", "PAGESIZE")
     val out: Array[Byte] = Array.fill[Byte](10)(0)
     Runtime.getRuntime.exec(cmd).getInputStream.read(out)
-    pageSize = Integer.parseInt(new String(out, "UTF-8").trim)
+    return Integer.parseInt(new String(out, "UTF-8").trim)
   }
 
   private def computeProcessTree(): Unit = {
     if (!isAvailable) {
       return
     }
-    computePageSize
     val queue: Queue[Int] = new Queue[Int]()
     queue += pid
     while( !queue.isEmpty ) {
       val p = queue.dequeue()
-      val c = getChildPIds(p)
+      val c = getChildPids(p)
       if(!c.isEmpty) {
         queue ++= c
         ptree += (p -> c.toSet)
@@ -129,7 +132,7 @@ private[spark] class ProcfsBasedSystems extends Logging {
     }
   }
 
-  private def getChildPIds(pid: Int): ArrayBuffer[Int] = {
+  private def getChildPids(pid: Int): ArrayBuffer[Int] = {
     try {
       val cmd = Array("pgrep", "-P", pid.toString)
       val input = Runtime.getRuntime.exec(cmd).getInputStream
@@ -150,23 +153,23 @@ private[spark] class ProcfsBasedSystems extends Logging {
       childPidsInInt
     } catch {
       case e: IOException => logDebug("IO Exception when trying to compute process tree." +
-        " As a result reporting of ProcessTree metrics is stopped")
+        " As a result reporting of ProcessTree metrics is stopped", e)
         isAvailable = false
         return new mutable.ArrayBuffer()
-      case _ => logDebug("Some exception occurred when trying to compute process tree." +
-        " As a result reporting of ProcessTree metrics is stopped")
+      case t: Throwable => logDebug("Some exception occurred when trying to compute process tree." +
+        " As a result reporting of ProcessTree metrics is stopped", t)
         isAvailable = false
         return new mutable.ArrayBuffer()
     }
   }
 
-  /**
+  def getProcessInfo(pid: Int): Unit = {
+    /*
    * Hadoop ProcfsBasedProcessTree class used regex and pattern matching to retrive the memory
    * info. I tried that but found it not correct during tests, so I used normal string analysis
    * instead. The computation of RSS and Vmem are based on proc(5):
    * http://man7.org/linux/man-pages/man5/proc.5.html
    */
-  def getProcessInfo(pid: Int): Unit = {
     try {
       val pidDir: File = new File(procfsDir, pid.toString)
       val fReader = new InputStreamReader(
@@ -178,20 +181,23 @@ private[spark] class ProcfsBasedSystems extends Logging {
       fReader.close
       val procInfoSplit = procInfo.split(" ")
       if ( procInfoSplit != null ) {
+        val vmem = procInfoSplit(22).toLong
+        val rssPages = procInfoSplit(23).toLong
         if (procInfoSplit(1).toLowerCase.contains("java")) {
-          latestJVMVmemTotal += procInfoSplit(22).toLong
-          latestJVMRSSTotal += procInfoSplit(23).toLong
+          latestJVMVmemTotal += vmem
+          latestJVMRSSTotal += rssPages
         }
         else if (procInfoSplit(1).toLowerCase.contains("python")) {
-          latestPythonVmemTotal += procInfoSplit(22).toLong
-          latestPythonRSSTotal += procInfoSplit(23).toLong
+          latestPythonVmemTotal += vmem
+          latestPythonRSSTotal += rssPages
         }
         else {
-        latestOtherVmemTotal += procInfoSplit(22).toLong
-        latestOtherRSSTotal += procInfoSplit(23).toLong }
+        latestOtherVmemTotal += vmem
+        latestOtherRSSTotal += rssPages }
       }
     } catch {
-      case f: FileNotFoundException =>
+      case f: FileNotFoundException => log.debug("There was a problem with reading" +
+        " the stat file of the process", f)
     }
   }
 

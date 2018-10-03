@@ -22,22 +22,20 @@ import org.apache.spark.SparkFunSuite
 
 class ProcfsBasedSystemsSuite extends SparkFunSuite {
 
- val p = new ProcfsBasedSystems
-  p.pageSize = 4096
-  p.procfsDir = getTestResourcePath("ProcessTree")
+  val p = new ProcfsBasedSystems(getTestResourcePath("ProcessTree"))
+  p.pageSize = 4096L
 
   test("testGetProcessInfo") {
-   p.getProcessInfo(26109)
-   assert(p.getJVMVirtualMemInfo == 4769947648L)
-   assert(p.getJVMRSSInfo == 262610944)
-   assert(p.getPythonVirtualMemInfo == 0)
-   assert(p.getPythonRSSInfo == 0)
+    p.getProcessInfo(26109)
+    assert(p.getJVMVirtualMemInfo == 4769947648L)
+    assert(p.getJVMRSSInfo == 262610944)
+    assert(p.getPythonVirtualMemInfo == 0)
+    assert(p.getPythonRSSInfo == 0)
 
-   p.getProcessInfo(22763)
-   assert(p.getPythonVirtualMemInfo == 360595456)
-   assert(p.getPythonRSSInfo == 7831552)
-   assert(p.getJVMVirtualMemInfo == 4769947648L)
-   assert(p.getJVMRSSInfo == 262610944)
-
+    p.getProcessInfo(22763)
+    assert(p.getPythonVirtualMemInfo == 360595456)
+    assert(p.getPythonRSSInfo == 7831552)
+    assert(p.getJVMVirtualMemInfo == 4769947648L)
+    assert(p.getJVMRSSInfo == 262610944)
   }
 }
