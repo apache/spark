@@ -225,6 +225,14 @@ The history server can be configured as follows:
     </td>
   </tr>
   <tr>
+    <td>spark.history.store.maxDiskUsage</td>
+    <td>10g</td>
+    <td>
+      Maximum disk usage for the local directory where the cache application history information
+      are stored.
+    </td>
+  </tr>
+  <tr>
     <td>spark.history.store.path</td>
     <td>(none)</td>
     <td>
