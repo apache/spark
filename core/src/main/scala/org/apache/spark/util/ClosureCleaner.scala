@@ -328,8 +328,8 @@ private[spark] object ClosureCleaner extends Logging {
           // class without cloning it since we don't want to clone the user's objects.
           // Note that we still need to keep around the outermost object itself because
           // we need it to clone its child closure later (see below).
-          logDebug(" + outermost object is not a closure or REPL line object," +
-            "so do not clone it: " +  outermostClass)
+          logDebug(s" + outermost object is not a closure or REPL line object," +
+            s" so do not clone it: ${outermostClass}")
           parent = outermostObject // e.g. SparkContext
           outerPairs = outerPairs.tail
         }
@@ -340,7 +340,7 @@ private[spark] object ClosureCleaner extends Logging {
       // Clone the closure objects themselves, nulling out any fields that are not
       // used in the closure we're working on or any of its inner closures.
       for ((cls, obj) <- outerPairs) {
-        logDebug(s" + cloning the object of class ${cls.getName}")
+        logDebug(s" + cloning instance of class ${cls.getName}")
         // We null out these unused references by cloning each object and then filling in all
         // required fields from the original object. We need the parent here because the Java
         // language specification requires the first constructor parameter of any closure to be
