@@ -136,7 +136,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
        |if ($batch == null) {
        |  $nextBatchFuncName();
        |}
-       |while ($batch != null) {
+       |while ($batch != null$keepProducingDataCond) {
        |  int $numRows = $batch.numRows();
        |  int $localEnd = $numRows - $idx;
        |  for (int $localIdx = 0; $localIdx < $localEnd; $localIdx++) {
@@ -166,7 +166,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     }
     val inputRow = if (needsUnsafeRowConversion) null else row
     s"""
-       |while ($input.hasNext()) {
+       |while ($input.hasNext()$keepProducingDataCond) {
        |  InternalRow $row = (InternalRow) $input.next();
        |  $numOutputRows.add(1);
        |  ${consume(ctx, outputVars, inputRow).trim}

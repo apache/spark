@@ -132,6 +132,10 @@ case class SortExec(
   // a stop check before sorting.
   override def needStopCheck: Boolean = false
 
+  // Sort operator always consumes all the input rows before outputting any result, so its upstream
+  // operators can keep producing data, even if there is a limit after Sort.
+  override def conditionsOfKeepProducingData: Seq[String] = Nil
+
   override protected def doProduce(ctx: CodegenContext): String = {
     val needToSort =
       ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "needToSort", v => s"$v = true;")
@@ -172,7 +176,7 @@ case class SortExec(
        |   $needToSort = false;
        | }
        |
-       | while ($sortedIterator.hasNext()) {
+       | while ($sortedIterator.hasNext()$keepProducingDataCond) {
        |   UnsafeRow $outputRow = (UnsafeRow)$sortedIterator.next();
        |   ${consume(ctx, null, outputRow)}
        |   if (shouldStop()) return;

@@ -159,6 +159,10 @@ case class HashAggregateExec(
   // don't need a stop check before aggregating.
   override def needStopCheck: Boolean = false
 
+  // Aggregate operator always consumes all the input rows before outputting any result, so its
+  // upstream operators can keep producing data, even if there is a limit after Aggregate.
+  override def conditionsOfKeepProducingData: Seq[String] = Nil
+
   protected override def doProduce(ctx: CodegenContext): String = {
     if (groupingExpressions.isEmpty) {
       doProduceWithoutKeys(ctx)
@@ -705,12 +709,15 @@ case class HashAggregateExec(
 
     def outputFromRegularHashMap: String = {
       s"""
-         |while ($iterTerm.next()) {
+         |while ($iterTerm.next()$keepProducingDataCond) {
          |  UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
          |  UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getValue();
          |  $outputFunc($keyTerm, $bufferTerm);
-         |
          |  if (shouldStop()) return;
+         |}
+         |$iterTerm.close();
+         |if ($sorterTerm == null) {
+         |  $hashMapTerm.free();
          |}
        """.stripMargin
     }
@@ -728,11 +735,6 @@ case class HashAggregateExec(
      // output the result
      $outputFromFastHashMap
      $outputFromRegularHashMap
-
-     $iterTerm.close();
-     if ($sorterTerm == null) {
-       $hashMapTerm.free();
-     }
      """
   }
 

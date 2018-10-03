@@ -345,6 +345,16 @@ trait CodegenSupport extends SparkPlan {
    * don't require shouldStop() in the loop of producing rows.
    */
   def needStopCheck: Boolean = parent.needStopCheck
+
+  def conditionsOfKeepProducingData: Seq[String] = parent.conditionsOfKeepProducingData
+
+  final protected def keepProducingDataCond: String = {
+    if (parent.conditionsOfKeepProducingData.isEmpty) {
+      ""
+    } else {
+      parent.conditionsOfKeepProducingData.mkString(" && ", " && ", "")
+    }
+  }
 }
 
 
@@ -381,7 +391,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       forceInline = true)
     val row = ctx.freshName("row")
     s"""
-       | while ($input.hasNext() && !stopEarly()) {
+       | while ($input.hasNext()$keepProducingDataCond) {
        |   InternalRow $row = (InternalRow) $input.next();
        |   ${consume(ctx, null, row).trim}
        |   if (shouldStop()) return;
@@ -676,6 +686,8 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
   }
 
   override def needStopCheck: Boolean = true
+
+  override def conditionsOfKeepProducingData: Seq[String] = Nil
 
   override protected def otherCopyArgs: Seq[AnyRef] = Seq(codegenStageId.asInstanceOf[Integer])
 }
