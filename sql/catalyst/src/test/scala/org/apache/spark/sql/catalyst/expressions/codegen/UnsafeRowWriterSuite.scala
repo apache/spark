@@ -22,13 +22,18 @@ import org.apache.spark.sql.types.Decimal
 
 class UnsafeRowWriterSuite extends SparkFunSuite {
 
+  def checkDecimalSizeInBytes(decimal: Decimal, numBytes: Int): Unit = {
+    assert(decimal.toJavaBigDecimal.unscaledValue().toByteArray.length == numBytes)
+  }
+
   test("SPARK-25538: zero-out all bits for decimals") {
-    // This decimal holds 8 bytes
     val decimal1 = Decimal(0.431)
     decimal1.changePrecision(38, 18)
-    // This decimal holds 11 bytes
+    checkDecimalSizeInBytes(decimal1, 8)
+
     val decimal2 = Decimal(123456789.1232456789)
     decimal2.changePrecision(38, 18)
+    checkDecimalSizeInBytes(decimal2, 11)
     // On an UnsafeRowWriter we write decimal2 first and then decimal1
     val unsafeRowWriter1 = new UnsafeRowWriter(1)
     unsafeRowWriter1.resetRowWriter()
@@ -36,7 +41,7 @@ class UnsafeRowWriterSuite extends SparkFunSuite {
     unsafeRowWriter1.reset()
     unsafeRowWriter1.write(0, decimal1, decimal1.precision, decimal1.scale)
     val res1 = unsafeRowWriter1.getRow
-    // On a second UnsafeRowWriter we write directly decimal2
+    // On a second UnsafeRowWriter we write directly decimal1
     val unsafeRowWriter2 = new UnsafeRowWriter(1)
     unsafeRowWriter2.resetRowWriter()
     unsafeRowWriter2.write(0, decimal1, decimal1.precision, decimal1.scale)
