@@ -1098,23 +1098,25 @@ object SQLContext {
       data: Iterator[_],
       beanClass: Class[_],
       attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
-    def createStructConverter(cls: Class[_], fieldTypes: Iterator[DataType]): Any => InternalRow = {
+    def createStructConverter(cls: Class[_], fieldTypes: Seq[DataType]): Any => InternalRow = {
       val methodConverters =
-        JavaTypeInference.getJavaBeanReadableProperties(cls).iterator.zip(fieldTypes)
+        JavaTypeInference.getJavaBeanReadableProperties(cls).zip(fieldTypes)
           .map { case (property, fieldType) =>
             val method = property.getReadMethod
             method -> createConverter(method.getReturnType, fieldType)
-          }.toArray
-      value => new GenericInternalRow(
-        methodConverters.map { case (method, converter) =>
-          converter(method.invoke(value))
-        })
+          }
+      value =>
+        if (value == null) null
+        else new GenericInternalRow(
+          methodConverters.map { case (method, converter) =>
+            converter(method.invoke(value))
+          })
     }
     def createConverter(cls: Class[_], dataType: DataType): Any => Any = dataType match {
-      case struct: StructType => createStructConverter(cls, struct.iterator.map(_.dataType))
+      case struct: StructType => createStructConverter(cls, struct.map(_.dataType))
       case _ => CatalystTypeConverters.createToCatalystConverter(dataType)
     }
-    val dataConverter = createStructConverter(beanClass, attrs.iterator.map(_.dataType))
+    val dataConverter = createStructConverter(beanClass, attrs.map(_.dataType))
     data.map(dataConverter)
   }
 
