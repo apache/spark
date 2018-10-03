@@ -2348,4 +2348,26 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("desc formatted table should also show viewOriginalText for views") {
+    withView("v1", "v2") {
+      sql("CREATE VIEW v1 AS SELECT 1 AS value")
+      assert(sql("DESC FORMATTED v1").collect().containsSlice(
+        Seq(
+          Row("Type", "VIEW", ""),
+          Row("View Text", "SELECT 1 AS value", ""),
+          Row("View Original Text", "SELECT 1 AS value", "")
+        )
+      ))
+
+      hiveClient.runSqlHive("CREATE VIEW v2 AS SELECT * FROM (SELECT 1) T")
+      assert(sql("DESC FORMATTED v2").collect().containsSlice(
+        Seq(
+          Row("Type", "VIEW", ""),
+          Row("View Text", "SELECT `t`.`_c0` FROM (SELECT 1) `T`", ""),
+          Row("View Original Text", "SELECT * FROM (SELECT 1) T", "")
+        )
+      ))
+    }
+  }
 }
