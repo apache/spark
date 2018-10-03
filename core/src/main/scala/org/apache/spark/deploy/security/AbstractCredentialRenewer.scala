@@ -108,6 +108,12 @@ private[spark] abstract class AbstractCredentialRenewer(
     val creds = obtainTokensAndScheduleRenewal(ugi)
     ugi.addCredentials(creds)
 
+    val driver = driverRef.get()
+    if (driver != null) {
+      val tokens = SparkHadoopUtil.get.serialize(creds)
+      driver.send(UpdateDelegationTokens(tokens))
+    }
+
     // Transfer the original user's tokens to the new user, since it may contain needed tokens
     // (such as those user to connect to YARN). Explicitly avoid overwriting tokens that already
     // exist in the current user's credentials, since those were freshly obtained above
