@@ -33,7 +33,8 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark sql test jar>
  *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt ";project sql;set javaOptions
+ *        in Test -= \"-Dspark.memory.debugFill=true\";test:runMain <this class>"
  *      Results will be written to
  *      "benchmarks/ExternalAppendOnlyUnsafeRowArrayBenchmark-results.txt".
  * }}}
@@ -54,14 +55,18 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
     sc.stop()
   }
 
-  def testAgainstRawArrayBuffer(numSpillThreshold: Int, numRows: Int, iterations: Int): Unit = {
+  private def testRows(numRows: Int): Seq[UnsafeRow] = {
     val random = new java.util.Random()
-    val rows = (1 to numRows).map(_ => {
+    (1 to numRows).map(_ => {
       val row = new UnsafeRow(1)
       row.pointTo(new Array[Byte](64), 16)
       row.setLong(0, random.nextLong())
       row
     })
+  }
+
+  def testAgainstRawArrayBuffer(numSpillThreshold: Int, numRows: Int, iterations: Int): Unit = {
+    val rows = testRows(numRows)
 
     val benchmark = new Benchmark(s"Array with $numRows rows", iterations * numRows,
       output = output)
@@ -116,14 +121,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
       numSpillThreshold: Int,
       numRows: Int,
       iterations: Int): Unit = {
-
-    val random = new java.util.Random()
-    val rows = (1 to numRows).map(_ => {
-      val row = new UnsafeRow(1)
-      row.pointTo(new Array[Byte](64), 16)
-      row.setLong(0, random.nextLong())
-      row
-    })
+    val rows = testRows(numRows)
 
     val benchmark = new Benchmark(s"Spilling with $numRows rows", iterations * numRows,
       output = output)
