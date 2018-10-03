@@ -36,7 +36,7 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT _FUNC_('1, 0.8', 'a INT, b DOUBLE');
        {"a":1, "b":0.8}
   """,
-  since = "2.5.0")
+  since = "3.0.0")
 // scalastyle:on line.size.limit
 case class CsvToStructs(
     schema: StructType,
