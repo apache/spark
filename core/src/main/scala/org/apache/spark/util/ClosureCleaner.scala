@@ -285,8 +285,6 @@ private[spark] object ClosureCleaner extends Logging {
         innerClasses.foreach { c => logDebug(s"     ${c.getName}") }
         logDebug(s" + outer classes: ${outerClasses.size}" )
         outerClasses.foreach { c => logDebug(s"     ${c.getName}") }
-        logDebug(s" + outer objects: ${outerObjects.size}")
-        outerObjects.foreach { o => logDebug(s"     $o") }
       }
 
       // Fail fast if we detect return statements in closures
@@ -318,19 +316,20 @@ private[spark] object ClosureCleaner extends Logging {
       if (outerPairs.nonEmpty) {
         val (outermostClass, outermostObject) = outerPairs.head
         if (isClosure(outermostClass)) {
-          logDebug(s" + outermost object is a closure, so we clone it: ${outerPairs.head}")
+          logDebug(s" + outermost object is a closure, so we clone it: ${outermostClass}")
         } else if (outermostClass.getName.startsWith("$line")) {
           // SPARK-14558: if the outermost object is a REPL line object, we should clone
           // and clean it as it may carray a lot of unnecessary information,
           // e.g. hadoop conf, spark conf, etc.
-          logDebug(s" + outermost object is a REPL line object, so we clone it: ${outerPairs.head}")
+          logDebug(s" + outermost object is a REPL line object, so we clone it:" +
+            s" ${outermostClass}")
         } else {
           // The closure is ultimately nested inside a class; keep the object of that
           // class without cloning it since we don't want to clone the user's objects.
           // Note that we still need to keep around the outermost object itself because
           // we need it to clone its child closure later (see below).
-          logDebug(" + outermost object is not a closure or REPL line object," +
-            "so do not clone it: " +  outerPairs.head)
+          logDebug(s" + outermost object is not a closure or REPL line object," +
+            s" so do not clone it: ${outermostClass}")
           parent = outermostObject // e.g. SparkContext
           outerPairs = outerPairs.tail
         }
@@ -341,7 +340,7 @@ private[spark] object ClosureCleaner extends Logging {
       // Clone the closure objects themselves, nulling out any fields that are not
       // used in the closure we're working on or any of its inner closures.
       for ((cls, obj) <- outerPairs) {
-        logDebug(s" + cloning the object $obj of class ${cls.getName}")
+        logDebug(s" + cloning instance of class ${cls.getName}")
         // We null out these unused references by cloning each object and then filling in all
         // required fields from the original object. We need the parent here because the Java
         // language specification requires the first constructor parameter of any closure to be
@@ -351,7 +350,7 @@ private[spark] object ClosureCleaner extends Logging {
         // If transitive cleaning is enabled, we recursively clean any enclosing closure using
         // the already populated accessed fields map of the starting closure
         if (cleanTransitively && isClosure(clone.getClass)) {
-          logDebug(s" + cleaning cloned closure $clone recursively (${cls.getName})")
+          logDebug(s" + cleaning cloned closure recursively (${cls.getName})")
           // No need to check serializable here for the outer closures because we're
           // only interested in the serializability of the starting closure
           clean(clone, checkSerializable = false, cleanTransitively, accessedFields)
