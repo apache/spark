@@ -176,31 +176,39 @@ private[csv] object CSVInferSchema {
    * Returns the common data type given two input data types so that the return type
    * is compatible with both input data types.
    */
-  def compatibleType(t1: DataType, t2: DataType): Option[DataType] = {
-    TypeCoercion.findTightestCommonType(t1, t2).orElse {
-      (t1, t2) match {
-        case (StringType, t2) => Some(StringType)
-        case (t1, StringType) => Some(StringType)
-
-        case (t1: IntegralType, t2: DecimalType) =>
-          compatibleType(DecimalType.forType(t1), t2)
-        case (t1: DecimalType, t2: IntegralType) =>
-          compatibleType(t1, DecimalType.forType(t2))
-
-        case (DoubleType, _: DecimalType) | (_: DecimalType, DoubleType) =>
-          Some(DoubleType)
-
-        case (t1: DecimalType, t2: DecimalType) =>
-          val scale = math.max(t1.scale, t2.scale)
-          val range = math.max(t1.precision - t1.scale, t2.precision - t2.scale)
-          if (range + scale > 38) {
-            // DecimalType can't support precision > 38
-            Some(DoubleType)
-          } else {
-            Some(DecimalType(range + scale, scale))
-          }
-        case (_, _) => None
-      }
-    }
+  private def compatibleType(t1: DataType, t2: DataType): Option[DataType] = {
+    TypeCoercion.findTightestCommonType(t1, t2).orElse (findCompatibleTypeForCSV(t1, t2))
   }
+
+  /**
+   * The following pattern matching represents additional type promotion rules that
+   * are CSV specific.
+   */
+  private val findCompatibleTypeForCSV: (DataType, DataType) => Option[DataType] = {
+    case (StringType, t2) => Some(StringType)
+    case (t1, StringType) => Some(StringType)
+
+    // These two cases below deal with when `IntegralType` is larger than `DecimalType`.
+    case (t1: IntegralType, t2: DecimalType) =>
+      compatibleType(DecimalType.forType(t1), t2)
+    case (t1: DecimalType, t2: IntegralType) =>
+      compatibleType(t1, DecimalType.forType(t2))
+
+    // Double support larger range than fixed decimal, DecimalType.Maximum should be enough
+    // in most case, also have better precision.
+    case (DoubleType, _: DecimalType) | (_: DecimalType, DoubleType) =>
+      Some(DoubleType)
+
+    case (t1: DecimalType, t2: DecimalType) =>
+      val scale = math.max(t1.scale, t2.scale)
+      val range = math.max(t1.precision - t1.scale, t2.precision - t2.scale)
+      if (range + scale > 38) {
+        // DecimalType can't support precision > 38
+        Some(DoubleType)
+      } else {
+        Some(DecimalType(range + scale, scale))
+      }
+    case _ => None
+  }
+
 }
