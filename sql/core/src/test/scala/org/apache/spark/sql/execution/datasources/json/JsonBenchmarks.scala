@@ -19,17 +19,18 @@ package org.apache.spark.sql.execution.datasources.json
 import java.io.File
 
 import org.apache.spark.SparkConf
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{Benchmark, Utils}
 
 /**
  * The benchmarks aims to measure performance of JSON parsing when encoding is set and isn't.
  * To run this:
  *  spark-submit --class <this class> --jars <spark sql test jar>
  */
-object JSONBenchmarks {
+object JSONBenchmarks extends SQLHelper {
   val conf = new SparkConf()
 
   val spark = SparkSession.builder
@@ -38,13 +39,6 @@ object JSONBenchmarks {
     .config(conf)
     .getOrCreate()
   import spark.implicits._
-
-  def withTempPath(f: File => Unit): Unit = {
-    val path = Utils.createTempDir()
-    path.delete()
-    try f(path) finally Utils.deleteRecursively(path)
-  }
-
 
   def schemaInferring(rowsNum: Int): Unit = {
     val benchmark = new Benchmark("JSON schema inferring", rowsNum)

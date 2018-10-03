@@ -349,8 +349,8 @@ class DataFrameReader(OptionUtils):
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
-            samplingRatio=None, enforceSchema=None):
-        """Loads a CSV file and returns the result as a  :class:`DataFrame`.
+            samplingRatio=None, enforceSchema=None, emptyValue=None):
+        r"""Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
         ``inferSchema`` is enabled. To avoid going through the entire data once, disable
@@ -444,6 +444,8 @@ class DataFrameReader(OptionUtils):
                                           different, ``\0`` otherwise.
         :param samplingRatio: defines fraction of rows used for schema inferring.
                               If None is set, it uses the default value, ``1.0``.
+        :param emptyValue: sets the string representation of an empty value. If None is set, it uses
+                           the default value, empty string.
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
@@ -463,7 +465,7 @@ class DataFrameReader(OptionUtils):
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, samplingRatio=samplingRatio,
-            enforceSchema=enforceSchema)
+            enforceSchema=enforceSchema, emptyValue=emptyValue)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -517,8 +519,8 @@ class DataFrameReader(OptionUtils):
 
         If both ``column`` and ``predicates`` are specified, ``column`` will be used.
 
-        .. note:: Don't create too many partitions in parallel on a large cluster; \
-        otherwise Spark might crash your external database systems.
+        .. note:: Don't create too many partitions in parallel on a large cluster;
+            otherwise Spark might crash your external database systems.
 
         :param url: a JDBC URL of the form ``jdbc:subprotocol:subname``
         :param table: the name of the table
@@ -859,8 +861,8 @@ class DataFrameWriter(OptionUtils):
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
             header=None, nullValue=None, escapeQuotes=None, quoteAll=None, dateFormat=None,
             timestampFormat=None, ignoreLeadingWhiteSpace=None, ignoreTrailingWhiteSpace=None,
-            charToEscapeQuoteEscaping=None, encoding=None):
-        """Saves the content of the :class:`DataFrame` in CSV format at the specified path.
+            charToEscapeQuoteEscaping=None, encoding=None, emptyValue=None):
+        r"""Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
         :param mode: specifies the behavior of the save operation when data already exists.
@@ -911,6 +913,8 @@ class DataFrameWriter(OptionUtils):
                                           different, ``\0`` otherwise..
         :param encoding: sets the encoding (charset) of saved csv files. If None is set,
                          the default UTF-8 charset will be used.
+        :param emptyValue: sets the string representation of an empty value. If None is set, it uses
+                           the default value, ``""``.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -921,7 +925,7 @@ class DataFrameWriter(OptionUtils):
                        ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
                        ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace,
                        charToEscapeQuoteEscaping=charToEscapeQuoteEscaping,
-                       encoding=encoding)
+                       encoding=encoding, emptyValue=emptyValue)
         self._jwrite.csv(path)
 
     @since(1.5)
@@ -958,8 +962,8 @@ class DataFrameWriter(OptionUtils):
     def jdbc(self, url, table, mode=None, properties=None):
         """Saves the content of the :class:`DataFrame` to an external database table via JDBC.
 
-        .. note:: Don't create too many partitions in parallel on a large cluster; \
-        otherwise Spark might crash your external database systems.
+        .. note:: Don't create too many partitions in parallel on a large cluster;
+            otherwise Spark might crash your external database systems.
 
         :param url: a JDBC URL of the form ``jdbc:subprotocol:subname``
         :param table: Name of the table in the external database.

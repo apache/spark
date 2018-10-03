@@ -17,9 +17,8 @@
 
 package org.apache.spark.util.collection
 
-import java.util.Objects
-
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
 import scala.ref.WeakReference
 
 import org.scalatest.Matchers
@@ -459,7 +458,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     // https://github.com/scala/scala/blob/2.13.x/test/junit/scala/tools/testing/AssertUtil.scala
     // (lines 69-89)
     // assert(map.currentMap == null)
-    eventually {
+    eventually(timeout(5 seconds), interval(200 milliseconds)) {
       System.gc()
       // direct asserts introduced some macro generated code that held a reference to the map
       val tmpIsNull = null == underlyingMapRef.get.orNull
@@ -509,7 +508,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     .sorted
 
     assert(it.isEmpty)
-    assert(keys == (0 until 100))
+    assert(keys == (0 until 100).toList)
 
     assert(map.numSpills == 0)
     // these asserts try to show that we're no longer holding references to the underlying map.

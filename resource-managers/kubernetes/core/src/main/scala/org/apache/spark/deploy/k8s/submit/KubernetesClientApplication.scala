@@ -17,7 +17,12 @@
 package org.apache.spark.deploy.k8s.submit
 
 import java.io.StringWriter
+<<<<<<< HEAD
 import java.util.{Collections, Properties, UUID}
+=======
+import java.util.{Collections, Locale, UUID}
+import java.util.Properties
+>>>>>>> 075dd620e32872b5d90a2fa7d09b43b15502182b
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -210,11 +215,8 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
     // considerably restrictive, e.g. must be no longer than 63 characters in length. So we generate
     // a unique app ID (captured by spark.app.id) in the format below.
     val kubernetesAppId = s"spark-${UUID.randomUUID().toString.replaceAll("-", "")}"
-    val launchTime = System.currentTimeMillis()
     val waitForAppCompletion = sparkConf.get(WAIT_FOR_APP_COMPLETION)
-    val kubernetesResourceNamePrefix = {
-      s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
-    }
+    val kubernetesResourceNamePrefix = KubernetesClientApplication.getResourceNamePrefix(appName)
     sparkConf.set(KUBERNETES_PYSPARK_PY_FILES, clientArguments.maybePyFiles.getOrElse(""))
     val kubernetesConf = KubernetesConf.createDriverConf(
       sparkConf,
@@ -250,5 +252,21 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
           kubernetesResourceNamePrefix)
         client.run()
     }
+  }
+}
+
+private[spark] object KubernetesClientApplication {
+
+  def getAppName(conf: SparkConf): String = conf.getOption("spark.app.name").getOrElse("spark")
+
+  def getResourceNamePrefix(appName: String): String = {
+    val launchTime = System.currentTimeMillis()
+    s"$appName-$launchTime"
+      .trim
+      .toLowerCase(Locale.ROOT)
+      .replaceAll("\\s+", "-")
+      .replaceAll("\\.", "-")
+      .replaceAll("[^a-z0-9\\-]", "")
+      .replaceAll("-+", "-")
   }
 }

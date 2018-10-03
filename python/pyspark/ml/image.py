@@ -25,8 +25,10 @@
 """
 
 import sys
+import warnings
 
 import numpy as np
+
 from pyspark import SparkContext
 from pyspark.sql.types import Row, _create_row, _parse_datatype_json_string
 from pyspark.sql import DataFrame, SparkSession
@@ -207,6 +209,9 @@ class _ImageSchema(object):
         .. note:: If sample ratio is less than 1, sampling uses a PathFilter that is efficient but
             potentially non-deterministic.
 
+        .. note:: Deprecated in 2.4.0. Use `spark.read.format("image").load(path)` instead and
+            this `readImages` will be removed in 3.0.0.
+
         :param str path: Path to the image directory.
         :param bool recursive: Recursive search flag.
         :param int numPartitions: Number of DataFrame partitions.
@@ -222,7 +227,8 @@ class _ImageSchema(object):
 
         .. versionadded:: 2.3.0
         """
-
+        warnings.warn("`ImageSchema.readImage` is deprecated. " +
+                      "Use `spark.read.format(\"image\").load(path)` instead.", DeprecationWarning)
         spark = SparkSession.builder.getOrCreate()
         image_schema = spark._jvm.org.apache.spark.ml.image.ImageSchema
         jsession = spark._jsparkSession

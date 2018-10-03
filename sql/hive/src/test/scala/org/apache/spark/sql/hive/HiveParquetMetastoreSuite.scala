@@ -19,13 +19,13 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.apache.spark.sql._
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.DataSourceScanExec
-import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
+<<<<<<< HEAD:sql/hive/src/test/scala/org/apache/spark/sql/hive/parquetSuites.scala
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -51,12 +51,14 @@ case class ParquetDataWithKeyAndComplexTypes(
     stringfield: String,
     structField: StructContainer,
     arrayField: Seq[Int])
+=======
+>>>>>>> 075dd620e32872b5d90a2fa7d09b43b15502182b:sql/hive/src/test/scala/org/apache/spark/sql/hive/HiveParquetMetastoreSuite.scala
 
 /**
  * A suite to test the automatic conversion of metastore tables with parquet data to use the
  * built in parquet support.
  */
-class ParquetMetastoreSuite extends ParquetPartitioningTest {
+class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
   import hiveContext._
   import spark.implicits._
 
@@ -70,6 +72,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       "jt",
       "jt_array",
       "test_parquet")
+<<<<<<< HEAD:sql/hive/src/test/scala/org/apache/spark/sql/hive/parquetSuites.scala
     sql(s"""
       create external table partitioned_parquet
       (
@@ -142,6 +145,85 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
        OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
       LOCATION '${partitionedTableDirWithKeyAndComplexTypes.toURI}'
     """)
+=======
+    sql(
+      s"""
+        |create external table partitioned_parquet
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |PARTITIONED BY (p int)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        | STORED AS
+        | INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        | OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        |location '${partitionedTableDir.toURI}'
+      """.stripMargin)
+
+    sql(
+      s"""
+        |create external table partitioned_parquet_with_key
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |PARTITIONED BY (p int)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        | STORED AS
+        | INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        | OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        |location '${partitionedTableDirWithKey.toURI}'
+      """.stripMargin)
+
+    sql(
+      s"""
+        |create external table normal_parquet
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        | STORED AS
+        | INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        | OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        |location '${new File(normalTableDir, "normal").toURI}'
+      """.stripMargin)
+
+    sql(
+      s"""
+        |CREATE EXTERNAL TABLE partitioned_parquet_with_complextypes
+        |(
+        |  intField INT,
+        |  stringField STRING,
+        |  structField STRUCT<intStructField: INT, stringStructField: STRING>,
+        |  arrayField ARRAY<INT>
+        |)
+        |PARTITIONED BY (p int)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        | STORED AS
+        | INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        | OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        |LOCATION '${partitionedTableDirWithComplexTypes.toURI}'
+      """.stripMargin)
+
+    sql(
+      s"""
+        |CREATE EXTERNAL TABLE partitioned_parquet_with_key_and_complextypes
+        |(
+        |  intField INT,
+        |  stringField STRING,
+        |  structField STRUCT<intStructField: INT, stringStructField: STRING>,
+        |  arrayField ARRAY<INT>
+        |)
+        |PARTITIONED BY (p int)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        | STORED AS
+        | INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        | OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        |LOCATION '${partitionedTableDirWithKeyAndComplexTypes.toURI}'
+      """.stripMargin)
+>>>>>>> 075dd620e32872b5d90a2fa7d09b43b15502182b:sql/hive/src/test/scala/org/apache/spark/sql/hive/HiveParquetMetastoreSuite.scala
 
     sql(
       """
@@ -291,7 +373,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         case LogicalRelation(_: HadoopFsRelation, _, _, _) => // OK
         case _ => fail(
           "test_parquet_ctas should be converted to " +
-              s"${classOf[HadoopFsRelation ].getCanonicalName }")
+            s"${classOf[HadoopFsRelation ].getCanonicalName }")
       }
     }
   }
@@ -430,7 +512,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   }
 
   test("SPARK-15968: nonempty partitioned metastore Parquet table lookup should use cached " +
-      "relation") {
+    "relation") {
     withTable("partitioned") {
       sql(
         """
@@ -678,6 +760,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       sql("SELECT * FROM normal_parquet x CROSS JOIN normal_parquet y"))
   }
 }
+<<<<<<< HEAD:sql/hive/src/test/scala/org/apache/spark/sql/hive/parquetSuites.scala
 
 /**
  * A suite of tests for the Parquet support through the data sources API.
@@ -1079,3 +1162,5 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
       Row(10))
   }
 }
+=======
+>>>>>>> 075dd620e32872b5d90a2fa7d09b43b15502182b:sql/hive/src/test/scala/org/apache/spark/sql/hive/HiveParquetMetastoreSuite.scala

@@ -16,6 +16,7 @@
  */
 package org.apache.spark.network.yarn
 
+<<<<<<< HEAD
 import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.Timer
@@ -25,6 +26,14 @@ import org.mockito.Matchers._
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest.Matchers
 import scala.collection.JavaConverters._
+=======
+import scala.collection.JavaConverters._
+
+import org.apache.hadoop.metrics2.MetricsRecordBuilder
+import org.mockito.Matchers._
+import org.mockito.Mockito.{mock, times, verify, when}
+import org.scalatest.Matchers
+>>>>>>> 075dd620e32872b5d90a2fa7d09b43b15502182b
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.network.server.OneForOneStreamManager
@@ -48,7 +57,12 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
 
   // these three metrics have the same effect on the collector
   for (testname <- Seq("openBlockRequestLatencyMillis",
+<<<<<<< HEAD
       "registerExecutorRequestLatencyMillis")) {
+=======
+      "registerExecutorRequestLatencyMillis",
+      "blockTransferRateBytes")) {
+>>>>>>> 075dd620e32872b5d90a2fa7d09b43b15502182b
     test(s"$testname - collector receives correct types") {
       val builder = mock(classOf[MetricsRecordBuilder])
       when(builder.addCounter(any(), anyLong())).thenReturn(builder)
@@ -58,6 +72,7 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
         metrics.getMetrics.get(testname))
 
       verify(builder).addCounter(anyObject(), anyLong())
+<<<<<<< HEAD
       verify(builder, times(13)).addGauge(anyObject(), anyDouble())
     }
   }
@@ -79,6 +94,15 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
     val builder = mock(classOf[MetricsRecordBuilder])
     when(builder.addCounter(any(), anyLong())).thenReturn(builder)
     when(builder.addGauge(any(), anyDouble())).thenReturn(builder)
+=======
+      verify(builder, times(4)).addGauge(anyObject(), anyDouble())
+    }
+  }
+
+  // this metric writes only one gauge to the collector
+  test("registeredExecutorsSize - collector receives correct types") {
+    val builder = mock(classOf[MetricsRecordBuilder])
+>>>>>>> 075dd620e32872b5d90a2fa7d09b43b15502182b
 
     YarnShuffleServiceMetrics.collectMetric(builder, "registeredExecutorsSize",
       metrics.getMetrics.get("registeredExecutorsSize"))
@@ -86,6 +110,7 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
     // only one
     verify(builder).addGauge(anyObject(), anyInt())
   }
+<<<<<<< HEAD
 
   test("openBlockRequestLatencyMillis has correct units") {
     val builder = mock(classOf[MetricsRecordBuilder])
@@ -110,4 +135,6 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
         }
     }
   }
+=======
+>>>>>>> 075dd620e32872b5d90a2fa7d09b43b15502182b
 }

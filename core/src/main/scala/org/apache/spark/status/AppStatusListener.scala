@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.status.api.v1
@@ -66,6 +66,7 @@ private[spark] class AppStatusListener(
   private val liveStages = new ConcurrentHashMap[(Int, Int), LiveStage]()
   private val liveJobs = new HashMap[Int, LiveJob]()
   private val liveExecutors = new HashMap[String, LiveExecutor]()
+  private val deadExecutors = new HashMap[String, LiveExecutor]()
   private val liveTasks = new HashMap[Long, LiveTask]()
   private val liveRDDs = new HashMap[Int, LiveRDD]()
   private val pools = new HashMap[String, SchedulerPool]()
@@ -204,6 +205,19 @@ private[spark] class AppStatusListener(
           update(rdd, now)
         }
       }
+      if (isExecutorActiveForLiveStages(exec)) {
+        // the executor was running for a currently active stage, so save it for now in
+        // deadExecutors, and remove when there are no active stages overlapping with the
+        // executor.
+        deadExecutors.put(event.executorId, exec)
+      }
+    }
+  }
+
+  /** Was the specified executor active for any currently live stages? */
+  private def isExecutorActiveForLiveStages(exec: LiveExecutor): Boolean = {
+    liveStages.values.asScala.exists { stage =>
+      stage.info.submissionTime.getOrElse(0L) < exec.removeTime.getTime
     }
   }
 
@@ -374,10 +388,11 @@ private[spark] class AppStatusListener(
 
       job.completionTime = if (event.time > 0) Some(new Date(event.time)) else None
       update(job, now, last = true)
+      if (job.status == JobExecutionStatus.SUCCEEDED) {
+        appSummary = new AppSummary(appSummary.numCompletedJobs + 1, appSummary.numCompletedStages)
+        kvstore.write(appSummary)
+      }
     }
-
-    appSummary = new AppSummary(appSummary.numCompletedJobs + 1, appSummary.numCompletedStages)
-    kvstore.write(appSummary)
   }
 
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
@@ -639,10 +654,14 @@ private[spark] class AppStatusListener(
       if (removeStage) {
         liveStages.remove((event.stageInfo.stageId, event.stageInfo.attemptNumber))
       }
+      if (stage.status == v1.StageStatus.COMPLETE) {
+        appSummary = new AppSummary(appSummary.numCompletedJobs, appSummary.numCompletedStages + 1)
+        kvstore.write(appSummary)
+      }
     }
 
-    appSummary = new AppSummary(appSummary.numCompletedJobs, appSummary.numCompletedStages + 1)
-    kvstore.write(appSummary)
+    // remove any dead executors that were not running for any currently active stages
+    deadExecutors.retain((execId, exec) => isExecutorActiveForLiveStages(exec))
   }
 
   private def removeBlackListedStageFrom(exec: LiveExecutor, stageId: Int, now: Long) = {
@@ -669,7 +688,37 @@ private[spark] class AppStatusListener(
   }
 
   override def onUnpersistRDD(event: SparkListenerUnpersistRDD): Unit = {
-    liveRDDs.remove(event.rddId)
+    liveRDDs.remove(event.rddId).foreach { liveRDD =>
+      val storageLevel = liveRDD.info.storageLevel
+
+      // Use RDD partition info to update executor block info.
+      liveRDD.getPartitions().foreach { case (_, part) =>
+        part.executors.foreach { executorId =>
+          liveExecutors.get(executorId).foreach { exec =>
+            exec.rddBlocks = exec.rddBlocks - 1
+          }
+        }
+      }
+
+      val now = System.nanoTime()
+
+      // Use RDD distribution to update executor memory and disk usage info.
+      liveRDD.getDistributions().foreach { case (executorId, rddDist) =>
+        liveExecutors.get(executorId).foreach { exec =>
+          if (exec.hasMemoryInfo) {
+            if (storageLevel.useOffHeap) {
+              exec.usedOffHeap = addDeltaToValue(exec.usedOffHeap, -rddDist.offHeapUsed)
+            } else {
+              exec.usedOnHeap = addDeltaToValue(exec.usedOnHeap, -rddDist.onHeapUsed)
+            }
+          }
+          exec.memoryUsed = addDeltaToValue(exec.memoryUsed, -rddDist.memoryUsed)
+          exec.diskUsed = addDeltaToValue(exec.diskUsed, -rddDist.diskUsed)
+          maybeUpdate(exec, now)
+        }
+      }
+    }
+
     kvstore.delete(classOf[RDDStorageInfoWrapper], event.rddId)
   }
 
@@ -690,6 +739,31 @@ private[spark] class AppStatusListener(
           esummary.metrics = LiveEntityHelpers.addMetrics(esummary.metrics, delta)
           maybeUpdate(esummary, now)
         }
+      }
+    }
+
+    // check if there is a new peak value for any of the executor level memory metrics
+    // for the live UI. SparkListenerExecutorMetricsUpdate events are only processed
+    // for the live UI.
+    event.executorUpdates.foreach { updates =>
+      liveExecutors.get(event.execId).foreach { exec =>
+        if (exec.peakExecutorMetrics.compareAndUpdatePeakValues(updates)) {
+          maybeUpdate(exec, now)
+        }
+      }
+    }
+  }
+
+  override def onStageExecutorMetrics(executorMetrics: SparkListenerStageExecutorMetrics): Unit = {
+    val now = System.nanoTime()
+
+    // check if there is a new peak value for any of the executor level memory metrics,
+    // while reading from the log. SparkListenerStageExecutorMetrics are only processed
+    // when reading logs.
+    liveExecutors.get(executorMetrics.execId)
+      .orElse(deadExecutors.get(executorMetrics.execId)).map { exec =>
+      if (exec.peakExecutorMetrics.compareAndUpdatePeakValues(executorMetrics.executorMetrics)) {
+        update(exec, now)
       }
     }
   }
@@ -728,6 +802,11 @@ private[spark] class AppStatusListener(
       .sortBy(_.stageId)
   }
 
+  /**
+   * Apply a delta to a value, but ensure that it doesn't go negative.
+   */
+  private def addDeltaToValue(old: Long, delta: Long): Long = math.max(0, old + delta)
+
   private def updateRDDBlock(event: SparkListenerBlockUpdated, block: RDDBlockId): Unit = {
     val now = System.nanoTime()
     val executorId = event.blockUpdatedInfo.blockManagerId.executorId
@@ -736,9 +815,6 @@ private[spark] class AppStatusListener(
     val storageLevel = event.blockUpdatedInfo.storageLevel
     val diskDelta = event.blockUpdatedInfo.diskSize * (if (storageLevel.useDisk) 1 else -1)
     val memoryDelta = event.blockUpdatedInfo.memSize * (if (storageLevel.useMemory) 1 else -1)
-
-    // Function to apply a delta to a value, but ensure that it doesn't go negative.
-    def newValue(old: Long, delta: Long): Long = math.max(0, old + delta)
 
     val updatedStorageLevel = if (storageLevel.isValid) {
       Some(storageLevel.description)
@@ -756,13 +832,13 @@ private[spark] class AppStatusListener(
     maybeExec.foreach { exec =>
       if (exec.hasMemoryInfo) {
         if (storageLevel.useOffHeap) {
-          exec.usedOffHeap = newValue(exec.usedOffHeap, memoryDelta)
+          exec.usedOffHeap = addDeltaToValue(exec.usedOffHeap, memoryDelta)
         } else {
-          exec.usedOnHeap = newValue(exec.usedOnHeap, memoryDelta)
+          exec.usedOnHeap = addDeltaToValue(exec.usedOnHeap, memoryDelta)
         }
       }
-      exec.memoryUsed = newValue(exec.memoryUsed, memoryDelta)
-      exec.diskUsed = newValue(exec.diskUsed, diskDelta)
+      exec.memoryUsed = addDeltaToValue(exec.memoryUsed, memoryDelta)
+      exec.diskUsed = addDeltaToValue(exec.diskUsed, diskDelta)
     }
 
     // Update the block entry in the RDD info, keeping track of the deltas above so that we
@@ -790,8 +866,8 @@ private[spark] class AppStatusListener(
       // Only update the partition if it's still stored in some executor, otherwise get rid of it.
       if (executors.nonEmpty) {
         partition.update(executors, rdd.storageLevel,
-          newValue(partition.memoryUsed, memoryDelta),
-          newValue(partition.diskUsed, diskDelta))
+          addDeltaToValue(partition.memoryUsed, memoryDelta),
+          addDeltaToValue(partition.diskUsed, diskDelta))
       } else {
         rdd.removePartition(block.name)
       }
@@ -799,14 +875,14 @@ private[spark] class AppStatusListener(
       maybeExec.foreach { exec =>
         if (exec.rddBlocks + rddBlocksDelta > 0) {
           val dist = rdd.distribution(exec)
-          dist.memoryUsed = newValue(dist.memoryUsed, memoryDelta)
-          dist.diskUsed = newValue(dist.diskUsed, diskDelta)
+          dist.memoryUsed = addDeltaToValue(dist.memoryUsed, memoryDelta)
+          dist.diskUsed = addDeltaToValue(dist.diskUsed, diskDelta)
 
           if (exec.hasMemoryInfo) {
             if (storageLevel.useOffHeap) {
-              dist.offHeapUsed = newValue(dist.offHeapUsed, memoryDelta)
+              dist.offHeapUsed = addDeltaToValue(dist.offHeapUsed, memoryDelta)
             } else {
-              dist.onHeapUsed = newValue(dist.onHeapUsed, memoryDelta)
+              dist.onHeapUsed = addDeltaToValue(dist.onHeapUsed, memoryDelta)
             }
           }
           dist.lastUpdate = null
@@ -825,8 +901,8 @@ private[spark] class AppStatusListener(
         }
       }
 
-      rdd.memoryUsed = newValue(rdd.memoryUsed, memoryDelta)
-      rdd.diskUsed = newValue(rdd.diskUsed, diskDelta)
+      rdd.memoryUsed = addDeltaToValue(rdd.memoryUsed, memoryDelta)
+      rdd.diskUsed = addDeltaToValue(rdd.diskUsed, diskDelta)
       update(rdd, now)
     }
 

@@ -97,8 +97,9 @@ def wrap_scalar_pandas_udf(f, return_type):
 
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
-    assign_cols_by_pos = runner_conf.get(
-        "spark.sql.execution.pandas.groupedMap.assignColumnsByPosition", False)
+    assign_cols_by_name = runner_conf.get(
+        "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "true")
+    assign_cols_by_name = assign_cols_by_name.lower() == "true"
 
     def wrapped(key_series, value_series):
         import pandas as pd
@@ -119,7 +120,7 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
                 "Expected: {} Actual: {}".format(len(return_type), len(result.columns)))
 
         # Assign result columns by schema name if user labeled with strings, else use position
-        if not assign_cols_by_pos and any(isinstance(name, basestring) for name in result.columns):
+        if assign_cols_by_name and any(isinstance(name, basestring) for name in result.columns):
             return [(result[field.name], to_arrow_type(field.dataType)) for field in return_type]
         else:
             return [(result[result.columns[i]], to_arrow_type(field.dataType))
@@ -324,15 +325,33 @@ def main(infile, outfile):
             importlib.invalidate_caches()
 
         # fetch names and values of broadcast variables
+        needs_broadcast_decryption_server = read_bool(infile)
         num_broadcast_variables = read_int(infile)
+        if needs_broadcast_decryption_server:
+            # read the decrypted data from a server in the jvm
+            port = read_int(infile)
+            auth_secret = utf8_deserializer.loads(infile)
+            (broadcast_sock_file, _) = local_connect_and_auth(port, auth_secret)
+
         for _ in range(num_broadcast_variables):
             bid = read_long(infile)
             if bid >= 0:
-                path = utf8_deserializer.loads(infile)
-                _broadcastRegistry[bid] = Broadcast(path=path)
+                if needs_broadcast_decryption_server:
+                    read_bid = read_long(broadcast_sock_file)
+                    assert(read_bid == bid)
+                    _broadcastRegistry[bid] = \
+                        Broadcast(sock_file=broadcast_sock_file)
+                else:
+                    path = utf8_deserializer.loads(infile)
+                    _broadcastRegistry[bid] = Broadcast(path=path)
+
             else:
                 bid = - bid - 1
                 _broadcastRegistry.pop(bid)
+
+        if needs_broadcast_decryption_server:
+            broadcast_sock_file.write(b'1')
+            broadcast_sock_file.close()
 
         _accumulatorRegistry.clear()
         eval_type = read_int(infile)
