@@ -3830,6 +3830,47 @@ object functions {
   @scala.annotation.varargs
   def map_concat(cols: Column*): Column = withExpr { MapConcat(cols.map(_.expr)) }
 
+  /**
+   * (Scala-specific) Converts a column containing a `StructType` into a CSV string
+   * with the specified schema. Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a column containing a struct.
+   * @param options options to control how the struct column is converted into a CSV string.
+   *                It accepts the same options and the CSV data source.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def to_csv(e: Column, options: Map[String, String]): Column = withExpr {
+    StructsToCsv(options, e.expr)
+  }
+
+  /**
+   * (Java-specific) Converts a column containing a `StructType` into a CSV string with
+   * the specified schema. Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a column containing a struct.
+   * @param options options to control how the struct column is converted into a CSV string.
+   *                It accepts the same options and the json data source.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def to_csv(e: Column, options: java.util.Map[String, String]): Column = {
+    to_csv(e, options.asScala.toMap)
+  }
+
+  /**
+   * Converts a column containing a `StructType` into a CSV string with the specified schema.
+   * Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a column containing a struct.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def to_csv(e: Column): Column = to_csv(e, Map.empty[String, String])
+
   // scalastyle:off line.size.limit
   // scalastyle:off parameter.number
 
