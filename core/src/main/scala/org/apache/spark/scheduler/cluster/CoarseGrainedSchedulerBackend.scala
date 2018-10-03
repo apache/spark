@@ -98,6 +98,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
 
+  private var driverEndpointStopped = false
+
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
 
@@ -115,6 +117,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           Option(self).foreach(_.send(ReviveOffers))
         }
       }, 0, reviveIntervalMs, TimeUnit.MILLISECONDS)
+    }
+
+    override def onStop(): Unit = {
+      driverEndpointStopped = true
     }
 
     override def receive: PartialFunction[Any, Unit] = {
@@ -446,7 +452,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   override def reviveOffers() {
-    driverEndpoint.send(ReviveOffers)
+    if (!driverEndpointStopped) {
+      driverEndpoint.send(ReviveOffers)
+    }
   }
 
   override def killTask(
