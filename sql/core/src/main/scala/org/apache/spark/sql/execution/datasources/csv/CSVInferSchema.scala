@@ -177,7 +177,7 @@ private[csv] object CSVInferSchema {
    * is compatible with both input data types.
    */
   private def compatibleType(t1: DataType, t2: DataType): Option[DataType] = {
-    TypeCoercion.findTightestCommonType(t1, t2).orElse (findCompatibleTypeForCSV(t1, t2))
+    TypeCoercion.findTightestCommonType(t1, t2).orElse(findCompatibleTypeForCSV(t1, t2))
   }
 
   /**
@@ -210,5 +210,4 @@ private[csv] object CSVInferSchema {
       }
     case _ => None
   }
-
 }
