@@ -191,15 +191,16 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       logDebug(s"Getting new files for time $currentTime, " +
         s"ignoring files older than $modTimeIgnoreThreshold")
 
-      val directories = Option(fs.globStatus(directoryPath)).getOrElse(Array.empty[FileStatus])
+      val directories = Option(fs.globStatus(directoryPath))
         .filter(_.isDirectory)
         .map(_.getPath)
+        .getOrElse(Array.empty[FileStatus])
       val newFiles = directories.flatMap(dir =>
         fs.listStatus(dir)
           .filter(isNewFile(_, currentTime, modTimeIgnoreThreshold))
           .map(_.getPath.toString))
       val timeTaken = clock.getTimeMillis() - lastNewFileFindingTime
-      logInfo(s"Finding new files took $timeTaken ms")
+      logDebug(s"Finding new files took $timeTaken ms")
       if (timeTaken > slideDuration.milliseconds) {
         logWarning(
           s"Time taken to find new files $timeTaken exceeds the batch size. " +
