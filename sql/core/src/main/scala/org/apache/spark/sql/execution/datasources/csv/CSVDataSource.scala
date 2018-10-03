@@ -88,7 +88,9 @@ abstract class CSVDataSource extends Serializable {
     if (options.headerFlag) {
       val duplicates = {
         val headerNames = row.filter(_ != null)
+          // scalastyle:off caselocale
           .map(name => if (caseSensitive) name else name.toLowerCase)
+          // scalastyle:on caselocale
         headerNames.diff(headerNames.distinct).distinct
       }
 
@@ -97,7 +99,9 @@ abstract class CSVDataSource extends Serializable {
           // When there are empty strings or the values set in `nullValue`, put the
           // index as the suffix.
           s"_c$index"
+          // scalastyle:off caselocale
         } else if (!caseSensitive && duplicates.contains(value.toLowerCase)) {
+          // scalastyle:on caselocale
           // When there are case-insensitive duplicates, put the index as the suffix.
           s"$value$index"
         } else if (duplicates.contains(value)) {
@@ -155,8 +159,10 @@ object CSVDataSource extends Logging {
         while (errorMessage.isEmpty && i < headerLen) {
           var (nameInSchema, nameInHeader) = (fieldNames(i), columnNames(i))
           if (!caseSensitive) {
+            // scalastyle:off caselocale
             nameInSchema = nameInSchema.toLowerCase
             nameInHeader = nameInHeader.toLowerCase
+            // scalastyle:on caselocale
           }
           if (nameInHeader != nameInSchema) {
             errorMessage = Some(

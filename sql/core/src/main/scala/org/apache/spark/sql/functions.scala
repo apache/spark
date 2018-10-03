@@ -3620,7 +3620,7 @@ object functions {
    * @return a column with string literal containing schema in DDL format.
    *
    * @group collection_funcs
-   * @since 2.5.0
+   * @since 3.0.0
    */
   def schema_of_json(e: Column, options: java.util.Map[String, String]): Column = {
     withExpr(SchemaOfJson(e.expr, options.asScala.toMap))
