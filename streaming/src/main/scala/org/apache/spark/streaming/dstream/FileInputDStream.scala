@@ -192,12 +192,12 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
         s"ignoring files older than $modTimeIgnoreThreshold")
 
       val directories = Option(fs.globStatus(directoryPath)).getOrElse(Array.empty[FileStatus])
-          .filter(_.isDirectory)
-          .map(_.getPath)
+        .filter(_.isDirectory)
+        .map(_.getPath)
       val newFiles = directories.flatMap(dir =>
         fs.listStatus(dir)
-            .filter(isNewFile(_, currentTime, modTimeIgnoreThreshold))
-            .map(_.getPath.toString))
+          .filter(isNewFile(_, currentTime, modTimeIgnoreThreshold))
+          .map(_.getPath.toString))
       val timeTaken = clock.getTimeMillis() - lastNewFileFindingTime
       logInfo(s"Finding new files took $timeTaken ms")
       if (timeTaken > slideDuration.milliseconds) {
