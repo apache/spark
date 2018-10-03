@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   import testImplicits._
@@ -343,11 +344,13 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   private def createDummyCorruptFile(dir: File): Unit = {
-    FileUtils.forceMkdir(dir)
-    val corruptFile = new File(dir, "corrupt.avro")
-    val writer = new BufferedWriter(new FileWriter(corruptFile))
-    writer.write("corrupt")
-    writer.close()
+    Utils.tryWithResource {
+      FileUtils.forceMkdir(dir)
+      val corruptFile = new File(dir, "corrupt.avro")
+      new BufferedWriter(new FileWriter(corruptFile))
+    } { writer =>
+      writer.write("corrupt")
+    }
   }
 
   test("Ignore corrupt Avro file if flag IGNORE_CORRUPT_FILES enabled") {
@@ -363,15 +366,8 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         val destFile = new File(dir, "episodes.avro")
         FileUtils.copyFile(srcFile, destFile)
 
-        val df = spark.read.format("avro").load(srcFile.getAbsolutePath)
-        val schema = df.schema
-        val result = df.collect()
-        // Schema inference picks random readable sample file.
-        // Here we use a loop to eliminate randomness.
-        (1 to 5).foreach { _ =>
-          assert(spark.read.format("avro").load(dir.getAbsolutePath).schema == schema)
-          checkAnswer(spark.read.format("avro").load(dir.getAbsolutePath), result)
-        }
+        val result = spark.read.format("avro").load(srcFile.getAbsolutePath).collect()
+        checkAnswer(spark.read.format("avro").load(dir.getAbsolutePath), result)
       }
     }
   }
@@ -381,7 +377,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       withTempPath { dir =>
         createDummyCorruptFile(dir)
         val message = intercept[org.apache.spark.SparkException] {
-          spark.read.format("avro").load(dir.getAbsolutePath).schema
+          spark.read.format("avro").load(dir.getAbsolutePath)
         }.getMessage
 
         assert(message.contains("Could not read file"))

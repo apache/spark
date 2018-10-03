@@ -37,10 +37,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 private[avro] class AvroFileFormat extends FileFormat
   with DataSourceRegister with Logging with Serializable {
@@ -64,7 +63,8 @@ private[avro] class AvroFileFormat extends FileFormat
     val avroSchema = parsedOptions.schema
       .map(new Schema.Parser().parse)
       .getOrElse {
-        inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension)
+        inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension,
+          spark.sessionState.conf.ignoreCorruptFiles)
     }
 
     SchemaConverters.toSqlType(avroSchema).dataType match {
@@ -80,8 +80,8 @@ private[avro] class AvroFileFormat extends FileFormat
   private def inferAvroSchemaFromFiles(
       files: Seq[FileStatus],
       conf: Configuration,
-      ignoreExtension: Boolean): Schema = {
-    val ignoreCorruptFiles = SQLConf.get.ignoreCorruptFiles
+      ignoreExtension: Boolean,
+      ignoreCorruptFiles: Boolean): Schema = {
     // Schema evolution is not supported yet. Here we only pick first random readable sample file to
     // figure out the schema of the whole dataset.
     val avroReader = files.iterator.map { f =>
@@ -89,19 +89,20 @@ private[avro] class AvroFileFormat extends FileFormat
       if (!ignoreExtension && !path.getName.endsWith(".avro")) {
         None
       } else {
-        val in = new FsInput(path, conf)
-        try {
-          Some(DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]()))
-        } catch {
-          case e: IOException =>
-            if (ignoreCorruptFiles) {
-              logWarning(s"Skipped the footer in the corrupted file: $path", e)
-              None
-            } else {
-              throw new SparkException(s"Could not read file: $path", e)
-            }
-        } finally {
-          in.close()
+        Utils.tryWithResource {
+          new FsInput(path, conf)
+        } { in =>
+          try {
+            Some(DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]()))
+          } catch {
+            case e: IOException =>
+              if (ignoreCorruptFiles) {
+                logWarning(s"Skipped the footer in the corrupted file: $path", e)
+                None
+              } else {
+                throw new SparkException(s"Could not read file: $path", e)
+              }
+          }
         }
       }
     }.collectFirst {
