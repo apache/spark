@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.11</artifactId>
-  <version>2.5.0-SNAPSHOT</version>
+  <version>3.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -2760,7 +2760,7 @@
     <profile>
       <id>scala-2.12</id>
       <properties>
-        <scala.version>2.12.6</scala.version>
+        <scala.version>2.12.7</scala.version>
         <scala.binary.version>2.12</scala.binary.version>
       </properties>
       <build>
