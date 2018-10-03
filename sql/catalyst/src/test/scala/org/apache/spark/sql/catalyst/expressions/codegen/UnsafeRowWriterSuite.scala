@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types.Decimal
 
-class UnsafeWriterSuite extends SparkFunSuite {
+class UnsafeRowWriterSuite extends SparkFunSuite {
 
   test("SPARK-25538: zero-out all bits for decimals") {
     // This decimal holds 8 bytes
