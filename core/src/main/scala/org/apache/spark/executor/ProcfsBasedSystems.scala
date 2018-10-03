@@ -20,6 +20,7 @@ package org.apache.spark.executor
 import java.io._
 import java.nio.charset.Charset
 import java.nio.file.{Files, Paths}
+import java.util.Locale
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -40,7 +41,7 @@ private[spark] case class ProcfsBasedSystemsMetrics(
 // project.
 private[spark] class ProcfsBasedSystems(procfsDir: String = "/proc/") extends Logging {
   val procfsStatFile = "stat"
-  var pageSize: Long = computePageSize()
+  var pageSize = computePageSize()
   var isAvailable: Boolean = isProcfsAvailable
   private val pid: Int = computePid()
   private val ptree: scala.collection.mutable.Map[ Int, Set[Int]] =
@@ -93,10 +94,6 @@ private[spark] class ProcfsBasedSystems(procfsDir: String = "/proc/") extends Lo
     catch {
       case e: IOException => logDebug("IO Exception when trying to compute process tree." +
         " As a result reporting of ProcessTree metrics is stopped", e)
-        isAvailable = false
-        return -1
-      case t: Throwable => logDebug("Some exception occurred when trying to" +
-        " compute process tree. As a result reporting of ProcessTree metrics is stopped", t)
         isAvailable = false
         return -1
     }
@@ -156,10 +153,6 @@ private[spark] class ProcfsBasedSystems(procfsDir: String = "/proc/") extends Lo
         " As a result reporting of ProcessTree metrics is stopped", e)
         isAvailable = false
         return new mutable.ArrayBuffer()
-      case t: Throwable => logDebug("Some exception occurred when trying to compute process tree." +
-        " As a result reporting of ProcessTree metrics is stopped", t)
-        isAvailable = false
-        return new mutable.ArrayBuffer()
     }
   }
 
@@ -183,11 +176,11 @@ private[spark] class ProcfsBasedSystems(procfsDir: String = "/proc/") extends Lo
       if ( procInfoSplit != null ) {
         val vmem = procInfoSplit(22).toLong
         val rssPages = procInfoSplit(23).toLong
-        if (procInfoSplit(1).toLowerCase.contains("java")) {
+        if (procInfoSplit(1).toLowerCase(Locale.US).contains("java")) {
           latestJVMVmemTotal += vmem
           latestJVMRSSTotal += rssPages
         }
-        else if (procInfoSplit(1).toLowerCase.contains("python")) {
+        else if (procInfoSplit(1).toLowerCase(Locale.US).contains("python")) {
           latestPythonVmemTotal += vmem
           latestPythonRSSTotal += rssPages
         }
