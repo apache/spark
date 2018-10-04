@@ -124,23 +124,23 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
         val sqlStatement = orcImp match {
           case "native" =>
             s"""
-               |CREATE TABLE $tableName (zipcode STRING, uuid STRING, value DOUBLE)
+               |CREATE TABLE $tableName (zipcode STRING, uniqColumn STRING, value DOUBLE)
                |USING ORC
                |OPTIONS (
                |  path '${dir.toURI}',
                |  orc.dictionary.key.threshold '1.0',
-               |  orc.column.encoding.direct 'uuid'
+               |  orc.column.encoding.direct 'uniqColumn'
                |)
             """.stripMargin
           case "hive" =>
             s"""
-               |CREATE TABLE $tableName (zipcode STRING, uuid STRING, value DOUBLE)
+               |CREATE TABLE $tableName (zipcode STRING, uniqColumn STRING, value DOUBLE)
                |STORED AS ORC
                |LOCATION '${dir.toURI}'
                |TBLPROPERTIES (
                |  orc.dictionary.key.threshold '1.0',
                |  hive.exec.orc.dictionary.key.size.threshold '1.0',
-               |  orc.column.encoding.direct 'uuid'
+               |  orc.column.encoding.direct 'uniqColumn'
                |)
             """.stripMargin
           case impl =>
@@ -163,15 +163,13 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
 
           // Check the kind
           val stripe = recordReader.readStripeFooter(reader.getStripes.get(0))
+          assert(stripe.getColumns(1).getKind === DICTIONARY_V2)
           if (isSelective) {
-            assert(stripe.getColumns(1).getKind === DICTIONARY_V2)
             assert(stripe.getColumns(2).getKind === DIRECT_V2)
-            assert(stripe.getColumns(3).getKind === DIRECT)
           } else {
-            assert(stripe.getColumns(1).getKind === DICTIONARY_V2)
             assert(stripe.getColumns(2).getKind === DICTIONARY_V2)
-            assert(stripe.getColumns(3).getKind === DIRECT)
           }
+          assert(stripe.getColumns(3).getKind === DIRECT)
         } finally {
           if (recordReader != null) {
             recordReader.close()
@@ -352,6 +350,6 @@ class OrcSourceSuite extends OrcSuite with SharedSQLContext {
   }
 
   test("Enforce direct encoding column-wise selectively") {
-    testSelectiveDictionaryEncoding(true)
+    testSelectiveDictionaryEncoding(isSelective = true)
   }
 }
