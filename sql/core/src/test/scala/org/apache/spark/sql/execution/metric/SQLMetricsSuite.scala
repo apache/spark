@@ -549,24 +549,24 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       assert(range.metrics("numOutputRows").value == rangeNumOutputs)
     }
 
-    val df = spark.range(0, 30, 1, 2).toDF().filter('id % 3 === 0)
+    val df = spark.range(0, 3000, 1, 2).toDF().filter('id % 3 === 0)
     val df2 = df.limit(2)
     Seq(true, false).foreach { wholeStageEnabled =>
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStageEnabled.toString) {
         df.collect()
-        checkFilterAndRangeMetrics(df, filterNumOutputs = 10, rangeNumOutputs = 30)
+        checkFilterAndRangeMetrics(df, filterNumOutputs = 1000, rangeNumOutputs = 3000)
 
         df.queryExecution.executedPlan.foreach(_.resetMetrics())
         // For each partition, we get 2 rows. Then the Filter should produce 2 rows per-partition,
-        // and Range should produce 4 rows([0, 1, 2, 3] and [15, 16, 17, 18]) per-partition. Since
-        // the Range has 2 partitions, totally Filter produces 4 rows, Range produces 8 rows.
+        // and Range should produce 1000 rows (one batch) per-partition. Totally Filter produces
+        // 4 rows, and Range produces 2000 rows.
         df.queryExecution.toRdd.mapPartitions(_.take(2)).collect()
-        checkFilterAndRangeMetrics(df, filterNumOutputs = 4, rangeNumOutputs = 8)
+        checkFilterAndRangeMetrics(df, filterNumOutputs = 4, rangeNumOutputs = 2000)
 
         // Top-most limit will call `CollectLimitExec.executeCollect`, which will only run the first
-        // task, so totally the Filter produces 2 rows, and Range produces 4 rows([0, 1, 2, 3]).
+        // task, so totally the Filter produces 2 rows, and Range produces 1000 rows (one batch).
         df2.collect()
-        checkFilterAndRangeMetrics(df2, filterNumOutputs = 2, rangeNumOutputs = 4)
+        checkFilterAndRangeMetrics(df2, filterNumOutputs = 2, rangeNumOutputs = 1000)
       }
     }
   }

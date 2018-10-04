@@ -456,14 +456,11 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     val processingLoop = if (parent.needStopCheck) {
       // TODO (cloud-fan): do we really need to do the stop check within batch?
       s"""
-         |int $localIdx = 0;
-         |for (; $localIdx < $localEnd && !shouldStop(); $localIdx++) {
+         |for (int $localIdx = 0; $localIdx < $localEnd && !shouldStop(); $localIdx++) {
          |  long $value = $nextIndex;
          |  ${consume(ctx, Seq(ev))}
          |  $nextIndex += ${step}L;
          |}
-         |$numOutput.add($localIdx);
-         |$inputMetrics.incRecordsRead($localIdx);
        """.stripMargin
     } else {
       s"""
@@ -472,8 +469,6 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
          |  ${consume(ctx, Seq(ev))}
          |}
          |$nextIndex = $batchEnd;
-         |$numOutput.add($localEnd);
-         |$inputMetrics.incRecordsRead($localEnd);
        """.stripMargin
     }
 
@@ -526,6 +521,8 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |       $numElementsTodo = 0;
       |       if ($nextBatchTodo == 0) break;
       |     }
+      |     $numOutput.add($nextBatchTodo);
+      |     $inputMetrics.incRecordsRead($nextBatchTodo);
       |     $batchEnd += $nextBatchTodo * ${step}L;
       |   }
       |
