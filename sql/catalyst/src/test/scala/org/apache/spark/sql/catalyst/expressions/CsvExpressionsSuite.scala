@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Calendar
 
+import org.scalatest.exceptions.TestFailedException
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
@@ -141,5 +143,16 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
       CsvToStructs(schema, Map.empty, Literal.create("1"), gmtId),
       InternalRow(1, null)
     )
+  }
+
+  test("unsupported mode") {
+    val csvData = "---"
+    val schema = StructType(StructField("a", DoubleType) :: Nil)
+    val exception = intercept[TestFailedException] {
+      checkEvaluation(
+        CsvToStructs(schema, Map("mode" -> DropMalformedMode.name), Literal(csvData), gmtId),
+        InternalRow(null))
+    }.getCause
+    assert(exception.getMessage.contains("from_csv() doesn't support the DROPMALFORMED mode"))
   }
 }
