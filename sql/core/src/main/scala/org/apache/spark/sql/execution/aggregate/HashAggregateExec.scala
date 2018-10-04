@@ -159,8 +159,10 @@ case class HashAggregateExec(
   // don't need a stop check before aggregating.
   override def needStopCheck: Boolean = false
 
-  // Aggregate operator always consumes all the input rows before outputting any result, so its
-  // upstream operators can keep producing data, even if there is a limit after Aggregate.
+  // Aggregate is a blocking operator. It needs to consume all the inputs before producing any
+  // output. This means, Limit after Aggregate has no effect to Aggregate's upstream operators.
+  // Here we override this method to return Nil, so that upstream operators will not generate
+  // unnecessary conditions (which is always evaluated to false) for the Limit after Aggregate.
   override def conditionsOfKeepProducingData: Seq[String] = Nil
 
   protected override def doProduce(ctx: CodegenContext): String = {

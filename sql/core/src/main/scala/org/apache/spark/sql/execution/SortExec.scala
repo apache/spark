@@ -132,8 +132,10 @@ case class SortExec(
   // a stop check before sorting.
   override def needStopCheck: Boolean = false
 
-  // Sort operator always consumes all the input rows before outputting any result, so its upstream
-  // operators can keep producing data, even if there is a limit after Sort.
+  // Sort is a blocking operator. It needs to consume all the inputs before producing any
+  // output. This means, Limit after Sort has no effect to Sort's upstream operators.
+  // Here we override this method to return Nil, so that upstream operators will not generate
+  // unnecessary conditions (which is always evaluated to false) for the Limit after Sort.
   override def conditionsOfKeepProducingData: Seq[String] = Nil
 
   override protected def doProduce(ctx: CodegenContext): String = {
