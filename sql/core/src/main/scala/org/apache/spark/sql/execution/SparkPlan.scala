@@ -445,9 +445,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
 
     if (scannedRowCount > n) {
-      buf.toArray.view.flatMap(decodeUnsafeRows).take(n).force
+      buf.iterator.flatMap(decodeUnsafeRows).take(n).toArray
     } else {
-      buf.toArray.view.flatMap(decodeUnsafeRows).force
+      buf.flatMap(decodeUnsafeRows).toArray
     }
   }
 
