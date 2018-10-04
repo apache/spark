@@ -39,21 +39,20 @@ private[spark] case class ProcfsBasedSystemsMetrics(
 
 // Some of the ideas here are taken from the ProcfsBasedProcessTree class in hadoop
 // project.
-private[spark] class ProcfsBasedSystems(procfsDir: String = "/proc/") extends Logging {
+private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extends Logging {
   val procfsStatFile = "stat"
   var pageSize = computePageSize()
   var isAvailable: Boolean = isProcfsAvailable
-  private val pid: Int = computePid()
-  private val ptree: scala.collection.mutable.Map[ Int, Set[Int]] =
-    scala.collection.mutable.Map[ Int, Set[Int]]()
+  private val pid = computePid()
+  private val ptree = mutable.Map[ Int, Set[Int]]()
 
   var allMetrics: ProcfsBasedSystemsMetrics = ProcfsBasedSystemsMetrics(0, 0, 0, 0, 0, 0)
-  private var latestJVMVmemTotal: Long = 0
-  private var latestJVMRSSTotal: Long = 0
-  private var latestPythonVmemTotal: Long = 0
-  private var latestPythonRSSTotal: Long = 0
-  private var latestOtherVmemTotal: Long = 0
-  private var latestOtherRSSTotal: Long = 0
+  private var latestJVMVmemTotal = 0L
+  private var latestJVMRSSTotal = 0L
+  private var latestPythonVmemTotal = 0L
+  private var latestPythonRSSTotal = 0L
+  private var latestOtherVmemTotal = 0L
+  private var latestOtherRSSTotal = 0L
 
   computeProcessTree()
 
@@ -86,7 +85,7 @@ private[spark] class ProcfsBasedSystems(procfsDir: String = "/proc/") extends Lo
       // https://docs.oracle.com/javase/9/docs/api/java/lang/ProcessHandle.html
       val cmd = Array("bash", "-c", "echo $PPID")
       val length = 10
-      val out: Array[Byte] = Array.fill[Byte](length)(0)
+      val out = Array.fill[Byte](length)(0)
       Runtime.getRuntime.exec(cmd).getInputStream.read(out)
       val pid = Integer.parseInt(new String(out, "UTF-8").trim)
       return pid;
@@ -105,7 +104,7 @@ private[spark] class ProcfsBasedSystems(procfsDir: String = "/proc/") extends Lo
       return 0;
     }
     val cmd = Array("getconf", "PAGESIZE")
-    val out: Array[Byte] = Array.fill[Byte](10)(0)
+    val out = Array.fill[Byte](10)(0)
     Runtime.getRuntime.exec(cmd).getInputStream.read(out)
     return Integer.parseInt(new String(out, "UTF-8").trim)
   }
@@ -114,7 +113,7 @@ private[spark] class ProcfsBasedSystems(procfsDir: String = "/proc/") extends Lo
     if (!isAvailable) {
       return
     }
-    val queue: Queue[Int] = new Queue[Int]()
+    val queue = mutable.Queue.empty[Int]
     queue += pid
     while( !queue.isEmpty ) {
       val p = queue.dequeue()
@@ -133,7 +132,7 @@ private[spark] class ProcfsBasedSystems(procfsDir: String = "/proc/") extends Lo
     try {
       val cmd = Array("pgrep", "-P", pid.toString)
       val input = Runtime.getRuntime.exec(cmd).getInputStream
-      val childPidsInByte: mutable.ArrayBuffer[Byte] = new mutable.ArrayBuffer()
+      val childPidsInByte = mutable.ArrayBuffer.empty[Byte]
       var d = input.read()
       while (d != -1) {
         childPidsInByte.append(d.asInstanceOf[Byte])
@@ -141,7 +140,7 @@ private[spark] class ProcfsBasedSystems(procfsDir: String = "/proc/") extends Lo
       }
       input.close()
       val childPids = new String(childPidsInByte.toArray, "UTF-8").split("\n")
-      val childPidsInInt: ArrayBuffer[Int] = new ArrayBuffer[Int]()
+      val childPidsInInt = mutable.ArrayBuffer.empty[Int]
       for (p <- childPids) {
         if (p != "") {
           childPidsInInt += Integer.parseInt(p)
@@ -152,7 +151,7 @@ private[spark] class ProcfsBasedSystems(procfsDir: String = "/proc/") extends Lo
       case e: IOException => logDebug("IO Exception when trying to compute process tree." +
         " As a result reporting of ProcessTree metrics is stopped", e)
         isAvailable = false
-        return new mutable.ArrayBuffer()
+        return mutable.ArrayBuffer.empty[Int]
     }
   }
 
@@ -164,11 +163,11 @@ private[spark] class ProcfsBasedSystems(procfsDir: String = "/proc/") extends Lo
    * http://man7.org/linux/man-pages/man5/proc.5.html
    */
     try {
-      val pidDir: File = new File(procfsDir, pid.toString)
+      val pidDir = new File(procfsDir, pid.toString)
       val fReader = new InputStreamReader(
         new FileInputStream(
           new File(pidDir, procfsStatFile)), Charset.forName("UTF-8"))
-      val in: BufferedReader = new BufferedReader(fReader)
+      val in = new BufferedReader(fReader)
       val procInfo = in.readLine
       in.close
       fReader.close
