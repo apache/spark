@@ -38,7 +38,7 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT _FUNC_(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'));
        "26/08/2015"
   """,
-  since = "2.5.0")
+  since = "3.0.0")
 // scalastyle:on line.size.limit
 case class StructsToCsv(
     options: Map[String, String],
