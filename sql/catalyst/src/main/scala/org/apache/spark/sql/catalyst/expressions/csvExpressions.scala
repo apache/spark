@@ -94,8 +94,9 @@ case class CsvToStructs(
 
   override def dataType: DataType = nullableSchema
 
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression = {
     copy(timeZoneId = Option(timeZoneId))
+  }
 
   override def nullSafeEval(input: Any): Any = {
     val csv = input.asInstanceOf[UTF8String].toString
