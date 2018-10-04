@@ -1106,11 +1106,14 @@ object SQLContext {
             method -> createConverter(method.getReturnType, fieldType)
           }
       value =>
-        if (value == null) null
-        else new GenericInternalRow(
-          methodConverters.map { case (method, converter) =>
-            converter(method.invoke(value))
-          })
+        if (value == null) {
+          null
+        } else {
+          new GenericInternalRow(
+            methodConverters.map { case (method, converter) =>
+              converter(method.invoke(value))
+            })
+        }
     }
     def createConverter(cls: Class[_], dataType: DataType): Any => Any = dataType match {
       case struct: StructType => createStructConverter(cls, struct.map(_.dataType))
