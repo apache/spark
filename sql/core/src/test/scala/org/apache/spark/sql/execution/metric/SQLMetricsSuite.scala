@@ -518,7 +518,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     testMetricsDynamicPartition("parquet", "parquet", "t1")
   }
 
-  test("SPARK-25602: range metrics can be wrong if the result rows are not fully consumed") {
+  test("SPARK-25602: SparkPlan.getByteArrayRdd should not consume the input when not necessary") {
     def checkFilterAndRangeMetrics(
         df: DataFrame,
         filterNumOutputs: Int,
