@@ -25,6 +25,7 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.function.VoidFunction2;
 import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.ForeachWriter;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.streaming.StreamingQuery;
 import org.apache.spark.sql.test.TestSparkSession;
@@ -56,6 +57,30 @@ public class JavaDataStreamReaderWriterSuite {
         .foreachBatch(new VoidFunction2<Dataset<String>, Long>() {
           @Override
           public void call(Dataset<String> v1, Long v2) throws Exception {
+          }
+        })
+        .start();
+    query.stop();
+  }
+
+  @Test
+  public void testForeachAPI() {
+    StreamingQuery query = spark
+        .readStream()
+        .textFile(input)
+        .writeStream()
+        .foreach(new ForeachWriter<String>() {
+          @Override
+          public boolean open(long partitionId, long epochId) {
+            return true;
+          }
+
+          @Override
+          public void process(String value) {
+          }
+
+          @Override
+          public void close(Throwable errorOrNull) {
           }
         })
         .start();
