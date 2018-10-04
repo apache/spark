@@ -394,8 +394,8 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     // operator produces elements in batches. After a batch is complete, the metrics are updated
     // and a new batch is started.
     // In the implementation below, the code in the inner loop is producing all the values
-    // within a batch, while the code in the outer loop is setting batch parameters and updating
-    // the metrics.
+    // within a batch and updating metrics afterwards, while the code in the outer loop is setting
+    // batch parameters.
 
     // Once nextIndex == batchEnd, it's time to progress to the next batch.
     val batchEnd = ctx.addMutableState(CodeGenerator.JAVA_LONG, "batchEnd")
@@ -452,7 +452,6 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
     val localIdx = ctx.freshName("localIdx")
     val localEnd = ctx.freshName("localEnd")
-    val range = ctx.freshName("range")
 
     val processingLoop = if (parent.needStopCheck) {
       // TODO (cloud-fan): do we really need to do the stop check within batch?
@@ -493,12 +492,11 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     //
     // `nextIndex` tracks the index of the next record that is going to be consumed, initialized
     // with partition start. `batchEnd` tracks the end index of the current batch, initialized
-    // with `nextIndex`. In the outer loop, we first check if `batchEnd - nextIndex` is non-zero.
-    // Note that it can be negative, because range step can be negative. If `batchEnd - nextIndex`
-    // is non-zero, we enter the inner loop. Otherwise, we update `batchEnd` to process the next
-    // batch. If `batchEnd` reaches partition end, exit the outer loop. Since `batchEnd` is
-    // initialized with `nextIndex`, the first iteration of outer loop will not enter the inner
-    // loop but just update the `batchEnd`.
+    // with `nextIndex`. In the outer loop, we first check if `nextIndex == batchEnd`. If it's true,
+    // it means the current batch is fully consumed, and we will update `batchEnd` to process the
+    // next batch. If `batchEnd` reaches partition end, exit the outer loop. Then we enter the inner
+    // loop. Note that, when we enter inner loop, `nextIndex` must be different than `batchEnd`,
+    // otherwise the outer loop should already be exited.
     //
     // The inner loop iterates from 0 to `localEnd`, which is calculated by
     // `(batchEnd - nextIndex) / step`. Since `batchEnd` is increased by `nextBatchTodo * step` in
@@ -507,7 +505,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     // up being equal to `batchEnd` when the inner loop finishes.
     //
     // The inner loop can be interrupted, if the query has produced at least one result row, so that
-    // we don't buffer many result rows and waste memory. It's ok to interrupt the inner loop,
+    // we don't buffer too many result rows and waste memory. It's ok to interrupt the inner loop,
     // because `nextIndex` is updated per loop iteration and remembers how far we have processed.
 
     s"""
@@ -518,11 +516,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       | }
       |
       | while ($loopCondition) {
-      |   long $range = $batchEnd - $nextIndex;
-      |   if ($range != 0L) {
-      |     int $localEnd = (int)($range / ${step}L);
-      |     $processingLoop
-      |   } else {
+      |   if ($nextIndex == $batchEnd) {
       |     long $nextBatchTodo;
       |     if ($numElementsTodo > ${batchSize}L) {
       |       $nextBatchTodo = ${batchSize}L;
@@ -535,6 +529,8 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |     $batchEnd += $nextBatchTodo * ${step}L;
       |   }
       |
+      |   int $localEnd = (int)(($batchEnd - $nextIndex) / ${step}L);
+      |   $processingLoop
       |   $taskContext.killTaskIfInterrupted();
       | }
      """.stripMargin

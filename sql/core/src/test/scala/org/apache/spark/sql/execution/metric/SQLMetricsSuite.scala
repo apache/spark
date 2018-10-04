@@ -24,7 +24,7 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.execution.{FilterExec, RangeExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -519,90 +519,54 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
   }
 
   test("SPARK-25602: range metrics can be wrong if the result rows are not fully consumed") {
+    def checkFilterAndRangeMetrics(
+        df: DataFrame,
+        filterNumOutputs: Int,
+        rangeNumOutputs: Int): Unit = {
+      var filter: FilterExec = null
+      var range: RangeExec = null
+      val collectFilterAndRange: SparkPlan => Unit = {
+        case f: FilterExec =>
+          assert(filter == null, "the query should only have one Filter")
+          filter = f
+        case r: RangeExec =>
+          assert(range == null, "the query should only have one Range")
+          range = r
+        case _ =>
+      }
+      if (SQLConf.get.wholeStageEnabled) {
+        df.queryExecution.executedPlan.foreach {
+          case w: WholeStageCodegenExec =>
+            w.child.foreach(collectFilterAndRange)
+          case _ =>
+        }
+      } else {
+        df.queryExecution.executedPlan.foreach(collectFilterAndRange)
+      }
+
+      assert(filter != null && range != null, "the query doesn't have Filter and Range")
+      assert(filter.metrics("numOutputRows").value == filterNumOutputs)
+      assert(range.metrics("numOutputRows").value == rangeNumOutputs)
+    }
+
     val df = spark.range(0, 30, 1, 2).toDF().filter('id % 3 === 0)
-
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
-      df.collect()
-      df.queryExecution.executedPlan.foreach {
-        case w: WholeStageCodegenExec =>
-          w.child.foreach {
-            case f: FilterExec => assert(f.metrics("numOutputRows").value == 10L)
-            case r: RangeExec => assert(r.metrics("numOutputRows").value == 30L)
-            case _ =>
-          }
-
-        case _ =>
-      }
-    }
-
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-      df.collect()
-      df.queryExecution.executedPlan.foreach {
-        case f: FilterExec => assert(f.metrics("numOutputRows").value == 10L)
-        case r: RangeExec => assert(r.metrics("numOutputRows").value == 30L)
-        case _ =>
-      }
-    }
-
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
-      df.queryExecution.executedPlan.foreach(_.resetMetrics())
-      // For each partition, we get 2 rows. Then the Filter should produce 2 rows, and Range should
-      // produce 4 rows(0, 1, 2, 3).
-      df.queryExecution.toRdd.mapPartitions(_.take(2)).collect()
-      df.queryExecution.executedPlan.foreach {
-        case w: WholeStageCodegenExec =>
-          w.child.foreach {
-            // Range has 2 partitions, so the expected metrics for filter should be 2 * 2, for range
-            // should be 4 * 2.
-            case f: FilterExec => assert(f.metrics("numOutputRows").value == 4L)
-            case r: RangeExec => assert(r.metrics("numOutputRows").value == 8L)
-            case _ =>
-          }
-
-        case _ =>
-      }
-    }
-
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-      df.queryExecution.executedPlan.foreach(_.resetMetrics())
-      // For each partition, we get 2 rows. Then the Filter should produce 2 rows, and Range should
-      // produce 4 rows(0, 1, 2, 3).
-      df.queryExecution.toRdd.mapPartitions(_.take(2)).collect()
-      df.queryExecution.executedPlan.foreach {
-        // Range has 2 partitions, so the expected metrics for filter should be 2 * 2, for range
-        // should be 4 * 2.
-        case f: FilterExec => assert(f.metrics("numOutputRows").value == 4L)
-        case r: RangeExec => assert(r.metrics("numOutputRows").value == 8L)
-        case _ =>
-      }
-    }
-
     val df2 = df.limit(2)
+    Seq(true, false).foreach { wholeStageEnabled =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStageEnabled.toString) {
+        df.collect()
+        checkFilterAndRangeMetrics(df, filterNumOutputs = 10, rangeNumOutputs = 30)
 
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
-      // Top-most limit will only run the first task, so totally the Filter produces 2 rows, and
-      // Range produces 4 rows(0, 1, 2, 3).
-      df2.collect()
-      df2.queryExecution.executedPlan.foreach {
-        case w: WholeStageCodegenExec =>
-          w.child.foreach {
-            case f: FilterExec => assert(f.metrics("numOutputRows").value == 2L)
-            case r: RangeExec => assert(r.metrics("numOutputRows").value == 4L)
-            case _ =>
-          }
+        df.queryExecution.executedPlan.foreach(_.resetMetrics())
+        // For each partition, we get 2 rows. Then the Filter should produce 2 rows per-partition,
+        // and Range should produce 4 rows([0, 1, 2, 3] and [15, 16, 17, 18]) per-partition. Since
+        // the Range has 2 partitions, totally Filter produces 4 rows, Range produces 8 rows.
+        df.queryExecution.toRdd.mapPartitions(_.take(2)).collect()
+        checkFilterAndRangeMetrics(df, filterNumOutputs = 4, rangeNumOutputs = 8)
 
-        case _ =>
-      }
-    }
-
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-      // Top-most limit will only run the first task, so totally the Filter produces 2 rows, and
-      // Range produces 4 rows(0, 1, 2, 3).
-      df2.collect()
-      df2.queryExecution.executedPlan.foreach {
-        case f: FilterExec => assert(f.metrics("numOutputRows").value == 2L)
-        case r: RangeExec => assert(r.metrics("numOutputRows").value == 4L)
-        case _ =>
+        // Top-most limit will call `CollectLimitExec.executeCollect`, which will only run the first
+        // task, so totally the Filter produces 2 rows, and Range produces 4 rows([0, 1, 2, 3]).
+        df2.collect()
+        checkFilterAndRangeMetrics(df2, filterNumOutputs = 2, rangeNumOutputs = 4)
       }
     }
   }
