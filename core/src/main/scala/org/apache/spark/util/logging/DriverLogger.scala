@@ -130,9 +130,14 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
         // Write all remaining bytes
         run()
       } finally {
-        inStream.close()
-        outputStream.close()
-        streamClosed = true
+        try {
+          streamClosed = true
+          inStream.close()
+          outputStream.close()
+        } catch {
+          case t: Throwable =>
+            logError("Error in closing driver log input/output stream", t)
+        }
       }
     }
 
@@ -145,7 +150,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
         threadpool.awaitTermination(1, TimeUnit.MINUTES)
       } catch {
         case e: Exception =>
-          logError("Error in closing driver log input/output stream", e)
+          logError("Error in shutting down threadpool", e)
       }
     }
   }
