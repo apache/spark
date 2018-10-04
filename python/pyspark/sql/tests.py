@@ -5642,8 +5642,9 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         foo_udf = pandas_udf(lambda x: x, "id long", PandasUDFType.GROUPED_MAP)
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ValueError, 'f must be either SQL_BATCHED_UDF or '
-                                                     'SQL_SCALAR_PANDAS_UDF'):
+            with self.assertRaisesRegexp(
+                    ValueError,
+                    'f.*SQL_BATCHED_UDF.*SQL_SCALAR_PANDAS_UDF.*SQL_GROUPED_AGG_PANDAS_UDF.*'):
                 self.spark.catalog.registerFunction("foo_udf", foo_udf)
 
     def test_decorator(self):
@@ -6458,6 +6459,21 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                     AnalysisException,
                     'mixture.*aggregate function.*group aggregate pandas UDF'):
                 df.groupby(df.id).agg(mean_udf(df.v), mean(df.v)).collect()
+
+    def test_register_vectorized_udf_basic(self):
+        from pyspark.sql.functions import pandas_udf
+        from pyspark.rdd import PythonEvalType
+
+        sum_pandas_udf = pandas_udf(
+            lambda v: v.sum(), "integer", PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF)
+
+        self.assertEqual(sum_pandas_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF)
+        group_agg_pandas_udf = self.spark.udf.register("sum_pandas_udf", sum_pandas_udf)
+        self.assertEqual(group_agg_pandas_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF)
+        q = "SELECT sum_pandas_udf(v1) FROM VALUES (3, 0), (2, 0), (1, 1) tbl(v1, v2) GROUP BY v2"
+        actual = sorted(map(lambda r: r[0], self.spark.sql(q).collect()))
+        expected = [1, 5]
+        self.assertEqual(actual, expected)
 
 
 @unittest.skipIf(
