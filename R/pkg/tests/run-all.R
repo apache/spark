@@ -24,22 +24,13 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
   # Turn all warnings into errors
   options("warn" = 2)
 
-<<<<<<< HEAD
-# Setup global test environment
-# Install Spark first to set SPARK_HOME
-install.spark()
-=======
   if (.Platform$OS.type == "windows") {
     Sys.setenv(TZ = "GMT")
   }
 
   # Setup global test environment
   # Install Spark first to set SPARK_HOME
->>>>>>> 075dd620e32872b5d90a2fa7d09b43b15502182b
-
-  # NOTE(shivaram): We set overwrite to handle any old tar.gz files or directories left behind on
-  # CRAN machines. For Jenkins we should already have SPARK_HOME set.
-  install.spark(overwrite = TRUE)
+  install.spark()
 
   sparkRDir <- file.path(Sys.getenv("SPARK_HOME"), "R")
   sparkRWhitelistSQLDirs <- c("spark-warehouse", "metastore_db")
@@ -47,34 +38,6 @@ install.spark()
                    function(x) { unlink(file.path(sparkRDir, x), recursive = TRUE, force = TRUE)}))
   sparkRFilesBefore <- list.files(path = sparkRDir, all.files = TRUE)
 
-<<<<<<< HEAD
-if (identical(Sys.getenv("NOT_CRAN"), "true")) {
-  if (identical(Sys.getenv("CONDA_TESTS"), "true")) {
-      summaryReporter <- ProgressReporter$new()
-      options(testthat.output_file = "target/R/R/conda/r-tests.xml")
-      junitReporter <- JunitReporter$new()
-      # set random seed for predictable results. mostly for base's sample() in tree and classification
-      set.seed(42)
-      testthat:::test_package_dir("SparkR",
-      file.path(sparkRDir, "pkg", "tests", "condatests"),
-      NULL,
-      MultiReporter$new(reporters = list(summaryReporter, junitReporter)))
-  } else {
-      summaryReporter <- ProgressReporter$new()
-      options(testthat.output_file = "target/R/R/r-tests.xml")
-      junitReporter <- JunitReporter$new()
-      reporter <- MultiReporter$new(reporters = list(summaryReporter, junitReporter))
-      # set random seed for predictable results. mostly for base's sample() in tree and classification
-      test_package("SparkR", reporter = reporter)
-      set.seed(42)
-      testthat:::test_package_dir("SparkR",
-      file.path(sparkRDir, "pkg", "tests", "fulltests"),
-      NULL,
-      reporter)
-  }
-}
-
-=======
   sparkRTestMaster <- "local[1]"
   sparkRTestConfig <- list()
   if (identical(Sys.getenv("NOT_CRAN"), "true")) {
@@ -89,19 +52,30 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
                              spark.executor.extraJavaOptions = tmpArg)
   }
 
-  test_package("SparkR")
-
   if (identical(Sys.getenv("NOT_CRAN"), "true")) {
-    # set random seed for predictable results. mostly for base's sample() in tree and classification
-    set.seed(42)
-    # for testthat 1.0.2 later, change reporter from "summary" to default_reporter()
-    testthat:::run_tests("SparkR",
-                         file.path(sparkRDir, "pkg", "tests", "fulltests"),
-                         NULL,
-                         "summary")
+    if (identical(Sys.getenv("CONDA_TESTS"), "true")) {
+        summaryReporter <- ProgressReporter$new()
+        options(testthat.output_file = "target/R/R/conda/r-tests.xml")
+        junitReporter <- JunitReporter$new()
+        # set random seed for predictable results. mostly for base's sample() in tree and classification
+        set.seed(42)
+        testthat:::test_package_dir("SparkR",
+        file.path(sparkRDir, "pkg", "tests", "condatests"),
+        NULL,
+        MultiReporter$new(reporters = list(summaryReporter, junitReporter)))
+    } else {
+        summaryReporter <- ProgressReporter$new()
+        options(testthat.output_file = "target/R/R/r-tests.xml")
+        junitReporter <- JunitReporter$new()
+        reporter <- MultiReporter$new(reporters = list(summaryReporter, junitReporter))
+        # set random seed for predictable results. mostly for base's sample() in tree and classification
+        test_package("SparkR", reporter = reporter)
+        set.seed(42)
+        testthat:::test_package_dir("SparkR",
+        file.path(sparkRDir, "pkg", "tests", "fulltests"),
+        NULL,
+        reporter)
+    }
   }
 
-  SparkR:::uninstallDownloadedSpark()
-
 }
->>>>>>> 075dd620e32872b5d90a2fa7d09b43b15502182b

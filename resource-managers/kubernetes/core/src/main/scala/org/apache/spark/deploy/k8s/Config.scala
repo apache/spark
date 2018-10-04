@@ -249,7 +249,6 @@ private[spark] object Config extends Logging {
         "Ensure that major Python version is either Python2 or Python3")
       .createWithDefault("2")
 
-<<<<<<< HEAD
   val KUBERNETES_DRIVER_PODTEMPLATE_FILE =
     ConfigBuilder("spark.kubernetes.driver.podTemplateFile")
       .doc("File containing a template pod spec for the driver")
@@ -261,7 +260,6 @@ private[spark] object Config extends Logging {
       .doc("File containing a template pod spec for executors")
       .stringConf
       .createOptional
-=======
   val APP_RESOURCE_TYPE =
     ConfigBuilder("spark.kubernetes.resource.type")
       .doc("This sets the resource type internally")
@@ -277,7 +275,6 @@ private[spark] object Config extends Logging {
         "your pods memory limit so you may wish to request more memory.")
       .booleanConf
       .createWithDefault(false)
->>>>>>> 075dd620e32872b5d90a2fa7d09b43b15502182b
 
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"

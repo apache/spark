@@ -259,7 +259,7 @@ jobs:
 
   run-spark-docker-gradle-plugin-tests:
     <<: *test-defaults
-    resource_class: small
+    resource_class: medium
     steps:
       - *checkout-code
       - setup_remote_docker

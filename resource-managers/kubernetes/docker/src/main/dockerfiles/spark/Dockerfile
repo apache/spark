@@ -41,12 +41,6 @@ COPY ${spark_jars} /opt/spark/jars
 COPY bin /opt/spark/bin
 COPY sbin /opt/spark/sbin
 COPY ${img_path}/spark/entrypoint.sh /opt/
-<<<<<<< HEAD
-=======
-COPY examples /opt/spark/examples
-COPY kubernetes/tests /opt/spark/tests
-COPY data /opt/spark/data
->>>>>>> 075dd620e32872b5d90a2fa7d09b43b15502182b
 
 ENV SPARK_HOME /opt/spark
 

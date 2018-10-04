@@ -572,14 +572,9 @@ private[parquet] class ParquetFilters(
         } yield FilterApi.or(lhsFilter, rhsFilter)
 
       case sources.Not(pred) =>
-<<<<<<< HEAD
-        createFilter(schema, pred)
-          .map(FilterApi.not)
-          .map(LogicalInverseRewriter.rewrite)
-=======
         createFilterHelper(nameToParquetField, pred, canRemoveOneSideInAnd = false)
           .map(FilterApi.not)
->>>>>>> 075dd620e32872b5d90a2fa7d09b43b15502182b
+          .map(LogicalInverseRewriter.rewrite)
 
       case sources.In(name, values) if canMakeFilterOn(name, values) =>
         makeInSet.lift(nameToParquetField(name).fieldType)

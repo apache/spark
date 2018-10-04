@@ -3372,11 +3372,7 @@ class SQLTests(ReusedSQLTestCase):
         import pandas as pd
         from datetime import datetime
         pdf = pd.DataFrame({"ts": [datetime(2017, 10, 31, 1, 1, 1)],
-<<<<<<< HEAD
                             "d": [pd.Timestamp.now().date()]})[["d", "ts"]]
-=======
-                            "d": [pd.Timestamp.now().date()]}, columns=["d", "ts"])
->>>>>>> 075dd620e32872b5d90a2fa7d09b43b15502182b
         # test types are inferred correctly without specifying schema
         df = self.spark.createDataFrame(pdf)
         self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampType))

@@ -176,6 +176,7 @@ class BasicExecutorFeatureStepSuite
         KubernetesExecutorSpecificConf("1", Some(DRIVER_POD)),
         RESOURCE_NAME_PREFIX,
         APP_ID,
+        None,
         LABELS,
         ANNOTATIONS,
         Map.empty,

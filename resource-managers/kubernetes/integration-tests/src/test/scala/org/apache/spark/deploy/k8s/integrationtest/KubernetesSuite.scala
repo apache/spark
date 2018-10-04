@@ -34,20 +34,13 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.integrationtest.TestConfig._
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
-<<<<<<< HEAD
+import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkLauncher
 
 private[spark] class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
-  with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite {
-=======
-import org.apache.spark.internal.Logging
-
-private[spark] class KubernetesSuite extends SparkFunSuite
-  with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
-  with PythonTestsSuite with ClientModeTestsSuite
+  with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
   with Logging with Eventually with Matchers {
->>>>>>> 075dd620e32872b5d90a2fa7d09b43b15502182b
 
   import KubernetesSuite._
 

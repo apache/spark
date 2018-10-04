@@ -17,12 +17,7 @@
 package org.apache.spark.deploy.k8s.submit
 
 import java.io.StringWriter
-<<<<<<< HEAD
-import java.util.{Collections, Properties, UUID}
-=======
-import java.util.{Collections, Locale, UUID}
-import java.util.Properties
->>>>>>> 075dd620e32872b5d90a2fa7d09b43b15502182b
+import java.util.{Collections, Locale, Properties, UUID}
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.KubernetesClient

@@ -32,4 +32,3 @@ RUN echo "deb http://cran.rstudio.com/bin/linux/ubuntu trusty/" >> /etc/apt/sour
 ENV R_HOME=/usr/lib/R
 
 USER circleci
-

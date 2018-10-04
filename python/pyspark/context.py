@@ -189,16 +189,12 @@ class SparkContext(object):
         self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port, auth_token)
         self._jsc.sc().register(self._javaAccumulator)
 
-<<<<<<< HEAD
-        self.pythonExec = self._jvm.scala.Option.apply(os.environ.get("PYSPARK_PYTHON"))
-=======
         # If encryption is enabled, we need to setup a server in the jvm to read broadcast
         # data via a socket.
         # scala's mangled names w/ $ in them require special treatment.
         self._encryption_enabled = self._jvm.PythonUtils.getEncryptionEnabled(self._jsc)
 
-        self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
->>>>>>> 075dd620e32872b5d90a2fa7d09b43b15502182b
+        self.pythonExec = self._jvm.scala.Option.apply(os.environ.get("PYSPARK_PYTHON"))
         self.pythonVer = "%d.%d" % sys.version_info[:2]
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
