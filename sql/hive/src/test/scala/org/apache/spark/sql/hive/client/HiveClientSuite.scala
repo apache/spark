@@ -24,17 +24,20 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType}
 
 // TODO: Refactor this to `HivePartitionFilteringSuite`
 class HiveClientSuite(version: String)
-    extends HiveVersionSuite(version) with BeforeAndAfterAll {
+    extends HiveVersionSuite(version) with BeforeAndAfterAll with SQLHelper {
 
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
+  private val partPruningFallbackKey = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK.key
 
   private val testPartitionCount = 3 * 24 * 4
 
-  private def init(tryDirectSql: Boolean): HiveClient = {
+  private def init(tryDirectSql: Boolean, partPruningFallback: Boolean = true): HiveClient = {
     val storageFormat = CatalogStorageFormat(
       locationUri = None,
       inputFormat = None,
@@ -85,6 +88,18 @@ class HiveClientSuite(version: String)
       Seq(attr("ds") === 20170101))
 
     assert(filteredPartitions.size == testPartitionCount)
+  }
+
+  test(s"getPartitionsByFilter should throw an exception if $partPruningFallbackKey=false") {
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK.key -> "false") {
+      val client = init(false)
+      // tryDirectSql = false and a non-string partition filter will always fail. This condition
+      // is used to test if the fallback works
+      assertThrows[RuntimeException](
+        client.getPartitionsByFilter(client.getTable("default", "test"),
+          Seq(attr("ds") === 20170101))
+      )
+    }
   }
 
   test("getPartitionsByFilter: ds<=>20170101") {

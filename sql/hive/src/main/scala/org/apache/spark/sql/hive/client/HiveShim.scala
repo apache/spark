@@ -746,6 +746,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
       } else {
         logDebug(s"Hive metastore filter is '$filter'.")
+        val shouldFallback = SQLConf.get.metastorePartitionPruningFallback
         val tryDirectSqlConfVar = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL
         // We should get this config value from the metaStore. otherwise hit SPARK-18681.
         // To be compatible with hive-0.12 and hive-0.13, In the future we can achieve this by:
@@ -759,24 +760,33 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
             .asInstanceOf[JArrayList[Partition]]
         } catch {
           case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] =>
-            if (!tryDirectSql) {
-              logWarning("Caught Hive MetaException attempting to get partition metadata by " +
-                "filter from Hive. Falling back to fetching all partition metadata, which will " +
-                "degrade performance. Modifying your Hive metastore configuration to set " +
-                s"${tryDirectSqlConfVar.varname} to true may resolve this problem.")
+            if (shouldFallback) {
+              if (!tryDirectSql) {
+                logWarning("Caught Hive MetaException attempting to get partition metadata by " +
+                  "filter from Hive. Falling back to fetching all partition metadata, which will " +
+                  "degrade performance. Modifying your Hive metastore configuration to set " +
+                  s"${tryDirectSqlConfVar.varname} to true may resolve this problem.")
+              } else {
+                logWarning("Caught Hive MetaException attempting to get partition metadata " +
+                  "by filter from Hive. Hive metastore's direct SQL feature has been enabled, " +
+                  "but it is an optimistic optimization and not guaranteed to work. Falling back " +
+                  "to fetching all partition metadata, which will degrade performance (for the " +
+                  "current query). If you see this error consistently, you can set the Spark " +
+                  s"configuration setting ${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key} to " +
+                  "false as a work around, however this will result in degraded performance. " +
+                  "Please report a bug to Hive stating that direct SQL is failing consistently " +
+                  "for the specified query: https://issues.apache.org/jira/browse/HIVE")
+              }
+              // HiveShim clients are expected to handle a superset of the requested partitions
+              getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
             } else {
-              logWarning("Caught Hive MetaException attempting to get partition metadata by " +
-                "filter from Hive. Hive metastore's direct SQL feature has been enabled, but it " +
-                "is an optimistic optimization and not guaranteed to work. Falling back to " +
-                "fetching all partition metadata, which will degrade performance (for the " +
-                "current query). If you see this error consistently, you can set the Spark " +
-                s"configuration setting ${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key} to " +
-                "false as a work around, however this will result in degraded performance. " +
-                "Please report a bug to Hive stating that direct SQL is failing consistently for " +
-                "the specified query: https://issues.apache.org/jira/browse/HIVE")
+              // Fallback mode has been disabled. Rethrow exception.
+              throw new RuntimeException("Caught Hive MetaException attempting to get partition " +
+                "metadata from Hive. Fallback mechanism is not enabled. You can set " +
+                s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK} to true to fetch all " +
+                "partition metadata as a fallback mechanism, however this may result in degraded " +
+                "performance.", ex)
             }
-            // HiveShim clients are expected to handle a superset of the requested partitions
-            getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
         }
       }
 
