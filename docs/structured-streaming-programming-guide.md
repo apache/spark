@@ -1828,14 +1828,14 @@ Here are the details of all the sinks in Spark.
     <td>Append, Update, Complete</td>
     <td>None</td>
     <td>Depends on ForeachWriter implementation</td>
-    <td>More details in the <a href="#using-foreach-and-foreach-batch">next section</a></td>
+    <td>More details in the <a href="#using-foreach-and-foreachbatch">next section</a></td>
   </tr>
   <tr>
       <td><b>ForeachBatch Sink</b></td>
       <td>Append, Update, Complete</td>
       <td>None</td>
       <td>Depends on the implementation</td>
-      <td>More details in the <a href="#using-foreach-and-foreach-batch">next section</a></td>
+      <td>More details in the <a href="#using-foreach-and-foreachbatch">next section</a></td>
     </tr>
     
   <tr>
@@ -2171,6 +2171,7 @@ For that situation you must specify the processing logic in an object.
   {% highlight python %}
       def processRow(row):
           // Write row to storage
+          pass
       
       query = streamingDF.writeStream.foreach(processRow).start()  
   {% endhighlight %}
