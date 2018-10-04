@@ -2909,6 +2909,11 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         can fail on special rows, the workaround is to incorporate the condition into the functions.
 
     .. note:: The user-defined functions do not take keyword arguments on the calling side.
+
+    .. note:: The data type of returned `pandas.Series` from the user-defined functions should be
+        matched with defined returnType. When there is mismatch between them, it is not guaranteed
+        that the conversion by SparkSQL during serialization is correct at all and users might get
+        unexpected results.
     """
     # decorator @pandas_udf(returnType, functionType)
     is_decorator = f is None or isinstance(f, (str, DataType))
