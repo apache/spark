@@ -63,6 +63,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
     }
   }
 
+  // scalastyle:off caselocale
   test("toUpperCase") {
     forAll { (s: String) =>
       assert(toUTF8(s).toUpperCase === toUTF8(s.toUpperCase))
@@ -74,6 +75,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
       assert(toUTF8(s).toLowerCase === toUTF8(s.toLowerCase))
     }
   }
+  // scalastyle:on caselocale
 
   test("compare") {
     forAll { (s1: String, s2: String) =>

@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.11</artifactId>
-  <version>2.5.0-SNAPSHOT</version>
+  <version>3.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -170,7 +170,7 @@
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.5</commons-lang3.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
-    <janino.version>3.0.9</janino.version>
+    <janino.version>3.0.10</janino.version>
     <jersey.version>2.22.2</jersey.version>
     <joda.version>2.9.3</joda.version>
     <jodd.version>3.5.2</jodd.version>
@@ -2760,7 +2760,7 @@
     <profile>
       <id>scala-2.12</id>
       <properties>
-        <scala.version>2.12.6</scala.version>
+        <scala.version>2.12.7</scala.version>
         <scala.binary.version>2.12</scala.binary.version>
       </properties>
       <build>

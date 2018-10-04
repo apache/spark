@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.network.yarn
 
 import scala.collection.JavaConverters._
@@ -47,12 +46,13 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
 
   // these three metrics have the same effect on the collector
   for (testname <- Seq("openBlockRequestLatencyMillis",
-    "registerExecutorRequestLatencyMillis",
-    "blockTransferRateBytes")) {
+      "registerExecutorRequestLatencyMillis",
+      "blockTransferRateBytes")) {
     test(s"$testname - collector receives correct types") {
       val builder = mock(classOf[MetricsRecordBuilder])
       when(builder.addCounter(any(), anyLong())).thenReturn(builder)
       when(builder.addGauge(any(), anyDouble())).thenReturn(builder)
+
       YarnShuffleServiceMetrics.collectMetric(builder, testname,
         metrics.getMetrics.get(testname))
 
@@ -64,11 +64,11 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
   // this metric writes only one gauge to the collector
   test("registeredExecutorsSize - collector receives correct types") {
     val builder = mock(classOf[MetricsRecordBuilder])
-    when(builder.addCounter(any(), anyLong())).thenReturn(builder)
-    when(builder.addGauge(any(), anyDouble())).thenReturn(builder)
+
     YarnShuffleServiceMetrics.collectMetric(builder, "registeredExecutorsSize",
       metrics.getMetrics.get("registeredExecutorsSize"))
 
+    // only one
     verify(builder).addGauge(anyObject(), anyInt())
   }
 }

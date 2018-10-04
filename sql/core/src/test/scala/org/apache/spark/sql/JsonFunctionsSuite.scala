@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import collection.JavaConverters._
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -402,6 +404,12 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(out.schema == expected)
   }
 
+  test("infers schemas using options") {
+    val df = spark.range(1)
+      .select(schema_of_json(lit("{a:1}"), Map("allowUnquotedFieldNames" -> "true").asJava))
+    checkAnswer(df, Seq(Row("struct<a:bigint>")))
+  }
+
   test("from_json - array of primitive types") {
     val df = Seq("[1, 2, 3]").toDF("a")
     val schema = new ArrayType(IntegerType, false)
@@ -517,5 +525,26 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       jsonDF.select(to_json(from_json($"a", schema))),
       Seq(Row(json)))
+  }
+
+  test("pretty print - roundtrip from_json -> to_json") {
+    val json = """[{"book":{"publisher":[{"country":"NL","year":[1981,1986,1999]}]}}]"""
+    val jsonDF = Seq(json).toDF("root")
+    val expected =
+      """[ {
+        |  "book" : {
+        |    "publisher" : [ {
+        |      "country" : "NL",
+        |      "year" : [ 1981, 1986, 1999 ]
+        |    } ]
+        |  }
+        |} ]""".stripMargin
+
+    checkAnswer(
+      jsonDF.select(
+        to_json(
+          from_json($"root", schema_of_json(lit(json))),
+          Map("pretty" -> "true"))),
+      Seq(Row(expected)))
   }
 }

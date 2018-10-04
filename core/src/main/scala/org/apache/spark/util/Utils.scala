@@ -240,6 +240,19 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Run a segment of code using a different context class loader in the current thread
+   */
+  def withContextClassLoader[T](ctxClassLoader: ClassLoader)(fn: => T): T = {
+    val oldClassLoader = Thread.currentThread().getContextClassLoader()
+    try {
+      Thread.currentThread().setContextClassLoader(ctxClassLoader)
+      fn
+    } finally {
+      Thread.currentThread().setContextClassLoader(oldClassLoader)
+    }
+  }
+
+  /**
    * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.DataOutput]]
    */
   def writeByteBuffer(bb: ByteBuffer, out: DataOutput): Unit = {
@@ -2723,7 +2736,7 @@ private[spark] object Utils extends Logging {
     }
 
     val masterScheme = new URI(masterWithoutK8sPrefix).getScheme
-    val resolvedURL = masterScheme.toLowerCase match {
+    val resolvedURL = masterScheme.toLowerCase(Locale.ROOT) match {
       case "https" =>
         masterWithoutK8sPrefix
       case "http" =>

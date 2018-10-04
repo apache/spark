@@ -21,6 +21,8 @@ import java.io.File
 import java.util.Arrays
 
 import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.api.java.JavaSparkContext
+import org.apache.spark.api.python.PythonUtils
 
 private[spark] object RUtils {
   // Local path where R binary packages built from R source code contained in the spark
@@ -104,4 +106,6 @@ private[spark] object RUtils {
       case e: Exception => false
     }
   }
+
+  def getEncryptionEnabled(sc: JavaSparkContext): Boolean = PythonUtils.getEncryptionEnabled(sc)
 }

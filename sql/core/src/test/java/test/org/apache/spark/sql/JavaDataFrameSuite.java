@@ -291,10 +291,37 @@ public class JavaDataFrameSuite {
   }
 
   @Test
+  public void testSampleByColumn() {
+    Dataset<Row> df = spark.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
+    Dataset<Row> sampled = df.stat().sampleBy(col("key"), ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
+    List<Row> actual = sampled.groupBy("key").count().orderBy("key").collectAsList();
+    Assert.assertEquals(0, actual.get(0).getLong(0));
+    Assert.assertTrue(0 <= actual.get(0).getLong(1) && actual.get(0).getLong(1) <= 8);
+    Assert.assertEquals(1, actual.get(1).getLong(0));
+    Assert.assertTrue(2 <= actual.get(1).getLong(1) && actual.get(1).getLong(1) <= 13);
+  }
+
+  @Test
   public void pivot() {
     Dataset<Row> df = spark.table("courseSales");
     List<Row> actual = df.groupBy("year")
       .pivot("course", Arrays.asList("dotNET", "Java"))
+      .agg(sum("earnings")).orderBy("year").collectAsList();
+
+    Assert.assertEquals(2012, actual.get(0).getInt(0));
+    Assert.assertEquals(15000.0, actual.get(0).getDouble(1), 0.01);
+    Assert.assertEquals(20000.0, actual.get(0).getDouble(2), 0.01);
+
+    Assert.assertEquals(2013, actual.get(1).getInt(0));
+    Assert.assertEquals(48000.0, actual.get(1).getDouble(1), 0.01);
+    Assert.assertEquals(30000.0, actual.get(1).getDouble(2), 0.01);
+  }
+
+  @Test
+  public void pivotColumnValues() {
+    Dataset<Row> df = spark.table("courseSales");
+    List<Row> actual = df.groupBy("year")
+      .pivot(col("course"), Arrays.asList(lit("dotNET"), lit("Java")))
       .agg(sum("earnings")).orderBy("year").collectAsList();
 
     Assert.assertEquals(2012, actual.get(0).getInt(0));
