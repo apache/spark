@@ -316,6 +316,7 @@ object InMemoryFileIndex extends Logging {
         // subprocess and parse the stdout).
         try {
           val locations = fs.getFileBlockLocations(f, 0, f.getLen).map { loc =>
+            // Store BlockLocation objects to consume less memory
             if (loc.getClass == classOf[BlockLocation]) {
               loc
             } else {

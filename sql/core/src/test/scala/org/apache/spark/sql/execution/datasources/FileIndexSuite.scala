@@ -249,7 +249,8 @@ class FileIndexSuite extends SharedSQLContext {
     }
   }
 
-  test("SPARK-25062 - InMemoryCache stores only simple BlockLocations") {
+  test("SPARK-25062 - InMemoryFileIndex stores BlockLocation objects no matter what subclass " +
+    "the FS returns") {
     withSQLConf("fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
       withTempDir { dir =>
         val file = new File(dir, "text.txt")
@@ -257,7 +258,7 @@ class FileIndexSuite extends SharedSQLContext {
 
         val inMemoryFileIndex = new InMemoryFileIndex(
           spark, Seq(new Path(file.getCanonicalPath)), Map.empty, None) {
-          def leafFileStatuses = leafFiles.map(_._2)
+          def leafFileStatuses = leafFiles.values
         }
         val blockLocations = inMemoryFileIndex.leafFileStatuses.flatMap(
           _.asInstanceOf[LocatedFileStatus].getBlockLocations)
