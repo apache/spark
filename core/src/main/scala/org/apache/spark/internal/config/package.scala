@@ -62,11 +62,6 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val DRIVER_LOG_SYNCTOYARN =
-    ConfigBuilder("spark.driver.log.syncToYarn.enabled")
-      .booleanConf
-      .createWithDefault(false)
-
   private[spark] val EVENT_LOG_COMPRESS =
     ConfigBuilder("spark.eventLog.compress")
       .booleanConf
