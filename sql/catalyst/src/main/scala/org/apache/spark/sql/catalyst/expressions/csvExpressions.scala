@@ -75,7 +75,7 @@ case class CsvToStructs(
   lazy val converter = (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
 
   @transient lazy val parser = {
-    val parsedOptions = new CSVOptions(options, true, timeZoneId.get)
+    val parsedOptions = new CSVOptions(options, columnPruning = true, timeZoneId.get)
     val mode = parsedOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
       throw new AnalysisException(s"from_csv() doesn't support the ${mode.name} mode. " +
