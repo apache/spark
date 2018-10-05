@@ -21,6 +21,7 @@ import java.io.File
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 import org.apache.hadoop.fs.Path
 import org.apache.orc.OrcConf.COMPRESS
@@ -229,8 +230,8 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
       tableCompressionCodecs: List[String])
       (assertionCompressionCodec: (Option[String], String, String, Long) => Unit): Unit = {
     withSQLConf(getConvertMetastoreConfName(format) -> convertMetastore.toString) {
-      tableCompressionCodecs.foreach { tableCompression =>
-        compressionCodecs.foreach { sessionCompressionCodec =>
+      Random.shuffle(tableCompressionCodecs).take(1).foreach { tableCompression =>
+        Random.shuffle(compressionCodecs).take(1).foreach { sessionCompressionCodec =>
           withSQLConf(getSparkCompressionConfName(format) -> sessionCompressionCodec) {
             // 'tableCompression = null' means no table-level compression
             val compression = Option(tableCompression)
