@@ -33,26 +33,32 @@ class FailureSafeParser[IN](
   // schema doesn't contain a field for corrupted record, we just return the partial result or a
   // row with all fields null. If the given schema contains a field for corrupted record, we will
   // set the bad record to this field, and set other fields according to the partial result or null.
-  private val toResultRow: (Option[InternalRow], () => UTF8String) => InternalRow = dataType match {
-    case struct: StructType =>
-      val corruptFieldIndex = struct.getFieldIndex(columnNameOfCorruptRecord)
-      if (corruptFieldIndex.isDefined) {
-        val actualSchema = StructType(struct.filterNot(_.name == columnNameOfCorruptRecord))
-        val resultRow = new GenericInternalRow(struct.length)
-        (row, badRecord) => {
-          var i = 0
-          while (i < actualSchema.length) {
-            val from = actualSchema(i)
-            resultRow(struct.fieldIndex(from.name)) = row.map(_.get(i, from.dataType)).orNull
-            i += 1
-          }
-          resultRow(corruptFieldIndex.get) = badRecord()
-          resultRow
+  private def structToResultRow(
+      struct: StructType)
+    : (Option[InternalRow], () => UTF8String) => InternalRow = {
+    val corruptFieldIndex = struct.getFieldIndex(columnNameOfCorruptRecord)
+
+    if (corruptFieldIndex.isDefined) {
+      val actualSchema = StructType(struct.filterNot(_.name == columnNameOfCorruptRecord))
+      val resultRow = new GenericInternalRow(struct.length)
+      (row, badRecord) => {
+        var i = 0
+        while (i < actualSchema.length) {
+          val from = actualSchema(i)
+          resultRow(struct.fieldIndex(from.name)) = row.map(_.get(i, from.dataType)).orNull
+          i += 1
         }
-      } else {
-        val nullResult = new GenericInternalRow(struct.length)
-        (row, _) => row.getOrElse(nullResult)
+        resultRow(corruptFieldIndex.get) = badRecord()
+        resultRow
       }
+    } else {
+      val nullResult = new GenericInternalRow(struct.length)
+      (row, _) => row.getOrElse(nullResult)
+    }
+  }
+
+  private val toResultRow: (Option[InternalRow], () => UTF8String) => InternalRow = dataType match {
+    case struct: StructType => structToResultRow(struct)
     case _ => (row, _) => row.getOrElse(new GenericInternalRow(1))
   }
 
