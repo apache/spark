@@ -623,7 +623,7 @@ case class SortMergeJoinExec(
     }
 
     s"""
-       |while (findNextInnerJoinRows($leftInput, $rightInput)$keepProducingDataCond) {
+       |while (findNextInnerJoinRows($leftInput, $rightInput)) {
        |  ${leftVarDecl.mkString("\n")}
        |  ${beforeLoop.trim}
        |  scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();

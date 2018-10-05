@@ -490,7 +490,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |   $initRangeFuncName(partitionIndex);
       | }
       |
-      | while (true$keepProducingDataCond) {
+      | while (true$limitNotReachedCond) {
       |   if ($nextIndex == $batchEnd) {
       |     long $nextBatchTodo;
       |     if ($numElementsTodo > ${batchSize}L) {

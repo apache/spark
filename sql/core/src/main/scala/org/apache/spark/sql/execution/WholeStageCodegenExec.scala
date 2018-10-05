@@ -346,13 +346,24 @@ trait CodegenSupport extends SparkPlan {
    */
   def needStopCheck: Boolean = parent.needStopCheck
 
-  def conditionsOfKeepProducingData: Seq[String] = parent.conditionsOfKeepProducingData
+  /**
+   * A sequence of checks which evaluate to true if the downstream Limit operators have not received
+   * enough records and reached the limit. If current node is a data producing node, it can leverage
+   * this information to stop producing data and complete the data flow earlier. Common data
+   * producing nodes are leaf nodes like Range and Scan, and blocking nodes like Sort and Aggregate.
+   * These checks should be put into the loop condition of the data producing loop.
+   */
+  def limitNotReachedChecks: Seq[String] = parent.limitNotReachedChecks
 
-  final protected def keepProducingDataCond: String = {
-    if (parent.conditionsOfKeepProducingData.isEmpty) {
+  /**
+   * A helper method to generate the data producing loop condition according to the
+   * limit-not-reached checks.
+   */
+  final def limitNotReachedCond: String = {
+    if (parent.limitNotReachedChecks.isEmpty) {
       ""
     } else {
-      parent.conditionsOfKeepProducingData.mkString(" && ", " && ", "")
+      parent.limitNotReachedChecks.mkString(" && ", " && ", "")
     }
   }
 }
@@ -391,7 +402,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       forceInline = true)
     val row = ctx.freshName("row")
     s"""
-       | while ($input.hasNext()$keepProducingDataCond) {
+       | while ($input.hasNext()$limitNotReachedCond) {
        |   InternalRow $row = (InternalRow) $input.next();
        |   ${consume(ctx, null, row).trim}
        |   if (shouldStop()) return;
@@ -687,7 +698,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
   override def needStopCheck: Boolean = true
 
-  override def conditionsOfKeepProducingData: Seq[String] = Nil
+  override def limitNotReachedChecks: Seq[String] = Nil
 
   override protected def otherCopyArgs: Seq[AnyRef] = Seq(codegenStageId.asInstanceOf[Integer])
 }

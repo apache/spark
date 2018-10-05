@@ -160,10 +160,11 @@ case class HashAggregateExec(
   override def needStopCheck: Boolean = false
 
   // Aggregate is a blocking operator. It needs to consume all the inputs before producing any
-  // output. This means, Limit after Aggregate has no effect to Aggregate's upstream operators.
-  // Here we override this method to return Nil, so that upstream operators will not generate
-  // unnecessary conditions (which is always evaluated to false) for the Limit after Aggregate.
-  override def conditionsOfKeepProducingData: Seq[String] = Nil
+  // output. This means, Limit operator after Aggregate will never reach its limit during the
+  // execution of Aggregate's upstream operators. Here we override this method to return Nil, so
+  // that upstream operators will not generate useless conditions (which are always evaluated to
+  // true) for the Limit operators after Aggregate.
+  override def limitNotReachedChecks: Seq[String] = Nil
 
   protected override def doProduce(ctx: CodegenContext): String = {
     if (groupingExpressions.isEmpty) {
@@ -711,7 +712,7 @@ case class HashAggregateExec(
 
     def outputFromRegularHashMap: String = {
       s"""
-         |while ($iterTerm.next()$keepProducingDataCond) {
+         |while ($iterTerm.next()$limitNotReachedCond) {
          |  UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
          |  UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getValue();
          |  $outputFunc($keyTerm, $bufferTerm);

@@ -77,8 +77,8 @@ trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
 
   private lazy val countTerm = BaseLimitExec.newLimitCountTerm()
 
-  override lazy val conditionsOfKeepProducingData: Seq[String] = {
-    s"$countTerm < $limit" +: super.conditionsOfKeepProducingData
+  override lazy val limitNotReachedChecks: Seq[String] = {
+    s"$countTerm < $limit" +: super.limitNotReachedChecks
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
