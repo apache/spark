@@ -37,8 +37,14 @@ public class ShuffleIndexInformation {
     size = (int)indexFile.length();
     ByteBuffer buffer = ByteBuffer.allocate(size);
     offsets = buffer.asLongBuffer();
-    try (DataInputStream dis = new DataInputStream(Files.newInputStream(indexFile.toPath()))) {
+    DataInputStream dis = null;
+    try {
+      dis = new DataInputStream(Files.newInputStream(indexFile.toPath()));
       dis.readFully(buffer.array());
+    } finally {
+      if (dis != null) {
+        dis.close();
+      }
     }
   }
 

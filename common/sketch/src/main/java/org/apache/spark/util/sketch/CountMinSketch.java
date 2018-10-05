@@ -191,9 +191,10 @@ public abstract class CountMinSketch {
    * Reads in a {@link CountMinSketch} from a byte array.
    */
   public static CountMinSketch readFrom(byte[] bytes) throws IOException {
-    try (InputStream in = new ByteArrayInputStream(bytes)) {
-      return readFrom(in);
-    }
+    InputStream in = new ByteArrayInputStream(bytes);
+    CountMinSketch cms = readFrom(in);
+    in.close();
+    return cms;
   }
 
   /**
