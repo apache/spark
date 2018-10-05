@@ -24,6 +24,7 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.mockito.ArgumentCaptor
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
@@ -166,35 +167,23 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
     ResourceRequestTestHelper.initializeResourceTypes(List("gpu"))
 
-    // request a single container and receive it
+    val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
     val handler = createAllocatorWithAdditionalConfigs(1, Map(
-      YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "gpu" -> "2G"
-    ))
+      YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "gpu" -> "2G"), mockAmClient)
+
     handler.updateResourceRequests()
-    handler.getNumExecutorsRunning should be (0)
-    handler.getPendingAllocate.size should be (1)
-
-    val resource = Resource.newInstance(3072, 6)
-    val resourceTypes = Map("gpu" -> "2G")
-    ResourceRequestHelper.setResourceRequests(resourceTypes, resource)
-
-    val container = createContainerWithResource("host1", resource)
+    val container = createContainerWithResource("host1", handler.resource)
     handler.handleAllocatedContainers(Array(container))
 
-    // verify custom resource type is part of rmClient.ask set
-    val askField = rmClient.getClass.getDeclaredField("ask")
-    askField.setAccessible(true)
-    val asks: collection.mutable.Set[ResourceRequest] =
-      askField.get(rmClient).asInstanceOf[java.util.Set[ResourceRequest]].asScala
+    // get amount of memory and vcores from resource, so effectively skipping their validation
+    val expectedResources = Resource.newInstance(handler.resource.getMemory(),
+      handler.resource.getVirtualCores)
+    ResourceRequestHelper.setResourceRequests(Map("gpu" -> "2G"), expectedResources)
+    val captor = ArgumentCaptor.forClass(classOf[ContainerRequest])
 
-    asks.size should be (1)
-    asks.head.getCapability shouldNot be (null)
-
-    val gpuResource = ResourceRequestTestHelper
-      .getResourceInformationByName(asks.head.getCapability, "gpu")
-    gpuResource shouldNot be (null)
-    gpuResource.value should be (2)
-    gpuResource.units should be ("G")
+    verify(mockAmClient).addContainerRequest(captor.capture())
+    val containerRequest: ContainerRequest = captor.getValue
+    assert(containerRequest.getCapability == expectedResources)
   }
 
   test("container should not be created if requested number if met") {
