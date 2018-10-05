@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Calendar
 
+import scala.util.Random
+
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkFunSuite
@@ -88,7 +90,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     )
 
     val csvData2 = "2016-01-01T00:00:00"
-    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
+    for (tz <- Random.shuffle(DateTimeTestUtils.ALL_TIMEZONES).take(50)) {
       c = Calendar.getInstance(tz)
       c.set(2016, 0, 1, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
