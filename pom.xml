@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.11</artifactId>
-  <version>2.4.0-SNAPSHOT</version>
+  <version>3.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -166,7 +166,6 @@
     <scala.binary.version>2.11</scala.binary.version>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.9.6</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.9.6</fasterxml.jackson.databind.version>
     <snappy.version>1.1.7.2</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <calcite.version>1.2.0-incubating</calcite.version>
@@ -181,9 +180,9 @@
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
     <javax-activation.version>1.1.1</javax-activation.version>
     <objenesis.version>2.6</objenesis.version>
-    <janino.version>3.0.9</janino.version>
     <jersey.version>2.25.1</jersey.version>
     <joda.version>2.10</joda.version>
+    <janino.version>3.0.10</janino.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.2</jsr305.version>
     <libthrift.version>0.9.3</libthrift.version>
@@ -743,7 +742,7 @@
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
-        <version>${fasterxml.jackson.databind.version}</version>
+        <version>${fasterxml.jackson.version}</version>
       </dependency>
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
@@ -755,7 +754,7 @@
       <dependency>
         <groupId>com.fasterxml.jackson.module</groupId>
         <artifactId>jackson-module-scala_${scala.binary.version}</artifactId>
-        <version>${fasterxml.jackson.databind.version}</version>
+        <version>${fasterxml.jackson.version}</version>
         <exclusions>
           <exclusion>
             <groupId>com.google.guava</groupId>
@@ -2966,7 +2965,7 @@
     <profile>
       <id>hadoop-2.7</id>
       <properties>
-        <hadoop.version>2.7.7</hadoop.version>
+        <hadoop.version>2.7.3</hadoop.version>
         <curator.version>2.7.1</curator.version>
       </properties>
       <dependencyManagement>
@@ -3113,7 +3112,7 @@
     <profile>
       <id>scala-2.12</id>
       <properties>
-        <scala.version>2.12.6</scala.version>
+        <scala.version>2.12.7</scala.version>
         <scala.binary.version>2.12</scala.binary.version>
       </properties>
       <build>

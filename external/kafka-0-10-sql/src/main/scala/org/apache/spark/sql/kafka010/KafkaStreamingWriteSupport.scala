@@ -54,8 +54,8 @@ class KafkaStreamingWriteSupport(
 }
 
 /**
- * A [[DataWriterFactory]] for Kafka writing. Will be serialized and sent to executors to generate
- * the per-task data writers.
+ * A [[StreamingDataWriterFactory]] for Kafka writing. Will be serialized and sent to executors to
+ * generate the per-task data writers.
  * @param topic The topic that should be written to. If None, topic will be inferred from
  *              a `topic` field in the incoming data.
  * @param producerParams Parameters for Kafka producers in each task.

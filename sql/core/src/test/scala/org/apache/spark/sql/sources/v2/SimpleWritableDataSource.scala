@@ -39,9 +39,13 @@ import org.apache.spark.util.SerializableConfiguration
  * Each job moves files from `target/_temporary/queryId/` to `target`.
  */
 class SimpleWritableDataSource extends DataSourceV2
-  with BatchReadSupportProvider with BatchWriteSupportProvider {
+  with BatchReadSupportProvider
+  with BatchWriteSupportProvider
+  with SessionConfigSupport {
 
   private val schema = new StructType().add("i", "long").add("j", "long")
+
+  override def keyPrefix: String = "simpleWritableDataSource"
 
   class ReadSupport(path: String, conf: Configuration) extends SimpleReadSupport {
 

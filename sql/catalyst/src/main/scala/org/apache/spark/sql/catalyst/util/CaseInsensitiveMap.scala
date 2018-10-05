@@ -24,6 +24,8 @@ import java.util.Locale
  * case-sensitive information is required. The primary constructor is marked private to avoid
  * nested case-insensitive map creation, otherwise the keys in the original map will become
  * case-insensitive in this scenario.
+ * Note: CaseInsensitiveMap is serializable. However, after transformation, e.g. `filterKeys()`,
+ *       it may become not serializable.
  */
 class CaseInsensitiveMap[T] private (val originalMap: Map[String, T]) extends Map[String, T]
   with Serializable {
@@ -42,7 +44,7 @@ class CaseInsensitiveMap[T] private (val originalMap: Map[String, T]) extends Ma
   override def iterator: Iterator[(String, T)] = keyLowerCasedMap.iterator
 
   override def -(key: String): Map[String, T] = {
-    new CaseInsensitiveMap(originalMap.filterKeys(!_.equalsIgnoreCase(key)))
+    new CaseInsensitiveMap(originalMap.filter(!_._1.equalsIgnoreCase(key)))
   }
 }
 

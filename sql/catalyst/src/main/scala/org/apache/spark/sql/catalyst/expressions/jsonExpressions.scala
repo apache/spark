@@ -613,12 +613,11 @@ case class JsonToStructs(
 }
 
 /**
- * Converts a [[StructType]], [[ArrayType]] of [[StructType]]s, [[MapType]]
- * or [[ArrayType]] of [[MapType]]s to a json output string.
+ * Converts a [[StructType]], [[ArrayType]] or [[MapType]] to a JSON output string.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr[, options]) - Returns a json string with a given struct value",
+  usage = "_FUNC_(expr[, options]) - Returns a JSON string with a given struct value",
   examples = """
     Examples:
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
@@ -660,15 +659,10 @@ case class StructsToJson(
 
   @transient
   lazy val gen = new JacksonGenerator(
-    rowSchema, writer, new JSONOptions(options, timeZoneId.get))
+    inputSchema, writer, new JSONOptions(options, timeZoneId.get))
 
   @transient
-  lazy val rowSchema = child.dataType match {
-    case st: StructType => st
-    case ArrayType(st: StructType, _) => st
-    case mt: MapType => mt
-    case ArrayType(mt: MapType, _) => mt
-  }
+  lazy val inputSchema = child.dataType
 
   // This converts rows to the JSON output according to the given schema.
   @transient
@@ -680,12 +674,12 @@ case class StructsToJson(
       UTF8String.fromString(json)
     }
 
-    child.dataType match {
+    inputSchema match {
       case _: StructType =>
         (row: Any) =>
           gen.write(row.asInstanceOf[InternalRow])
           getAndReset()
-      case ArrayType(_: StructType, _) =>
+      case _: ArrayType =>
         (arr: Any) =>
           gen.write(arr.asInstanceOf[ArrayData])
           getAndReset()
@@ -693,29 +687,33 @@ case class StructsToJson(
         (map: Any) =>
           gen.write(map.asInstanceOf[MapData])
           getAndReset()
-      case ArrayType(_: MapType, _) =>
-        (arr: Any) =>
-          gen.write(arr.asInstanceOf[ArrayData])
-          getAndReset()
     }
   }
 
   override def dataType: DataType = StringType
 
-  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case _: StructType | ArrayType(_: StructType, _) =>
+  override def checkInputDataTypes(): TypeCheckResult = inputSchema match {
+    case struct: StructType =>
       try {
-        JacksonUtils.verifySchema(rowSchema.asInstanceOf[StructType])
+        JacksonUtils.verifySchema(struct)
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: UnsupportedOperationException =>
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
-    case _: MapType | ArrayType(_: MapType, _) =>
+    case map: MapType =>
       // TODO: let `JacksonUtils.verifySchema` verify a `MapType`
       try {
-        val st = StructType(StructField("a", rowSchema.asInstanceOf[MapType]) :: Nil)
+        val st = StructType(StructField("a", map) :: Nil)
         JacksonUtils.verifySchema(st)
+        TypeCheckResult.TypeCheckSuccess
+      } catch {
+        case e: UnsupportedOperationException =>
+          TypeCheckResult.TypeCheckFailure(e.getMessage)
+      }
+    case array: ArrayType =>
+      try {
+        JacksonUtils.verifyType(prettyName, array)
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: UnsupportedOperationException =>
@@ -742,15 +740,31 @@ case class StructsToJson(
   examples = """
     Examples:
       > SELECT _FUNC_('[{"col":0}]');
-       array<struct<col:int>>
+       array<struct<col:bigint>>
+      > SELECT _FUNC_('[{"col":01}]', map('allowNumericLeadingZeros', 'true'));
+       array<struct<col:bigint>>
   """,
   since = "2.4.0")
-case class SchemaOfJson(child: Expression)
+case class SchemaOfJson(
+    child: Expression,
+    options: Map[String, String])
   extends UnaryExpression with String2StringExpression with CodegenFallback {
 
-  private val jsonOptions = new JSONOptions(Map.empty, "UTC")
-  private val jsonFactory = new JsonFactory()
-  jsonOptions.setJacksonOptions(jsonFactory)
+  def this(child: Expression) = this(child, Map.empty[String, String])
+
+  def this(child: Expression, options: Expression) = this(
+      child = child,
+      options = JsonExprUtils.convertToMapData(options))
+
+  @transient
+  private lazy val jsonOptions = new JSONOptions(options, "UTC")
+
+  @transient
+  private lazy val jsonFactory = {
+    val factory = new JsonFactory()
+    jsonOptions.setJacksonOptions(factory)
+    factory
+  }
 
   override def convert(v: UTF8String): UTF8String = {
     val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, v)) { parser =>
@@ -766,7 +780,7 @@ object JsonExprUtils {
 
   def evalSchemaExpr(exp: Expression): DataType = exp match {
     case Literal(s, StringType) => DataType.fromDDL(s.toString)
-    case e @ SchemaOfJson(_: Literal) =>
+    case e @ SchemaOfJson(_: Literal, _) =>
       val ddlSchema = e.eval().asInstanceOf[UTF8String]
       DataType.fromDDL(ddlSchema.toString)
     case e => throw new AnalysisException(

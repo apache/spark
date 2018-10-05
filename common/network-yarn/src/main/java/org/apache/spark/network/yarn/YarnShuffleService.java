@@ -19,7 +19,6 @@ package org.apache.spark.network.yarn;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -36,7 +35,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.impl.MetricsSystemImpl;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -173,21 +171,13 @@ public class YarnShuffleService extends AuxiliaryService {
       blockHandler = new ExternalShuffleBlockHandler(transportConf, registeredExecutorFile);
 
       // register metrics on the block handler into the Node Manager's metrics system.
-      try {
-        YarnShuffleServiceMetrics serviceMetrics = new YarnShuffleServiceMetrics(
-          blockHandler.getAllMetrics());
-        MetricsSystemImpl metricsSystem = (MetricsSystemImpl) DefaultMetricsSystem.instance();
+      YarnShuffleServiceMetrics serviceMetrics =
+        new YarnShuffleServiceMetrics(blockHandler.getAllMetrics());
 
-        Method registerSourceMethod = metricsSystem.getClass().getDeclaredMethod("registerSource",
-                String.class, String.class, MetricsSource.class);
-        registerSourceMethod.setAccessible(true);
-        registerSourceMethod.invoke(metricsSystem, "shuffleService", "Metrics on the Spark " +
-                "Shuffle Service", serviceMetrics);
-        logger.info("Registered metrics with Hadoop's DefaultMetricsSystem");
-      } catch (Exception e) {
-        logger.warn("Unable to register Spark Shuffle Service metrics with Node Manager; " +
-                "proceeding without metrics", e);
-      }
+      MetricsSystemImpl metricsSystem = (MetricsSystemImpl) DefaultMetricsSystem.instance();
+      metricsSystem.register(
+        "sparkShuffleService", "Metrics on the Spark Shuffle Service", serviceMetrics);
+      logger.info("Registered metrics with Hadoop's DefaultMetricsSystem");
 
       // If authentication is enabled, set up the shuffle server to use a
       // special RPC handler that filters out unauthenticated fetch requests

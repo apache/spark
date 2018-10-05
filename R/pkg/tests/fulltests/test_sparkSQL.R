@@ -316,18 +316,6 @@ test_that("create DataFrame from RDD", {
   unsetHiveContext()
 })
 
-test_that("createDataFrame uses files for large objects", {
-  # To simulate a large file scenario, we set spark.r.maxAllocationLimit to a smaller value
-  conf <- callJMethod(sparkSession, "conf")
-  callJMethod(conf, "set", "spark.r.maxAllocationLimit", "100")
-  df <- suppressWarnings(createDataFrame(iris, numPartitions = 3))
-  expect_equal(getNumPartitions(df), 3)
-
-  # Resetting the conf back to default value
-  callJMethod(conf, "set", "spark.r.maxAllocationLimit", toString(.Machine$integer.max / 10))
-  expect_equal(dim(df), dim(iris))
-})
-
 test_that("read/write csv as DataFrame", {
   if (windows_with_hadoop()) {
     csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
@@ -1686,6 +1674,15 @@ test_that("column functions", {
     expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 })))
   }
 
+  # Test to_json() supports arrays of primitive types and arrays
+  df <- sql("SELECT array(19, 42, 70) as age")
+  j <- collect(select(df, alias(to_json(df$age), "json")))
+  expect_equal(j[order(j$json), ][1], "[19,42,70]")
+
+  df <- sql("SELECT array(array(1, 2), array(3, 4)) as matrix")
+  j <- collect(select(df, alias(to_json(df$matrix), "json")))
+  expect_equal(j[order(j$json), ][1], "[[1,2],[3,4]]")
+
   # passing option
   df <- as.DataFrame(list(list("col" = "{\"date\":\"21/10/2014\"}")))
   schema2 <- structType(structField("date", "date"))
@@ -2410,6 +2407,15 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   expect_true(any(grepl("BroadcastHashJoin", execution_plan_broadcast)))
 })
 
+test_that("test hint", {
+  df <- sql("SELECT * FROM range(10e10)")
+  hintList <- list("hint2", "hint3", "hint4")
+  execution_plan_hint <- capture.output(
+    explain(hint(df, "hint1", 1.23456, "aaaaaaaaaa", hintList), TRUE)
+  )
+  expect_true(any(grepl("1.23456, aaaaaaaaaa", execution_plan_hint)))
+})
+
 test_that("toJSON() on DataFrame", {
   df <- as.DataFrame(cars)
   df_json <- toJSON(df)
@@ -2695,8 +2701,16 @@ test_that("read/write text files", {
   expect_equal(colnames(df2), c("value"))
   expect_equal(count(df2), count(df) * 2)
 
+  df3 <- createDataFrame(list(list(1L, "1"), list(2L, "2"), list(1L, "1"), list(2L, "2")),
+                         schema = c("key", "value"))
+  textPath3 <- tempfile(pattern = "textPath3", fileext = ".txt")
+  write.df(df3, textPath3, "text", mode = "overwrite", partitionBy = "key")
+  df4 <- read.df(textPath3, "text")
+  expect_equal(count(df3), count(df4))
+
   unlink(textPath)
   unlink(textPath2)
+  unlink(textPath3)
 })
 
 test_that("read/write text files - compression option", {

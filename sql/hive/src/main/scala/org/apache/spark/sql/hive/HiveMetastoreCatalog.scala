@@ -59,8 +59,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   // For testing only
   private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
     val key = QualifiedTableName(
+      // scalastyle:off caselocale
       table.database.getOrElse(sessionState.catalog.getCurrentDatabase).toLowerCase,
       table.table.toLowerCase)
+      // scalastyle:on caselocale
     catalogProxy.getCachedTable(key)
   }
 
@@ -273,6 +275,7 @@ private[hive] object HiveMetastoreCatalog {
   def mergeWithMetastoreSchema(
       metastoreSchema: StructType,
       inferredSchema: StructType): StructType = try {
+    // scalastyle:off caselocale
     // Find any nullable fields in mestastore schema that are missing from the inferred schema.
     val metastoreFields = metastoreSchema.map(f => f.name.toLowerCase -> f).toMap
     val missingNullables = metastoreFields
@@ -282,6 +285,7 @@ private[hive] object HiveMetastoreCatalog {
     // Merge missing nullable fields to inferred schema and build a case-insensitive field map.
     val inferredFields = StructType(inferredSchema ++ missingNullables)
       .map(f => f.name.toLowerCase -> f).toMap
+    // scalastyle:on caselocale
     StructType(metastoreSchema.map(f => f.copy(name = inferredFields(f.name).name)))
   } catch {
     case NonFatal(_) =>

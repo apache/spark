@@ -2399,7 +2399,7 @@ class RDD(object):
         :return: an :class:`RDDBarrier` instance that provides actions within a barrier stage.
 
         .. seealso:: :class:`BarrierTaskContext`
-        .. seealso:: `SPIP: Barrier Execution Mode \
+        .. seealso:: `SPIP: Barrier Execution Mode
             <http://jira.apache.org/jira/browse/SPARK-24374>`_
         .. seealso:: `Design Doc <https://jira.apache.org/jira/browse/SPARK-24582>`_
 

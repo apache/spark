@@ -86,7 +86,9 @@ abstract class CSVDataSource extends Serializable {
     if (options.headerFlag) {
       val duplicates = {
         val headerNames = row.filter(_ != null)
+          // scalastyle:off caselocale
           .map(name => if (caseSensitive) name else name.toLowerCase)
+          // scalastyle:on caselocale
         headerNames.diff(headerNames.distinct).distinct
       }
 
@@ -95,7 +97,9 @@ abstract class CSVDataSource extends Serializable {
           // When there are empty strings or the values set in `nullValue`, put the
           // index as the suffix.
           s"_c$index"
+          // scalastyle:off caselocale
         } else if (!caseSensitive && duplicates.contains(value.toLowerCase)) {
+          // scalastyle:on caselocale
           // When there are case-insensitive duplicates, put the index as the suffix.
           s"$value$index"
         } else if (duplicates.contains(value)) {
@@ -153,8 +157,10 @@ object CSVDataSource extends Logging {
         while (errorMessage.isEmpty && i < headerLen) {
           var (nameInSchema, nameInHeader) = (fieldNames(i), columnNames(i))
           if (!caseSensitive) {
+            // scalastyle:off caselocale
             nameInSchema = nameInSchema.toLowerCase
             nameInHeader = nameInHeader.toLowerCase
+            // scalastyle:on caselocale
           }
           if (nameInHeader != nameInSchema) {
             errorMessage = Some(
@@ -240,23 +246,25 @@ object TextInputCSVDataSource extends CSVDataSource {
       sparkSession: SparkSession,
       csv: Dataset[String],
       maybeFirstLine: Option[String],
-      parsedOptions: CSVOptions): StructType = maybeFirstLine match {
-    case Some(firstLine) =>
-      val firstRow = new CsvParser(parsedOptions.asParserSettings).parseLine(firstLine)
-      val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-      val header = makeSafeHeader(firstRow, caseSensitive, parsedOptions)
-      val sampled: Dataset[String] = CSVUtils.sample(csv, parsedOptions)
-      val tokenRDD = sampled.rdd.mapPartitions { iter =>
-        val filteredLines = CSVUtils.filterCommentAndEmpty(iter, parsedOptions)
-        val linesWithoutHeader =
-          CSVUtils.filterHeaderLine(filteredLines, firstLine, parsedOptions)
-        val parser = new CsvParser(parsedOptions.asParserSettings)
-        linesWithoutHeader.map(parser.parseLine)
-      }
-      CSVInferSchema.infer(tokenRDD, header, parsedOptions)
-    case None =>
-      // If the first line could not be read, just return the empty schema.
-      StructType(Nil)
+      parsedOptions: CSVOptions): StructType = {
+    val csvParser = new CsvParser(parsedOptions.asParserSettings)
+    maybeFirstLine.map(csvParser.parseLine(_)) match {
+      case Some(firstRow) if firstRow != null =>
+        val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+        val header = makeSafeHeader(firstRow, caseSensitive, parsedOptions)
+        val sampled: Dataset[String] = CSVUtils.sample(csv, parsedOptions)
+        val tokenRDD = sampled.rdd.mapPartitions { iter =>
+          val filteredLines = CSVUtils.filterCommentAndEmpty(iter, parsedOptions)
+          val linesWithoutHeader =
+            CSVUtils.filterHeaderLine(filteredLines, maybeFirstLine.get, parsedOptions)
+          val parser = new CsvParser(parsedOptions.asParserSettings)
+          linesWithoutHeader.map(parser.parseLine)
+        }
+        CSVInferSchema.infer(tokenRDD, header, parsedOptions)
+      case _ =>
+        // If the first line could not be read, just return the empty schema.
+        StructType(Nil)
+    }
   }
 
   private def createBaseDataset(
