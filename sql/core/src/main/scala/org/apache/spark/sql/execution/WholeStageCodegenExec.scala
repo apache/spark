@@ -363,7 +363,7 @@ trait CodegenSupport extends SparkPlan {
     if (parent.limitNotReachedChecks.isEmpty) {
       ""
     } else {
-      parent.limitNotReachedChecks.mkString(" && ", " && ", "")
+      parent.limitNotReachedChecks.mkString("", " && ", " &&")
     }
   }
 }
@@ -402,7 +402,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       forceInline = true)
     val row = ctx.freshName("row")
     s"""
-       | while ($input.hasNext()$limitNotReachedCond) {
+       | while ($limitNotReachedCond $input.hasNext()) {
        |   InternalRow $row = (InternalRow) $input.next();
        |   ${consume(ctx, null, row).trim}
        |   if (shouldStop()) return;

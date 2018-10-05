@@ -457,6 +457,11 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     } else {
       "// shouldStop check is eliminated"
     }
+    val loopCondition = if (limitNotReachedChecks.isEmpty) {
+      "true"
+    } else {
+      limitNotReachedChecks.mkString(" && ")
+    }
 
     // An overview of the Range processing.
     //
@@ -469,7 +474,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     // with partition start. `batchEnd` tracks the end index of the current batch, initialized
     // with `nextIndex`. In the outer loop, we first check if `nextIndex == batchEnd`. If it's true,
     // it means the current batch is fully consumed, and we will update `batchEnd` to process the
-    // next batch. If `batchEnd` reaches partition end, exit the outer loop. finally we enter the
+    // next batch. If `batchEnd` reaches partition end, exit the outer loop. Finally we enter the
     // inner loop. Note that, when we enter inner loop, `nextIndex` must be different from
     // `batchEnd`, otherwise we already exit the outer loop.
     //
@@ -490,7 +495,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |   $initRangeFuncName(partitionIndex);
       | }
       |
-      | while (true$limitNotReachedCond) {
+      | while ($loopCondition) {
       |   if ($nextIndex == $batchEnd) {
       |     long $nextBatchTodo;
       |     if ($numElementsTodo > ${batchSize}L) {

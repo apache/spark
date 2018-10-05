@@ -712,7 +712,7 @@ case class HashAggregateExec(
 
     def outputFromRegularHashMap: String = {
       s"""
-         |while ($iterTerm.next()$limitNotReachedCond) {
+         |while ($limitNotReachedCond $iterTerm.next()) {
          |  UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
          |  UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getValue();
          |  $outputFunc($keyTerm, $bufferTerm);

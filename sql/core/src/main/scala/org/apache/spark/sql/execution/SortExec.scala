@@ -179,7 +179,7 @@ case class SortExec(
        |   $needToSort = false;
        | }
        |
-       | while ($sortedIterator.hasNext()$limitNotReachedCond) {
+       | while ($limitNotReachedCond $sortedIterator.hasNext()) {
        |   UnsafeRow $outputRow = (UnsafeRow)$sortedIterator.next();
        |   ${consume(ctx, null, outputRow)}
        |   if (shouldStop()) return;
