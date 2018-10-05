@@ -45,13 +45,17 @@ case class CsvToStructs(
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
+  extends UnaryExpression
+    with TimeZoneAwareExpression
+    with CodegenFallback
+    with ExpectsInputTypes
+    with NullIntolerant {
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = child.nullable
 
   // The CSV input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions.
-  val nullableSchema = schema.asNullable
+  val nullableSchema: StructType = schema.asNullable
 
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
@@ -72,7 +76,12 @@ case class CsvToStructs(
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
-  lazy val converter = (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
+  lazy val converter = (rows: Iterator[InternalRow]) =>
+    if (rows.hasNext) {
+      rows.next()
+    } else {
+      throw new IllegalArgumentException("Expected at least one row from CSV parser.")
+    }
 
   @transient lazy val parser = {
     val parsedOptions = new CSVOptions(options, columnPruning = true, timeZoneId.get)
