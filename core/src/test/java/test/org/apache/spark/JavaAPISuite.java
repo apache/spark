@@ -997,10 +997,10 @@ public class JavaAPISuite implements Serializable {
 
     FileOutputStream fos1 = new FileOutputStream(file1);
 
-    FileChannel channel1 = fos1.getChannel();
-    ByteBuffer bbuf = ByteBuffer.wrap(content1);
-    channel1.write(bbuf);
-    channel1.close();
+    try (FileChannel channel1 = fos1.getChannel()) {
+      ByteBuffer bbuf = ByteBuffer.wrap(content1);
+      channel1.write(bbuf);
+    }
     JavaPairRDD<String, PortableDataStream> readRDD = sc.binaryFiles(tempDirName, 3);
     List<Tuple2<String, PortableDataStream>> result = readRDD.collect();
     for (Tuple2<String, PortableDataStream> res : result) {
@@ -1018,10 +1018,10 @@ public class JavaAPISuite implements Serializable {
 
     FileOutputStream fos1 = new FileOutputStream(file1);
 
-    FileChannel channel1 = fos1.getChannel();
-    ByteBuffer bbuf = ByteBuffer.wrap(content1);
-    channel1.write(bbuf);
-    channel1.close();
+    try (FileChannel channel1 = fos1.getChannel()) {
+      ByteBuffer bbuf = ByteBuffer.wrap(content1);
+      channel1.write(bbuf);
+    }
 
     JavaPairRDD<String, PortableDataStream> readRDD = sc.binaryFiles(tempDirName).cache();
     readRDD.foreach(pair -> pair._2().toArray()); // force the file to read
@@ -1042,13 +1042,12 @@ public class JavaAPISuite implements Serializable {
 
     FileOutputStream fos1 = new FileOutputStream(file1);
 
-    FileChannel channel1 = fos1.getChannel();
-
-    for (int i = 0; i < numOfCopies; i++) {
-      ByteBuffer bbuf = ByteBuffer.wrap(content1);
-      channel1.write(bbuf);
+    try (FileChannel channel1 = fos1.getChannel()) {
+      for (int i = 0; i < numOfCopies; i++) {
+        ByteBuffer bbuf = ByteBuffer.wrap(content1);
+        channel1.write(bbuf);
+      }
     }
-    channel1.close();
 
     JavaRDD<byte[]> readRDD = sc.binaryRecords(tempDirName, content1.length);
     assertEquals(numOfCopies,readRDD.count());
