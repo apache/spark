@@ -147,7 +147,7 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
       val childPidsInInt = mutable.ArrayBuffer.empty[Int]
       for (p <- childPids) {
         if (p != "") {
-          logInfo("Found a child pid: " + p)
+          logDebug("Found a child pid: " + p)
           childPidsInInt += Integer.parseInt(p)
         }
       }
@@ -169,28 +169,29 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
    */
     try {
       val pidDir = new File(procfsDir, pid.toString)
-      val fReader = new InputStreamReader(
+      Utils.tryWithResource( new InputStreamReader(
         new FileInputStream(
-          new File(pidDir, procfsStatFile)), Charset.forName("UTF-8"))
-      val in = new BufferedReader(fReader)
-      val procInfo = in.readLine
-      in.close
-      fReader.close
-      val procInfoSplit = procInfo.split(" ")
-      if ( procInfoSplit != null ) {
-        val vmem = procInfoSplit(22).toLong
-        val rssPages = procInfoSplit(23).toLong
-        if (procInfoSplit(1).toLowerCase(Locale.US).contains("java")) {
-          latestJVMVmemTotal += vmem
-          latestJVMRSSTotal += rssPages
+          new File(pidDir, procfsStatFile)), Charset.forName("UTF-8"))) { fReader =>
+        Utils.tryWithResource( new BufferedReader(fReader)) { in =>
+          val procInfo = in.readLine
+          val procInfoSplit = procInfo.split(" ")
+          if (procInfoSplit != null) {
+            val vmem = procInfoSplit(22).toLong
+            val rssPages = procInfoSplit(23).toLong
+            if (procInfoSplit(1).toLowerCase(Locale.US).contains("java")) {
+              latestJVMVmemTotal += vmem
+              latestJVMRSSTotal += rssPages
+            }
+            else if (procInfoSplit(1).toLowerCase(Locale.US).contains("python")) {
+              latestPythonVmemTotal += vmem
+              latestPythonRSSTotal += rssPages
+            }
+            else {
+              latestOtherVmemTotal += vmem
+              latestOtherRSSTotal += rssPages
+            }
+          }
         }
-        else if (procInfoSplit(1).toLowerCase(Locale.US).contains("python")) {
-          latestPythonVmemTotal += vmem
-          latestPythonRSSTotal += rssPages
-        }
-        else {
-        latestOtherVmemTotal += vmem
-        latestOtherRSSTotal += rssPages }
       }
     } catch {
       case f: FileNotFoundException => logDebug("There was a problem with reading" +
