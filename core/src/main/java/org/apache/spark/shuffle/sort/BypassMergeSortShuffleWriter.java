@@ -152,9 +152,9 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
 
     for (int i = 0; i < numPartitions; i++) {
-      try (final DiskBlockObjectWriter writer = partitionWriters[i]) {
-        partitionWriterSegments[i] = writer.commitAndGet();
-      }
+      final DiskBlockObjectWriter writer = partitionWriters[i];
+      partitionWriterSegments[i] = writer.commitAndGet();
+      writer.close();
     }
 
     File output = shuffleBlockResolver.getDataFile(shuffleId, mapId);
