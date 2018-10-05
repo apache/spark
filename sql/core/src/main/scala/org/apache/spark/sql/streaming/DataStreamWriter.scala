@@ -380,7 +380,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * @since 2.4.0
    */
   @InterfaceStability.Evolving
-  def foreachBatch(function: VoidFunction2[Dataset[T], Long]): DataStreamWriter[T] = {
+  def foreachBatch(function: VoidFunction2[Dataset[T], java.lang.Long]): DataStreamWriter[T] = {
     foreachBatch((batchDs: Dataset[T], batchId: Long) => function.call(batchDs, batchId))
   }
 
