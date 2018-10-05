@@ -113,7 +113,6 @@ class YarnShuffleServiceMetrics implements MetricsSource {
       metricsRecordBuilder.addGauge(new ShuffleServiceMetricsInfo(name, "Number of " +
               "connections to shuffle service " + name), counterValue);
     }
-
   }
 
   private static MetricsInfo getShuffleServiceMetricsInfo(String name) {
