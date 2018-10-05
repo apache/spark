@@ -465,13 +465,16 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |   $initRangeFuncName(partitionIndex);
       | }
       |
-      | while (true) {
+      | while (true && !stopEarly()) {
       |   long $range = $batchEnd - $number;
       |   if ($range != 0L) {
       |     int $localEnd = (int)($range / ${step}L);
       |     for (int $localIdx = 0; $localIdx < $localEnd; $localIdx++) {
       |       long $value = ((long)$localIdx * ${step}L) + $number;
       |       ${consume(ctx, Seq(ev))}
+      |       if (stopEarly()) {
+      |         break;
+      |       }
       |       $shouldStop
       |     }
       |     $number = $batchEnd;

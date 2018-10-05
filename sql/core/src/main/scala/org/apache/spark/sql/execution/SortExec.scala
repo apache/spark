@@ -170,9 +170,12 @@ case class SortExec(
        |   $spillSize.add($metrics.memoryBytesSpilled() - $spillSizeBefore);
        |   $metrics.incPeakExecutionMemory($sorterVariable.getPeakMemoryUsage());
        |   $needToSort = false;
+       |
+       |   // Reset stop early flag set by previous limit operator
+       |   setStopEarly(false);
        | }
        |
-       | while ($sortedIterator.hasNext()) {
+       | while ($sortedIterator.hasNext() && !stopEarly()) {
        |   UnsafeRow $outputRow = (UnsafeRow)$sortedIterator.next();
        |   ${consume(ctx, null, outputRow)}
        |   if (shouldStop()) return;
