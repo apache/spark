@@ -197,11 +197,11 @@ public class OperationManager extends AbstractService {
   }
 
   public void closeOperation(OperationHandle opHandle) throws HiveSQLException {
-    Operation operation = removeOperation(opHandle);
-    if (operation == null) {
-      throw new HiveSQLException("Operation does not exist!");
+    try (Operation operation = removeOperation(opHandle)) {
+      if (operation == null) {
+        throw new HiveSQLException("Operation does not exist!");
+      }
     }
-    operation.close();
   }
 
   public TableSchema getOperationResultSetSchema(OperationHandle opHandle)
