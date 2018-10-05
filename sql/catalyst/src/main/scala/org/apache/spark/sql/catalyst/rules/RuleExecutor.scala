@@ -69,7 +69,9 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   protected def verifyOnceStrategyIdempotence: Boolean = false
 
   private val knownUnstableBatches = Seq(
-    ("UDF", "org.apache.spark.ml.feature.StringIndexerSuite.transform")
+    ("UDF", "org.apache.spark.ml.feature.StringIndexerSuite.transform"),
+    ("View", "org.apache.spark.sql.hive.execution.HiveCatalogedDDLSuite." +
+      "SPARK-22431: view with nested type")
   )
 
   /**
