@@ -66,7 +66,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         .bucketBy(8, "j", "k")
         .saveAsTable("bucketed_table")
 
-      for (i <- 0 until 5) {
+      for (i <- 0 until 3) {
         val table = spark.table("bucketed_table").filter($"i" === i)
         val query = table.queryExecution
         val output = query.analyzed.output
@@ -145,7 +145,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         .bucketBy(numBuckets, "j")
         .saveAsTable("bucketed_table")
 
-      for (j <- 0 until 13) {
+      for (j <- 0 until 2) {
         // Case 1: EqualTo
         checkPrunedAnswers(
           bucketSpec,
@@ -188,7 +188,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         .bucketBy(numBuckets, "j")
         .saveAsTable("bucketed_table")
 
-      for (j <- 0 until 13) {
+      for (j <- 0 until 2) {
         checkPrunedAnswers(
           bucketSpec,
           bucketValues = j :: Nil,
@@ -236,7 +236,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         .bucketBy(numBuckets, "j")
         .saveAsTable("bucketed_table")
 
-      for (j <- 0 until 13) {
+      for (j <- 0 until 2) {
         checkPrunedAnswers(
           bucketSpec,
           bucketValues = j :: Nil,
