@@ -709,8 +709,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
         Row("b", true, true, true, true),
         Row("b", true, true, true, true),
         Row("c", false, false, false, false),
-        Row("d", true, false, true, true),
-        Row("d", null, false, true, true)
+        Row("d", true, true, true, true),
+        Row("d", null, true, true, true)
       )
     )
   }

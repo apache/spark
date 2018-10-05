@@ -26,7 +26,7 @@ class EveryTestSuite extends SparkFunSuite {
   val evaluator = DeclarativeAggregateEvaluator(Every(input), Seq(input))
 
   test("empty buffer") {
-    assert(evaluator.initialize() === InternalRow(true, true))
+    assert(evaluator.initialize() === InternalRow(true, false))
   }
 
   test("update") {
@@ -34,34 +34,35 @@ class EveryTestSuite extends SparkFunSuite {
       InternalRow(true),
       InternalRow(false),
       InternalRow(true))
-    assert(result === InternalRow(false, false))
+    assert(result === InternalRow(false, true))
   }
 
   test("merge") {
     // Empty merge
     val p0 = evaluator.initialize()
-    assert(evaluator.merge(p0) === InternalRow(true, true))
+    assert(evaluator.merge(p0) === InternalRow(true, false))
 
     // Single merge
     val p1 = evaluator.update(InternalRow(true), InternalRow(true))
-    assert(evaluator.merge(p1) === InternalRow(true, false))
+    assert(evaluator.merge(p1) === InternalRow(true, true))
 
     // Multiple merges.
     val p2 = evaluator.update(InternalRow(true), InternalRow(null))
-    assert(evaluator.merge(p1, p2) === InternalRow(false, false))
+    assert(evaluator.merge(p1, p2) === InternalRow(true, true))
 
     // Empty partitions (p0 is empty)
-    assert(evaluator.merge(p1, p0, p2) === InternalRow(false, false))
-    assert(evaluator.merge(p2, p1, p0) === InternalRow(false, false))
+    assert(evaluator.merge(p1, p0, p2) === InternalRow(true, true))
+    assert(evaluator.merge(p2, p1, p0) === InternalRow(true, true))
   }
 
   test("eval") {
     // Null Eval
-    assert(evaluator.eval(InternalRow(null, true)) === InternalRow(false))
+    assert(evaluator.eval(InternalRow(true, false)) === InternalRow(null))
+    assert(evaluator.eval(InternalRow(false, false)) === InternalRow(null))
 
     // Empty Eval
     val p0 = evaluator.initialize()
-    assert(evaluator.eval(p0) === InternalRow(false))
+    assert(evaluator.eval(p0) === InternalRow(null))
 
     // Update - Eval
     val p1 = evaluator.update(InternalRow(true), InternalRow(true))

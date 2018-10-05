@@ -40,24 +40,25 @@ case class AnyAgg(child: Expression) extends DeclarativeAggregate with ImplicitC
 
   private lazy val some = AttributeReference("some", BooleanType)()
 
-  private lazy val emptySet = AttributeReference("emptySet", BooleanType)()
+  private lazy val valueSet = AttributeReference("valueSet", BooleanType)()
 
-  override lazy val aggBufferAttributes = some :: emptySet :: Nil
+  override lazy val aggBufferAttributes = some :: valueSet :: Nil
 
   override lazy val initialValues: Seq[Expression] = Seq(
-    Literal(false),
-    Literal(true)
+    /* some = */ Literal.create(false, BooleanType),
+    /* valueSet = */ Literal.create(false, BooleanType)
   )
 
   override lazy val updateExpressions: Seq[Expression] = Seq(
-    Or(some, Coalesce(Seq(child, Literal(false)))),
-    Literal(false)
+    /* some = */ Or(some, If (child.isNull, some, child)),
+    /* valueSet = */ valueSet || child.isNotNull
   )
 
   override lazy val mergeExpressions: Seq[Expression] = Seq(
-    Or(some.left, some.right),
-    And(emptySet.left, emptySet.right)
+    /* some = */ Or(some.left, some.right),
+    /* valueSet */ valueSet.right || valueSet.left
   )
 
-  override lazy val evaluateExpression: Expression = And(!emptySet, some)
+  override lazy val evaluateExpression: Expression =
+    If (valueSet, some, Literal.create(null, BooleanType))
 }

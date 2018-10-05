@@ -736,11 +736,23 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Seq(Row(1, false), Row(2, true), Row(3, false)))
   }
 
+  test("every null values") {
+    val df = Seq[(java.lang.Integer, java.lang.Boolean)](
+      (1, true), (1, false),
+      (2, true),
+      (3, false), (3, null),
+      (4, null), (4, null))
+      .toDF("a", "b")
+    checkAnswer(
+      df.groupBy("a").agg(every('b)),
+      Seq(Row(1, false), Row(2, true), Row(3, false), Row(4, null)))
+  }
+
   test("every empty table") {
     val df = Seq.empty[(Int, Boolean)].toDF("a", "b")
     checkAnswer(
       df.agg(every('b)),
-      Seq(Row(false)))
+      Seq(Row(null)))
   }
 
   test("any") {
@@ -755,7 +767,22 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     val df = Seq.empty[(Int, Boolean)].toDF("a", "b")
     checkAnswer(
       df.agg(any('b)),
-      Seq(Row(false)))
+      Seq(Row(null)))
+  }
+
+  test("any/some null values") {
+    val df = Seq[(java.lang.Integer, java.lang.Boolean)] (
+      (1, true), (1, false),
+      (2, true),
+      (3, true), (3, false), (3, null),
+      (4, null), (4, null))
+      .toDF("a", "b")
+    checkAnswer(
+      df.groupBy("a").agg(any('b)),
+      Seq(Row(1, true), Row(2, true), Row(3, true), Row(4, null)))
+    checkAnswer(
+      df.groupBy("a").agg(some('b)),
+      Seq(Row(1, true), Row(2, true), Row(3, true), Row(4, null)))
   }
 
   test("some") {

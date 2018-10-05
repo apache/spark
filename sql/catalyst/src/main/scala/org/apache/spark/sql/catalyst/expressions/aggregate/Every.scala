@@ -40,24 +40,25 @@ case class Every(child: Expression) extends DeclarativeAggregate with ImplicitCa
 
   private lazy val every = AttributeReference("every", BooleanType)()
 
-  private lazy val emptySet = AttributeReference("emptySet", BooleanType)()
+  private lazy val valueSet = AttributeReference("valueSet", BooleanType)()
 
-  override lazy val aggBufferAttributes = every :: emptySet :: Nil
+  override lazy val aggBufferAttributes = every :: valueSet :: Nil
 
   override lazy val initialValues: Seq[Expression] = Seq(
-    Literal(true),
-    Literal(true)
+    /* every = */ Literal.create(true, BooleanType),
+    /* valueSet = */ Literal.create(false, BooleanType)
   )
 
   override lazy val updateExpressions: Seq[Expression] = Seq(
-    And(every, Coalesce(Seq(child, Literal(false)))),
-    Literal(false)
+    /* every = */ And(every, If (child.isNull, every, child)),
+    /* valueSet = */ valueSet || child.isNotNull
   )
 
   override lazy val mergeExpressions: Seq[Expression] = Seq(
-    And(every.left, every.right),
-    And(emptySet.left, emptySet.right)
+    /* every = */ And(every.left, every.right),
+    /* valueSet */ valueSet.right || valueSet.left
   )
 
-  override lazy val evaluateExpression: Expression = And(!emptySet, every)
+  override lazy val evaluateExpression: Expression =
+    If (valueSet, every, Literal.create(null, BooleanType))
 }
