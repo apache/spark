@@ -38,6 +38,10 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   val dataSourceName: String
 
+  protected val parquetDataSourceName: String = "parquet"
+
+  private def isParquetDataSource: Boolean = dataSourceName == parquetDataSourceName
+
   protected def supportsDataType(dataType: DataType): Boolean = true
 
   val dataSchema =
@@ -114,10 +118,21 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     new UDT.MyDenseVectorUDT()
   ).filter(supportsDataType)
 
+  private val parquetDictionaryEncodingEnabledConfs = if (isParquetDataSource) {
+    // Run with/without Parquet dictionary encoding enabled for Parquet data source.
+    Seq(true, false)
+  } else {
+    Seq(false)
+  }
+
   for (dataType <- supportedDataTypes) {
-    for (parquetDictionaryEncodingEnabled <- Seq(true, false)) {
-      test(s"test all data types - $dataType with parquet.enable.dictionary = " +
-        s"$parquetDictionaryEncodingEnabled") {
+    for (parquetDictionaryEncodingEnabled <- parquetDictionaryEncodingEnabledConfs) {
+      val extraMessage = if (isParquetDataSource) {
+        s" with parquet.enable.dictionary = $parquetDictionaryEncodingEnabled"
+      } else {
+        ""
+      }
+      test(s"test all data types - $dataType$extraMessage") {
 
         val extraOptions = Map[String, String](
           "parquet.enable.dictionary" -> parquetDictionaryEncodingEnabled.toString
@@ -760,23 +775,27 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   // requirement.  We probably want to move this test case to spark-integration-tests or spark-perf
   // later.
   test("SPARK-8406: Avoids name collision while writing files") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      spark
-        .range(10000)
-        .repartition(250)
-        .write
-        .mode(SaveMode.Overwrite)
-        .format(dataSourceName)
-        .save(path)
-
-      assertResult(10000) {
+    // The following test is slow. As now all the file format data source are using common code
+    // for creating result files, we can test one data source(Parquet) only to reduce test time.
+    if (isParquetDataSource) {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
         spark
-          .read
+          .range(10000)
+          .repartition(250)
+          .write
+          .mode(SaveMode.Overwrite)
           .format(dataSourceName)
-          .option("dataSchema", StructType(StructField("id", LongType) :: Nil).json)
-          .load(path)
-          .count()
+          .save(path)
+
+        assertResult(10000) {
+          spark
+            .read
+            .format(dataSourceName)
+            .option("dataSchema", StructType(StructField("id", LongType) :: Nil).json)
+            .load(path)
+            .count()
+        }
       }
     }
   }

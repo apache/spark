@@ -33,7 +33,7 @@ import org.apache.spark.sql.types._
 class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   import testImplicits._
 
-  override val dataSourceName: String = "parquet"
+  override val dataSourceName: String = parquetDataSourceName
 
   // Parquet does not play well with NullType.
   override protected def supportsDataType(dataType: DataType): Boolean = dataType match {
