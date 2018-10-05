@@ -117,8 +117,7 @@ private[spark] class AppStatusStore(
     val stageKey = Array(stageId, stageAttemptId)
     val stageDataWrapper = store.read(classOf[StageDataWrapper], stageKey)
     val stage = if (details) stageWithDetails(stageDataWrapper.info) else stageDataWrapper.info
-    val jobIds = stageDataWrapper.jobIds
-    (stage, jobIds.toSeq)
+    (stage, stageDataWrapper.jobIds.toSeq)
   }
 
   def taskCount(stageId: Int, stageAttemptId: Int): Long = {
