@@ -33,11 +33,11 @@ class HiveClientSuite(version: String)
     extends HiveVersionSuite(version) with BeforeAndAfterAll with SQLHelper {
 
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
-  private val partPruningFallbackKey = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK.key
+  private val partPruningFallbackKey = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ENABLED.key
 
   private val testPartitionCount = 3 * 24 * 4
 
-  private def init(tryDirectSql: Boolean, partPruningFallback: Boolean = true): HiveClient = {
+  private def init(tryDirectSql: Boolean): HiveClient = {
     val storageFormat = CatalogStorageFormat(
       locationUri = None,
       inputFormat = None,
@@ -82,16 +82,22 @@ class HiveClientSuite(version: String)
     client = init(true)
   }
 
-  test(s"getPartitionsByFilter returns all partitions when $tryDirectSqlKey=false") {
-    val client = init(false)
-    val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
-      Seq(attr("ds") === 20170101))
+  test(s"getPartitionsByFilter returns all partitions when $partPruningFallbackKey=true") {
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ENABLED.key -> "true",
+        SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> "true") {
+      val client = init(false)
+      // tryDirectSql = false and a non-string partition filter will always fail. This condition
+      // is used to test if the fallback works
+      val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
+        Seq(attr("ds") === 20170101))
 
-    assert(filteredPartitions.size == testPartitionCount)
+      assert(filteredPartitions.size == testPartitionCount)
+    }
   }
 
   test(s"getPartitionsByFilter should throw an exception if $partPruningFallbackKey=false") {
-    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK.key -> "false") {
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ENABLED.key -> "false",
+        SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> "true") {
       val client = init(false)
       // tryDirectSql = false and a non-string partition filter will always fail. This condition
       // is used to test if the fallback works

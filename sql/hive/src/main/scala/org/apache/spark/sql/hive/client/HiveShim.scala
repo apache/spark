@@ -783,9 +783,9 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
               // Fallback mode has been disabled. Rethrow exception.
               throw new RuntimeException("Caught Hive MetaException attempting to get partition " +
                 "metadata from Hive. Fallback mechanism is not enabled. You can set " +
-                s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK} to true to fetch all " +
-                "partition metadata as a fallback mechanism, however this may result in degraded " +
-                "performance.", ex)
+                s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ENABLED} to true to fetch " +
+                "all partition metadata as a fallback mechanism, however this may result in " +
+                "degraded performance.", ex)
             }
         }
       }

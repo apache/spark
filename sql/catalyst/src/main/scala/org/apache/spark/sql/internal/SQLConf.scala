@@ -544,14 +544,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val HIVE_METASTORE_PARTITION_PRUNING_FALLBACK =
-    buildConf("spark.sql.hive.metastorePartitionPruningFallback")
+  val HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ENABLED =
+    buildConf("spark.sql.hive.metastorePartitionPruning.fallback.enabled")
       .doc("When true, enable fallback to fetch all partitions if Hive metastore partition " +
            "push down fails. This is applicable only if partition pruning is enabled (see " +
            s" ${HIVE_METASTORE_PARTITION_PRUNING.key}). Enabling this may degrade performance " +
            "if there are a large number of partitions." )
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val HIVE_MANAGE_FILESOURCE_PARTITIONS =
     buildConf("spark.sql.hive.manageFilesourcePartitions")
@@ -1707,7 +1707,7 @@ class SQLConf extends Serializable with Logging {
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
   def metastorePartitionPruningFallback: Boolean =
-    getConf(HIVE_METASTORE_PARTITION_PRUNING_FALLBACK)
+    getConf(HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ENABLED)
 
   def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 
