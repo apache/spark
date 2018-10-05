@@ -143,38 +143,37 @@ public class ChunkFetchIntegrationSuite {
   }
 
   private FetchResult fetchChunks(List<Integer> chunkIndices) throws Exception {
+    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    final Semaphore sem = new Semaphore(0);
+
     final FetchResult res = new FetchResult();
+    res.successChunks = Collections.synchronizedSet(new HashSet<Integer>());
+    res.failedChunks = Collections.synchronizedSet(new HashSet<Integer>());
+    res.buffers = Collections.synchronizedList(new LinkedList<ManagedBuffer>());
 
-    try (TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
-      final Semaphore sem = new Semaphore(0);
-
-      res.successChunks = Collections.synchronizedSet(new HashSet<Integer>());
-      res.failedChunks = Collections.synchronizedSet(new HashSet<Integer>());
-      res.buffers = Collections.synchronizedList(new LinkedList<ManagedBuffer>());
-
-      ChunkReceivedCallback callback = new ChunkReceivedCallback() {
-        @Override
-        public void onSuccess(int chunkIndex, ManagedBuffer buffer) {
-          buffer.retain();
-          res.successChunks.add(chunkIndex);
-          res.buffers.add(buffer);
-          sem.release();
-        }
-
-        @Override
-        public void onFailure(int chunkIndex, Throwable e) {
-          res.failedChunks.add(chunkIndex);
-          sem.release();
-        }
-      };
-
-      for (int chunkIndex : chunkIndices) {
-        client.fetchChunk(STREAM_ID, chunkIndex, callback);
+    ChunkReceivedCallback callback = new ChunkReceivedCallback() {
+      @Override
+      public void onSuccess(int chunkIndex, ManagedBuffer buffer) {
+        buffer.retain();
+        res.successChunks.add(chunkIndex);
+        res.buffers.add(buffer);
+        sem.release();
       }
-      if (!sem.tryAcquire(chunkIndices.size(), 5, TimeUnit.SECONDS)) {
-        fail("Timeout getting response from the server");
+
+      @Override
+      public void onFailure(int chunkIndex, Throwable e) {
+        res.failedChunks.add(chunkIndex);
+        sem.release();
       }
+    };
+
+    for (int chunkIndex : chunkIndices) {
+      client.fetchChunk(STREAM_ID, chunkIndex, callback);
     }
+    if (!sem.tryAcquire(chunkIndices.size(), 5, TimeUnit.SECONDS)) {
+      fail("Timeout getting response from the server");
+    }
+    client.close();
     return res;
   }
 

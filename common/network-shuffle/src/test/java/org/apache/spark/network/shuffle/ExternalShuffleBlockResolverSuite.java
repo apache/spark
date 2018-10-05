@@ -98,15 +98,19 @@ public class ExternalShuffleBlockResolverSuite {
     resolver.registerExecutor("app0", "exec0",
       dataContext.createExecutorInfo(SORT_MANAGER));
 
-    try (InputStream block0Stream = resolver.getBlockData("app0", "exec0", 0, 0, 0).createInputStream()) {
-      String block0 = CharStreams.toString(new InputStreamReader(block0Stream, StandardCharsets.UTF_8));
-      assertEquals(sortBlock0, block0);
-    }
+    InputStream block0Stream =
+      resolver.getBlockData("app0", "exec0", 0, 0, 0).createInputStream();
+    String block0 = CharStreams.toString(
+        new InputStreamReader(block0Stream, StandardCharsets.UTF_8));
+    block0Stream.close();
+    assertEquals(sortBlock0, block0);
 
-    try (InputStream block1Stream = resolver.getBlockData("app0", "exec0", 0, 0, 1).createInputStream()) {
-      String block1 = CharStreams.toString(new InputStreamReader(block1Stream, StandardCharsets.UTF_8));
-      assertEquals(sortBlock1, block1);
-    }
+    InputStream block1Stream =
+      resolver.getBlockData("app0", "exec0", 0, 0, 1).createInputStream();
+    String block1 = CharStreams.toString(
+        new InputStreamReader(block1Stream, StandardCharsets.UTF_8));
+    block1Stream.close();
+    assertEquals(sortBlock1, block1);
   }
 
   @Test
