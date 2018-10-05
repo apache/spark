@@ -3984,8 +3984,8 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             ("b", True, True, True, True),
             ("b", True, True, True, True),
             ("c", False, False, False, False),
-            ("d", None, False, True, True),
-            ("d", True, False, True, True)
+            ("d", None, True, True, True),
+            ("d", True, True, True, True)
         ]
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[:len(r)])
@@ -4013,7 +4013,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
                         F.some("value").over(w2))
         rs = sel.collect()
         expected = [
-            (None, False, False, False, False, False, False),
+            (None, None, None, None, None, None, None),
             (False, False, False, False, False, False, False),
             (False, False, False, False, False, False, False),
             (False, False, False, False, False, False, False),
