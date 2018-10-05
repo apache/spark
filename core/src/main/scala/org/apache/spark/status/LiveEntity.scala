@@ -342,8 +342,8 @@ private class LiveExecutorStageSummary(
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled,
       isBlacklisted,
-      null,
-      null)
+      executorLogs = null,
+      hostPort = null)
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
   }
 
