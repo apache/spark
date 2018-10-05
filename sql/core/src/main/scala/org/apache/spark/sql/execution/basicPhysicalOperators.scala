@@ -471,7 +471,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     // it means the current batch is fully consumed, and we will update `batchEnd` to process the
     // next batch. If `batchEnd` reaches partition end, exit the outer loop. finally we enter the
     // inner loop. Note that, when we enter inner loop, `nextIndex` must be different from
-    // `batchEnd`, otherwise the outer loop should already exits.
+    // `batchEnd`, otherwise we already exit the outer loop.
     //
     // The inner loop iterates from 0 to `localEnd`, which is calculated by
     // `(batchEnd - nextIndex) / step`. Since `batchEnd` is increased by `nextBatchTodo * step` in
