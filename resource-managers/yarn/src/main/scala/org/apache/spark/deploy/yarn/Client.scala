@@ -154,7 +154,7 @@ private[spark] class Client(
    * available in the alpha API.
    */
   def submitApplication(): ApplicationId = {
-    ResourceRequestValidator.validateResources(sparkConf)
+    ResourceRequestHelper.validateResources(sparkConf)
 
     var appId: ApplicationId = null
     try {

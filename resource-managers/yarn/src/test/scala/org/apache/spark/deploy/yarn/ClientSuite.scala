@@ -42,7 +42,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
-class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
+class ClientSuite extends SparkFunSuite with Matchers {
 
   import Client._
 
@@ -200,7 +200,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
     appContext.getMaxAppAttempts should be (42)
   }
 
-  test("Resource type args propagate, resource type not defined") {
+  test("resource request for invalid resource") {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
     val sparkConf = new SparkConf()
       .set(YARN_AM_RESOURCE_TYPES_PREFIX + "some_resource_with_units_1", "121m")
@@ -219,71 +219,16 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
     } catch {
       case NonFatal(e) =>
         val expectedExceptionClass = "org.apache.hadoop.yarn.exceptions.ResourceNotFoundException"
-        if (e.getClass.getName != expectedExceptionClass) {
-          fail(s"Exception caught: $e is not an instance of $expectedExceptionClass!")
-        }
+        assert(e.getClass.getName === expectedExceptionClass)
     }
   }
 
-  test("Resource type args propagate (client mode)") {
-    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
-    TestYarnResourceRequestHelper.initializeResourceTypes(List("gpu", "fpga"))
-
-    val sparkConf = new SparkConf()
-      .set(YARN_AM_RESOURCE_TYPES_PREFIX + "some_resource_with_units_1", "121m")
-      .set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "some_resource_with_units_1", "122m")
-      .set(YARN_AM_RESOURCE_TYPES_PREFIX + "fpga", "222m")
-      .set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "fpga", "223m")
-      .set(YARN_AM_RESOURCE_TYPES_PREFIX + "memory", "1G")
-      .set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "memory", "2G")
-    val args = new ClientArguments(Array())
-
-    val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
-    val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
-    val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
-
-    val client = new Client(args, sparkConf)
-    client.createApplicationSubmissionContext(
-      new YarnClientApplication(getNewApplicationResponse, appContext),
-      containerLaunchContext)
-
-    appContext.getAMContainerSpec should be (containerLaunchContext)
-    appContext.getApplicationType should be ("SPARK")
-    TestYarnResourceRequestHelper.getResourceTypeValue(appContext.getResource,
-      "some_resource_with_units_1") should be (121)
-    TestYarnResourceRequestHelper
-        .getResourceTypeValue(appContext.getResource, "fpga") should be (222)
+  test("resource request (client mode)") {
+    testResourceRequest(Seq(("fpga", 2), ("gpu", 3)), "client")
   }
 
-  test("configuration and resource type args propagate (cluster mode)") {
-    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
-    TestYarnResourceRequestHelper.initializeResourceTypes(List("gpu", "fpga"))
-
-    val sparkConf = new SparkConf()
-      .set(YARN_AM_RESOURCE_TYPES_PREFIX + "some_resource_with_units_1", "121m")
-      .set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "some_resource_with_units_1", "122m")
-      .set(YARN_AM_RESOURCE_TYPES_PREFIX + "fpga", "222m")
-      .set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "fpga", "223m")
-      .set(YARN_AM_RESOURCE_TYPES_PREFIX + "memory", "1G")
-      .set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "memory", "2G")
-      .set("spark.submit.deployMode", "cluster")
-    val args = new ClientArguments(Array())
-
-    val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
-    val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
-    val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
-
-    val client = new Client(args, sparkConf)
-    client.createApplicationSubmissionContext(
-      new YarnClientApplication(getNewApplicationResponse, appContext),
-      containerLaunchContext)
-
-    appContext.getAMContainerSpec should be (containerLaunchContext)
-    appContext.getApplicationType should be ("SPARK")
-    TestYarnResourceRequestHelper.getResourceTypeValue(appContext.getResource,
-      "some_resource_with_units_1") should be (122)
-    TestYarnResourceRequestHelper
-        .getResourceTypeValue(appContext.getResource, "fpga") should be (223)
+  test("resource request (cluster mode)") {
+    testResourceRequest(Seq(("fpga", 4), ("gpu", 5)), "cluster")
   }
 
   test("spark.yarn.jars with multiple paths and globs") {
@@ -518,6 +463,38 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
     val env = new MutableHashMap[String, String]()
     populateClasspath(null, new Configuration(), client.sparkConf, env)
     classpath(env)
+  }
+
+  private def testResourceRequest(expectedResources: Seq[(String, Long)],
+      deployMode: String): Unit = {
+    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+    require(deployMode == "client" || deployMode == "cluster",
+      "Deploy mode should be either client or cluster!")
+    ResourceRequestTestHelper.initializeResourceTypes(List("gpu", "fpga"))
+
+    val sparkConf = new SparkConf()
+        .set(YARN_AM_RESOURCE_TYPES_PREFIX + "fpga", "2")
+        .set(YARN_AM_RESOURCE_TYPES_PREFIX + "gpu", "3")
+        .set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "fpga", "4")
+        .set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "gpu", "5")
+        .set("spark.submit.deployMode", deployMode)
+    val args = new ClientArguments(Array())
+
+    val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
+    val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
+    val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
+
+    val client = new Client(args, sparkConf)
+    client.createApplicationSubmissionContext(
+      new YarnClientApplication(getNewApplicationResponse, appContext),
+      containerLaunchContext)
+
+    appContext.getAMContainerSpec should be (containerLaunchContext)
+    appContext.getApplicationType should be ("SPARK")
+
+    expectedResources.foreach { case (name, value) =>
+      ResourceRequestTestHelper.getResourceTypeValue(appContext.getResource, name) should be (value)
+    }
   }
 
 }

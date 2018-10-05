@@ -63,10 +63,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   var containerNum = 0
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-  }
-
   override def beforeEach() {
     super.beforeEach()
     rmClient = AMRMClient.createAMRMClient()
@@ -166,14 +162,13 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     size should be (0)
   }
 
-  test("custom resource type requested from yarn") {
+  test("custom resource requested from yarn") {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
-    TestYarnResourceRequestHelper.initializeResourceTypes(List("gpu"))
+    ResourceRequestTestHelper.initializeResourceTypes(List("gpu"))
 
     // request a single container and receive it
     val handler = createAllocatorWithAdditionalConfigs(1, Map(
-      YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "gpu" -> "2G",
-      YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "memory" -> "1G"
+      YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "gpu" -> "2G"
     ))
     handler.updateResourceRequests()
     handler.getNumExecutorsRunning should be (0)
@@ -195,7 +190,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     asks.size should be (1)
     asks.head.getCapability shouldNot be (null)
 
-    val gpuResource = TestYarnResourceRequestHelper
+    val gpuResource = ResourceRequestTestHelper
       .getResourceInformationByName(asks.head.getCapability, "gpu")
     gpuResource shouldNot be (null)
     gpuResource.value should be (2)

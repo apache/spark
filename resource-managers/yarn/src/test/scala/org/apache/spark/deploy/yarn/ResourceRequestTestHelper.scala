@@ -22,10 +22,9 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.hadoop.yarn.api.records.Resource
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-object TestYarnResourceRequestHelper extends Logging {
+object ResourceRequestTestHelper {
   def initializeResourceTypes(resourceTypes: List[String]): Unit = {
     if (!ResourceRequestHelper.isYarnResourceTypesAvailable()) {
       throw new IllegalStateException("initializeResourceTypes() should not be invoked " +
@@ -67,10 +66,10 @@ object TestYarnResourceRequestHelper extends Logging {
     val name = invokeMethod(resourceInformation, "getName").asInstanceOf[String]
     val value = invokeMethod(resourceInformation, "getValue").asInstanceOf[Long]
     val units = invokeMethod(resourceInformation, "getUnits").asInstanceOf[String]
-    new ResourceInformation(name, value, units)
+    ResourceInformation(name, value, units)
   }
 
-  private def getResourceInformation(res: Resource, name: String) = {
+  private def getResourceInformation(res: Resource, name: String): AnyRef = {
     if (!ResourceRequestHelper.isYarnResourceTypesAvailable()) {
       throw new IllegalStateException("assertResourceTypeValue() should not be invoked " +
         "since yarn resource types is not available because of old Hadoop version!")
@@ -87,6 +86,5 @@ object TestYarnResourceRequestHelper extends Logging {
     getValueMethod.invoke(resourceInformation)
   }
 
-  class ResourceInformation(val name: String, val value: Long, val units: String) {
-  }
+  case class ResourceInformation(name: String, value: Long, units: String)
 }
