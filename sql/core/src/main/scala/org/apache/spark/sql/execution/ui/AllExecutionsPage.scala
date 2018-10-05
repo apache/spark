@@ -57,7 +57,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
       if (running.nonEmpty) {
         val runningPageTable =
-          jobsTable(request, "running", running, currentTime, true, true, true)
+          executionsTable(request, "running", running, currentTime, true, true, true)
 
         _content ++=
           <span id="running" class="collapse-aggregated-runningExecutions collapse-table"
@@ -75,7 +75,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
       if (completed.nonEmpty) {
         val completedPageTable =
-          jobsTable(request, "completed", completed, currentTime, false, true, false)
+          executionsTable(request, "completed", completed, currentTime, false, true, false)
 
         _content ++=
           <span id="completed" class="collapse-aggregated-completedExecutions collapse-table"
@@ -93,7 +93,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
       if (failed.nonEmpty) {
         val failedPageTable =
-          jobsTable(request, "failed", failed, currentTime, false, true, true)
+          executionsTable(request, "failed", failed, currentTime, false, true, true)
 
         _content ++=
           <span id="failed" class="collapse-aggregated-failedExecutions collapse-table"
@@ -149,7 +149,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
     UIUtils.headerSparkPage(request, "SQL", summary ++ content, parent, Some(5000))
   }
 
-  private def jobsTable(
+  private def executionsTable(
     request: HttpServletRequest,
     executionTag: String,
     executionData: Seq[SQLExecutionUIData],
@@ -174,13 +174,13 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
     val parameterExecutionPrevPageSize = UIUtils.stripXSS(request.
       getParameter(executionTag + ".prevPageSize"))
 
-    val jobPage = Option(parameterExecutionPage).map(_.toInt).getOrElse(1)
+    val executionPage = Option(parameterExecutionPage).map(_.toInt).getOrElse(1)
     val executionSortColumn = Option(parameterExecutionSortColumn).map { sortColumn =>
       UIUtils.decodeURLParameter(sortColumn)
-    }.getOrElse("Id")
+    }.getOrElse("ID")
     val executionSortDesc = Option(parameterExecutionSortDesc).map(_.toBoolean).getOrElse(
-      // New executions should be shown above old jobs by default.
-      executionSortColumn == "Id"
+      // New executions should be shown above old executions by default.
+      executionSortColumn == "ID"
     )
     val executionPageSize = Option(parameterExecutionPageSize).map(_.toInt).getOrElse(100)
     val executionPrevPageSize = Option(parameterExecutionPrevPageSize).map(_.toInt).
@@ -190,7 +190,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
       // If the user has changed to a larger page size, then go to page 1 in order to avoid
       // IndexOutOfBoundsException.
       if (executionPageSize <= executionPrevPageSize) {
-        jobPage
+        executionPage
       } else {
         1
       }
@@ -287,7 +287,7 @@ private[ui] class ExecutionPagedTable(
   override def headers: Seq[Node] = {
     // Information for each header: title, cssClass, and sortable
     val executionHeadersAndCssClasses: Seq[(String, String, Boolean)] =
-      Seq(("Id", "", true), ("Description", "", true), ("Submitted", "", true),
+      Seq(("ID", "", true), ("Description", "", true), ("Submitted", "", true),
         ("Duration", "", true)) ++ {
         if (showRunningJobs && showSucceededJobs && showFailedJobs) {
           Seq(("Running Job IDs", "", true), ("Succeeded Job IDs", "", true),
@@ -348,46 +348,6 @@ private[ui] class ExecutionPagedTable(
     </thead>
   }
 
-  private def executionURL(executionID: Long): String =
-    s"${
-      UIUtils.prependBaseUri(
-        request, parent.basePath)
-    }/${
-      parent.prefix
-    }/execution/?id=$executionID"
-
-  private def jobURL(request: HttpServletRequest, jobId: Long): String =
-    "%s/jobs/job/?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
-
-  private def descriptionCell(execution: SQLExecutionUIData): Seq[Node] = {
-    val details = if (execution.details != null && execution.details.nonEmpty) {
-      <span onclick="this.parentNode.querySelector('.stage-details').
-      classList.toggle('collapsed')"
-            class="expand-details">
-        +details
-      </span> ++
-        <div class="stage-details collapsed">
-          <pre>{execution.details}</pre>
-        </div>
-    } else {
-      Nil
-    }
-
-    val desc = if (execution.description != null && execution.description.nonEmpty) {
-      <a href={executionURL(execution.executionId)}>
-        {execution.description}
-      </a>
-    } else {
-      <a href={executionURL(execution.executionId)}>
-        {execution.executionId}
-      </a>
-    }
-
-    <div>
-      {desc}{details}
-    </div>
-  }
-
   override def row(executionTableRow: ExecutionTableRowData): Seq[Node] = {
     val executionUIData = executionTableRow.executionUIData
     val submissionTime = executionUIData.submissionTime
@@ -420,10 +380,10 @@ private[ui] class ExecutionPagedTable(
         {UIUtils.formatDuration(duration)}
       </td>
       {if (showRunningJobs) {
-      <td>
-        {jobLinks(JobExecutionStatus.RUNNING)}
-      </td>
-    }}
+        <td>
+          {jobLinks(JobExecutionStatus.RUNNING)}
+        </td>
+      }}
       {if (showSucceededJobs) {
       <td>
         {jobLinks(JobExecutionStatus.SUCCEEDED)}
@@ -436,6 +396,42 @@ private[ui] class ExecutionPagedTable(
     }}
     </tr>
   }
+
+  private def descriptionCell(execution: SQLExecutionUIData): Seq[Node] = {
+    val details = if (execution.details != null && execution.details.nonEmpty) {
+      <span onclick="this.parentNode.querySelector('.stage-details').
+      classList.toggle('collapsed')"
+            class="expand-details">
+        +details
+      </span> ++
+        <div class="stage-details collapsed">
+          <pre>{execution.details}</pre>
+        </div>
+    } else {
+      Nil
+    }
+
+    val desc = if (execution.description != null && execution.description.nonEmpty) {
+      <a href={executionURL(execution.executionId)}>
+        {execution.description}
+      </a>
+    } else {
+      <a href={executionURL(execution.executionId)}>
+        {execution.executionId}
+      </a>
+    }
+
+    <div>
+      {desc}{details}
+    </div>
+  }
+
+  private def jobURL(request: HttpServletRequest, jobId: Long): String =
+    "%s/jobs/job/?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
+
+  private def executionURL(executionID: Long): String =
+    s"${UIUtils.prependBaseUri(
+      request, parent.basePath)}/${parent.prefix}/execution/?id=$executionID"
 }
 
 
@@ -485,9 +481,9 @@ private[ui] class ExecutionDataSource(
     */
   private def ordering(sortColumn: String, desc: Boolean): Ordering[ExecutionTableRowData] = {
     val ordering: Ordering[ExecutionTableRowData] = sortColumn match {
-      case "Id" => Ordering.by(_.executionUIData.executionId)
-      case "Description" => Ordering.by(_.executionUIData.executionId)
-      case "Submitted" => Ordering.by(_.executionUIData.details)
+      case "ID" => Ordering.by(_.executionUIData.executionId)
+      case "Description" => Ordering.by(_.executionUIData.description)
+      case "Submitted" => Ordering.by(_.executionUIData.submissionTime)
       case "Duration" => Ordering.by(_.duration)
       case "Job IDs" | "Succeeded Job IDs" => Ordering.by(_.executionUIData.jobs.flatMap {
         case (jobId, jobStatus) =>
