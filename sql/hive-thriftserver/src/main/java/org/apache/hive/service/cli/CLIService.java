@@ -146,17 +146,10 @@ public class CLIService extends CompositeService implements ICLIService {
   public synchronized void start() {
     super.start();
     // Initialize and test a connection to the metastore
-    IMetaStoreClient metastoreClient = null;
-    try {
-      metastoreClient = new HiveMetaStoreClient(hiveConf);
+    try (IMetaStoreClient metastoreClient = new HiveMetaStoreClient(hiveConf)) {
       metastoreClient.getDatabases("default");
     } catch (Exception e) {
       throw new ServiceException("Unable to connect to MetaStore!", e);
-    }
-    finally {
-      if (metastoreClient != null) {
-        metastoreClient.close();
-      }
     }
   }
 
