@@ -26,13 +26,13 @@ class ProcfsBasedSystemsSuite extends SparkFunSuite {
   p.pageSize = 4096L
 
   test("testGetProcessInfo") {
-    p.getProcessInfo(26109)
+    p.computeProcessInfo(26109)
     assert(p.getJVMVirtualMemInfo == 4769947648L)
     assert(p.getJVMRSSInfo == 262610944)
     assert(p.getPythonVirtualMemInfo == 0)
     assert(p.getPythonRSSInfo == 0)
 
-    p.getProcessInfo(22763)
+    p.computeProcessInfo(22763)
     assert(p.getPythonVirtualMemInfo == 360595456)
     assert(p.getPythonRSSInfo == 7831552)
     assert(p.getJVMVirtualMemInfo == 4769947648L)

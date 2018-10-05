@@ -24,10 +24,10 @@ import java.util.Locale
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.Queue
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.util.Utils
 
 private[spark] case class ProcfsBasedSystemsMetrics(
     jvmVmemTotal: Long,
@@ -41,6 +41,7 @@ private[spark] case class ProcfsBasedSystemsMetrics(
 // project.
 private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extends Logging {
   val procfsStatFile = "stat"
+  val testing = sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
   var pageSize = computePageSize()
   var isAvailable: Boolean = isProcfsAvailable
   private val pid = computePid()
@@ -57,7 +58,6 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
   computeProcessTree()
 
   private def isProcfsAvailable: Boolean = {
-    val testing = sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
     if (testing) {
       return true
     }
@@ -77,7 +77,7 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
   }
 
   private def computePid(): Int = {
-    if (!isAvailable) {
+    if (!isAvailable || testing) {
       return -1;
     }
     try {
@@ -85,13 +85,12 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
       // https://docs.oracle.com/javase/9/docs/api/java/lang/ProcessHandle.html
       val cmd = Array("bash", "-c", "echo $PPID")
       val length = 10
-      val out = Array.fill[Byte](length)(0)
-      Runtime.getRuntime.exec(cmd).getInputStream.read(out)
-      val pid = Integer.parseInt(new String(out, "UTF-8").trim)
+      val out2 = Utils.executeAndGetOutput(cmd)
+      val pid = Integer.parseInt(out2.split("\n")(0))
       return pid;
     }
     catch {
-      case e: IOException => logDebug("IO Exception when trying to compute process tree." +
+      case e: SparkException => logDebug("IO Exception when trying to compute process tree." +
         " As a result reporting of ProcessTree metrics is stopped", e)
         isAvailable = false
         return -1
@@ -99,18 +98,16 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
   }
 
   private def computePageSize(): Long = {
-    val testing = sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
     if (testing) {
       return 0;
     }
     val cmd = Array("getconf", "PAGESIZE")
-    val out = Array.fill[Byte](10)(0)
-    Runtime.getRuntime.exec(cmd).getInputStream.read(out)
-    return Integer.parseInt(new String(out, "UTF-8").trim)
+    val out2 = Utils.executeAndGetOutput(cmd)
+    return Integer.parseInt(out2.split("\n")(0))
   }
 
   private def computeProcessTree(): Unit = {
-    if (!isAvailable) {
+    if (!isAvailable || testing) {
       return
     }
     val queue = mutable.Queue.empty[Int]
@@ -131,18 +128,26 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
   private def getChildPids(pid: Int): ArrayBuffer[Int] = {
     try {
       val cmd = Array("pgrep", "-P", pid.toString)
-      val input = Runtime.getRuntime.exec(cmd).getInputStream
-      val childPidsInByte = mutable.ArrayBuffer.empty[Byte]
-      var d = input.read()
-      while (d != -1) {
-        childPidsInByte.append(d.asInstanceOf[Byte])
-        d = input.read()
+      val builder = new ProcessBuilder("pgrep", "-P", pid.toString)
+      val process = builder.start()
+      val output = new StringBuilder()
+      val threadName = "read stdout for " + "pgrep"
+      def appendToOutput(s: String): Unit = output.append(s).append("\n")
+      val stdoutThread = Utils.processStreamByLine(threadName,
+        process.getInputStream, appendToOutput)
+      val exitCode = process.waitFor()
+      stdoutThread.join()
+      // pgrep will have exit code of 1 if there are more than one child process
+      // and it will have a exit code of 2 if there is no child process
+      if (exitCode != 0 && exitCode > 2) {
+        logError(s"Process $cmd exited with code $exitCode: $output")
+        throw new SparkException(s"Process $cmd exited with code $exitCode")
       }
-      input.close()
-      val childPids = new String(childPidsInByte.toArray, "UTF-8").split("\n")
+      val childPids = output.toString.split("\n")
       val childPidsInInt = mutable.ArrayBuffer.empty[Int]
       for (p <- childPids) {
         if (p != "") {
+          logInfo("Found a child pid: " + p)
           childPidsInInt += Integer.parseInt(p)
         }
       }
@@ -155,7 +160,7 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
     }
   }
 
-  def getProcessInfo(pid: Int): Unit = {
+  def computeProcessInfo(pid: Int): Unit = {
     /*
    * Hadoop ProcfsBasedProcessTree class used regex and pattern matching to retrive the memory
    * info. I tried that but found it not correct during tests, so I used normal string analysis
@@ -188,7 +193,7 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
         latestOtherRSSTotal += rssPages }
       }
     } catch {
-      case f: FileNotFoundException => log.debug("There was a problem with reading" +
+      case f: FileNotFoundException => logDebug("There was a problem with reading" +
         " the stat file of the process", f)
     }
   }
@@ -210,7 +215,7 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
     latestOtherRSSTotal = 0
     latestOtherVmemTotal = 0
     for (p <- pids) {
-      getProcessInfo(p)
+      computeProcessInfo(p)
     }
     ProcfsBasedSystemsMetrics(
       getJVMVirtualMemInfo,
