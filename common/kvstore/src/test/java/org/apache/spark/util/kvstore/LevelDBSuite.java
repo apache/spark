@@ -217,7 +217,7 @@ public class LevelDBSuite {
   public void testNegativeIndexValues() throws Exception {
     List<Integer> expected = Arrays.asList(-100, -50, 0, 50, 100);
 
-    expected.forEach(i -> {
+    expected.stream().forEach(i -> {
       try {
         db.write(createCustomType1(i));
       } catch (Exception e) {
