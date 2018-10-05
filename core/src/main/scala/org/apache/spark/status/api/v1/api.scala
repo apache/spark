@@ -139,6 +139,9 @@ private[spark] class ExecutorMetricsJsonSerializer
       jsonGenerator.writeObject(metricsMap)
     }
   }
+
+  override def isEmpty(provider: SerializerProvider, value: Option[ExecutorMetrics]): Boolean =
+    value.isEmpty
 }
 
 class JobData private[spark](

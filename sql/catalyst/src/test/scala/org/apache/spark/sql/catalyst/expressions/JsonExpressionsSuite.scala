@@ -244,6 +244,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       "1234")
   }
 
+  test("some big value") {
+    val value = "x" * 3000
+    checkEvaluation(
+      GetJsonObject(NonFoldableLiteral((s"""{"big": "$value"}""")),
+      NonFoldableLiteral("$.big")), value)
+  }
+
   val jsonTupleQuery = Literal("f1") ::
     Literal("f2") ::
     Literal("f3") ::
