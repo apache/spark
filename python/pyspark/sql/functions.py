@@ -2668,8 +2668,8 @@ def sequence(start, stop, step=None):
 @since(3.0)
 def from_csv(col, schema, options={}):
     """
-    Parses a column containing a CSV string into a :class:`StructType`
-    with the specified schema. Returns `null`, in the case of an unparseable string.
+    Parses a column containing a CSV string to a row with the specified schema.
+    Returns `null`, in the case of an unparseable string.
 
     :param col: string column in CSV format
     :param schema: a string with schema in DDL format to use when parsing the CSV column.
