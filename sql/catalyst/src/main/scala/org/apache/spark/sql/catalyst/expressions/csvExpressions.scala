@@ -76,12 +76,13 @@ case class CsvToStructs(
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
-  lazy val converter = (rows: Iterator[InternalRow]) =>
+  lazy val converter = (rows: Iterator[InternalRow]) => {
     if (rows.hasNext) {
       rows.next()
     } else {
-      throw new IllegalArgumentException("Expected at least one row from CSV parser.")
+      throw new IllegalArgumentException("Expected one row from CSV parser.")
     }
+  }
 
   @transient lazy val parser = {
     val parsedOptions = new CSVOptions(options, columnPruning = true, timeZoneId.get)
