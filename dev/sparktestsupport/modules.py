@@ -561,6 +561,7 @@ kubernetes = Module(
 spark_ganglia_lgpl = Module(
     name="spark-ganglia-lgpl",
     dependencies=[],
+    build_profile_flags=["-Pspark-ganglia-lgpl"],
     source_file_regexes=[
         "external/spark-ganglia-lgpl",
     ]
