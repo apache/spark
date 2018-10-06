@@ -19,6 +19,7 @@ package org.apache.spark.deploy.k8s
 import scala.collection.mutable
 
 import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferenceBuilder, Pod}
+import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
@@ -26,6 +27,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.deploy.k8s.submit.KubernetesClientApplication._
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.ConfigEntry
 
 
@@ -69,8 +71,9 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
 
   def kRBConfigMapName: String = s"$appResourceNamePrefix-krb5-file"
 
-  def tokenManager : KubernetesHadoopDelegationTokenManager =
-    new KubernetesHadoopDelegationTokenManager
+  def tokenManager(conf: SparkConf, hConf: Configuration) : KubernetesHadoopDelegationTokenManager =
+    new KubernetesHadoopDelegationTokenManager(
+      new HadoopDelegationTokenManager(conf, hConf))
 
   def namespace(): String = sparkConf.get(KUBERNETES_NAMESPACE)
 

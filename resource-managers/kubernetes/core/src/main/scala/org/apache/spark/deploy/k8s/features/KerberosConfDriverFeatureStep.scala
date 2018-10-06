@@ -22,6 +22,7 @@ import com.google.common.base.Charsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.{ConfigMapBuilder, HasMetadata}
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -47,7 +48,8 @@ private[spark] class KerberosConfDriverFeatureStep(
       conf.get(KUBERNETES_KERBEROS_KRB5_FILE)
     private val maybeKrb5CMap =
       conf.get(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP)
-    private val kubeTokenManager = kubernetesConf.tokenManager
+    private val kubeTokenManager = kubernetesConf.tokenManager(conf,
+      SparkHadoopUtil.get.newConfiguration(conf))
     private val isKerberosEnabled = kubeTokenManager.isSecurityEnabled
 
     require(maybeKeytab.isEmpty || isKerberosEnabled,
@@ -105,7 +107,6 @@ private[spark] class KerberosConfDriverFeatureStep(
       val hadoopBasedSparkPod = HadoopBootstrapUtil.bootstrapHadoopConfDir(
         hadoopConfDir,
         kubernetesConf.hadoopConfigMapName,
-        kubeTokenManager,
         pod)
       hadoopSpec.map { hSpec =>
         HadoopBootstrapUtil.bootstrapKerberosPod(
@@ -129,7 +130,7 @@ private[spark] class KerberosConfDriverFeatureStep(
             KERBEROS_SPARK_USER_NAME -> hSpec.jobUserName)
       }.getOrElse(
           Map(KERBEROS_SPARK_USER_NAME ->
-            kubernetesConf.tokenManager.getCurrentUser.getShortUserName))
+            kubeTokenManager.getCurrentUser.getShortUserName))
       Map(HADOOP_CONFIG_MAP_NAME -> kubernetesConf.hadoopConfigMapName,
           HADOOP_CONF_DIR_LOC -> kubernetesConf.hadoopConfDir.get) ++ resolvedConfValues
     }

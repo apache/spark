@@ -41,7 +41,6 @@ private[spark] class HadoopConfExecutorFeatureStep(
      HadoopBootstrapUtil.bootstrapHadoopConfDir(
        maybeHadoopConfDir.get,
        maybeHadoopConfigMap.get,
-       kubernetesConf.tokenManager,
        pod)
   }
 

@@ -27,7 +27,6 @@ import io.fabric8.kubernetes.api.model._
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.SparkPod
-import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
 
 private[spark] object HadoopBootstrapUtil {
 
@@ -39,7 +38,7 @@ private[spark] object HadoopBootstrapUtil {
     * @param userName Name of the SparkUser to set SPARK_USER
     * @param maybeFileLocation Optional Location of the krb5 file
     * @param newKrb5ConfName Optiona location of the ConfigMap for Krb5
-    * @param oldKrb5ConfName Optional name of ConfigMap for Krb5
+    * @param maybeKrb5ConfName Optional name of ConfigMap for Krb5
     * @param pod Input pod to be appended to
     * @return a modified SparkPod
     */
@@ -153,14 +152,12 @@ private[spark] object HadoopBootstrapUtil {
     *
     * @param hadoopConfDir location of HADOOP_CONF_DIR
     * @param hadoopConfigMapName name of the configMap for HADOOP_CONF_DIR
-    * @param kubeTokenManager KubernetesHadoopDelegationTokenManager
     * @param pod Input pod to be appended to
     * @return a modified SparkPod
     */
   def bootstrapHadoopConfDir(
     hadoopConfDir: String,
     hadoopConfigMapName: String,
-    kubeTokenManager: KubernetesHadoopDelegationTokenManager,
     pod: SparkPod) : SparkPod = {
       val hadoopConfigFiles = getHadoopConfFiles(hadoopConfDir)
       val keyPaths = hadoopConfigFiles.map { file =>

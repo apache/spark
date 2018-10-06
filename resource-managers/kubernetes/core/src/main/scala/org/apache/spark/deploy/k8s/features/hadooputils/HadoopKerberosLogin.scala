@@ -25,7 +25,6 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
-import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 
  /**
   * This logic does all the heavy lifting for Delegation Token creation. This step
@@ -46,15 +45,13 @@ private[spark] object HadoopKerberosLogin {
        throw new SparkException("Hadoop not configured with Kerberos")
      }
      // The JobUserUGI will be taken fom the Local Ticket Cache or via keytab+principal
-     // The login happens in the SparkSubmit so login logic is not necessary
+     // The login happens in the SparkSubmit so login logic is not necessary to include
      val jobUserUGI = tokenManager.getCurrentUser
      val originalCredentials = jobUserUGI.getCredentials
-     val hadoopTokenManager = new HadoopDelegationTokenManager(submissionSparkConf, hadoopConf)
      val (tokenData, renewalInterval) = tokenManager.getDelegationTokens(
        originalCredentials,
        submissionSparkConf,
-       hadoopConf,
-       hadoopTokenManager)
+       hadoopConf)
      require(tokenData.nonEmpty, "Did not obtain any delegation tokens")
      val currentTime = tokenManager.getCurrentTime
      val initialTokenDataKeyName = s"$KERBEROS_SECRET_LABEL_PREFIX-$currentTime-$renewalInterval"

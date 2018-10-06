@@ -33,7 +33,8 @@ import org.apache.spark.util.{Clock, SystemClock}
   * (called Tokens when they are serialized) are stored in Secrets accessible
   * to the driver and executors, when new Tokens are received they overwrite the current Secrets.
   */
-private[spark] class KubernetesHadoopDelegationTokenManager extends Logging {
+private[spark] class KubernetesHadoopDelegationTokenManager(
+   tokenManager: HadoopDelegationTokenManager) extends Logging {
 
    // HadoopUGI Util methods
    private val clock: Clock = new SystemClock()
@@ -50,8 +51,7 @@ private[spark] class KubernetesHadoopDelegationTokenManager extends Logging {
    def getDelegationTokens(
     creds: Credentials,
     conf: SparkConf,
-    hadoopConf: Configuration,
-    tokenManager: HadoopDelegationTokenManager): (Array[Byte], Long) = {
+    hadoopConf: Configuration): (Array[Byte], Long) = {
     try {
       val rt = tokenManager.obtainDelegationTokens(hadoopConf, creds)
       logDebug(s"Initialized tokens")

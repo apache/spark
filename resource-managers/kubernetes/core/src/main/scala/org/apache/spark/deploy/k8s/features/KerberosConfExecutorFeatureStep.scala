@@ -31,17 +31,17 @@ import org.apache.spark.internal.Logging
 private[spark] class KerberosConfExecutorFeatureStep(
   kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
   extends KubernetesFeatureConfigStep with Logging{
+   private val sparkConf = kubernetesConf.sparkConf
+   private val maybeKrb5File = sparkConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
+   private val maybeKrb5CMap = sparkConf.get(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP)
+   KubernetesUtils.requireNandDefined(
+     maybeKrb5File,
+     maybeKrb5CMap,
+     "Do not specify both a Krb5 local file and the ConfigMap as the creation" +
+       "of an additional ConfigMap, when one is already specified, is extraneous")
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val sparkConf = kubernetesConf.sparkConf
-    val maybeKrb5File = sparkConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
-    val maybeKrb5CMap = sparkConf.get(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP)
-    KubernetesUtils.requireNandDefined(
-      maybeKrb5File,
-      maybeKrb5CMap,
-      "Do not specify both a Krb5 local file and the ConfigMap as the creation" +
-        "of an additional ConfigMap, when one is already specified, is extraneous")
-    logInfo(s"Mounting HDFS DT for Secure HDFS")
+    logInfo(s"Mounting Kerberos DT for Kerberos")
     HadoopBootstrapUtil.bootstrapKerberosPod(
       sparkConf.get(KERBEROS_KEYTAB_SECRET_NAME),
       sparkConf.get(KERBEROS_KEYTAB_SECRET_KEY),
@@ -55,7 +55,7 @@ private[spark] class KerberosConfExecutorFeatureStep(
   override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
+    maybeKrb5File
       .map(fileLocation => HadoopBootstrapUtil.buildkrb5ConfigMap(
         kubernetesConf.kRBConfigMapName,
         fileLocation)).toSeq
