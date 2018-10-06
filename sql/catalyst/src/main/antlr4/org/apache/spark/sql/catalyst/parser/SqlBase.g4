@@ -468,7 +468,7 @@ joinType
 
 joinCriteria
     : ON booleanExpression
-    | USING '(' identifier (',' identifier)* ')'
+    | USING identifierList
     ;
 
 sample
