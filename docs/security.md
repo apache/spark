@@ -726,7 +726,7 @@ tokens for supported will be created.
 
 When talking to Hadoop-based services behind Kerberos, it was noted that Spark needs to obtain delegation tokens
 so that non-local processes can authenticate. These delegation tokens in Kubernetes are stored in Secrets that are 
-shared by the Driver and its Executors. As such, there are three ways of submitting a kerberos job: 
+shared by the Driver and its Executors. As such, there are three ways of submitting a Kerberos job: 
 
 In all cases you must define the environment variable: `HADOOP_CONF_DIR` as well as either 
 `spark.kubernetes.kerberos.krb5.location` or `spark.kubernetes.kerberos.krb5.configMapName`.
@@ -734,10 +734,10 @@ In all cases you must define the environment variable: `HADOOP_CONF_DIR` as well
 It also important to note that the KDC needs to be visible from inside the containers if the user uses a local
 krb5 file. 
 
-If a user wishes to use a remote HADOOP_CONF directory, that contains the Hadoop configuration files, this could be achieved by mounting a pre-defined ConfigMap in the desired location
-that you can point to via the appropriate configs. This method is useful for those who wish to not rebuild
-their Docker images, but instead point to a ConfigMap that they could modify. This strategy is supported
-via the pod-template feature. 
+If a user wishes to use a remote HADOOP_CONF directory, that contains the Hadoop configuration files, this could be
+achieved by mounting a pre-defined ConfigMap in the desired location that you can point to via the appropriate configs.
+This method is useful for those who wish to not rebuild their Docker images, but instead point to a ConfigMap that they
+could modify. This strategy is supported via the pod-template feature. 
 
 1. Submitting with a $kinit that stores a TGT in the Local Ticket Cache:
 ```bash
@@ -785,6 +785,21 @@ via the pod-template feature.
     <HDFS_FILE_LOCATION>
 ```
 
+3b. Submitting like in (3) however specifying a pre-created krb5 config map
+```bash
+/opt/spark/bin/spark-submit \
+    --deploy-mode cluster \
+    --class org.apache.spark.examples.HdfsTest \
+    --master k8s://<KUBERNETES_MASTER_ENDPOINT> \
+    --conf spark.executor.instances=1 \
+    --conf spark.app.name=spark-hdfs \
+    --conf spark.kubernetes.container.image=spark:latest \
+    --conf spark.kubernetes.kerberos.tokenSecret.name=<SECRET_TOKEN_NAME> \
+    --conf spark.kubernetes.kerberos.tokenSecret.itemKey=<SECRET_ITEM_KEY> \
+    --conf spark.kubernetes.kerberos.krb5.configMapName=<CONFIG_MAP_NAME> \
+    local:///opt/spark/examples/jars/spark-examples_<VERSION>-SNAPSHOT.jar \
+    <HDFS_FILE_LOCATION>
+```
 # Event Logging
 
 If your applications are using event logging, the directory where the event logs go
