@@ -1283,9 +1283,18 @@ def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
 @since(1.5)
 def from_utc_timestamp(timestamp, tz):
     """
-    Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
-    that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
-    '2017-07-14 03:40:00.0'.
+    This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
+    takes a timestamp which is timezone-agnostic, and interprets it as a timestamp in UTC, and
+    renders that timestamp as a timestamp in the given time zone.
+
+    However, timestamp in Spark represents number of microseconds from the Unix epoch, which is not
+    timezone-agnostic. So in Spark this function just shift the timestamp value from UTC timezone to
+    the given timezone.
+
+    This function may return confusing result if the input is a string with timezone, e.g.
+    '2018-03-13T06:18:23+00:00'. The reason is that, Spark firstly cast the string to timestamp
+    according to the timezone in the string, and finally display the result by converting the
+    timestamp to string according to the session local timezone.
 
     :param timestamp: the column that contains timestamps
     :param tz: a string that has the ID of timezone, e.g. "GMT", "America/Los_Angeles", etc
@@ -1308,9 +1317,18 @@ def from_utc_timestamp(timestamp, tz):
 @since(1.5)
 def to_utc_timestamp(timestamp, tz):
     """
-    Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time
-    zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
-    '2017-07-14 01:40:00.0'.
+    This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
+    takes a timestamp which is timezone-agnostic, and interprets it as a timestamp in the given
+    timezone, and renders that timestamp as a timestamp in UTC.
+
+    However, timestamp in Spark represents number of microseconds from the Unix epoch, which is not
+    timezone-agnostic. So in Spark this function just shift the timestamp value from the given
+    timezone to UTC timezone.
+
+    This function may return confusing result if the input is a string with timezone, e.g.
+    '2018-03-13T06:18:23+00:00'. The reason is that, Spark firstly cast the string to timestamp
+    according to the timezone in the string, and finally display the result by converting the
+    timestamp to string according to the session local timezone.
 
     :param timestamp: the column that contains timestamps
     :param tz: a string that has the ID of timezone, e.g. "GMT", "America/Los_Angeles", etc
@@ -1673,18 +1691,32 @@ def repeat(col, n):
 
 @since(1.5)
 @ignore_unicode_prefix
-def split(str, pattern):
+def split(str, pattern, limit=-1):
     """
-    Splits str around pattern (pattern is a regular expression).
+    Splits str around matches of the given pattern.
 
-    .. note:: pattern is a string represent the regular expression.
+    :param str: a string expression to split
+    :param pattern: a string representing a regular expression. The regex string should be
+        a Java regular expression.
+    :param limit: an integer which controls the number of times `pattern` is applied.
 
-    >>> df = spark.createDataFrame([('ab12cd',)], ['s',])
-    >>> df.select(split(df.s, '[0-9]+').alias('s')).collect()
-    [Row(s=[u'ab', u'cd'])]
+        * ``limit > 0``: The resulting array's length will not be more than `limit`, and the
+                         resulting array's last entry will contain all input beyond the last
+                         matched pattern.
+        * ``limit <= 0``: `pattern` will be applied as many times as possible, and the resulting
+                          array can be of any size.
+
+    .. versionchanged:: 3.0
+       `split` now takes an optional `limit` field. If not provided, default limit value is -1.
+
+    >>> df = spark.createDataFrame([('oneAtwoBthreeC',)], ['s',])
+    >>> df.select(split(df.s, '[ABC]', 2).alias('s')).collect()
+    [Row(s=[u'one', u'twoBthreeC'])]
+    >>> df.select(split(df.s, '[ABC]', -1).alias('s')).collect()
+    [Row(s=[u'one', u'two', u'three', u''])]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.split(_to_java_column(str), pattern))
+    return Column(sc._jvm.functions.split(_to_java_column(str), pattern, limit))
 
 
 @ignore_unicode_prefix
@@ -2295,7 +2327,9 @@ def to_json(col, options={}):
     into a JSON string. Throws an exception, in the case of an unsupported type.
 
     :param col: name of column containing a struct, an array or a map.
-    :param options: options to control converting. accepts the same options as the JSON datasource
+    :param options: options to control converting. accepts the same options as the JSON datasource.
+                    Additionally the function supports the `pretty` option which enables
+                    pretty JSON generation.
 
     >>> from pyspark.sql import Row
     >>> from pyspark.sql.types import *
@@ -2328,11 +2362,15 @@ def to_json(col, options={}):
 
 @ignore_unicode_prefix
 @since(2.4)
-def schema_of_json(col):
+def schema_of_json(col, options={}):
     """
     Parses a column containing a JSON string and infers its schema in DDL format.
 
     :param col: string column in json format
+    :param options: options to control parsing. accepts the same options as the JSON datasource
+
+    .. versionchanged:: 3.0
+       It accepts `options` parameter to control schema inferring.
 
     >>> from pyspark.sql.types import *
     >>> data = [(1, '{"a": 1}')]
@@ -2341,10 +2379,13 @@ def schema_of_json(col):
     [Row(json=u'struct<a:bigint>')]
     >>> df.select(schema_of_json(lit('{"a": 0}')).alias("json")).collect()
     [Row(json=u'struct<a:bigint>')]
+    >>> schema = schema_of_json(lit('{a: 1}'), {'allowUnquotedFieldNames':'true'})
+    >>> df.select(schema.alias("json")).collect()
+    [Row(json=u'struct<a:bigint>')]
     """
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.schema_of_json(_to_java_column(col))
+    jc = sc._jvm.functions.schema_of_json(_to_java_column(col), options)
     return Column(jc)
 
 

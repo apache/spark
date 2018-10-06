@@ -80,7 +80,7 @@ _have_pandas = _pandas_requirement_message is None
 _have_pyarrow = _pyarrow_requirement_message is None
 _test_compiled = _test_not_compiled_message is None
 
-from pyspark import SparkContext
+from pyspark import SparkConf, SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type, _make_type_verifier
@@ -281,6 +281,50 @@ class DataTypeTests(unittest.TestCase):
     def test_invalid_create_row(self):
         row_class = Row("c1", "c2")
         self.assertRaises(ValueError, lambda: row_class(1, 2, 3))
+
+
+class SparkSessionBuilderTests(unittest.TestCase):
+
+    def test_create_spark_context_first_then_spark_session(self):
+        sc = None
+        session = None
+        try:
+            conf = SparkConf().set("key1", "value1")
+            sc = SparkContext('local[4]', "SessionBuilderTests", conf=conf)
+            session = SparkSession.builder.config("key2", "value2").getOrCreate()
+
+            self.assertEqual(session.conf.get("key1"), "value1")
+            self.assertEqual(session.conf.get("key2"), "value2")
+            self.assertEqual(session.sparkContext, sc)
+
+            self.assertFalse(sc.getConf().contains("key2"))
+            self.assertEqual(sc.getConf().get("key1"), "value1")
+        finally:
+            if session is not None:
+                session.stop()
+            if sc is not None:
+                sc.stop()
+
+    def test_another_spark_session(self):
+        session1 = None
+        session2 = None
+        try:
+            session1 = SparkSession.builder.config("key1", "value1").getOrCreate()
+            session2 = SparkSession.builder.config("key2", "value2").getOrCreate()
+
+            self.assertEqual(session1.conf.get("key1"), "value1")
+            self.assertEqual(session2.conf.get("key1"), "value1")
+            self.assertEqual(session1.conf.get("key2"), "value2")
+            self.assertEqual(session2.conf.get("key2"), "value2")
+            self.assertEqual(session1.sparkContext, session2.sparkContext)
+
+            self.assertEqual(session1.sparkContext.getConf().get("key1"), "value1")
+            self.assertFalse(session1.sparkContext.getConf().contains("key2"))
+        finally:
+            if session1 is not None:
+                session1.stop()
+            if session2 is not None:
+                session2.stop()
 
 
 class SQLTests(ReusedSQLTestCase):
@@ -551,6 +595,70 @@ class SQLTests(ReusedSQLTestCase):
         f = udf(lambda a, b: a == b, BooleanType())
         df = left.crossJoin(right).filter(f("a", "b"))
         self.assertEqual(df.collect(), [Row(a=1, b=1)])
+
+    def test_udf_in_join_condition(self):
+        # regression test for SPARK-25314
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1)])
+        right = self.spark.createDataFrame([Row(b=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+        df = left.join(right, f("a", "b"))
+        with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
+            df.collect()
+        with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
+            self.assertEqual(df.collect(), [Row(a=1, b=1)])
+
+    def test_udf_in_left_semi_join_condition(self):
+        # regression test for SPARK-25314
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+        df = left.join(right, f("a", "b"), "leftsemi")
+        with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
+            df.collect()
+        with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
+            self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1)])
+
+    def test_udf_and_common_filter_in_join_condition(self):
+        # regression test for SPARK-25314
+        # test the complex scenario with both udf and common filter
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+        df = left.join(right, [f("a", "b"), left.a1 == right.b1])
+        # do not need spark.sql.crossJoin.enabled=true for udf is not the only join condition.
+        self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1, b=1, b1=1, b2=1)])
+
+    def test_udf_and_common_filter_in_left_semi_join_condition(self):
+        # regression test for SPARK-25314
+        # test the complex scenario with both udf and common filter
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+        df = left.join(right, [f("a", "b"), left.a1 == right.b1], "left_semi")
+        # do not need spark.sql.crossJoin.enabled=true for udf is not the only join condition.
+        self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1)])
+
+    def test_udf_not_supported_in_join_condition(self):
+        # regression test for SPARK-25314
+        # test python udf is not supported in join type besides left_semi and inner join.
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+
+        def runWithJoinType(join_type, type_string):
+            with self.assertRaisesRegexp(
+                    AnalysisException,
+                    'Using PythonUDF.*%s is not supported.' % type_string):
+                left.join(right, [f("a", "b"), left.a1 == right.b1], join_type).collect()
+        runWithJoinType("full", "FullOuter")
+        runWithJoinType("left", "LeftOuter")
+        runWithJoinType("right", "RightOuter")
+        runWithJoinType("leftanti", "LeftAnti")
 
     def test_udf_without_arguments(self):
         self.spark.catalog.registerFunction("foo", lambda: "bar")
@@ -1498,8 +1606,7 @@ class SQLTests(ReusedSQLTestCase):
         from pyspark.sql.functions import array_contains
 
         df = self.spark.createDataFrame([(["1", "2", "3"],), ([],)], ['data'])
-        actual = df.select(array_contains(df.data, 1).alias('b')).collect()
-        # The value argument can be implicitly castable to the element's type of the array.
+        actual = df.select(array_contains(df.data, "1").alias('b')).collect()
         self.assertEqual([Row(b=True), Row(b=False)], actual)
 
     def test_between_function(self):
@@ -1962,6 +2069,9 @@ class SQLTests(ReusedSQLTestCase):
         def __setstate__(self, state):
             self.open_events_dir, self.process_events_dir, self.close_events_dir = state
 
+    # Those foreach tests are failed in Python 3.6 and macOS High Sierra by defined rules
+    # at http://sealiesoftware.com/blog/archive/2017/6/5/Objective-C_and_fork_in_macOS_1013.html
+    # To work around this, OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES.
     def test_streaming_foreach_with_simple_function(self):
         tester = self.ForeachWriterTester(self.spark)
 
@@ -5415,32 +5525,81 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             .withColumn("v", explode(col('vs'))).drop('vs')
 
     def test_supported_types(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType, array, col
-        df = self.data.withColumn("arr", array(col("id")))
+        from decimal import Decimal
+        from distutils.version import LooseVersion
+        import pyarrow as pa
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        values = [
+            1, 2, 3,
+            4, 5, 1.1,
+            2.2, Decimal(1.123),
+            [1, 2, 2], True, 'hello'
+        ]
+        output_fields = [
+            ('id', IntegerType()), ('byte', ByteType()), ('short', ShortType()),
+            ('int', IntegerType()), ('long', LongType()), ('float', FloatType()),
+            ('double', DoubleType()), ('decim', DecimalType(10, 3)),
+            ('array', ArrayType(IntegerType())), ('bool', BooleanType()), ('str', StringType())
+        ]
+
+        # TODO: Add BinaryType to variables above once minimum pyarrow version is 0.10.0
+        if LooseVersion(pa.__version__) >= LooseVersion("0.10.0"):
+            values.append(bytearray([0x01, 0x02]))
+            output_fields.append(('bin', BinaryType()))
+
+        output_schema = StructType([StructField(*x) for x in output_fields])
+        df = self.spark.createDataFrame([values], schema=output_schema)
 
         # Different forms of group map pandas UDF, results of these are the same
-
-        output_schema = StructType(
-            [StructField('id', LongType()),
-             StructField('v', IntegerType()),
-             StructField('arr', ArrayType(LongType())),
-             StructField('v1', DoubleType()),
-             StructField('v2', LongType())])
-
         udf1 = pandas_udf(
-            lambda pdf: pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
+            lambda pdf: pdf.assign(
+                byte=pdf.byte * 2,
+                short=pdf.short * 2,
+                int=pdf.int * 2,
+                long=pdf.long * 2,
+                float=pdf.float * 2,
+                double=pdf.double * 2,
+                decim=pdf.decim * 2,
+                bool=False if pdf.bool else True,
+                str=pdf.str + 'there',
+                array=pdf.array,
+            ),
             output_schema,
             PandasUDFType.GROUPED_MAP
         )
 
         udf2 = pandas_udf(
-            lambda _, pdf: pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
+            lambda _, pdf: pdf.assign(
+                byte=pdf.byte * 2,
+                short=pdf.short * 2,
+                int=pdf.int * 2,
+                long=pdf.long * 2,
+                float=pdf.float * 2,
+                double=pdf.double * 2,
+                decim=pdf.decim * 2,
+                bool=False if pdf.bool else True,
+                str=pdf.str + 'there',
+                array=pdf.array,
+            ),
             output_schema,
             PandasUDFType.GROUPED_MAP
         )
 
         udf3 = pandas_udf(
-            lambda key, pdf: pdf.assign(id=key[0], v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
+            lambda key, pdf: pdf.assign(
+                id=key[0],
+                byte=pdf.byte * 2,
+                short=pdf.short * 2,
+                int=pdf.int * 2,
+                long=pdf.long * 2,
+                float=pdf.float * 2,
+                double=pdf.double * 2,
+                decim=pdf.decim * 2,
+                bool=False if pdf.bool else True,
+                str=pdf.str + 'there',
+                array=pdf.array,
+            ),
             output_schema,
             PandasUDFType.GROUPED_MAP
         )
@@ -5483,8 +5642,9 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         foo_udf = pandas_udf(lambda x: x, "id long", PandasUDFType.GROUPED_MAP)
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ValueError, 'f must be either SQL_BATCHED_UDF or '
-                                                     'SQL_SCALAR_PANDAS_UDF'):
+            with self.assertRaisesRegexp(
+                    ValueError,
+                    'f.*SQL_BATCHED_UDF.*SQL_SCALAR_PANDAS_UDF.*SQL_GROUPED_AGG_PANDAS_UDF.*'):
                 self.spark.catalog.registerFunction("foo_udf", foo_udf)
 
     def test_decorator(self):
@@ -5604,24 +5764,26 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                     pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
 
     def test_unsupported_types(self):
+        from distutils.version import LooseVersion
+        import pyarrow as pa
         from pyspark.sql.functions import pandas_udf, PandasUDFType
-        schema = StructType(
-            [StructField("id", LongType(), True),
-             StructField("map", MapType(StringType(), IntegerType()), True)])
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
-                    NotImplementedError,
-                    'Invalid returnType.*grouped map Pandas UDF.*MapType'):
-                pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
 
-        schema = StructType(
-            [StructField("id", LongType(), True),
-             StructField("arr_ts", ArrayType(TimestampType()), True)])
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
-                    NotImplementedError,
-                    'Invalid returnType.*grouped map Pandas UDF.*ArrayType.*TimestampType'):
-                pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
+        common_err_msg = 'Invalid returnType.*grouped map Pandas UDF.*'
+        unsupported_types = [
+            StructField('map', MapType(StringType(), IntegerType())),
+            StructField('arr_ts', ArrayType(TimestampType())),
+            StructField('null', NullType()),
+        ]
+
+        # TODO: Remove this if-statement once minimum pyarrow version is 0.10.0
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            unsupported_types.append(StructField('bin', BinaryType()))
+
+        for unsupported_type in unsupported_types:
+            schema = StructType([StructField('id', LongType(), True), unsupported_type])
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(NotImplementedError, common_err_msg):
+                    pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
@@ -5800,7 +5962,8 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         import pandas as pd
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
-        with self.sql_conf({"spark.sql.execution.pandas.groupedMap.assignColumnsByPosition": True}):
+        with self.sql_conf({
+                "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}):
 
             @pandas_udf("a string, b float", PandasUDFType.GROUPED_MAP)
             def foo(_):
@@ -6296,6 +6459,21 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                     AnalysisException,
                     'mixture.*aggregate function.*group aggregate pandas UDF'):
                 df.groupby(df.id).agg(mean_udf(df.v), mean(df.v)).collect()
+
+    def test_register_vectorized_udf_basic(self):
+        from pyspark.sql.functions import pandas_udf
+        from pyspark.rdd import PythonEvalType
+
+        sum_pandas_udf = pandas_udf(
+            lambda v: v.sum(), "integer", PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF)
+
+        self.assertEqual(sum_pandas_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF)
+        group_agg_pandas_udf = self.spark.udf.register("sum_pandas_udf", sum_pandas_udf)
+        self.assertEqual(group_agg_pandas_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF)
+        q = "SELECT sum_pandas_udf(v1) FROM VALUES (3, 0), (2, 0), (1, 1) tbl(v1, v2) GROUP BY v2"
+        actual = sorted(map(lambda r: r[0], self.spark.sql(q).collect()))
+        expected = [1, 5]
+        self.assertEqual(actual, expected)
 
 
 @unittest.skipIf(

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans._
@@ -150,5 +151,53 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _)) =>
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
+  }
+}
+
+/**
+ * PythonUDF in join condition can not be evaluated, this rule will detect the PythonUDF
+ * and pull them out from join condition. For python udf accessing attributes from only one side,
+ * they are pushed down by operation push down rules. If not (e.g. user disables filter push
+ * down rules), we need to pull them out in this rule too.
+ */
+object PullOutPythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
+  def hasPythonUDF(expression: Expression): Boolean = {
+    expression.collectFirst { case udf: PythonUDF => udf }.isDefined
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case j @ Join(_, _, joinType, condition)
+        if condition.isDefined && hasPythonUDF(condition.get) =>
+      if (!joinType.isInstanceOf[InnerLike] && joinType != LeftSemi) {
+        // The current strategy only support InnerLike and LeftSemi join because for other type,
+        // it breaks SQL semantic if we run the join condition as a filter after join. If we pass
+        // the plan here, it'll still get a an invalid PythonUDF RuntimeException with message
+        // `requires attributes from more than one child`, we throw firstly here for better
+        // readable information.
+        throw new AnalysisException("Using PythonUDF in join condition of join type" +
+          s" $joinType is not supported.")
+      }
+      // If condition expression contains python udf, it will be moved out from
+      // the new join conditions.
+      val (udf, rest) =
+        splitConjunctivePredicates(condition.get).partition(hasPythonUDF)
+      val newCondition = if (rest.isEmpty) {
+        logWarning(s"The join condition:$condition of the join plan contains PythonUDF only," +
+          s" it will be moved out and the join plan will be turned to cross join.")
+        None
+      } else {
+        Some(rest.reduceLeft(And))
+      }
+      val newJoin = j.copy(condition = newCondition)
+      joinType match {
+        case _: InnerLike => Filter(udf.reduceLeft(And), newJoin)
+        case LeftSemi =>
+          Project(
+            j.left.output.map(_.toAttribute),
+            Filter(udf.reduceLeft(And), newJoin.copy(joinType = Inner)))
+        case _ =>
+          throw new AnalysisException("Using PythonUDF in join condition of join type" +
+            s" $joinType is not supported.")
+      }
   }
 }
