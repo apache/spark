@@ -118,21 +118,21 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     new UDT.MyDenseVectorUDT()
   ).filter(supportsDataType)
 
-  private val parquetDictionaryEncodingEnabledConfs = if (isParquetDataSource) {
-    // Run with/without Parquet dictionary encoding enabled for Parquet data source.
-    Seq(true, false)
-  } else {
-    Seq(false)
-  }
-
-  for (dataType <- supportedDataTypes) {
-    for (parquetDictionaryEncodingEnabled <- parquetDictionaryEncodingEnabledConfs) {
-      val extraMessage = if (isParquetDataSource) {
-        s" with parquet.enable.dictionary = $parquetDictionaryEncodingEnabled"
-      } else {
-        ""
-      }
-      test(s"test all data types - $dataType$extraMessage") {
+  test(s"test all data types") {
+    val parquetDictionaryEncodingEnabledConfs = if (isParquetDataSource) {
+      // Run with/without Parquet dictionary encoding enabled for Parquet data source.
+      Seq(true, false)
+    } else {
+      Seq(false)
+    }
+    for (dataType <- supportedDataTypes) {
+      for (parquetDictionaryEncodingEnabled <- parquetDictionaryEncodingEnabledConfs) {
+        val extraMessage = if (isParquetDataSource) {
+          s" with parquet.enable.dictionary = $parquetDictionaryEncodingEnabled"
+        } else {
+          ""
+        }
+        logInfo(s"Testing $dataType data type$extraMessage")
 
         val extraOptions = Map[String, String](
           "parquet.enable.dictionary" -> parquetDictionaryEncodingEnabled.toString
@@ -766,37 +766,6 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
     withTable("t") {
       checkAnswer(spark.table("t").select('b, 'c, 'a), df.select('b, 'c, 'a).collect())
-    }
-  }
-
-  // NOTE: This test suite is not super deterministic.  On nodes with only relatively few cores
-  // (4 or even 1), it's hard to reproduce the data loss issue.  But on nodes with for example 8 or
-  // more cores, the issue can be reproduced steadily.  Fortunately our Jenkins builder meets this
-  // requirement.  We probably want to move this test case to spark-integration-tests or spark-perf
-  // later.
-  test("SPARK-8406: Avoids name collision while writing files") {
-    // The following test is slow. As now all the file format data source are using common code
-    // for creating result files, we can test one data source(Parquet) only to reduce test time.
-    if (isParquetDataSource) {
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        spark
-          .range(10000)
-          .repartition(250)
-          .write
-          .mode(SaveMode.Overwrite)
-          .format(dataSourceName)
-          .save(path)
-
-        assertResult(10000) {
-          spark
-            .read
-            .format(dataSourceName)
-            .option("dataSchema", StructType(StructField("id", LongType) :: Nil).json)
-            .load(path)
-            .count()
-        }
-      }
     }
   }
 
