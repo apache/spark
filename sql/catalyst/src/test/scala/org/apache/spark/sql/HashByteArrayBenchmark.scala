@@ -28,7 +28,7 @@ import org.apache.spark.unsafe.hash.Murmur3_x86_32
  * Synthetic benchmark for MurMurHash 3 and xxHash64.
  * To run this benchmark:
  * {{{
- *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
+ *   1. without sbt: bin/spark-submit --class <this class> <spark catalyst test jar>
  *   2. build/sbt "catalyst/test:runMain <this class>"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "catalyst/test:runMain <this class>"
