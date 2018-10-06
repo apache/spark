@@ -7,9 +7,9 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 parsing large select:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-1 select expressions                             6 /   22          0.0     5645637.0       1.0X
-100 select expressions                           6 /   13          0.0     6046103.0       0.9X
-2500 select expressions                        172 /  271          0.0   171929312.0       0.0X
+1 select expressions                             2 /    5          0.0     2183931.0       1.0X
+100 select expressions                           4 /    5          0.0     3614440.0       0.6X
+2500 select expressions                         67 /   74          0.0    66814202.0       0.0X
 
 
 ================================================================================================
@@ -21,18 +21,18 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 many column field r/w:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-1 cols x 100000 rows (read in-mem)              27 /   47          3.7         267.8       1.0X
-1 cols x 100000 rows (exec in-mem)              24 /   31          4.3         235.0       1.1X
-1 cols x 100000 rows (read parquet)            312 /  385          0.3        3123.8       0.1X
-1 cols x 100000 rows (write parquet)           195 /  217          0.5        1947.3       0.1X
-100 cols x 1000 rows (read in-mem)              25 /   31          3.9         254.4       1.1X
-100 cols x 1000 rows (exec in-mem)              32 /   38          3.1         318.5       0.8X
-100 cols x 1000 rows (read parquet)            304 /  421          0.3        3043.0       0.1X
-100 cols x 1000 rows (write parquet)           211 /  391          0.5        2111.9       0.1X
-2500 cols x 40 rows (read in-mem)              338 /  542          0.3        3382.1       0.1X
-2500 cols x 40 rows (exec in-mem)              573 /  680          0.2        5733.2       0.0X
-2500 cols x 40 rows (read parquet)            1297 / 1509          0.1       12967.6       0.0X
-2500 cols x 40 rows (write parquet)            407 /  452          0.2        4074.0       0.1X
+1 cols x 100000 rows (read in-mem)              33 /   52          3.1         325.2       1.0X
+1 cols x 100000 rows (exec in-mem)              35 /   76          2.9         348.2       0.9X
+1 cols x 100000 rows (read parquet)             82 /  188          1.2         824.2       0.4X
+1 cols x 100000 rows (write parquet)           407 /  571          0.2        4066.9       0.1X
+100 cols x 1000 rows (read in-mem)              33 /   63          3.0         331.2       1.0X
+100 cols x 1000 rows (exec in-mem)              39 /   75          2.6         390.9       0.8X
+100 cols x 1000 rows (read parquet)             65 /  103          1.5         651.9       0.5X
+100 cols x 1000 rows (write parquet)           237 /  271          0.4        2368.0       0.1X
+2500 cols x 40 rows (read in-mem)              209 /  225          0.5        2090.8       0.2X
+2500 cols x 40 rows (exec in-mem)              340 /  401          0.3        3400.2       0.1X
+2500 cols x 40 rows (read parquet)              86 /   99          1.2         856.2       0.4X
+2500 cols x 40 rows (write parquet)            315 /  329          0.3        3150.8       0.1X
 
 
 ================================================================================================
@@ -44,18 +44,18 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 wide shallowly nested struct field r/w:  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-1 wide x 100000 rows (read in-mem)              24 /   30          4.1         241.9       1.0X
-1 wide x 100000 rows (exec in-mem)              28 /   39          3.6         280.3       0.9X
-1 wide x 100000 rows (read parquet)            339 /  438          0.3        3392.7       0.1X
-1 wide x 100000 rows (write parquet)           202 /  261          0.5        2021.5       0.1X
-100 wide x 1000 rows (read in-mem)              44 /  108          2.3         438.1       0.6X
-100 wide x 1000 rows (exec in-mem)              59 /   77          1.7         585.6       0.4X
-100 wide x 1000 rows (read parquet)            578 /  740          0.2        5776.7       0.0X
-100 wide x 1000 rows (write parquet)           216 /  259          0.5        2157.9       0.1X
-2500 wide x 40 rows (read in-mem)               49 /   56          2.0         494.1       0.5X
-2500 wide x 40 rows (exec in-mem)              291 /  304          0.3        2907.1       0.1X
-2500 wide x 40 rows (read parquet)            2203 / 2269          0.0       22032.7       0.0X
-2500 wide x 40 rows (write parquet)            212 /  237          0.5        2115.6       0.1X
+1 wide x 100000 rows (read in-mem)              23 /   28          4.3         235.0       1.0X
+1 wide x 100000 rows (exec in-mem)              29 /   32          3.5         285.2       0.8X
+1 wide x 100000 rows (read parquet)             97 /  103          1.0         968.3       0.2X
+1 wide x 100000 rows (write parquet)           209 /  338          0.5        2087.1       0.1X
+100 wide x 1000 rows (read in-mem)              44 /   82          2.3         435.5       0.5X
+100 wide x 1000 rows (exec in-mem)              54 /   81          1.9         537.3       0.4X
+100 wide x 1000 rows (read parquet)            138 /  282          0.7        1376.5       0.2X
+100 wide x 1000 rows (write parquet)           247 /  378          0.4        2469.7       0.1X
+2500 wide x 40 rows (read in-mem)               53 /   92          1.9         532.7       0.4X
+2500 wide x 40 rows (exec in-mem)              240 /  252          0.4        2398.1       0.1X
+2500 wide x 40 rows (read parquet)            1166 / 1171          0.1       11664.2       0.0X
+2500 wide x 40 rows (write parquet)            227 /  291          0.4        2269.5       0.1X
 
 
 ================================================================================================
@@ -67,18 +67,18 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 deeply nested struct field r/w:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-1 deep x 100000 rows (read in-mem)              20 /   24          5.0         200.2       1.0X
-1 deep x 100000 rows (exec in-mem)              23 /   25          4.4         226.9       0.9X
-1 deep x 100000 rows (read parquet)            232 /  250          0.4        2324.0       0.1X
-1 deep x 100000 rows (write parquet)           181 /  194          0.6        1811.6       0.1X
-100 deep x 1000 rows (read in-mem)              41 /   47          2.4         412.0       0.5X
-100 deep x 1000 rows (exec in-mem)             454 /  506          0.2        4541.5       0.0X
-100 deep x 1000 rows (read parquet)           8463 / 8497          0.0       84630.4       0.0X
-100 deep x 1000 rows (write parquet)           205 /  234          0.5        2049.7       0.1X
-250 deep x 400 rows (read in-mem)              145 /  159          0.7        1451.1       0.1X
-250 deep x 400 rows (exec in-mem)             2714 / 2757          0.0       27135.5       0.0X
-250 deep x 400 rows (read parquet)        116363 / 116465          0.0     1163631.4       0.0X
-250 deep x 400 rows (write parquet)            322 /  389          0.3        3221.4       0.1X
+1 deep x 100000 rows (read in-mem)              21 /   32          4.8         209.1       1.0X
+1 deep x 100000 rows (exec in-mem)              24 /   33          4.2         235.9       0.9X
+1 deep x 100000 rows (read parquet)             50 /   77          2.0         496.9       0.4X
+1 deep x 100000 rows (write parquet)           248 /  310          0.4        2475.4       0.1X
+100 deep x 1000 rows (read in-mem)              44 /   82          2.3         443.6       0.5X
+100 deep x 1000 rows (exec in-mem)             543 /  793          0.2        5433.8       0.0X
+100 deep x 1000 rows (read parquet)           8755 / 8936          0.0       87553.5       0.0X
+100 deep x 1000 rows (write parquet)           216 /  365          0.5        2163.1       0.1X
+250 deep x 400 rows (read in-mem)              154 /  168          0.6        1544.8       0.1X
+250 deep x 400 rows (exec in-mem)             2617 / 2728          0.0       26172.1       0.0X
+250 deep x 400 rows (read parquet)        113432 / 114016          0.0     1134316.8       0.0X
+250 deep x 400 rows (write parquet)            329 /  361          0.3        3291.9       0.1X
 
 
 ================================================================================================
@@ -90,18 +90,18 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 bushy struct field r/w:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-1 x 1 deep x 100000 rows (read in-mem)          22 /   27          4.5         224.4       1.0X
-1 x 1 deep x 100000 rows (exec in-mem)          26 /   35          3.8         261.6       0.9X
-1 x 1 deep x 100000 rows (read parquet)        225 /  256          0.4        2251.7       0.1X
-1 x 1 deep x 100000 rows (write parquet)       190 /  208          0.5        1902.3       0.1X
-128 x 8 deep x 1000 rows (read in-mem)          18 /   21          5.7         176.7       1.3X
-128 x 8 deep x 1000 rows (exec in-mem)          58 /   72          1.7         576.7       0.4X
-128 x 8 deep x 1000 rows (read parquet)        464 /  470          0.2        4641.9       0.0X
-128 x 8 deep x 1000 rows (write parquet)       178 /  198          0.6        1776.8       0.1X
-1024 x 11 deep x 100 rows (read in-mem)         46 /   53          2.2         456.8       0.5X
-1024 x 11 deep x 100 rows (exec in-mem)        236 /  247          0.4        2356.5       0.1X
-1024 x 11 deep x 100 rows (read parquet)      1853 / 1862          0.1       18534.2       0.0X
-1024 x 11 deep x 100 rows (write parquet)      218 /  229          0.5        2177.8       0.1X
+1 x 1 deep x 100000 rows (read in-mem)          23 /   27          4.3         233.2       1.0X
+1 x 1 deep x 100000 rows (exec in-mem)          26 /   29          3.9         258.4       0.9X
+1 x 1 deep x 100000 rows (read parquet)         36 /   40          2.8         359.1       0.6X
+1 x 1 deep x 100000 rows (write parquet)       199 /  213          0.5        1987.1       0.1X
+128 x 8 deep x 1000 rows (read in-mem)          19 /   22          5.4         186.9       1.2X
+128 x 8 deep x 1000 rows (exec in-mem)          56 /   61          1.8         558.9       0.4X
+128 x 8 deep x 1000 rows (read parquet)        200 /  209          0.5        2001.6       0.1X
+128 x 8 deep x 1000 rows (write parquet)       193 /  207          0.5        1928.5       0.1X
+1024 x 11 deep x 100 rows (read in-mem)         50 /   54          2.0         502.4       0.5X
+1024 x 11 deep x 100 rows (exec in-mem)        214 /  220          0.5        2139.0       0.1X
+1024 x 11 deep x 100 rows (read parquet)      1371 / 1378          0.1       13706.6       0.0X
+1024 x 11 deep x 100 rows (write parquet)       230 /  245          0.4        2297.8       0.1X
 
 
 ================================================================================================
@@ -113,18 +113,18 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 wide array field r/w:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-1 wide x 100000 rows (read in-mem)              20 /   24          5.0         200.7       1.0X
-1 wide x 100000 rows (exec in-mem)              23 /   25          4.3         232.9       0.9X
-1 wide x 100000 rows (read parquet)            243 /  258          0.4        2432.1       0.1X
-1 wide x 100000 rows (write parquet)           182 /  200          0.5        1824.7       0.1X
-100 wide x 1000 rows (read in-mem)              16 /   18          6.3         158.6       1.3X
-100 wide x 1000 rows (exec in-mem)              18 /   20          5.4         184.9       1.1X
-100 wide x 1000 rows (read parquet)            218 /  237          0.5        2184.5       0.1X
-100 wide x 1000 rows (write parquet)           176 /  193          0.6        1763.7       0.1X
-2500 wide x 40 rows (read in-mem)               16 /   19          6.4         157.5       1.3X
-2500 wide x 40 rows (exec in-mem)               18 /   22          5.5         182.1       1.1X
-2500 wide x 40 rows (read parquet)             229 /  321          0.4        2286.3       0.1X
-2500 wide x 40 rows (write parquet)            178 /  219          0.6        1784.8       0.1X
+1 wide x 100000 rows (read in-mem)              20 /   42          4.9         203.4       1.0X
+1 wide x 100000 rows (exec in-mem)              23 /   27          4.3         231.7       0.9X
+1 wide x 100000 rows (read parquet)             55 /   66          1.8         554.9       0.4X
+1 wide x 100000 rows (write parquet)           194 /  228          0.5        1942.9       0.1X
+100 wide x 1000 rows (read in-mem)              16 /   25          6.1         164.0       1.2X
+100 wide x 1000 rows (exec in-mem)              19 /   23          5.2         191.3       1.1X
+100 wide x 1000 rows (read parquet)             40 /   49          2.5         403.7       0.5X
+100 wide x 1000 rows (write parquet)           190 /  224          0.5        1902.7       0.1X
+2500 wide x 40 rows (read in-mem)               17 /   22          5.8         171.1       1.2X
+2500 wide x 40 rows (exec in-mem)               19 /   23          5.2         192.1       1.1X
+2500 wide x 40 rows (read parquet)              39 /   44          2.6         389.2       0.5X
+2500 wide x 40 rows (write parquet)            195 /  210          0.5        1953.7       0.1X
 
 
 ================================================================================================
@@ -136,17 +136,17 @@ Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 wide map field r/w:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-1 wide x 100000 rows (read in-mem)              16 /   18          6.2         160.4       1.0X
-1 wide x 100000 rows (exec in-mem)              21 /   22          4.8         207.0       0.8X
-1 wide x 100000 rows (read parquet)            292 /  303          0.3        2921.9       0.1X
-1 wide x 100000 rows (write parquet)           180 /  194          0.6        1796.7       0.1X
-100 wide x 1000 rows (read in-mem)              11 /   13          8.9         111.9       1.4X
-100 wide x 1000 rows (exec in-mem)              14 /   15          7.1         141.3       1.1X
-100 wide x 1000 rows (read parquet)            254 /  420          0.4        2540.8       0.1X
-100 wide x 1000 rows (write parquet)           176 /  234          0.6        1764.8       0.1X
-2500 wide x 40 rows (read in-mem)               13 /   15          7.6         132.1       1.2X
-2500 wide x 40 rows (exec in-mem)               16 /   18          6.2         162.2       1.0X
-2500 wide x 40 rows (read parquet)             238 /  257          0.4        2380.4       0.1X
-2500 wide x 40 rows (write parquet)            174 /  184          0.6        1737.0       0.1X
+1 wide x 100000 rows (read in-mem)              17 /   18          6.0         165.3       1.0X
+1 wide x 100000 rows (exec in-mem)              21 /   25          4.7         212.8       0.8X
+1 wide x 100000 rows (read parquet)             80 /   85          1.3         798.4       0.2X
+1 wide x 100000 rows (write parquet)           187 /  204          0.5        1867.8       0.1X
+100 wide x 1000 rows (read in-mem)              12 /   14          8.3         120.7       1.4X
+100 wide x 1000 rows (exec in-mem)              15 /   16          6.9         145.9       1.1X
+100 wide x 1000 rows (read parquet)             46 /   51          2.2         461.2       0.4X
+100 wide x 1000 rows (write parquet)           186 /  197          0.5        1862.2       0.1X
+2500 wide x 40 rows (read in-mem)               14 /   15          7.4         135.7       1.2X
+2500 wide x 40 rows (exec in-mem)               17 /   19          6.0         167.4       1.0X
+2500 wide x 40 rows (read parquet)              46 /   51          2.2         462.9       0.4X
+2500 wide x 40 rows (write parquet)            181 /  197          0.6        1807.6       0.1X
 
 
