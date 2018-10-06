@@ -54,6 +54,8 @@ function build {
       img_path=$IMG_PATH
       --build-arg
       spark_jars=assembly/target/scala-$SPARK_SCALA_VERSION/jars
+      --build-arg
+      k8s_tests=resource-managers/kubernetes/integration-tests/tests
     )
   else
     # Not passed as an argument to docker, but used to validate the Spark directory.
