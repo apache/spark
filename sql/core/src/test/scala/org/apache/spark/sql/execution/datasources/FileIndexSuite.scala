@@ -23,7 +23,7 @@ import java.net.URI
 import scala.collection.mutable
 import scala.language.reflectiveCalls
 
-import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
+import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path, RawLocalFileSystem}
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.util._
@@ -248,6 +248,26 @@ class FileIndexSuite extends SharedSQLContext {
       assert(spark.read.parquet(path.getAbsolutePath).schema.exists(_.name == colToUnescape))
     }
   }
+
+  test("SPARK-25062 - InMemoryFileIndex stores BlockLocation objects no matter what subclass " +
+    "the FS returns") {
+    withSQLConf("fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
+      withTempDir { dir =>
+        val file = new File(dir, "text.txt")
+        stringToFile(file, "text")
+
+        val inMemoryFileIndex = new InMemoryFileIndex(
+          spark, Seq(new Path(file.getCanonicalPath)), Map.empty, None) {
+          def leafFileStatuses = leafFiles.values
+        }
+        val blockLocations = inMemoryFileIndex.leafFileStatuses.flatMap(
+          _.asInstanceOf[LocatedFileStatus].getBlockLocations)
+
+        assert(blockLocations.forall(_.getClass == classOf[BlockLocation]))
+      }
+    }
+  }
+
 }
 
 class FakeParentPathFileSystem extends RawLocalFileSystem {
@@ -255,5 +275,22 @@ class FakeParentPathFileSystem extends RawLocalFileSystem {
 
   override def getUri: URI = {
     URI.create("mockFs://some-bucket")
+  }
+}
+
+class SpecialBlockLocationFileSystem extends RawLocalFileSystem {
+
+  class SpecialBlockLocation(
+      names: Array[String],
+      hosts: Array[String],
+      offset: Long,
+      length: Long)
+    extends BlockLocation(names, hosts, offset, length)
+
+  override def getFileBlockLocations(
+      file: FileStatus,
+      start: Long,
+      len: Long): Array[BlockLocation] = {
+    Array(new SpecialBlockLocation(Array("dummy"), Array("dummy"), 0L, file.getLen))
   }
 }
