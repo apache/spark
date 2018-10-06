@@ -54,8 +54,8 @@ private[spark] class KubernetesDriverBuilder(
     new JavaDriverFeatureStep(_),
     provideHadoopGlobalStep: (
       KubernetesConf[KubernetesDriverSpecificConf]
-        => HadoopGlobalFeatureDriverStep) =
-    new HadoopGlobalFeatureDriverStep(_))  {
+        => KerberosConfDriverFeatureStep) =
+    new KerberosConfDriverFeatureStep(_))  {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesDriverSpec = {

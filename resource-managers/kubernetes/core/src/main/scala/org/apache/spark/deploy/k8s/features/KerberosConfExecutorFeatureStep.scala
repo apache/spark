@@ -18,12 +18,11 @@ package org.apache.spark.deploy.k8s.features
 
 import io.fabric8.kubernetes.api.model.HasMetadata
 
-import org.apache.spark.SparkException
-import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
-import org.apache.spark.deploy.k8s.Config.KUBERNETES_KERBEROS_KRB5_FILE
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesExecutorSpecificConf
-import org.apache.spark.deploy.k8s.features.hadoopsteps.HadoopBootstrapUtil
+import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
 import org.apache.spark.internal.Logging
 
  /**
@@ -35,18 +34,21 @@ private[spark] class KerberosConfExecutorFeatureStep(
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val sparkConf = kubernetesConf.sparkConf
-    val dTSecretName = sparkConf.get(KERBEROS_KEYTAB_SECRET_NAME)
-    val dTDataItemKey = sparkConf.get(KERBEROS_KEYTAB_SECRET_KEY)
-    val krb5Location = sparkConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
-      .getOrElse(throw new SparkException("Must specify krb5 file location"))
-    val sparkUserName = sparkConf.get(KERBEROS_SPARK_USER_NAME)
-    logInfo(s"Mounting HDFS DT from Secret $dTSecretName for Secure HDFS")
+    val maybeKrb5File = sparkConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
+    val maybeKrb5CMap = sparkConf.get(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP)
+    KubernetesUtils.requireNandDefined(
+      maybeKrb5File,
+      maybeKrb5CMap,
+      "Do not specify both a Krb5 local file and the ConfigMap as the creation" +
+        "of an additional ConfigMap, when one is already specified, is extraneous")
+    logInfo(s"Mounting HDFS DT for Secure HDFS")
     HadoopBootstrapUtil.bootstrapKerberosPod(
-      dTSecretName,
-      dTDataItemKey,
-      sparkUserName,
-      krb5Location,
+      sparkConf.get(KERBEROS_KEYTAB_SECRET_NAME),
+      sparkConf.get(KERBEROS_KEYTAB_SECRET_KEY),
+      sparkConf.get(KERBEROS_SPARK_USER_NAME),
+      maybeKrb5File,
       kubernetesConf.kRBConfigMapName,
+      maybeKrb5CMap,
       pod)
   }
 

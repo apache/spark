@@ -20,7 +20,7 @@ import io.fabric8.kubernetes.api.model.HasMetadata
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.features.hadoopsteps.HadoopBootstrapUtil
+import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
 import org.apache.spark.internal.Logging
 
  /**
@@ -33,16 +33,16 @@ private[spark] class HadoopConfExecutorFeatureStep(
   extends KubernetesFeatureConfigStep with Logging{
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val maybeHadoopConfDir = kubernetesConf.sparkConf.getOption(HADOOP_CONF_DIR_LOC)
-    val maybeHadoopConfigMap = kubernetesConf.sparkConf.getOption(HADOOP_CONFIG_MAP_SPARK_CONF_NAME)
-    require(maybeHadoopConfDir.isDefined && maybeHadoopConfigMap.isDefined,
-      "Ensure that HADOOP_CONF_DIR is defined")
-    logInfo("HADOOP_CONF_DIR defined. Mounting Hadoop specific files")
-    HadoopBootstrapUtil.bootstrapHadoopConfDir(
-      maybeHadoopConfDir.get,
-      maybeHadoopConfigMap.get,
-      kubernetesConf.tokenManager,
-      pod)
+     val maybeHadoopConfDir = kubernetesConf.sparkConf.getOption(HADOOP_CONF_DIR_LOC)
+     val maybeHadoopConfigMap = kubernetesConf.sparkConf.getOption(HADOOP_CONFIG_MAP_NAME)
+     require(maybeHadoopConfDir.isDefined && maybeHadoopConfigMap.isDefined,
+       "Ensure that HADOOP_CONF_DIR is defined")
+     logInfo("HADOOP_CONF_DIR defined. Mounting Hadoop specific files")
+     HadoopBootstrapUtil.bootstrapHadoopConfDir(
+       maybeHadoopConfDir.get,
+       maybeHadoopConfigMap.get,
+       kubernetesConf.tokenManager,
+       pod)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty

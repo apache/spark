@@ -88,8 +88,8 @@ private[spark] object Constants {
   val KRB_FILE_DIR_PATH = "/etc"
   val ENV_HADOOP_CONF_DIR = "HADOOP_CONF_DIR"
   val HADOOP_CONF_DIR_LOC = "spark.kubernetes.hadoop.conf.dir"
-  val HADOOP_CONFIG_MAP_SPARK_CONF_NAME =
-    "spark.kubernetes.hadoop.executor.hadoopConfigMapName"
+  val HADOOP_CONFIG_MAP_NAME =
+    "spark.kubernetes.executor.hadoopConfigMapName"
 
   // Kerberos Configuration
   val KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME =

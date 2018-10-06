@@ -63,7 +63,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     ENV_SECRETS_STEP_TYPE, classOf[EnvSecretsFeatureStep])
 
   private val hadoopGlobalStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    HADOOP_GLOBAL_STEP_TYPE, classOf[HadoopGlobalFeatureDriverStep])
+    HADOOP_GLOBAL_STEP_TYPE, classOf[KerberosConfDriverFeatureStep])
 
   private val mountVolumesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     MOUNT_VOLUMES_STEP_TYPE, classOf[MountVolumesFeatureStep])

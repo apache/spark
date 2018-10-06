@@ -49,7 +49,9 @@ private[spark] object KubernetesUtils {
   }
 
   def requireSecondIfFirstIsDefined(
-      opt1: Option[_], opt2: Option[_], errMessageWhenSecondIsMissing: String): Unit = {
+      opt1: Option[_],
+      opt2: Option[_],
+      errMessageWhenSecondIsMissing: String): Unit = {
     opt1.foreach { _ =>
       require(opt2.isDefined, errMessageWhenSecondIsMissing)
     }

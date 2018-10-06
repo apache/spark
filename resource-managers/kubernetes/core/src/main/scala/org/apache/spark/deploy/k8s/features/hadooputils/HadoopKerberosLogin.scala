@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.features.hadoopsteps
+package org.apache.spark.deploy.k8s.features.hadooputils
 
 import scala.collection.JavaConverters._
 
@@ -49,8 +49,7 @@ private[spark] object HadoopKerberosLogin {
      // The login happens in the SparkSubmit so login logic is not necessary
      val jobUserUGI = tokenManager.getCurrentUser
      val originalCredentials = jobUserUGI.getCredentials
-     val hadoopTokenManager: HadoopDelegationTokenManager =
-       new HadoopDelegationTokenManager(submissionSparkConf, hadoopConf)
+     val hadoopTokenManager = new HadoopDelegationTokenManager(submissionSparkConf, hadoopConf)
      val (tokenData, renewalInterval) = tokenManager.getDelegationTokens(
        originalCredentials,
        submissionSparkConf,

@@ -21,7 +21,7 @@ import io.fabric8.kubernetes.api.model.HasMetadata
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesExecutorSpecificConf
-import org.apache.spark.deploy.k8s.features.hadoopsteps.HadoopBootstrapUtil
+import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
 import org.apache.spark.internal.Logging
 
  /**
@@ -33,10 +33,8 @@ import org.apache.spark.internal.Logging
    extends KubernetesFeatureConfigStep with Logging{
 
    override def configurePod(pod: SparkPod): SparkPod = {
-     val sparkUserName = kubernetesConf.sparkConf.get(KERBEROS_SPARK_USER_NAME)
-     HadoopBootstrapUtil.bootstrapSparkUserPod(
-       sparkUserName,
-       pod)
+      val sparkUserName = kubernetesConf.sparkConf.get(KERBEROS_SPARK_USER_NAME)
+      HadoopBootstrapUtil.bootstrapSparkUserPod(sparkUserName, pod)
    }
 
    override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty

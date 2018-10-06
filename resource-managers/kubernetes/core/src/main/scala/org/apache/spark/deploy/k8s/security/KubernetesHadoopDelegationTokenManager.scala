@@ -17,8 +17,6 @@
 
 package org.apache.spark.deploy.k8s.security
 
-import java.io.File
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
@@ -48,16 +46,6 @@ private[spark] class KubernetesHadoopDelegationTokenManager extends Logging {
    def getCurrentTime: Long = clock.getTimeMillis()
    def serializeCreds(creds: Credentials): Array[Byte] = SparkHadoopUtil.get.serialize(creds)
    def nextRT(rt: Long, conf: SparkConf): Long = SparkHadoopUtil.nextCredentialRenewalTime(rt, conf)
-
-   // Grab files in the HADOOP_CONF directory
-   def getHadoopConfFiles(path: String) : Seq[File] = {
-     val dir = new File(path)
-     if (dir.isDirectory) {
-       dir.listFiles.flatMap { file => Some(file).filter(_.isFile) }.toSeq
-     } else {
-       Seq.empty[File]
-     }
-   }
 
    def getDelegationTokens(
     creds: Credentials,

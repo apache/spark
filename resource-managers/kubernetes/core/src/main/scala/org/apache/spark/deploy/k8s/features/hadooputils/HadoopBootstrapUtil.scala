@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.features.hadoopsteps
+package org.apache.spark.deploy.k8s.features.hadooputils
 
 import java.io.File
 
@@ -22,8 +22,9 @@ import scala.collection.JavaConverters._
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
-import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, ContainerBuilder, KeyToPathBuilder, PodBuilder}
+import io.fabric8.kubernetes.api.model._
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.SparkPod
 import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
@@ -36,8 +37,9 @@ private[spark] object HadoopBootstrapUtil {
     * @param dtSecretName Name of the secret that stores the Delegation Token
     * @param dtSecretItemKey Name of the Item Key storing the Delegation Token
     * @param userName Name of the SparkUser to set SPARK_USER
-    * @param fileLocation Location of the krb5 file
-    * @param krb5ConfName Name of the ConfigMap for Krb5
+    * @param maybeFileLocation Optional Location of the krb5 file
+    * @param newKrb5ConfName Optiona location of the ConfigMap for Krb5
+    * @param oldKrb5ConfName Optional name of ConfigMap for Krb5
     * @param pod Input pod to be appended to
     * @return a modified SparkPod
     */
@@ -45,11 +47,41 @@ private[spark] object HadoopBootstrapUtil {
     dtSecretName: String,
     dtSecretItemKey: String,
     userName: String,
-    fileLocation: String,
-    krb5ConfName: String,
+    maybeFileLocation: Option[String],
+    newKrb5ConfName: String,
+    maybeKrb5ConfName: Option[String],
     pod: SparkPod) : SparkPod = {
-    val krb5File = new File(fileLocation)
-    val fileStringPath = krb5File.toPath.getFileName.toString
+
+    val maybePreConfigMapVolume = maybeKrb5ConfName.map { kconf =>
+      new VolumeBuilder()
+        .withNewConfigMap()
+          .withName(kconf)
+          .endConfigMap()
+        .build() }
+
+    val maybeCreateConfigMapVolume = maybeFileLocation.map {
+      fileLocation =>
+      val krb5File = new File(fileLocation)
+      val fileStringPath = krb5File.toPath.getFileName.toString
+      new VolumeBuilder()
+        .withName(KRB_FILE_VOLUME)
+        .withNewConfigMap()
+          .withName(newKrb5ConfName)
+          .withItems(new KeyToPathBuilder()
+            .withKey(fileStringPath)
+            .withPath(fileStringPath)
+            .build())
+          .endConfigMap()
+        .build() }
+
+    // Breaking up Volume Creation for clarity
+    val configMapVolume =
+      maybePreConfigMapVolume.getOrElse(
+        maybeCreateConfigMapVolume.getOrElse(
+          throw new SparkException(
+            "Must specify krb5 file locally or via ConfigMap")
+        ))
+
     val kerberizedPod = new PodBuilder(pod.pod)
       .editOrNewSpec()
         .addNewVolume()
@@ -58,16 +90,7 @@ private[spark] object HadoopBootstrapUtil {
             .withSecretName(dtSecretName)
             .endSecret()
           .endVolume()
-        .addNewVolume()
-          .withName(KRB_FILE_VOLUME)
-            .withNewConfigMap()
-              .withName(krb5ConfName)
-              .withItems(new KeyToPathBuilder()
-                .withKey(fileStringPath)
-                .withPath(fileStringPath)
-                .build())
-              .endConfigMap()
-            .endVolume()
+        .withVolumes(configMapVolume)
         .endSpec()
       .build()
     val kerberizedContainer = new ContainerBuilder(pod.container)
@@ -99,9 +122,7 @@ private[spark] object HadoopBootstrapUtil {
     * @param pod Input pod to be appended to
     * @return a modified SparkPod
     */
-  def bootstrapSparkUserPod(
-    sparkUserName: String,
-    pod: SparkPod) : SparkPod = {
+  def bootstrapSparkUserPod(sparkUserName: String, pod: SparkPod) : SparkPod = {
     val envModifiedContainer = new ContainerBuilder(pod.container)
       .addNewEnv()
         .withName(ENV_SPARK_USER)
@@ -109,6 +130,21 @@ private[spark] object HadoopBootstrapUtil {
         .endEnv()
       .build()
     SparkPod(pod.pod, envModifiedContainer)
+  }
+
+   /**
+    * Grabbing files in the HADOOP_CONF_DIR
+    *
+    * @param path location of HADOOP_CONF_DIR
+    * @return a list of File object
+    */
+  def getHadoopConfFiles(path: String) : Seq[File] = {
+    val dir = new File(path)
+    if (dir.isDirectory) {
+      dir.listFiles.flatMap { file => Some(file).filter(_.isFile) }.toSeq
+    } else {
+      Seq.empty[File]
+    }
   }
 
    /**
@@ -126,8 +162,7 @@ private[spark] object HadoopBootstrapUtil {
     hadoopConfigMapName: String,
     kubeTokenManager: KubernetesHadoopDelegationTokenManager,
     pod: SparkPod) : SparkPod = {
-      val hadoopConfigFiles =
-        kubeTokenManager.getHadoopConfFiles(hadoopConfDir)
+      val hadoopConfigFiles = getHadoopConfFiles(hadoopConfDir)
       val keyPaths = hadoopConfigFiles.map { file =>
         val fileStringPath = file.toPath.getFileName.toString
         new KeyToPathBuilder()
@@ -159,24 +194,25 @@ private[spark] object HadoopBootstrapUtil {
         .build()
       SparkPod(hadoopSupportedPod, hadoopSupportedContainer)
     }
+
      /**
-      * bootstraping the container with ConfigMaps that store
-      * Hadoop configuration files
+      * Builds ConfigMap given the file location of the
+      * krb5.conf file
       *
       * @param configMapName name of configMap for krb5
       * @param fileLocation location of krb5 file
       * @return a ConfigMap
       */
   def buildkrb5ConfigMap(
-    configMapName: String,
-    fileLocation: String) : ConfigMap = {
-    val file = new File(fileLocation)
-    new ConfigMapBuilder()
-      .withNewMetadata()
-      .withName(configMapName)
-      .endMetadata()
-      .addToData(
-        Map(file.toPath.getFileName.toString -> Files.toString(file, Charsets.UTF_8)).asJava)
-      .build()
+     configMapName: String,
+     fileLocation: String) : ConfigMap = {
+     val file = new File(fileLocation)
+     new ConfigMapBuilder()
+       .withNewMetadata()
+         .withName(configMapName)
+         .endMetadata()
+       .addToData(
+         Map(file.toPath.getFileName.toString -> Files.toString(file, Charsets.UTF_8)).asJava)
+       .build()
   }
 }
