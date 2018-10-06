@@ -35,7 +35,7 @@ object TypedAggregateExpression {
 
   // Checks if given encoder is for `Option[Product]`.
   def isOptProductEncoder(encoder: ExpressionEncoder[_]): Boolean = {
-    // Only Option[Product] is non-flat.
+    // For all Option[_] classes, only Option[Product] is reported as not flat.
     encoder.clsTag.runtimeClass == classOf[Option[_]] && !encoder.flat
   }
 
@@ -47,8 +47,10 @@ object TypedAggregateExpression {
     val serializer = encoder.serializer
     val deserializer = encoder.deserializer
 
+    // This is just a sanity check. Encoders of Option[Product] has only one `CreateNamedStruct`
+    // serializer expression.
     assert(serializer.length == 1,
-      "We can only flatten encoder of Option of Product class which has single serializer.")
+      "We only flatten encoder of Option[Product] class which has single serializer.")
 
     val flattenSerializers = serializer(0).collect {
       case c: CreateNamedStruct => c.flatten
@@ -74,8 +76,7 @@ object TypedAggregateExpression {
           "On top of deserializer of Option[Product] should be `WrapOption`.")
     }
 
-    // `Option[Product]` is encoded as single column of struct type in a row.
-    val newSchema = encoder.schema.asInstanceOf[StructType].fields(0)
+    val newSchema = encoder.schema.fields(0)
       .dataType.asInstanceOf[StructType]
     encoder.copy(serializer = flattenSerializers, deserializer = flattenDeserializer,
       schema = newSchema)
@@ -85,6 +86,11 @@ object TypedAggregateExpression {
       aggregator: Aggregator[_, BUF, OUT]): TypedAggregateExpression = {
     val rawBufferEncoder = encoderFor[BUF]
 
+    // When `BUF` or `OUT` is an Option[Product], we need to flatten serializers and deserializer
+    // of original encoder. It is because we wrap serializers of Option[Product] inside an extra
+    // struct in order to support encoding of Option[Product] at top-level row. But here we use
+    // the encoder to encode Option[Product] for a column, we need to get rid of this extra
+    // struct.
     val bufferEncoder = if (isOptProductEncoder(rawBufferEncoder)) {
       flattenOptProductEncoder(rawBufferEncoder)
     } else {

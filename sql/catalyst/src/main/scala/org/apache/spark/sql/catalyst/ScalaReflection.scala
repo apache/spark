@@ -143,7 +143,8 @@ object ScalaReflection extends ScalaReflection {
     val isOptionOfProduct = tpe.dealias <:< localTypeOf[Option[_]] &&
       definedByConstructorParams(tpe)
     val (optTypePath, nullable) = if (isOptionOfProduct) {
-      // Top-level Option of Product is encoded as single struct column at top-level row.
+      // Because we encode top-level Option[Product] as a struct at the first column of the row,
+      // we add zero ordinal as the path to access it when to deserialize it.
       (Some(addToPathOrdinal(None, 0, dataType, walkedTypePath)), true)
     } else {
       (None, tpeNullable)
@@ -448,7 +449,10 @@ object ScalaReflection extends ScalaReflection {
     serializerFor(inputObject, tpe, walkedTypePath) match {
       case i @ expressions.If(_, _, _: CreateNamedStruct)
           if tpe.dealias <:< localTypeOf[Option[_]] && definedByConstructorParams(tpe) =>
-        // We encode top-level Option of Product as a single struct column.
+        // When we are going to serialize an Option[Product] at top-level of row, because
+        // Spark doesn't support top-level row as null, we encode the Option[Product] as a
+        // struct at the first column of the row. So here we add an extra named struct wrapping
+        // the serialized Option[Product] which is the first and only column named `value`.
         CreateNamedStruct(expressions.Literal("value") :: i :: Nil)
       case expressions.If(_, _, s: CreateNamedStruct) if definedByConstructorParams(tpe) => s
       case other => CreateNamedStruct(expressions.Literal("value") :: other :: Nil)
