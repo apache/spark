@@ -2733,6 +2733,33 @@ def udf(f=None, returnType=StringType()):
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
     """
+
+    # The following table shows most of Python data and SQL type conversions in normal UDFs that
+    # are not yet visible to the user. Some of behaviors are buggy and might be changed in the near
+    # future. The table might have to be eventually documented externally.
+    # Please see SPARK-25666's PR to see the codes in order to generate the table below.
+    #
+    # +-----------------------------+--------------+----------+------+-------+------+----------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+--------------+----------+--------------+-------------+-------------+  # noqa
+    # |SQL Type \ Python Value(Type)|None(NoneType)|True(bool)|1(int)|1(long)|a(str)|a(unicode)|    1970-01-01(date)|1970-01-01 00:00:00(datetime)|1.0(float)|array('i', [1])(array)|[1](list)|         (1,)(tuple)|ABC(bytearray)|1(Decimal)|{'a': 1}(dict)|Row(a=1)(Row)|Row(a=1)(Row)|  # noqa
+    # +-----------------------------+--------------+----------+------+-------+------+----------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+--------------+----------+--------------+-------------+-------------+  # noqa
+    # |                         null|          None|      None|  None|   None|  None|      None|                None|                         None|      None|                  None|     None|                None|          None|      None|          None|            X|            X|  # noqa
+    # |                      boolean|          None|      True|  None|   None|  None|      None|                None|                         None|      None|                  None|     None|                None|          None|      None|          None|            X|            X|  # noqa
+    # |                      tinyint|          None|      None|     1|      1|  None|      None|                None|                         None|      None|                  None|     None|                None|          None|      None|          None|            X|            X|  # noqa
+    # |                     smallint|          None|      None|     1|      1|  None|      None|                None|                         None|      None|                  None|     None|                None|          None|      None|          None|            X|            X|  # noqa
+    # |                          int|          None|      None|     1|      1|  None|      None|                None|                         None|      None|                  None|     None|                None|          None|      None|          None|            X|            X|  # noqa
+    # |                       bigint|          None|      None|     1|      1|  None|      None|                None|                         None|      None|                  None|     None|                None|          None|      None|          None|            X|            X|  # noqa
+    # |                       string|          None|      true|     1|      1|     a|         a|java.util.Gregori...|         java.util.Gregori...|       1.0|           [I@7f1970e1|      [1]|[Ljava.lang.Objec...|   [B@284838a9|         1|         {a=1}|            X|            X|  # noqa
+    # |                         date|          None|         X|     X|      X|     X|         X|          1970-01-01|                   1970-01-01|         X|                     X|        X|                   X|             X|         X|             X|            X|            X|  # noqa
+    # |                    timestamp|          None|         X|     X|      X|     X|         X|                   X|          1970-01-01 00:00:00|         X|                     X|        X|                   X|             X|         X|             X|            X|            X|  # noqa
+    # |                        float|          None|      None|  None|   None|  None|      None|                None|                         None|       1.0|                  None|     None|                None|          None|      None|          None|            X|            X|  # noqa
+    # |                       double|          None|      None|  None|   None|  None|      None|                None|                         None|       1.0|                  None|     None|                None|          None|      None|          None|            X|            X|  # noqa
+    # |                   array<int>|          None|      None|  None|   None|  None|      None|                None|                         None|      None|                   [1]|      [1]|                 [1]|  [65, 66, 67]|      None|          None|            X|            X|  # noqa
+    # |                       binary|          None|      None|  None|   None|     a|         a|                None|                         None|      None|                  None|     None|                None|           ABC|      None|          None|            X|            X|  # noqa
+    # |                decimal(10,0)|          None|      None|  None|   None|  None|      None|                None|                         None|      None|                  None|     None|                None|          None|         1|          None|            X|            X|  # noqa
+    # |              map<string,int>|          None|      None|  None|   None|  None|      None|                None|                         None|      None|                  None|     None|                None|          None|      None|     {u'a': 1}|            X|            X|  # noqa
+    # |               struct<_1:int>|          None|         X|     X|      X|     X|         X|                   X|                            X|         X|                     X|Row(_1=1)|           Row(_1=1)|             X|         X|  Row(_1=None)|    Row(_1=1)|    Row(_1=1)|  # noqa
+    # +-----------------------------+--------------+----------+------+-------+------+----------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+--------------+----------+--------------+-------------+-------------+  # noqa
+
     # decorator @udf, @udf(), @udf(dataType())
     if f is None or isinstance(f, (str, DataType)):
         # If DataType has been passed as a positional argument
