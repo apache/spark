@@ -1819,6 +1819,14 @@ test_that("string operators", {
     collect(select(df4, split_string(df4$a, "\\\\")))[1, 1],
     list(list("a.b@c.d   1", "b"))
   )
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "\\.", 2)))[1, 1],
+    list(list("a", "b@c.d   1\\b"))
+  )
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "b", 0)))[1, 1],
+    list(list("a.", "@c.d   1\\", ""))
+  )
 
   l5 <- list(list(a = "abc"))
   df5 <- createDataFrame(l5)
