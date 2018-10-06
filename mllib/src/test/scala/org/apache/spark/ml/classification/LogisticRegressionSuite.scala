@@ -1677,10 +1677,10 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     // use tighter constraints because OWL-QN solver takes longer to converge
     val trainer1 = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(1.0).setRegParam(0.05).setStandardization(true)
-      .setMaxIter(175).setTol(1e-10).setWeightCol("weight")
+      .setMaxIter(300).setTol(1e-10).setWeightCol("weight")
     val trainer2 = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(1.0).setRegParam(0.05).setStandardization(false)
-      .setMaxIter(125).setTol(1e-10).setWeightCol("weight")
+      .setMaxIter(300).setTol(1e-10).setWeightCol("weight")
 
     val model1 = trainer1.fit(multinomialDataset)
     val model2 = trainer2.fit(multinomialDataset)
@@ -1767,7 +1767,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       0.0, 0.0, 0.0, 0.0), isTransposed = true)
     val interceptsR = Vectors.dense(-0.44215290, 0.76308326, -0.3209304)
 
-    assert(model1.coefficientMatrix ~== coefficientsRStd absTol 0.05)
+    assert(model1.coefficientMatrix ~== coefficientsRStd absTol 0.02)
     assert(model1.interceptVector ~== interceptsRStd relTol 0.1)
     assert(model1.interceptVector.toArray.sum ~== 0.0 absTol eps)
     assert(model2.coefficientMatrix ~== coefficientsR absTol 0.02)
