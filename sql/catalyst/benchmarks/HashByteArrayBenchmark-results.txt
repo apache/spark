@@ -1,0 +1,86 @@
+================================================================================================
+Benchmark for MurMurHash 3 and xxHash64
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Hash byte arrays with length 8:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Murmur3_x86_32                                  12 /   15        181.7           5.5       1.0X
+xxHash 64-bit                                   14 /   18        146.0           6.8       0.8X
+HiveHasher                                      11 /   13        183.0           5.5       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Hash byte arrays with length 16:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Murmur3_x86_32                                  18 /   22        113.4           8.8       1.0X
+xxHash 64-bit                                   17 /   24        120.3           8.3       1.1X
+HiveHasher                                      21 /   31         97.9          10.2       0.9X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Hash byte arrays with length 24:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Murmur3_x86_32                                  25 /   27         84.8          11.8       1.0X
+xxHash 64-bit                                   20 /   22        103.9           9.6       1.2X
+HiveHasher                                      32 /   34         65.0          15.4       0.8X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Hash byte arrays with length 31:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Murmur3_x86_32                                  36 /   38         58.5          17.1       1.0X
+xxHash 64-bit                                   29 /   31         73.2          13.7       1.3X
+HiveHasher                                      43 /   46         48.7          20.5       0.8X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Hash byte arrays with length 95:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Murmur3_x86_32                                  87 /   92         24.2          41.3       1.0X
+xxHash 64-bit                                   57 /   59         37.1          26.9       1.5X
+HiveHasher                                     163 /  167         12.9          77.6       0.5X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Hash byte arrays with length 287:        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Murmur3_x86_32                                 263 /  271          8.0         125.3       1.0X
+xxHash 64-bit                                   95 /  100         22.1          45.3       2.8X
+HiveHasher                                     537 /  540          3.9         256.0       0.5X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Hash byte arrays with length 1055:       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Murmur3_x86_32                                 976 / 1065          2.1         465.2       1.0X
+xxHash 64-bit                                  233 /  248          9.0         110.9       4.2X
+HiveHasher                                    2054 / 2054          1.0         979.3       0.5X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Hash byte arrays with length 2079:       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Murmur3_x86_32                                1874 / 1878          1.1         893.8       1.0X
+xxHash 64-bit                                  412 /  428          5.1         196.6       4.5X
+HiveHasher                                    4044 / 4049          0.5        1928.5       0.5X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+Hash byte arrays with length 8223:       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Murmur3_x86_32                                7744 / 7938          0.3        3692.8       1.0X
+xxHash 64-bit                                 1871 / 1893          1.1         892.3       4.1X
+HiveHasher                                  16043 / 16073          0.1        7650.1       0.5X
+
+
