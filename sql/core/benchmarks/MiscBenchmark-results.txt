@@ -2,131 +2,119 @@
 filter & aggregate without group
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
-Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 range/filter/sum:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-range/filter/sum wholestage off             36618 / 41080         57.3          17.5       1.0X
-range/filter/sum wholestage on                2495 / 2609        840.4           1.2      14.7X
+range/filter/sum wholestage off             47752 / 48952         43.9          22.8       1.0X
+range/filter/sum wholestage on                3123 / 3558        671.5           1.5      15.3X
 
 
 ================================================================================================
 range/limit/sum
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
-Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 range/limit/sum:                         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-range/limit/sum wholestage off                 117 /  121       4477.9           0.2       1.0X
-range/limit/sum wholestage on                  178 /  187       2938.1           0.3       0.7X
+range/limit/sum wholestage off                 229 /  236       2288.9           0.4       1.0X
+range/limit/sum wholestage on                  257 /  267       2041.0           0.5       0.9X
 
 
 ================================================================================================
 sample
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
-Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 sample with replacement:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-sample with replacement wholestage off        9142 / 9182         14.3          69.8       1.0X
-sample with replacement wholestage on         5926 / 6107         22.1          45.2       1.5X
+sample with replacement wholestage off      12908 / 13076         10.2          98.5       1.0X
+sample with replacement wholestage on         7334 / 7346         17.9          56.0       1.8X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
-Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 sample without replacement:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-sample without replacement wholestage off      1834 / 1837         71.5          14.0       1.0X
-sample without replacement wholestage on       784 /  803        167.2           6.0       2.3X
+sample without replacement wholestage off      3082 / 3095         42.5          23.5       1.0X
+sample without replacement wholestage on      1125 / 1211        116.5           8.6       2.7X
 
 
 ================================================================================================
 collect
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
-Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 collect:                                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-collect 1 million                              186 /  215          5.6         177.5       1.0X
-collect 2 millions                             361 /  393          2.9         344.2       0.5X
-collect 4 millions                             884 / 1053          1.2         843.4       0.2X
+collect 1 million                              291 /  311          3.6         277.3       1.0X
+collect 2 millions                             552 /  564          1.9         526.6       0.5X
+collect 4 millions                            1104 / 1108          0.9        1053.0       0.3X
 
 
 ================================================================================================
 collect limit
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
-Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 collect limit:                           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-collect limit 1 million                        206 /  225          5.1         196.6       1.0X
-collect limit 2 millions                       407 /  419          2.6         387.8       0.5X
+collect limit 1 million                        311 /  340          3.4         296.2       1.0X
+collect limit 2 millions                       581 /  614          1.8         554.4       0.5X
 
 
 ================================================================================================
 generate explode
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
-Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 generate explode array:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-generate explode array wholestage off         9658 / 9820          1.7         575.7       1.0X
-generate explode array wholestage on          6953 / 7005          2.4         414.4       1.4X
+generate explode array wholestage off       15211 / 15368          1.1         906.6       1.0X
+generate explode array wholestage on        10761 / 10776          1.6         641.4       1.4X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
-Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 generate explode map:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-generate explode map wholestage off         13024 / 13061          1.3         776.3       1.0X
-generate explode map wholestage on          10300 / 10372          1.6         613.9       1.3X
+generate explode map wholestage off         22128 / 22578          0.8        1318.9       1.0X
+generate explode map wholestage on          16421 / 16520          1.0         978.8       1.3X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
-Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 generate posexplode array:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-generate posexplode array wholestage off      9770 / 9910          1.7         582.3       1.0X
-generate posexplode array wholestage on       7033 / 7104          2.4         419.2       1.4X
+generate posexplode array wholestage off    17108 / 18019          1.0        1019.7       1.0X
+generate posexplode array wholestage on     11715 / 11804          1.4         698.3       1.5X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
-Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 generate inline array:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-generate inline array wholestage off          9260 / 9264          1.8         551.9       1.0X
-generate inline array wholestage on           7040 / 7668          2.4         419.6       1.3X
+generate inline array wholestage off        16358 / 16418          1.0         975.0       1.0X
+generate inline array wholestage on         11152 / 11472          1.5         664.7       1.5X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
-Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 generate big struct array:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-generate big struct array wholestage off       391 /  476          0.2        6511.5       1.0X
-generate big struct array wholestage on        353 /  372          0.2        5884.0       1.1X
+generate big struct array wholestage off       708 /  776          0.1       11803.5       1.0X
+generate big struct array wholestage on        535 /  589          0.1        8913.9       1.3X
 
 
 ================================================================================================
 generate regular generator
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
-Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 generate stack:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-generate stack wholestage off               17179 / 17719          1.0        1024.0       1.0X
-generate stack wholestage on                13674 / 14112          1.2         815.0       1.3X
+generate stack wholestage off               29082 / 29393          0.6        1733.4       1.0X
+generate stack wholestage on                21066 / 21128          0.8        1255.6       1.4X
 
 
