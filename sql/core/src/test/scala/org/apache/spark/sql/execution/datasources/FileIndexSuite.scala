@@ -281,15 +281,16 @@ class FakeParentPathFileSystem extends RawLocalFileSystem {
 class SpecialBlockLocationFileSystem extends RawLocalFileSystem {
 
   class SpecialBlockLocation(
-    names: Array[String],
-    hosts: Array[String],
-    offset: Long,
-    length: Long) extends BlockLocation(names, hosts, offset, length)
+      names: Array[String],
+      hosts: Array[String],
+      offset: Long,
+      length: Long)
+    extends BlockLocation(names, hosts, offset, length)
 
   override def getFileBlockLocations(
-    file: FileStatus,
-    start: Long,
-    len: Long): Array[BlockLocation] = {
+      file: FileStatus,
+      start: Long,
+      len: Long): Array[BlockLocation] = {
     Array(new SpecialBlockLocation(Array("dummy"), Array("dummy"), 0L, file.getLen))
   }
 }
