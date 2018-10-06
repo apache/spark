@@ -1820,4 +1820,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     checkAnswer(spark.read.option("multiLine", true).schema(schema).csv(input), Row(null))
     assert(spark.read.csv(input).collect().toSet == Set(Row()))
   }
+
+  test("using the backward slash as the delimiter") {
+    val input = Seq("""abc\1""").toDS()
+    val df = spark.read.option("delimiter", "\\").csv(input)
+    checkAnswer(df, Row("abc", "1"))
+  }
 }
