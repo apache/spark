@@ -557,6 +557,15 @@ kubernetes = Module(
     sbt_test_goals=["kubernetes/test"]
 )
 
+
+spark_ganglia_lgpl = Module(
+    name="spark-ganglia-lgpl",
+    dependencies=[],
+    source_file_regexes=[
+        "external/spark-ganglia-lgpl",
+    ]
+)
+
 # The root module is a dummy module which is used to run all of the tests.
 # No other modules should directly depend on this module.
 root = Module(
