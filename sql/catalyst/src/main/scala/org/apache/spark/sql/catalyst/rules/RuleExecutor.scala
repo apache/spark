@@ -88,11 +88,14 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
       var lastPlan = curPlan
       var continue = true
       // Verify that once-strategy batches stabilize after one run when testing.
-      val maxIterations = if (batch.strategy.maxIterations == 1 && verifyOnceStrategyIdempotence) {
-        2
-      } else {
-        batch.strategy.maxIterations
-      }
+      val maxIterations =
+        if (batch.strategy.maxIterations == 1
+          && verifyOnceStrategyIdempotence
+          && !knownUnstableBatches.exists(_._1 == batch.name)) {
+          2
+        } else {
+          batch.strategy.maxIterations
+        }
 
       // Run until fix point (or the max number of iterations as specified in the strategy.
       while (continue) {
@@ -136,7 +139,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
           if (iteration > 1) {
             val message = s"Plan did not stabilize after max iterations " +
               s"(${batch.strategy.maxIterations}) reached for batch ${batch.name}."
-            if (Utils.isTesting && !knownUnstableBatches.exists(_._1 == batch.name)) {
+            if (Utils.isTesting) {
               throw new TreeNodeException(curPlan, message, null)
             } else {
               logWarning(message)
