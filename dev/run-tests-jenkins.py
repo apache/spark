@@ -115,7 +115,8 @@ def run_tests(tests_timeout):
                                          os.path.join(SPARK_HOME, 'dev', 'run-tests')]).wait()
 
     failure_note_by_errcode = {
-        1: 'executing the `dev/run-tests` script',  # error to denote run-tests script failures
+        # error to denote run-tests script failures:
+        1: 'executing the `dev/run-tests` script',
         ERROR_CODES["BLOCK_GENERAL"]: 'some tests',
         ERROR_CODES["BLOCK_RAT"]: 'RAT tests',
         ERROR_CODES["BLOCK_SCALA_STYLE"]: 'Scala style tests',
@@ -130,7 +131,7 @@ def run_tests(tests_timeout):
         ERROR_CODES["BLOCK_PYSPARK_UNIT_TESTS"]: 'PySpark unit tests',
         ERROR_CODES["BLOCK_PYSPARK_PIP_TESTS"]: 'PySpark pip packaging tests',
         ERROR_CODES["BLOCK_SPARKR_UNIT_TESTS"]: 'SparkR unit tests',
-        ERROR_CODES["BLOCK_TIMEOUT"]: 'from timeout after a configured wait of \`%s\`' % (
+        ERROR_CODES["BLOCK_TIMEOUT"]: 'from timeout after a configured wait of `%s`' % (
             tests_timeout)
     }
 

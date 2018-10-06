@@ -316,18 +316,6 @@ test_that("create DataFrame from RDD", {
   unsetHiveContext()
 })
 
-test_that("createDataFrame uses files for large objects", {
-  # To simulate a large file scenario, we set spark.r.maxAllocationLimit to a smaller value
-  conf <- callJMethod(sparkSession, "conf")
-  callJMethod(conf, "set", "spark.r.maxAllocationLimit", "100")
-  df <- suppressWarnings(createDataFrame(iris, numPartitions = 3))
-  expect_equal(getNumPartitions(df), 3)
-
-  # Resetting the conf back to default value
-  callJMethod(conf, "set", "spark.r.maxAllocationLimit", toString(.Machine$integer.max / 10))
-  expect_equal(dim(df), dim(iris))
-})
-
 test_that("read/write csv as DataFrame", {
   if (windows_with_hadoop()) {
     csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
@@ -1598,6 +1586,25 @@ test_that("column functions", {
   result <- collect(select(df, element_at(df$map, "y")))[[1]]
   expect_equal(result, 2)
 
+  # Test array_except(), array_intersect() and array_union()
+  df <- createDataFrame(list(list(list(1L, 2L, 3L), list(3L, 1L)),
+                             list(list(1L, 2L), list(3L, 4L)),
+                             list(list(1L, 2L, 3L), list(3L, 4L))))
+  result1 <- collect(select(df, array_except(df[[1]], df[[2]])))[[1]]
+  expect_equal(result1, list(list(2L), list(1L, 2L), list(1L, 2L)))
+
+  result2 <- collect(select(df, array_intersect(df[[1]], df[[2]])))[[1]]
+  expect_equal(result2, list(list(1L, 3L), list(), list(3L)))
+
+  result3 <- collect(select(df, array_union(df[[1]], df[[2]])))[[1]]
+  expect_equal(result3, list(list(1L, 2L, 3L), list(1L, 2L, 3L, 4L), list(1L, 2L, 3L, 4L)))
+
+  # Test shuffle()
+  df <- createDataFrame(list(list(list(1L, 20L, 3L, 5L)), list(list(4L, 5L, 6L, 7L))))
+  result <- collect(select(df, shuffle(df[[1]])))[[1]]
+  expect_true(setequal(result[[1]], c(1L, 20L, 3L, 5L)))
+  expect_true(setequal(result[[2]], c(4L, 5L, 6L, 7L)))
+
   # Test that stats::lag is working
   expect_equal(length(lag(ldeaths, 12)), 72)
 
@@ -1666,6 +1673,15 @@ test_that("column functions", {
     expect_is(s[[1]][[1]], "struct")
     expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 })))
   }
+
+  # Test to_json() supports arrays of primitive types and arrays
+  df <- sql("SELECT array(19, 42, 70) as age")
+  j <- collect(select(df, alias(to_json(df$age), "json")))
+  expect_equal(j[order(j$json), ][1], "[19,42,70]")
+
+  df <- sql("SELECT array(array(1, 2), array(3, 4)) as matrix")
+  j <- collect(select(df, alias(to_json(df$matrix), "json")))
+  expect_equal(j[order(j$json), ][1], "[[1,2],[3,4]]")
 
   # passing option
   df <- as.DataFrame(list(list("col" = "{\"date\":\"21/10/2014\"}")))
@@ -1851,9 +1867,9 @@ test_that("date functions on a DataFrame", {
   expect_equal(collect(select(df2, minute(df2$b)))[, 1], c(34, 24))
   expect_equal(collect(select(df2, second(df2$b)))[, 1], c(0, 34))
   expect_equal(collect(select(df2, from_utc_timestamp(df2$b, "JST")))[, 1],
-               c(as.POSIXlt("2012-12-13 21:34:00 UTC"), as.POSIXlt("2014-12-15 10:24:34 UTC")))
+               c(as.POSIXct("2012-12-13 21:34:00 UTC"), as.POSIXct("2014-12-15 10:24:34 UTC")))
   expect_equal(collect(select(df2, to_utc_timestamp(df2$b, "JST")))[, 1],
-               c(as.POSIXlt("2012-12-13 03:34:00 UTC"), as.POSIXlt("2014-12-14 16:24:34 UTC")))
+               c(as.POSIXct("2012-12-13 03:34:00 UTC"), as.POSIXct("2014-12-14 16:24:34 UTC")))
   expect_gt(collect(select(df2, unix_timestamp()))[1, 1], 0)
   expect_gt(collect(select(df2, unix_timestamp(df2$b)))[1, 1], 0)
   expect_gt(collect(select(df2, unix_timestamp(lit("2015-01-01"), "yyyy-MM-dd")))[1, 1], 0)
@@ -2391,6 +2407,15 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   expect_true(any(grepl("BroadcastHashJoin", execution_plan_broadcast)))
 })
 
+test_that("test hint", {
+  df <- sql("SELECT * FROM range(10e10)")
+  hintList <- list("hint2", "hint3", "hint4")
+  execution_plan_hint <- capture.output(
+    explain(hint(df, "hint1", 1.23456, "aaaaaaaaaa", hintList), TRUE)
+  )
+  expect_true(any(grepl("1.23456, aaaaaaaaaa", execution_plan_hint)))
+})
+
 test_that("toJSON() on DataFrame", {
   df <- as.DataFrame(cars)
   df_json <- toJSON(df)
@@ -2676,8 +2701,16 @@ test_that("read/write text files", {
   expect_equal(colnames(df2), c("value"))
   expect_equal(count(df2), count(df) * 2)
 
+  df3 <- createDataFrame(list(list(1L, "1"), list(2L, "2"), list(1L, "1"), list(2L, "2")),
+                         schema = c("key", "value"))
+  textPath3 <- tempfile(pattern = "textPath3", fileext = ".txt")
+  write.df(df3, textPath3, "text", mode = "overwrite", partitionBy = "key")
+  df4 <- read.df(textPath3, "text")
+  expect_equal(count(df3), count(df4))
+
   unlink(textPath)
   unlink(textPath2)
+  unlink(textPath3)
 })
 
 test_that("read/write text files - compression option", {
@@ -3633,7 +3666,8 @@ test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
   expect_equal(currentDatabase(), "default")
   expect_error(setCurrentDatabase("default"), NA)
   expect_error(setCurrentDatabase("zxwtyswklpf"),
-        "Error in setCurrentDatabase : analysis error - Database 'zxwtyswklpf' does not exist")
+               paste0("Error in setCurrentDatabase : analysis error - Database ",
+               "'zxwtyswklpf' does not exist"))
   dbs <- collect(listDatabases())
   expect_equal(names(dbs), c("name", "description", "locationUri"))
   expect_equal(which(dbs[, 1] == "default"), 1)
