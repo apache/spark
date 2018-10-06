@@ -44,4 +44,14 @@ class CSVUtilsSuite extends SparkFunSuite {
     assert(exception.getMessage.contains("Unsupported special character for delimiter"))
   }
 
+  test("string with one backward slash should be converted to the backward slash char") {
+    assert(CSVUtils.toChar("""\""") == '\\')
+  }
+
+  test("output proper error message for empty string") {
+    val exception = intercept[IllegalArgumentException]{
+      CSVUtils.toChar("")
+    }
+    assert(exception.getMessage.contains("Delimiter cannot be empty string"))
+  }
 }
