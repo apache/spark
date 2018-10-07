@@ -28,7 +28,8 @@ import org.apache.spark.sql.types._
  * hash expressions (Murmur3Hash/xxHash64).
  * To run this benchmark:
  * {{{
- *   1. without sbt: bin/spark-submit --class <this class> <spark catalyst test jar>
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark catalyst test jar>
  *   2. build/sbt "catalyst/test:runMain <this class>"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "catalyst/test:runMain <this class>"
