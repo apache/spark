@@ -2365,7 +2365,7 @@ def schema_of_json(json, options={}):
 
 
 @ignore_unicode_prefix
-@since(2.5)
+@since(3.0)
 def schema_of_csv(col, options={}):
     """
     Parses a column containing a CSV string and infers its schema in DDL format.

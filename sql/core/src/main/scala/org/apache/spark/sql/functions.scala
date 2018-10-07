@@ -3902,7 +3902,7 @@ object functions {
    * @param e a string column containing CSV data.
    *
    * @group collection_funcs
-   * @since 2.5.0
+   * @since 3.0.0
    */
   def schema_of_csv(e: Column): Column = withExpr(new SchemaOfCsv(e.expr))
 
@@ -3915,7 +3915,7 @@ object functions {
    * @return a column with string literal containing schema in DDL format.
    *
    * @group collection_funcs
-   * @since 2.5.0
+   * @since 3.0.0
    */
   def schema_of_csv(e: Column, options: java.util.Map[String, String]): Column = {
     withExpr(SchemaOfCsv(e.expr, options.asScala.toMap))
