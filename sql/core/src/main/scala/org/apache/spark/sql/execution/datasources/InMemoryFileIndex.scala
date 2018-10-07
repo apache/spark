@@ -315,7 +315,14 @@ object InMemoryFileIndex extends Logging {
         // which is very slow on some file system (RawLocalFileSystem, which is launch a
         // subprocess and parse the stdout).
         try {
-          val locations = fs.getFileBlockLocations(f, 0, f.getLen)
+          val locations = fs.getFileBlockLocations(f, 0, f.getLen).map { loc =>
+            // Store BlockLocation objects to consume less memory
+            if (loc.getClass == classOf[BlockLocation]) {
+              loc
+            } else {
+              new BlockLocation(loc.getNames, loc.getHosts, loc.getOffset, loc.getLength)
+            }
+          }
           val lfs = new LocatedFileStatus(f.getLen, f.isDirectory, f.getReplication, f.getBlockSize,
             f.getModificationTime, 0, null, null, null, null, f.getPath, locations)
           if (f.isSymlink) {
