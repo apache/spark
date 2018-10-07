@@ -154,7 +154,8 @@ object JoinBenchmark extends SqlBasedBenchmark {
 
   def shuffleHashJoin(): Unit = {
     val N: Long = 4 << 20
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+    withSQLConf(
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10000000",
       SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
       codegenBenchmark("shuffle hash join", N) {
