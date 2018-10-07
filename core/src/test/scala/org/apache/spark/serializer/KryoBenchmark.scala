@@ -38,10 +38,11 @@ import org.apache.spark.serializer.KryoTest._
  */
 object KryoBenchmark extends BenchmarkBase {
 
+  val N = 1000000
   override def runBenchmarkSuite(): Unit = {
     val name = "Benchmark Kryo Unsafe vs safe Serialization"
     runBenchmark(name) {
-      val benchmark = new Benchmark(name, 1024 * 1024 * 3, 10, output = output)
+      val benchmark = new Benchmark(name, N, 10, output = output)
       Seq(true, false).foreach(useUnsafe => run(useUnsafe, benchmark))
       benchmark.run()
     }
@@ -53,15 +54,14 @@ object KryoBenchmark extends BenchmarkBase {
     }
 
     // Benchmark Primitives
-    val basicTypeCount = 200000
     def basicTypes[T: ClassTag](name: String, gen: () => T): Unit = {
       lazy val ser = createSerializer(useUnsafe)
-      val arrayOfBasicType: Array[T] = Array.fill(basicTypeCount)(gen())
+      val arrayOfBasicType: Array[T] = Array.fill(N)(gen())
 
       benchmark.addCase(s"basicTypes: $name with unsafe:$useUnsafe") { _ =>
         var sum = 0L
         var i = 0
-        while (i < basicTypeCount) {
+        while (i < N) {
           sum += check(arrayOfBasicType(i), ser)
           i += 1
         }
@@ -74,11 +74,12 @@ object KryoBenchmark extends BenchmarkBase {
     basicTypes("Double", () => Random.nextDouble())
 
     // Benchmark Array of Primitives
-    val arrayCount = 2000
+    val arrayCount = 4000
+    val arrayLength = N / arrayCount
     def basicTypeArray[T: ClassTag](name: String, gen: () => T): Unit = {
       lazy val ser = createSerializer(useUnsafe)
       val arrayOfArrays: Array[Array[T]] =
-        Array.fill(arrayCount)(Array.fill[T](Random.nextInt(arrayCount))(gen()))
+        Array.fill(arrayCount)(Array.fill[T](arrayLength + Random.nextInt(arrayLength / 4))(gen()))
 
       benchmark.addCase(s"Array: $name with unsafe:$useUnsafe") { _ =>
         var sum = 0L
@@ -98,10 +99,12 @@ object KryoBenchmark extends BenchmarkBase {
 
     // Benchmark Maps
     val mapsCount = 200
+    val mapKeyLength = 20
+    val mapLength = N  / mapsCount / mapKeyLength
     lazy val ser = createSerializer(useUnsafe)
     val arrayOfMaps: Array[Map[String, Double]] = Array.fill(mapsCount) {
-      Array.fill(Random.nextInt(mapsCount)) {
-        (Random.nextString(mapsCount / 10), Random.nextDouble())
+      Array.fill(mapLength + Random.nextInt(mapLength / 4)) {
+        (Random.nextString(mapKeyLength), Random.nextDouble())
       }.toMap
     }
 
