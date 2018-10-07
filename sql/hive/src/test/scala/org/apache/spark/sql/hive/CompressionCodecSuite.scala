@@ -276,7 +276,7 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
             compressionCodecs = sessionCompressCodecs,
             tableCompressionCodecs = tableCompressCodecs) {
             case (tableCodec, sessionCodec, realCodec, tableSize) =>
-              val expectCodec = if (tableCodec.isDefined) tableCodec.get else sessionCodec
+              val expectCodec = tableCodec.getOrElse(sessionCodec)
               assert(expectCodec == realCodec)
               assert(checkTableSize(
                 format, expectCodec, isPartitioned, convertMetastore, usingCTAS, tableSize))
