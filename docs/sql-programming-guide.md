@@ -304,9 +304,9 @@ registered as a table. Tables can be used in subsequent SQL statements.
 
 Spark SQL supports automatically converting an RDD of
 [JavaBeans](http://stackoverflow.com/questions/3295496/what-is-a-javabean-exactly) into a DataFrame.
-The `BeanInfo`, obtained using reflection, defines the schema of the table. Currently, Spark SQL
-does not support JavaBeans that contain `Map` field(s). Nested JavaBeans and `List` or `Array`
-fields are supported though. You can create a JavaBean by creating a class that implements
+The `BeanInfo`, obtained using reflection, defines the schema of the table. Spark SQL supports
+fields that contain `List`, `Array`, `Map` or a nested JavaBean. JavaBeans are also supported as collection elements.
+You can create a JavaBean by creating a class that implements
 Serializable and has getters and setters for all of its fields.
 
 {% include_example schema_inferring java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}

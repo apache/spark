@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql
 
+import java.lang.reflect.{Array => JavaArray, ParameterizedType, Type}
 import java.util.Properties
 
+import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 
@@ -1099,13 +1101,14 @@ object SQLContext {
       data: Iterator[_],
       beanClass: Class[_],
       attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
-    import scala.collection.JavaConverters._
-    import java.lang.reflect.{Type, ParameterizedType, Array => JavaArray}
-    def interfaceParameters(t: Type, interface: Class[_]): Array[Type] = t match {
-      case parType: ParameterizedType if parType.getRawType == interface =>
-        parType.getActualTypeArguments
-      case _ => throw new UnsupportedOperationException(s"$t is not an $interface")
-    }
+    def interfaceParameters(t: Type, interface: Class[_], dataType: DataType): Array[Type] =
+      t match {
+        case parType: ParameterizedType if parType.getRawType == interface =>
+          parType.getActualTypeArguments
+        case _ => throw new UnsupportedOperationException(
+          s"Type ${t.getTypeName} is not supported for data type ${dataType.simpleString}. " +
+            s"Expected ${interface.getName}")
+      }
     def createStructConverter(cls: Class[_], fieldTypes: Seq[DataType]): Any => InternalRow = {
       val methodConverters =
         JavaTypeInference.getJavaBeanReadableProperties(cls).zip(fieldTypes)
@@ -1125,21 +1128,25 @@ object SQLContext {
     }
     def createConverter(t: Type, dataType: DataType): Any => Any = (t, dataType) match {
       case (cls: Class[_], struct: StructType) =>
+        // bean type
         createStructConverter(cls, struct.map(_.dataType))
-      case (arrayType: Class[_], array: ArrayType) =>
+      case (arrayType: Class[_], array: ArrayType) if arrayType.isArray =>
+        // array type
         val converter = createConverter(arrayType.getComponentType, array.elementType)
         value => new GenericArrayData(
           (0 until JavaArray.getLength(value)).map(i =>
             converter(JavaArray.get(value, i))).toArray)
       case (_, array: ArrayType) =>
+        // java.util.List type
         val cls = classOf[java.util.List[_]]
-        val params = interfaceParameters(t, cls)
+        val params = interfaceParameters(t, cls, dataType)
         val converter = createConverter(params(0), array.elementType)
         value => new GenericArrayData(
           value.asInstanceOf[java.util.List[_]].asScala.map(converter).toArray)
       case (_, map: MapType) =>
+        // java.util.Map type
         val cls = classOf[java.util.Map[_, _]]
-        val params = interfaceParameters(t, cls)
+        val params = interfaceParameters(t, cls, dataType)
         val keyConverter = createConverter(params(0), map.keyType)
         val valueConverter = createConverter(params(1), map.valueType)
         value => {
@@ -1148,7 +1155,9 @@ object SQLContext {
             new GenericArrayData(keys.map(keyConverter).toArray),
             new GenericArrayData(values.map(valueConverter).toArray))
         }
-      case _ => CatalystTypeConverters.createToCatalystConverter(dataType)
+      case _ =>
+        // other types
+        CatalystTypeConverters.createToCatalystConverter(dataType)
     }
     val dataConverter = createStructConverter(beanClass, attrs.map(_.dataType))
     data.map(dataConverter)
