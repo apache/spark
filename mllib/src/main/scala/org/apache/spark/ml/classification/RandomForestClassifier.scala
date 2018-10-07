@@ -313,15 +313,15 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
     override def load(path: String): RandomForestClassificationModel = {
       implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], _) =
-        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName, true)
+        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
       val numTrees = (metadata.metadata \ "numTrees").extract[Int]
 
       val trees: Array[DecisionTreeClassificationModel] = treesData.map {
         case (treeMetadata, root) =>
-          val tree = new DecisionTreeClassificationModel(treeMetadata.uid,
-            root.asInstanceOf[ClassificationNode], numFeatures, numClasses)
+          val tree =
+            new DecisionTreeClassificationModel(treeMetadata.uid, root, numFeatures, numClasses)
           treeMetadata.getAndSetParams(tree)
           tree
       }
