@@ -20,50 +20,40 @@ package org.apache.spark.serializer
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.SparkConf
+import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.serializer.KryoTest._
 
-class KryoBenchmark extends SparkFunSuite {
-  val benchmark = new Benchmark("Benchmark Kryo Unsafe vs safe Serialization", 1024 * 1024 * 15, 10)
+/**
+ * Benchmark for Kryo Unsafe vs safe Serialization.
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class> --jars <spark core test jar>
+ *   2. build/sbt "core/test:runMain <this class>"
+ *   3. generate result:
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
+ *      Results will be written to "benchmarks/KryoBenchmark-results.txt".
+ * }}}
+ */
+object KryoBenchmark extends BenchmarkBase {
 
-  ignore(s"Benchmark Kryo Unsafe vs safe Serialization") {
-    Seq (true, false).foreach (runBenchmark)
-    benchmark.run()
-
-    // scalastyle:off
-    /*
-      Benchmark Kryo Unsafe vs safe Serialization: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      ------------------------------------------------------------------------------------------------
-      basicTypes: Int with unsafe:true               151 /  170        104.2           9.6       1.0X
-      basicTypes: Long with unsafe:true              175 /  191         89.8          11.1       0.9X
-      basicTypes: Float with unsafe:true             177 /  184         88.8          11.3       0.9X
-      basicTypes: Double with unsafe:true            193 /  216         81.4          12.3       0.8X
-      Array: Int with unsafe:true                    513 /  587         30.7          32.6       0.3X
-      Array: Long with unsafe:true                  1211 / 1358         13.0          77.0       0.1X
-      Array: Float with unsafe:true                  890 /  964         17.7          56.6       0.2X
-      Array: Double with unsafe:true                1335 / 1428         11.8          84.9       0.1X
-      Map of string->Double  with unsafe:true        931 /  988         16.9          59.2       0.2X
-      basicTypes: Int with unsafe:false              197 /  217         79.9          12.5       0.8X
-      basicTypes: Long with unsafe:false             219 /  240         71.8          13.9       0.7X
-      basicTypes: Float with unsafe:false            208 /  217         75.7          13.2       0.7X
-      basicTypes: Double with unsafe:false           208 /  225         75.6          13.2       0.7X
-      Array: Int with unsafe:false                  2559 / 2681          6.1         162.7       0.1X
-      Array: Long with unsafe:false                 3425 / 3516          4.6         217.8       0.0X
-      Array: Float with unsafe:false                2025 / 2134          7.8         128.7       0.1X
-      Array: Double with unsafe:false               2241 / 2358          7.0         142.5       0.1X
-      Map of string->Double  with unsafe:false      1044 / 1085         15.1          66.4       0.1X
-    */
-    // scalastyle:on
+  override def runBenchmarkSuite(): Unit = {
+    val name = "Benchmark Kryo Unsafe vs safe Serialization"
+    runBenchmark(name) {
+      val benchmark = new Benchmark(name, 1024 * 1024 * 3, 10, output = output)
+      Seq(true, false).foreach(useUnsafe => run(useUnsafe, benchmark))
+      benchmark.run()
+    }
   }
 
-  private def runBenchmark(useUnsafe: Boolean): Unit = {
+  private def run(useUnsafe: Boolean, benchmark: Benchmark): Unit = {
     def check[T: ClassTag](t: T, ser: SerializerInstance): Int = {
-      if (ser.deserialize[T](ser.serialize(t)) === t) 1 else 0
+      if (ser.deserialize[T](ser.serialize(t)) == t) 1 else 0
     }
 
     // Benchmark Primitives
-    val basicTypeCount = 1000000
+    val basicTypeCount = 200000
     def basicTypes[T: ClassTag](name: String, gen: () => T): Unit = {
       lazy val ser = createSerializer(useUnsafe)
       val arrayOfBasicType: Array[T] = Array.fill(basicTypeCount)(gen())
@@ -84,7 +74,7 @@ class KryoBenchmark extends SparkFunSuite {
     basicTypes("Double", () => Random.nextDouble())
 
     // Benchmark Array of Primitives
-    val arrayCount = 10000
+    val arrayCount = 2000
     def basicTypeArray[T: ClassTag](name: String, gen: () => T): Unit = {
       lazy val ser = createSerializer(useUnsafe)
       val arrayOfArrays: Array[Array[T]] =
@@ -107,7 +97,7 @@ class KryoBenchmark extends SparkFunSuite {
     basicTypeArray("Double", () => Random.nextDouble())
 
     // Benchmark Maps
-    val mapsCount = 1000
+    val mapsCount = 200
     lazy val ser = createSerializer(useUnsafe)
     val arrayOfMaps: Array[Map[String, Double]] = Array.fill(mapsCount) {
       Array.fill(Random.nextInt(mapsCount)) {
