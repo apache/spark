@@ -37,7 +37,7 @@ private[spark] class KerberosConfExecutorFeatureStep(
    KubernetesUtils.requireNandDefined(
      maybeKrb5File,
      maybeKrb5CMap,
-     "Do not specify both a Krb5 local file and the ConfigMap as the creation" +
+     "Do not specify both a Krb5 local file and the ConfigMap as the creation " +
        "of an additional ConfigMap, when one is already specified, is extraneous")
 
   override def configurePod(pod: SparkPod): SparkPod = {

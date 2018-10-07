@@ -33,8 +33,9 @@ private[spark] class HadoopConfExecutorFeatureStep(
   extends KubernetesFeatureConfigStep with Logging{
 
   override def configurePod(pod: SparkPod): SparkPod = {
-     val maybeHadoopConfDir = kubernetesConf.sparkConf.getOption(HADOOP_CONF_DIR_LOC)
-     val maybeHadoopConfigMap = kubernetesConf.sparkConf.getOption(HADOOP_CONFIG_MAP_NAME)
+     val sparkConf = kubernetesConf.sparkConf
+     val maybeHadoopConfDir = sparkConf.getOption(HADOOP_CONF_DIR_LOC)
+     val maybeHadoopConfigMap = sparkConf.getOption(HADOOP_CONFIG_MAP_NAME)
      require(maybeHadoopConfDir.isDefined && maybeHadoopConfigMap.isDefined,
        "Ensure that HADOOP_CONF_DIR is defined")
      logInfo("HADOOP_CONF_DIR defined. Mounting Hadoop specific files")

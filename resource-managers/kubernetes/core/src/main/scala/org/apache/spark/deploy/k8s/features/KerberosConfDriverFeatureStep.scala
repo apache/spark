@@ -64,7 +64,7 @@ private[spark] class KerberosConfDriverFeatureStep(
    KubernetesUtils.requireNandDefined(
      maybeKrb5File,
      maybeKrb5CMap,
-     "Do not specify both a Krb5 local file and the ConfigMap as the creation" +
+     "Do not specify both a Krb5 local file and the ConfigMap as the creation " +
        "of an additional ConfigMap, when one is already specified, is extraneous")
 
     KubernetesUtils.requireBothOrNeitherDefined(
@@ -136,8 +136,7 @@ private[spark] class KerberosConfDriverFeatureStep(
     }
 
     override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-      val krb5ConfigMap =
-        maybeKrb5File.map { fileLocation =>
+      val krb5ConfigMap = maybeKrb5File.map { fileLocation =>
           HadoopBootstrapUtil.buildkrb5ConfigMap(
           kubernetesConf.kRBConfigMapName,
           fileLocation)}

@@ -53,6 +53,7 @@ private[spark] object HadoopBootstrapUtil {
 
     val maybePreConfigMapVolume = maybeKrb5ConfName.map { kconf =>
       new VolumeBuilder()
+        .withName(KRB_FILE_VOLUME)
         .withNewConfigMap()
           .withName(kconf)
           .endConfigMap()
@@ -89,7 +90,8 @@ private[spark] object HadoopBootstrapUtil {
             .withSecretName(dtSecretName)
             .endSecret()
           .endVolume()
-        .withVolumes(configMapVolume)
+        .addNewVolumeLike(configMapVolume)
+          .endVolume()
         .endSpec()
       .build()
     val kerberizedContainer = new ContainerBuilder(pod.container)
