@@ -29,6 +29,7 @@ dist: trusty
 language: java
 jdk:
   - oraclejdk8
+  - openjdk11
 
 # 3. Setup cache directory for SBT and Maven.
 cache:
