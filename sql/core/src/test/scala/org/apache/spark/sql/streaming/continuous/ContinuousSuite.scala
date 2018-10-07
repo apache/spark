@@ -292,7 +292,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       StartStream(Trigger.Continuous(1012)),
       StopStream,
       StartStream(Trigger.Continuous(1012)),
-      AwaitEpoch(10),
+      AwaitEpoch(15),
       StopStream,
       CheckAnswerRowsContains(scala.Range(0, 2500).map(Row(_))))
   }
