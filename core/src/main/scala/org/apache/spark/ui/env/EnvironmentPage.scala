@@ -42,6 +42,8 @@ private[ui] class EnvironmentPage(
       propertyHeader, jvmRow, jvmInformation, fixedWidth = true)
     val sparkPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
       Utils.redact(conf, appEnv.sparkProperties.toSeq), fixedWidth = true)
+    val historyPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
+      Utils.redact(conf, appEnv.historyProperties.toSeq), fixedWidth = true)
     val systemPropertiesTable = UIUtils.listingTable(
       propertyHeader, propertyRow, appEnv.systemProperties, fixedWidth = true)
     val classpathEntriesTable = UIUtils.listingTable(
@@ -70,6 +72,19 @@ private[ui] class EnvironmentPage(
         <div class="aggregated-sparkProperties collapsible-table">
           {sparkPropertiesTable}
         </div>
+        {if (appEnv.historyProperties.nonEmpty) {
+        <span class="collapse-aggregated-historyProperties collapse-table"
+              onClick="collapseTable('collapse-aggregated-historyProperties',
+            'aggregated-historyProperties')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>History Properties</a>
+          </h4>
+        </span>
+        <div class="aggregated-historyProperties collapsible-table">
+          {historyPropertiesTable}
+        </div>
+        }}
         <span class="collapse-aggregated-systemProperties collapse-table"
             onClick="collapseTable('collapse-aggregated-systemProperties',
             'aggregated-systemProperties')">

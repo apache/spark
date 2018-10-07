@@ -141,16 +141,13 @@ private[spark] class AppStatusListener(
       jvmInfo.get("Java Version").orNull,
       jvmInfo.get("Java Home").orNull,
       jvmInfo.get("Scala Version").orNull)
-    val sparkProperties = if (!live) {
-      (details.getOrElse("Spark Properties", Nil).toMap ++ conf.getAll.toMap).toSeq
-    } else {
-      details.getOrElse("Spark Properties", Nil)
-    }
+
     val envInfo = new v1.ApplicationEnvironmentInfo(
       runtime,
-      sparkProperties,
+      details.getOrElse("Spark Properties", Nil),
       details.getOrElse("System Properties", Nil),
-      details.getOrElse("Classpath Entries", Nil))
+      details.getOrElse("Classpath Entries", Nil),
+      if (!live) conf.getAll else Nil)
 
     coresPerTask = envInfo.sparkProperties.toMap.get("spark.task.cpus").map(_.toInt)
       .getOrElse(coresPerTask)

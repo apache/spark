@@ -347,7 +347,8 @@ class ApplicationEnvironmentInfo private[spark] (
     val runtime: RuntimeInfo,
     val sparkProperties: Seq[(String, String)],
     val systemProperties: Seq[(String, String)],
-    val classpathEntries: Seq[(String, String)])
+    val classpathEntries: Seq[(String, String)],
+    val historyProperties: Seq[(String, String)])
 
 class RuntimeInfo private[spark](
     val javaVersion: String,
