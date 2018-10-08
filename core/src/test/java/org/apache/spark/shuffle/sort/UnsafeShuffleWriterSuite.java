@@ -186,14 +186,14 @@ public class UnsafeShuffleWriterSuite {
         if (conf.getBoolean("spark.shuffle.compress", true)) {
           in = CompressionCodec$.MODULE$.createCodec(conf).compressedInputStream(in);
         }
-        DeserializationStream recordsStream = serializer.newInstance().deserializeStream(in);
-        Iterator<Tuple2<Object, Object>> records = recordsStream.asKeyValueIterator();
-        while (records.hasNext()) {
-          Tuple2<Object, Object> record = records.next();
-          assertEquals(i, hashPartitioner.getPartition(record._1()));
-          recordsList.add(record);
+        try (DeserializationStream recordsStream = serializer.newInstance().deserializeStream(in)) {
+          Iterator<Tuple2<Object, Object>> records = recordsStream.asKeyValueIterator();
+          while (records.hasNext()) {
+            Tuple2<Object, Object> record = records.next();
+            assertEquals(i, hashPartitioner.getPartition(record._1()));
+            recordsList.add(record);
+          }
         }
-        recordsStream.close();
         startOffset += partitionSize;
       }
     }
