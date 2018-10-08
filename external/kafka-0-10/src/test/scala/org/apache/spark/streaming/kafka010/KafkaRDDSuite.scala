@@ -41,6 +41,10 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   private val sparkConf = new SparkConf().setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
+    // Set a poll time out of 10 seconds. Othewise the poll time out defaults to
+    // 2 minutes causing the test cases to run longer.
+    .set("spark.streaming.kafka.consumer.poll.ms", "10000")
+
   private var sc: SparkContext = _
 
   override def beforeAll {
