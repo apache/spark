@@ -262,9 +262,9 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
   }
 
   def checkForTableWithCompressProp(
-     format: String,
-     tableCompressCodecs: List[String],
-     sessionCompressCodecs: List[String]): Unit = {
+      format: String,
+      tableCompressCodecs: List[String],
+      sessionCompressCodecs: List[String]): Unit = {
     Seq(true, false).foreach { isPartitioned =>
       Seq(true, false).foreach { convertMetastore =>
         Seq(true, false).foreach { usingCTAS =>
