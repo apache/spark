@@ -74,26 +74,27 @@ trait TestPrematureExit {
     @volatile var exitedCleanly = false
     mainObject.exitFn = (_) => exitedCleanly = true
 
-    var message: String = null
+    var exception: Exception = null
     val thread = new Thread {
       override def run() = try {
         mainObject.main(input)
       } catch {
         // If exceptions occur after the "exit" has happened, fine to ignore them.
         // These represent code paths not reachable during normal execution.
-        case e: Exception =>
-          message = e.getMessage
-          if (!(exitedCleanly || message.contains(searchString))) {
-            throw e
-          }
+        case e: Exception => exception = e
       }
     }
     thread.start()
     thread.join()
     val joined = printStream.lineBuffer.mkString("\n")
-    if (!(joined.contains(searchString) ||
-      (message != null && message.contains(searchString)))) {
-      fail(s"Search string '$searchString' not found in $joined or in $message")
+    val searchStrContainsInEx = exception != null && exception.getMessage.contains(searchString)
+    if(!searchStrContainsInEx){
+      if(!exitedCleanly){
+        // throw the exception when the exception message doesn't contain searchString and not exitedCleanly.
+        throw exception
+      } else if(!joined.contains(searchString)){
+        fail(s"Search string '$searchString' not found in $joined")
+      }
     }
   }
 }
