@@ -3607,22 +3607,22 @@ class SQLTests(ReusedSQLTestCase):
     def test_same_accumulator_in_udfs(self):
         from pyspark.sql.functions import udf
 
-        data_schema = StructType([StructField("a", DoubleType(), True),
-                                  StructField("b", DoubleType(), True)])
-        data = self.spark.createDataFrame([[1.0, 2.0]], schema=data_schema)
+        data_schema = StructType([StructField("a", IntegerType(), True),
+                                  StructField("b", IntegerType(), True)])
+        data = self.spark.createDataFrame([[1, 2]], schema=data_schema)
 
-        test_accum = self.sc.accumulator(0.0)
+        test_accum = self.sc.accumulator(0)
 
         def first_udf(x):
-            test_accum.add(1.0)
+            test_accum.add(1)
             return x
 
         def second_udf(x):
-            test_accum.add(100.0)
+            test_accum.add(100)
             return x
 
-        func_udf = udf(first_udf, DoubleType())
-        func_udf2 = udf(second_udf, DoubleType())
+        func_udf = udf(first_udf, IntegerType())
+        func_udf2 = udf(second_udf, IntegerType())
         data = data.withColumn("out1", func_udf(data["a"]))
         data = data.withColumn("out2", func_udf2(data["b"]))
         data.collect()
