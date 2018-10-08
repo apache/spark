@@ -754,8 +754,6 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         val tryDirectSql = hive.getMSC.getConfigValue(tryDirectSqlConfVar.varname,
           tryDirectSqlConfVar.defaultBoolVal.toString).toBoolean
         try {
-          // Hive may throw an exception when calling this method in some circumstances, such as
-          // when filtering on a non-string partition column.
           getPartitionsByFilterMethod.invoke(hive, table, filter)
             .asInstanceOf[JArrayList[Partition]]
         } catch {
