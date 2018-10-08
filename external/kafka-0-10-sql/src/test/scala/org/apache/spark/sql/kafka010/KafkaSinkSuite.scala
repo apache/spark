@@ -332,7 +332,9 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
     var ex: Exception = null
     try {
       ex = intercept[StreamingQueryException] {
-        writer = createKafkaWriter(input.toDF(), withTopic = Some(topic))()
+        writer = createKafkaWriter(input.toDF(),
+          withTopic = Some(topic),
+          withOptions = Map("kafka.max.block.ms" -> "10000"))()
         input.addData("1", "2", "3", "4", "5")
         writer.processAllAvailable()
       }
