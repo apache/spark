@@ -33,6 +33,7 @@ class HiveClientSuite(version: String)
     extends HiveVersionSuite(version) with BeforeAndAfterAll with SQLHelper {
 
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
+  private val partPruningKey = SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key
   private val partPruningFallbackKey = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ENABLED.key
 
   private val testPartitionCount = 3 * 24 * 4
@@ -82,9 +83,9 @@ class HiveClientSuite(version: String)
     client = init(true)
   }
 
-  test(s"getPartitionsByFilter returns all partitions when $partPruningFallbackKey=true") {
-    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ENABLED.key -> "true",
-        SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> "true") {
+  test(s"getPartitionsByFilter should return all partitions if the underlying call to the " +
+    s"metastore fails and $partPruningFallbackKey=true") {
+    withSQLConf(partPruningFallbackKey -> "true", partPruningKey -> "true") {
       val client = init(false)
       // tryDirectSql = false and a non-string partition filter will always fail. This condition
       // is used to test if the fallback works
@@ -95,9 +96,9 @@ class HiveClientSuite(version: String)
     }
   }
 
-  test(s"getPartitionsByFilter should throw an exception if $partPruningFallbackKey=false") {
-    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ENABLED.key -> "false",
-        SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> "true") {
+  test(s"getPartitionsByFilter should fail if the underlying call to the metastore fails and " +
+      s"$partPruningFallbackKey=false") {
+    withSQLConf(partPruningFallbackKey -> "false", partPruningKey -> "true") {
       val client = init(false)
       // tryDirectSql = false and a non-string partition filter will always fail. This condition
       // is used to test if the fallback works

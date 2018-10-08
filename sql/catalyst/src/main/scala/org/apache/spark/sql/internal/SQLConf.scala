@@ -549,7 +549,7 @@ object SQLConf {
       .doc("When true, enable fallback to fetch all partitions if Hive metastore partition " +
            "push down fails. This is applicable only if partition pruning is enabled (see " +
            s" ${HIVE_METASTORE_PARTITION_PRUNING.key}). Enabling this may degrade performance " +
-           "if there are a large number of partitions." )
+           "if there is a large number of partitions." )
       .booleanConf
       .createWithDefault(false)
 
