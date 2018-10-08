@@ -362,13 +362,13 @@ trait CodegenSupport extends SparkPlan {
   final def limitNotReachedCond: String = {
     // InputAdapter is also a leaf node.
     val isLeafNode = children.isEmpty || this.isInstanceOf[InputAdapter]
-    if (isLeafNode || this.isInstanceOf[BlockingOperatorWithCodegen]) {
-      val errMsg = "only leaf nodes and blocking nodes need to call 'limitNotReachedCond' " +
+    if (!isLeafNode && !this.isInstanceOf[BlockingOperatorWithCodegen]) {
+      val errMsg = "Only leaf nodes and blocking nodes need to call 'limitNotReachedCond' " +
         "in its data producing loop."
       if (Utils.isTesting) {
         throw new IllegalStateException(errMsg)
       } else {
-        logWarning(errMsg)
+        logWarning(s"[BUG] $errMsg Please open a JIRA ticket to report it.")
       }
     }
     if (parent.limitNotReachedChecks.isEmpty) {
