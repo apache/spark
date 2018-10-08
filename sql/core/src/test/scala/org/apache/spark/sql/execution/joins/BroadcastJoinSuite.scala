@@ -54,8 +54,12 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   }
 
   override def afterAll(): Unit = {
-    spark.stop()
-    spark = null
+    try {
+      spark.stop()
+      spark = null
+    } finally {
+      super.afterAll()
+    }
   }
 
   /**

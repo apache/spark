@@ -31,7 +31,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
-import org.apache.spark.sql.execution.{FilterExec, QueryExecution, TakeOrderedAndProjectExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
@@ -2408,18 +2408,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Seq(Row(7, 1, 1), Row(7, 1, 2), Row(7, 2, 1), Row(7, 2, 2), Row(7, 3, 1), Row(7, 3, 2)))
   }
 
-  test("SPARK-22226: splitExpressions should not generate codes beyond 64KB") {
-    val colNumber = 10000
-    val input = spark.range(2).rdd.map(_ => Row(1 to colNumber: _*))
-    val df = sqlContext.createDataFrame(input, StructType(
-      (1 to colNumber).map(colIndex => StructField(s"_$colIndex", IntegerType, false))))
-    val newCols = (1 to colNumber).flatMap { colIndex =>
-      Seq(expr(s"if(1000 < _$colIndex, 1000, _$colIndex)"),
-        expr(s"sqrt(_$colIndex)"))
-    }
-    df.select(newCols: _*).collect()
-  }
-
   test("SPARK-22271: mean overflows and returns null for some decimal variables") {
     val d = 0.034567890
     val df = Seq(d, d, d, d, d, d, d, d, d, d).toDF("DecimalCol")
@@ -2549,26 +2537,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val df = spark.read.json(path.getCanonicalPath)
       assert(df.columns === Array("i", "p"))
       assert(numJobs == 1)
-    }
-  }
-
-  test("SPARK-25352: Ordered global limit when more than topKSortFallbackThreshold ") {
-    withSQLConf(SQLConf.LIMIT_FLAT_GLOBAL_LIMIT.key -> "true") {
-      val baseDf = spark.range(1000).toDF.repartition(3).sort("id")
-
-      withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "100") {
-        val expected = baseDf.limit(99)
-        val takeOrderedNode1 = expected.queryExecution.executedPlan
-          .find(_.isInstanceOf[TakeOrderedAndProjectExec])
-        assert(takeOrderedNode1.isDefined)
-
-        val result = baseDf.limit(100)
-        val takeOrderedNode2 = result.queryExecution.executedPlan
-          .find(_.isInstanceOf[TakeOrderedAndProjectExec])
-        assert(takeOrderedNode2.isEmpty)
-
-        checkAnswer(expected, result.collect().take(99))
-      }
     }
   }
 

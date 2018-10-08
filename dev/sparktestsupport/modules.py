@@ -387,6 +387,8 @@ pyspark_core = Module(
         "pyspark.profiler",
         "pyspark.shuffle",
         "pyspark.tests",
+        "pyspark.test_broadcast",
+        "pyspark.test_serializers",
         "pyspark.util",
     ]
 )
@@ -553,6 +555,16 @@ kubernetes = Module(
     source_file_regexes=["resource-managers/kubernetes"],
     build_profile_flags=["-Pkubernetes"],
     sbt_test_goals=["kubernetes/test"]
+)
+
+
+spark_ganglia_lgpl = Module(
+    name="spark-ganglia-lgpl",
+    dependencies=[],
+    build_profile_flags=["-Pspark-ganglia-lgpl"],
+    source_file_regexes=[
+        "external/spark-ganglia-lgpl",
+    ]
 )
 
 # The root module is a dummy module which is used to run all of the tests.
