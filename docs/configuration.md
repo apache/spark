@@ -954,7 +954,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>org.apache.spark.io.LZ4CompressionCodec</code>,
     <code>org.apache.spark.io.LZFCompressionCodec</code>,
     <code>org.apache.spark.io.SnappyCompressionCodec</code>,
-    and <code>org.apache.spark.io.ZstdCompressionCodec</code>.
+    and <code>org.apache.spark.io.ZStdCompressionCodec</code>.
   </td>
 </tr>
 <tr>
