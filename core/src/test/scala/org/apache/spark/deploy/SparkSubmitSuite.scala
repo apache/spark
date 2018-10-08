@@ -88,11 +88,12 @@ trait TestPrematureExit {
     thread.join()
     val joined = printStream.lineBuffer.mkString("\n")
     val searchStrContainsInEx = exception != null && exception.getMessage.contains(searchString)
-    if(!searchStrContainsInEx){
-      if(!exitedCleanly){
-        // throw the exception when the exception message doesn't contain searchString and not exitedCleanly.
+    if (!searchStrContainsInEx) {
+      if (!exitedCleanly) {
+        // throw the exception when the exception message doesn't contain
+        // searchString and not exitedCleanly.
         throw exception
-      } else if(!joined.contains(searchString)){
+      } else if (!joined.contains(searchString)) {
         fail(s"Search string '$searchString' not found in $joined")
       }
     }
