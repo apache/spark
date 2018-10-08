@@ -2063,11 +2063,11 @@ streamingDatasetOfString.writeStream().foreachBatch(
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
-def foreachBatchFunction(df, epoch_id):
+def foreach_batch_function(df, epoch_id):
     # Transform and write batchDF
     pass
   
-streamingDF.writeStream.foreachBatch(foreachBatchFunction).start()   
+streamingDF.writeStream.foreachBatch(foreach_batch_function).start()   
 {% endhighlight %}
 
 </div>
@@ -2116,7 +2116,7 @@ Since Spark 2.4, `foreach` is available in Scala, Java and Python.
 In Scala, you have to extend the class `ForeachWriter` ([docs](api/scala/index.html#org.apache.spark.sql.ForeachWriter)).
 
 {% highlight scala %}
-streamingDF.writeStream.foreach(
+streamingDatasetOfString.writeStream.foreach(
   new ForeachWriter[String] {
 
     def open(partitionId: Long, version: Long): Boolean = {
@@ -2139,7 +2139,7 @@ streamingDF.writeStream.foreach(
 
 In Java, you have to extend the class `ForeachWriter` ([docs](api/java/org/apache/spark/sql/ForeachWriter.html)).
 {% highlight java %}
-streamingDF.writeStream().foreach(
+streamingDatasetOfString.writeStream().foreach(
   new ForeachWriter[String] {
 
     @Override public boolean open(long partitionId, long version) {
