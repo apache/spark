@@ -1569,7 +1569,7 @@ object SQLConf {
         "important especially when using NOT IN as in the second case, it filters out the rows " +
         "when a null is present in a filed; while in the first one, those rows are returned.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val LEGACY_INTEGRALDIVIDE_RETURN_LONG = buildConf("spark.sql.legacy.integralDivide.returnBigint")
     .doc("If it is set to true, the div operator returns always a bigint. This behavior was " +
