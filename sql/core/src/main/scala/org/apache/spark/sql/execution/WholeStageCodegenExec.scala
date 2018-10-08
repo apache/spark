@@ -360,12 +360,39 @@ trait CodegenSupport extends SparkPlan {
    * limit-not-reached checks.
    */
   final def limitNotReachedCond: String = {
+    // InputAdapter is also a leaf node.
+    val isLeafNode = children.isEmpty || this.isInstanceOf[InputAdapter]
+    assert(isLeafNode || this.isInstanceOf[BlockingOperatorWithCodegen],
+      "only leaf nodes and blocking nodes need to call this method in its data producing loop.")
     if (parent.limitNotReachedChecks.isEmpty) {
       ""
     } else {
       parent.limitNotReachedChecks.mkString("", " && ", " &&")
     }
   }
+}
+
+/**
+ * A special kind of operators which support whole stage codegen. Blocking means these operators
+ * will consume all the inputs first, before producing output. Typical blocking operators are
+ * sort and aggregate.
+ */
+trait BlockingOperatorWithCodegen extends CodegenSupport {
+
+  // Blocking operators usually have some kind of buffer to keep the data before producing them, so
+  // then don't to copy its result even if its child does.
+  override def needCopyResult: Boolean = false
+
+  // Blocking operators always consume all the input first, so its upstream operators don't need a
+  // stop check.
+  override def needStopCheck: Boolean = false
+
+  // Blocking operators need to consume all the inputs before producing any output. This means,
+  // Limit operator after this blocking operator will never reach its limit during the execution of
+  // this blocking operator's upstream operators. Here we override this method to return Nil, so
+  // that upstream operators will not generate useless conditions (which are always evaluated to
+  // false) for the Limit operators after this blocking operator.
+  override def limitNotReachedChecks: Seq[String] = Nil
 }
 
 

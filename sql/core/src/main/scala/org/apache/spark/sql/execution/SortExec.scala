@@ -39,7 +39,7 @@ case class SortExec(
     global: Boolean,
     child: SparkPlan,
     testSpillFrequency: Int = 0)
-  extends UnaryExecNode with CodegenSupport {
+  extends UnaryExecNode with BlockingOperatorWithCodegen {
 
   override def output: Seq[Attribute] = child.output
 
@@ -123,21 +123,6 @@ case class SortExec(
 
   // Name of sorter variable used in codegen.
   private var sorterVariable: String = _
-
-  // The result rows come from the sort buffer, so this operator doesn't need to copy its result
-  // even if its child does.
-  override def needCopyResult: Boolean = false
-
-  // Sort operator always consumes all the input rows before outputting any result, so we don't need
-  // a stop check before sorting.
-  override def needStopCheck: Boolean = false
-
-  // Sort is a blocking operator. It needs to consume all the inputs before producing any output.
-  // This means, Limit operator after Sort will never reach its limit during the execution of Sort's
-  // upstream operators. Here we override this method to return Nil, so that upstream operators will
-  // not generate useless conditions (which are always evaluated to false) for the Limit operators
-  // after Sort.
-  override def limitNotReachedChecks: Seq[String] = Nil
 
   override protected def doProduce(ctx: CodegenContext): String = {
     val needToSort =

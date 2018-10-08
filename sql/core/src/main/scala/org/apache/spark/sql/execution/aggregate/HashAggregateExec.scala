@@ -45,7 +45,7 @@ case class HashAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryExecNode with CodegenSupport {
+  extends UnaryExecNode with BlockingOperatorWithCodegen {
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -150,21 +150,6 @@ case class HashAggregateExec(
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
-
-  // The result rows come from the aggregate buffer, or a single row(no grouping keys), so this
-  // operator doesn't need to copy its result even if its child does.
-  override def needCopyResult: Boolean = false
-
-  // Aggregate operator always consumes all the input rows before outputting any result, so we
-  // don't need a stop check before aggregating.
-  override def needStopCheck: Boolean = false
-
-  // Aggregate is a blocking operator. It needs to consume all the inputs before producing any
-  // output. This means, Limit operator after Aggregate will never reach its limit during the
-  // execution of Aggregate's upstream operators. Here we override this method to return Nil, so
-  // that upstream operators will not generate useless conditions (which are always evaluated to
-  // true) for the Limit operators after Aggregate.
-  override def limitNotReachedChecks: Seq[String] = Nil
 
   protected override def doProduce(ctx: CodegenContext): String = {
     if (groupingExpressions.isEmpty) {
