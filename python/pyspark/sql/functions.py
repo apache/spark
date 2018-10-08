@@ -2713,6 +2713,23 @@ def from_csv(col, schema, options={}):
     return Column(jc)
 
 
+@since(3.0)
+def getActiveSession():
+    """
+    Returns the active SparkSession for the current thread
+    """
+    from pyspark.sql import SparkSession
+    sc = SparkContext._active_spark_context
+    if sc is None:
+        sc = SparkContext()
+
+    if sc._jvm.SparkSession.getActiveSession().isDefined():
+        SparkSession(sc, sc._jvm.SparkSession.getActiveSession().get())
+        return SparkSession._activeSession
+    else:
+        return None
+
+
 # ---------------------------- User Defined Function ----------------------------------
 
 class PandasUDFType(object):

@@ -259,7 +259,7 @@ class SparkSession(object):
         return self.__class__(self._sc, self._jsparkSession.newSession())
 
     @classmethod
-    @since(2.5)
+    @since(3.0)
     def getActiveSession(cls):
         """
         Returns the active SparkSession for the current thread, returned by the builder.
@@ -270,7 +270,8 @@ class SparkSession(object):
         >>> df.select("age").collect()
         [Row(age=1)]
         """
-        return cls._activeSession
+        from pyspark.sql import functions
+        return functions.getActiveSession()
 
     @property
     @since(2.0)
