@@ -70,32 +70,26 @@ trait TestPrematureExit {
       mainObject: CommandLineUtils = SparkSubmit) : Unit = {
     val printStream = new BufferPrintStream()
     mainObject.printStream = printStream
+    mainObject.exitFn = (_) => ()
 
-    @volatile var exitedCleanly = false
-    mainObject.exitFn = (_) => exitedCleanly = true
-
-    var exception: Exception = null
+    @volatile var exception: Exception = null
     val thread = new Thread {
       override def run() = try {
         mainObject.main(input)
       } catch {
-        // If exceptions occur after the "exit" has happened, fine to ignore them.
-        // These represent code paths not reachable during normal execution.
+        // Capture the exception to check whether the exception contains searchString or not
         case e: Exception => exception = e
       }
     }
     thread.start()
     thread.join()
     val joined = printStream.lineBuffer.mkString("\n")
-    val searchStrContainsInEx = exception != null && exception.getMessage.contains(searchString)
-    if (!searchStrContainsInEx) {
-      if (!exitedCleanly) {
-        // throw the exception when the exception message doesn't contain
-        // searchString and not exitedCleanly.
+    if (exception != null) {
+      if (!exception.getMessage.contains(searchString)) {
         throw exception
-      } else if (!joined.contains(searchString)) {
-        fail(s"Search string '$searchString' not found in $joined")
       }
+    } else if (!joined.contains(searchString)) {
+      fail(s"Search string '$searchString' not found in $joined")
     }
   }
 }
