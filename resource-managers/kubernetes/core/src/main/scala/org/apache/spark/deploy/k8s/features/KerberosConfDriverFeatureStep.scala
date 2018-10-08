@@ -146,14 +146,9 @@ private[spark] class KerberosConfDriverFeatureStep(
       } yield {
         kDtSecret
       }
-      val configMap =
-        new ConfigMapBuilder()
-          .withNewMetadata()
-            .withName(kubernetesConf.hadoopConfigMapName)
-            .endMetadata()
-          .addToData(hadoopConfigurationFiles.map(file =>
-            (file.toPath.getFileName.toString, Files.toString(file, Charsets.UTF_8))).toMap.asJava)
-          .build()
+      val configMap = HadoopBootstrapUtil.buildHadoopConfigMap(
+        kubernetesConf.hadoopConfigMapName,
+        hadoopConfigurationFiles)
       Seq(configMap) ++
         krb5ConfigMap.toSeq ++
         kerberosDTSecret.toSeq

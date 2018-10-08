@@ -37,8 +37,9 @@ private[spark] class HadoopConfExecutorFeatureStep(
      val maybeHadoopConfDir = sparkConf.getOption(HADOOP_CONF_DIR_LOC)
      val maybeHadoopConfigMap = sparkConf.getOption(HADOOP_CONFIG_MAP_NAME)
      require(maybeHadoopConfDir.isDefined && maybeHadoopConfigMap.isDefined,
-       "Ensure that HADOOP_CONF_DIR is defined")
-     logInfo("HADOOP_CONF_DIR defined. Mounting Hadoop specific files")
+       "Ensure that the env `HADOOP_CONF_DIR` is defined either in the client or " +
+         " using pre-existing ConfigMaps where the `HADOOP_CONF_DIR` should be defined")
+     logInfo("HADOOP_CONF_DIR defined")
      HadoopBootstrapUtil.bootstrapHadoopConfDir(
        maybeHadoopConfDir.get,
        maybeHadoopConfigMap.get,

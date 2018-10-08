@@ -735,7 +735,8 @@ It also important to note that the KDC needs to be visible from inside the conta
 krb5 file. 
 
 If a user wishes to use a remote HADOOP_CONF directory, that contains the Hadoop configuration files, this could be
-achieved by mounting a pre-defined ConfigMap in the desired location that you can point to via the appropriate configs.
+achieved by setting the environmental variable `HADOOP_CONF_DIR` on the container to be pointed to the path where the
+pre-created ConfigMap is mounted.
 This method is useful for those who wish to not rebuild their Docker images, but instead point to a ConfigMap that they
 could modify. This strategy is supported via the pod-template feature. 
 
@@ -753,7 +754,7 @@ could modify. This strategy is supported via the pod-template feature.
     local:///opt/spark/examples/jars/spark-examples_<VERSION>-SNAPSHOT.jar \
     <HDFS_FILE_LOCATION>
 ```
-2. Submitting with a local keytab and principal
+2. Submitting with a local Keytab and Principal
 ```bash
 /opt/spark/bin/spark-submit \
     --deploy-mode cluster \
@@ -769,7 +770,7 @@ could modify. This strategy is supported via the pod-template feature.
     <HDFS_FILE_LOCATION>
 ```
 
-3. Submitting with pre-populated secrets, that contain the delegation token, already existing within the namespace
+3. Submitting with pre-populated secrets, that contain the Delegation Token, already existing within the namespace
 ```bash
 /opt/spark/bin/spark-submit \
     --deploy-mode cluster \
@@ -785,7 +786,7 @@ could modify. This strategy is supported via the pod-template feature.
     <HDFS_FILE_LOCATION>
 ```
 
-3b. Submitting like in (3) however specifying a pre-created krb5 config map
+3b. Submitting like in (3) however specifying a pre-created krb5 ConfigMap
 ```bash
 /opt/spark/bin/spark-submit \
     --deploy-mode cluster \

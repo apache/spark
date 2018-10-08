@@ -54,10 +54,5 @@ private[spark] class KerberosConfExecutorFeatureStep(
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
 
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    maybeKrb5File
-      .map(fileLocation => HadoopBootstrapUtil.buildkrb5ConfigMap(
-        kubernetesConf.kRBConfigMapName,
-        fileLocation)).toSeq
-  }
+  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty[HasMetadata]
 }

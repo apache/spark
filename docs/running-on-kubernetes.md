@@ -833,7 +833,8 @@ specific to Spark on Kubernetes.
   <td><code>(none)</code></td>
   <td>
    Specify the name of the ConfigMap, containing the krb5 file, to be mounted on the driver and executors
-   for Kerberos interaction. The KDC defined needs to be visible from inside the containers.
+   for Kerberos interaction. The KDC defined needs to be visible from inside the containers. The ConfigMap must also
+   be in the same namespace of the driver and executor pods.
   </td>
 </tr>
 <tr>

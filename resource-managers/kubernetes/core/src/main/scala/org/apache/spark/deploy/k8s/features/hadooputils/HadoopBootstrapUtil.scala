@@ -37,7 +37,7 @@ private[spark] object HadoopBootstrapUtil {
     * @param dtSecretItemKey Name of the Item Key storing the Delegation Token
     * @param userName Name of the SparkUser to set SPARK_USER
     * @param maybeFileLocation Optional Location of the krb5 file
-    * @param newKrb5ConfName Optiona location of the ConfigMap for Krb5
+    * @param newKrb5ConfName Optional location of the ConfigMap for Krb5
     * @param maybeKrb5ConfName Optional name of ConfigMap for Krb5
     * @param pod Input pod to be appended to
     * @return a modified SparkPod
@@ -214,4 +214,25 @@ private[spark] object HadoopBootstrapUtil {
          Map(file.toPath.getFileName.toString -> Files.toString(file, Charsets.UTF_8)).asJava)
        .build()
   }
+
+     /**
+      * Builds ConfigMap given the ConfigMap name
+      * and a list of Hadoop Conf files
+      *
+      * @param hadoopConfigMapName name of hadoopConfigMap
+      * @param hadoopConfFiles list of hadoopFiles
+      * @return a ConfigMap
+      */
+  def buildHadoopConfigMap(
+     hadoopConfigMapName: String,
+     hadoopConfFiles: Seq[File]) : ConfigMap = {
+     new ConfigMapBuilder()
+       .withNewMetadata()
+        .withName(hadoopConfigMapName)
+        .endMetadata()
+       .addToData(hadoopConfFiles.map(file =>
+         (file.toPath.getFileName.toString, Files.toString(file, Charsets.UTF_8))).toMap.asJava)
+       .build()
+  }
+
 }
