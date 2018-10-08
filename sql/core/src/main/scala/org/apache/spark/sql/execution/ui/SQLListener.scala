@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.ui
 
+import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.JavaType
 import com.fasterxml.jackson.databind.`type`.TypeFactory
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
@@ -24,8 +25,7 @@ import com.fasterxml.jackson.databind.util.Converter
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
-import org.apache.spark.sql.execution.SparkPlanInfo
-import org.apache.spark.sql.execution.metric._
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlanInfo}
 
 @DeveloperApi
 case class SparkListenerSQLExecutionStart(
@@ -39,7 +39,14 @@ case class SparkListenerSQLExecutionStart(
 
 @DeveloperApi
 case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
-  extends SparkListenerEvent
+  extends SparkListenerEvent {
+
+  @JsonIgnore private[sql] var executionName: Option[String] = None
+  // These 3 fields are only accessed when `executionName` is defined.
+  @JsonIgnore private[sql] var duration: Long = 0L
+  @JsonIgnore private[sql] var qe: QueryExecution = null
+  @JsonIgnore private[sql] var executionFailure: Option[Exception] = None
+}
 
 /**
  * A message used to update SQL metric value for driver-side updates (which doesn't get reflected
