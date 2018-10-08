@@ -177,8 +177,11 @@ case class AggregateInPandasExec(
     : Iterator[InternalRow] = {
     val newIter = sessionWindowOption match {
       case Some(sessionExpression) =>
+        val inMemoryThreshold = sqlContext.conf.windowExecBufferInMemoryThreshold
+        val spillThreshold = sqlContext.conf.windowExecBufferSpillThreshold
+
         new UpdatingSessionIterator(iter, groupingWithoutSessionExpressions, sessionExpression,
-          child.output)
+          child.output, inMemoryThreshold, spillThreshold)
 
       case None => iter
     }

@@ -539,6 +539,39 @@ case class SessionWindowStateStoreSaveExec(
 
       // assuming late events were dropped from MergingSortWithMultiValuesStateIterator
       outputMode match {
+        case Some(Complete) =>
+          allUpdatesTimeMs += timeTakenMs {
+            while (iter.hasNext) {
+              val row = iter.next().asInstanceOf[UnsafeRow]
+              val keys = keyProjection(row)
+
+              if (currentKey == null || !keyOrdering.equiv(currentKey, keys)) {
+                currentKey = keys.copy()
+
+                // This is necessary because MultiValuesStateManager doesn't guarantee
+                // stable ordering.
+                // The number of values for the given key is expected to be likely small,
+                // so listing it here doesn't hurt.
+                previousSessions = stateManager.get(keys).toList
+
+                stateManager.removeKey(keys)
+              }
+
+              stateManager.append(keys, row)
+
+              if (!previousSessions.exists(p => valueOrdering.equiv(row, p))) {
+                // such session is not in previous session
+                numUpdatedStateRows += 1
+              }
+            }
+          }
+
+          CompletionIterator[InternalRow, Iterator[InternalRow]](
+            stateManager.getAllRowPairs.map(_.value), {
+            commitTimeMs += timeTakenMs { stateManager.commit() }
+            setStoreMetrics(stateManager)
+          })
+
         // Update and output only sessions being evicted from the MultiValuesStateManager
         // Assumption: watermark predicates must be non-empty if append mode is allowed
         case Some(Append) =>
@@ -548,7 +581,7 @@ case class SessionWindowStateStoreSaveExec(
               val keys = keyProjection(row)
 
               if (currentKey == null || !keyOrdering.equiv(currentKey, keys)) {
-                currentKey = keys
+                currentKey = keys.copy()
 
                 // This is necessary because MultiValuesStateManager doesn't guarantee
                 // stable ordering.

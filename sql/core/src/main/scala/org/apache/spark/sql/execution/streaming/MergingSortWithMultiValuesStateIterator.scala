@@ -122,7 +122,7 @@ class MergingSortWithMultiValuesStateIterator(
         // The number of values for the given key is expected to be likely small,
         // so sorting it here doesn't hurt.
         val unsortedIter = stateManager.get(currentRow.keys)
-        currentStateIter = unsortedIter.toList.sortWith((row1, row2) => {
+        currentStateIter = unsortedIter.map(_.copy()).toList.sortWith((row1, row2) => {
           val rowInfo1 = SessionRowInformation.of(row1)
           val rowInfo2 = SessionRowInformation.of(row2)
           // here sorting is based on the fact that keys are same

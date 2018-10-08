@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.util.Properties
+
+import org.apache.spark._
+import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -45,9 +49,26 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     attr => List("aggVal1", "aggVal2").contains(attr.name)
   }
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    val taskManager = new TaskMemoryManager(new TestMemoryManager(sqlContext.sparkContext.conf), 0)
+    TaskContext.setTaskContext(
+      new TaskContextImpl(0, 0, 0, 0, 0, taskManager, new Properties, null))
+  }
+
+  override def afterAll(): Unit = try {
+    TaskContext.unset()
+  } finally {
+    super.afterAll()
+  }
+
+  // just copying default values to avoid bothering with SQLContext
+  val inMemoryThreshold = 4096
+  val spillThreshold = Int.MaxValue
+
   test("no row") {
     val iterator = new UpdatingSessionIterator(None.iterator, keysWithoutSessionAttributes,
-      sessionAttribute, rowAttributes)
+      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold)
 
     assert(!iterator.hasNext)
   }
@@ -56,7 +77,7 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     val rows = List(createRow("a", 1, 100, 110, 10, 1.1))
 
     val iterator = new UpdatingSessionIterator(rows.iterator, keysWithoutSessionAttributes,
-      sessionAttribute, rowAttributes)
+      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold)
 
     assert(iterator.hasNext)
 
@@ -74,7 +95,7 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     val rows = List(row1, row2, row3, row4)
 
     val iterator = new UpdatingSessionIterator(rows.iterator, keysWithoutSessionAttributes,
-      sessionAttribute, rowAttributes)
+      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold)
 
     val retRows = rows.indices.map { _ =>
       assert(iterator.hasNext)
@@ -105,7 +126,7 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     val rowsAll = rows1 ++ rows2
 
     val iterator = new UpdatingSessionIterator(rowsAll.iterator, keysWithoutSessionAttributes,
-      sessionAttribute, rowAttributes)
+      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold)
 
     val retRows1 = rows1.indices.map { _ =>
       assert(iterator.hasNext)
@@ -141,7 +162,7 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     val rowsAll = rows1 ++ rows2
 
     val iterator = new UpdatingSessionIterator(rowsAll.iterator, keysWithoutSessionAttributes,
-      sessionAttribute, rowAttributes)
+      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold)
 
     val retRows1 = rows1.indices.map { _ =>
       assert(iterator.hasNext)
@@ -186,7 +207,7 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     val rowsAll = rows1 ++ rows2 ++ rows3 ++ rows4
 
     val iterator = new UpdatingSessionIterator(rowsAll.iterator, keysWithoutSessionAttributes,
-      sessionAttribute, rowAttributes)
+      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold)
 
     val retRows1 = rows1.indices.map { _ =>
       assert(iterator.hasNext)
@@ -239,7 +260,7 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     val rows = List(row1, row2, row3, row4)
 
     val iterator = new UpdatingSessionIterator(rows.iterator, keysWithoutSessionAttributes,
-      sessionAttribute, rowAttributes)
+      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold)
 
     // UpdatingSessionIterator can't detect error on hasNext
     assert(iterator.hasNext)
@@ -266,7 +287,7 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     val rows = List(row1, row2, row3)
 
     val iterator = new UpdatingSessionIterator(rows.iterator, keysWithoutSessionAttributes,
-      sessionAttribute, rowAttributes)
+      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold)
 
     // UpdatingSessionIterator can't detect error on hasNext
     assert(iterator.hasNext)
@@ -332,7 +353,7 @@ class UpdatingSessionIteratorSuite extends SharedSQLContext {
     val rows = List(row1, row2, row3, row4)
 
     val iterator = new UpdatingSessionIterator(rows.iterator, Seq.empty[Attribute],
-      noKeySessionAttribute, noKeyRowAttributes)
+      noKeySessionAttribute, noKeyRowAttributes, inMemoryThreshold, spillThreshold)
 
     val retRows = rows.indices.map { _ =>
       assert(iterator.hasNext)

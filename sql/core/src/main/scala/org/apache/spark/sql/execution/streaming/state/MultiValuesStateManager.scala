@@ -257,6 +257,51 @@ class MultiValuesStateManager(
     }
   }
 
+  /** Provide all (key, value) row pairs (key can be exposed multiple times) */
+  def getAllRowPairs: Iterator[UnsafeRowPair] = {
+    new NextIterator[UnsafeRowPair] {
+      // Reuse this object to avoid creation+GC overhead.
+      private val reusedPair = new UnsafeRowPair()
+
+      private val allKeyToNumValues = keyToNumValues.iterator
+
+      private var currentKey: UnsafeRow = null
+      private var numValues: Long = 0L
+      private var index: Long = 0L
+
+      override def getNext(): UnsafeRowPair = {
+        if (currentKey != null && index < numValues) {
+          provideCurrentRow()
+        } else {
+          if (!allKeyToNumValues.hasNext) {
+            // finished
+            finished = true
+            null
+          } else {
+            advanceGroup()
+            assert(numValues != 0)
+            provideCurrentRow()
+          }
+        }
+      }
+
+      private def advanceGroup(): Unit = {
+        val currentKeyToNumValue = allKeyToNumValues.next()
+        currentKey = currentKeyToNumValue.key
+        numValues = currentKeyToNumValue.numValue
+        index = 0
+      }
+
+      private def provideCurrentRow(): UnsafeRowPair = {
+        val currentRow = keyWithIndexToValue.get(currentKey, index)
+        index += 1
+        reusedPair.withRows(currentKey, currentRow)
+      }
+
+      override def close: Unit = {}
+    }
+  }
+
   /** Commit all the changes to all the state stores */
   def commit(): Unit = {
     keyToNumValues.commit()

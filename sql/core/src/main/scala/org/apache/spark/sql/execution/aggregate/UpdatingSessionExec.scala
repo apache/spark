@@ -34,9 +34,12 @@ case class UpdatingSessionExec(
     child: SparkPlan) extends UnaryExecNode {
 
   override protected def doExecute(): RDD[InternalRow] = {
+    val inMemoryThreshold = sqlContext.conf.windowExecBufferInMemoryThreshold
+    val spillThreshold = sqlContext.conf.windowExecBufferSpillThreshold
+
     child.execute().mapPartitions { iter =>
       new UpdatingSessionIterator(iter, keyExpressions, sessionExpression,
-        child.output)
+        child.output, inMemoryThreshold, spillThreshold)
     }
   }
 

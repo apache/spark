@@ -121,7 +121,7 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
     )
   }
 
-  test("session window groupBy with multiple keys statement - two distincts") {
+  test("session window groupBy with multiple keys statement - two distinct") {
     val df = Seq(
       ("2016-03-27 19:39:34", 1, 2, "a"),
       ("2016-03-27 19:39:39", 1, 2, "a"),

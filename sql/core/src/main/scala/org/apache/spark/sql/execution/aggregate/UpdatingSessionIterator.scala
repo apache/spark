@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
 import org.apache.spark.sql.types.{LongType, TimestampType}
 
 // FIXME: javadoc!!
@@ -29,7 +30,9 @@ class UpdatingSessionIterator(
     iter: Iterator[InternalRow],
     groupWithoutSessionExpressions: Seq[Expression],
     sessionExpression: Expression,
-    inputSchema: Seq[Attribute]) extends Iterator[InternalRow] {
+    inputSchema: Seq[Attribute],
+    inMemoryThreshold: Int,
+    spillThreshold: Int) extends Iterator[InternalRow] {
 
   val sessionIndex = inputSchema.indexOf(sessionExpression)
 
@@ -40,8 +43,10 @@ class UpdatingSessionIterator(
   var currentSessionStart: Long = Long.MaxValue
   var currentSessionEnd: Long = Long.MinValue
 
-  val currentRows: mutable.MutableList[InternalRow] = new mutable.MutableList[InternalRow]()
+  var currentRows: ExternalAppendOnlyUnsafeRowArray = new ExternalAppendOnlyUnsafeRowArray(
+    inMemoryThreshold, spillThreshold)
 
+  var returnRows: ExternalAppendOnlyUnsafeRowArray = _
   var returnRowsIter: Iterator[InternalRow] = _
   var errorOnIterator: Boolean = false
 
@@ -56,6 +61,7 @@ class UpdatingSessionIterator(
 
     if (returnRowsIter != null) {
       returnRowsIter = null
+      returnRows.clear()
     }
 
     iter.hasNext
@@ -98,7 +104,7 @@ class UpdatingSessionIterator(
         } else if (sessionStart <= currentSessionEnd) {
           // expanding session length if needed
           expandEndOfCurrentSession(sessionEnd)
-          currentRows += row
+          currentRows.add(row.asInstanceOf[UnsafeRow])
         } else {
           closeCurrentSession(keyChanged = false)
           startNewSession(row, keys, sessionStart, sessionEnd)
@@ -133,8 +139,9 @@ class UpdatingSessionIterator(
     currentKeys = keys
     currentSessionStart = sessionStart
     currentSessionEnd = sessionEnd
+
     currentRows.clear()
-    currentRows += row
+    currentRows.add(row.asInstanceOf[UnsafeRow])
   }
 
   private def handleBrokenPreconditionForSort(): Unit = {
@@ -164,15 +171,19 @@ class UpdatingSessionIterator(
       }
     }
 
-    val returnRows = currentRows.map { internalRow =>
+    returnRows = currentRows
+    currentRows = new ExternalAppendOnlyUnsafeRowArray(
+      inMemoryThreshold, spillThreshold)
+
+    val currentRowsIter = returnRows.generateIterator().map { internalRow =>
       val proj = UnsafeProjection.create(newSchemaExpressions, inputSchema)
       proj(internalRow)
-    }.toList
+    }
 
     if (returnRowsIter != null && returnRowsIter.hasNext) {
-      returnRowsIter = returnRowsIter ++ returnRows.iterator
+      returnRowsIter = returnRowsIter ++ currentRowsIter
     } else {
-      returnRowsIter = returnRows.iterator
+      returnRowsIter = currentRowsIter
     }
 
     if (keyChanged) processedKeys.add(currentKeys)
@@ -180,7 +191,6 @@ class UpdatingSessionIterator(
     currentKeys = null
     currentSessionStart = Long.MaxValue
     currentSessionEnd = Long.MinValue
-    currentRows.clear()
   }
 
   private def assertIteratorNotCorrupted(): Unit = {
