@@ -472,19 +472,19 @@ private[ui] class ExecutionDataSource(
     val runningJobData = if (showRunningJobs) {
       executionUIData.jobs.filter {
         case (_, jobStatus) => jobStatus == JobExecutionStatus.RUNNING
-      }.map { case (jobId, _) => jobId }.toSeq
+      }.map { case (jobId, _) => jobId }.toSeq.sorted
     } else Seq.empty
 
     val completedJobData = if (showSucceededJobs) {
       executionUIData.jobs.filter {
         case (_, jobStatus) => jobStatus == JobExecutionStatus.SUCCEEDED
-      }.map { case (jobId, _) => jobId }.toSeq
+      }.map { case (jobId, _) => jobId }.toSeq.sorted
     } else Seq.empty
 
     val failedJobData = if (showFailedJobs) {
       executionUIData.jobs.filter {
         case (_, jobStatus) => jobStatus == JobExecutionStatus.FAILED
-      }.map { case (jobId, _) => jobId }.toSeq
+      }.map { case (jobId, _) => jobId }.toSeq.sorted
     } else Seq.empty
     
     new ExecutionTableRowData(
@@ -505,9 +505,9 @@ private[ui] class ExecutionDataSource(
       case "Description" => Ordering.by(_.executionUIData.description)
       case "Submitted" => Ordering.by(_.executionUIData.submissionTime)
       case "Duration" => Ordering.by(_.duration)
-      case "Job IDs" | "Succeeded Job IDs" => Ordering by (_.completedJobData.toString())
-      case "Running Job IDs" => Ordering.by(_.runningJobData.toString())
-      case "Failed Job IDs" => Ordering.by(_.failedJobData.toString())
+      case "Job IDs" | "Succeeded Job IDs" => Ordering by (_.completedJobData.headOption)
+      case "Running Job IDs" => Ordering.by(_.runningJobData.headOption)
+      case "Failed Job IDs" => Ordering.by(_.failedJobData.headOption)
       case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
     }
     if (desc) {
