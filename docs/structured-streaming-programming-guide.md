@@ -2050,9 +2050,9 @@ streamingDF.writeStream.foreachBatch { (batchDF: DataFrame, batchId: Long) =>
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
-streamingDatasetOfString.writeStream.foreachBatch(
-  new VoidFunction2<Dataset<String>, long> {
-    void call(Dataset<String> dataset, long batchId) {
+streamingDatasetOfString.writeStream().foreachBatch(
+  new VoidFunction2<Dataset<String>, Long> {
+    public void call(Dataset<String> dataset, Long batchId) {
       // Transform and write batchDF
     }    
   }
@@ -2063,9 +2063,9 @@ streamingDatasetOfString.writeStream.foreachBatch(
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
-def foreachBatchFunction(df, epochId):
-  # Transform and write batchDF
-  pass
+def foreachBatchFunction(df, epoch_id):
+    # Transform and write batchDF
+    pass
   
 streamingDF.writeStream.foreachBatch(foreachBatchFunction).start()   
 {% endhighlight %}
@@ -2076,10 +2076,10 @@ R is not yet supported.
 </div>
 </div>
 
-With foreachBatch, you can do the following.
+With `foreachBatch`, you can do the following.
 
 - **Reuse existing batch data sources** - For many storage systems, there may not be a streaming sink available yet, 
-  but there may already exist a data writer for batch queries. Using foreachBatch(), you can use the batch
+  but there may already exist a data writer for batch queries. Using `foreachBatch`, you can use the batch
   data writers on the output of each micro-batch.
 - **Write to multiple locations** - If you want to write the output of a streaming query to multiple locations, 
   then you can simply write the output DataFrame/Dataset multiple times. However, each attempt to write can 
@@ -2087,15 +2087,15 @@ With foreachBatch, you can do the following.
   you should cache the output DataFrame/Dataset, write it to multiple locations, and then uncache it. Here is an outline.  
 
     streamingDF.writeStream.foreachBatch { (batchDF: DataFrame, batchId: Long) =>
-      batchDF.cache()
+      batchDF.persist()
       batchDF.write.format(...).save(...)  // location 1
       batchDF.write.format(...).save(...)  // location 2
-      batchDF.uncache()
+      batchDF.unpersist()
     }
 
 - **Apply additional DataFrame operations** - Many DataFrame and Dataset operations are not supported 
   in streaming DataFrames because Spark does not support generating incremental plans in those cases. 
-  Using foreachBatch() you can apply some of these operations on each micro-batch output. However, you will have to reason about the end-to-end semantics of doing that operation yourself.
+  Using `foreachBatch`, you can apply some of these operations on each micro-batch output. However, you will have to reason about the end-to-end semantics of doing that operation yourself.
 
 **Note:**
 - By default, `foreachBatch` provides only at-least-once write guarantees. However, you can use the 
@@ -2123,7 +2123,7 @@ streamingDF.writeStream.foreach(
       // Open connection
     }
 
-    def process(record: String) = {
+    def process(record: String): Unit = {
       // Write string to connection
     }
 
@@ -2139,18 +2139,18 @@ streamingDF.writeStream.foreach(
 
 In Java, you have to extend the class `ForeachWriter` ([docs](api/java/org/apache/spark/sql/ForeachWriter.html)).
 {% highlight java %}
-streamingDF.writeStream.foreach(
+streamingDF.writeStream().foreach(
   new ForeachWriter[String] {
 
-    boolean open(long partitionId, long version) {
+    @Override public boolean open(long partitionId, long version) {
       // Open connection
     }
 
-    void process(String record) {
+    @Override public void process(String record) {
       // Write string to connection
     }
 
-    void close(Throwable errorOrNull) {
+    @Override public void close(Throwable errorOrNull) {
       // Close the connection
     }
   }
@@ -2169,11 +2169,11 @@ For that situation you must specify the processing logic in an object.
 1. The function takes a row as input.
 
   {% highlight python %}
-      def processRow(row):
-          // Write row to storage
+      def process_row(row):
+          # Write row to storage
           pass
       
-      query = streamingDF.writeStream.foreach(processRow).start()  
+      query = streamingDF.writeStream.foreach(process_row).start()  
   {% endhighlight %}
 
 2. The object has a process method and optional open and close methods: 
@@ -2181,13 +2181,16 @@ For that situation you must specify the processing logic in an object.
   {% highlight python %}
       class ForeachWriter:
           def open(self, partition_id, epoch_id):
-              // Open connection. This method is optional in Python.
+              # Open connection. This method is optional in Python.
+              pass
       
           def process(self, row):
-              // Write row to connection. This method is NOT optional in Python.
+              # Write row to connection. This method is NOT optional in Python.
+              pass
       
           def close(self, error):
-              // Close the connection. This method in optional in Python.
+              # Close the connection. This method in optional in Python.
+              pass
       
       query = streamingDF.writeStream.foreach(ForeachWriter()).start()
   {% endhighlight %}
@@ -2973,7 +2976,7 @@ the effect of the change is not well-defined. For all of them:
 
   - Changes to output directory of a file sink is not allowed: `sdf.writeStream.format("parquet").option("path", "/somePath")` to `sdf.writeStream.format("parquet").option("path", "/anotherPath")`
 
-  - Changes to output topic is allowed: `sdf.writeStream.format("kafka").option("topic", "someTopic")` to `sdf.writeStream.format("kafka").option("path", "anotherTopic")`
+  - Changes to output topic is allowed: `sdf.writeStream.format("kafka").option("topic", "someTopic")` to `sdf.writeStream.format("kafka").option("topic", "anotherTopic")`
 
   - Changes to the user-defined foreach sink (that is, the `ForeachWriter` code) is allowed, but the semantics of the change depends on the code.
 
@@ -2981,13 +2984,13 @@ the effect of the change is not well-defined. For all of them:
 
   - Addition / deletion of filters is allowed: `sdf.selectExpr("a")` to `sdf.where(...).selectExpr("a").filter(...)`.
 
-  - Changes in projections with same output schema is allowed: `sdf.selectExpr("stringColumn AS json").writeStream` to `sdf.select(to_json(...).as("json")).writeStream`.
+  - Changes in projections with same output schema is allowed: `sdf.selectExpr("stringColumn AS json").writeStream` to `sdf.selectExpr("anotherStringColumn AS json").writeStream`
 
   - Changes in projections with different output schema are conditionally allowed: `sdf.selectExpr("a").writeStream` to `sdf.selectExpr("b").writeStream` is allowed only if the output sink allows the schema change from `"a"` to `"b"`.
 
 - *Changes in stateful operations*: Some operations in streaming queries need to maintain
   state data in order to continuously update the result. Structured Streaming automatically checkpoints
-  the state data to fault-tolerant storage (for example, DBFS, AWS S3, Azure Blob storage) and restores it after restart.
+  the state data to fault-tolerant storage (for example, HDFS, AWS S3, Azure Blob storage) and restores it after restart.
   However, this assumes that the schema of the state data remains same across restarts. This means that
   *any changes (that is, additions, deletions, or schema modifications) to the stateful operations of a streaming query are not allowed between restarts*.
   Here is the list of stateful operations whose schema should not be changed between restarts in order to ensure state recovery:
