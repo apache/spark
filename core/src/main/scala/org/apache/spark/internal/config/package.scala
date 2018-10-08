@@ -648,41 +648,40 @@ package object config {
       .toSequence
       .createWithDefault(Nil)
 
-  private[spark] val KAFKA_DELEGATION_TOKEN_ENABLED =
-    ConfigBuilder("spark.kafka.delegation.token.enabled")
-      .doc("Set to 'true' for obtaining delegation token from kafka.")
-      .booleanConf
-      .createWithDefault(false)
-
   private[spark] val KAFKA_BOOTSTRAP_SERVERS =
     ConfigBuilder("spark.kafka.bootstrap.servers")
       .doc("A list of coma separated host/port pairs to use for establishing the initial " +
         "connection to the Kafka cluster. For further details please see kafka documentation.")
-      .stringConf.createOptional
+      .stringConf
+      .createOptional
 
   private[spark] val KAFKA_SECURITY_PROTOCOL =
     ConfigBuilder("spark.kafka.security.protocol")
       .doc("Protocol used to communicate with brokers. For further details please see kafka " +
         "documentation.")
-      .stringConf.createWithDefault("SASL_SSL")
+      .stringConf
+      .createWithDefault("SASL_SSL")
 
   private[spark] val KAFKA_KERBEROS_SERVICE_NAME =
     ConfigBuilder("spark.kafka.sasl.kerberos.service.name")
       .doc("The Kerberos principal name that Kafka runs as. This can be defined either in " +
         "Kafka's JAAS config or in Kafka's config. For further details please see kafka " +
         "documentation.")
-      .stringConf.createOptional
+      .stringConf
+      .createOptional
 
   private[spark] val KAFKA_TRUSTSTORE_LOCATION =
     ConfigBuilder("spark.kafka.ssl.truststore.location")
       .doc("The location of the trust store file. For further details please see kafka " +
         "documentation.")
-      .stringConf.createOptional
+      .stringConf
+      .createOptional
 
   private[spark] val KAFKA_TRUSTSTORE_PASSWORD =
     ConfigBuilder("spark.kafka.ssl.truststore.password")
       .doc("The store password for the key store file. This is optional for client and only " +
         "needed if ssl.keystore.location is configured. For further details please see kafka " +
         "documentation.")
-      .stringConf.createOptional
+      .stringConf
+      .createOptional
 }

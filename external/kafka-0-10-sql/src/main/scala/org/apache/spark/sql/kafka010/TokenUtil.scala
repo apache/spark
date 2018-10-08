@@ -33,28 +33,30 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
 private[kafka010] object TokenUtil extends Logging {
-  val TOKEN_KIND = new Text("KAFKA_DELEGATION_TOKEN")
-  val TOKEN_SERVICE = new Text("kafka.server.delegation.token")
+  private[kafka010] val TOKEN_KIND = new Text("KAFKA_DELEGATION_TOKEN")
+  private[kafka010] val TOKEN_SERVICE = new Text("kafka.server.delegation.token")
 
-  private class KafkaDelegationTokenIdentifier extends AbstractDelegationTokenIdentifier {
+  private[kafka010] class KafkaDelegationTokenIdentifier extends AbstractDelegationTokenIdentifier {
     override def getKind: Text = TOKEN_KIND;
   }
 
   private def printToken(token: DelegationToken): Unit = {
-    val dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm")
-    log.info("%-15s %-30s %-15s %-25s %-15s %-15s %-15s".format(
-      "TOKENID", "HMAC", "OWNER", "RENEWERS", "ISSUEDATE", "EXPIRYDATE", "MAXDATE"))
-    val tokenInfo = token.tokenInfo
-    log.info("%-15s [hidden] %-15s %-25s %-15s %-15s %-15s".format(
-      tokenInfo.tokenId,
-      tokenInfo.owner,
-      tokenInfo.renewersAsString,
-      dateFormat.format(tokenInfo.issueTimestamp),
-      dateFormat.format(tokenInfo.expiryTimestamp),
-      dateFormat.format(tokenInfo.maxTimestamp)))
+    if (log.isDebugEnabled) {
+      val dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm")
+      log.info("%-15s %-30s %-15s %-25s %-15s %-15s %-15s".format(
+        "TOKENID", "HMAC", "OWNER", "RENEWERS", "ISSUEDATE", "EXPIRYDATE", "MAXDATE"))
+      val tokenInfo = token.tokenInfo
+      logDebug("%-15s [hidden] %-15s %-25s %-15s %-15s %-15s".format(
+        tokenInfo.tokenId,
+        tokenInfo.owner,
+        tokenInfo.renewersAsString,
+        dateFormat.format(tokenInfo.issueTimestamp),
+        dateFormat.format(tokenInfo.expiryTimestamp),
+        dateFormat.format(tokenInfo.maxTimestamp)))
+    }
   }
 
-  def obtainToken(sparkConf: SparkConf): Token[_ <: TokenIdentifier] = {
+  private[kafka010] def createAdminClientProperties(sparkConf: SparkConf): Properties = {
     val adminClientProperties = new Properties
 
     val bootstrapServers = sparkConf.get(KAFKA_BOOTSTRAP_SERVERS)
@@ -66,23 +68,15 @@ private[kafka010] object TokenUtil extends Logging {
     adminClientProperties.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, protocol)
     if (protocol.endsWith("SSL")) {
       logInfo("SSL protocol detected.")
-
-      val truststoreLocation = sparkConf.get(KAFKA_TRUSTSTORE_LOCATION)
-      if (truststoreLocation.nonEmpty) {
-        adminClientProperties.put("ssl.truststore.location", truststoreLocation.get)
-      } else {
-        logInfo("No truststore location set for SSL.")
+      sparkConf.get(KAFKA_TRUSTSTORE_LOCATION).foreach { truststoreLocation =>
+        adminClientProperties.put("ssl.truststore.location", truststoreLocation)
       }
-
-      val truststorePassword = sparkConf.get(KAFKA_TRUSTSTORE_PASSWORD)
-      if (truststorePassword.nonEmpty) {
-        adminClientProperties.put("ssl.truststore.password", truststorePassword.get)
-      } else {
-        logInfo("No truststore password set for SSL.")
+      sparkConf.get(KAFKA_TRUSTSTORE_PASSWORD).foreach { truststorePassword =>
+        adminClientProperties.put("ssl.truststore.password", truststorePassword)
       }
     } else {
       logWarning("Obtaining kafka delegation token through plain communication channel. Please " +
-        "consider it's security impact.")
+        "consider the security impact.")
     }
 
     // There are multiple possibilities to log in:
@@ -91,16 +85,17 @@ private[kafka010] object TokenUtil extends Logging {
     // - Keytab not provided -> try to log in with JVM global security configuration
     //   which can be configured for example with 'java.security.auth.login.config'.
     //   For this no additional parameter needed.
-    KafkaSecurityHelper.getKeytabJaasParams(sparkConf) match {
-      case Some(jaasParams) =>
-        logInfo("Keytab detected, using it for login.")
-        adminClientProperties.put(SaslConfigs.SASL_MECHANISM, SaslConfigs.GSSAPI_MECHANISM)
-        adminClientProperties.put(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
-      case None => // No params required
-        logInfo("Keytab not found.")
+    KafkaSecurityHelper.getKeytabJaasParams(sparkConf).foreach { jaasParams =>
+      logInfo("Keytab detected, using it for login.")
+      adminClientProperties.put(SaslConfigs.SASL_MECHANISM, SaslConfigs.GSSAPI_MECHANISM)
+      adminClientProperties.put(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
     }
 
-    val adminClient = AdminClient.create(adminClientProperties)
+    adminClientProperties
+  }
+
+  def obtainToken(sparkConf: SparkConf): Token[_ <: TokenIdentifier] = {
+    val adminClient = AdminClient.create(createAdminClientProperties(sparkConf))
     val createDelegationTokenOptions = new CreateDelegationTokenOptions()
     val createResult = adminClient.createDelegationToken(createDelegationTokenOptions)
     val token = createResult.delegationToken().get()

@@ -24,7 +24,6 @@ import org.apache.hadoop.security.Credentials
 import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.internal.config._
 
 class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
   private var delegationTokenManager: HadoopDelegationTokenManager = null
@@ -117,7 +116,6 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
 
   test("Obtain tokens For Kafka") {
     val hadoopConf = new Configuration()
-    sparkConf.set(KAFKA_DELEGATION_TOKEN_ENABLED, true)
 
     val kafkaTokenProvider = new KafkaDelegationTokenProvider()
     val creds = new Credentials()

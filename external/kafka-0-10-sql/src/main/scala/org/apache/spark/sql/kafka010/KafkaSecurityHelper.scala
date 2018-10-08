@@ -27,32 +27,26 @@ import org.apache.spark.internal.config._
 
 private[kafka010] object KafkaSecurityHelper extends Logging {
   def getKeytabJaasParams(sparkConf: SparkConf): Option[String] = {
-    if (sparkConf.get(KEYTAB).nonEmpty) {
-      Some(getKrbJaasParams(sparkConf))
+    val keytab = sparkConf.get(KEYTAB)
+    if (keytab.isDefined) {
+      val serviceName = sparkConf.get(KAFKA_KERBEROS_SERVICE_NAME)
+      require(serviceName.nonEmpty, "Kerberos service name must be defined")
+      val principal = sparkConf.get(PRINCIPAL)
+      require(principal.nonEmpty, "Principal must be defined")
+
+      val params =
+        s"""
+        |${getKrb5LoginModuleName} required
+        | useKeyTab=true
+        | serviceName="${serviceName.get}"
+        | keyTab="${keytab.get}"
+        | principal="${principal.get}";
+        """.stripMargin.replace("\n", "")
+      logDebug(s"Krb JAAS params: $params")
+      Some(params)
     } else {
       None
     }
-  }
-
-  def getKrbJaasParams(sparkConf: SparkConf): String = {
-    val serviceName = sparkConf.get(KAFKA_KERBEROS_SERVICE_NAME)
-    require(serviceName.nonEmpty, "Kerberos service name must be defined")
-    val keytab = sparkConf.get(KEYTAB)
-    require(keytab.nonEmpty, "Keytab must be defined")
-    val principal = sparkConf.get(PRINCIPAL)
-    require(principal.nonEmpty, "Principal must be defined")
-
-    val params =
-      s"""
-      |${getKrb5LoginModuleName} required
-      | useKeyTab=true
-      | serviceName="${serviceName.get}"
-      | keyTab="${keytab.get}"
-      | principal="${principal.get}";
-      """.stripMargin.replace("\n", "")
-    logInfo(s"Krb JAAS params: $params")
-
-    params
   }
 
   private def getKrb5LoginModuleName(): String = {
@@ -74,9 +68,10 @@ private[kafka010] object KafkaSecurityHelper extends Logging {
   }
 
   private def getScramJaasParams(
-      sparkConf: SparkConf, token: Token[_ <: TokenIdentifier]): String = {
+      sparkConf: SparkConf,
+      token: Token[_ <: TokenIdentifier]): String = {
     val serviceName = sparkConf.get(KAFKA_KERBEROS_SERVICE_NAME)
-    require(serviceName.nonEmpty, "Kerberos service name must be defined")
+    require(serviceName.isDefined, "Kerberos service name must be defined")
     val username = new String(token.getIdentifier)
     val password = new String(token.getPassword)
 
@@ -89,7 +84,7 @@ private[kafka010] object KafkaSecurityHelper extends Logging {
       | username="$username"
       | password="$password";
       """.stripMargin.replace("\n", "")
-    logInfo(s"Scram JAAS params: ${params.replaceAll("password=\".*\"", "password=\"[hidden]\"")}")
+    logDebug(s"Scram JAAS params: ${params.replaceAll("password=\".*\"", "password=\"[hidden]\"")}")
 
     params
   }

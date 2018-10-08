@@ -26,7 +26,7 @@ import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{KAFKA_DELEGATION_TOKEN_ENABLED, KAFKA_SECURITY_PROTOCOL}
+import org.apache.spark.internal.config.{KAFKA_BOOTSTRAP_SERVERS, KAFKA_SECURITY_PROTOCOL}
 import org.apache.spark.util.Utils
 
 private[security] class KafkaDelegationTokenProvider
@@ -47,11 +47,10 @@ private[security] class KafkaDelegationTokenProvider
       logDebug("Attempting to fetch Kafka security token.")
       val token = obtainToken.invoke(null, sparkConf)
         .asInstanceOf[Token[_ <: TokenIdentifier]]
-      logInfo(s"Get token from Kafka: ${token.toString}")
       creds.addToken(token.getService, token)
     } catch {
       case NonFatal(e) =>
-        logDebug(s"Failed to get token from service $serviceName", e)
+        logInfo(s"Failed to get token from service $serviceName", e)
     }
 
     None
@@ -60,7 +59,7 @@ private[security] class KafkaDelegationTokenProvider
   override def delegationTokensRequired(
       sparkConf: SparkConf,
       hadoopConf: Configuration): Boolean = {
-    sparkConf.get(KAFKA_DELEGATION_TOKEN_ENABLED) &&
+    sparkConf.get(KAFKA_BOOTSTRAP_SERVERS).isDefined &&
       sparkConf.get(KAFKA_SECURITY_PROTOCOL).startsWith("SASL")
   }
 }

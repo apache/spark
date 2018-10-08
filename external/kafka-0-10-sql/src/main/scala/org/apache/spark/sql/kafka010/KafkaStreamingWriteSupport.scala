@@ -41,7 +41,9 @@ case object KafkaWriterCommitMessage extends WriterCommitMessage
  * @param schema The schema of the input data.
  */
 class KafkaStreamingWriteSupport(
-    topic: Option[String], producerParams: ju.Map[String, Object], schema: StructType)
+    topic: Option[String],
+    producerParams: ju.Map[String, Object],
+    schema: StructType)
   extends StreamingWriteSupport {
 
   validateQuery(schema.toAttributes, producerParams, topic)
@@ -62,7 +64,9 @@ class KafkaStreamingWriteSupport(
  * @param schema The schema of the input data.
  */
 case class KafkaStreamWriterFactory(
-    topic: Option[String], producerParams: ju.Map[String, Object], schema: StructType)
+    topic: Option[String],
+    producerParams: ju.Map[String, Object],
+    schema: StructType)
   extends StreamingDataWriterFactory {
 
   override def createWriter(
