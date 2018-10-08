@@ -195,9 +195,11 @@ if [[ "$1" == "package" ]]; then
     BUILD_PACKAGE=$3
     SCALA_VERSION=$4
 
+    PIP_FLAG=""
     if [[ $BUILD_PACKAGE == *"withpip"* ]]; then
       PIP_FLAG="--pip"
     fi
+    R_FLAG=""
     if [[ $BUILD_PACKAGE == *"withr"* ]]; then
       R_FLAG="--r"
     fi
