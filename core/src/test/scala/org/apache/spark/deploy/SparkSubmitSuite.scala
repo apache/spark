@@ -83,13 +83,13 @@ trait TestPrematureExit {
     }
     thread.start()
     thread.join()
-    val joined = printStream.lineBuffer.mkString("\n")
     if (exception != null) {
       if (!exception.getMessage.contains(searchString)) {
         throw exception
       }
-    } else if (!joined.contains(searchString)) {
-      fail(s"Search string '$searchString' not found in $joined")
+    } else {
+      val joined = printStream.lineBuffer.mkString("\n")
+      assert(joined.contains(searchString), s"Search string '$searchString' not found in $joined")
     }
   }
 }
