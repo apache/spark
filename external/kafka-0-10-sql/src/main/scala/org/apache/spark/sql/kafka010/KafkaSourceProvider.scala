@@ -482,7 +482,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
     }
   }
 
-  def kafkaParamsForDriver(specifiedKafkaParams: Map[String, String]): ju.Map[String, Object] = {
+  def kafkaParamsForDriver(specifiedKafkaParams: Map[String, String]): ju.Map[String, Object] =
     ConfigUpdater("source", specifiedKafkaParams)
       .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
       .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
@@ -502,11 +502,10 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
       .setTokenJaasConfigIfNeeded()
       .build()
-  }
 
   def kafkaParamsForExecutors(
       specifiedKafkaParams: Map[String, String],
-      uniqueGroupId: String): ju.Map[String, Object] = {
+      uniqueGroupId: String): ju.Map[String, Object] =
     ConfigUpdater("executor", specifiedKafkaParams)
       .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
       .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
@@ -525,7 +524,6 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
       .setTokenJaasConfigIfNeeded()
       .build()
-  }
 
   /** Class to conveniently update Kafka config params, while logging the changes */
   private case class ConfigUpdater(module: String, kafkaParams: Map[String, String]) {
