@@ -526,7 +526,6 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       case w: WholeStageCodegenExec => w
     }
     assert(stages.length == 1, "The query plan should have one and only one whole-stage.")
-    stages.head
 
     val cls = classTag[T].runtimeClass
     stages.head.collect {
