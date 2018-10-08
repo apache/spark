@@ -1368,6 +1368,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     })
   }
 
+  test("SPARK-20144: Keep partition order if allowReordering=false.") {
+    withSQLConf(
+      "spark.sql.files.allowReordering" -> "false"
+    )(withTempPath { path =>
+      val df = spark.range(10).map(_.toString).toDF
+      df.write.csv(path.getAbsolutePath)
+      val readback = spark.read.csv(path.getCanonicalPath)
+      assert(readback.collect.toSeq == df.collect.toSeq)
+    })
+  }
+
   test("SPARK-23846: usage of samplingRatio while parsing a dataset of strings") {
     val ds = sampledTestData.coalesce(1)
     val readback = spark.read

@@ -428,6 +428,7 @@ case class FileSourceScanExec(
       fsRelation.sparkSession.sessionState.conf.filesMaxPartitionBytes
     val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
     val defaultParallelism = fsRelation.sparkSession.sparkContext.defaultParallelism
+    val allowReordering = fsRelation.sparkSession.sessionState.conf.allowReorderingFiles
     val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
     val bytesPerCore = totalBytes / defaultParallelism
 
@@ -453,7 +454,7 @@ case class FileSourceScanExec(
             partition.values, file.getPath.toUri.toString, 0, file.getLen, hosts))
         }
       }
-    }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
+    }.toArray
 
     val partitions = new ArrayBuffer[FilePartition]
     val currentFiles = new ArrayBuffer[PartitionedFile]
@@ -472,8 +473,9 @@ case class FileSourceScanExec(
       currentSize = 0
     }
 
-    // Assign files to partitions using "Next Fit Decreasing"
-    splitFiles.foreach { file =>
+    // Assign files to partitions using "Next Fit Decreasing" or just "Next Fit".
+    (if (allowReordering) splitFiles.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
+      else splitFiles.sortBy(_.filePath)).foreach { file =>
       if (currentSize + file.length > maxSplitBytes) {
         closePartition()
       }
