@@ -123,6 +123,20 @@ Starting with Spark 2.4.0, it is possible to run Spark applications on Kubernete
 runs in client mode, the driver can run inside a pod or on a physical host. When running an application in client mode,
 it is recommended to account for the following factors:
 
+### Make a distribution
+
+In the case you are working with latest code directly from the git code base of Apache Spark, by building from the source.
+Then it is important to first make a distribution and deploy images to docker repository available to you, as described
+in [Docker images section](#docker-images).
+
+A distribution of spark can be locally created using `dev/make-distribution.sh` script, for example:
+
+```
+>  dev/make-distribution.sh --name spark-latest --tgz -Pkubernetes,hadoop-3.1
+```
+_Note: This step is not required, if you are using a release of spark, by directly downloading the binaries
+and not building from source._
+
 ### Client Mode Networking
 
 Spark executors must be able to connect to the Spark driver over a hostname and a port that is routable from the Spark
