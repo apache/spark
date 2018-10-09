@@ -1001,6 +1001,7 @@ private[spark] object Utils extends Logging {
       // scalastyle:off SingleSpaceBetweenRParenAndLCurlyBrace
       if (hostPort.matches("(([0-9a-fA-F]*):([0-9a-fA-F]*)){2,}")) {
       // scalastyle:on SingleSpaceBetweenRParenAndLCurlyBrace
+        log.warn(s"Invalid hostname ${hostPort}. IPv6 addresses are currently not supported")
         -1
       } else {
         // Else last colon defines start of port definition
