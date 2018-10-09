@@ -79,8 +79,6 @@ private[spark] abstract class AbstractCredentialRenewer(
     driverRef.set(ref)
   }
 
-  protected def renewalEnabled: Boolean = principal != null
-
   /**
    * Start the token renewer. Upon start, if a principal has been configured, the renewer will:
    *
@@ -88,59 +86,66 @@ private[spark] abstract class AbstractCredentialRenewer(
    * - obtain delegation tokens from all available providers
    * - schedule a periodic task to update the tokens when needed.
    *
-   * @return The newly logged in user.
+   * When token renewal is not enabled, this method will not start any periodic tasks. Instead, it
+   * will generate tokens if the driver ref has been provided, update the current user, and send
+   * those tokens to the driver. No future tokens will be generated, so when that initial set
+   * expires, the app will stop working.
+   *
+   * @param driver If provided, the driver where to send the newly generated tokens.
+   *               The same ref will also receive future token updates unless overridden later.
+   * @return The newly logged in user, or null if principal is not configured.
    */
-  def start(): UserGroupInformation = {
-    require(renewalEnabled, "Token renewal is disabled.")
+  def start(driver: Option[RpcEndpointRef] = None): UserGroupInformation = {
+    driver.foreach(setDriverRef)
 
-    val originalCreds = UserGroupInformation.getCurrentUser().getCredentials()
-    val ugi = doLogin()
+    if (principal != null) {
+      val originalCreds = UserGroupInformation.getCurrentUser().getCredentials()
+      val ugi = doLogin()
 
-    val tgtRenewalTask = new Runnable() {
-      override def run(): Unit = {
-        ugi.checkTGTAndReloginFromKeytab()
+      val tgtRenewalTask = new Runnable() {
+        override def run(): Unit = {
+          ugi.checkTGTAndReloginFromKeytab()
+        }
       }
+      val tgtRenewalPeriod = sparkConf.get(KERBEROS_RELOGIN_PERIOD)
+      renewalExecutor.scheduleAtFixedRate(tgtRenewalTask, tgtRenewalPeriod, tgtRenewalPeriod,
+        TimeUnit.SECONDS)
+
+      val creds = obtainTokensAndScheduleRenewal(ugi)
+      ugi.addCredentials(creds)
+
+      val driver = driverRef.get()
+      if (driver != null) {
+        val tokens = SparkHadoopUtil.get.serialize(creds)
+        driver.send(UpdateDelegationTokens(tokens))
+      }
+
+      // Transfer the original user's tokens to the new user, since it may contain needed tokens
+      // (such as those user to connect to YARN). Explicitly avoid overwriting tokens that already
+      // exist in the current user's credentials, since those were freshly obtained above
+      // (see SPARK-23361).
+      val existing = ugi.getCredentials()
+      existing.mergeAll(originalCreds)
+      ugi.addCredentials(existing)
+      ugi
+    } else {
+      driver.foreach { ref =>
+        logInfo("Using ticket cache for Kerberos authentication, no token renewal.")
+        val creds = new Credentials()
+        obtainDelegationTokens(creds)
+        UserGroupInformation.getCurrentUser.addCredentials(creds)
+
+        val tokens = SparkHadoopUtil.get.serialize(creds)
+        ref.send(UpdateDelegationTokens(tokens))
+      }
+      null
     }
-    val tgtRenewalPeriod = sparkConf.get(KERBEROS_RELOGIN_PERIOD)
-    renewalExecutor.scheduleAtFixedRate(tgtRenewalTask, tgtRenewalPeriod, tgtRenewalPeriod,
-      TimeUnit.SECONDS)
-
-    val creds = obtainTokensAndScheduleRenewal(ugi)
-    ugi.addCredentials(creds)
-
-    val driver = driverRef.get()
-    if (driver != null) {
-      val tokens = SparkHadoopUtil.get.serialize(creds)
-      driver.send(UpdateDelegationTokens(tokens))
-    }
-
-    // Transfer the original user's tokens to the new user, since it may contain needed tokens
-    // (such as those user to connect to YARN). Explicitly avoid overwriting tokens that already
-    // exist in the current user's credentials, since those were freshly obtained above
-    // (see SPARK-23361).
-    val existing = ugi.getCredentials()
-    existing.mergeAll(originalCreds)
-    ugi.addCredentials(existing)
-    ugi
   }
 
   def stop(): Unit = {
     if (renewalExecutor != null) {
       renewalExecutor.shutdown()
     }
-  }
-
-  /** Create new tokens for the current user and distribute them to the driver. */
-  protected def createAndUpdateTokens(): Unit = {
-    val driver = driverRef.get()
-    require(driver != null, "Driver endpoint not set.")
-
-    val creds = new Credentials()
-    obtainDelegationTokens(creds)
-    UserGroupInformation.getCurrentUser.addCredentials(creds)
-
-    val tokens = SparkHadoopUtil.get.serialize(creds)
-    driver.send(UpdateDelegationTokens(tokens))
   }
 
   /**

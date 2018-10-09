@@ -34,15 +34,9 @@ private[spark] class MesosHadoopDelegationTokenManager(
 
   private val tokenManager = new HadoopDelegationTokenManager(sparkConf, hadoopConf)
 
-  def start(driverEndpoint: RpcEndpointRef): Unit = {
-    require(driverEndpoint != null, "DriverEndpoint is not initialized")
-    setDriverRef(driverEndpoint)
-    if (renewalEnabled) {
-      super.start()
-    } else {
-      logInfo("Using ticket cache for Kerberos authentication, no token renewal.")
-      createAndUpdateTokens()
-    }
+  override def start(driver: Option[RpcEndpointRef]): UserGroupInformation = {
+    require(driver.orNull != null, "Driver endpoint is not initialized")
+    super.start(driver)
   }
 
   override protected def obtainDelegationTokens(creds: Credentials): Long = {

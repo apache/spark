@@ -200,7 +200,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     super.start()
 
     if (tokenManager != null) {
-      tokenManager.start(driverEndpoint)
+      tokenManager.start(Some(driverEndpoint))
     }
 
     if (sc.deployMode == "client") {
