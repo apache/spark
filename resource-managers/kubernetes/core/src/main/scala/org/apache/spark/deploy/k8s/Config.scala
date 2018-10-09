@@ -241,6 +241,13 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_HADOOP_CONF_CONFIG_MAP =
+    ConfigBuilder("spark.kubernetes.hadoop.configMapName")
+      .doc("Specify the name of the ConfigMap, containing the HADOOP_CONF_DIR files, " +
+        "to be mounted on the driver and executors for custom Hadoop configuration.")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_KERBEROS_DT_SECRET_NAME =
     ConfigBuilder("spark.kubernetes.kerberos.tokenSecret.name")
       .doc("Specify the name of the secret where your existing delegation token is stored. " +

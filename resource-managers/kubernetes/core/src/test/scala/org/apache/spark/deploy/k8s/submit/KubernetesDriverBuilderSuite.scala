@@ -269,7 +269,41 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Seq.empty[String],
-      hadoopConfDir = Some("/var/hadoop-conf"))
+      hadoopConfDir = Some(
+        HadoopConfSpecConf(
+          Some("/var/hadoop-conf"),
+          None)))
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf),
+      BASIC_STEP_TYPE,
+      CREDENTIALS_STEP_TYPE,
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
+      JAVA_STEP_TYPE,
+      HADOOP_GLOBAL_STEP_TYPE)
+  }
+
+  test("Apply HadoopSteps if HADOOP_CONF ConfigMap is defined.") {
+    val conf = KubernetesConf(
+      new SparkConf(false),
+      KubernetesDriverSpecificConf(
+        None,
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Nil,
+      Seq.empty[String],
+      hadoopConfDir = Some(
+        HadoopConfSpecConf(
+          None,
+          Some("pre-defined-configMapName"))))
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,

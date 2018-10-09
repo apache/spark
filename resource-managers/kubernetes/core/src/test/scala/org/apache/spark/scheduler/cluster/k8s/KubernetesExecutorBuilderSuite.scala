@@ -19,7 +19,7 @@ package org.apache.spark.scheduler.cluster.k8s
 import io.fabric8.kubernetes.api.model.PodBuilder
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, KubernetesHostPathVolumeConf, KubernetesVolumeSpec, SparkPod}
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features._
 
@@ -135,8 +135,8 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     val HADOOPFS_PROVIDER = s"$HADOOP_CREDS_PREFIX.hadoopfs.enabled"
     val conf = KubernetesConf(
       new SparkConf(false)
-        .set(HADOOP_CONFIG_MAP_NAME, "hadoop-conf-map-loc")
-        .set(HADOOP_CONF_DIR_LOC, "hadoop-conf-dir-loc")
+        .set(HADOOP_CONFIG_MAP_NAME, "hadoop-conf-map-name")
+        .set(KRB5_CONFIG_MAP_NAME, "krb5-conf-map-name")
         .set(KERBEROS_SPARK_USER_NAME, "spark-user")
         .set(HADOOPFS_PROVIDER, "true"),
       KubernetesExecutorSpecificConf(
@@ -150,7 +150,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Seq.empty[String],
-      Some("hadoop-conf-dir-loc"))
+      Some(HadoopConfSpecConf(Some("/var/hadoop-conf"), None)))
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -162,8 +162,8 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   test("Apply kerberos step if DT secrets created") {
     val conf = KubernetesConf(
       new SparkConf(false)
-        .set(HADOOP_CONFIG_MAP_NAME, "hadoop-conf-map-loc")
-        .set(HADOOP_CONF_DIR_LOC, "hadoop-conf-dir-loc")
+        .set(HADOOP_CONFIG_MAP_NAME, "hadoop-conf-map-name")
+        .set(KRB5_CONFIG_MAP_NAME, "krb5-conf-map-name")
         .set(KERBEROS_SPARK_USER_NAME, "spark-user")
         .set(KERBEROS_KEYTAB_SECRET_NAME, "dt-secret")
         .set(KERBEROS_KEYTAB_SECRET_KEY, "dt-key"),
@@ -178,7 +178,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Seq.empty[String],
-      Some("hadoop-conf-dir-loc"))
+      Some(HadoopConfSpecConf(None, Some("pre-defined-onfigMapName"))))
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,

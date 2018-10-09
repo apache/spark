@@ -18,8 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import io.fabric8.kubernetes.api.model.HasMetadata
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
-import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesExecutorSpecificConf
 import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
@@ -29,25 +28,21 @@ import org.apache.spark.internal.Logging
   * This step is responsible for mounting the DT secret for the executors
   */
 private[spark] class KerberosConfExecutorFeatureStep(
-  kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
-  extends KubernetesFeatureConfigStep with Logging{
+   kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
+   extends KubernetesFeatureConfigStep with Logging{
+
    private val sparkConf = kubernetesConf.sparkConf
-   private val maybeKrb5File = sparkConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
-   private val maybeKrb5CMap = sparkConf.get(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP)
-   KubernetesUtils.requireNandDefined(
-     maybeKrb5File,
-     maybeKrb5CMap,
-     "Do not specify both a Krb5 local file and the ConfigMap as the creation " +
-       "of an additional ConfigMap, when one is already specified, is extraneous")
+   private val maybeKrb5CMap = sparkConf.getOption(KRB5_CONFIG_MAP_NAME)
+   require(maybeKrb5CMap.isDefined, "HADOOP_CONF_DIR ConfigMap not found")
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    logInfo(s"Mounting Kerberos DT for Kerberos")
+    logInfo(s"Mounting Resources for Kerberos")
     HadoopBootstrapUtil.bootstrapKerberosPod(
       sparkConf.get(KERBEROS_KEYTAB_SECRET_NAME),
       sparkConf.get(KERBEROS_KEYTAB_SECRET_KEY),
       sparkConf.get(KERBEROS_SPARK_USER_NAME),
-      maybeKrb5File,
-      kubernetesConf.kRBConfigMapName,
+      None,
+      None,
       maybeKrb5CMap,
       pod)
   }

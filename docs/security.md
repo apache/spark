@@ -728,17 +728,15 @@ When talking to Hadoop-based services behind Kerberos, it was noted that Spark n
 so that non-local processes can authenticate. These delegation tokens in Kubernetes are stored in Secrets that are 
 shared by the Driver and its Executors. As such, there are three ways of submitting a Kerberos job: 
 
-In all cases you must define the environment variable: `HADOOP_CONF_DIR` as well as either 
+In all cases you must define the environment variable: `HADOOP_CONF_DIR` or 
+`spark.kubernetes.hadoop.configMapName` as well as either
 `spark.kubernetes.kerberos.krb5.location` or `spark.kubernetes.kerberos.krb5.configMapName`.
 
 It also important to note that the KDC needs to be visible from inside the containers if the user uses a local
 krb5 file. 
 
 If a user wishes to use a remote HADOOP_CONF directory, that contains the Hadoop configuration files, this could be
-achieved by setting the environmental variable `HADOOP_CONF_DIR` on the container to be pointed to the path where the
-pre-created ConfigMap is mounted.
-This method is useful for those who wish to not rebuild their Docker images, but instead point to a ConfigMap that they
-could modify. This strategy is supported via the pod-template feature. 
+achieved by setting `spark.kubernetes.hadoop.configMapName` to a pre-existing ConfigMap.
 
 1. Submitting with a $kinit that stores a TGT in the Local Ticket Cache:
 ```bash
@@ -764,7 +762,7 @@ could modify. This strategy is supported via the pod-template feature.
     --conf spark.app.name=spark-hdfs \
     --conf spark.kubernetes.container.image=spark:latest \
     --conf spark.kerberos.keytab=<KEYTAB_FILE> \
-    --conf spark.kerberos.principal=<PRINCIPLE> \
+    --conf spark.kerberos.principal=<PRINCIPAL> \
     --conf spark.kubernetes.kerberos.krb5.location=/etc/krb5.conf \
     local:///opt/spark/examples/jars/spark-examples_<VERSION>-SNAPSHOT.jar \
     <HDFS_FILE_LOCATION>
@@ -786,7 +784,7 @@ could modify. This strategy is supported via the pod-template feature.
     <HDFS_FILE_LOCATION>
 ```
 
-3b. Submitting like in (3) however specifying a pre-created krb5 ConfigMap
+3b. Submitting like in (3) however specifying a pre-created krb5 ConfigMap and pre-created `HADOOP_CONF_DIR` ConfigMap
 ```bash
 /opt/spark/bin/spark-submit \
     --deploy-mode cluster \
@@ -797,7 +795,8 @@ could modify. This strategy is supported via the pod-template feature.
     --conf spark.kubernetes.container.image=spark:latest \
     --conf spark.kubernetes.kerberos.tokenSecret.name=<SECRET_TOKEN_NAME> \
     --conf spark.kubernetes.kerberos.tokenSecret.itemKey=<SECRET_ITEM_KEY> \
-    --conf spark.kubernetes.kerberos.krb5.configMapName=<CONFIG_MAP_NAME> \
+    --conf spark.kubernetes.hadoop.configMapName=<HCONF_CONFIG_MAP_NAME> \
+    --conf spark.kubernetes.kerberos.krb5.configMapName=<KRB_CONFIG_MAP_NAME> \
     local:///opt/spark/examples/jars/spark-examples_<VERSION>-SNAPSHOT.jar \
     <HDFS_FILE_LOCATION>
 ```

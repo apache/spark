@@ -87,28 +87,20 @@ private[spark] object Constants {
   val HADOOP_CONF_DIR_PATH = "/opt/hadoop/conf"
   val KRB_FILE_DIR_PATH = "/etc"
   val ENV_HADOOP_CONF_DIR = "HADOOP_CONF_DIR"
-  val HADOOP_CONF_DIR_LOC = "spark.kubernetes.hadoop.conf.dir"
   val HADOOP_CONFIG_MAP_NAME =
     "spark.kubernetes.executor.hadoopConfigMapName"
+  val KRB5_CONFIG_MAP_NAME =
+    "spark.kubernetes.executor.krb5ConfigMapName"
 
   // Kerberos Configuration
-  val KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME =
-    "spark.kubernetes.kerberos.delegation-token-secret-name"
+  val KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME = "delegation-tokens"
   val KERBEROS_KEYTAB_SECRET_NAME =
     "spark.kubernetes.kerberos.key-tab-secret-name"
   val KERBEROS_KEYTAB_SECRET_KEY =
     "spark.kubernetes.kerberos.key-tab-secret-key"
   val KERBEROS_SPARK_USER_NAME =
     "spark.kubernetes.kerberos.spark-user-name"
-  val KERBEROS_SECRET_LABEL_PREFIX =
-    "hadoop-tokens"
-  val SPARK_HADOOP_PREFIX = "spark.hadoop."
-  val HADOOP_SECURITY_AUTHENTICATION =
-    SPARK_HADOOP_PREFIX + "hadoop.security.authentication"
-
-  // Kerberos Token-Refresh Server
-  val KERBEROS_REFRESH_LABEL_KEY = "refresh-hadoop-tokens"
-  val KERBEROS_REFRESH_LABEL_VALUE = "yes"
+  val KERBEROS_SECRET_KEY_PREFIX = "hadoop-tokens"
 
   // Hadoop credentials secrets for the Spark app.
   val SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR = "/mnt/secrets/hadoop-credentials"

@@ -647,8 +647,8 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     if ((clusterManager == MESOS || clusterManager == KUBERNETES)
-       && UserGroupInformation.isSecurityEnabled) {
-       setRMPrincipal(sparkConf)
+      && UserGroupInformation.isSecurityEnabled) {
+      setRMPrincipal(sparkConf)
     }
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class

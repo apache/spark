@@ -825,7 +825,7 @@ specific to Spark on Kubernetes.
   <td><code>(none)</code></td>
   <td>
    Specify the local location of the krb5 file to be mounted on the driver and executors for Kerberos interaction.
-   It is important to note that for local files, the KDC defined needs to be visible from inside the containers.
+   It is important to note that the KDC defined needs to be visible from inside the containers.
   </td>
 </tr>
 <tr>
@@ -838,11 +838,19 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.hadoop.configMapName</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Specify the name of the ConfigMap, containing the HADOOP_CONF_DIR files, to be mounted on the driver 
+    and executors for custom Hadoop configuration.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.kerberos.tokenSecret.name</code></td>
   <td><code>(none)</code></td>
   <td>
     Specify the name of the secret where your existing delegation token is stored. This removes the need for the job user
-    to provide any keytab for launching a job. 
+    to provide any kerberos credentials for launching a job. 
   </td>
 </tr>
 <tr>
@@ -850,7 +858,7 @@ specific to Spark on Kubernetes.
   <td><code>(none)</code></td>
   <td>
     Specify the item key of the data where your existing delegation token is stored. This removes the need for the job user 
-    to provide any keytab for launching a job.
+    to provide any kerberos credentials for launching a job.
   </td>
 </tr>
 </table>

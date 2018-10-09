@@ -69,15 +69,13 @@ private[spark] class KubernetesExecutorBuilder(
 
     val maybeHadoopConfFeatureSteps = maybeHadoopConfigMap.map { _ =>
       val maybeKerberosStep =
-        for {
-          _ <- maybeDTSecretName
-          _ <- maybeDTDataItem
-        } yield {
+        if (maybeDTSecretName.isDefined && maybeDTDataItem.isDefined) {
           provideKerberosConfStep(kubernetesConf)
+        } else {
+          provideHadoopSparkUserStep(kubernetesConf)
         }
       Seq(provideHadoopConfStep(kubernetesConf)) :+
-        maybeKerberosStep.getOrElse(
-        provideHadoopSparkUserStep(kubernetesConf))
+        maybeKerberosStep
     }.getOrElse(Seq.empty[KubernetesFeatureConfigStep])
 
     val allFeatures: Seq[KubernetesFeatureConfigStep] =

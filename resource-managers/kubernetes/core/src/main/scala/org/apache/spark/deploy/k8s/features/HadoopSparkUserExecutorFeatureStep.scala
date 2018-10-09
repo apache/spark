@@ -29,13 +29,13 @@ import org.apache.spark.internal.Logging
   * however, this step would not be run if Kerberos is enabled, as Kerberos sets SPARK_USER
   */
  private[spark] class HadoopSparkUserExecutorFeatureStep(
-   kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
-   extends KubernetesFeatureConfigStep with Logging{
+    kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
+    extends KubernetesFeatureConfigStep with Logging{
 
-   override def configurePod(pod: SparkPod): SparkPod = {
+    override def configurePod(pod: SparkPod): SparkPod = {
       val sparkUserName = kubernetesConf.sparkConf.get(KERBEROS_SPARK_USER_NAME)
       HadoopBootstrapUtil.bootstrapSparkUserPod(sparkUserName, pod)
-   }
+    }
 
    override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
 

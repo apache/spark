@@ -50,6 +50,13 @@ private[spark] case class KubernetesExecutorSpecificConf(
     driverPod: Option[Pod])
   extends KubernetesRoleSpecificConf
 
+/*
+ * Structure containing metadata for HADOOP_CONF_DIR customization
+ */
+private[spark] case class HadoopConfSpecConf(
+    hadoopConfDir: Option[String],
+    hadoopConfigMapName: Option[String])
+
 /**
  * Structure containing metadata for Kubernetes logic to build Spark pods.
  */
@@ -65,7 +72,7 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     roleEnvs: Map[String, String],
     roleVolumes: Iterable[KubernetesVolumeSpec[_ <: KubernetesVolumeSpecificConf]],
     sparkFiles: Seq[String],
-    hadoopConfDir: Option[String]) {
+    hadoopConfDir: Option[HadoopConfSpecConf]) {
 
   def hadoopConfigMapName: String = s"$appResourceNamePrefix-hadoop-config"
 
@@ -188,6 +195,19 @@ private[spark] object KubernetesConf {
       .map(str => str.split(",").toSeq)
       .getOrElse(Seq.empty[String]) ++ additionalFiles
 
+    val hadoopConfigMapName = sparkConf.get(KUBERNETES_HADOOP_CONF_CONFIG_MAP)
+    KubernetesUtils.requireNandDefined(
+      hadoopConfDir,
+      hadoopConfigMapName,
+      "Do not specify both the `HADOOP_CONF_DIR` in your ENV and the ConfigMap " +
+      "as the creation of an additional ConfigMap, when one is already specified is extraneous" )
+    val hadoopConfSpecConf =
+      if (hadoopConfDir.isDefined || hadoopConfigMapName.isDefined) {
+        Some(HadoopConfSpecConf(hadoopConfDir, hadoopConfigMapName))
+      } else {
+        None
+      }
+
     KubernetesConf(
       sparkConfWithMainAppJar,
       KubernetesDriverSpecificConf(mainAppResource, mainClass, appName, appArgs),
@@ -200,7 +220,7 @@ private[spark] object KubernetesConf {
       driverEnvs,
       driverVolumes,
       sparkFiles,
-      hadoopConfDir)
+      hadoopConfSpecConf)
   }
 
   def createExecutorConf(

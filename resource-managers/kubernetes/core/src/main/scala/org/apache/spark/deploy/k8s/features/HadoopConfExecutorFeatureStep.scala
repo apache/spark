@@ -29,21 +29,17 @@ import org.apache.spark.internal.Logging
   * pointed to the mounted file directory.
   */
 private[spark] class HadoopConfExecutorFeatureStep(
-  kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
-  extends KubernetesFeatureConfigStep with Logging{
+   kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
+   extends KubernetesFeatureConfigStep with Logging {
 
-  override def configurePod(pod: SparkPod): SparkPod = {
+   override def configurePod(pod: SparkPod): SparkPod = {
      val sparkConf = kubernetesConf.sparkConf
-     val maybeHadoopConfDir = sparkConf.getOption(HADOOP_CONF_DIR_LOC)
-     val maybeHadoopConfigMap = sparkConf.getOption(HADOOP_CONFIG_MAP_NAME)
-     require(maybeHadoopConfDir.isDefined && maybeHadoopConfigMap.isDefined,
+     val maybeHadoopConfDir = sparkConf.getOption(HADOOP_CONFIG_MAP_NAME)
+     require(maybeHadoopConfDir.isDefined,
        "Ensure that the env `HADOOP_CONF_DIR` is defined either in the client or " +
-         " using pre-existing ConfigMaps where the `HADOOP_CONF_DIR` should be defined")
+         " using pre-existing ConfigMaps")
      logInfo("HADOOP_CONF_DIR defined")
-     HadoopBootstrapUtil.bootstrapHadoopConfDir(
-       maybeHadoopConfDir.get,
-       maybeHadoopConfigMap.get,
-       pod)
+     HadoopBootstrapUtil.bootstrapHadoopConfDir(None, None, maybeHadoopConfDir, pod)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty

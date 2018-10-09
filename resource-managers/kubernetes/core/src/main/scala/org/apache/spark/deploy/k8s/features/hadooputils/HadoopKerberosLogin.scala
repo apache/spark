@@ -16,12 +16,10 @@
  */
 package org.apache.spark.deploy.k8s.features.hadooputils
 
-import scala.collection.JavaConverters._
-
 import io.fabric8.kubernetes.api.model.SecretBuilder
 import org.apache.commons.codec.binary.Base64
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
@@ -41,9 +39,6 @@ private[spark] object HadoopKerberosLogin {
      kubernetesResourceNamePrefix : String,
      tokenManager: KubernetesHadoopDelegationTokenManager): KerberosConfigSpec = {
      val hadoopConf = SparkHadoopUtil.get.newConfiguration(submissionSparkConf)
-     if (!tokenManager.isSecurityEnabled) {
-       throw new SparkException("Hadoop not configured with Kerberos")
-     }
      // The JobUserUGI will be taken fom the Local Ticket Cache or via keytab+principal
      // The login happens in the SparkSubmit so login logic is not necessary to include
      val jobUserUGI = tokenManager.getCurrentUser
@@ -54,21 +49,20 @@ private[spark] object HadoopKerberosLogin {
        hadoopConf)
      require(tokenData.nonEmpty, "Did not obtain any delegation tokens")
      val currentTime = tokenManager.getCurrentTime
-     val initialTokenDataKeyName = s"$KERBEROS_SECRET_LABEL_PREFIX-$currentTime-$renewalInterval"
-     val uniqueSecretName =
+     val initialTokenDataKeyName = s"$KERBEROS_SECRET_KEY_PREFIX-$currentTime"
+     val newSecretName =
        s"$kubernetesResourceNamePrefix-$KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME.$currentTime"
      val secretDT =
        new SecretBuilder()
          .withNewMetadata()
-           .withName(uniqueSecretName)
-           .withLabels(Map(KERBEROS_REFRESH_LABEL_KEY -> KERBEROS_REFRESH_LABEL_VALUE).asJava)
+           .withName(newSecretName)
            .endMetadata()
          .addToData(initialTokenDataKeyName, Base64.encodeBase64String(tokenData))
          .build()
 
      KerberosConfigSpec(
        dtSecret = Some(secretDT),
-       dtSecretName = uniqueSecretName,
+       dtSecretName = newSecretName,
        dtSecretItemKey = initialTokenDataKeyName,
        jobUserName = jobUserUGI.getShortUserName)
    }
