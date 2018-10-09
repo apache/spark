@@ -38,7 +38,8 @@ import org.apache.spark.util.Utils
  */
 class JacksonParser(
     schema: DataType,
-    val options: JSONOptions) extends Logging {
+    val options: JSONOptions,
+    explodeArray: Boolean) extends Logging {
 
   import JacksonUtils._
   import com.fasterxml.jackson.core.JsonToken._
@@ -90,6 +91,10 @@ class JacksonParser(
         // in such an array as a row, this case is possible.
         if (array.numElements() == 0) {
           Nil
+        } else if (array.numElements() > 1 && !explodeArray) {
+          throw new RuntimeException("Found an array with more than one element for " +
+            s"the specified schema ${st.catalogString}. " +
+            s"The array cannot be converted to the type.")
         } else {
           array.toArray[InternalRow](schema).toSeq
         }
