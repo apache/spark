@@ -346,6 +346,16 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     projection(row)
   }
 
+  test("SPARK-22226: splitExpressions should not generate codes beyond 64KB") {
+    val colNumber = 10000
+    val attrs = (1 to colNumber).map(colIndex => AttributeReference(s"_$colIndex", IntegerType)())
+    val lit = Literal(1000)
+    val exprs = attrs.flatMap { a =>
+      Seq(If(lit < a, lit, a), sqrt(a))
+    }
+    UnsafeProjection.create(exprs, attrs)
+  }
+
   test("SPARK-22543: split large predicates into blocks due to JVM code size limit") {
     val length = 600
 
