@@ -1892,7 +1892,6 @@ working with timestamps in `pandas_udf`s to get the best performance, see
 
 ## Upgrading From Spark SQL 2.3 to 2.4
 
-  - In version 2.3 and earlier, the IN operator returns `false` when comparing structs with null fields; since 2.4, by default Spark returns `null` in this scenario in compliance to other RDBMS behavior (therefore NOT IN filters out the rows). The previous behavior can be restored switching `spark.sql.legacy.inOperator.falseForNullField` to `true`.
   - In Spark version 2.3 and earlier, the second parameter to array_contains function is implicitly promoted to the element type of first array type parameter. This type promotion can be lossy and may cause `array_contains` function to return wrong result. This problem has been addressed in 2.4 by employing a safer type promotion mechanism. This can cause some change in behavior and are illustrated in the table below.
   <table class="table">
         <tr>

@@ -14,6 +14,8 @@ CREATE TEMPORARY VIEW m AS SELECT * FROM VALUES
 -- Case 1 (not possible to write a literal with no rows, so we ignore it.)
 -- (subquery is empty -> row is returned)
 
+set spark.sql.legacy.inOperator.falseForNullField=false;
+
   -- Case 2
   -- (subquery contains a row with null in all columns -> row not returned)
 SELECT *
