@@ -64,7 +64,11 @@ private[spark] class Heartbeater(
    * determined by MetricGetter.values
    */
   def getCurrentMetrics(): ExecutorMetrics = {
-    val metrics = ExecutorMetricType.values.map(_.getMetricValue(memoryManager)).toArray
+    // figure out how to append all the metrics
+    var metrics = Map.empty[String, Long]
+    ExecutorMetricType.metricGetters.foreach { metric =>
+       metrics ++= metric.getMetricSet(memoryManager)
+    }
     new ExecutorMetrics(metrics)
   }
 }

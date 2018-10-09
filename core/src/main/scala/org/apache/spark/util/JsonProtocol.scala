@@ -394,9 +394,9 @@ private[spark] object JsonProtocol {
 
   /** Convert executor metrics to JSON. */
   def executorMetricsToJson(executorMetrics: ExecutorMetrics): JValue = {
-    val metrics = ExecutorMetricType.values.map{ metricType =>
-      JField(metricType.name, executorMetrics.getMetricValue(metricType))
-     }
+    val metrics = executorMetrics.getMetrics().map{ m =>
+      JField(m._1, m._2)
+    }.toSeq
     JObject(metrics: _*)
   }
 
@@ -611,8 +611,8 @@ private[spark] object JsonProtocol {
   /** Extract the executor metrics from JSON. */
   def executorMetricsFromJson(json: JValue): ExecutorMetrics = {
     val metrics =
-      ExecutorMetricType.values.map { metric =>
-        metric.name -> jsonOption(json \ metric.name).map(_.extract[Long]).getOrElse(0L)
+      ExecutorMetricType.definedMetrics.map { metric =>
+        metric -> jsonOption(json \ metric).map(_.extract[Long]).getOrElse(0L)
       }.toMap
     new ExecutorMetrics(metrics)
   }

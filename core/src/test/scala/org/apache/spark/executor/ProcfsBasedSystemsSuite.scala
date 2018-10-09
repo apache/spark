@@ -27,15 +27,15 @@ class ProcfsBasedSystemsSuite extends SparkFunSuite {
 
   test("testGetProcessInfo") {
     p.computeProcessInfo(26109)
-    assert(p.getJVMVirtualMemInfo == 4769947648L)
-    assert(p.getJVMRSSInfo == 262610944)
-    assert(p.getPythonVirtualMemInfo == 0)
-    assert(p.getPythonRSSInfo == 0)
+    assert(p.allMetrics.jvmVmemTotal == 4769947648L)
+    assert(p.allMetrics.jvmRSSTotal == 262610944)
+    assert(p.allMetrics.pythonVmemTotal == 0)
+    assert(p.allMetrics.pythonRSSTotal == 0)
 
     p.computeProcessInfo(22763)
-    assert(p.getPythonVirtualMemInfo == 360595456)
-    assert(p.getPythonRSSInfo == 7831552)
-    assert(p.getJVMVirtualMemInfo == 4769947648L)
-    assert(p.getJVMRSSInfo == 262610944)
+    assert(p.allMetrics.pythonVmemTotal == 360595456)
+    assert(p.allMetrics.pythonRSSTotal == 7831552)
+    assert(p.allMetrics.jvmVmemTotal == 4769947648L)
+    assert(p.allMetrics.jvmRSSTotal == 262610944)
   }
 }

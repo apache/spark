@@ -26,12 +26,21 @@ import org.apache.spark.memory.MemoryManager
  * Executor metric types for executor-level metrics stored in ExecutorMetrics.
  */
 sealed trait ExecutorMetricType {
-  private[spark] def getMetricValue(memoryManager: MemoryManager): Long
+  private[spark] var numberOfMetricsInSet = 0
+  private[spark] def getMetricValue(memoryManager: MemoryManager): Long = 0
+  private[spark] def getMetricSet(memoryManager: MemoryManager): Map[String, Long] =
+    Map.empty[ String, Long]
   private[spark] val name = getClass().getName().stripSuffix("$").split("""\.""").last
 }
 
 private[spark] abstract class MemoryManagerExecutorMetricType(
     f: MemoryManager => Long) extends ExecutorMetricType {
+  override private[spark] def getMetricSet(memoryManager: MemoryManager): Map[String, Long] = {
+    var metricAsSet = Map.empty[String, Long]
+    metricAsSet += (name -> f(memoryManager))
+    numberOfMetricsInSet = 1
+    metricAsSet
+  }
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
     f(memoryManager)
   }
@@ -49,51 +58,47 @@ private[spark] abstract class MBeanExecutorMetricType(mBeanName: String)
 }
 
 case object JVMHeapMemory extends ExecutorMetricType {
+  override private[spark] def getMetricSet(memoryManager: MemoryManager): Map[String, Long] = {
+    var metricAsSet = Map.empty[String, Long]
+    metricAsSet += (name -> ManagementFactory.getMemoryMXBean.getHeapMemoryUsage().getUsed())
+    numberOfMetricsInSet = 1
+    metricAsSet
+  }
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
     ManagementFactory.getMemoryMXBean.getHeapMemoryUsage().getUsed()
   }
 }
 
 case object JVMOffHeapMemory extends ExecutorMetricType {
+  override private[spark] def getMetricSet(memoryManager: MemoryManager): Map[String, Long] = {
+    var metricAsSet = Map.empty[String, Long]
+    metricAsSet += (name -> ManagementFactory.getMemoryMXBean.getNonHeapMemoryUsage().getUsed())
+    numberOfMetricsInSet = 1
+    metricAsSet
+  }
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
     ManagementFactory.getMemoryMXBean.getNonHeapMemoryUsage().getUsed()
   }
 }
 
-case object ProcessTreeJVMRSSMemory extends ExecutorMetricType {
-  override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
-    ExecutorMetricType.pTreeInfo.updateAllMetrics()
-    ExecutorMetricType.pTreeInfo.allMetrics.jvmRSSTotal
-  }
-}
-
-case object ProcessTreeJVMVMemory extends ExecutorMetricType {
-  override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
-    ExecutorMetricType.pTreeInfo.allMetrics.jvmVmemTotal
-  }
-}
-
-case object ProcessTreePythonRSSMemory extends ExecutorMetricType {
-  override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
-    ExecutorMetricType.pTreeInfo.allMetrics.pythonRSSTotal
-  }
-}
-
-case object ProcessTreePythonVMemory extends ExecutorMetricType {
-  override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
-    ExecutorMetricType.pTreeInfo.allMetrics.pythonVmemTotal
-  }
-}
-
-case object ProcessTreeOtherRSSMemory extends ExecutorMetricType {
-  override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
-    ExecutorMetricType.pTreeInfo.allMetrics.otherRSSTotal
-  }
-}
-
-case object ProcessTreeOtherVMemory extends ExecutorMetricType {
-  override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
-    ExecutorMetricType.pTreeInfo.allMetrics.otherVmemTotal
+case object ProcessTreeMetrics extends ExecutorMetricType {
+  override private[spark] def getMetricSet(memoryManager: MemoryManager): Map[String, Long] = {
+    ExecutorMetricType.pTreeInfo.computeAllMetrics()
+    var processTreeMetrics = Map.empty[String, Long]
+    processTreeMetrics += ("ProcessTreeJVMVMemory" ->
+      ExecutorMetricType.pTreeInfo.allMetrics.jvmVmemTotal )
+    processTreeMetrics += ("ProcessTreeJVMRSSMemory" ->
+      ExecutorMetricType.pTreeInfo.allMetrics.jvmRSSTotal )
+    processTreeMetrics += ("ProcessTreePythonVMemory" ->
+      ExecutorMetricType.pTreeInfo.allMetrics.pythonVmemTotal )
+    processTreeMetrics += ("ProcessTreePythonRSSMemory" ->
+      ExecutorMetricType.pTreeInfo.allMetrics.pythonRSSTotal )
+    processTreeMetrics += ("ProcessTreeOtherVMemory" ->
+      ExecutorMetricType.pTreeInfo.allMetrics.otherVmemTotal )
+    processTreeMetrics += ("ProcessTreeOtherRSSMemory" ->
+      ExecutorMetricType.pTreeInfo.allMetrics.otherRSSTotal )
+    numberOfMetricsInSet = processTreeMetrics.size
+    processTreeMetrics
   }
 }
 
@@ -124,8 +129,8 @@ case object MappedPoolMemory extends MBeanExecutorMetricType(
 private[spark] object ExecutorMetricType {
   final val pTreeInfo = new ProcfsBasedSystems
 
-  // List of all executor metric types
-  val values = IndexedSeq(
+  // List of all executor metric getters
+  val metricGetters = IndexedSeq(
     JVMHeapMemory,
     JVMOffHeapMemory,
     OnHeapExecutionMemory,
@@ -136,15 +141,25 @@ private[spark] object ExecutorMetricType {
     OffHeapUnifiedMemory,
     DirectPoolMemory,
     MappedPoolMemory,
-    ProcessTreeJVMVMemory,
-    ProcessTreeJVMRSSMemory,
-    ProcessTreePythonVMemory,
-    ProcessTreePythonRSSMemory,
-    ProcessTreeOtherVMemory,
-    ProcessTreeOtherRSSMemory
+    ProcessTreeMetrics
   )
-
-  // Map of executor metric type to its index in values.
-  val metricIdxMap =
-    Map[ExecutorMetricType, Int](ExecutorMetricType.values.zipWithIndex: _*)
+ // List of defined metrics
+  val definedMetrics = Set(
+    "JVMHeapMemory",
+    "JVMOffHeapMemory",
+    "OnHeapExecutionMemory",
+    "OffHeapExecutionMemory",
+    "OnHeapStorageMemory",
+    "OffHeapStorageMemory",
+    "OnHeapUnifiedMemory",
+    "OffHeapUnifiedMemory",
+    "DirectPoolMemory",
+    "MappedPoolMemory",
+    "ProcessTreeJVMVMemory",
+    "ProcessTreeJVMRSSMemory",
+    "ProcessTreePythonVMemory",
+    "ProcessTreePythonRSSMemory",
+    "ProcessTreeOtherVMemory",
+    "ProcessTreeOtherRSSMemory"
+  )
 }

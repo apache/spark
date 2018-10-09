@@ -48,12 +48,6 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
   private val ptree = mutable.Map[ Int, Set[Int]]()
 
   var allMetrics: ProcfsBasedSystemsMetrics = ProcfsBasedSystemsMetrics(0, 0, 0, 0, 0, 0)
-  private var latestJVMVmemTotal = 0L
-  private var latestJVMRSSTotal = 0L
-  private var latestPythonVmemTotal = 0L
-  private var latestPythonRSSTotal = 0L
-  private var latestOtherVmemTotal = 0L
-  private var latestOtherRSSTotal = 0L
 
   computeProcessTree()
 
@@ -179,16 +173,34 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
             val vmem = procInfoSplit(22).toLong
             val rssPages = procInfoSplit(23).toLong
             if (procInfoSplit(1).toLowerCase(Locale.US).contains("java")) {
-              latestJVMVmemTotal += vmem
-              latestJVMRSSTotal += rssPages
+              allMetrics = ProcfsBasedSystemsMetrics(
+                allMetrics.jvmVmemTotal + vmem,
+                allMetrics.jvmRSSTotal + (rssPages*pageSize),
+                allMetrics.pythonVmemTotal,
+                allMetrics.pythonRSSTotal,
+                allMetrics.otherVmemTotal,
+                allMetrics.otherRSSTotal
+              )
             }
             else if (procInfoSplit(1).toLowerCase(Locale.US).contains("python")) {
-              latestPythonVmemTotal += vmem
-              latestPythonRSSTotal += rssPages
+              allMetrics = ProcfsBasedSystemsMetrics(
+                allMetrics.jvmVmemTotal,
+                allMetrics.jvmRSSTotal,
+                allMetrics.pythonVmemTotal + vmem,
+                allMetrics.pythonRSSTotal + (rssPages*pageSize),
+                allMetrics.otherVmemTotal,
+                allMetrics.otherRSSTotal
+              )
             }
             else {
-              latestOtherVmemTotal += vmem
-              latestOtherRSSTotal += rssPages
+              allMetrics = ProcfsBasedSystemsMetrics(
+                allMetrics.jvmVmemTotal,
+                allMetrics.jvmRSSTotal,
+                allMetrics.pythonVmemTotal,
+                allMetrics.pythonRSSTotal,
+                allMetrics.otherVmemTotal + vmem,
+                allMetrics.otherRSSTotal + (rssPages*pageSize)
+              )
             }
           }
         }
@@ -199,74 +211,16 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
     }
   }
 
-  def updateAllMetrics(): Unit = {
-    allMetrics = computeAllMetrics
-  }
-
-  private def computeAllMetrics(): ProcfsBasedSystemsMetrics = {
+  private[spark] def computeAllMetrics(): Unit = {
     if (!isAvailable) {
-      return ProcfsBasedSystemsMetrics(-1, -1, -1, -1, -1, -1)
+      allMetrics = ProcfsBasedSystemsMetrics(0, 0, 0, 0, 0, 0)
+      return
     }
     computeProcessTree
     val pids = ptree.keySet
-    latestJVMRSSTotal = 0
-    latestJVMVmemTotal = 0
-    latestPythonRSSTotal = 0
-    latestPythonVmemTotal = 0
-    latestOtherRSSTotal = 0
-    latestOtherVmemTotal = 0
+    allMetrics = ProcfsBasedSystemsMetrics(0, 0, 0, 0, 0, 0)
     for (p <- pids) {
       computeProcessInfo(p)
     }
-    ProcfsBasedSystemsMetrics(
-      getJVMVirtualMemInfo,
-      getJVMRSSInfo,
-      getPythonVirtualMemInfo,
-      getPythonRSSInfo,
-      getOtherVirtualMemInfo,
-      getOtherRSSInfo)
-
-  }
-
-  def getOtherRSSInfo(): Long = {
-    if (!isAvailable) {
-      return -1
-    }
-    latestOtherRSSTotal*pageSize
-  }
-
-  def getOtherVirtualMemInfo(): Long = {
-    if (!isAvailable) {
-      return -1
-    }
-    latestOtherVmemTotal
-  }
-
-  def getJVMRSSInfo(): Long = {
-    if (!isAvailable) {
-      return -1
-    }
-    latestJVMRSSTotal*pageSize
-  }
-
-  def getJVMVirtualMemInfo(): Long = {
-    if (!isAvailable) {
-      return -1
-    }
-    latestJVMVmemTotal
-  }
-
-  def getPythonRSSInfo(): Long = {
-    if (!isAvailable) {
-      return -1
-    }
-    latestPythonRSSTotal*pageSize
-  }
-
-  def getPythonVirtualMemInfo(): Long = {
-    if (!isAvailable) {
-      return -1
-    }
-    latestPythonVmemTotal
   }
 }
