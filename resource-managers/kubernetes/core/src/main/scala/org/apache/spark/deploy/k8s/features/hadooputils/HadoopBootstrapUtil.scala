@@ -42,38 +42,38 @@ private[spark] object HadoopBootstrapUtil {
     * @return a modified SparkPod
     */
   def bootstrapKerberosPod(
-     dtSecretName: String,
-     dtSecretItemKey: String,
-     userName: String,
-     maybeFileLocation: Option[String],
-     newKrb5ConfName: Option[String],
-     maybeKrb5ConfName: Option[String],
-     pod: SparkPod) : SparkPod = {
+    dtSecretName: String,
+    dtSecretItemKey: String,
+    userName: String,
+    maybeFileLocation: Option[String],
+    newKrb5ConfName: Option[String],
+    maybeKrb5ConfName: Option[String],
+    pod: SparkPod) : SparkPod = {
 
-     val maybePreConfigMapVolume = maybeKrb5ConfName.map { kconf =>
-       new VolumeBuilder()
-         .withName(KRB_FILE_VOLUME)
-         .withNewConfigMap()
+    val maybePreConfigMapVolume = maybeKrb5ConfName.map { kconf =>
+      new VolumeBuilder()
+        .withName(KRB_FILE_VOLUME)
+        .withNewConfigMap()
           .withName(kconf)
-         .endConfigMap()
-         .build() }
+          .endConfigMap()
+        .build() }
 
-     val maybeCreateConfigMapVolume = for {
-       fileLocation <- maybeFileLocation
-       krb5ConfName <- newKrb5ConfName
+    val maybeCreateConfigMapVolume = for {
+      fileLocation <- maybeFileLocation
+      krb5ConfName <- newKrb5ConfName
      } yield {
-       val krb5File = new File(fileLocation)
-       val fileStringPath = krb5File.toPath.getFileName.toString
-       new VolumeBuilder()
-         .withName(KRB_FILE_VOLUME)
-         .withNewConfigMap()
-         .withName(krb5ConfName)
-         .withItems(new KeyToPathBuilder()
-           .withKey(fileStringPath)
-           .withPath(fileStringPath)
-           .build())
-         .endConfigMap()
-         .build()
+      val krb5File = new File(fileLocation)
+      val fileStringPath = krb5File.toPath.getFileName.toString
+      new VolumeBuilder()
+        .withName(KRB_FILE_VOLUME)
+        .withNewConfigMap()
+        .withName(krb5ConfName)
+        .withItems(new KeyToPathBuilder()
+          .withKey(fileStringPath)
+          .withPath(fileStringPath)
+          .build())
+        .endConfigMap()
+        .build()
     }
 
      // Breaking up Volume Creation for clarity
@@ -158,61 +158,61 @@ private[spark] object HadoopBootstrapUtil {
     * @return a modified SparkPod
     */
   def bootstrapHadoopConfDir(
-     maybeHadoopConfDir: Option[String],
-     newHadoopConfigMapName: Option[String],
-     oldHadoopConfigMapName: Option[String],
-     pod: SparkPod) : SparkPod = {
-     val maybePreConfigMapVolume = oldHadoopConfigMapName.map { hConf =>
-       new VolumeBuilder()
-         .withName(HADOOP_FILE_VOLUME)
-         .withNewConfigMap()
-            .withName(hConf)
-            .endConfigMap()
-          .build() }
+    maybeHadoopConfDir: Option[String],
+    newHadoopConfigMapName: Option[String],
+    oldHadoopConfigMapName: Option[String],
+    pod: SparkPod) : SparkPod = {
+    val maybePreConfigMapVolume = oldHadoopConfigMapName.map { hConf =>
+      new VolumeBuilder()
+        .withName(HADOOP_FILE_VOLUME)
+        .withNewConfigMap()
+          .withName(hConf)
+          .endConfigMap()
+        .build() }
 
-     val maybeCreateConfigMapVolume = for {
-        dirLocation <- maybeHadoopConfDir
-        hConfName <- newHadoopConfigMapName
+    val maybeCreateConfigMapVolume = for {
+      dirLocation <- maybeHadoopConfDir
+      hConfName <- newHadoopConfigMapName
      } yield {
-       val hadoopConfigFiles = getHadoopConfFiles(dirLocation)
-       val keyPaths = hadoopConfigFiles.map { file =>
-         val fileStringPath = file.toPath.getFileName.toString
-         new KeyToPathBuilder()
-            .withKey(fileStringPath)
-            .withPath(fileStringPath)
-            .build() }
-         new VolumeBuilder()
-           .withName(HADOOP_FILE_VOLUME)
-           .withNewConfigMap()
-              .withName(hConfName)
-              .withItems(keyPaths.asJava)
-              .endConfigMap()
-           .build() }
+      val hadoopConfigFiles = getHadoopConfFiles(dirLocation)
+      val keyPaths = hadoopConfigFiles.map { file =>
+        val fileStringPath = file.toPath.getFileName.toString
+        new KeyToPathBuilder()
+          .withKey(fileStringPath)
+          .withPath(fileStringPath)
+          .build() }
+      new VolumeBuilder()
+        .withName(HADOOP_FILE_VOLUME)
+        .withNewConfigMap()
+          .withName(hConfName)
+          .withItems(keyPaths.asJava)
+          .endConfigMap()
+        .build() }
 
-     // Breaking up Volume Creation for clarity
-     val configMapVolume = maybePreConfigMapVolume.getOrElse(
-       maybeCreateConfigMapVolume.get)
+    // Breaking up Volume Creation for clarity
+    val configMapVolume = maybePreConfigMapVolume.getOrElse(
+      maybeCreateConfigMapVolume.get)
 
-     val hadoopSupportedPod = new PodBuilder(pod.pod)
-        .editSpec()
-          .addNewVolumeLike(configMapVolume)
-            .endVolume()
-          .endSpec()
+    val hadoopSupportedPod = new PodBuilder(pod.pod)
+      .editSpec()
+        .addNewVolumeLike(configMapVolume)
+          .endVolume()
+        .endSpec()
         .build()
 
 
-     val hadoopSupportedContainer = new ContainerBuilder(pod.container)
-        .addNewVolumeMount()
-          .withName(HADOOP_FILE_VOLUME)
-          .withMountPath(HADOOP_CONF_DIR_PATH)
-          .endVolumeMount()
-        .addNewEnv()
-          .withName(ENV_HADOOP_CONF_DIR)
-          .withValue(HADOOP_CONF_DIR_PATH)
-          .endEnv()
-        .build()
-      SparkPod(hadoopSupportedPod, hadoopSupportedContainer)
-    }
+    val hadoopSupportedContainer = new ContainerBuilder(pod.container)
+      .addNewVolumeMount()
+        .withName(HADOOP_FILE_VOLUME)
+        .withMountPath(HADOOP_CONF_DIR_PATH)
+        .endVolumeMount()
+      .addNewEnv()
+        .withName(ENV_HADOOP_CONF_DIR)
+        .withValue(HADOOP_CONF_DIR_PATH)
+        .endEnv()
+      .build()
+    SparkPod(hadoopSupportedPod, hadoopSupportedContainer)
+  }
 
    /**
     * Builds ConfigMap given the file location of the
@@ -223,17 +223,17 @@ private[spark] object HadoopBootstrapUtil {
     * @return a ConfigMap
     */
   def buildkrb5ConfigMap(
-     configMapName: String,
-     fileLocation: String) : ConfigMap = {
-     val file = new File(fileLocation)
-     new ConfigMapBuilder()
-       .withNewMetadata()
-         .withName(configMapName)
-         .endMetadata()
-       .addToData(
-         Map(file.toPath.getFileName.toString ->
-           Files.toString(file, StandardCharsets.UTF_8)).asJava)
-       .build()
+    configMapName: String,
+    fileLocation: String) : ConfigMap = {
+    val file = new File(fileLocation)
+    new ConfigMapBuilder()
+      .withNewMetadata()
+        .withName(configMapName)
+        .endMetadata()
+      .addToData(
+        Map(file.toPath.getFileName.toString ->
+          Files.toString(file, StandardCharsets.UTF_8)).asJava)
+      .build()
   }
 
    /**
@@ -245,16 +245,16 @@ private[spark] object HadoopBootstrapUtil {
     * @return a ConfigMap
     */
   def buildHadoopConfigMap(
-     hadoopConfigMapName: String,
-     hadoopConfFiles: Seq[File]) : ConfigMap = {
-     new ConfigMapBuilder()
-       .withNewMetadata()
+    hadoopConfigMapName: String,
+    hadoopConfFiles: Seq[File]) : ConfigMap = {
+    new ConfigMapBuilder()
+      .withNewMetadata()
         .withName(hadoopConfigMapName)
         .endMetadata()
-       .addToData(hadoopConfFiles.map(file =>
-         (file.toPath.getFileName.toString,
-           Files.toString(file, StandardCharsets.UTF_8))).toMap.asJava)
-       .build()
+      .addToData(hadoopConfFiles.map(file =>
+        (file.toPath.getFileName.toString,
+          Files.toString(file, StandardCharsets.UTF_8))).toMap.asJava)
+      .build()
   }
 
 }

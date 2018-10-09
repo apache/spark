@@ -155,9 +155,9 @@ private[spark] class KerberosConfDriverFeatureStep(
         hName <- newHadoopConfigMapName
         hFiles <- hadoopConfigurationFiles
       } yield {
-        HadoopBootstrapUtil.buildHadoopConfigMap(
-          hName,
-          hFiles)
+       HadoopBootstrapUtil.buildHadoopConfigMap(
+         hName,
+         hFiles)
       }
 
      // krb5 ConfigMap
