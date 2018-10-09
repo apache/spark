@@ -41,6 +41,9 @@ cache:
 notifications:
   email: yaooqinn@hotmail.com
 
+before_install:
+  - unset SBT_OPTS JVM_OPTS
+  
 # 5. Run maven install before running lint-java.
 install:
   - build/sbt -Phadoop-2.7 -Dhadoop.version=2.7.3 -Pyarn -Pkafka-0-8 -Phive assembly/package test:package | grep -v  "^.*[info].*Resolving"
