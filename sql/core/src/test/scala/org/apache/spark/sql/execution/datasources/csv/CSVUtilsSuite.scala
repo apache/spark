@@ -28,6 +28,7 @@ class CSVUtilsSuite extends SparkFunSuite {
     assert(CSVUtils.toChar("""\"""") === '\"')
     assert(CSVUtils.toChar("""\'""") === '\'')
     assert(CSVUtils.toChar("""\u0000""") === '\u0000')
+    assert(CSVUtils.toChar("""\\""") === '\\')
   }
 
   test("Does not accept delimiter larger than one character") {

@@ -107,6 +107,7 @@ object CSVUtils {
       // In case user changes quote char and uses \" as delimiter in options
       case Seq('\\', '\"') => '\"'
       case Seq('\\', '\'') => '\''
+      case Seq('\\', '\\') => '\\'
       case _ if str == """\u0000""" => '\u0000'
       case Seq('\\', _) =>
         throw new IllegalArgumentException(s"Unsupported special character for delimiter: $str")
