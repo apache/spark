@@ -105,7 +105,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
       "spark.testing.nHosts" -> "2",
       "spark.testing.nExecutorsPerHost" -> "1",
       "spark.testing.nCoresPerExecutor" -> "1",
-      "spark.scheduler.unschedulableTaskSetTimeout" -> "0s"
+      "spark.scheduler.blacklist.unschedulableTaskSetTimeout" -> "0s"
     )
   ) {
     def runBackend(): Unit = {
