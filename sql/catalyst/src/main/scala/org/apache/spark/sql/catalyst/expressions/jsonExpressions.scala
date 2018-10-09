@@ -585,27 +585,6 @@ case class JsonToStructs(
     copy(timeZoneId = Option(timeZoneId))
 
   override def nullSafeEval(json: Any): Any = {
-    // When input is,
-    //   - `null`: `null`.
-    //   - invalid json: `null`.
-    //   - empty string: `null`.
-    //
-    // When the schema is array,
-    //   - json array: `Array(Row(...), ...)`
-    //   - json object: `Array(Row(...))`
-    //   - empty json array: `Array()`.
-    //   - empty json object: `Array(Row(null))`.
-    //
-    // When the schema is a struct,
-    //   - json object/array with single element: `Row(...)`
-    //   - json array with multiple elements: `null`
-    //   - empty json array: `null`.
-    //   - empty json object: `Row(null)`.
-
-    // We need `null` if the input string is an empty string. `JacksonParser` can
-    // deal with this but produces `Nil`.
-    if (json.toString.trim.isEmpty) return null
-
     converter(parser.parse(json.asInstanceOf[UTF8String]))
   }
 
