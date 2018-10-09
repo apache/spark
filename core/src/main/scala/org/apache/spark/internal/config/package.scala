@@ -607,7 +607,7 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .checkValue(v => v >= 0, "The value should be a non negative time value.")
       .createWithDefault(120)
-  
+
   private[spark] val BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL =
     ConfigBuilder("spark.scheduler.barrier.maxConcurrentTasksCheck.interval")
       .doc("Time in seconds to wait between a max concurrent tasks check failure and the next " +
