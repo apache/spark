@@ -20,10 +20,13 @@ package org.apache.spark.network.crypto;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
+import java.util.Map;
+import java.security.InvalidKeyException;
 import java.util.Random;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.FileRegion;
@@ -187,6 +190,20 @@ public class AuthEngineSuite {
     } finally {
       client.close();
       server.close();
+    }
+  }
+
+  @Test(expected = InvalidKeyException.class)
+  public void testBadKeySize() throws Exception {
+    Map<String, String> mconf = ImmutableMap.of("spark.network.crypto.keyLength", "42");
+    TransportConf conf = new TransportConf("rpc", new MapConfigProvider(mconf));
+
+    try (AuthEngine engine = new AuthEngine("appId", "secret", conf)) {
+      engine.challenge();
+      fail("Should have failed to create challenge message.");
+
+      // Call close explicitly to make sure it's idempotent.
+      engine.close();
     }
   }
 }
