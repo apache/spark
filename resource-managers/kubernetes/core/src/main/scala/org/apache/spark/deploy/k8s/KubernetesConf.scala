@@ -72,7 +72,7 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     roleEnvs: Map[String, String],
     roleVolumes: Iterable[KubernetesVolumeSpec[_ <: KubernetesVolumeSpecificConf]],
     sparkFiles: Seq[String],
-    hadoopConfDir: Option[HadoopConfSpec]) {
+    hadoopConfSpec: Option[HadoopConfSpec]) {
 
   def hadoopConfigMapName: String = s"$appResourceNamePrefix-hadoop-config"
 

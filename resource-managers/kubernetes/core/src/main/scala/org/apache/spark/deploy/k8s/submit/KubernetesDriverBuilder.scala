@@ -85,7 +85,7 @@ private[spark] class KubernetesDriverBuilder(
       .getOrElse(provideJavaStep(kubernetesConf))
 
     val maybeHadoopConfigStep =
-      kubernetesConf.hadoopConfDir.map { _ =>
+      kubernetesConf.hadoopConfSpec.map { _ =>
           provideHadoopGlobalStep(kubernetesConf)}
 
     val allFeatures: Seq[KubernetesFeatureConfigStep] =

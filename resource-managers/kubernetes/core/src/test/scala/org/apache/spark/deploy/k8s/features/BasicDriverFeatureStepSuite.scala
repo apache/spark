@@ -78,7 +78,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       DRIVER_ENVS,
       Nil,
       Seq.empty[String],
-      hadoopConfDir = None)
+      hadoopConfSpec = None)
 
     val featureStep = new BasicDriverFeatureStep(kubernetesConf)
     val basePod = SparkPod.initialPod()
@@ -157,7 +157,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       DRIVER_ENVS,
       Nil,
       Seq.empty[String],
-      hadoopConfDir = None)
+      hadoopConfSpec = None)
 
     val pythonKubernetesConf = KubernetesConf(
       pythonSparkConf,
@@ -175,7 +175,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       DRIVER_ENVS,
       Nil,
       Seq.empty[String],
-      hadoopConfDir = None)
+      hadoopConfSpec = None)
     val javaFeatureStep = new BasicDriverFeatureStep(javaKubernetesConf)
     val pythonFeatureStep = new BasicDriverFeatureStep(pythonKubernetesConf)
     val basePod = SparkPod.initialPod()
@@ -205,7 +205,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       DRIVER_ENVS,
       Nil,
       allFiles,
-      hadoopConfDir = None)
+      hadoopConfSpec = None)
 
     val step = new BasicDriverFeatureStep(kubernetesConf)
     val additionalProperties = step.getAdditionalPodSystemProperties()

@@ -48,10 +48,8 @@ private[spark] object HadoopKerberosLogin {
        submissionSparkConf,
        hadoopConf)
      require(tokenData.nonEmpty, "Did not obtain any delegation tokens")
-     val currentTime = tokenManager.getCurrentTime
-     val initialTokenDataKeyName = s"$KERBEROS_SECRET_KEY_PREFIX-$currentTime"
-     val newSecretName =
-       s"$kubernetesResourceNamePrefix-$KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME.$currentTime"
+     val initialTokenDataKeyName = KERBEROS_SECRET_KEY_PREFIX
+     val newSecretName = s"$kubernetesResourceNamePrefix-$KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME"
      val secretDT =
        new SecretBuilder()
          .withNewMetadata()

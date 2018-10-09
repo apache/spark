@@ -99,7 +99,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Seq.empty[String],
-      hadoopConfDir = None)
+      hadoopConfSpec = None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -126,7 +126,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Seq.empty[String],
-      hadoopConfDir = None)
+      hadoopConfSpec = None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -155,7 +155,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Seq.empty[String],
-      hadoopConfDir = None)
+      hadoopConfSpec = None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -182,7 +182,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Seq.empty[String],
-      hadoopConfDir = None)
+      hadoopConfSpec = None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -214,7 +214,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       volumeSpec :: Nil,
       Seq.empty[String],
-      hadoopConfDir = None)
+      hadoopConfSpec = None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -242,7 +242,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Seq.empty[String],
-      hadoopConfDir = None)
+      hadoopConfSpec = None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -269,7 +269,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Seq.empty[String],
-      hadoopConfDir = Some(
+      hadoopConfSpec = Some(
         HadoopConfSpec(
           Some("/var/hadoop-conf"),
           None)))
@@ -300,7 +300,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Seq.empty[String],
-      hadoopConfDir = Some(
+      hadoopConfSpec = Some(
         HadoopConfSpec(
           None,
           Some("pre-defined-configMapName"))))

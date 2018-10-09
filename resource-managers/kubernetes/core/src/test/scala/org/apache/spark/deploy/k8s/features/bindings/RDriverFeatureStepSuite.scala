@@ -48,7 +48,7 @@ class RDriverFeatureStepSuite extends SparkFunSuite {
       roleEnvs = Map.empty,
       roleVolumes = Seq.empty,
       sparkFiles = Seq.empty[String],
-      hadoopConfDir = None)
+      hadoopConfSpec = None)
 
     val step = new RDriverFeatureStep(kubernetesConf)
     val driverContainerwithR = step.configurePod(baseDriverPod).container

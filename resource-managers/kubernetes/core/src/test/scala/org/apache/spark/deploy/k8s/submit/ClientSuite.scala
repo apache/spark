@@ -143,7 +143,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       Map.empty,
       Nil,
       Seq.empty[String],
-      hadoopConfDir = None)
+      hadoopConfSpec = None)
     when(driverBuilder.buildFromFeatures(kubernetesConf)).thenReturn(BUILT_KUBERNETES_SPEC)
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withName(POD_NAME)).thenReturn(namedPods)

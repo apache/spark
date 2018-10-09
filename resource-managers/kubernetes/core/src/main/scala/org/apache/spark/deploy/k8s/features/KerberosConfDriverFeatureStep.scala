@@ -34,9 +34,9 @@ private[spark] class KerberosConfDriverFeatureStep(
    kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf])
    extends KubernetesFeatureConfigStep with Logging {
 
-   require(kubernetesConf.hadoopConfDir.isDefined,
+   require(kubernetesConf.hadoopConfSpec.isDefined,
      "Ensure that HADOOP_CONF_DIR is defined either via env or a pre-defined ConfigMap")
-   private val hadoopConfDirSpec = kubernetesConf.hadoopConfDir.get
+   private val hadoopConfDirSpec = kubernetesConf.hadoopConfSpec.get
    private val conf = kubernetesConf.sparkConf
    private val principal = conf.get(org.apache.spark.internal.config.PRINCIPAL)
    private val keytab = conf.get(org.apache.spark.internal.config.KEYTAB)

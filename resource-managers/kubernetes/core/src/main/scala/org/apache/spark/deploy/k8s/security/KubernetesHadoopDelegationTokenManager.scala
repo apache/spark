@@ -25,7 +25,6 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.{Clock, SystemClock}
 
  /**
   * The KubernetesHadoopDelegationTokenManager fetches Hadoop delegation tokens
@@ -37,14 +36,12 @@ private[spark] class KubernetesHadoopDelegationTokenManager(
    tokenManager: HadoopDelegationTokenManager) extends Logging {
 
    // HadoopUGI Util methods
-   private val clock: Clock = new SystemClock()
    def getCurrentUser: UserGroupInformation = UserGroupInformation.getCurrentUser
    def getShortUserName : String = getCurrentUser.getShortUserName
    def getFileSystem(hadoopConf: Configuration) : FileSystem = FileSystem.get(hadoopConf)
    def isSecurityEnabled: Boolean = UserGroupInformation.isSecurityEnabled
    def loginUserFromKeytabAndReturnUGI(principal: String, keytab: String): UserGroupInformation =
      UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
-   def getCurrentTime: Long = clock.getTimeMillis()
    def serializeCreds(creds: Credentials): Array[Byte] = SparkHadoopUtil.get.serialize(creds)
    def nextRT(rt: Long, conf: SparkConf): Long = SparkHadoopUtil.nextCredentialRenewalTime(rt, conf)
 

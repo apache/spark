@@ -92,7 +92,7 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Nil,
         Seq.empty[String],
-        hadoopConfDir = None))
+        hadoopConfSpec = None))
     val executor = step.configurePod(SparkPod.initialPod())
 
     // The executor pod name and default labels.
@@ -133,7 +133,7 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Nil,
         Seq.empty[String],
-        hadoopConfDir = None))
+        hadoopConfSpec = None))
     assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length === 63)
   }
 
@@ -155,7 +155,7 @@ class BasicExecutorFeatureStepSuite
         Map("qux" -> "quux"),
         Nil,
         Seq.empty[String],
-        hadoopConfDir = None))
+        hadoopConfSpec = None))
     val executor = step.configurePod(SparkPod.initialPod())
 
     checkEnv(executor,
@@ -183,7 +183,7 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Nil,
         Seq.empty[String],
-        hadoopConfDir = None))
+        hadoopConfSpec = None))
     val executor = step.configurePod(SparkPod.initialPod())
     // This is checking that basic executor + executorMemory = 1408 + 42 = 1450
     assert(executor.container.getResources.getRequests.get("memory").getAmount === "1450Mi")
