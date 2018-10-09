@@ -53,8 +53,8 @@ private[spark] class KubernetesExecutorBuilder(
     kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf]): SparkPod = {
     val sparkConf = kubernetesConf.sparkConf
     val maybeHadoopConfigMap = sparkConf.getOption(HADOOP_CONFIG_MAP_NAME)
-    val maybeDTSecretName = sparkConf.getOption(KERBEROS_KEYTAB_SECRET_NAME)
-    val maybeDTDataItem = sparkConf.getOption(KERBEROS_KEYTAB_SECRET_KEY)
+    val maybeDTSecretName = sparkConf.getOption(KERBEROS_DT_SECRET_NAME)
+    val maybeDTDataItem = sparkConf.getOption(KERBEROS_DT_SECRET_KEY)
 
     val baseFeatures = Seq(provideBasicStep(kubernetesConf), provideLocalDirsStep(kubernetesConf))
     val secretFeature = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {

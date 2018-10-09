@@ -647,7 +647,7 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     if ((clusterManager == MESOS || clusterManager == KUBERNETES)
-      && UserGroupInformation.isSecurityEnabled) {
+       && UserGroupInformation.isSecurityEnabled) {
       setRMPrincipal(sparkConf)
     }
 

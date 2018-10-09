@@ -150,7 +150,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Seq.empty[String],
-      Some(HadoopConfSpecConf(Some("/var/hadoop-conf"), None)))
+      Some(HadoopConfSpec(Some("/var/hadoop-conf"), None)))
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -165,8 +165,8 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
         .set(HADOOP_CONFIG_MAP_NAME, "hadoop-conf-map-name")
         .set(KRB5_CONFIG_MAP_NAME, "krb5-conf-map-name")
         .set(KERBEROS_SPARK_USER_NAME, "spark-user")
-        .set(KERBEROS_KEYTAB_SECRET_NAME, "dt-secret")
-        .set(KERBEROS_KEYTAB_SECRET_KEY, "dt-key"),
+        .set(KERBEROS_DT_SECRET_NAME, "dt-secret")
+        .set(KERBEROS_DT_SECRET_KEY, "dt-key"),
       KubernetesExecutorSpecificConf(
         "executor-id", Some(new PodBuilder().build())),
       "prefix",
@@ -178,7 +178,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Seq.empty[String],
-      Some(HadoopConfSpecConf(None, Some("pre-defined-onfigMapName"))))
+      Some(HadoopConfSpec(None, Some("pre-defined-onfigMapName"))))
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,

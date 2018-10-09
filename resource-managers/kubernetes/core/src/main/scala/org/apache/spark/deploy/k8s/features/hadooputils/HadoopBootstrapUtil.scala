@@ -35,9 +35,9 @@ private[spark] object HadoopBootstrapUtil {
     * @param dtSecretName Name of the secret that stores the Delegation Token
     * @param dtSecretItemKey Name of the Item Key storing the Delegation Token
     * @param userName Name of the SparkUser to set SPARK_USER
-    * @param maybeFileLocation Optional Location of the krb5 file
+    * @param fileLocation Optional Location of the krb5 file
     * @param newKrb5ConfName Optional location of the ConfigMap for Krb5
-    * @param maybeKrb5ConfName Optional name of ConfigMap for Krb5
+    * @param existingKrb5ConfName Optional name of ConfigMap for Krb5
     * @param pod Input pod to be appended to
     * @return a modified SparkPod
     */
@@ -45,12 +45,12 @@ private[spark] object HadoopBootstrapUtil {
     dtSecretName: String,
     dtSecretItemKey: String,
     userName: String,
-    maybeFileLocation: Option[String],
+    fileLocation: Option[String],
     newKrb5ConfName: Option[String],
-    maybeKrb5ConfName: Option[String],
+    existingKrb5ConfName: Option[String],
     pod: SparkPod) : SparkPod = {
 
-    val maybePreConfigMapVolume = maybeKrb5ConfName.map { kconf =>
+    val preConfigMapVolume = existingKrb5ConfName.map { kconf =>
       new VolumeBuilder()
         .withName(KRB_FILE_VOLUME)
         .withNewConfigMap()
@@ -58,11 +58,11 @@ private[spark] object HadoopBootstrapUtil {
           .endConfigMap()
         .build() }
 
-    val maybeCreateConfigMapVolume = for {
-      fileLocation <- maybeFileLocation
+    val ceateConfigMapVolume = for {
+      fLocation <- fileLocation
       krb5ConfName <- newKrb5ConfName
      } yield {
-      val krb5File = new File(fileLocation)
+      val krb5File = new File(fLocation)
       val fileStringPath = krb5File.toPath.getFileName.toString
       new VolumeBuilder()
         .withName(KRB_FILE_VOLUME)
@@ -77,8 +77,8 @@ private[spark] object HadoopBootstrapUtil {
     }
 
      // Breaking up Volume Creation for clarity
-     val configMapVolume = maybePreConfigMapVolume.getOrElse(
-       maybeCreateConfigMapVolume.get)
+     val configMapVolume = preConfigMapVolume.getOrElse(
+       ceateConfigMapVolume.get)
 
      val kerberizedPod = new PodBuilder(pod.pod)
        .editOrNewSpec()
@@ -151,18 +151,18 @@ private[spark] object HadoopBootstrapUtil {
     * Bootstraping the container with ConfigMaps that store
     * Hadoop configuration files
     *
-    * @param maybeHadoopConfDir directory location of HADOOP_CONF_DIR env
+    * @param hadoopConfDir directory location of HADOOP_CONF_DIR env
     * @param newHadoopConfigMapName name of the new configMap for HADOOP_CONF_DIR
-    * @param oldHadoopConfigMapName name of the pre-defined configMap for HADOOP_CONF_DIR
+    * @param existingHadoopConfigMapName name of the pre-defined configMap for HADOOP_CONF_DIR
     * @param pod Input pod to be appended to
     * @return a modified SparkPod
     */
   def bootstrapHadoopConfDir(
-    maybeHadoopConfDir: Option[String],
+    hadoopConfDir: Option[String],
     newHadoopConfigMapName: Option[String],
-    oldHadoopConfigMapName: Option[String],
+    existingHadoopConfigMapName: Option[String],
     pod: SparkPod) : SparkPod = {
-    val maybePreConfigMapVolume = oldHadoopConfigMapName.map { hConf =>
+    val preConfigMapVolume = existingHadoopConfigMapName.map { hConf =>
       new VolumeBuilder()
         .withName(HADOOP_FILE_VOLUME)
         .withNewConfigMap()
@@ -170,8 +170,8 @@ private[spark] object HadoopBootstrapUtil {
           .endConfigMap()
         .build() }
 
-    val maybeCreateConfigMapVolume = for {
-      dirLocation <- maybeHadoopConfDir
+    val createConfigMapVolume = for {
+      dirLocation <- hadoopConfDir
       hConfName <- newHadoopConfigMapName
      } yield {
       val hadoopConfigFiles = getHadoopConfFiles(dirLocation)
@@ -190,8 +190,8 @@ private[spark] object HadoopBootstrapUtil {
         .build() }
 
     // Breaking up Volume Creation for clarity
-    val configMapVolume = maybePreConfigMapVolume.getOrElse(
-      maybeCreateConfigMapVolume.get)
+    val configMapVolume = preConfigMapVolume.getOrElse(
+      createConfigMapVolume.get)
 
     val hadoopSupportedPod = new PodBuilder(pod.pod)
       .editSpec()

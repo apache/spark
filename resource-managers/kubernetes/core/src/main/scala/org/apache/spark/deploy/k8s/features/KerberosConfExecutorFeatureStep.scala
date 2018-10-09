@@ -38,8 +38,8 @@ private[spark] class KerberosConfExecutorFeatureStep(
   override def configurePod(pod: SparkPod): SparkPod = {
     logInfo(s"Mounting Resources for Kerberos")
     HadoopBootstrapUtil.bootstrapKerberosPod(
-      sparkConf.get(KERBEROS_KEYTAB_SECRET_NAME),
-      sparkConf.get(KERBEROS_KEYTAB_SECRET_KEY),
+      sparkConf.get(KERBEROS_DT_SECRET_NAME),
+      sparkConf.get(KERBEROS_DT_SECRET_KEY),
       sparkConf.get(KERBEROS_SPARK_USER_NAME),
       None,
       None,
