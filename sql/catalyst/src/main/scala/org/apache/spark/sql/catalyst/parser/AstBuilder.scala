@@ -309,7 +309,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           AttributeReference(pFilter.identifier().getText, StringType)()
         val value = Literal(visitStringConstant(pFilter.constant()))
         val operator = pFilter.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
-        buildComparison(partition, value, operator)
+        val comparison = buildComparison(partition, value, operator)
+        if (comparison.isInstanceOf[EqualNullSafe]) {
+          throw new ParseException(
+            "'<=>' operator is not supported in ALTER TABLE ... DROP PARTITION.", ctx)
+        }
+        comparison
       }
     }
   }

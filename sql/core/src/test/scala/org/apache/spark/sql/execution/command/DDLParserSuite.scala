@@ -883,8 +883,7 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       ("<", (a: Expression, b: Expression) => a < b),
       ("<=", (a: Expression, b: Expression) => a <= b),
       ("<>", (a: Expression, b: Expression) => a =!= b),
-      ("!=", (a: Expression, b: Expression) => a =!= b),
-      ("<=>", (a: Expression, b: Expression) => a <=> b)).foreach { case (op, predicateGen) =>
+      ("!=", (a: Expression, b: Expression) => a =!= b)).foreach { case (op, predicateGen) =>
         val genPlan = parser.parsePlan(sql1_table.replace("=", op))
         val expectedPlan = AlterTableDropPartitionCommand(
           tableIdent,
@@ -896,6 +895,9 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
           retainData = false)
         comparePlans(genPlan, expectedPlan)
     }
+
+    // SPARK-23866: <=> is not supported
+    intercept("ALTER TABLE table_name DROP PARTITION (dt <=> 'a')", "operator is not supported in")
 
     // SPARK-23866: Invalid partition specification
     intercept("ALTER TABLE table_name DROP PARTITION (dt)", "Invalid partition spec:")
