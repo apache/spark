@@ -568,7 +568,7 @@ case class JsonToStructs(
       throw new IllegalArgumentException(s"from_json() doesn't support the ${mode.name} mode. " +
         s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
     }
-    val rawParser = new JacksonParser(nullableSchema, parsedOptions, explodeArray = false)
+    val rawParser = new JacksonParser(nullableSchema, parsedOptions, allowArrayAsStructs = false)
     val createParser = CreateJacksonParser.utf8String _
 
     new FailureSafeParser[UTF8String](

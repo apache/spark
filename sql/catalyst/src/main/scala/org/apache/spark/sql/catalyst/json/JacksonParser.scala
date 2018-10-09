@@ -39,7 +39,7 @@ import org.apache.spark.util.Utils
 class JacksonParser(
     schema: DataType,
     val options: JSONOptions,
-    explodeArray: Boolean) extends Logging {
+    allowArrayAsStructs: Boolean) extends Logging {
 
   import JacksonUtils._
   import com.fasterxml.jackson.core.JsonToken._
@@ -85,19 +85,17 @@ class JacksonParser(
         // List([str_a_1,null])
         // List([str_a_2,null], [null,str_b_3])
         //
-      case START_ARRAY =>
+      case START_ARRAY if allowArrayAsStructs =>
         val array = convertArray(parser, elementConverter)
         // Here, as we support reading top level JSON arrays and take every element
         // in such an array as a row, this case is possible.
         if (array.numElements() == 0) {
           Nil
-        } else if (array.numElements() > 1 && !explodeArray) {
-          throw new RuntimeException("Found an array with more than one element for " +
-            s"the specified schema ${st.catalogString}. " +
-            s"The array cannot be converted to the type.")
         } else {
           array.toArray[InternalRow](schema).toSeq
         }
+      case START_ARRAY =>
+        throw new RuntimeException("Parsing JSON arrays as structs is forbidden.")
     }
   }
 
