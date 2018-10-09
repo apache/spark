@@ -43,7 +43,7 @@ private[kafka010] object TokenUtil extends Logging {
   private def printToken(token: DelegationToken): Unit = {
     if (log.isDebugEnabled) {
       val dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm")
-      log.info("%-15s %-30s %-15s %-25s %-15s %-15s %-15s".format(
+      logDebug("%-15s %-30s %-15s %-25s %-15s %-15s %-15s".format(
         "TOKENID", "HMAC", "OWNER", "RENEWERS", "ISSUEDATE", "EXPIRYDATE", "MAXDATE"))
       val tokenInfo = token.tokenInfo
       logDebug("%-15s [hidden] %-15s %-25s %-15s %-15s %-15s".format(
