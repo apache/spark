@@ -119,7 +119,6 @@ private[spark] class TaskSchedulerImpl(
 
   private val abortTimer = new Timer(true)
   private val clock = new SystemClock
-
   protected val unschedulableTaskSetToExpiryTime = new HashMap[TaskSetManager, Long]
 
   // Listener object to pass upcalls into
@@ -427,8 +426,9 @@ private[spark] class TaskSchedulerImpl(
 
               // If the taskSet is unschedulable we try to find an existing idle blacklisted
               // executor. If we cannot find one, we abort immediately. Else we kill the idle
-              // executor and kick off an abortTimer which after waiting will abort the taskSet if
-              // we were unable to schedule any task from the taskSet.
+              // executor and kick off an abortTimer which if it doesn't schedule a task within the
+              // the timeout will abort the taskSet if we were unable to schedule any task from the
+              // taskSet.
               // Note 1: We keep track of schedulability on a per taskSet basis rather than on a per
               // task basis.
               // Note 2: The taskSet can still be aborted when there are more than one idle
