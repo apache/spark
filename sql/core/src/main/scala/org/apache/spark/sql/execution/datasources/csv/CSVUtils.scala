@@ -98,7 +98,7 @@ object CSVUtils {
   @throws[IllegalArgumentException]
   def toChar(str: String): Char = {
     (str: Seq[Char]) match {
-      case Seq() => throw new IllegalArgumentException(s"Delimiter cannot be empty string")
+      case Seq() => throw new IllegalArgumentException("Delimiter cannot be empty string")
       case Seq(c) => c
       case Seq('\\', 't') => '\t'
       case Seq('\\', 'r') => '\r'
