@@ -130,7 +130,6 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
           "df.filter($\"_corrupt_record\".isNotNull).count()."
       )
     }
-    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     val columnPruning = sparkSession.sessionState.conf.csvColumnPruning
 
     (file: PartitionedFile) => {
@@ -139,14 +138,15 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         StructType(dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
         StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
         parsedOptions)
+      val schema = if (columnPruning) requiredSchema else dataSchema
+      val headerChecker = new CSVHeaderChecker(
+        schema, parsedOptions, source = s"CSV file: ${file.filePath}", file.start == 0)
       CSVDataSource(parsedOptions).readFile(
         conf,
         file,
         parser,
-        requiredSchema,
-        dataSchema,
-        caseSensitive,
-        columnPruning)
+        headerChecker,
+        requiredSchema)
     }
   }
 
