@@ -22,10 +22,9 @@ import java.util.{Locale, Timer, TimerTask}
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.Set
+import scala.collection.{Set, mutable}
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
-
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.ExecutorMetrics
@@ -118,7 +117,6 @@ private[spark] class TaskSchedulerImpl(
   protected val executorIdToHost = new HashMap[String, String]
 
   private val abortTimer = new Timer(true)
-
   private val clock = new SystemClock
 
   protected val unschedulableTaskSetToExpiryTime = new HashMap[TaskSetManager, Long]
@@ -430,14 +428,13 @@ private[spark] class TaskSchedulerImpl(
               // executor. If we cannot find one, we abort immediately. Else we kill the idle
               // executor and kick off an abortTimer which after waiting will abort the taskSet if
               // we were unable to schedule any task from the taskSet.
-              // Note 1: We keep a track of schedulability on a per taskSet basis rather than on a
-              // per task basis.
+              // Note 1: We keep track of schedulability on a per taskSet basis rather than on a per
+              // task basis.
               // Note 2: The taskSet can still be aborted when there are more than one idle
-              // blacklisted executors and dynamic allocation is on. This is because we rely on the
-              // ExecutorAllocationManager to acquire a new executor based on the pending tasks and
-              // it won't release any blacklisted executors which idle timeout after we kill an
-              // executor to acquire a new one, resulting in the abort timer to expire and abort the
-              // taskSet.
+              // blacklisted executors and dynamic allocation is on. This can happen when a killed
+              // idle executor isn't replaced in time by ExecutorAllocationManager as it relies on
+              // pending tasks and doesn't kill executors on idle timeouts, resulting in the abort
+              // timer to expire and abort the taskSet.
               executorIdToRunningTaskIds.find(x => !isExecutorBusy(x._1)) match {
                 case Some (x) =>
                   val executorId = x._1
@@ -465,18 +462,16 @@ private[spark] class TaskSchedulerImpl(
                   }
                 case _ => // Abort Immediately
                   logInfo("Cannot schedule any task because of complete blacklisting. No idle" +
-                  s" executors could be found. Aborting $taskSet." )
+                  s" executors can be found to kill. Aborting $taskSet." )
                   taskSet.abortSinceCompletelyBlacklisted(taskIndex.get)
               }
-            case _ => // Do nothing.
-            }
-          } else {
-            // If a task was scheduled, we clear the expiry time for the taskSet. The abort timer
-            // checks this entry to decide if we want to abort the taskSet.
-            if (unschedulableTaskSetToExpiryTime.contains(taskSet)) {
-              unschedulableTaskSetToExpiryTime.remove(taskSet)
-            }
+            case _ => // Do nothing if no tasks completely blacklisted.
           }
+        } else {
+          // If a task was scheduled, we clear the expiry time for the taskSet. The abort timer
+          // checks this entry to decide if we want to abort the taskSet.
+          unschedulableTaskSetToExpiryTime.remove(taskSet)
+        }
 
         if (launchedAnyTask && taskSet.isBarrier) {
           // Check whether the barrier tasks are partially launched.

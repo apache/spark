@@ -600,10 +600,10 @@ package object config {
   // Threshold above which we abort the TaskSet if a task could not be scheduled because of complete
   // blacklisting.
   private[spark] val UNSCHEDULABLE_TASKSET_TIMEOUT =
-    ConfigBuilder("spark.scheduler.unschedulableTaskSetTimeout")
-      .doc("The timeout in seconds to wait before aborting a TaskSet to acquire a new executor " +
-        "and schedule a task which was previously unschedulable because of being completely " +
-        "blacklisted.")
+    ConfigBuilder("spark.scheduler.blacklist.unschedulableTaskSetTimeout")
+      .doc("The timeout in seconds to wait to try to acquire a new executor and schedule a task " +
+        "before aborting a TaskSet which was previously unschedulable because of being " +
+        "completely blacklisted.")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(v => v >= 0, "The value should be a non negative time value.")
       .createWithDefault(120)

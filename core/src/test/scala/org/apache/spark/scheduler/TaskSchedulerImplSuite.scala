@@ -530,8 +530,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     )
     // Wait for the failed task to propagate.
     Thread.sleep(500)
-    //    taskScheduler.handleFailedTask(tsm, failedTask.taskId, TaskState.FAILED, TaskResultLost)
-    //    tsm.handleFailedTask(failedTask.taskId, TaskState.FAILED, TaskResultLost)
 
     when(stageToMockTaskSetBlacklist(0).isExecutorBlacklistedForTask("executor0", failedTask.index))
       .thenReturn(true)
@@ -548,7 +546,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   test("SPARK-22148 try to acquire a new executor when task is unschedulable with 1 executor") {
-
     taskScheduler = setupSchedulerWithMockTaskSetBlacklist(
       config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "10")
 
