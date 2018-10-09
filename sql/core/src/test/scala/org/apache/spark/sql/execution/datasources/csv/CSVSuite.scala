@@ -1821,6 +1821,12 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     assert(spark.read.csv(input).collect().toSet == Set(Row()))
   }
 
+  test("field names of inferred schema shouldn't compare to the first row") {
+    val input = Seq("1,2").toDS()
+    val df = spark.read.option("enforceSchema", false).csv(input)
+    checkAnswer(df, Row("1", "2"))
+  }
+
   test("using the backward slash as the delimiter") {
     val input = Seq("""abc\1""").toDS()
     checkAnswer(spark.read.option("delimiter", "\\").csv(input), Row("abc", "1"))

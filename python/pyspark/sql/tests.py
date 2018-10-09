@@ -1149,6 +1149,75 @@ class SQLTests(ReusedSQLTestCase):
         result = self.spark.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
         self.assertEqual(1, result.head()[0])
 
+    def test_infer_schema_specification(self):
+        from decimal import Decimal
+
+        class A(object):
+            def __init__(self):
+                self.a = 1
+
+        data = [
+            True,
+            1,
+            "a",
+            u"a",
+            datetime.date(1970, 1, 1),
+            datetime.datetime(1970, 1, 1, 0, 0),
+            1.0,
+            array.array("d", [1]),
+            [1],
+            (1, ),
+            {"a": 1},
+            bytearray(1),
+            Decimal(1),
+            Row(a=1),
+            Row("a")(1),
+            A(),
+        ]
+
+        df = self.spark.createDataFrame([data])
+        actual = list(map(lambda x: x.dataType.simpleString(), df.schema))
+        expected = [
+            'boolean',
+            'bigint',
+            'string',
+            'string',
+            'date',
+            'timestamp',
+            'double',
+            'array<double>',
+            'array<bigint>',
+            'struct<_1:bigint>',
+            'map<string,bigint>',
+            'binary',
+            'decimal(38,18)',
+            'struct<a:bigint>',
+            'struct<a:bigint>',
+            'struct<a:bigint>',
+        ]
+        self.assertEqual(actual, expected)
+
+        actual = list(df.first())
+        expected = [
+            True,
+            1,
+            'a',
+            u"a",
+            datetime.date(1970, 1, 1),
+            datetime.datetime(1970, 1, 1, 0, 0),
+            1.0,
+            [1.0],
+            [1],
+            Row(_1=1),
+            {"a": 1},
+            bytearray(b'\x00'),
+            Decimal('1.000000000000000000'),
+            Row(a=1),
+            Row(a=1),
+            Row(a=1),
+        ]
+        self.assertEqual(actual, expected)
+
     def test_infer_schema_not_enough_names(self):
         df = self.spark.createDataFrame([["a", "b"]], ["col1"])
         self.assertEqual(df.columns, ['col1', '_2'])
@@ -3602,6 +3671,31 @@ class SQLTests(ReusedSQLTestCase):
                 with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
                     self.assertEquals(None, df._repr_html_())
                     self.assertEquals(expected, df.__repr__())
+
+    # SPARK-25591
+    def test_same_accumulator_in_udfs(self):
+        from pyspark.sql.functions import udf
+
+        data_schema = StructType([StructField("a", IntegerType(), True),
+                                  StructField("b", IntegerType(), True)])
+        data = self.spark.createDataFrame([[1, 2]], schema=data_schema)
+
+        test_accum = self.sc.accumulator(0)
+
+        def first_udf(x):
+            test_accum.add(1)
+            return x
+
+        def second_udf(x):
+            test_accum.add(100)
+            return x
+
+        func_udf = udf(first_udf, IntegerType())
+        func_udf2 = udf(second_udf, IntegerType())
+        data = data.withColumn("out1", func_udf(data["a"]))
+        data = data.withColumn("out2", func_udf2(data["b"]))
+        data.collect()
+        self.assertEqual(test_accum.value, 101)
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
