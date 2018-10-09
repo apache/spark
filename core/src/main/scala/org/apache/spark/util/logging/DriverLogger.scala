@@ -43,17 +43,18 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 
   private var localLogFile: String = FileUtils.getFile(
     Utils.getLocalDir(conf), "driver_logs", DRIVER_LOG_FILE).getAbsolutePath()
-  private var writer: Option[HdfsAsyncWriter] = None
-  private val syncToDfs: Boolean = conf.get(DRIVER_LOG_SYNCTODFS)
+  private var writer: DfsAsyncWriter = _
 
   addLogAppender()
 
   private def addLogAppender(): Unit = {
     val appenders = LogManager.getRootLogger().getAllAppenders()
-    val layout = if (appenders.hasMoreElements()) {
+    val layout = if (conf.contains(DRIVER_LOG_LAYOUT)) {
+      new PatternLayout(conf.get(DRIVER_LOG_LAYOUT))
+    } else if (appenders.hasMoreElements()) {
       appenders.nextElement().asInstanceOf[Appender].getLayout()
     } else {
-      new PatternLayout(conf.get(DRIVER_LOG_LAYOUT))
+      new PatternLayout(DRIVER_LOG_LAYOUT.defaultValueString)
     }
     val fa = new Log4jFileAppender(layout, localLogFile)
     fa.setName(DriverLogger.APPENDER_NAME)
@@ -64,10 +65,8 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
   def startSync(hadoopConf: Configuration): Unit = {
     try {
       // Setup a writer which moves the local file to hdfs continuously
-      if (syncToDfs) {
-        val appId = Utils.sanitizeDirName(conf.getAppId)
-        writer = Some(new HdfsAsyncWriter(appId, hadoopConf))
-      }
+      val appId = Utils.sanitizeDirName(conf.getAppId)
+      writer = new DfsAsyncWriter(appId, hadoopConf)
     } catch {
       case e: Exception =>
         logError(s"Could not sync driver logs to spark dfs", e)
@@ -76,37 +75,47 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 
   def stop(): Unit = {
     try {
-      writer.map(_.closeWriter())
+      LogManager.getRootLogger().removeAppender(DriverLogger.APPENDER_NAME)
+      writer.closeWriter()
     } catch {
       case e: Exception =>
         logError(s"Error in persisting driver logs", e)
     } finally {
-      try {
-        JavaUtils.deleteRecursively(FileUtils.getFile(localLogFile).getParentFile())
-      } catch {
-        case e: Exception =>
-          logError(s"Error in deleting local driver log dir", e)
-      }
+      Utils.tryLogNonFatalError(JavaUtils.deleteRecursively(
+        FileUtils.getFile(localLogFile).getParentFile()))
     }
   }
 
-  private class HdfsAsyncWriter(appId: String, hadoopConf: Configuration) extends Runnable
+  private class DfsAsyncWriter(appId: String, hadoopConf: Configuration) extends Runnable
     with Logging {
 
     private var streamClosed = false
-    private val inStream = new BufferedInputStream(new FileInputStream(localLogFile))
-    private var hdfsLogFile: String = {
-      val rootDir = conf.get(DRIVER_LOG_DFS_DIR.key, "/tmp/driver_logs").split(",").head
+    private val dfsLogFile: String = {
+      val rootDir = conf.get(DRIVER_LOG_DFS_DIR).get.split(",").head
       FileUtils.getFile(rootDir, appId, DRIVER_LOG_FILE).getAbsolutePath()
     }
-    private var fileSystem: FileSystem = FileSystem.get(hadoopConf)
-    private val outputStream: FSDataOutputStream = fileSystem.create(new Path(hdfsLogFile), true)
-    fileSystem.setPermission(new Path(hdfsLogFile), LOG_FILE_PERMISSIONS)
+    private val fileSystem: FileSystem = FileSystem.get(hadoopConf)
+    private var inStream: InputStream = null
+    private var outputStream: FSDataOutputStream = null
+    try {
+      inStream = new BufferedInputStream(new FileInputStream(localLogFile))
+      outputStream = fileSystem.create(new Path(dfsLogFile), true)
+      fileSystem.setPermission(new Path(dfsLogFile), LOG_FILE_PERMISSIONS)
+    } catch {
+      case e: Exception =>
+        if (inStream != null) {
+          Utils.tryLogNonFatalError(inStream.close())
+        }
+        if (outputStream != null) {
+          Utils.tryLogNonFatalError(outputStream.close())
+        }
+        logError("Error reading/writing driver logs", e)
+    }
     private val tmpBuffer = new Array[Byte](UPLOAD_CHUNK_SIZE)
     private val threadpool = ThreadUtils.newDaemonSingleThreadScheduledExecutor("dfsSyncThread")
     threadpool.scheduleWithFixedDelay(this, UPLOAD_INTERVAL_IN_SECS, UPLOAD_INTERVAL_IN_SECS,
       TimeUnit.SECONDS)
-    logInfo(s"The local driver log file is being synced to spark dfs at: ${hdfsLogFile}")
+    logInfo(s"The local driver log file is being synced to spark dfs at: ${dfsLogFile}")
 
     def run(): Unit = {
       if (streamClosed) {
@@ -144,7 +153,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
     def closeWriter(): Unit = {
       try {
         threadpool.execute(new Runnable() {
-          def run(): Unit = HdfsAsyncWriter.this.close()
+          override def run(): Unit = DfsAsyncWriter.this.close()
         })
         threadpool.shutdown()
         threadpool.awaitTermination(1, TimeUnit.MINUTES)
@@ -161,7 +170,9 @@ private[spark] object DriverLogger extends Logging {
   val APPENDER_NAME = "_DriverLogAppender"
 
   def apply(conf: SparkConf): Option[DriverLogger] = {
-    if (conf.get(DRIVER_LOG_SYNCTODFS) && Utils.isClientMode(conf)) {
+    if (conf.get(DRIVER_LOG_SYNCTODFS)
+      && conf.get(DRIVER_LOG_DFS_DIR).isDefined
+      && Utils.isClientMode(conf)) {
       Try[DriverLogger] { new DriverLogger(conf) }
         .recoverWith {
           case t: Throwable =>

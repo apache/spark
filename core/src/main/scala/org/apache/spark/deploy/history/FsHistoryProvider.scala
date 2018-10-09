@@ -825,18 +825,19 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     // Delete driver logs from the configured spark dfs dir that exceed the configured max age
     try {
-      val hdfsDir = conf.get("spark.driver.log.dfsDir")
-      val appDirs = fs.listLocatedStatus(new Path(hdfsDir))
-      while (appDirs.hasNext()) {
-        val appDirStatus = appDirs.next()
-        if (appDirStatus.getModificationTime() < maxTime) {
-          logInfo(s"Deleting expired driver log for: ${appDirStatus.getPath().getName()}")
-          deleteLog(appDirStatus.getPath())
+      val driverLogDir = conf.getOption("spark.driver.log.dfsDir")
+      driverLogDir.foreach { dl =>
+        val appDirs = fs.listLocatedStatus(new Path(dl))
+        while (appDirs.hasNext()) {
+          val appDirStatus = appDirs.next()
+          if (appDirStatus.getModificationTime() < maxTime) {
+            logInfo(s"Deleting expired driver log for: ${appDirStatus.getPath().getName()}")
+            deleteLog(appDirStatus.getPath())
+          }
         }
       }
     } catch {
-      case nse: NoSuchElementException => // no-op
-      case t: Throwable => logError("Failed to delete driver logs", t)
+      case e: Exception => logError("Failed to delete driver logs", e)
     }
   }
 

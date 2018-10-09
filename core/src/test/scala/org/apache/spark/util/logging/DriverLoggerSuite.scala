@@ -28,12 +28,10 @@ import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
-class DriverLoggerSuite extends SparkFunSuite {
+class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
 
   test("driver logs are persisted") {
     val sc = getSparkContext()
-    // Wait for application to start
-    Thread.sleep(1000)
 
     val app_id = sc.applicationId
     // Run a simple spark application
@@ -50,7 +48,7 @@ class DriverLoggerSuite extends SparkFunSuite {
     sc.stop()
     // On application end, file is moved to Hdfs (which is a local dir for this test)
     assert(!driverLogsDir.exists())
-    val hdfsDir = FileUtils.getFile("/tmp/hdfs_logs/", app_id)
+    val hdfsDir = FileUtils.getFile(sc.getConf.get(DRIVER_LOG_DFS_DIR).get, app_id)
     assert(hdfsDir.exists())
     val hdfsFiles = hdfsDir.listFiles()
     assert(hdfsFiles.length > 0)
@@ -60,8 +58,6 @@ class DriverLoggerSuite extends SparkFunSuite {
 
   test("driver logs are synced to hdfs continuously") {
     val sc = getSparkContext()
-    // Wait for application to start
-    Thread.sleep(1000)
 
     val app_id = sc.applicationId
     // Run a simple spark application
@@ -80,7 +76,7 @@ class DriverLoggerSuite extends SparkFunSuite {
 
     // After 5 secs, file contents are synced to Hdfs (which is a local dir for this test)
     Thread.sleep(6000)
-    val hdfsDir = FileUtils.getFile("/tmp/hdfs_logs/", app_id)
+    val hdfsDir = FileUtils.getFile(sc.getConf.get(DRIVER_LOG_DFS_DIR).get, app_id)
     assert(hdfsDir.exists())
     val hdfsFiles = hdfsDir.listFiles()
     assert(hdfsFiles.length > 0)
@@ -102,7 +98,8 @@ class DriverLoggerSuite extends SparkFunSuite {
     conf.set(DRIVER_LOG_SYNCTODFS, true)
     conf.set(SparkLauncher.SPARK_MASTER, "local")
     conf.set(SparkLauncher.DEPLOY_MODE, "client")
-    new SparkContext("local", "DriverLogTest", conf)
+    sc = new SparkContext("local", "DriverLogTest", conf)
+    sc
   }
 
 }
