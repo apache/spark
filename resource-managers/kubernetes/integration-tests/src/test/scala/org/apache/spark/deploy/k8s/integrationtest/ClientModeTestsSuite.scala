@@ -20,13 +20,12 @@ import org.scalatest.concurrent.Eventually
 import scala.collection.JavaConverters._
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{k8sTestTag, INTERVAL, TIMEOUT}
+import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 
 private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
 
   test("Run in client mode.", k8sTestTag) {
     val labels = Map("spark-app-selector" -> driverPodName)
-    val driverPort = 7077
-    val blockManagerPort = 10000
     val driverService = testBackend
       .getKubernetesClient
       .services()

@@ -19,4 +19,6 @@ package org.apache.spark.deploy.k8s.integrationtest
 object TestConstants {
   val MINIKUBE_TEST_BACKEND = "minikube"
   val GCE_TEST_BACKEND = "gce"
+  val driverPort = 7077
+  val blockManagerPort = 10000
 }
