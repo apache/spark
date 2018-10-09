@@ -139,8 +139,9 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
         parsedOptions)
       val schema = if (columnPruning) requiredSchema else dataSchema
+      val isStartOfFile = file.start == 0
       val headerChecker = new CSVHeaderChecker(
-        schema, parsedOptions, source = s"CSV file: ${file.filePath}", file.start == 0)
+        schema, parsedOptions, source = s"CSV file: ${file.filePath}", isStartOfFile)
       CSVDataSource(parsedOptions).readFile(
         conf,
         file,

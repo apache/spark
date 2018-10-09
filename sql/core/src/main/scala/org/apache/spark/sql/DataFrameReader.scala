@@ -509,7 +509,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       val headerChecker = new CSVHeaderChecker(
         actualSchema,
         parsedOptions,
-        source = s"CSV source: ${csvDataset.getClass.getCanonicalName}")
+        source = s"CSV source: $csvDataset")
       headerChecker.checkHeaderColumnNames(firstLine)
       filteredLines.rdd.mapPartitions(CSVUtils.filterHeaderLine(_, firstLine, parsedOptions))
     }.getOrElse(filteredLines.rdd)
