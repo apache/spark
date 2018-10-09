@@ -595,7 +595,9 @@ case class AlterTableDropPartitionCommand(
         // Cast the partition value to the data type of the corresponding partition attribute
         case cmp @ BinaryComparison(partitionAttr, value)
             if !partitionAttr.dataType.sameType(value.dataType) =>
-          cmp.withNewChildren(Seq(partitionAttr, Cast(value, partitionAttr.dataType, timeZone)))
+          val dt = partitionAttr.dataType
+          val lit = Literal(Cast(value, dt, timeZone).eval(), dt)
+          cmp.withNewChildren(Seq(partitionAttr, lit))
       }
     }
     val partitions = catalog.listPartitionsByFilter(tableIdentifier, filters)
