@@ -684,7 +684,7 @@ class HiveDDLSuite
       val m3 = intercept[AnalysisException] {
         sql("ALTER TABLE sales DROP PARTITION (unknown <=> 'KR')")
       }.getMessage
-      assert(m3.contains("unknown is not a valid partition column in table"))
+      assert(m3.contains("'<=>' operator is not supported"))
       val m4 = intercept[ParseException] {
         sql("ALTER TABLE sales DROP PARTITION (unknown <=> upper('KR'))")
       }.getMessage
