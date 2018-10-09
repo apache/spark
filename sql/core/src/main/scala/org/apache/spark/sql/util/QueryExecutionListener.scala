@@ -76,6 +76,11 @@ trait QueryExecutionListener {
  */
 @Experimental
 @InterfaceStability.Evolving
+// The `session` is used to indicate which session carries this listener manager, and we only
+// catch SQL executions which are launched by the same session.
+// The `loadExtensions` flag is used to indicate whether we should load the pre-defined,
+// user-specified listeners during construction. We should not do it when cloning this listener
+// manager, as we will copy all listeners to the cloned listener manager.
 class ExecutionListenerManager private[sql](session: SparkSession, loadExtensions: Boolean)
   extends SparkListener with Logging {
 
