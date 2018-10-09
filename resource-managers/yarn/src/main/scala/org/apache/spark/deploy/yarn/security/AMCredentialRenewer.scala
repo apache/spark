@@ -20,16 +20,16 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.security.AbstractCredentialRenewer
+import org.apache.spark.deploy.security.AbstractCredentialManager
 import org.apache.spark.rpc.RpcEndpointRef
 
 /**
- * YARN-specific implementation of AbstractCredentialRenewer.
+ * YARN-specific implementation of AbstractCredentialManager.
  */
 private[yarn] class AMCredentialRenewer(
     _sparkConf: SparkConf,
     _hadoopConf: Configuration)
-  extends AbstractCredentialRenewer(_sparkConf, _hadoopConf) {
+  extends AbstractCredentialManager(_sparkConf, _hadoopConf) {
 
   private val credentialManager = new YARNHadoopDelegationTokenManager(sparkConf, hadoopConf)
 

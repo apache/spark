@@ -20,17 +20,17 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.security.AbstractCredentialRenewer
+import org.apache.spark.deploy.security.AbstractCredentialManager
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.rpc.RpcEndpointRef
 
 /**
- * Mesos-specific implementation of AbstractCredentialRenewer.
+ * Mesos-specific implementation of AbstractCredentialManager.
  */
 private[spark] class MesosHadoopDelegationTokenManager(
     _sparkConf: SparkConf,
     _hadoopConf: Configuration)
-  extends AbstractCredentialRenewer(_sparkConf, _hadoopConf) {
+  extends AbstractCredentialManager(_sparkConf, _hadoopConf) {
 
   private val tokenManager = new HadoopDelegationTokenManager(sparkConf, hadoopConf)
 

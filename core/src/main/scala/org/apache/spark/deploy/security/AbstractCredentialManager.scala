@@ -34,27 +34,28 @@ import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.ThreadUtils
 
 /**
- * Base class for periodically updating delegation tokens needed by the application.
+ * Base class for managing delegation tokens for a Spark application.
  *
- * When configured with a principal and a keytab, this manager will make sure long-running apps
- * (such as Spark Streaming apps) can run without interruption while accessing secured services. It
- * periodically logs in to the KDC with user-provided credentials, and contacts all the configured
- * secure services to obtain delegation tokens to be distributed to the rest of the application.
+ * This manager has two modes of operation:
  *
- * This class will manage the kerberos login, by renewing the TGT when needed. Because the UGI API
- * does not expose the TTL of the TGT, a configuration controls how often to check that a relogin is
- * necessary. This is done reasonably often since the check is a no-op when the relogin is not yet
- * needed. The check period can be overridden in the configuration.
+ * 1.  When configured with a principal and a keytab, it will make sure long-running apps can run
+ * without interruption while accessing secured services. It periodically logs in to the KDC with
+ * user-provided credentials, and contacts all the configured secure services to obtain delegation
+ * tokens to be distributed to the rest of the application.
+ *
+ * Because the Hadoop UGI API does not expose the TTL of the TGT, a configuration controls how often
+ * to check that a relogin is necessary. This is done reasonably often since the check is a no-op
+ * when the relogin is not yet needed. The check period can be overridden in the configuration.
  *
  * New delegation tokens are created once 75% of the renewal interval of the original tokens has
  * elapsed. The new tokens are sent to the Spark driver endpoint once it's registered with the AM.
  * The driver is tasked with distributing the tokens to other processes that might need them.
  *
- * This class can also be used when without a principal and keytab, in which case token renewal will
- * not be available. It provides a different API in that case (see `createAndUpdateTokens()`), which
- * automates the distribution of tokens to the different processes in the Spark app.
+ * 2. When operating without an explicit principal and keytab, token renewal will not be available.
+ * Starting the manager will distribute an initial set of delegation tokens to the provided Spark
+ * driver, but the app will not get new tokens when those expire.
  */
-private[spark] abstract class AbstractCredentialRenewer(
+private[spark] abstract class AbstractCredentialManager(
     protected val sparkConf: SparkConf,
     protected val hadoopConf: Configuration) extends Logging {
 
