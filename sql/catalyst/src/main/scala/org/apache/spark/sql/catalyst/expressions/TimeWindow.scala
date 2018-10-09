@@ -36,7 +36,7 @@ case class TimeWindow(
   with Unevaluable
   with NonSQLExpression {
   TimeWindow.checkWindowAndSlideDuration(windowDuration, slideDuration,
-    windowDuration, slideDuration)
+    windowDuration.toString, slideDuration.toString)
 
   //////////////////////////
   // SQL Constructors
@@ -170,8 +170,8 @@ object TimeWindow {
 
   private def checkWindowAndSlideDuration(windowDurationMicroSec: Long,
       slideDurationMicroSec: Long,
-      windowDuration: Any,
-      slideDuration: Any): Unit = {
+      windowDuration: String,
+      slideDuration: String): Unit = {
     require(windowDurationMicroSec > 0, "The window duration must be " +
       s"a positive integer, long or string literal, found: $windowDuration")
     require(slideDurationMicroSec > 0, "The slide duration must be " +
