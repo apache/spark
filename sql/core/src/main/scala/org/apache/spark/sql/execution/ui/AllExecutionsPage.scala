@@ -486,7 +486,7 @@ private[ui] class ExecutionDataSource(
         case (_, jobStatus) => jobStatus == JobExecutionStatus.FAILED
       }.map { case (jobId, _) => jobId }.toSeq.sorted
     } else Seq.empty
-    
+
     new ExecutionTableRowData(
       submissionTime,
       duration,
@@ -496,9 +496,7 @@ private[ui] class ExecutionDataSource(
       failedJobData)
   }
 
-  /**
-    * Return Ordering according to sortColumn and desc
-    */
+  /** Return Ordering according to sortColumn and desc. */
   private def ordering(sortColumn: String, desc: Boolean): Ordering[ExecutionTableRowData] = {
     val ordering: Ordering[ExecutionTableRowData] = sortColumn match {
       case "ID" => Ordering.by(_.executionUIData.executionId)
