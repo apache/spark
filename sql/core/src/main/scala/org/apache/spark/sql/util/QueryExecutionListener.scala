@@ -17,18 +17,15 @@
 
 package org.apache.spark.sql.util
 
-import java.util.concurrent.CopyOnWriteArrayList
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
-import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ListenerBus, Utils}
 
 /**
  * :: Experimental ::
@@ -81,10 +78,9 @@ trait QueryExecutionListener {
 // The `loadExtensions` flag is used to indicate whether we should load the pre-defined,
 // user-specified listeners during construction. We should not do it when cloning this listener
 // manager, as we will copy all listeners to the cloned listener manager.
-class ExecutionListenerManager private[sql](session: SparkSession, loadExtensions: Boolean)
-  extends SparkListener with Logging {
+class ExecutionListenerManager private[sql](session: SparkSession, loadExtensions: Boolean) {
 
-  private[this] val listeners = new CopyOnWriteArrayList[QueryExecutionListener]
+  private val listenerBus = new ExecutionListenerBus(session)
 
   if (loadExtensions) {
     val conf = session.sparkContext.conf
@@ -93,14 +89,12 @@ class ExecutionListenerManager private[sql](session: SparkSession, loadExtension
     }
   }
 
-  session.sparkContext.listenerBus.addToSharedQueue(this)
-
   /**
    * Registers the specified [[QueryExecutionListener]].
    */
   @DeveloperApi
   def register(listener: QueryExecutionListener): Unit = {
-    listeners.add(listener)
+    listenerBus.addListener(listener)
   }
 
   /**
@@ -108,7 +102,7 @@ class ExecutionListenerManager private[sql](session: SparkSession, loadExtension
    */
   @DeveloperApi
   def unregister(listener: QueryExecutionListener): Unit = {
-    listeners.remove(listener)
+    listenerBus.removeListener(listener)
   }
 
   /**
@@ -116,7 +110,7 @@ class ExecutionListenerManager private[sql](session: SparkSession, loadExtension
    */
   @DeveloperApi
   def clear(): Unit = {
-    listeners.clear()
+    listenerBus.removeAllListeners()
   }
 
   /**
@@ -124,24 +118,35 @@ class ExecutionListenerManager private[sql](session: SparkSession, loadExtension
    */
   private[sql] def clone(session: SparkSession): ExecutionListenerManager = {
     val newListenerManager = new ExecutionListenerManager(session, loadExtensions = false)
-    listeners.iterator().asScala.foreach(newListenerManager.register)
+    listenerBus.listeners.asScala.foreach(newListenerManager.register)
     newListenerManager
   }
+}
+
+private[sql] class ExecutionListenerBus(session: SparkSession)
+  extends SparkListener with ListenerBus[QueryExecutionListener, SparkListenerSQLExecutionEnd] {
+
+  session.sparkContext.listenerBus.addToSharedQueue(this)
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
-    case e: SparkListenerSQLExecutionEnd if shouldCatchEvent(e) =>
-      val funcName = e.executionName.get
-      e.executionFailure match {
-        case Some(ex) =>
-          listeners.iterator().asScala.foreach(_.onFailure(funcName, e.qe, ex))
-        case _ =>
-          listeners.iterator().asScala.foreach(_.onSuccess(funcName, e.qe, e.duration))
-      }
-
-    case _ => // Ignore
+    case e: SparkListenerSQLExecutionEnd => postToAll(e)
   }
 
-  private def shouldCatchEvent(e: SparkListenerSQLExecutionEnd): Boolean = {
+  override protected def doPostEvent(
+      listener: QueryExecutionListener,
+      event: SparkListenerSQLExecutionEnd): Unit = {
+    if (shouldReport(event)) {
+      val funcName = event.executionName.get
+      event.executionFailure match {
+        case Some(ex) =>
+          listener.onFailure(funcName, event.qe, ex)
+        case _ =>
+          listener.onSuccess(funcName, event.qe, event.duration)
+      }
+    }
+  }
+
+  private def shouldReport(e: SparkListenerSQLExecutionEnd): Boolean = {
     // Only catch SQL execution with a name, and triggered by the same spark session that this
     // listener manager belongs.
     e.executionName.isDefined && e.qe.sparkSession.eq(this.session)

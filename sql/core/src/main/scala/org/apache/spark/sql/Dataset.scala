@@ -3356,10 +3356,10 @@ class Dataset[T] private[sql](
    * user-registered callback functions.
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
-    qe.executedPlan.foreach { plan =>
-      plan.resetMetrics()
-    }
     SQLExecution.withNewExecutionId(sparkSession, qe, Some(name)) {
+      qe.executedPlan.foreach { plan =>
+        plan.resetMetrics()
+      }
       action(qe.executedPlan)
     }
   }

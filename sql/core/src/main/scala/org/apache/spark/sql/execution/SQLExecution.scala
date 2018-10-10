@@ -73,7 +73,7 @@ object SQLExecution {
 
       withSQLConfPropagated(sparkSession) {
         var ex: Option[Exception] = None
-        val startTime = System.currentTimeMillis()
+        val startTime = System.nanoTime()
         try {
           sc.listenerBus.post(SparkListenerSQLExecutionStart(
             executionId = executionId,
@@ -83,15 +83,15 @@ object SQLExecution {
             // `queryExecution.executedPlan` triggers query planning. If it fails, the exception
             // will be caught and reported in the `SparkListenerSQLExecutionEnd`
             sparkPlanInfo = SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
-            time = startTime))
+            time = System.currentTimeMillis()))
           body
         } catch {
           case e: Exception =>
             ex = Some(e)
             throw e
         } finally {
-          val endTime = System.currentTimeMillis()
-          val event = SparkListenerSQLExecutionEnd(executionId, endTime)
+          val endTime = System.nanoTime()
+          val event = SparkListenerSQLExecutionEnd(executionId, System.currentTimeMillis())
           // Currently only `Dataset.withAction` and `DataFrameWriter.runCommand` specify the `name`
           // parameter. The `ExecutionListenerManager` only watches SQL executions with name. We
           // can specify the execution name in more places in the future, so that

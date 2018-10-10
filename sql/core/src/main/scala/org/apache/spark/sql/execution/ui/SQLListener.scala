@@ -41,10 +41,18 @@ case class SparkListenerSQLExecutionStart(
 case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
   extends SparkListenerEvent {
 
+  // The name of the execution, e.g. `df.collect` will trigger a SQL execution with name "collect".
   @JsonIgnore private[sql] var executionName: Option[String] = None
-  // These 3 fields are only accessed when `executionName` is defined.
+
+  // The following 3 fields are only accessed when `executionName` is defined.
+
+  // The duration of the SQL execution, in nanoseconds.
   @JsonIgnore private[sql] var duration: Long = 0L
+
+  // The `QueryExecution` instance that represents the SQL execution
   @JsonIgnore private[sql] var qe: QueryExecution = null
+
+  // The exception object that caused this execution to fail. None if the execution doesn't fail.
   @JsonIgnore private[sql] var executionFailure: Option[Exception] = None
 }
 
