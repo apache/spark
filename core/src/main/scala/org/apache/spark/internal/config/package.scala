@@ -601,9 +601,8 @@ package object config {
   // blacklisting.
   private[spark] val UNSCHEDULABLE_TASKSET_TIMEOUT =
     ConfigBuilder("spark.scheduler.blacklist.unschedulableTaskSetTimeout")
-      .doc("The timeout in seconds to wait to try to acquire a new executor and schedule a task " +
-        "before aborting a TaskSet which was previously unschedulable because of being " +
-        "completely blacklisted.")
+      .doc("The timeout in seconds to wait to acquire a new executor and schedule a task " +
+        "before aborting a TaskSet which is unschedulable because of being completely blacklisted.")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(v => v >= 0, "The value should be a non negative time value.")
       .createWithDefault(120)

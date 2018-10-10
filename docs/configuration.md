@@ -1587,8 +1587,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.scheduler.blacklist.unschedulableTaskSetTimeout</code></td>
   <td>120s</td>
   <td>
-    The timeout in seconds to wait to try to acquire a new executor and schedule a task before
-    aborting a TaskSet which was previously unschedulable because of being completely blacklisted.
+    The timeout in seconds to wait to acquire a new executor and schedule a task before aborting a
+    TaskSet which is unschedulable because of being completely blacklisted.
   </td>
 </tr>
 <tr>

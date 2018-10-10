@@ -153,7 +153,7 @@ private[scheduler] class BlacklistTracker (
         a.killExecutors(Seq(exec), adjustTargetNumExecutors = false, countFailures = false,
           force = true)
       case None =>
-        logWarning(s"Not attempting to kill blacklisted executor id $exec " +
+        logInfo(s"Not attempting to kill blacklisted executor id $exec " +
           s"since allocation client is not defined.")
     }
   }
