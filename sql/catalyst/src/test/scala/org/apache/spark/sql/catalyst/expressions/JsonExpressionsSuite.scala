@@ -19,13 +19,11 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Calendar
 
-import scala.util.Random
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeTestUtils, DateTimeUtils, GenericArrayData, PermissiveMode}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -512,7 +510,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     )
 
     val jsonData2 = """{"t": "2016-01-01T00:00:00"}"""
-    for (tz <- Random.shuffle(DateTimeTestUtils.ALL_TIMEZONES).take(8)) {
+    for (tz <- DateTimeTestUtils.TIMEZONES) {
       c = Calendar.getInstance(tz)
       c.set(2016, 0, 1, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)

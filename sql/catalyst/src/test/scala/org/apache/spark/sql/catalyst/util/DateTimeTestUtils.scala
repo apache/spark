@@ -26,6 +26,16 @@ object DateTimeTestUtils {
 
   val ALL_TIMEZONES: Seq[TimeZone] = TimeZone.getAvailableIDs.toSeq.map(TimeZone.getTimeZone)
 
+  val TIMEZONES = Seq(
+    TimeZone.getTimeZone("UTC"),
+    TimeZone.getTimeZone("PST"),
+    TimeZone.getTimeZone("CET"),
+    TimeZone.getTimeZone("Africa/Dakar"),
+    TimeZone.getTimeZone("America/Los_Angeles"),
+    TimeZone.getTimeZone("Antarctica/Vostok"),
+    TimeZone.getTimeZone("Asia/Hong_Kong"),
+    TimeZone.getTimeZone("Europe/Amsterdam"))
+
   def withDefaultTimeZone[T](newDefaultTimeZone: TimeZone)(block: => T): T = {
     val originalDefaultTimeZone = TimeZone.getDefault
     try {
