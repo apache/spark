@@ -47,14 +47,14 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
    * <ul>
-   *   <li> `OutputMode.Append()`: only the new rows in the streaming DataFrame/Dataset will be
-   *                            written to the sink.</li>
-   *   <li> `OutputMode.Complete()`: all the rows in the streaming DataFrame/Dataset will be written
-   *                              to the sink every time there are some updates.</li>
-   *   <li> `OutputMode.Update()`: only the rows that were updated in the streaming DataFrame/Dataset
-   *                            will be written to the sink every time there are some updates. If
-   *                            the query doesn't contain aggregations, it will be equivalent to
-   *                            `OutputMode.Append()` mode.</li>
+   * <li> `OutputMode.Append()`: only the new rows in the streaming DataFrame/Dataset will be
+   * written to the sink.</li>
+   * <li> `OutputMode.Complete()`: all the rows in the streaming DataFrame/Dataset will be written
+   * to the sink every time there are some updates.</li>
+   * <li> `OutputMode.Update()`: only the rows that were updated in the streaming 
+   * DataFrame/Dataset will be written to the sink every time there are some updates.
+   * If the query doesn't contain aggregations, it will be equivalent to 
+   * `OutputMode.Append()` mode.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -67,13 +67,13 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
    * <ul>
-   *   <li> `append`: only the new rows in the streaming DataFrame/Dataset will be written to
-   *                 the sink. </li>
-   *   <li> `complete`: all the rows in the streaming DataFrame/Dataset will be written to the sink
-   *                 every time there are some updates. </li>
-   *   <li> `update`: only the rows that were updated in the streaming DataFrame/Dataset will
-   *                 be written to the sink every time there are some updates. If the query doesn't
-   *                 contain aggregations, it will be equivalent to `append` mode. </li>
+   * <li> `append`: only the new rows in the streaming DataFrame/Dataset will be written to
+   * the sink.</li>
+   * <li> `complete`: all the rows in the streaming DataFrame/Dataset will be written to the sink
+   * every time there are some updates.</li>
+   * <li> `update`: only the rows that were updated in the streaming DataFrame/Dataset will
+   * be written to the sink every time there are some updates. If the query doesn't
+   * contain aggregations, it will be equivalent to `append` mode.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -137,8 +137,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * partition a dataset by year and then month, the directory layout would look like:
    *
    * <ul>
-   *   <li> year=2016/month=01/ </li>
-   *   <li> year=2016/month=02/ </li>
+   * <li> year=2016/month=01/</li>
+   * <li> year=2016/month=02/</li>
    * </ul>
    *
    * Partitioning is one of the most widely used techniques to optimize physical data layout.
