@@ -404,7 +404,7 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
       )).get.toString
     }
 
-    // Safely remove unsupported `StringContains` predicate and push down `LessThan`
+    // Safely remove unsupported `StringContains` predicate, push down `LessThan` and `GreaterThan`.
     assertResult("leaf-0 = (LESS_THAN a 10), leaf-1 = (LESS_THAN_EQUALS a 1)," +
       " expr = (and leaf-0 (not leaf-1))") {
       OrcFilters.createFilter(schema, Array(
