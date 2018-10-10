@@ -927,8 +927,6 @@ object SparkSubmit extends CommandLineUtils with Logging {
         } catch {
           case e: SparkUserAppException =>
             exitFn(e.exitCode)
-          case e: SparkException =>
-            printErrorAndExit(e.getMessage())
         }
       }
 
