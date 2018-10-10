@@ -27,7 +27,7 @@ import org.apache.spark.util.Utils
 object ResourceRequestTestHelper {
   def initializeResourceTypes(resourceTypes: List[String]): Unit = {
     if (!ResourceRequestHelper.isYarnResourceTypesAvailable()) {
-      throw new IllegalStateException("initializeResourceTypes() should not be invoked " +
+      throw new IllegalStateException("This method should not be invoked " +
         "since YARN resource types is not available because of old Hadoop version!" )
     }
 
@@ -39,7 +39,11 @@ object ResourceRequestTestHelper {
     allResourceTypes ++= defaultResourceTypes
     allResourceTypes ++= customResourceTypes
 
-    reinitializeResources(allResourceTypes)
+    val resourceUtilsClass =
+      Utils.classForName("org.apache.hadoop.yarn.util.resource.ResourceUtils")
+    val reinitializeResourcesMethod = resourceUtilsClass.getMethod("reinitializeResources",
+      classOf[java.util.List[AnyRef]])
+    reinitializeResourcesMethod.invoke(null, allResourceTypes.asJava)
   }
 
   private def createResourceTypeInfo(resourceName: String): AnyRef = {
@@ -48,16 +52,8 @@ object ResourceRequestTestHelper {
     resTypeInfoNewInstanceMethod.invoke(null, resourceName)
   }
 
-  private def reinitializeResources(resourceTypes: ListBuffer[AnyRef]): Unit = {
-    val resourceUtilsClass =
-      Utils.classForName("org.apache.hadoop.yarn.util.resource.ResourceUtils")
-    val reinitializeResourcesMethod = resourceUtilsClass.getMethod("reinitializeResources",
-      classOf[java.util.List[AnyRef]])
-    reinitializeResourcesMethod.invoke(null, resourceTypes.asJava)
-  }
-
   def getResourceTypeValue(res: Resource, name: String): AnyRef = {
-    val resourceInformation: AnyRef = getResourceInformation(res, name)
+    val resourceInformation = getResourceInformation(res, name)
     invokeMethod(resourceInformation, "getValue")
   }
 

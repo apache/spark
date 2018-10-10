@@ -183,7 +183,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
     verify(mockAmClient).addContainerRequest(captor.capture())
     val containerRequest: ContainerRequest = captor.getValue
-    assert(containerRequest.getCapability == expectedResources)
+    assert(containerRequest.getCapability === expectedResources)
   }
 
   test("container should not be created if requested number if met") {

@@ -38,12 +38,11 @@ import org.apache.spark.util.Utils
 private object ResourceRequestHelper extends Logging {
   private val AMOUNT_AND_UNIT_REGEX = "([0-9]+)([A-Za-z]*)".r
   private val RESOURCE_INFO_CLASS = "org.apache.hadoop.yarn.api.records.ResourceInformation"
-  private val ERROR_PREFIX: String = "Error:"
+  private val ERROR_PREFIX = "Error:"
 
   /**
    * Validates sparkConf and throws a SparkException if any of standard resources (memory or cores)
    * is defined with the property spark.yarn.x.resource.y
-   * @param sparkConf
    */
   def validateResources(sparkConf: SparkConf): Unit = {
     val resourceDefinitions = Seq[(String, String)](
@@ -86,7 +85,7 @@ private object ResourceRequestHelper extends Logging {
     logDebug(s"Custom resources requested: $resources")
     if (!isYarnResourceTypesAvailable()) {
       if (resources.nonEmpty) {
-        logWarning("Ignoring updating resource with resource types because " +
+        logWarning("Ignoring custom resource requests because " +
             "the version of YARN does not support it!")
       }
       return
