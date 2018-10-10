@@ -190,13 +190,12 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
 
   test("simple writable data source") {
     // TODO: java implementation.
-    val writeOnlySource = classOf[SimpleWriteOnlyDataSource]
     Seq(classOf[SimpleWritableDataSource]).foreach { cls =>
       withTempPath { file =>
         val path = file.getCanonicalPath
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
 
-        spark.range(10).select('id as 'i, -'id as 'j).write.format(writeOnlySource.getName)
+        spark.range(10).select('id as 'i, -'id as 'j).write.format(cls.getName)
           .option("path", path).save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
@@ -209,20 +208,20 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(10).union(spark.range(10)).select('id, -'id))
 
-        spark.range(5).select('id as 'i, -'id as 'j).write.format(writeOnlySource.getName)
+        spark.range(5).select('id as 'i, -'id as 'j).write.format(cls.getName)
           .option("path", path).mode("overwrite").save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(5).select('id, -'id))
 
-        spark.range(5).select('id as 'i, -'id as 'j).write.format(writeOnlySource.getName)
+        spark.range(5).select('id as 'i, -'id as 'j).write.format(cls.getName)
           .option("path", path).mode("ignore").save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(5).select('id, -'id))
 
         val e = intercept[Exception] {
-          spark.range(5).select('id as 'i, -'id as 'j).write.format(writeOnlySource.getName)
+          spark.range(5).select('id as 'i, -'id as 'j).write.format(cls.getName)
             .option("path", path).mode("error").save()
         }
         assert(e.getMessage.contains("data already exists"))
@@ -241,7 +240,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         // this input data will fail to read middle way.
         val input = spark.range(10).select(failingUdf('id).as('i)).select('i, -'i as 'j)
         val e2 = intercept[SparkException] {
-          input.write.format(writeOnlySource.getName).option("path", path).mode("overwrite").save()
+          input.write.format(cls.getName).option("path", path).mode("overwrite").save()
         }
         assert(e2.getMessage.contains("Writing job aborted"))
         // make sure we don't have partial data.
@@ -349,6 +348,21 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
           assert(!new File(sessionPath).exists)
           checkAnswer(spark.read.format(format).option("path", optionPath).load(), df)
         }
+      }
+    }
+  }
+
+  test("SPARK-25700: do not read schema when writing in other modes except append mode") {
+    withTempPath { file =>
+      val cls = classOf[SimpleWriteOnlyDataSource]
+      val path = file.getCanonicalPath
+      val df = spark.range(5)
+      try {
+        df.write.format(cls.getName).option("path", path).mode("error").save()
+        df.write.format(cls.getName).option("path", path).mode("overwrite").save()
+        df.write.format(cls.getName).option("path", path).mode("ignore").save()
+      } catch {
+        case e: SchemaReadAttemptException => fail("Schema read was attempted.", e)
       }
     }
   }
@@ -642,11 +656,13 @@ object SpecificReaderFactory extends PartitionReaderFactory {
   }
 }
 
+class SchemaReadAttemptException(m: String) extends RuntimeException(m)
+
 class SimpleWriteOnlyDataSource extends SimpleWritableDataSource {
   override def fullSchema(): StructType = {
     // This is a bit hacky since this source implements read support but throws
     // during schema retrieval. Might have to rewrite but it's done
     // such so for minimised changes.
-    throw new UnsupportedOperationException("read is not supported")
+    throw new SchemaReadAttemptException("read is not supported")
   }
 }
