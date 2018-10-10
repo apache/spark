@@ -464,13 +464,12 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val input = """[{"a": 1}, {"a": 2}]"""
     val corrupted = "corrupted"
     val schema = new StructType().add("a", IntegerType).add(corrupted, StringType)
-    StructType(StructField("a", IntegerType) :: Nil)
     val output = InternalRow(null, UTF8String.fromString(input))
     val options = Map("columnNameOfCorruptRecord" -> corrupted)
     checkEvaluation(JsonToStructs(schema, options, Literal(input), gmtId), output)
   }
 
-  test("from_json - input=empty array, schema=struct, output=null") {
+  test("from_json - input=empty array, schema=struct, output=single row with null") {
     val input = """[]"""
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     val output = InternalRow(null)
