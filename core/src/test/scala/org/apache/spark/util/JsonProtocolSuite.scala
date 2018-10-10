@@ -92,9 +92,9 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorMetricsUpdate = {
       // Use custom accum ID for determinism
       val accumUpdates =
-       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true)
-         .accumulators().map(AccumulatorSuite.makeInfo)
-         .zipWithIndex.map { case (a, i) => a.copy(id = i) }
+        makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true)
+          .accumulators().map(AccumulatorSuite.makeInfo)
+          .zipWithIndex.map { case (a, i) => a.copy(id = i) }
       val executorUpdates = new ExecutorMetrics(
         Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
           321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L))
