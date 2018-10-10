@@ -200,29 +200,6 @@ class ClientSuite extends SparkFunSuite with Matchers {
     appContext.getMaxAppAttempts should be (42)
   }
 
-  test("resource request for invalid resource") {
-    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
-    val sparkConf = new SparkConf()
-      .set(YARN_AM_RESOURCE_TYPES_PREFIX + "some_resource_with_units_1", "121m")
-    val args = new ClientArguments(Array())
-
-    val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
-    val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
-    val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
-
-    val client = new Client(args, sparkConf)
-
-    try {
-      client.createApplicationSubmissionContext(
-        new YarnClientApplication(getNewApplicationResponse, appContext),
-        containerLaunchContext)
-    } catch {
-      case NonFatal(e) =>
-        val expectedExceptionClass = "org.apache.hadoop.yarn.exceptions.ResourceNotFoundException"
-        assert(e.getClass.getName === expectedExceptionClass)
-    }
-  }
-
   test("resource request (client mode)") {
     testResourceRequest(Seq(("fpga", 2), ("gpu", 3)), "client")
   }
