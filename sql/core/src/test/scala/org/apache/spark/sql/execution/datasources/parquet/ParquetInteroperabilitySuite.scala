@@ -262,36 +262,33 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
   }
 
   test("parquet timestamp predicate pushdown") {
-    Seq("timestamp_pushdown").foreach({ file =>
-      val timestampPath = Thread.currentThread()
-        .getContextClassLoader.getResource("test-data/" + file + ".parq").toURI.getPath
-      val textFile = Thread.currentThread()
-        .getContextClassLoader.getResource("test-data/" + file + ".txt").toURI.getPath
+    val timestampPath = Thread.currentThread()
+      .getContextClassLoader.getResource("test-data/timestamp_pushdown.parq").toURI.getPath
+    val textFile = Thread.currentThread()
+      .getContextClassLoader.getResource("test-data/timestamp_pushdown.txt").toURI.getPath
 
-      withTempPath { tableDir =>
-        val textValues = spark.read
-          .option("inferSchema", false)
-          .option("header", false)
-          .option("delimiter", ";").csv(textFile).collect
-        FileUtils.copyFile(new File(timestampPath), new File(tableDir, "part-00001.parq"))
+    withTempPath { tableDir =>
+      val textValues = spark.read
+        .option("inferSchema", false)
+        .option("header", false)
+        .option("delimiter", ";").csv(textFile).collect
+      FileUtils.copyFile(new File(timestampPath), new File(tableDir, "part-00001.parq"))
 
-        Seq(false, true).foreach { vectorized =>
-          withSQLConf(
-            (SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized.toString())
-          ) {
-            Seq((1, "millisUtc"), (2, "millisNonUtc"), (3, "microsUtc"), (4, "microsNonUtc"))
-              .foreach(column => textValues.map(row => row.getString(column._1)).foreach(item => {
-                val readBack = spark.read.parquet(tableDir.getAbsolutePath)
-                  .select(column._2).distinct().where(s"${column._2} = '$item'").collect
-                withClue(s"vectorized = $vectorized, file = $file") {
-                  assert(readBack.length === 1)
-                  assert(readBack(0).getTimestamp(0).toString === item)
-                }
-              })
-            )
-          }
+      Seq(false, true).foreach { vectorized =>
+        withSQLConf(
+          (SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized.toString())
+        ) {
+          Seq((1, "millisUtc"), (2, "millisNonUtc"), (3, "microsUtc"), (4, "microsNonUtc"))
+            .foreach(column => textValues.map(row => row.getString(column._1)).foreach(item => {
+              val readBack = spark.read.parquet(tableDir.getAbsolutePath)
+                .select(column._2).distinct().where(s"${column._2} = '$item'").collect
+              withClue(s"vectorized = $vectorized, column = ${column._2}, item = $item") {
+                assert(readBack.length === 1)
+                assert(readBack(0).getTimestamp(0).toString === item)
+              }
+            }))
         }
       }
-    })
+    }
   }
 }
