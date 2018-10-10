@@ -351,7 +351,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
     }
   }
 
-  test("SPARK-12218 Converting conjunctions into ORC SearchArguments") {
+  test("SPARK-12218 and SPARK-25699 Converting conjunctions into ORC SearchArguments") {
     import org.apache.spark.sql.sources._
     // The `LessThan` should be converted while the `StringContains` shouldn't
     val schema = new StructType(
