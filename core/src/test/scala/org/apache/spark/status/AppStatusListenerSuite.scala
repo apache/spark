@@ -1379,7 +1379,9 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
         assert(exec.info.id === id)
         exec.info.peakMemoryMetrics match {
           case Some(actual) =>
-            assert(metrics.getMetrics().equals(actual.getMetrics()))
+            ExecutorMetricType.definedMetrics.foreach { metricType =>
+              assert(actual.getMetricValue(metricType) === metrics.getMetricValue(metricType))
+            }
           case _ =>
             assert(false)
         }
@@ -1427,7 +1429,9 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
         assert(exec.info.id === id)
         exec.info.peakMemoryMetrics match {
           case Some(actual) =>
-            assert(metrics.getMetrics().equals(actual.getMetrics()))
+            ExecutorMetricType.definedMetrics.foreach { metricType =>
+              assert(actual.getMetricValue(metricType) === metrics.getMetricValue(metricType))
+            }
           case _ =>
             assert(false)
         }

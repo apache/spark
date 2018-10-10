@@ -30,20 +30,23 @@ import org.apache.spark.metrics.ExecutorMetricType
 @DeveloperApi
 class ExecutorMetrics private[spark] extends Serializable {
 
-  private var metrics = mutable.Map.empty[String, Long]
-
-  /** Returns the Map which given a metric's name will return its value. */
-  def getMetrics(): mutable.Map[String, Long] = {
-    metrics
-  }
+  private val metrics = new Array[Long](ExecutorMetricType.definedMetrics.length)
+  // the first element is initialized to -1, indicating that the values for the array
+  // haven't been set yet.
+  metrics(0) = -1
 
   /** Returns the value for the specified metric. */
   def getMetricValue(metricName: String): Long = {
-    metrics.get(metricName).get
+    metrics(ExecutorMetricType.metricIdxMap(metricName))
   }
 
   /** Returns true if the values for the metrics have been set, false otherwise. */
-  def isSet(): Boolean = !metrics.isEmpty
+  def isSet(): Boolean = metrics(0) > -1
+
+  private[spark] def this(metrics: Array[Long]) {
+    this()
+    Array.copy(metrics, 0, this.metrics, 0, Math.min(metrics.size, this.metrics.size))
+  }
 
   /**
    * Constructor: create the ExecutorMetrics with using a given map.
@@ -52,41 +55,8 @@ class ExecutorMetrics private[spark] extends Serializable {
    */
   private[spark] def this(executorMetrics: Map[String, Long]) {
     this()
-    for(m <- ExecutorMetricType.definedMetrics) {
-      metrics += (m -> executorMetrics.getOrElse(m, 0L))
-    }
-  }
-
-  // This method is just added for the use of some of the existing tests.
-  // IT SHOULDN't BE USED FOR OTHER PURPOSES
-  private[spark] def this(metrics: Array[Long]) {
-    this()
-    val orderedMetrics = Seq(
-      "JVMHeapMemory",
-      "JVMOffHeapMemory",
-      "OnHeapExecutionMemory",
-      "OffHeapExecutionMemory",
-      "OnHeapStorageMemory",
-      "OffHeapStorageMemory",
-      "OnHeapUnifiedMemory",
-      "OffHeapUnifiedMemory",
-      "DirectPoolMemory",
-      "MappedPoolMemory",
-      "ProcessTreeJVMVMemory",
-      "ProcessTreeJVMRSSMemory",
-      "ProcessTreePythonVMemory",
-      "ProcessTreePythonRSSMemory",
-      "ProcessTreeOtherVMemory",
-      "ProcessTreeOtherRSSMemory"
-    )
-
-    (0 until orderedMetrics.length).foreach{ m =>
-      if ( m < metrics.length) {
-        this.metrics += (orderedMetrics(m) -> metrics(m))
-      }
-      else {
-        this.metrics += (orderedMetrics(m) -> 0L)
-      }
+    (0 until ExecutorMetricType.definedMetrics.length).foreach { idx =>
+      metrics(idx) = executorMetrics.getOrElse(ExecutorMetricType.definedMetrics(idx), 0L)
     }
   }
 
@@ -99,16 +69,10 @@ class ExecutorMetrics private[spark] extends Serializable {
    */
   private[spark] def compareAndUpdatePeakValues(executorMetrics: ExecutorMetrics): Boolean = {
     var updated = false
-    for(m <- ExecutorMetricType.definedMetrics) {
-      if (!metrics.contains(m)) {
-        metrics += (m -> 0)
-      }
-      if (executorMetrics.getMetrics().contains(m)) {
-        val mValue = executorMetrics.getMetrics().get(m).get
-        if (mValue > metrics.get(m).get) {
-          updated = true
-          metrics += (m -> mValue)
-        }
+    (0 until ExecutorMetricType.definedMetrics.length).foreach { idx =>
+      if (executorMetrics.metrics(idx) > metrics(idx)) {
+        updated = true
+        metrics(idx) = executorMetrics.metrics(idx)
       }
     }
     updated

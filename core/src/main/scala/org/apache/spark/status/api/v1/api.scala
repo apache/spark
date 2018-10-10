@@ -133,7 +133,10 @@ private[spark] class ExecutorMetricsJsonSerializer
       jsonGenerator: JsonGenerator,
       serializerProvider: SerializerProvider): Unit = {
     metrics.foreach { m: ExecutorMetrics =>
-      jsonGenerator.writeObject(m.getMetrics())
+      val metricsMap = ExecutorMetricType.definedMetrics.map { metricType =>
+        metricType -> m.getMetricValue(metricType)
+      }.toMap
+      jsonGenerator.writeObject(metricsMap)
     }
   }
 }

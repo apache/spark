@@ -26,7 +26,6 @@ import org.apache.spark.memory.MemoryManager
  * Executor metric types for executor-level metrics stored in ExecutorMetrics.
  */
 sealed trait ExecutorMetricType {
-  private[spark] var numberOfMetricsInSet = 0
   private[spark] def getMetricValue(memoryManager: MemoryManager): Long = 0
   private[spark] def getMetricSet(memoryManager: MemoryManager): Map[String, Long] =
     Map.empty[ String, Long]
@@ -38,7 +37,6 @@ private[spark] abstract class MemoryManagerExecutorMetricType(
   override private[spark] def getMetricSet(memoryManager: MemoryManager): Map[String, Long] = {
     var metricAsSet = Map.empty[String, Long]
     metricAsSet += (name -> f(memoryManager))
-    numberOfMetricsInSet = 1
     metricAsSet
   }
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
@@ -61,7 +59,6 @@ case object JVMHeapMemory extends ExecutorMetricType {
   override private[spark] def getMetricSet(memoryManager: MemoryManager): Map[String, Long] = {
     var metricAsSet = Map.empty[String, Long]
     metricAsSet += (name -> ManagementFactory.getMemoryMXBean.getHeapMemoryUsage().getUsed())
-    numberOfMetricsInSet = 1
     metricAsSet
   }
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
@@ -73,7 +70,6 @@ case object JVMOffHeapMemory extends ExecutorMetricType {
   override private[spark] def getMetricSet(memoryManager: MemoryManager): Map[String, Long] = {
     var metricAsSet = Map.empty[String, Long]
     metricAsSet += (name -> ManagementFactory.getMemoryMXBean.getNonHeapMemoryUsage().getUsed())
-    numberOfMetricsInSet = 1
     metricAsSet
   }
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
@@ -97,7 +93,6 @@ case object ProcessTreeMetrics extends ExecutorMetricType {
       ExecutorMetricType.pTreeInfo.allMetrics.otherVmemTotal )
     processTreeMetrics += ("ProcessTreeOtherRSSMemory" ->
       ExecutorMetricType.pTreeInfo.allMetrics.otherRSSTotal )
-    numberOfMetricsInSet = processTreeMetrics.size
     processTreeMetrics
   }
 }
@@ -144,7 +139,7 @@ private[spark] object ExecutorMetricType {
     ProcessTreeMetrics
   )
  // List of defined metrics
-  val definedMetrics = Set(
+  val definedMetrics = IndexedSeq(
     "JVMHeapMemory",
     "JVMOffHeapMemory",
     "OnHeapExecutionMemory",
@@ -162,4 +157,7 @@ private[spark] object ExecutorMetricType {
     "ProcessTreeOtherVMemory",
     "ProcessTreeOtherRSSMemory"
   )
+
+  val metricIdxMap =
+    Map[String, Int](ExecutorMetricType.definedMetrics.zipWithIndex: _*)
 }
