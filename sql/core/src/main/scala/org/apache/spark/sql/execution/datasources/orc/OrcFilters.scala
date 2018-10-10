@@ -173,8 +173,8 @@ private[sql] object OrcFilters {
         // Pushing one side of AND down is only safe to do at the top level or in the child
         // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
         // can be safely removed.
-        val leftBuilderOption = createBuilder(dataTypeMap, left,
-          newBuilder, canPartialPushDownConjuncts)
+        val leftBuilderOption =
+          createBuilder(dataTypeMap, left, newBuilder, canPartialPushDownConjuncts)
         val rightBuilderOption =
           createBuilder(dataTypeMap, right, newBuilder, canPartialPushDownConjuncts)
         (leftBuilderOption, rightBuilderOption) match {
@@ -206,7 +206,8 @@ private[sql] object OrcFilters {
       case Not(child) =>
         for {
           _ <- createBuilder(dataTypeMap, child, newBuilder, canPartialPushDownConjuncts = false)
-          negate <- createBuilder(dataTypeMap, child, builder.startNot(), false)
+          negate <- createBuilder(dataTypeMap,
+            child, builder.startNot(), canPartialPushDownConjuncts = false)
         } yield negate.end()
 
       // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
