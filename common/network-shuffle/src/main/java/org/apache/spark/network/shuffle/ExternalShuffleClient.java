@@ -91,6 +91,7 @@ public class ExternalShuffleClient extends ShuffleClient {
       int port,
       String execId,
       String[] blockIds,
+      boolean isBackup,
       BlockFetchingListener listener,
       DownloadFileManager downloadFileManager) {
     checkInit();

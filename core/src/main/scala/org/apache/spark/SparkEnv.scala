@@ -19,12 +19,12 @@ package org.apache.spark
 
 import java.io.File
 import java.net.Socket
-import java.util.Locale
-
-import scala.collection.mutable
-import scala.util.Properties
+import java.util.{Locale, ServiceLoader}
 
 import com.google.common.collect.MapMaker
+import scala.collection.mutable
+import scala.util.Properties
+import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
@@ -39,7 +39,7 @@ import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
-import org.apache.spark.shuffle.ShuffleManager
+import org.apache.spark.shuffle.{DefaultShuffleServiceAddressProvider, ShuffleManager, ShuffleServiceAddressProviderFactory}
 import org.apache.spark.storage._
 import org.apache.spark.util.{RpcUtils, Utils}
 
@@ -302,7 +302,20 @@ object SparkEnv extends Logging {
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 
     val mapOutputTracker = if (isDriver) {
-      new MapOutputTrackerMaster(conf, broadcastManager, isLocal)
+      val loader = Utils.getContextOrSparkClassLoader
+      val master = conf.get("spark.master")
+      val serviceLoaders =
+        ServiceLoader.load(classOf[ShuffleServiceAddressProviderFactory], loader)
+            .asScala.filter(_.canCreate(conf.get("spark.master")))
+      if (serviceLoaders.size > 1) {
+        throw new SparkException(
+          s"Multiple external cluster managers registered for the url $master: $serviceLoaders")
+      }
+      val shuffleServiceAddressProvider = serviceLoaders.headOption
+        .map(_.create(conf))
+        .getOrElse(DefaultShuffleServiceAddressProvider)
+      shuffleServiceAddressProvider.start()
+      new MapOutputTrackerMaster(conf, broadcastManager, isLocal, shuffleServiceAddressProvider)
     } else {
       new MapOutputTrackerWorker(conf)
     }

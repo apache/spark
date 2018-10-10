@@ -24,7 +24,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
-
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._
@@ -39,6 +38,7 @@ import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
+import org.apache.spark.shuffle.DefaultShuffleServiceAddressProvider
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver._
@@ -70,7 +70,8 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
   val streamId = 1
   val securityMgr = new SecurityManager(conf, encryptionKey)
   val broadcastManager = new BroadcastManager(true, conf, securityMgr)
-  val mapOutputTracker = new MapOutputTrackerMaster(conf, broadcastManager, true)
+  val mapOutputTracker = new MapOutputTrackerMaster(
+      conf, broadcastManager, true, None, DefaultShuffleServiceAddressProvider)
   val shuffleManager = new SortShuffleManager(conf)
   val serializer = new KryoSerializer(conf)
   var serializerManager = new SerializerManager(serializer, conf, encryptionKey)

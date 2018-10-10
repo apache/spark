@@ -17,13 +17,10 @@
 
 package org.apache.spark.shuffle
 
-import java.net.URI
-
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.shuffle._
 
 private[spark] class ExternalFallbackShuffleClient(
-    shuffleServiceAddresses: Set[URI],
     externalShuffleClient: ExternalShuffleClient,
     baseBlockTransferService: BlockTransferService) extends ShuffleClient {
 
@@ -37,20 +34,21 @@ private[spark] class ExternalFallbackShuffleClient(
       port: Int,
       execId: String,
       blockIds: Array[String],
+      isBackup: Boolean,
       listener: BlockFetchingListener,
       downloadFileManager: DownloadFileManager): Unit = {
-    if (shuffleServiceAddresses.exists(
-      uri => uri.getHost.equals(host) && uri.getPort.equals(port))) {
+    if (isBackup) {
       externalShuffleClient.fetchBlocks(
         host,
         port,
         execId,
         blockIds,
+        isBackup,
         listener,
         downloadFileManager)
     } else {
       baseBlockTransferService.fetchBlocks(
-        host, port, execId, blockIds, listener, downloadFileManager)
+        host, port, execId, blockIds, isBackup, listener, downloadFileManager)
     }
   }
 

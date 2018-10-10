@@ -105,6 +105,7 @@ private[spark] class NettyBlockTransferService(
       port: Int,
       execId: String,
       blockIds: Array[String],
+      isBackup: Boolean,
       listener: BlockFetchingListener,
       tempFileManager: DownloadFileManager): Unit = {
     logTrace(s"Fetch blocks from $host:$port (executor id $execId)")

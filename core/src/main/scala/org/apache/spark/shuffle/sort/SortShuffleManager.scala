@@ -20,6 +20,8 @@ package org.apache.spark.shuffle.sort
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.util.Random
+
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.TransportContext
@@ -89,18 +91,18 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   private val backupShuffleTransportConf = SparkTransportConf.fromSparkConf(
     conf, "shuffle", 2)
 
-  private lazy val maybeBackupShuffleTransportClient = SparkEnv
+  private lazy val backupShuffleTransportClients = SparkEnv
     .get
     .blockManager
-    .backupShuffleServiceAddress()
+    .getBackupShuffleServiceAddresses()
     .map(address => {
-      val addressAsUri = URI.create(address)
+      val addressAsUri = URI.create(s"spark://${address._1}:${address._2}")
       val transportContext = new TransportContext(
         backupShuffleTransportConf,
         new NoOpRpcHandler(),
         true)
-      transportContext.createClientFactory().createClient(
-        addressAsUri.getHost, addressAsUri.getPort)
+      (address, transportContext.createClientFactory().createClient(
+        addressAsUri.getHost, addressAsUri.getPort))
     })
 
   /**
@@ -170,19 +172,18 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       case other: BaseShuffleHandle[K @unchecked, V @unchecked, _] =>
         new SortShuffleWriter(shuffleBlockResolver, other, mapId, context)
     }
-    env.blockManager.backupShuffleServiceAddress()
-      .map(address => {
-        require(maybeBackupShuffleTransportClient.isDefined,
-          "Should have a backup shuffle transport client to use.")
+    Random.shuffle(backupShuffleTransportClients)
+      .headOption
+      .map(addressAndClient => {
         new BackingUpShuffleWriter(
           shuffleBlockResolver,
           baseWriter,
-          maybeBackupShuffleTransportClient.get,
+          addressAndClient._2,
           backupShuffleTransportConf,
           env.mapOutputTracker,
           ThreadUtils.newDaemonCachedThreadPool("backup-shuffle-files"),
-          URI.create(address).getHost,
-          URI.create(address).getPort,
+          addressAndClient._1._1,
+          addressAndClient._1._2,
           conf.getAppId,
           env.blockManager.blockManagerId.executorId,
           handle.shuffleId,
@@ -203,7 +204,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   /** Shut down this ShuffleManager. */
   override def stop(): Unit = {
     shuffleBlockResolver.stop()
-    maybeBackupShuffleTransportClient.foreach(_.close)
+    backupShuffleTransportClients.foreach(_._2.close())
   }
 }
 

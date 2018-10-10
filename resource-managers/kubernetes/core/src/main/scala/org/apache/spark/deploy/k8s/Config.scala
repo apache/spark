@@ -278,6 +278,25 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(false)
 
+  val KUBERNETES_BACKUP_SHUFFLE_SERVICE_ENABLED =
+    ConfigBuilder("spark.kubernetes.shuffle.service.backups.enabled")
+      .doc("Use shuffle service to back up shuffle data in Kubernetes applications.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_BACKUP_SHUFFLE_SERVICE_PODS_NAMESPACE =
+    ConfigBuilder("spark.kubernetes.shuffle.service.backups.pods.namespace")
+      .doc("Namespace of the pods that are running the shuffle service instances for backing up" +
+        " shuffle data.")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_BACKUP_SHUFFLE_SERVICE_PORT =
+    ConfigBuilder("spark.kubernetes.shuffle.service.backups.port")
+      .doc("Port of the shuffle services that will back up the application's shuffle data.")
+      .intConf
+      .createWithDefault(7337)
+
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 
@@ -306,4 +325,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY = "options.sizeLimit"
 
   val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
+
+  val KUBERNETES_BACKUP_SHUFFLE_SERVICE_LABELS =
+      "spark.kubernetes.shuffle.service.backups.label."
 }

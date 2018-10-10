@@ -14,13 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.shuffle
 
-package org.apache.spark.storage
+import org.apache.spark.SparkConf
 
-import java.net.URI
+trait ShuffleServiceAddressProviderFactory {
+  def canCreate(masterUrl: String): Boolean
 
-trait BackupShuffleServiceAddressProvider {
-
-  def getBackupShuffleServiceAddresses(): Set[URI]
-
+  def create(conf: SparkConf): ShuffleServiceAddressProvider
 }

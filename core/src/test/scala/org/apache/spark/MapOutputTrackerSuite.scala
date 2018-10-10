@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import scala.collection.mutable.ArrayBuffer
-
 import org.mockito.Matchers.any
 import org.mockito.Mockito._
 
@@ -26,7 +25,7 @@ import org.apache.spark.LocalSparkContext._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
-import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.shuffle.{DefaultShuffleServiceAddressProvider, FetchFailedException}
 import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId}
 
 class MapOutputTrackerSuite extends SparkFunSuite {
@@ -35,7 +34,11 @@ class MapOutputTrackerSuite extends SparkFunSuite {
   private def newTrackerMaster(sparkConf: SparkConf = conf) = {
     val broadcastManager = new BroadcastManager(true, sparkConf,
       new SecurityManager(sparkConf))
-    new MapOutputTrackerMaster(sparkConf, broadcastManager, true)
+    new MapOutputTrackerMaster(
+        sparkConf,
+        broadcastManager,
+      true,
+      DefaultShuffleServiceAddressProvider)
   }
 
   def createRpcEnv(name: String, host: String = "localhost", port: Int = 0,
@@ -186,7 +189,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val senderAddress = RpcAddress("localhost", 12345)
     val rpcCallContext = mock(classOf[RpcCallContext])
     when(rpcCallContext.senderAddress).thenReturn(senderAddress)
-    masterEndpoint.receiveAndReply(rpcCallContext)(GetMapOutputStatuses(10))
+    masterEndpoint.receiveAndReply(rpcCallContext)(GetMapOutputStatuses(10, false))
     // Default size for broadcast in this testsuite is set to -1 so should not cause broadcast
     // to be used.
     verify(rpcCallContext, timeout(30000)).reply(any())
@@ -265,7 +268,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       val senderAddress = RpcAddress("localhost", 12345)
       val rpcCallContext = mock(classOf[RpcCallContext])
       when(rpcCallContext.senderAddress).thenReturn(senderAddress)
-      masterEndpoint.receiveAndReply(rpcCallContext)(GetMapOutputStatuses(20))
+      masterEndpoint.receiveAndReply(rpcCallContext)(GetMapOutputStatuses(20, false))
       // should succeed since majority of data is broadcast and actual serialized
       // message size is small
       verify(rpcCallContext, timeout(30000)).reply(any())
@@ -313,7 +316,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
       Array(size10000, size0, size1000, size0)))
     assert(tracker.containsShuffle(10))
-    assert(tracker.getMapSizesByExecutorId(10, 0, 4, 0).toSeq ===
+    assert(tracker.getMapSizesByExecutorId(10, 0, 4, false).toSeq ===
         Seq(
           (BlockManagerId("a", "hostA", 1000),
               Seq((ShuffleBlockId(10, 0, 1), size1000), (ShuffleBlockId(10, 0, 3), size10000))),

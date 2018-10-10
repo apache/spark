@@ -82,7 +82,7 @@ class BackingUpShuffleWriter[K, V](
         } yield {
           val backedUpMapStatus = RelocatedMapStatus(
             delegateMapStatus.get,
-            BlockManagerId(execId, backupHost, backupPort, None))
+            BlockManagerId(execId, backupHost, backupPort, None, isBackup = true))
           mapOutputTracker.trackerEndpoint.send(
               ReportBackedUpMapOutput(shuffleId, mapId, backedUpMapStatus))
         }

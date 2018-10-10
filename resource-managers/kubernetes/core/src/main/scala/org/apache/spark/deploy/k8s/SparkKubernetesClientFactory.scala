@@ -21,11 +21,13 @@ import java.io.File
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient, KubernetesClient}
+import io.fabric8.kubernetes.client.Config._
 import io.fabric8.kubernetes.client.utils.HttpClientUtils
 import okhttp3.Dispatcher
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -34,6 +36,36 @@ import org.apache.spark.util.ThreadUtils
  * options for different components.
  */
 private[spark] object SparkKubernetesClientFactory {
+
+  def getDriverKubernetesClient(conf: SparkConf, masterURL: String): KubernetesClient = {
+    val wasSparkSubmittedInClusterMode = conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK)
+    val (authConfPrefix,
+    apiServerUri,
+    defaultServiceAccountToken,
+    defaultServiceAccountCaCrt) = if (wasSparkSubmittedInClusterMode) {
+      require(conf.get(KUBERNETES_DRIVER_POD_NAME).isDefined,
+        "If the application is deployed using spark-submit in cluster mode, the driver pod name " +
+          "must be provided.")
+      (KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
+        KUBERNETES_MASTER_INTERNAL_URL,
+        Some(new File(KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
+        Some(new File(KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
+    } else {
+      (KUBERNETES_AUTH_CLIENT_MODE_PREFIX,
+        KubernetesUtils.parseMasterUrl(masterURL),
+        None,
+        None)
+    }
+
+    val kubernetesClient = createKubernetesClient(
+      apiServerUri,
+      Some(conf.get(KUBERNETES_NAMESPACE)),
+      authConfPrefix,
+      conf,
+      defaultServiceAccountToken,
+      defaultServiceAccountCaCrt)
+    kubernetesClient
+  }
 
   def createKubernetesClient(
       master: String,

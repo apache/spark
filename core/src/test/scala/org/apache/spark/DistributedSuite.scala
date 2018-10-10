@@ -189,8 +189,13 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(locations.size === storageLevel.replication,
       s"; got ${locations.size} replicas instead of ${storageLevel.replication}")
     locations.foreach { cmId =>
-      val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
-        blockId.toString, null)
+      val bytes = blockTransfer.fetchBlockSync(
+        cmId.host,
+        cmId.port,
+        cmId.executorId,
+        blockId.toString,
+        cmId.isBackup,
+        null)
       val deserialized = serializerManager.dataDeserializeStream(blockId,
         new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream())(data.elementClassTag).toList
       assert(deserialized === (1 to 100).toList)

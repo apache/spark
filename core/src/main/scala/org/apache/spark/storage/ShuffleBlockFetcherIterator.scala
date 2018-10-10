@@ -254,11 +254,22 @@ final class ShuffleBlockFetcherIterator(
     // already encrypted and compressed over the wire(w.r.t. the related configs), we can just fetch
     // the data and write it to file directly.
     if (req.size > maxReqSizeShuffleToMem) {
-      shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, this)
+      shuffleClient.fetchBlocks(
+          address.host,
+          address.port,
+          address.executorId,
+          blockIds.toArray,
+          address.isBackup,
+          blockFetchingListener, this)
     } else {
-      shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, null)
+      shuffleClient.fetchBlocks(
+        address.host,
+        address.port,
+        address.executorId,
+        blockIds.toArray,
+        address.isBackup,
+        blockFetchingListener,
+        null)
     }
   }
 

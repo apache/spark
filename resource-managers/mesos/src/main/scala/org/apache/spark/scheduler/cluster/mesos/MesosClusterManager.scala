@@ -20,6 +20,8 @@ package org.apache.spark.scheduler.cluster.mesos
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
+import org.apache.spark.scheduler.cluster.DefaultShuffleServiceAddressProvider
+import org.apache.spark.shuffle.{DefaultShuffleServiceAddressProvider, ShuffleServiceAddressProvider}
 
 /**
  * Cluster Manager for creation of Mesos scheduler and backend
@@ -60,5 +62,8 @@ private[spark] class MesosClusterManager extends ExternalClusterManager {
   override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {
     scheduler.asInstanceOf[TaskSchedulerImpl].initialize(backend)
   }
+
+  override def createShuffleServiceAddressProvider(): ShuffleServiceAddressProvider =
+    DefaultShuffleServiceAddressProvider
 }
 
