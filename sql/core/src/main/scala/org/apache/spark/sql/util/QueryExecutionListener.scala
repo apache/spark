@@ -20,6 +20,7 @@ package org.apache.spark.sql.util
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.QueryExecution
@@ -78,7 +79,8 @@ trait QueryExecutionListener {
 // The `loadExtensions` flag is used to indicate whether we should load the pre-defined,
 // user-specified listeners during construction. We should not do it when cloning this listener
 // manager, as we will copy all listeners to the cloned listener manager.
-class ExecutionListenerManager private[sql](session: SparkSession, loadExtensions: Boolean) {
+class ExecutionListenerManager private[sql](session: SparkSession, loadExtensions: Boolean)
+  extends Logging {
 
   private val listenerBus = new ExecutionListenerBus(session)
 
