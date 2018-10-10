@@ -46,39 +46,47 @@ before_install:
   
 # 5. Run maven install before running lint-java.
 install:
-  - build/sbt -Phadoop-2.7 -Dhadoop.version=2.7.3 -Pyarn -Pkafka-0-8 -Phive assembly/package test:package | grep -v  "^.*[info].*Resolving"
+  - build/sbt -Phadoop-2.7 -Pyarn -Pkafka-0-8 -Phive assembly/package test:package | grep -v  "^.*[info].*Resolving"
 
 # 6. Run tests
 
 jobs:
   include:
     - stage: core
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Dhadoop.version=2.7.3 -Pyarn -Phive core/test
-    - stage: catalyst
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Dhadoop.version=2.7.3 -Pyarn -Phive catalyst/test
-    - stage: sql
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Dhadoop.version=2.7.3 -Pyarn -Phive sql/test
-    - stage: hive
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Dhadoop.version=2.7.3 -Pyarn -Phive -Dtest.exclude.tags=org.apache.spark.tags.ExtendedHiveTest "hive/testOnly org.apache.spark.sql.hive.C* org.apache.spark.sql.hive.E* org.apache.spark.sql.hive.H* org.apache.spark.sql.hive.L* org.apache.spark.sql.hive.M* org.apache.spark.sql.hive.P* org.apache.spark.sql.hive.Q* org.apache.spark.sql.hive.H* org.apache.spark.sql.hive.p* org.apache.spark.sql.hive.S* org.apache.spark.sql.hive.I* org.apache.spark.sql.hive.U*"
-    - stage: hive-catalyst
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Dhadoop.version=2.7.3 -Pyarn -Phive -Dtest.exclude.tags=org.apache.spark.tags.ExtendedHiveTest "hive/testOnly org.apache.spark.sql.catalyst.*"
-    - stage: hive-client
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Dhadoop.version=2.7.3 -Pyarn -Phive -Dtest.exclude.tags=org.apache.spark.tags.ExtendedHiveTest "hive/testOnly org.apache.spark.sql.hive.client.*"
-    - stage: hive-orc
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Dhadoop.version=2.7.3 -Pyarn -Phive -Dtest.exclude.tags=org.apache.spark.tags.ExtendedHiveTest "hive/testOnly org.apache.spark.sql.hive.orc.*"
-    - stage: hive-execution
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Dhadoop.version=2.7.3 -Pyarn -Phive -Dtest.exclude.tags=org.apache.spark.tags.ExtendedHiveTest "hive/testOnly org.apache.spark.sql.hive.execution.*"
-    - stage: hive-sources
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Dhadoop.version=2.7.3 -Pyarn -Phive -Dtest.exclude.tags=org.apache.spark.tags.ExtendedHiveTest "hive/testOnly org.apache.spark.sql.sources.*"
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 core/test
     - stage: streaming
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Dhadoop.version=2.7.3 -Pyarn -Phive streaming/test
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 streaming/test
     - stage: ml
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Dhadoop.version=2.7.3 -Pyarn -Phive mllib/test
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 mllib/test
     - stage: graphx
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Dhadoop.version=2.7.3 -Pyarn -Phive graphx/test
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 graphx/test
     - stage: network
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Dhadoop.version=2.7.3 -Pyarn -Phive network-common/test
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 network-common/test
     - stage: shuffle
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Dhadoop.version=2.7.3 -Pyarn -Phive network-shuffle/test
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 network-shuffle/test
     - stage: unsafe
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Dhadoop.version=2.7.3 -Pyarn -Phive unsafe/test
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 unsafe/test
+    - stage: yarn
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 yarn/test
+    - stage: repl
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 repl/test
+    - stage: launcher
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 launcher/test
+    - stage: catalyst
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 catalyst/test
+    - stage: sql-java-test
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 "sql/testOnly test.*"
+    - stage: sql-scala-test
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 "sql/testOnly org.*"
+    - stage: hive
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Phive -Dtest.exclude.tags=org.apache.spark.tags.ExtendedHiveTest "hive/testOnly org.apache.spark.sql.hive.C* org.apache.spark.sql.hive.E* org.apache.spark.sql.hive.H* org.apache.spark.sql.hive.L* org.apache.spark.sql.hive.M* org.apache.spark.sql.hive.P* org.apache.spark.sql.hive.Q* org.apache.spark.sql.hive.H* org.apache.spark.sql.hive.p* org.apache.spark.sql.hive.S* org.apache.spark.sql.hive.I* org.apache.spark.sql.hive.U*"
+    - stage: hive-catalyst
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Phive -Dtest.exclude.tags=org.apache.spark.tags.ExtendedHiveTest "hive/testOnly org.apache.spark.sql.catalyst.*"
+    - stage: hive-client
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Phive -Dtest.exclude.tags=org.apache.spark.tags.ExtendedHiveTest "hive/testOnly org.apache.spark.sql.hive.client.*"
+    - stage: hive-orc
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Phive -Dtest.exclude.tags=org.apache.spark.tags.ExtendedHiveTest "hive/testOnly org.apache.spark.sql.hive.orc.*"
+    - stage: hive-execution
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Phive -Dtest.exclude.tags=org.apache.spark.tags.ExtendedHiveTest "hive/testOnly org.apache.spark.sql.hive.execution.*"
+    - stage: hive-sources
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Phive -Dtest.exclude.tags=org.apache.spark.tags.ExtendedHiveTest "hive/testOnly org.apache.spark.sql.sources.*"
