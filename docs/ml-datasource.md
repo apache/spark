@@ -20,7 +20,7 @@ The loaded DataFrame has one StructType column: "image". containing image data s
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 [`ImageDataSource`](api/scala/index.html#org.apache.spark.ml.source.image.ImageDataSource)
-implements Spark SQL data source API for loading image data as DataFrame.
+implements a Spark SQL data source API for loading image data as a DataFrame.
 
 {% highlight scala %}
 scala> spark.read.format("image").load("data/mllib/images/origin")
