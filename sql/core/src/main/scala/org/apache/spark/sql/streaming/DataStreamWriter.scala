@@ -51,9 +51,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * written to the sink.</li>
    * <li> `OutputMode.Complete()`: all the rows in the streaming DataFrame/Dataset will be written
    * to the sink every time there are some updates.</li>
-   * <li> `OutputMode.Update()`: only the rows that were updated in the streaming 
+   * <li> `OutputMode.Update()`: only the rows that were updated in the streaming
    * DataFrame/Dataset will be written to the sink every time there are some updates.
-   * If the query doesn't contain aggregations, it will be equivalent to 
+   * If the query doesn't contain aggregations, it will be equivalent to
    * `OutputMode.Append()` mode.</li>
    * </ul>
    *
