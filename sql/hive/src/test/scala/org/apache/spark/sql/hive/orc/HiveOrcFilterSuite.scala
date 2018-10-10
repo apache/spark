@@ -383,5 +383,48 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
         ))
       )).get.toString
     }
+
+    // Can not remove unsupported `StringContains` predicate since it is under `Or` operator.
+    assert(OrcFilters.createFilter(schema, Array(
+      Or(
+        LessThan("a", 10),
+        And(
+          StringContains("b", "prefix"),
+          GreaterThan("a", 1)
+        )
+      )
+    )).isEmpty)
+
+    // Safely remove unsupported `StringContains` predicate and push down `LessThan`
+    assertResult(
+      """leaf-0 = (LESS_THAN a 10)
+        |expr = leaf-0
+      """.stripMargin.trim
+    ) {
+      OrcFilters.createFilter(schema, Array(
+        And(
+          LessThan("a", 10),
+          StringContains("b", "prefix")
+        )
+      )).get.toString
+    }
+
+    // Safely remove unsupported `StringContains` predicate and push down `LessThan`
+    assertResult(
+      """leaf-0 = (LESS_THAN a 10)
+        |leaf-1 = (LESS_THAN_EQUALS a 1)
+        |expr = (and leaf-0 (not leaf-1))
+      """.stripMargin.trim
+    ) {
+      OrcFilters.createFilter(schema, Array(
+        And(
+          And(
+            LessThan("a", 10),
+            StringContains("b", "prefix")
+          ),
+          GreaterThan("a", 1)
+        )
+      )).get.toString
+    }
   }
 }
