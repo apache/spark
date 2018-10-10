@@ -296,14 +296,16 @@ private[yarn] class YarnAllocator(
       s"executorsStarting: ${numExecutorsStarting.get}")
 
     if (missing > 0) {
-      var requestContainerMessage = s"Will request $missing executor container(s), each with " +
-          s"${resource.getVirtualCores} core(s) and " +
-          s"${resource.getMemory} MB memory (including $memoryOverhead MB of overhead)"
-      if (ResourceRequestHelper.isYarnResourceTypesAvailable() &&
-          executorResourceRequests.nonEmpty) {
-        requestContainerMessage ++= s" with custom resources: " + resource.toString
+      if (log.isInfoEnabled()) {
+        var requestContainerMessage = s"Will request $missing executor container(s), each with " +
+            s"${resource.getVirtualCores} core(s) and " +
+            s"${resource.getMemory} MB memory (including $memoryOverhead MB of overhead)"
+        if (ResourceRequestHelper.isYarnResourceTypesAvailable() &&
+            executorResourceRequests.nonEmpty) {
+          requestContainerMessage ++= s" with custom resources: " + resource.toString
+        }
+        logInfo(requestContainerMessage)
       }
-      logInfo(requestContainerMessage)
 
       // Split the pending container request into three groups: locality matched list, locality
       // unmatched list and non-locality list. Take the locality matched container request into

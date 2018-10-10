@@ -143,7 +143,7 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
       include(NEW_CONFIG_AM_MEMORY) and
       include(NEW_CONFIG_DRIVER_MEMORY))
   }
-  
+
   private def verifySetResourceRequestsSuccessful(definedResourceTypes: List[String],
       resourceRequests: Map[String, String],
       expectedResources: Map[String, ResourceInformation]) = {
@@ -152,7 +152,7 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
 
     val resource = createResource
     ResourceRequestHelper.setResourceRequests(resourceRequests, resource)
-    
+
     expectedResources.foreach { case (name, ri) =>
       val resourceInfo: ResourceInformation = ResourceRequestTestHelper
           .getResourceInformationByName(resource, name)
@@ -162,7 +162,6 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
 
   private def verifySetResourceRequestsExceptionWithNullRequest(definedResourceTypes: List[String],
       resourceRequests: Map[String, String], message: String) = {
-    val resource = createResource
     verifySetResourceRequestsException(definedResourceTypes, null, resourceRequests, message)
   }
 
@@ -171,13 +170,13 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
     val resource = createResource
     verifySetResourceRequestsException(definedResourceTypes, resource, resourceRequests, "")
   }
-  
+
   private def verifySetResourceRequestsException(definedResourceTypes: List[String],
       resourceRequests: Map[String, String], message: String): Unit = {
     val resource = createResource
     verifySetResourceRequestsException(definedResourceTypes, resource, resourceRequests, message)
   }
-  
+
   private def verifySetResourceRequestsException(definedResourceTypes: List[String],
       resource: Resource, resourceRequests: Map[String, String], message: String) = {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
@@ -189,13 +188,13 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
       thrown.getMessage should include (message)
     }
   }
-  
+
   private def verifyValidateResourcesException(sparkConf: SparkConf,
-      expectedFractionOfMessage: String) = {
+      message: String) = {
     val thrown = intercept[SparkException] {
       ResourceRequestHelper.validateResources(sparkConf)
     }
-    thrown.getMessage should include (expectedFractionOfMessage)
+    thrown.getMessage should include (message)
   }
 
   private def createResource: Resource = {

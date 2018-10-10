@@ -75,12 +75,6 @@ private object ResourceRequestHelper extends Logging {
       resources: Map[String, String],
       resource: Resource): Unit = {
     require(resource != null, "Resource parameter should not be null!")
-    require(!resources.contains("memory"),
-      "This method is meant to set custom resources to the resource object, " +
-          "but memory is a standard resource!")
-    require(!resources.contains("cores"),
-      "This method is meant to set custom resources to the resource object, " +
-          "but cores is a standard resource!")
 
     logDebug(s"Custom resources requested: $resources")
     if (!isYarnResourceTypesAvailable()) {

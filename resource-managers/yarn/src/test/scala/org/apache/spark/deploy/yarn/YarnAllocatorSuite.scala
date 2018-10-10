@@ -87,21 +87,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   def createAllocator(
       maxExecutors: Int = 5,
-      rmClient: AMRMClient[ContainerRequest] = rmClient): YarnAllocator = {
-    createAllocatorInternal(maxExecutors, rmClient, Map())
-  }
-
-  def createAllocatorWithAdditionalConfigs(
-      maxExecutors: Int = 5,
-      additionalConfigs: Map[String, String],
-      rmClient: AMRMClient[ContainerRequest] = rmClient): YarnAllocator = {
-    createAllocatorInternal(maxExecutors, rmClient, additionalConfigs)
-  }
-
-  private def createAllocatorInternal(
-      maxExecutors: Int,
-      rmClient: AMRMClient[ContainerRequest],
-      additionalConfigs: Map[String, String]) = {
+      rmClient: AMRMClient[ContainerRequest] = rmClient,
+      additionalConfigs: Map[String, String] = Map()): YarnAllocator = {
     val args = Array(
       "--jar", "somejar.jar",
       "--class", "SomeClass")
@@ -129,20 +116,12 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       clock)
   }
 
-  def createContainer(host: String): Container = {
-    createContainerInternal(host, containerResource)
-  }
-
-  def createContainerWithResource(host: String, resource: Resource): Container = {
-    createContainerInternal(host, resource)
-  }
-
-  private def createContainerInternal(host: String, containerResource: Resource) = {
+  def createContainer(host: String, resource: Resource = containerResource): Container = {
     // When YARN 2.6+ is required, avoid deprecation by using version with long second arg
     val containerId = ContainerId.newInstance(appAttemptId, containerNum)
     containerNum += 1
     val nodeId = NodeId.newInstance(host, 1000)
-    Container.newInstance(containerId, nodeId, "", containerResource, RM_REQUEST_PRIORITY, null)
+    Container.newInstance(containerId, nodeId, "", resource, RM_REQUEST_PRIORITY, null)
   }
 
   test("single container allocated") {
@@ -168,11 +147,11 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     ResourceRequestTestHelper.initializeResourceTypes(List("gpu"))
 
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
-    val handler = createAllocatorWithAdditionalConfigs(1, Map(
-      YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "gpu" -> "2G"), mockAmClient)
+    val handler = createAllocator(1, mockAmClient,
+      Map(YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "gpu" -> "2G"))
 
     handler.updateResourceRequests()
-    val container = createContainerWithResource("host1", handler.resource)
+    val container = createContainer("host1", handler.resource)
     handler.handleAllocatedContainers(Array(container))
 
     // get amount of memory and vcores from resource, so effectively skipping their validation

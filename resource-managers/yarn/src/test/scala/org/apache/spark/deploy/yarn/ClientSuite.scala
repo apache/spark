@@ -449,12 +449,15 @@ class ClientSuite extends SparkFunSuite with Matchers {
       "Deploy mode should be either client or cluster!")
     ResourceRequestTestHelper.initializeResourceTypes(List("gpu", "fpga"))
 
-    val sparkConf = new SparkConf()
-        .set(YARN_AM_RESOURCE_TYPES_PREFIX + "fpga", "2")
-        .set(YARN_AM_RESOURCE_TYPES_PREFIX + "gpu", "3")
-        .set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "fpga", "4")
+    val sparkConf = new SparkConf().set("spark.submit.deployMode", deployMode)
+    if (deployMode == "cluster") {
+      sparkConf.set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "fpga", "4")
         .set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "gpu", "5")
-        .set("spark.submit.deployMode", deployMode)
+    } else if (deployMode == "client") {
+      sparkConf.set(YARN_AM_RESOURCE_TYPES_PREFIX + "fpga", "2")
+        .set(YARN_AM_RESOURCE_TYPES_PREFIX + "gpu", "3")
+    }
+
     val args = new ClientArguments(Array())
 
     val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
