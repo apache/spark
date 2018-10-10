@@ -76,8 +76,12 @@ jobs:
       script: ./build/sbt -mem 4096 -Phadoop-2.7 catalyst/test
     - stage: sql-java-test
       script: ./build/sbt -mem 4096 -Phadoop-2.7 "sql/testOnly test.*"
-    - stage: sql-scala-test
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 "sql/testOnly org.*"
+    - stage: sql-a-m-test
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 "sql/testOnly org.apache.spark.sql.a* org.apache.spark.sql.b* org.apache.spark.sql.c* org.apache.spark.sql.d* org.apache.spark.sql.e* org.apache.spark.sql.f* org.apache.spark.sql.g* org.apache.spark.sql.h* org.apache.spark.sql.i* org.apache.spark.sql.j* org.apache.spark.sql.k* org.apache.spark.sql.l* org.apache.spark.sql.m*"
+    - stage: sql-n-z-test
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 "sql/testOnly org.apache.spark.sql.n* org.apache.spark.sql.o* org.apache.spark.sql.p* org.apache.spark.sql.q* org.apache.spark.sql.r* org.apache.spark.sql.s* org.apache.spark.sql.t* org.apache.spark.sql.u* org.apache.spark.sql.v* org.apache.spark.sql.w* org.apache.spark.sql.x* org.apache.spark.sql.y* org.apache.spark.sql.z*"
+    - stage: sql-A-Z-test
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 "sql/testOnly org.apache.spark.sql.A* org.apache.spark.sql.B* org.apache.spark.sql.C* org.apache.spark.sql.D* org.apache.spark.sql.E* org.apache.spark.sql.F* org.apache.spark.sql.G* org.apache.spark.sql.H* org.apache.spark.sql.I* org.apache.spark.sql.J* org.apache.spark.sql.K* org.apache.spark.sql.L* org.apache.spark.sql.M* org.apache.spark.sql.N* org.apache.spark.sql.O* org.apache.spark.sql.P* org.apache.spark.sql.Q* org.apache.spark.sql.R* org.apache.spark.sql.S* org.apache.spark.sql.T* org.apache.spark.sql.U* org.apache.spark.sql.V* org.apache.spark.sql.W* org.apache.spark.sql.X* org.apache.spark.sql.Y* org.apache.spark.sql.Z*"
     - stage: hive
       script: ./build/sbt -mem 4096 -Phadoop-2.7 -Phive -Dtest.exclude.tags=org.apache.spark.tags.ExtendedHiveTest "hive/testOnly org.apache.spark.sql.hive.C* org.apache.spark.sql.hive.E* org.apache.spark.sql.hive.H* org.apache.spark.sql.hive.L* org.apache.spark.sql.hive.M* org.apache.spark.sql.hive.P* org.apache.spark.sql.hive.Q* org.apache.spark.sql.hive.H* org.apache.spark.sql.hive.p* org.apache.spark.sql.hive.S* org.apache.spark.sql.hive.I* org.apache.spark.sql.hive.U*"
     - stage: hive-catalyst
