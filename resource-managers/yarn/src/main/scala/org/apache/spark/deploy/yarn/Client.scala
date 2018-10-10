@@ -273,19 +273,10 @@ private[spark] class Client(
     sparkConf.get(ROLLED_LOG_INCLUDE_PATTERN).foreach { includePattern =>
       try {
         val logAggregationContext = Records.newRecord(classOf[LogAggregationContext])
-
-        // These two methods were added in Hadoop 2.6.4, so we still need to use reflection to
-        // avoid compile error when building against Hadoop 2.6.0 ~ 2.6.3.
-        val setRolledLogsIncludePatternMethod =
-          logAggregationContext.getClass.getMethod("setRolledLogsIncludePattern", classOf[String])
-        setRolledLogsIncludePatternMethod.invoke(logAggregationContext, includePattern)
-
+        logAggregationContext.setRolledLogsIncludePattern(includePattern)
         sparkConf.get(ROLLED_LOG_EXCLUDE_PATTERN).foreach { excludePattern =>
-          val setRolledLogsExcludePatternMethod =
-            logAggregationContext.getClass.getMethod("setRolledLogsExcludePattern", classOf[String])
-          setRolledLogsExcludePatternMethod.invoke(logAggregationContext, excludePattern)
+          logAggregationContext.setRolledLogsExcludePattern(excludePattern)
         }
-
         appContext.setLogAggregationContext(logAggregationContext)
       } catch {
         case NonFatal(e) =>
