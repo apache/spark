@@ -275,8 +275,8 @@ of the most common options to set are:
     specific to the application in this directory. Users may want to set this to a unified location like an
     HDFS directory so driver log files can be persisted for later usage. This directory should allow any spark
     user to read/write files and the spark history server user to delete files. Additionally, older logs from
-    this directory are cleaned by Spark History Server if spark.history.fs.cleaner.enabled is true. They are
-    cleaned if they are older than max age configured at spark.history.fs.cleaner.maxAge.
+    this directory are cleaned by Spark History Server if spark.history.fs.driverlog.cleaner.enabled is true.
+    They are cleaned if they are older than max age configured at spark.history.fs.driverlog.cleaner.maxAge.
   </td>
 </tr>
 <tr>
@@ -285,6 +285,7 @@ of the most common options to set are:
   <td>
     If true, spark application running in client mode will sync driver logs to a persistent storage, configured
     in spark.driver.log.dfsDir. If spark.driver.log.dfsDir is not configured, driver logs will not be synced.
+    Additionally, enable the cleaner by setting spark.history.fs.driverlog.cleaner.enabled to true.
   </td>
 </tr>
 <tr>

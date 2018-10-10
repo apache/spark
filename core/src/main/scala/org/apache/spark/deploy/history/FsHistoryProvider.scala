@@ -116,6 +116,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   // Visible for testing
   private[history] val fs: FileSystem = new Path(logDir).getFileSystem(hadoopConf)
 
+  private[history] val driverLogFs: Option[FileSystem] =
+    if (conf.getOption("spark.driver.log.dfsDir").isDefined) {
+      Some(FileSystem.get(hadoopConf))
+    } else {
+      None
+    }
+
   // Used by check event thread and clean log thread.
   // Scheduled thread pool size must be one, otherwise it will have concurrent issues about fs
   // and applications between check task and clean task.
@@ -278,6 +285,16 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         // A task that periodically cleans event logs on disk.
         pool.scheduleWithFixedDelay(
           getRunner(() => cleanLogs()), 0, CLEAN_INTERVAL_S, TimeUnit.SECONDS)
+      }
+
+      driverLogFs.foreach { _ =>
+        if (conf.get(DRIVER_LOG_CLEANER_ENABLED).getOrElse(
+            conf.getBoolean("spark.history.fs.cleaner.enabled", false))) {
+          pool.scheduleWithFixedDelay(getRunner(() => cleanDriverLogs()),
+            0,
+            conf.get(DRIVER_LOG_CLEANER_INTERVAL).getOrElse(CLEAN_INTERVAL_S),
+            TimeUnit.SECONDS)
+        }
       }
     } else {
       logDebug("Background update thread disabled for testing")
@@ -798,7 +815,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         val logPath = new Path(logDir, attempt.logPath)
         listing.delete(classOf[LogInfo], logPath.toString())
         cleanAppData(app.id, attempt.info.attemptId, logPath.toString())
-        deleteLog(logPath)
+        deleteLog(fs, logPath)
       }
 
       if (remaining.isEmpty) {
@@ -816,28 +833,30 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     stale.foreach { log =>
       if (log.appId.isEmpty) {
         logInfo(s"Deleting invalid / corrupt event log ${log.logPath}")
-        deleteLog(new Path(log.logPath))
+        deleteLog(fs, new Path(log.logPath))
         listing.delete(classOf[LogInfo], log.logPath)
       }
     }
     // Clean the blacklist from the expired entries.
     clearBlacklist(CLEAN_INTERVAL_S)
+  }
 
-    // Delete driver logs from the configured spark dfs dir that exceed the configured max age
-    try {
-      val driverLogDir = conf.getOption("spark.driver.log.dfsDir")
-      driverLogDir.foreach { dl =>
-        val appDirs = fs.listLocatedStatus(new Path(dl))
-        while (appDirs.hasNext()) {
-          val appDirStatus = appDirs.next()
-          if (appDirStatus.getModificationTime() < maxTime) {
-            logInfo(s"Deleting expired driver log for: ${appDirStatus.getPath().getName()}")
-            deleteLog(appDirStatus.getPath())
-          }
+  /**
+   * Delete driver logs from the configured spark dfs dir that exceed the configured max age
+   */
+  private[history] def cleanDriverLogs(): Unit = Utils.tryLog {
+    val driverLogDir = conf.getOption("spark.driver.log.dfsDir")
+    driverLogDir.foreach { dl =>
+      val maxTime = clock.getTimeMillis() -
+        conf.get(MAX_DRIVER_LOG_AGE_S).getOrElse(conf.get(MAX_LOG_AGE_S)) * 1000
+      val appDirs = driverLogFs.get.listLocatedStatus(new Path(dl))
+      while (appDirs.hasNext()) {
+        val appDirStatus = appDirs.next()
+        if (appDirStatus.getModificationTime() < maxTime) {
+          logInfo(s"Deleting expired driver log for: ${appDirStatus.getPath().getName()}")
+          deleteLog(driverLogFs.get, appDirStatus.getPath())
         }
       }
-    } catch {
-      case e: Exception => logError("Failed to delete driver logs", e)
     }
   }
 
@@ -997,7 +1016,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       throw new NoSuchElementException(s"Cannot find attempt $attemptId of $appId."))
   }
 
-  private def deleteLog(log: Path): Unit = {
+  private def deleteLog(fs: FileSystem, log: Path): Unit = {
     if (isBlacklisted(log)) {
       logDebug(s"Skipping deleting $log as we don't have permissions on it.")
     } else {

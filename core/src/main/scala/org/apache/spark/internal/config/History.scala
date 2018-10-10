@@ -62,4 +62,16 @@ private[spark] object History {
         "parts of event log files. It can be disabled by setting this config to 0.")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("1m")
+
+  val DRIVER_LOG_CLEANER_ENABLED = ConfigBuilder("spark.history.fs.driverlog.cleaner.enabled")
+    .booleanConf
+    .createOptional
+
+  val DRIVER_LOG_CLEANER_INTERVAL = ConfigBuilder("spark.history.fs.driverlog.cleaner.interval")
+    .timeConf(TimeUnit.SECONDS)
+    .createOptional
+
+  val MAX_DRIVER_LOG_AGE_S = ConfigBuilder("spark.history.fs.driverlog.cleaner.maxAge")
+    .timeConf(TimeUnit.SECONDS)
+    .createOptional
 }

@@ -43,7 +43,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 
   private var localLogFile: String = FileUtils.getFile(
     Utils.getLocalDir(conf), "driver_logs", DRIVER_LOG_FILE).getAbsolutePath()
-  private var writer: DfsAsyncWriter = _
+  private var writer: Option[DfsAsyncWriter] = None
 
   addLogAppender()
 
@@ -66,7 +66,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
     try {
       // Setup a writer which moves the local file to hdfs continuously
       val appId = Utils.sanitizeDirName(conf.getAppId)
-      writer = new DfsAsyncWriter(appId, hadoopConf)
+      writer = Some(new DfsAsyncWriter(appId, hadoopConf))
     } catch {
       case e: Exception =>
         logError(s"Could not sync driver logs to spark dfs", e)
@@ -76,7 +76,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
   def stop(): Unit = {
     try {
       LogManager.getRootLogger().removeAppender(DriverLogger.APPENDER_NAME)
-      writer.closeWriter()
+      writer.foreach(_.closeWriter())
     } catch {
       case e: Exception =>
         logError(s"Error in persisting driver logs", e)
@@ -90,11 +90,15 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
     with Logging {
 
     private var streamClosed = false
+    private val fileSystem: FileSystem = FileSystem.get(hadoopConf)
     private val dfsLogFile: String = {
       val rootDir = conf.get(DRIVER_LOG_DFS_DIR).get.split(",").head
+      if (!fileSystem.exists(new Path(rootDir))) {
+        throw new RuntimeException(s"${rootDir} does not exist." +
+          s" Please create this dir in order to sync driver logs")
+      }
       FileUtils.getFile(rootDir, appId, DRIVER_LOG_FILE).getAbsolutePath()
     }
-    private val fileSystem: FileSystem = FileSystem.get(hadoopConf)
     private var inStream: InputStream = null
     private var outputStream: FSDataOutputStream = null
     try {
@@ -109,7 +113,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
         if (outputStream != null) {
           Utils.tryLogNonFatalError(outputStream.close())
         }
-        logError("Error reading/writing driver logs", e)
+        throw e
     }
     private val tmpBuffer = new Array[Byte](UPLOAD_CHUNK_SIZE)
     private val threadpool = ThreadUtils.newDaemonSingleThreadScheduledExecutor("dfsSyncThread")
@@ -135,6 +139,9 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
     }
 
     def close(): Unit = {
+      if (streamClosed) {
+        return
+      }
       try {
         // Write all remaining bytes
         run()

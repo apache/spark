@@ -30,6 +30,16 @@ import org.apache.spark.util.Utils
 
 class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
 
+  private val DRIVER_LOG_DIR_DEFAULT = "/tmp/hdfs_logs"
+
+  override def beforeAll(): Unit = {
+    FileUtils.forceMkdir(FileUtils.getFile(DRIVER_LOG_DIR_DEFAULT))
+  }
+
+  override def afterAll(): Unit = {
+    JavaUtils.deleteRecursively(FileUtils.getFile(DRIVER_LOG_DIR_DEFAULT))
+  }
+
   test("driver logs are persisted") {
     val sc = getSparkContext()
 
@@ -94,7 +104,7 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
   private def getSparkContext(): SparkContext = {
     val conf = new SparkConf()
     conf.set("spark.local.dir", "/tmp")
-    conf.set(DRIVER_LOG_DFS_DIR, "/tmp/hdfs_logs")
+    conf.set(DRIVER_LOG_DFS_DIR, DRIVER_LOG_DIR_DEFAULT)
     conf.set(DRIVER_LOG_SYNCTODFS, true)
     conf.set(SparkLauncher.SPARK_MASTER, "local")
     conf.set(SparkLauncher.DEPLOY_MODE, "client")
