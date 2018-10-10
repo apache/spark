@@ -43,7 +43,8 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 
   private var localLogFile: String = FileUtils.getFile(
     Utils.getLocalDir(conf), "driver_logs", DRIVER_LOG_FILE).getAbsolutePath()
-  private var writer: Option[DfsAsyncWriter] = None
+  // Visible for testing
+  private[spark] var writer: Option[DfsAsyncWriter] = None
 
   addLogAppender()
 
@@ -86,7 +87,8 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
     }
   }
 
-  private class DfsAsyncWriter(appId: String, hadoopConf: Configuration) extends Runnable
+  // Visible for testing
+  private[spark] class DfsAsyncWriter(appId: String, hadoopConf: Configuration) extends Runnable
     with Logging {
 
     private var streamClosed = false

@@ -84,8 +84,8 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
       logInfo("Log enough data to log file so that it can be flushed")
     }
 
-    // After 5 secs, file contents are synced to Hdfs (which is a local dir for this test)
-    Thread.sleep(6000)
+    // Sync the driver logs manually instead of waiting for scheduler
+    sc._driverLogger.foreach(_.writer.foreach(_.run()))
     val hdfsDir = FileUtils.getFile(sc.getConf.get(DRIVER_LOG_DFS_DIR).get, app_id)
     assert(hdfsDir.exists())
     val hdfsFiles = hdfsDir.listFiles()
