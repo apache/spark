@@ -78,7 +78,7 @@ private final class RowIteratorToScala(val rowIter: RowIterator) extends Iterato
 }
 
 private final class RowIteratorFromScala(scalaIter: Iterator[InternalRow]) extends RowIterator {
-  private[this] var _next: InternalRow = null
+  private[this] var _next: InternalRow = _
   override def advanceNext(): Boolean = {
     if (scalaIter.hasNext) {
       _next = scalaIter.next()

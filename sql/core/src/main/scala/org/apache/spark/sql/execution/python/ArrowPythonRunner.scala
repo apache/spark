@@ -159,9 +159,9 @@ class ArrowPythonRunner(
             stream.readInt() match {
               case SpecialLengths.START_ARROW_STREAM =>
                 reader = new ArrowStreamReader(stream, allocator)
-                root = reader.getVectorSchemaRoot()
-                schema = ArrowUtils.fromArrowSchema(root.getSchema())
-                vectors = root.getFieldVectors().asScala.map { vector =>
+                root = reader.getVectorSchemaRoot
+                schema = ArrowUtils.fromArrowSchema(root.getSchema)
+                vectors = root.getFieldVectors.asScala.map { vector =>
                   new ArrowColumnVector(vector)
                 }.toArray[ColumnVector]
                 read()

@@ -62,7 +62,7 @@ case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends Runn
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val fileList = sparkSession.sparkContext.listFiles()
-    if (files.size > 0) {
+    if (files.nonEmpty) {
       files.map { f =>
         val uri = new URI(f)
         val schemeCorrectedPath = uri.getScheme match {

@@ -74,7 +74,7 @@ abstract class FileFormatDataWriter(
     releaseResources()
     val summary = ExecutedWriteSummary(
       updatedPartitions = updatedPartitions.toSet,
-      stats = statsTrackers.map(_.getFinalStats()))
+      stats = statsTrackers.map(_.getFinalStats))
     WriteTaskResult(committer.commitTask(taskAttemptContext), summary)
   }
 

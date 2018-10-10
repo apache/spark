@@ -567,10 +567,10 @@ class KeyValueGroupedDataset[K, V] private[sql](
   override def toString: String = {
     val builder = new StringBuilder
     val kFields = kExprEnc.schema.map {
-      case f => s"${f.name}: ${f.dataType.simpleString(2)}"
+      f => s"${f.name}: ${f.dataType.simpleString(2)}"
     }
     val vFields = vExprEnc.schema.map {
-      case f => s"${f.name}: ${f.dataType.simpleString(2)}"
+      f => s"${f.name}: ${f.dataType.simpleString(2)}"
     }
     builder.append("KeyValueGroupedDataset: [key: [")
     builder.append(kFields.take(2).mkString(", "))

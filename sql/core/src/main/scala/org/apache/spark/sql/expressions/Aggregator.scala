@@ -97,8 +97,8 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
    * @since 1.6.0
    */
   def toColumn: TypedColumn[IN, OUT] = {
-    implicit val bEncoder = bufferEncoder
-    implicit val cEncoder = outputEncoder
+    implicit val bEncoder: Encoder[BUF] = bufferEncoder
+    implicit val cEncoder: Encoder[OUT] = outputEncoder
 
     val expr =
       AggregateExpression(

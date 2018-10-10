@@ -66,7 +66,7 @@ private[columnar] trait CompressibleColumnBuilder[T <: AtomicType]
   // the row to become unaligned, thus causing crashes.  Until a way of fixing the compression
   // is found to also allow aligned accesses this must be disabled for SPARC.
 
-  protected def isWorthCompressing(encoder: Encoder[T]) = {
+  protected def isWorthCompressing(encoder: Encoder[T]): Boolean = {
     CompressibleColumnBuilder.unaligned && encoder.compressionRatio < 0.8
   }
 

@@ -461,11 +461,11 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   private def convertToDouble(v: Any): Double = v match {
-    case v: Float => v.toDouble
-    case v: Double => v
-    case v: Long => v.toDouble
-    case v: Int => v.toDouble
-    case v => throw new IllegalArgumentException(
+    case f: Float => f.toDouble
+    case d: Double => d
+    case l: Long => l.toDouble
+    case i: Int => i.toDouble
+    case _ => throw new IllegalArgumentException(
       s"Unsupported value type ${v.getClass.getName} ($v).")
   }
 

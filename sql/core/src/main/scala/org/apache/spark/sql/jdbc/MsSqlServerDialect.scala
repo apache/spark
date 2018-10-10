@@ -41,5 +41,5 @@ private object MsSqlServerDialect extends JdbcDialect {
     case _ => None
   }
 
-  override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+  override def isCascadingTruncateTable: Option[Boolean] = Some(false)
 }

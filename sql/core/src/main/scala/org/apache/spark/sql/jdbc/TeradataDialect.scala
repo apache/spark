@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
-
 import org.apache.spark.sql.types._
 
 
@@ -33,7 +31,7 @@ private case object TeradataDialect extends JdbcDialect {
   }
 
   // Teradata does not support cascading a truncation
-  override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+  override def isCascadingTruncateTable: Option[Boolean] = Some(false)
 
   /**
    * The SQL query used to truncate a table. Teradata does not support the 'TRUNCATE' syntax that

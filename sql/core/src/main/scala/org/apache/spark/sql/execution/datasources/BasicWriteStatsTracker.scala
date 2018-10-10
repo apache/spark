@@ -65,7 +65,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
     val path = new Path(filePath)
     val fs = path.getFileSystem(hadoopConf)
     try {
-      Some(fs.getFileStatus(path).getLen())
+      Some(fs.getFileStatus(path).getLen)
     } catch {
       case e: FileNotFoundException =>
         // may arise against eventually consistent object stores
@@ -103,7 +103,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
     numRows += 1
   }
 
-  override def getFinalStats(): WriteTaskStats = {
+  override def getFinalStats: WriteTaskStats = {
     statCurrentFile()
 
     // Reports bytesWritten and recordsWritten to the Spark output metrics.

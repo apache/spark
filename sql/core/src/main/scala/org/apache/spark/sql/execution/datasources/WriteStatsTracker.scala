@@ -83,7 +83,7 @@ trait WriteTaskStatsTracker {
    * @note This may only be called once. Further use of the object may lead to undefined behavior.
    * @return An object of subtype of [[WriteTaskStats]], to be sent to the driver.
    */
-  def getFinalStats(): WriteTaskStats
+  def getFinalStats: WriteTaskStats
 }
 
 

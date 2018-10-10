@@ -117,7 +117,7 @@ object JdbcUtils extends Logging {
   }
 
   def isCascadingTruncateTable(url: String): Option[Boolean] = {
-    JdbcDialects.get(url).isCascadingTruncateTable()
+    JdbcDialects.get(url).isCascadingTruncateTable
   }
 
   /**
