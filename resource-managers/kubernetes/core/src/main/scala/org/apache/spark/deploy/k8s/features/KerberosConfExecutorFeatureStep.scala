@@ -28,12 +28,12 @@ import org.apache.spark.internal.Logging
   * This step is responsible for mounting the DT secret for the executors
   */
 private[spark] class KerberosConfExecutorFeatureStep(
-   kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
-   extends KubernetesFeatureConfigStep with Logging{
+    kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
+    extends KubernetesFeatureConfigStep with Logging {
 
-   private val sparkConf = kubernetesConf.sparkConf
-   private val maybeKrb5CMap = sparkConf.getOption(KRB5_CONFIG_MAP_NAME)
-   require(maybeKrb5CMap.isDefined, "HADOOP_CONF_DIR ConfigMap not found")
+  private val sparkConf = kubernetesConf.sparkConf
+  private val maybeKrb5CMap = sparkConf.getOption(KRB5_CONFIG_MAP_NAME)
+  require(maybeKrb5CMap.isDefined, "HADOOP_CONF_DIR ConfigMap not found")
 
   override def configurePod(pod: SparkPod): SparkPod = {
     logInfo(s"Mounting Resources for Kerberos")

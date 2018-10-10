@@ -226,17 +226,17 @@ private[spark] object Config extends Logging {
       .createWithDefault("2")
 
   val KUBERNETES_KERBEROS_KRB5_FILE =
-    ConfigBuilder("spark.kubernetes.kerberos.krb5.location")
-      .doc("Specify the local location of the krb5 file to be mounted on the driver " +
-        "and executors for Kerberos. Note: For Local files the KDC defined needs to be " +
+    ConfigBuilder("spark.kubernetes.kerberos.krb5.path")
+      .doc("Specify the local location of the krb5.conf file to be mounted on the driver " +
+        "and executors for Kerberos. Note: The KDC defined needs to be " +
         "visible from inside the containers ")
       .stringConf
       .createOptional
 
   val KUBERNETES_KERBEROS_KRB5_CONFIG_MAP =
     ConfigBuilder("spark.kubernetes.kerberos.krb5.configMapName")
-      .doc("Specify the name of the ConfigMap, containing the krb5 file, to be mounted " +
-        "on the driver and executors for Kerberos. Note: For Local files the KDC defined" +
+      .doc("Specify the name of the ConfigMap, containing the krb5.conf file, to be mounted " +
+        "on the driver and executors for Kerberos. Note: The KDC defined" +
         "needs to be visible from inside the containers ")
       .stringConf
       .createOptional
@@ -250,14 +250,14 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_KERBEROS_DT_SECRET_NAME =
     ConfigBuilder("spark.kubernetes.kerberos.tokenSecret.name")
-      .doc("Specify the name of the secret where your existing delegation token is stored. " +
+      .doc("Specify the name of the secret where your existing delegation tokens are stored. " +
         "This removes the need for the job user to provide any keytab for launching a job")
       .stringConf
       .createOptional
 
   val KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY =
     ConfigBuilder("spark.kubernetes.kerberos.tokenSecret.itemKey")
-      .doc("Specify the item key of the data where your existing delegation token is stored. " +
+      .doc("Specify the item key of the data where your existing delegation tokens are stored. " +
         "This removes the need for the job user to provide any keytab for launching a job")
       .stringConf
       .createOptional

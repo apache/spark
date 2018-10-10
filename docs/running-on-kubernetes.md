@@ -821,10 +821,10 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.kerberos.krb5.location</code></td>
+  <td><code>spark.kubernetes.kerberos.krb5.path</code></td>
   <td><code>(none)</code></td>
   <td>
-   Specify the local location of the krb5 file to be mounted on the driver and executors for Kerberos interaction.
+   Specify the local location of the krb5.conf file to be mounted on the driver and executors for Kerberos interaction.
    It is important to note that the KDC defined needs to be visible from inside the containers.
   </td>
 </tr>
@@ -832,7 +832,7 @@ specific to Spark on Kubernetes.
   <td><code>spark.kubernetes.kerberos.krb5.configMapName</code></td>
   <td><code>(none)</code></td>
   <td>
-   Specify the name of the ConfigMap, containing the krb5 file, to be mounted on the driver and executors
+   Specify the name of the ConfigMap, containing the krb5.conf file, to be mounted on the driver and executors
    for Kerberos interaction. The KDC defined needs to be visible from inside the containers. The ConfigMap must also
    be in the same namespace of the driver and executor pods.
   </td>
@@ -849,7 +849,7 @@ specific to Spark on Kubernetes.
   <td><code>spark.kubernetes.kerberos.tokenSecret.name</code></td>
   <td><code>(none)</code></td>
   <td>
-    Specify the name of the secret where your existing delegation token is stored. This removes the need for the job user
+    Specify the name of the secret where your existing delegation tokens are stored. This removes the need for the job user
     to provide any kerberos credentials for launching a job. 
   </td>
 </tr>
@@ -857,7 +857,7 @@ specific to Spark on Kubernetes.
   <td><code>spark.kubernetes.kerberos.tokenSecret.itemKey</code></td>
   <td><code>(none)</code></td>
   <td>
-    Specify the item key of the data where your existing delegation token is stored. This removes the need for the job user 
+    Specify the item key of the data where your existing delegation tokens are stored. This removes the need for the job user 
     to provide any kerberos credentials for launching a job.
   </td>
 </tr>

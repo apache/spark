@@ -27,7 +27,7 @@ import io.fabric8.kubernetes.api.model.Secret
   * - The Job User's username
   */
 private[spark] case class KerberosConfigSpec(
-  dtSecret: Option[Secret],
-  dtSecretName: String,
-  dtSecretItemKey: String,
-  jobUserName: String)
+    dtSecret: Option[Secret],
+    dtSecretName: String,
+    dtSecretItemKey: String,
+    jobUserName: String)

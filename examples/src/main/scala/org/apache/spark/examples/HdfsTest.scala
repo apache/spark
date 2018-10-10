@@ -42,7 +42,7 @@ object HdfsTest {
       println(s"Iteration $iter took ${end-start} ms")
     }
     println(s"File contents: ${file.map(_.toString).take(1).mkString(",").slice(0, 10)}")
-    println(s"Returned length(s) of: ${file.map(_.length).collect().mkString(",")}")
+    println(s"Returned length(s) of: ${file.map(_.length).sum().toString}")
     spark.stop()
   }
 }

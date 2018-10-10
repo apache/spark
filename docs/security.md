@@ -730,10 +730,9 @@ shared by the Driver and its Executors. As such, there are three ways of submitt
 
 In all cases you must define the environment variable: `HADOOP_CONF_DIR` or 
 `spark.kubernetes.hadoop.configMapName` as well as either
-`spark.kubernetes.kerberos.krb5.location` or `spark.kubernetes.kerberos.krb5.configMapName`.
+`spark.kubernetes.kerberos.krb5.path` or `spark.kubernetes.kerberos.krb5.configMapName`.
 
-It also important to note that the KDC needs to be visible from inside the containers if the user uses a local
-krb5 file. 
+It also important to note that the KDC needs to be visible from inside the containers.
 
 If a user wishes to use a remote HADOOP_CONF directory, that contains the Hadoop configuration files, this could be
 achieved by setting `spark.kubernetes.hadoop.configMapName` to a pre-existing ConfigMap.
@@ -748,8 +747,8 @@ achieved by setting `spark.kubernetes.hadoop.configMapName` to a pre-existing Co
     --conf spark.executor.instances=1 \
     --conf spark.app.name=spark-hdfs \
     --conf spark.kubernetes.container.image=spark:latest \
-    --conf spark.kubernetes.kerberos.krb5.locationn=/etc/krb5.conf \
-    local:///opt/spark/examples/jars/spark-examples_<VERSION>-SNAPSHOT.jar \
+    --conf spark.kubernetes.kerberos.krb5.path=/etc/krb5.conf \
+    local:///opt/spark/examples/jars/spark-examples_<VERSION>.jar \
     <HDFS_FILE_LOCATION>
 ```
 2. Submitting with a local Keytab and Principal
@@ -763,8 +762,8 @@ achieved by setting `spark.kubernetes.hadoop.configMapName` to a pre-existing Co
     --conf spark.kubernetes.container.image=spark:latest \
     --conf spark.kerberos.keytab=<KEYTAB_FILE> \
     --conf spark.kerberos.principal=<PRINCIPAL> \
-    --conf spark.kubernetes.kerberos.krb5.location=/etc/krb5.conf \
-    local:///opt/spark/examples/jars/spark-examples_<VERSION>-SNAPSHOT.jar \
+    --conf spark.kubernetes.kerberos.krb5.path=/etc/krb5.conf \
+    local:///opt/spark/examples/jars/spark-examples_<VERSION>.jar \
     <HDFS_FILE_LOCATION>
 ```
 
@@ -779,8 +778,8 @@ achieved by setting `spark.kubernetes.hadoop.configMapName` to a pre-existing Co
     --conf spark.kubernetes.container.image=spark:latest \
     --conf spark.kubernetes.kerberos.tokenSecret.name=<SECRET_TOKEN_NAME> \
     --conf spark.kubernetes.kerberos.tokenSecret.itemKey=<SECRET_ITEM_KEY> \
-    --conf spark.kubernetes.kerberos.krb5.location=/etc/krb5.conf \
-    local:///opt/spark/examples/jars/spark-examples_<VERSION>-SNAPSHOT.jar \
+    --conf spark.kubernetes.kerberos.krb5.path=/etc/krb5.conf \
+    local:///opt/spark/examples/jars/spark-examples_<VERSION>.jar \
     <HDFS_FILE_LOCATION>
 ```
 
@@ -797,7 +796,7 @@ achieved by setting `spark.kubernetes.hadoop.configMapName` to a pre-existing Co
     --conf spark.kubernetes.kerberos.tokenSecret.itemKey=<SECRET_ITEM_KEY> \
     --conf spark.kubernetes.hadoop.configMapName=<HCONF_CONFIG_MAP_NAME> \
     --conf spark.kubernetes.kerberos.krb5.configMapName=<KRB_CONFIG_MAP_NAME> \
-    local:///opt/spark/examples/jars/spark-examples_<VERSION>-SNAPSHOT.jar \
+    local:///opt/spark/examples/jars/spark-examples_<VERSION>.jar \
     <HDFS_FILE_LOCATION>
 ```
 # Event Logging

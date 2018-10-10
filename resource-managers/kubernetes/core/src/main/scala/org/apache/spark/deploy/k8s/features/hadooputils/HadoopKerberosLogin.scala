@@ -34,34 +34,33 @@ import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManag
   * a secret. All this is defined in a KerberosConfigSpec.
   */
 private[spark] object HadoopKerberosLogin {
-   def buildSpec(
-     submissionSparkConf: SparkConf,
-     kubernetesResourceNamePrefix : String,
-     tokenManager: KubernetesHadoopDelegationTokenManager): KerberosConfigSpec = {
-     val hadoopConf = SparkHadoopUtil.get.newConfiguration(submissionSparkConf)
-     // The JobUserUGI will be taken fom the Local Ticket Cache or via keytab+principal
-     // The login happens in the SparkSubmit so login logic is not necessary to include
-     val jobUserUGI = tokenManager.getCurrentUser
-     val originalCredentials = jobUserUGI.getCredentials
-     val (tokenData, renewalInterval) = tokenManager.getDelegationTokens(
-       originalCredentials,
-       submissionSparkConf,
-       hadoopConf)
-     require(tokenData.nonEmpty, "Did not obtain any delegation tokens")
-     val initialTokenDataKeyName = KERBEROS_SECRET_KEY_PREFIX
-     val newSecretName = s"$kubernetesResourceNamePrefix-$KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME"
-     val secretDT =
-       new SecretBuilder()
-         .withNewMetadata()
-           .withName(newSecretName)
-           .endMetadata()
-         .addToData(initialTokenDataKeyName, Base64.encodeBase64String(tokenData))
-         .build()
-
-     KerberosConfigSpec(
-       dtSecret = Some(secretDT),
-       dtSecretName = newSecretName,
-       dtSecretItemKey = initialTokenDataKeyName,
-       jobUserName = jobUserUGI.getShortUserName)
-   }
+  def buildSpec(
+      submissionSparkConf: SparkConf,
+      kubernetesResourceNamePrefix : String,
+      tokenManager: KubernetesHadoopDelegationTokenManager): KerberosConfigSpec = {
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(submissionSparkConf)
+    // The JobUserUGI will be taken fom the Local Ticket Cache or via keytab+principal
+    // The login happens in the SparkSubmit so login logic is not necessary to include
+    val jobUserUGI = tokenManager.getCurrentUser
+    val originalCredentials = jobUserUGI.getCredentials
+    val (tokenData, renewalInterval) = tokenManager.getDelegationTokens(
+      originalCredentials,
+      submissionSparkConf,
+      hadoopConf)
+    require(tokenData.nonEmpty, "Did not obtain any delegation tokens")
+    val initialTokenDataKeyName = KERBEROS_SECRET_KEY
+    val newSecretName = s"$kubernetesResourceNamePrefix-$KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME"
+    val secretDT =
+      new SecretBuilder()
+        .withNewMetadata()
+          .withName(newSecretName)
+          .endMetadata()
+        .addToData(initialTokenDataKeyName, Base64.encodeBase64String(tokenData))
+        .build()
+    KerberosConfigSpec(
+      dtSecret = Some(secretDT),
+      dtSecretName = newSecretName,
+      dtSecretItemKey = initialTokenDataKeyName,
+      jobUserName = jobUserUGI.getShortUserName)
+  }
 }

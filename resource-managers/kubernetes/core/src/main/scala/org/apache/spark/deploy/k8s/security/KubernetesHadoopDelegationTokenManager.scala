@@ -33,22 +33,22 @@ import org.apache.spark.internal.Logging
   * to the driver and executors, when new Tokens are received they overwrite the current Secrets.
   */
 private[spark] class KubernetesHadoopDelegationTokenManager(
-   tokenManager: HadoopDelegationTokenManager) extends Logging {
+    tokenManager: HadoopDelegationTokenManager) extends Logging {
 
-   // HadoopUGI Util methods
-   def getCurrentUser: UserGroupInformation = UserGroupInformation.getCurrentUser
-   def getShortUserName : String = getCurrentUser.getShortUserName
-   def getFileSystem(hadoopConf: Configuration) : FileSystem = FileSystem.get(hadoopConf)
-   def isSecurityEnabled: Boolean = UserGroupInformation.isSecurityEnabled
-   def loginUserFromKeytabAndReturnUGI(principal: String, keytab: String): UserGroupInformation =
-     UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
-   def serializeCreds(creds: Credentials): Array[Byte] = SparkHadoopUtil.get.serialize(creds)
-   def nextRT(rt: Long, conf: SparkConf): Long = SparkHadoopUtil.nextCredentialRenewalTime(rt, conf)
+  // HadoopUGI Util methods
+  def getCurrentUser: UserGroupInformation = UserGroupInformation.getCurrentUser
+  def getShortUserName : String = getCurrentUser.getShortUserName
+  def getFileSystem(hadoopConf: Configuration) : FileSystem = FileSystem.get(hadoopConf)
+  def isSecurityEnabled: Boolean = UserGroupInformation.isSecurityEnabled
+  def loginUserFromKeytabAndReturnUGI(principal: String, keytab: String): UserGroupInformation =
+    UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
+  def serializeCreds(creds: Credentials): Array[Byte] = SparkHadoopUtil.get.serialize(creds)
+  def nextRT(rt: Long, conf: SparkConf): Long = SparkHadoopUtil.nextCredentialRenewalTime(rt, conf)
 
-   def getDelegationTokens(
-    creds: Credentials,
-    conf: SparkConf,
-    hadoopConf: Configuration): (Array[Byte], Long) = {
+  def getDelegationTokens(
+      creds: Credentials,
+      conf: SparkConf,
+      hadoopConf: Configuration): (Array[Byte], Long) = {
     try {
       val rt = tokenManager.obtainDelegationTokens(hadoopConf, creds)
       logDebug(s"Initialized tokens")

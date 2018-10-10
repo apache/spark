@@ -100,7 +100,7 @@ private[spark] object Constants {
     "spark.kubernetes.kerberos.dt-secret-key"
   val KERBEROS_SPARK_USER_NAME =
     "spark.kubernetes.kerberos.spark-user-name"
-  val KERBEROS_SECRET_KEY_PREFIX = "hadoop-tokens"
+  val KERBEROS_SECRET_KEY = "hadoop-tokens"
 
   // Hadoop credentials secrets for the Spark app.
   val SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR = "/mnt/secrets/hadoop-credentials"
