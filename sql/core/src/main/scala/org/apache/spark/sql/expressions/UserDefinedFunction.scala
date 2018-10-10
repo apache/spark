@@ -147,7 +147,7 @@ private[sql] object SparkUserDefinedFunction {
       f: AnyRef,
       dataType: DataType,
       inputSchemas: Option[Seq[ScalaReflection.Schema]]): UserDefinedFunction = {
-    val udf = new UserDefinedFunction(f, dataType, inputSchemas.map(_.map(_.dataType)))
+    val udf = UserDefinedFunction(f, dataType, inputSchemas.map(_.map(_.dataType)))
     udf.nullableTypes = inputSchemas.map(_.map(_.nullable))
     udf
   }

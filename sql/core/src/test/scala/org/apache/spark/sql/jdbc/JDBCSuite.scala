@@ -777,7 +777,7 @@ class JDBCSuite extends QueryTest
     assert(!agg.canHandle("jdbc:h2"))
     assert(agg.getCatalystType(0, "", 1, null) === Some(LongType))
     assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
-    assert(agg.isCascadingTruncateTable() === Some(true))
+    assert(agg.isCascadingTruncateTable === Some(true))
     assert(agg.quoteIdentifier ("Dummy") === "My Dummy quoteIdentifier")
     assert(agg.getTableExistsQuery ("Dummy") === "My Dummy Table")
     assert(agg.getSchemaQuery ("Dummy") === "My Dummy Schema")
@@ -791,13 +791,13 @@ class JDBCSuite extends QueryTest
         typeName: String,
         size: Int,
         md: MetadataBuilder): Option[DataType] = None
-      override def isCascadingTruncateTable(): Option[Boolean] = cascadingTruncateTable
+      override def isCascadingTruncateTable: Option[Boolean] = cascadingTruncateTable
     }
 
     def testDialects(cascadings: List[Option[Boolean]], expected: Option[Boolean]): Unit = {
-      val dialects = cascadings.map(genDialect(_))
+      val dialects = cascadings.map(genDialect)
       val agg = new AggregatedDialect(dialects)
-      assert(agg.isCascadingTruncateTable() === expected)
+      assert(agg.isCascadingTruncateTable === expected)
     }
 
     testDialects(List(Some(true), Some(false), None), Some(true))

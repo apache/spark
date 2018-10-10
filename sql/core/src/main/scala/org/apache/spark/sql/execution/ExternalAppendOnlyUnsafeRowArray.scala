@@ -178,7 +178,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
   abstract class ExternalAppendOnlyUnsafeRowArrayIterator extends Iterator[UnsafeRow] {
     private val expectedModificationsCount = modificationsCount
 
-    protected def isModified(): Boolean = expectedModificationsCount != modificationsCount
+    protected def isModified: Boolean = expectedModificationsCount != modificationsCount
 
     protected def throwExceptionIfModified(): Unit = {
       if (expectedModificationsCount != modificationsCount) {
@@ -194,7 +194,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
 
     private var currentIndex = startIndex
 
-    override def hasNext(): Boolean = !isModified() && currentIndex < numRows
+    override def hasNext(): Boolean = !isModified && currentIndex < numRows
 
     override def next(): UnsafeRow = {
       throwExceptionIfModified()
@@ -211,7 +211,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
 
     private val currentRow = new UnsafeRow(numFieldPerRow)
 
-    override def hasNext(): Boolean = !isModified() && iterator.hasNext
+    override def hasNext(): Boolean = !isModified && iterator.hasNext
 
     override def next(): UnsafeRow = {
       throwExceptionIfModified()

@@ -51,15 +51,13 @@ import org.apache.spark.sql.types._
  * type appropriate to the complex type extractor. In our example, the name of the child expression
  * is "name" and its data type is a [[org.apache.spark.sql.types.StructType]] with a single string
  * field named "first".
- *
- * @param expr the top-level complex type extractor
  */
 private[execution] object SelectedField {
   def unapply(expr: Expression): Option[StructField] = {
     // If this expression is an alias, work on its child instead
     val unaliased = expr match {
       case Alias(child, _) => child
-      case expr => expr
+      case _ => expr
     }
     selectField(unaliased, None)
   }

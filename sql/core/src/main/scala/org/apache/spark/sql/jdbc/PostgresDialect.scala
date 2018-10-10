@@ -38,7 +38,7 @@ private object PostgresDialect extends JdbcDialect {
     } else if (sqlType == Types.OTHER) {
       Some(StringType)
     } else if (sqlType == Types.ARRAY) {
-      val scale = md.build.getLong("scale").toInt
+      val scale = md.build().getLong("scale").toInt
       // postgres array type names start with underscore
       toCatalystType(typeName.drop(1), size, scale).map(ArrayType(_))
     } else None
@@ -85,7 +85,7 @@ private object PostgresDialect extends JdbcDialect {
     s"SELECT 1 FROM $table LIMIT 1"
   }
 
-  override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+  override def isCascadingTruncateTable: Option[Boolean] = Some(false)
 
   /**
    * The SQL query used to truncate a table. For Postgres, the default behaviour is to

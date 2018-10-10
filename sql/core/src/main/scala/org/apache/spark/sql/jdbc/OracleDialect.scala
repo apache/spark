@@ -94,7 +94,7 @@ private case object OracleDialect extends JdbcDialect {
     case _ => value
   }
 
-  override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+  override def isCascadingTruncateTable: Option[Boolean] = Some(false)
 
   /**
    * The SQL query used to truncate a table.

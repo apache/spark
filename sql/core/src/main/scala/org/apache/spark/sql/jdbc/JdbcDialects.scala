@@ -182,7 +182,7 @@ abstract class JdbcDialect extends Serializable {
    * Some[false] : TRUNCATE TABLE does not cause cascading.
    * None: The behavior of TRUNCATE TABLE is unknown (default).
    */
-  def isCascadingTruncateTable(): Option[Boolean] = None
+  def isCascadingTruncateTable: Option[Boolean] = None
 }
 
 /**

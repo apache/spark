@@ -51,7 +51,7 @@ private[text] class TextOptions(@transient private val parameters: CaseInsensiti
 
   // Note that the option 'lineSep' uses a different default value in read and write.
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
-    lineSep.getBytes(encoding.map(Charset.forName(_)).getOrElse(StandardCharsets.UTF_8))
+    lineSep.getBytes(encoding.map(Charset.forName).getOrElse(StandardCharsets.UTF_8))
   }
   val lineSeparatorInWrite: Array[Byte] =
     lineSeparatorInRead.getOrElse("\n".getBytes(StandardCharsets.UTF_8))

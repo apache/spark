@@ -101,7 +101,7 @@ class RowBasedHashMapGenerator(
     def genEqualsForKeys(groupingKeys: Seq[Buffer]): String = {
       groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
         s"""(${ctx.genEqual(key.dataType, CodeGenerator.getValue("row",
-          key.dataType, ordinal.toString()), key.name)})"""
+          key.dataType, ordinal.toString), key.name)})"""
       }.mkString(" && ")
     }
 
@@ -152,7 +152,7 @@ class RowBasedHashMapGenerator(
        |      if (numRows < capacity && !isBatchFull) {
        |        agg_rowWriter.reset();
        |        $resetNullBits
-       |        ${createUnsafeRowForKey};
+       |        $createUnsafeRowForKey;
        |        org.apache.spark.sql.catalyst.expressions.UnsafeRow agg_result
        |          = agg_rowWriter.getRow();
        |        Object kbase = agg_result.getBaseObject();

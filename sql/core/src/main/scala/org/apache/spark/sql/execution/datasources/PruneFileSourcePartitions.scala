@@ -56,7 +56,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
       val partitionSet = AttributeSet(partitionColumns)
       val partitionKeyFilters =
         ExpressionSet(normalizedFilters
-          .filterNot(SubqueryExpression.hasSubquery(_))
+          .filterNot(SubqueryExpression.hasSubquery)
           .filter(_.references.subsetOf(partitionSet)))
 
       if (partitionKeyFilters.nonEmpty) {

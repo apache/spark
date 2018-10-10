@@ -133,7 +133,7 @@ private[sql] object SQLUtils extends Logging {
 
     val cols = (0 until row.length).map(row(_).asInstanceOf[Object]).toArray
     SerDe.writeObject(dos, cols, jvmObjectTracker = null)
-    bos.toByteArray()
+    bos.toByteArray
   }
 
   // Schema for DataFrame of serialized R data
@@ -188,7 +188,7 @@ private[sql] object SQLUtils extends Logging {
     dataType match {
       case 's' =>
         // Read StructType for DataFrame
-        val fields = SerDe.readList(dis, jvmObjectTracker = null).asInstanceOf[Array[Object]]
+        val fields = SerDe.readList(dis, jvmObjectTracker = null)
         Row.fromSeq(fields)
       case _ => null
     }
