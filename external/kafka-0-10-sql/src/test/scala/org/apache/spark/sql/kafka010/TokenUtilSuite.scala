@@ -58,9 +58,9 @@ class TokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
     val adminClientProperties = TokenUtil.createAdminClientProperties(sparkConf)
 
     assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
-      .equals(bootStrapServers))
+      === bootStrapServers)
     assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
-      .equals(plainSecurityProtocol))
+      === plainSecurityProtocol)
     assert(!adminClientProperties.containsKey("ssl.truststore.location"))
     assert(!adminClientProperties.containsKey("ssl.truststore.password"))
   }
@@ -74,11 +74,11 @@ class TokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
     val adminClientProperties = TokenUtil.createAdminClientProperties(sparkConf)
 
     assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
-      .equals(bootStrapServers))
+      === bootStrapServers)
     assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
-      .equals(sslSecurityProtocol))
-    assert(adminClientProperties.get("ssl.truststore.location").equals(trustStoreLocation))
-    assert(adminClientProperties.get("ssl.truststore.password").equals(trustStorePassword))
+      === sslSecurityProtocol)
+    assert(adminClientProperties.get("ssl.truststore.location") === trustStoreLocation)
+    assert(adminClientProperties.get("ssl.truststore.password") === trustStorePassword)
   }
 
   test("createAdminClientProperties without keytab should not set dynamic jaas config") {
@@ -88,9 +88,9 @@ class TokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
     val adminClientProperties = TokenUtil.createAdminClientProperties(sparkConf)
 
     assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
-      .equals(bootStrapServers))
+      === bootStrapServers)
     assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
-      .equals(sslSecurityProtocol))
+      === sslSecurityProtocol)
     assert(!adminClientProperties.containsKey(SaslConfigs.SASL_MECHANISM))
     assert(!adminClientProperties.containsKey(SaslConfigs.SASL_JAAS_CONFIG))
   }
@@ -105,9 +105,9 @@ class TokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
     val adminClientProperties = TokenUtil.createAdminClientProperties(sparkConf)
 
     assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
-      .equals(bootStrapServers))
+      === bootStrapServers)
     assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
-      .equals(sslSecurityProtocol))
+      === sslSecurityProtocol)
     assert(adminClientProperties.containsKey(SaslConfigs.SASL_MECHANISM))
     assert(adminClientProperties.containsKey(SaslConfigs.SASL_JAAS_CONFIG))
   }

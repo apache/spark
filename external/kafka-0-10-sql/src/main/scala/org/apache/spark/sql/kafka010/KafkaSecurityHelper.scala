@@ -49,6 +49,10 @@ private[kafka010] object KafkaSecurityHelper extends Logging {
     }
   }
 
+  /**
+   * Krb5LoginModule package vary in different JVMs.
+   * Please see Hadoop UserGroupInformation for further details.
+   */
   private def getKrb5LoginModuleName(): String = {
     if (System.getProperty("java.vendor").contains("IBM")) {
       "com.ibm.security.auth.module.Krb5LoginModule"
