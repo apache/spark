@@ -534,6 +534,13 @@ private[parquet] class ParquetFilters(
             createFilterHelper(nameToParquetField, rhs, canPartialPushDownConjuncts = false)
         } yield FilterApi.or(lhsFilter, rhsFilter)
 
+      case sources.Not(sources.Or(lhs, rhs)) if canPartialPushDownConjuncts =>
+        createFilterHelper(nameToParquetField,
+          sources.And(sources.Not(lhs), sources.Not(rhs)), canPartialPushDownConjuncts = true)
+
+      case sources.Not(sources.Not(pred)) if canPartialPushDownConjuncts =>
+        createFilterHelper(nameToParquetField, pred, canPartialPushDownConjuncts = true)
+
       case sources.Not(pred) =>
         createFilterHelper(nameToParquetField, pred, canPartialPushDownConjuncts = false)
           .map(FilterApi.not)
