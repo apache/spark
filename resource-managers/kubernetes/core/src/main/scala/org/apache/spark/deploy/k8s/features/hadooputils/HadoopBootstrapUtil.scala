@@ -24,11 +24,11 @@ import scala.collection.JavaConverters._
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model._
 
-import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.SparkPod
+import org.apache.spark.internal.Logging
 
-private[spark] object HadoopBootstrapUtil {
+private[spark] object HadoopBootstrapUtil extends Logging {
 
    /**
     * Mounting the DT secret for both the Driver and the executors
@@ -78,35 +78,38 @@ private[spark] object HadoopBootstrapUtil {
         .build()
     }
 
-     // Breaking up Volume Creation for clarity
-     val configMapVolume = preConfigMapVolume.getOrElse(
-       createConfigMapVolume.getOrElse(
-         throw new SparkException("Must specify krb5.conf file locally or via ConfigMap")
-       )
-     )
+    // Breaking up Volume creation for clarity
+    val configMapVolume = preConfigMapVolume.orElse(createConfigMapVolume)
+    if (configMapVolume.isEmpty) {
+       logInfo("You have not specified a krb5.conf file locally or via a ConfigMap. " +
+         "Make sure that you have the krb5.conf locally on the Driver and Executor images")
+    }
 
-     val kerberizedPod = new PodBuilder(pod.pod)
-       .editOrNewSpec()
+    val kerberizedPodWithDTSecret = new PodBuilder(pod.pod)
+      .editOrNewSpec()
         .addNewVolume()
           .withName(SPARK_APP_HADOOP_SECRET_VOLUME_NAME)
           .withNewSecret()
             .withSecretName(dtSecretName)
             .endSecret()
           .endVolume()
-        .addNewVolumeLike(configMapVolume)
-          .endVolume()
         .endSpec()
-        .build()
+      .build()
 
-     val kerberizedContainer = new ContainerBuilder(pod.container)
+    // Optionally add the krb5.conf ConfigMap
+    val kerberizedPod = configMapVolume.map { cmVolume =>
+      new PodBuilder(kerberizedPodWithDTSecret)
+        .editSpec()
+          .addNewVolumeLike(cmVolume)
+            .endVolume()
+          .endSpec()
+        .build()
+    }.getOrElse(kerberizedPodWithDTSecret)
+
+    val kerberizedContainerWithMounts = new ContainerBuilder(pod.container)
       .addNewVolumeMount()
         .withName(SPARK_APP_HADOOP_SECRET_VOLUME_NAME)
         .withMountPath(SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR)
-        .endVolumeMount()
-      .addNewVolumeMount()
-        .withName(KRB_FILE_VOLUME)
-        .withMountPath(KRB_FILE_DIR_PATH + "/krb5.conf")
-        .withSubPath("krb5.conf")
         .endVolumeMount()
       .addNewEnv()
         .withName(ENV_HADOOP_TOKEN_FILE_LOCATION)
@@ -117,7 +120,22 @@ private[spark] object HadoopBootstrapUtil {
         .withValue(userName)
         .endEnv()
       .build()
-      SparkPod(kerberizedPod, kerberizedContainer)
+
+    // Optionally add the krb5.conf Volume Mount
+    val kerberizedContainer =
+      if (configMapVolume.isDefined) {
+        new ContainerBuilder(kerberizedContainerWithMounts)
+          .addNewVolumeMount()
+            .withName(KRB_FILE_VOLUME)
+            .withMountPath(KRB_FILE_DIR_PATH + "/krb5.conf")
+            .withSubPath("krb5.conf")
+            .endVolumeMount()
+          .build()
+      } else {
+        kerberizedContainerWithMounts
+      }
+
+    SparkPod(kerberizedPod, kerberizedContainer)
   }
 
    /**
@@ -130,9 +148,9 @@ private[spark] object HadoopBootstrapUtil {
   def bootstrapSparkUserPod(sparkUserName: String, pod: SparkPod): SparkPod = {
      val envModifiedContainer = new ContainerBuilder(pod.container)
        .addNewEnv()
-        .withName(ENV_SPARK_USER)
-        .withValue(sparkUserName)
-        .endEnv()
+         .withName(ENV_SPARK_USER)
+         .withValue(sparkUserName)
+         .endEnv()
       .build()
      SparkPod(pod.pod, envModifiedContainer)
   }
@@ -235,9 +253,8 @@ private[spark] object HadoopBootstrapUtil {
       .withNewMetadata()
         .withName(configMapName)
         .endMetadata()
-      .addToData(
-        Map(file.toPath.getFileName.toString ->
-          Files.toString(file, StandardCharsets.UTF_8)).asJava)
+      .addToData(Map(file.toPath.getFileName.toString ->
+        Files.toString(file, StandardCharsets.UTF_8)).asJava)
       .build()
   }
 
