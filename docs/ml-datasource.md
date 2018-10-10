@@ -5,7 +5,7 @@ displayTitle: Data sources
 ---
 
 In this section, we introduce how to use data source in ML to load data.
-Beside some general data sources "parquat", "csv", "json", "jdbc", we also provide some specific data source for ML.
+Beside some general data sources like Parquet, CSV, JSON, JDBC, we also provide some specific data source for ML.
 
 **Table of Contents**
 
@@ -14,13 +14,13 @@ Beside some general data sources "parquat", "csv", "json", "jdbc", we also provi
 
 ## Image data source
 
-This image data source is used to load libsvm data files from directory.
+This image data source is used to load image files from a directory.
+The loaded DataFrame has one StructType column: "image". containing image data stored as image schema.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 [`ImageDataSource`](api/scala/index.html#org.apache.spark.ml.source.image.ImageDataSource)
 implements Spark SQL data source API for loading image data as DataFrame.
-The loaded DataFrame has one StructType column: "image". containing image data stored as image schema.
 
 {% highlight scala %}
 scala> spark.read.format("image").load("data/mllib/images/origin")
@@ -31,7 +31,6 @@ res1: org.apache.spark.sql.DataFrame = [image: struct<origin: string, height: in
 <div data-lang="java" markdown="1">
 [`ImageDataSource`](api/java/org/apache/spark/ml/source/image/ImageDataSource.html)
 implements Spark SQL data source API for loading image data as DataFrame.
-The loaded DataFrame has one StructType column: "image". containing image data stored as image schema.
 
 {% highlight java %}
 Dataset<Row> imagesDF = spark.read().format("image").load("data/mllib/images/origin");
@@ -39,8 +38,7 @@ Dataset<Row> imagesDF = spark.read().format("image").load("data/mllib/images/ori
 </div>
 
 <div data-lang="python" markdown="1">
-In scala we implement Spark SQL data source API for loading image data as DataFrame.
-The loaded DataFrame has one StructType column: "image". containing image data stored as image schema.
+In PySpark we provide Spark SQL data source API for loading image data as DataFrame.
 
 {% highlight python %}
 >>> spark.read.format("image").load("data/mllib/images/origin")
