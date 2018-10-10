@@ -98,7 +98,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       .set("spark.executor.cores", "5")
       .set("spark.executor.memory", "2048")
 
-    // add additional configs from map
     for ((name, value) <- additionalConfigs) {
       sparkConfClone.set(name, value)
     }

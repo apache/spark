@@ -49,12 +49,13 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
   }
 
   test("resource request with null value should not be allowed") {
-    verifySetResourceRequestsExceptionWithNullRequest(List(), Map(CUSTOM_RES_1 -> "123"),
+    verifySetResourceRequestsException(List(), null, Map(CUSTOM_RES_1 -> "123"),
       "requirement failed: Resource parameter should not be null!")
   }
 
   test("resource request with valid value and invalid unit") {
-    verifySetResourceRequestsException(List(CUSTOM_RES_1), Map(CUSTOM_RES_1 -> "123ppp"))
+    verifySetResourceRequestsException(List(CUSTOM_RES_1), createResource,
+      Map(CUSTOM_RES_1 -> "123ppp"), "")
   }
 
   test("resource request with valid value and without unit") {
@@ -144,9 +145,10 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
       include(NEW_CONFIG_DRIVER_MEMORY))
   }
 
-  private def verifySetResourceRequestsSuccessful(definedResourceTypes: List[String],
+  private def verifySetResourceRequestsSuccessful(
+      definedResourceTypes: List[String],
       resourceRequests: Map[String, String],
-      expectedResources: Map[String, ResourceInformation]) = {
+      expectedResources: Map[String, ResourceInformation]): Unit = {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
     ResourceRequestTestHelper.initializeResourceTypes(definedResourceTypes)
 
@@ -160,25 +162,18 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
     }
   }
 
-  private def verifySetResourceRequestsExceptionWithNullRequest(definedResourceTypes: List[String],
-      resourceRequests: Map[String, String], message: String) = {
-    verifySetResourceRequestsException(definedResourceTypes, null, resourceRequests, message)
-  }
-
-  private def verifySetResourceRequestsException(definedResourceTypes: List[String],
-      resourceRequests: Map[String, String]): Unit = {
-    val resource = createResource
-    verifySetResourceRequestsException(definedResourceTypes, resource, resourceRequests, "")
-  }
-
-  private def verifySetResourceRequestsException(definedResourceTypes: List[String],
+  private def verifySetResourceRequestsException(
+      definedResourceTypes: List[String],
       resourceRequests: Map[String, String], message: String): Unit = {
     val resource = createResource
     verifySetResourceRequestsException(definedResourceTypes, resource, resourceRequests, message)
   }
 
-  private def verifySetResourceRequestsException(definedResourceTypes: List[String],
-      resource: Resource, resourceRequests: Map[String, String], message: String) = {
+  private def verifySetResourceRequestsException(
+      definedResourceTypes: List[String],
+      resource: Resource,
+      resourceRequests: Map[String, String],
+      message: String) = {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
     ResourceRequestTestHelper.initializeResourceTypes(definedResourceTypes)
     val thrown = intercept[IllegalArgumentException] {
@@ -189,8 +184,7 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
     }
   }
 
-  private def verifyValidateResourcesException(sparkConf: SparkConf,
-      message: String) = {
+  private def verifyValidateResourcesException(sparkConf: SparkConf, message: String) = {
     val thrown = intercept[SparkException] {
       ResourceRequestHelper.validateResources(sparkConf)
     }

@@ -201,11 +201,17 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
   test("resource request (client mode)") {
-    testResourceRequest(Seq(("fpga", 2), ("gpu", 3)), "client")
+    val sparkConf = new SparkConf().set("spark.submit.deployMode", "client")
+      .set(YARN_AM_RESOURCE_TYPES_PREFIX + "fpga", "2")
+      .set(YARN_AM_RESOURCE_TYPES_PREFIX + "gpu", "3")
+    testResourceRequest(sparkConf, List("gpu", "fpga"), Seq(("fpga", 2), ("gpu", 3)))
   }
 
   test("resource request (cluster mode)") {
-    testResourceRequest(Seq(("fpga", 4), ("gpu", 5)), "cluster")
+    val sparkConf = new SparkConf().set("spark.submit.deployMode", "cluster")
+      .set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "fpga", "4")
+      .set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "gpu", "5")
+    testResourceRequest(sparkConf, List("gpu", "fpga"), Seq(("fpga", 4), ("gpu", 5)))
   }
 
   test("spark.yarn.jars with multiple paths and globs") {
@@ -442,21 +448,12 @@ class ClientSuite extends SparkFunSuite with Matchers {
     classpath(env)
   }
 
-  private def testResourceRequest(expectedResources: Seq[(String, Long)],
-      deployMode: String): Unit = {
+  private def testResourceRequest(
+      sparkConf: SparkConf,
+      resources: List[String],
+      expectedResources: Seq[(String, Long)]): Unit = {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
-    require(deployMode == "client" || deployMode == "cluster",
-      "Deploy mode should be either client or cluster!")
-    ResourceRequestTestHelper.initializeResourceTypes(List("gpu", "fpga"))
-
-    val sparkConf = new SparkConf().set("spark.submit.deployMode", deployMode)
-    if (deployMode == "cluster") {
-      sparkConf.set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "fpga", "4")
-        .set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "gpu", "5")
-    } else if (deployMode == "client") {
-      sparkConf.set(YARN_AM_RESOURCE_TYPES_PREFIX + "fpga", "2")
-        .set(YARN_AM_RESOURCE_TYPES_PREFIX + "gpu", "3")
-    }
+    ResourceRequestTestHelper.initializeResourceTypes(resources)
 
     val args = new ClientArguments(Array())
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.lang.{Integer => JInteger, Long => JLong}
+import java.lang.{Long => JLong}
 import java.lang.reflect.InvocationTargetException
 
 import scala.collection.mutable
@@ -26,9 +26,9 @@ import scala.util.Try
 import org.apache.hadoop.yarn.api.records.Resource
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.deploy.yarn.config.{AM_CORES, AM_MEMORY, DRIVER_CORES, EXECUTOR_CORES, YARN_AM_RESOURCE_TYPES_PREFIX, YARN_DRIVER_RESOURCE_TYPES_PREFIX, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{DRIVER_MEMORY, EXECUTOR_MEMORY}
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 /**
@@ -38,7 +38,6 @@ import org.apache.spark.util.Utils
 private object ResourceRequestHelper extends Logging {
   private val AMOUNT_AND_UNIT_REGEX = "([0-9]+)([A-Za-z]*)".r
   private val RESOURCE_INFO_CLASS = "org.apache.hadoop.yarn.api.records.ResourceInformation"
-  private val ERROR_PREFIX = "Error:"
 
   /**
    * Validates sparkConf and throws a SparkException if any of standard resources (memory or cores)
@@ -56,7 +55,7 @@ private object ResourceRequestHelper extends Logging {
 
     resourceDefinitions.foreach { case (sparkName, resourceRequest) =>
       if (sparkConf.contains(resourceRequest)) {
-        errorMessage.append(s"$ERROR_PREFIX Do not use $resourceRequest, " +
+        errorMessage.append(s"Error: Do not use $resourceRequest, " +
             s"please use $sparkName instead!\n")
       }
     }
