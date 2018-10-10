@@ -2730,7 +2730,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
 object SessionWindowing extends Rule[LogicalPlan] {
   import org.apache.spark.sql.catalyst.dsl.expressions._
 
-  private final val SESSION_COL_NAME = "session"
+  private final val SESSION_COL_NAME = "session_window"
   private final val SESSION_START = "start"
   private final val SESSION_END = "end"
 

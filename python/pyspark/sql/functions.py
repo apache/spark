@@ -1399,7 +1399,7 @@ def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
 
 @since(3.0)
 @ignore_unicode_prefix
-def session(timeColumn, gapDuration):
+def session_window(timeColumn, gapDuration):
     """
     # FIXME: python doc!!
     """
@@ -1410,7 +1410,7 @@ def session(timeColumn, gapDuration):
     sc = SparkContext._active_spark_context
     time_col = _to_java_column(timeColumn)
     check_string_field(gapDuration, "gapDuration")
-    res = sc._jvm.functions.session(time_col, gapDuration)
+    res = sc._jvm.functions.session_window(time_col, gapDuration)
     return Column(res)
 
 

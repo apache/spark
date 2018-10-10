@@ -30,7 +30,7 @@ import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.functions.{count, max, session, sum, window}
+import org.apache.spark.sql.functions.{count, max, session_window, sum, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.util.Utils

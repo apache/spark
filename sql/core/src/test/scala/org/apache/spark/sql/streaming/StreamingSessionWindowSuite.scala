@@ -21,7 +21,7 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.functions.{count, session, sum}
+import org.apache.spark.sql.functions.{count, session_window, sum}
 
 class StreamingSessionWindowSuite extends StreamTest
   with BeforeAndAfter with Matchers with Logging {
@@ -48,7 +48,7 @@ class StreamingSessionWindowSuite extends StreamTest
       .selectExpr("explode(split(value, ' ')) AS sessionId", "eventTime")
 
     val sessionUpdates = events
-      .groupBy(session($"eventTime", "10 seconds") as 'session, 'sessionId)
+      .groupBy(session_window($"eventTime", "10 seconds") as 'session, 'sessionId)
       .agg(count("*").as("numEvents"))
       .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
         "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
@@ -142,7 +142,7 @@ class StreamingSessionWindowSuite extends StreamTest
     val windowedAggregation = inputData.toDF()
       .selectExpr("*")
       .withColumn("eventTime", $"value".cast("timestamp"))
-      .groupBy(session($"eventTime", "5 seconds") as 'session)
+      .groupBy(session_window($"eventTime", "5 seconds") as 'session)
       .agg(count("*") as 'count, sum("value") as 'sum)
       .select($"session".getField("start").cast("long").as[Long],
         $"session".getField("end").cast("long").as[Long], $"count".as[Long], $"sum".as[Long])
@@ -195,7 +195,7 @@ class StreamingSessionWindowSuite extends StreamTest
       .withWatermark("eventTime", "10 seconds")
 
     val sessionUpdates = events
-      .groupBy(session($"eventTime", "10 seconds") as 'session, 'sessionId)
+      .groupBy(session_window($"eventTime", "10 seconds") as 'session, 'sessionId)
       .agg(count("*").as("numEvents"))
       .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
         "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
@@ -287,7 +287,7 @@ class StreamingSessionWindowSuite extends StreamTest
       .selectExpr("*", "CAST(MOD(value, 2) AS INT) AS valuegroup")
       .withColumn("eventTime", $"value".cast("timestamp"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(session($"eventTime", "5 seconds") as 'session, 'valuegroup)
+      .groupBy(session_window($"eventTime", "5 seconds") as 'session, 'valuegroup)
       .agg(count("*") as 'count, sum("value") as 'sum)
       .select($"valuegroup", $"session".getField("start").cast("long").as[Long],
         $"session".getField("end").cast("long").as[Long], $"count".as[Long], $"sum".as[Long])
@@ -331,7 +331,7 @@ class StreamingSessionWindowSuite extends StreamTest
       .selectExpr("*")
       .withColumn("eventTime", $"value".cast("timestamp"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(session($"eventTime", "5 seconds") as 'session)
+      .groupBy(session_window($"eventTime", "5 seconds") as 'session)
       .agg(count("*") as 'count, sum("value") as 'sum)
       .select($"session".getField("start").cast("long").as[Long],
         $"session".getField("end").cast("long").as[Long], $"count".as[Long], $"sum".as[Long])
@@ -381,7 +381,7 @@ class StreamingSessionWindowSuite extends StreamTest
       .withWatermark("eventTime", "10 seconds")
 
     val sessionUpdates = events
-      .groupBy(session($"eventTime", "10 seconds") as 'session, 'sessionId)
+      .groupBy(session_window($"eventTime", "10 seconds") as 'session, 'sessionId)
       .agg(count("*").as("numEvents"))
       .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
         "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
@@ -472,7 +472,7 @@ class StreamingSessionWindowSuite extends StreamTest
       .selectExpr("*", "CAST(MOD(value, 2) AS INT) AS valuegroup")
       .withColumn("eventTime", $"value".cast("timestamp"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(session($"eventTime", "5 seconds") as 'session, 'valuegroup)
+      .groupBy(session_window($"eventTime", "5 seconds") as 'session, 'valuegroup)
       .agg(count("*") as 'count, sum("value") as 'sum)
       .select($"valuegroup", $"session".getField("start").cast("long").as[Long],
         $"session".getField("end").cast("long").as[Long], $"count".as[Long], $"sum".as[Long])
@@ -520,7 +520,7 @@ class StreamingSessionWindowSuite extends StreamTest
       .selectExpr("*")
       .withColumn("eventTime", $"value".cast("timestamp"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(session($"eventTime", "5 seconds") as 'session)
+      .groupBy(session_window($"eventTime", "5 seconds") as 'session)
       .agg(count("*") as 'count, sum("value") as 'sum)
       .select($"session".getField("start").cast("long").as[Long],
         $"session".getField("end").cast("long").as[Long], $"count".as[Long], $"sum".as[Long])

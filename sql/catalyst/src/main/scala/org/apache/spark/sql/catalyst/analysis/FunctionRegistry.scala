@@ -398,7 +398,7 @@ object FunctionRegistry {
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
     expression[TimeWindow]("window"),
-    expression[SessionWindow]("session"),
+    expression[SessionWindow]("session_window"),
 
     // collection functions
     expression[CreateArray]("array"),

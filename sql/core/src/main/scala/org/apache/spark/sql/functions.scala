@@ -3263,10 +3263,10 @@ object functions {
   }
 
   // FIXME: javadoc!
-  def session(timeColumn: Column, gapDuration: String): Column = {
+  def session_window(timeColumn: Column, gapDuration: String): Column = {
     withExpr {
       SessionWindow(timeColumn.expr, gapDuration)
-    }.as("session")
+    }.as("session_window")
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////

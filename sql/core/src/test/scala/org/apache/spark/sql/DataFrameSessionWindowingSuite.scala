@@ -34,10 +34,11 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
       ("2016-03-27 19:39:30", 1, "a")).toDF("time", "value", "id")
 
     checkAnswer(
-      df.groupBy(session($"time", "10 seconds"))
+      df.groupBy(session_window($"time", "10 seconds"))
         .agg(count("*").as("counts"))
-        .orderBy($"session.start".asc)
-        .select($"session.start".cast("string"), $"session.end".cast("string"), $"counts"),
+        .orderBy($"session_window.start".asc)
+        .select($"session_window.start".cast("string"), $"session_window.end".cast("string"),
+          $"counts"),
       Seq(
         Row("2016-03-27 19:39:30", "2016-03-27 19:39:40", 1)
       )
@@ -54,9 +55,9 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
     // whereas time window doesn't
 
     checkAnswer(
-      df.groupBy(session($"time", "10 seconds"))
+      df.groupBy(session_window($"time", "10 seconds"))
         .agg(count("*").as("counts"))
-        .orderBy($"session.start".asc)
+        .orderBy($"session_window.start".asc)
         .select("counts"),
       Seq(Row(2), Row(1))
     )
@@ -78,11 +79,11 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
     // key "b" => (19:39:27 ~ 19:39:37)
 
     checkAnswer(
-      df.groupBy(session($"time", "10 seconds"), 'id)
+      df.groupBy(session_window($"time", "10 seconds"), 'id)
         .agg(count("*").as("counts"), sum("value").as("sum"))
-        .orderBy($"session.start".asc)
-        .selectExpr("CAST(session.start AS STRING)", "CAST(session.end AS STRING)", "id",
-          "counts", "sum"),
+        .orderBy($"session_window.start".asc)
+        .selectExpr("CAST(session_window.start AS STRING)", "CAST(session_window.end AS STRING)",
+          "id", "counts", "sum"),
 
       Seq(
         Row("2016-03-27 19:39:27", "2016-03-27 19:39:37", "b", 1, 4),
@@ -108,11 +109,11 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
     // key "b" => (19:39:27 ~ 19:39:37)
 
     checkAnswer(
-      df.groupBy(session($"time", "10 seconds"), 'id)
+      df.groupBy(session_window($"time", "10 seconds"), 'id)
         .agg(count("*").as("counts"), sumDistinct("value").as("sum"))
-        .orderBy($"session.start".asc)
-        .selectExpr("CAST(session.start AS STRING)", "CAST(session.end AS STRING)", "id",
-          "counts", "sum"),
+        .orderBy($"session_window.start".asc)
+        .selectExpr("CAST(session_window.start AS STRING)", "CAST(session_window.end AS STRING)",
+          "id", "counts", "sum"),
       Seq(
         Row("2016-03-27 19:39:27", "2016-03-27 19:39:37", "b", 1, 4),
         Row("2016-03-27 19:39:34", "2016-03-27 19:39:49", "a", 2, 1),
@@ -137,11 +138,11 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
     // key "b" => (19:39:27 ~ 19:39:37)
 
     checkAnswer(
-      df.groupBy(session($"time", "10 seconds"), 'id)
+      df.groupBy(session_window($"time", "10 seconds"), 'id)
         .agg(sumDistinct("value").as("sum"), sumDistinct("value2").as("sum2"))
-        .orderBy($"session.start".asc)
-        .selectExpr("CAST(session.start AS STRING)", "CAST(session.end AS STRING)", "id",
-          "sum", "sum2"),
+        .orderBy($"session_window.start".asc)
+        .selectExpr("CAST(session_window.start AS STRING)", "CAST(session_window.end AS STRING)",
+          "id", "sum", "sum2"),
       Seq(
         Row("2016-03-27 19:39:27", "2016-03-27 19:39:37", "b", 4, 8),
         Row("2016-03-27 19:39:34", "2016-03-27 19:39:49", "a", 1, 2),
@@ -166,11 +167,11 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
     // b => (19:39:27 ~ 19:39:37), (19:39:39 ~ 19:39:55)
 
     checkAnswer(
-      df.groupBy(session($"time", "10 seconds"), 'id)
+      df.groupBy(session_window($"time", "10 seconds"), 'id)
         .agg(count("*").as("counts"), sum("value").as("sum"))
-        .orderBy($"session.start".asc)
-        .selectExpr("CAST(session.start AS STRING)", "CAST(session.end AS STRING)", "id",
-          "counts", "sum"),
+        .orderBy($"session_window.start".asc)
+        .selectExpr("CAST(session_window.start AS STRING)", "CAST(session_window.end AS STRING)",
+          "id", "counts", "sum"),
 
       Seq(
         Row("2016-03-27 19:39:27", "2016-03-27 19:39:37", "b", 1, 4),
@@ -185,9 +186,10 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
         ("2016-03-27 19:39:34", 1, "a"),
         ("2016-03-27 19:39:56", 2, "a"),
         ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
-      .select(session($"time", "10 seconds"), $"value")
-      .orderBy($"session.start".asc)
-      .select($"session.start".cast("string"), $"session.end".cast("string"), $"value")
+      .select(session_window($"time", "10 seconds"), $"value")
+      .orderBy($"session_window.start".asc)
+      .select($"session_window.start".cast("string"), $"session_window.end".cast("string"),
+        $"value")
 
     val expands = df.queryExecution.optimizedPlan.find(_.isInstanceOf[Expand])
     assert(expands.isEmpty, "Session windows shouldn't require expand")
@@ -208,8 +210,8 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
       ("2016-03-27 19:39:56", 2, Seq("a", "c", "d"))).toDF("time", "value", "ids")
 
     checkAnswer(
-      df.select(session($"time", "10 seconds"), $"value", explode($"ids"))
-        .orderBy($"session.start".asc).select("value"),
+      df.select(session_window($"time", "10 seconds"), $"value", explode($"ids"))
+        .orderBy($"session_window.start".asc).select("value"),
       // first window exploded to two rows for "a", and "b", second window exploded to 3 rows
       Seq(Row(1), Row(1), Row(2), Row(2), Row(2))
     )
@@ -223,8 +225,8 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
       (null, 4)).toDF("time", "value")
 
     checkDataset(
-      df.select(session($"time", "10 seconds"), $"value")
-        .orderBy($"session.start".asc)
+      df.select(session_window($"time", "10 seconds"), $"value")
+        .orderBy($"session_window.start".asc)
         .select("value")
         .as[Int],
       1, 2) // null columns are dropped
@@ -238,7 +240,8 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
       ("2016-03-27 09:00:02", 3),
       ("2016-03-27 09:00:35", 6)).toDF("time", "value")
     val e = intercept[AnalysisException] {
-      df.select(session($"time", "10 second"), session($"time", "15 second")).collect()
+      df.select(session_window($"time", "10 second"), session_window($"time", "15 second"))
+        .collect()
     }
     assert(e.getMessage.contains(
       "Multiple time/session window expressions would result in a cartesian product"))
@@ -250,7 +253,7 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
       ("2016-03-27 19:39:56", 2, Seq("a", "c", "d"))).toDF("time", "value", "ids")
 
     checkAnswer(
-      df.select(session($"time", "10 seconds").as("session_window"), $"value")
+      df.select(session_window($"time", "10 seconds").as("session_window"), $"value")
         .orderBy($"session_window.start".asc)
         .select("value"),
       Seq(Row(1), Row(2))
@@ -273,8 +276,9 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSQLContext
   test("time window in SQL with single string expression") {
     withTempTable { table =>
       checkAnswer(
-        spark.sql(s"""select session(time, "10 seconds"), value from $table""")
-          .select($"session.start".cast(StringType), $"session.end".cast(StringType), $"value"),
+        spark.sql(s"""select session_window(time, "10 seconds"), value from $table""")
+          .select($"session_window.start".cast(StringType), $"session_window.end".cast(StringType),
+            $"value"),
         Seq(
           Row("2016-03-27 19:39:27", "2016-03-27 19:39:37", 4),
           Row("2016-03-27 19:39:34", "2016-03-27 19:39:44", 1),
