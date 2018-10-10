@@ -729,8 +729,7 @@ so that non-local processes can authenticate. These delegation tokens in Kuberne
 shared by the Driver and its Executors. As such, there are three ways of submitting a Kerberos job: 
 
 In all cases you must define the environment variable: `HADOOP_CONF_DIR` or 
-`spark.kubernetes.hadoop.configMapName` as well as either
-`spark.kubernetes.kerberos.krb5.path` or `spark.kubernetes.kerberos.krb5.configMapName`.
+`spark.kubernetes.hadoop.configMapName.`
 
 It also important to note that the KDC needs to be visible from inside the containers.
 

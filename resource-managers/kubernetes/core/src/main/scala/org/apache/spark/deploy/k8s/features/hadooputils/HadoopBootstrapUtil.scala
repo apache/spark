@@ -30,18 +30,18 @@ import org.apache.spark.internal.Logging
 
 private[spark] object HadoopBootstrapUtil extends Logging {
 
-   /**
-    * Mounting the DT secret for both the Driver and the executors
-    *
-    * @param dtSecretName Name of the secret that stores the Delegation Token
-    * @param dtSecretItemKey Name of the Item Key storing the Delegation Token
-    * @param userName Name of the SparkUser to set SPARK_USER
-    * @param fileLocation Optional Location of the krb5 file
-    * @param newKrb5ConfName Optional location of the ConfigMap for Krb5
-    * @param existingKrb5ConfName Optional name of ConfigMap for Krb5
-    * @param pod Input pod to be appended to
-    * @return a modified SparkPod
-    */
+  /**
+   * Mounting the DT secret for both the Driver and the executors
+   *
+   * @param dtSecretName Name of the secret that stores the Delegation Token
+   * @param dtSecretItemKey Name of the Item Key storing the Delegation Token
+   * @param userName Name of the SparkUser to set SPARK_USER
+   * @param fileLocation Optional Location of the krb5 file
+   * @param newKrb5ConfName Optional location of the ConfigMap for Krb5
+   * @param existingKrb5ConfName Optional name of ConfigMap for Krb5
+   * @param pod Input pod to be appended to
+   * @return a modified SparkPod
+   */
   def bootstrapKerberosPod(
       dtSecretName: String,
       dtSecretItemKey: String,
@@ -138,29 +138,29 @@ private[spark] object HadoopBootstrapUtil extends Logging {
     SparkPod(kerberizedPod, kerberizedContainer)
   }
 
-   /**
-    * setting ENV_SPARK_USER when HADOOP_FILES are detected
-    *
-    * @param sparkUserName Name of the SPARK_USER
-    * @param pod Input pod to be appended to
-    * @return a modified SparkPod
-    */
+  /**
+   * setting ENV_SPARK_USER when HADOOP_FILES are detected
+   *
+   * @param sparkUserName Name of the SPARK_USER
+   * @param pod Input pod to be appended to
+   * @return a modified SparkPod
+   */
   def bootstrapSparkUserPod(sparkUserName: String, pod: SparkPod): SparkPod = {
-     val envModifiedContainer = new ContainerBuilder(pod.container)
-       .addNewEnv()
-         .withName(ENV_SPARK_USER)
-         .withValue(sparkUserName)
-         .endEnv()
+    val envModifiedContainer = new ContainerBuilder(pod.container)
+      .addNewEnv()
+        .withName(ENV_SPARK_USER)
+        .withValue(sparkUserName)
+        .endEnv()
       .build()
-     SparkPod(pod.pod, envModifiedContainer)
+    SparkPod(pod.pod, envModifiedContainer)
   }
 
-    /**
-     * Grabbing files in the HADOOP_CONF_DIR
-     *
-     * @param path location of HADOOP_CONF_DIR
-     * @return a list of File object
-     */
+  /**
+   * Grabbing files in the HADOOP_CONF_DIR
+   *
+   * @param path location of HADOOP_CONF_DIR
+   * @return a list of File object
+   */
   def getHadoopConfFiles(path: String): Seq[File] = {
     val dir = new File(path)
     if (dir.isDirectory) {
@@ -170,16 +170,16 @@ private[spark] object HadoopBootstrapUtil extends Logging {
     }
   }
 
-   /**
-    * Bootstraping the container with ConfigMaps that store
-    * Hadoop configuration files
-    *
-    * @param hadoopConfDir directory location of HADOOP_CONF_DIR env
-    * @param newHadoopConfigMapName name of the new configMap for HADOOP_CONF_DIR
-    * @param existingHadoopConfigMapName name of the pre-defined configMap for HADOOP_CONF_DIR
-    * @param pod Input pod to be appended to
-    * @return a modified SparkPod
-    */
+  /**
+   * Bootstraping the container with ConfigMaps that store
+   * Hadoop configuration files
+   *
+   * @param hadoopConfDir directory location of HADOOP_CONF_DIR env
+   * @param newHadoopConfigMapName name of the new configMap for HADOOP_CONF_DIR
+   * @param existingHadoopConfigMapName name of the pre-defined configMap for HADOOP_CONF_DIR
+   * @param pod Input pod to be appended to
+   * @return a modified SparkPod
+   */
   def bootstrapHadoopConfDir(
       hadoopConfDir: Option[String],
       newHadoopConfigMapName: Option[String],
@@ -237,14 +237,14 @@ private[spark] object HadoopBootstrapUtil extends Logging {
     SparkPod(hadoopSupportedPod, hadoopSupportedContainer)
   }
 
-   /**
-    * Builds ConfigMap given the file location of the
-    * krb5.conf file
-    *
-    * @param configMapName name of configMap for krb5
-    * @param fileLocation location of krb5 file
-    * @return a ConfigMap
-    */
+  /**
+   * Builds ConfigMap given the file location of the
+   * krb5.conf file
+   *
+   * @param configMapName name of configMap for krb5
+   * @param fileLocation location of krb5 file
+   * @return a ConfigMap
+   */
   def buildkrb5ConfigMap(
       configMapName: String,
       fileLocation: String): ConfigMap = {
@@ -258,14 +258,14 @@ private[spark] object HadoopBootstrapUtil extends Logging {
       .build()
   }
 
-   /**
-    * Builds ConfigMap given the ConfigMap name
-    * and a list of Hadoop Conf files
-    *
-    * @param hadoopConfigMapName name of hadoopConfigMap
-    * @param hadoopConfFiles list of hadoopFiles
-    * @return a ConfigMap
-    */
+  /**
+   * Builds ConfigMap given the ConfigMap name
+   * and a list of Hadoop Conf files
+   *
+   * @param hadoopConfigMapName name of hadoopConfigMap
+   * @param hadoopConfFiles list of hadoopFiles
+   * @return a ConfigMap
+   */
   def buildHadoopConfigMap(
       hadoopConfigMapName: String,
       hadoopConfFiles: Seq[File]): ConfigMap = {

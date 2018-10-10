@@ -18,14 +18,14 @@ package org.apache.spark.deploy.k8s.features.hadooputils
 
 import io.fabric8.kubernetes.api.model.Secret
 
- /**
-  * Represents a given configuration of the Kerberos Configuration logic
-  * <p>
-  * - The secret containing a DT, either previously specified or built on the fly
-  * - The name of the secret where the DT will be stored
-  * - The data item-key on the secret which correlates with where the current DT data is stored
-  * - The Job User's username
-  */
+/**
+ * Represents a given configuration of the Kerberos Configuration logic
+ * <p>
+ * - The secret containing a DT, either previously specified or built on the fly
+ * - The name of the secret where the DT will be stored
+ * - The data item-key on the secret which correlates with where the current DT data is stored
+ * - The Job User's username
+ */
 private[spark] case class KerberosConfigSpec(
     dtSecret: Option[Secret],
     dtSecretName: String,

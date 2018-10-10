@@ -24,19 +24,19 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
 
- /**
-  * This logic does all the heavy lifting for Delegation Token creation. This step
-  * assumes that the job user has either specified a principal and keytab or ran
-  * $kinit before running spark-submit. By running UGI.getCurrentUser we are able
-  * to obtain the current user, either signed in via $kinit or keytab. With the
-  * Job User principal you then retrieve the delegation token from the NameNode
-  * and store values in DelegationToken. Lastly, the class puts the data into
-  * a secret. All this is defined in a KerberosConfigSpec.
-  */
+/**
+ * This logic does all the heavy lifting for Delegation Token creation. This step
+ * assumes that the job user has either specified a principal and keytab or ran
+ * $kinit before running spark-submit. By running UGI.getCurrentUser we are able
+ * to obtain the current user, either signed in via $kinit or keytab. With the
+ * Job User principal you then retrieve the delegation token from the NameNode
+ * and store values in DelegationToken. Lastly, the class puts the data into
+ * a secret. All this is defined in a KerberosConfigSpec.
+ */
 private[spark] object HadoopKerberosLogin {
   def buildSpec(
       submissionSparkConf: SparkConf,
-      kubernetesResourceNamePrefix : String,
+      kubernetesResourceNamePrefix: String,
       tokenManager: KubernetesHadoopDelegationTokenManager): KerberosConfigSpec = {
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(submissionSparkConf)
     // The JobUserUGI will be taken fom the Local Ticket Cache or via keytab+principal

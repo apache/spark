@@ -24,12 +24,12 @@ import org.apache.spark.deploy.k8s.KubernetesExecutorSpecificConf
 import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
 import org.apache.spark.internal.Logging
 
- /**
-  * This step is responsible for mounting the DT secret for the executors
-  */
+/**
+ * This step is responsible for mounting the DT secret for the executors
+ */
 private[spark] class KerberosConfExecutorFeatureStep(
     kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
-    extends KubernetesFeatureConfigStep with Logging {
+  extends KubernetesFeatureConfigStep with Logging {
 
   private val sparkConf = kubernetesConf.sparkConf
   private val maybeKrb5CMap = sparkConf.getOption(KRB5_CONFIG_MAP_NAME)

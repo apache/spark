@@ -26,13 +26,13 @@ import org.apache.spark.deploy.k8s.KubernetesDriverSpecificConf
 import org.apache.spark.deploy.k8s.features.hadooputils._
 import org.apache.spark.internal.Logging
 
- /**
-  * Runs the necessary Hadoop-based logic based on Kerberos configs and the presence of the
-  * HADOOP_CONF_DIR. This runs various bootstrap methods defined in HadoopBootstrapUtil.
-  */
+/**
+ * Runs the necessary Hadoop-based logic based on Kerberos configs and the presence of the
+ * HADOOP_CONF_DIR. This runs various bootstrap methods defined in HadoopBootstrapUtil.
+ */
 private[spark] class KerberosConfDriverFeatureStep(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf])
-    extends KubernetesFeatureConfigStep with Logging {
+  extends KubernetesFeatureConfigStep with Logging {
 
   require(kubernetesConf.hadoopConfSpec.isDefined,
      "Ensure that HADOOP_CONF_DIR is defined either via env or a pre-defined ConfigMap")
@@ -143,7 +143,6 @@ private[spark] class KerberosConfDriverFeatureStep(
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    // HADOOP_CONF_DIR ConfigMap
     val hadoopConfConfigMap = for {
       hName <- newHadoopConfigMapName
       hFiles <- hadoopConfigurationFiles
@@ -151,14 +150,12 @@ private[spark] class KerberosConfDriverFeatureStep(
       HadoopBootstrapUtil.buildHadoopConfigMap(hName, hFiles)
     }
 
-    // krb5 ConfigMap
     val krb5ConfigMap = krb5File.map { fileLocation =>
       HadoopBootstrapUtil.buildkrb5ConfigMap(
         kubernetesConf.krbConfigMapName,
         fileLocation)
     }
 
-    // Kerberos DT Secret
     val kerberosDTSecret = kerberosConfSpec.flatMap(_.dtSecret)
 
     hadoopConfConfigMap.toSeq ++

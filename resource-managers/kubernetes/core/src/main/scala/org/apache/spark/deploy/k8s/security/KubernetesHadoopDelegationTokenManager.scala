@@ -26,19 +26,19 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 
- /**
-  * The KubernetesHadoopDelegationTokenManager fetches Hadoop delegation tokens
-  * on the behalf of the Kubernetes submission client. The new credentials
-  * (called Tokens when they are serialized) are stored in Secrets accessible
-  * to the driver and executors, when new Tokens are received they overwrite the current Secrets.
-  */
+/**
+ * The KubernetesHadoopDelegationTokenManager fetches Hadoop delegation tokens
+ * on the behalf of the Kubernetes submission client. The new credentials
+ * (called Tokens when they are serialized) are stored in Secrets accessible
+ * to the driver and executors, when new Tokens are received they overwrite the current Secrets.
+ */
 private[spark] class KubernetesHadoopDelegationTokenManager(
     tokenManager: HadoopDelegationTokenManager) extends Logging {
 
   // HadoopUGI Util methods
   def getCurrentUser: UserGroupInformation = UserGroupInformation.getCurrentUser
-  def getShortUserName : String = getCurrentUser.getShortUserName
-  def getFileSystem(hadoopConf: Configuration) : FileSystem = FileSystem.get(hadoopConf)
+  def getShortUserName: String = getCurrentUser.getShortUserName
+  def getFileSystem(hadoopConf: Configuration): FileSystem = FileSystem.get(hadoopConf)
   def isSecurityEnabled: Boolean = UserGroupInformation.isSecurityEnabled
   def loginUserFromKeytabAndReturnUGI(principal: String, keytab: String): UserGroupInformation =
     UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)

@@ -23,14 +23,14 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
 import org.apache.spark.internal.Logging
 
- /**
-  * This step is responsible for bootstraping the container with ConfigMaps
-  * containing Hadoop config files mounted as volumes and an ENV variable
-  * pointed to the mounted file directory.
-  */
+/**
+ * This step is responsible for bootstraping the container with ConfigMaps
+ * containing Hadoop config files mounted as volumes and an ENV variable
+ * pointed to the mounted file directory.
+ */
 private[spark] class HadoopConfExecutorFeatureStep(
     kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
-    extends KubernetesFeatureConfigStep with Logging {
+  extends KubernetesFeatureConfigStep with Logging {
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val sparkConf = kubernetesConf.sparkConf
