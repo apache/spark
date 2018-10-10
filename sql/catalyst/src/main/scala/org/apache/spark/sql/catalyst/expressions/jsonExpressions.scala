@@ -561,8 +561,9 @@ case class JsonToStructs(
       (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
   }
 
+  val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
   @transient lazy val parser = {
-    val parsedOptions = new JSONOptions(options, timeZoneId.get)
+    val parsedOptions = new JSONOptions(options, timeZoneId.get, nameOfCorruptRecord)
     val mode = parsedOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
       throw new IllegalArgumentException(s"from_json() doesn't support the ${mode.name} mode. " +

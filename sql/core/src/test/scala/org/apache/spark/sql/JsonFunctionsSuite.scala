@@ -21,6 +21,7 @@ import collection.JavaConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -550,25 +551,31 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("from_json invalid json - check modes") {
-    val df = Seq("""{"a" 1}""", """{"a": 2}""").toDS()
-    val schema = new StructType().add("a", IntegerType)
+    withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
+      val schema = new StructType()
+        .add("a", IntegerType)
+        .add("b", IntegerType)
+        .add("_unparsed", StringType)
+      val badRec = """{"a" 1, "b": 11}"""
+      val df = Seq(badRec, """{"a": 2, "b": 12}""").toDS()
 
-    checkAnswer(
-      df.select(from_json($"value", schema, Map("mode" -> "PERMISSIVE"))),
-      Row(Row(null)) :: Row(Row(2)) :: Nil)
+      checkAnswer(
+        df.select(from_json($"value", schema, Map("mode" -> "PERMISSIVE"))),
+        Row(Row(null, null, badRec)) :: Row(Row(2, 12, null)) :: Nil)
 
-    val exception1 = intercept[SparkException] {
-      df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))).collect()
-    }.getMessage
-    assert(exception1.contains(
-      "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+      val exception1 = intercept[SparkException] {
+        df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))).collect()
+      }.getMessage
+      assert(exception1.contains(
+        "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
 
-    val exception2 = intercept[SparkException] {
-      df.select(from_json($"value", schema, Map("mode" -> "DROPMALFORMED")))
-        .collect()
-    }.getMessage
-    assert(exception2.contains(
-      "from_json() doesn't support the DROPMALFORMED mode. " +
-      "Acceptable modes are PERMISSIVE and FAILFAST."))
+      val exception2 = intercept[SparkException] {
+        df.select(from_json($"value", schema, Map("mode" -> "DROPMALFORMED")))
+          .collect()
+      }.getMessage
+      assert(exception2.contains(
+        "from_json() doesn't support the DROPMALFORMED mode. " +
+          "Acceptable modes are PERMISSIVE and FAILFAST."))
+    }
   }
 }
