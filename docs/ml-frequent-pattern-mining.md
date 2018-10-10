@@ -85,3 +85,48 @@ Refer to the [R API docs](api/R/spark.fpGrowth.html) for more details.
 </div>
 
 </div>
+
+## PrefixSpan
+
+PrefixSpan is a sequential pattern mining algorithm described in
+[Pei et al., Mining Sequential Patterns by Pattern-Growth: The
+PrefixSpan Approach](http://dx.doi.org/10.1109%2FTKDE.2004.77). We refer
+the reader to the referenced paper for formalizing the sequential
+pattern mining problem.
+
+`spark.ml`'s PrefixSpan takes the following parameters:
+
+* `minSupport`: the minimum support required to be considered a frequent
+  sequential pattern.
+* `maxPatternLength`: the maximum length of a frequent sequential
+  pattern. Any frequent pattern exceeding this length will not be
+  included in the results.
+* `maxLocalProjDBSize`: the maximum number of items allowed in a
+  prefix-projected database before local iterative processing of the
+  projected database begins. This parameter should be tuned with respect
+  to the size of your executors.
+
+**Examples**
+
+The following example illustrates PrefixSpan running on the sequences
+(using same notation as Pei et al):
+
+~~~
+  <(12)3>
+  <1(32)(12)>
+  <(12)5>
+  <6>
+~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+[`ML PrefixSpan`](api/scala/index.html#org.apache.spark.ml.fpm.PrefixSpan) is a wrapper of [`MLlib PrefixSpan`](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpan) which implements the algorithm.
+`PrefixSpan.findFrequentSequentialPatterns` would pass all parameters to [`MLlib PrefixSpan`](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpan).
+
+Refer to the [`ML PrefixSpan  Scala docs` Scala docs](api/scala/index.html#org.apache.spark.ml.fpm.PrefixSpan), [`MLlib PrefixSpan  Scala docs`](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpan) and [`MLlib PrefixSpanModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpanModel) for details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/PrefixSpanExample.scala %}
+
+</div>
+</div>
