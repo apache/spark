@@ -356,7 +356,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     withTempPath { file =>
       val cls = classOf[SimpleWriteOnlyDataSource]
       val path = file.getCanonicalPath
-      val df = spark.range(5).select($"id", $"id")
+      val df = spark.range(5).select('id as 'i, -'id as 'j)
       try {
         df.write.format(cls.getName).option("path", path).mode("error").save()
         df.write.format(cls.getName).option("path", path).mode("overwrite").save()
