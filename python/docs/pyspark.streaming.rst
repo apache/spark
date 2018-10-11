@@ -22,10 +22,3 @@ pyspark.streaming.kinesis module
     :members:
     :undoc-members:
     :show-inheritance:
-
-pyspark.streaming.flume.module
-------------------------------
-.. automodule:: pyspark.streaming.flume
-    :members:
-    :undoc-members:
-    :show-inheritance:
