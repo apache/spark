@@ -104,9 +104,27 @@ private[parquet] class ParquetFilters(
     Binary.fromConstantByteArray(fixedLengthBytes, 0, numBytes)
   }
 
-  val reverseAdjustMillis = (x: Any) => DateTimeUtils.toMillis(DateTimeUtils.convertTz(
-    DateTimeUtils.fromMillis(x.asInstanceOf[Timestamp].getTime),
-    DateTimeUtils.TimeZoneUTC, sessionLocalTz)).asInstanceOf[JLong]
+  private def timestampValue(timestampType: TimestampLogicalTypeAnnotation, v: Any): JLong =
+    if (timestampType.getUnit == TimeUnit.MICROS) {
+      Option(v).map(
+        if (timestampType.isAdjustedToUTC) {
+          t => DateTimeUtils.fromJavaTimestamp(t.asInstanceOf[Timestamp])
+              .asInstanceOf[JLong]
+        } else {
+          t => DateTimeUtils.convertTz(
+              DateTimeUtils.fromJavaTimestamp(t.asInstanceOf[Timestamp]),
+              DateTimeUtils.TimeZoneUTC, sessionLocalTz).asInstanceOf[JLong]
+        }).orNull
+    } else {
+      Option(v).map(
+        if (timestampType.isAdjustedToUTC) {
+          _.asInstanceOf[Timestamp].getTime.asInstanceOf[JLong]
+        } else {
+          t => DateTimeUtils.toMillis(DateTimeUtils.convertTz(
+            DateTimeUtils.fromMillis(t.asInstanceOf[Timestamp].getTime),
+            DateTimeUtils.TimeZoneUTC, sessionLocalTz)).asInstanceOf[JLong]
+        }).orNull
+    }
 
   private val makeEq: PartialFunction[ParquetSchemaType, (String, Any) => FilterPredicate] = {
     case ParquetBooleanType =>
@@ -141,30 +159,9 @@ private[parquet] class ParquetFilters(
           Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
     case ParquetSchemaType(logicalType, _class, INT64, _) if pushDownTimestamp &&
       _class == classOf[TimestampLogicalTypeAnnotation] =>
-        if (logicalType.asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MICROS) {
-          val timestampType = logicalType.asInstanceOf[TimestampLogicalTypeAnnotation]
-          (n: String, v: Any) => FilterApi.eq(
-            longColumn(n),
-            Option(v).map(
-              if (timestampType.isAdjustedToUTC) {
-                t => DateTimeUtils.fromJavaTimestamp(t.asInstanceOf[Timestamp])
-                  .asInstanceOf[JLong]
-              } else {
-                t => DateTimeUtils.convertTz(
-                  DateTimeUtils.fromJavaTimestamp(t.asInstanceOf[Timestamp]),
-                  DateTimeUtils.TimeZoneUTC, sessionLocalTz).asInstanceOf[JLong]
-              }).orNull)
-        } else {
-          val timestampType = logicalType.asInstanceOf[TimestampLogicalTypeAnnotation]
-          (n: String, v: Any) => FilterApi.eq(
-            longColumn(n),
-            Option(v).map(
-              if (timestampType.isAdjustedToUTC) {
-                _.asInstanceOf[Timestamp].getTime.asInstanceOf[JLong]
-              } else {
-                reverseAdjustMillis
-              }).orNull)
-        }
+      (n: String, v: Any) => FilterApi.eq(
+        longColumn(n),
+        timestampValue(logicalType.asInstanceOf[TimestampLogicalTypeAnnotation], v))
     case ParquetSchemaType(_, _class, INT32, _) if pushDownDecimal &&
       _class == classOf[DecimalLogicalTypeAnnotation] =>
         (n: String, v: Any) => FilterApi.eq(
@@ -210,18 +207,10 @@ private[parquet] class ParquetFilters(
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
     case ParquetSchemaType(logicalType, _class, INT64, _) if pushDownTimestamp &&
       _class == classOf[TimestampLogicalTypeAnnotation] =>
-        if (logicalType.asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MICROS) {
-          (n: String, v: Any) =>
-            FilterApi.notEq(
-              longColumn(n),
-              Option(v).map(t => DateTimeUtils.fromJavaTimestamp(t.asInstanceOf[Timestamp])
-                .asInstanceOf[JLong]).orNull)
-        } else {
-          (n: String, v: Any) =>
-            FilterApi.notEq(
-              longColumn(n),
-              Option(v).map(_.asInstanceOf[Timestamp].getTime.asInstanceOf[JLong]).orNull)
-        }
+      (n: String, v: Any) =>
+        FilterApi.notEq(
+          longColumn(n),
+          timestampValue(logicalType.asInstanceOf[TimestampLogicalTypeAnnotation], v))
     case ParquetSchemaType(_, _class, INT32, _) if pushDownDecimal &&
       _class == classOf[DecimalLogicalTypeAnnotation] =>
         (n: String, v: Any) => FilterApi.notEq(
@@ -356,17 +345,10 @@ private[parquet] class ParquetFilters(
         FilterApi.gt(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
     case ParquetSchemaType(logicalType, _class, INT64, _) if pushDownTimestamp &&
       _class == classOf[TimestampLogicalTypeAnnotation] =>
-        if (logicalType.asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MICROS) {
-          (n: String, v: Any) =>
-            FilterApi.gt(
-              longColumn(n),
-              DateTimeUtils.fromJavaTimestamp(v.asInstanceOf[Timestamp]).asInstanceOf[JLong])
-        } else {
-          (n: String, v: Any) =>
-            FilterApi.gt(
-              longColumn(n),
-              v.asInstanceOf[Timestamp].getTime.asInstanceOf[JLong])
-        }
+      (n: String, v: Any) =>
+        FilterApi.gt(
+          longColumn(n),
+          timestampValue(logicalType.asInstanceOf[TimestampLogicalTypeAnnotation], v))
     case ParquetSchemaType(_, _class, INT32, _) if pushDownDecimal &&
       _class == classOf[DecimalLogicalTypeAnnotation] =>
       (n: String, v: Any) =>
@@ -403,17 +385,10 @@ private[parquet] class ParquetFilters(
         FilterApi.gtEq(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
     case ParquetSchemaType(logicalType, _class, INT64, _) if pushDownTimestamp &&
       _class == classOf[TimestampLogicalTypeAnnotation] =>
-        if (logicalType.asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MICROS) {
-          (n: String, v: Any) =>
-            FilterApi.gtEq(
-              longColumn(n),
-              DateTimeUtils.fromJavaTimestamp(v.asInstanceOf[Timestamp]).asInstanceOf[JLong])
-        } else {
-          (n: String, v: Any) =>
-            FilterApi.gtEq(
-              longColumn(n),
-              v.asInstanceOf[Timestamp].getTime.asInstanceOf[JLong])
-        }
+      (n: String, v: Any) =>
+        FilterApi.gtEq(
+          longColumn(n),
+          timestampValue(logicalType.asInstanceOf[TimestampLogicalTypeAnnotation], v))
     case ParquetSchemaType(_, _class, INT32, _) if pushDownDecimal &&
       _class == classOf[DecimalLogicalTypeAnnotation] =>
       (n: String, v: Any) =>

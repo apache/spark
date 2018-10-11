@@ -27,7 +27,7 @@ import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -261,32 +261,54 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
     })
   }
 
+  //          predicates to test for
+  //          s"${column._2} > to_timestamp('2017-10-29 00:45:00.0')"
+  //          s"${column._2} >= to_timestamp('2017-10-29 00:45:00.0')"
+  //          s"${column._2} != to_timestamp('1970-01-01 00:00:55.0')"
   test("parquet timestamp predicate pushdown") {
     val timestampPath = Thread.currentThread()
       .getContextClassLoader.getResource("test-data/timestamp_pushdown.parq").toURI.getPath
-    val textFile = Thread.currentThread()
-      .getContextClassLoader.getResource("test-data/timestamp_pushdown.txt").toURI.getPath
+
+    def verifyPredicate(dataFrame: DataFrame, column: String,
+                        item: String, predicate: String, vectorized: Boolean): Unit = {
+      val filter = s"$column $predicate to_timestamp('$item')"
+      withSQLConf(
+        (SQLConf.PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED.key, "true")
+      ) {
+        val withPushdown = dataFrame.where(filter).collect
+        withSQLConf(
+          (SQLConf.PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED.key, "false")
+        ) {
+          val withoutPushdown = dataFrame.where(filter).collect
+          withClue(s"vectorized = $vectorized, column = ${column}, item = $item") {
+            assert(withPushdown === withoutPushdown)
+          }
+        }
+      }
+    }
 
     withTempPath { tableDir =>
-      val textValues = spark.read
-        .option("inferSchema", false)
-        .option("header", false)
-        .option("delimiter", ";").csv(textFile).collect
       FileUtils.copyFile(new File(timestampPath), new File(tableDir, "part-00001.parq"))
 
       Seq(false, true).foreach { vectorized =>
         withSQLConf(
           (SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized.toString())
         ) {
-          Seq((1, "millisUtc"), (2, "millisNonUtc"), (3, "microsUtc"), (4, "microsNonUtc"))
-            .foreach(column => textValues.map(row => row.getString(column._1)).foreach(item => {
-              val readBack = spark.read.parquet(tableDir.getAbsolutePath)
-                .select(column._2).distinct().where(s"${column._2} = '$item'").collect
-              withClue(s"vectorized = $vectorized, column = ${column._2}, item = $item") {
-                assert(readBack.length === 1)
-                assert(readBack(0).getTimestamp(0).toString === item)
-              }
-            }))
+          val losAngeles = spark.read.parquet(tableDir.getAbsolutePath).select("inLosAngeles")
+            .collect.map(_.getString(0))
+          val utc = spark.read.parquet(tableDir.getAbsolutePath).select("inUtc")
+            .collect.map(_.getString(0))
+          val singapore = spark.read.parquet(tableDir.getAbsolutePath).select("inPerth")
+            .collect.map(_.getString(0))
+          Seq(losAngeles, utc, singapore).foreach(values => values.foreach(item =>
+            Seq("millisUtc", "millisNonUtc", "microsUtc", "microsNonUtc").foreach(column => {
+              val dataFrame = spark.read.parquet(tableDir.getAbsolutePath).select(column)
+              verifyPredicate(dataFrame, column, item, "=", vectorized)
+              verifyPredicate(dataFrame, column, item, "!=", vectorized)
+              verifyPredicate(dataFrame, column, item, ">", vectorized)
+              verifyPredicate(dataFrame, column, item, ">=", vectorized)
+            })
+          ))
         }
       }
     }
