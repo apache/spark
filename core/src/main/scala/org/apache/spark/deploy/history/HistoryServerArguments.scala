@@ -34,26 +34,25 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
 
   @tailrec
   private def parse(args: List[String]): Unit = {
-    if (args.length == 1) {
-      setLogDirectory(args.head)
-    } else {
-      args match {
-        case ("--dir" | "-d") :: value :: tail =>
-          setLogDirectory(value)
-          parse(tail)
+    args match {
+      case ("--dir" | "-d") :: value :: tail =>
+        setLogDirectory(value)
+        parse(tail)
 
-        case ("--help" | "-h") :: tail =>
-          printUsageAndExit(0)
+      case ("--help" | "-h") :: tail =>
+        printUsageAndExit(0)
 
-        case ("--properties-file") :: value :: tail =>
-          propertiesFile = value
-          parse(tail)
+      case ("--properties-file") :: value :: tail =>
+        propertiesFile = value
+        parse(tail)
 
-        case Nil =>
+      case dir :: Nil =>
+        setLogDirectory(value = dir)
 
-        case _ =>
-          printUsageAndExit(1)
-      }
+      case Nil =>
+
+      case _ =>
+        printUsageAndExit(1)
     }
   }
 
