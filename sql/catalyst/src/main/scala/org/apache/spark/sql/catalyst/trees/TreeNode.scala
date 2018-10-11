@@ -456,7 +456,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case other => other :: Nil
   }.mkString(", ")
 
-  /** ONE line description of this node. */
+  /**
+   * ONE line description of this node.
+   * @param maxFields Maximum number of fields that will be converted to strings.
+   *                  Any elements beyond the limit will be dropped.
+   *                  `None` means the limit is defined by the SQL config
+   *                  `spark.sql.debug.maxToStringFields`.
+   */
   def simpleString(maxFields: Option[Int]): String = {
     s"$nodeName ${argString(maxFields)}".trim
   }
