@@ -184,6 +184,10 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
+  private[spark] val KUBE_RENEWAL = ConfigBuilder("spark.kubernetes.kerberos.tokenRenewer.enabled")
+    .booleanConf
+    .createOptional
+
   private[spark] val MAX_TASK_FAILURES =
     ConfigBuilder("spark.task.maxFailures")
       .intConf
