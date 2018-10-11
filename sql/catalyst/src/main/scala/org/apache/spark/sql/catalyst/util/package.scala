@@ -194,7 +194,7 @@ package object util extends Logging {
       if (truncationWarningPrinted.compareAndSet(false, true)) {
         logWarning(
           "Truncated the string representation of a plan since it was too large. This " +
-            "behavior can be adjusted by setting 'spark.debug.maxToStringFields' in SparkEnv.conf.")
+            s"behavior can be adjusted by setting '${SQLConf.MAX_TO_STRING_FIELDS.key}'")
       }
       val numFields = math.max(0, maxNumFields - 1)
       seq.take(numFields).mkString(
