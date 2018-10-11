@@ -170,6 +170,14 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     }
   }
 
+  test("JDBC query float-point number") {
+    withJdbcStatement() { statement =>
+      val resultSet = statement.executeQuery("SELECT CAST(1.23 AS FLOAT)")
+      resultSet.next()
+      assert(resultSet.getString(1) === "1.23")
+    }
+  }
+
   test("Checks Hive version") {
     withJdbcStatement() { statement =>
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
