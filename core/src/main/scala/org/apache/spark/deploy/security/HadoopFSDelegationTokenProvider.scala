@@ -127,8 +127,8 @@ private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: Configuration
       filesystems: Set[FileSystem]): Option[Long] = {
     // In Yarn: you cannot use the tokens generated with renewer yarn. Trying to renew
     // those will fail with an access control issue. So we create new tokens with the logged in
-    // user as renewer. In Kubernetes: you may prefer to achieve the renewal interval, but
-    // you are not required to fetch a new DT, as does Yarn.
+    // user as renewer. In Kubernetes: you may prefer to retrieve the renewal interval, but
+    // you are not required to fetch a second DT, as does Yarn.
     val renewIntervals = sparkConf.get(KUBE_RENEWAL).map { boolConf =>
       if (boolConf) {
         getIntervalGivenCreds(hadoopConf, existingCreds)
