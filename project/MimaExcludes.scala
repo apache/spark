@@ -36,6 +36,8 @@ object MimaExcludes {
 
   // Exclude rules for 3.0.x
   lazy val v30excludes = v24excludes ++ Seq(
+    // [SPARK-25362][JavaAPI] Replace Spark Optional class with Java Optional
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.Optional")
   )
 
   // Exclude rules for 2.4.x
