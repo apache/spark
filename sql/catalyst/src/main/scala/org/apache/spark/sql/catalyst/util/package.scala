@@ -172,23 +172,6 @@ package object util extends Logging {
     builder.toString()
   }
 
-  /**
-   * The performance overhead of creating and logging strings for wide schemas can be large. To
-   * limit the impact, we bound the number of fields to include by default. This can be overridden
-   * by setting the 'spark.debug.maxToStringFields' conf in SparkEnv or by settings the SQL config
-   * `spark.sql.debug.maxToStringFields`.
-   */
-  private[spark] def maxNumToStringFields: Int = {
-    val legacyLimit = if (SparkEnv.get != null) {
-      SparkEnv.get.conf.get(config.MAX_TO_STRING_FIELDS)
-    } else {
-      config.MAX_TO_STRING_FIELDS.defaultValue.get
-    }
-    val sqlConfLimit = SQLConf.get.maxToStringFields
-
-    Math.max(sqlConfLimit, legacyLimit)
-  }
-
   /** Whether we have warned about plan string truncation yet. */
   private val truncationWarningPrinted = new AtomicBoolean(false)
 
@@ -204,7 +187,7 @@ package object util extends Logging {
       sep: String,
       end: String,
       maxFields: Option[Int]): String = {
-    val maxNumFields = maxFields.getOrElse(maxNumToStringFields)
+    val maxNumFields = maxFields.getOrElse(SQLConf.get.maxToStringFields)
     if (seq.length > maxNumFields) {
       if (truncationWarningPrinted.compareAndSet(false, true)) {
         logWarning(

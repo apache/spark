@@ -647,14 +647,4 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
-
-  private[spark] val MAX_TO_STRING_FIELDS =
-    ConfigBuilder("spark.debug.maxToStringFields")
-      .internal()
-      .doc("Maximum number of fields of sequence-like entries that can be converted to strings " +
-        "in debug output. Any elements beyond the limit will be dropped and replaced by a" +
-        """ "... N more fields" placeholder. The config will be removed in Spark 3.0.""")
-      .intConf
-      .checkValue(v => v > 0, "The value should be a positive integer.")
-      .createWithDefault(25)
 }
