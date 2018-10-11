@@ -26,9 +26,10 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan,
-    ScriptTransformation}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, InsertIntoDir, InsertIntoTable, LogicalPlan,
+    ScriptTransformation, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.{CreateTable, LogicalRelation}
@@ -115,26 +116,45 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
 
 class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case filterPlan @ Filter(_, SubqueryAlias(_, relation: HiveTableRelation)) =>
+      val predicates = PhysicalOperation.unapply(filterPlan).map(_._2).getOrElse(Nil)
+      computeTableStats(relation, predicates)
     case relation: HiveTableRelation
         if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
-      val table = relation.tableMeta
-      val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
-        try {
-          val hadoopConf = session.sessionState.newHadoopConf()
-          val tablePath = new Path(table.location)
-          val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
-          fs.getContentSummary(tablePath).getLength
-        } catch {
-          case e: IOException =>
-            logWarning("Failed to get table size from hdfs.", e)
-            session.sessionState.conf.defaultSizeInBytes
-        }
-      } else {
-        session.sessionState.conf.defaultSizeInBytes
-      }
+      computeTableStats(relation)
+  }
 
-      val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
-      relation.copy(tableMeta = withStats)
+  private def computeTableStats(
+      relation: HiveTableRelation,
+      predicates: Seq[Expression] = Nil): LogicalPlan = {
+    val table = relation.tableMeta
+    val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
+      try {
+        val hadoopConf = session.sessionState.newHadoopConf()
+        val tablePath = new Path(table.location)
+        val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
+        BigInt(fs.getContentSummary(tablePath).getLength)
+      } catch {
+        case e: IOException =>
+          logWarning("Failed to get table size from hdfs.", e)
+          getSizeInBytesFromTablePartitions(table.identifier, predicates)
+      }
+    } else {
+      getSizeInBytesFromTablePartitions(table.identifier, predicates)
+    }
+    val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = sizeInBytes)))
+    relation.copy(tableMeta = withStats)
+  }
+
+  private def getSizeInBytesFromTablePartitions(
+      tableIdentifier: TableIdentifier,
+      predicates: Seq[Expression] = Nil): BigInt = {
+    session.sessionState.catalog.listPartitionsByFilter(tableIdentifier, predicates) match {
+      case Nil => BigInt(0L)
+      case partitions if partitions.exists(_.stats.isEmpty) =>
+        BigInt(session.sessionState.conf.defaultSizeInBytes)
+      case partitions => partitions.flatMap(_.stats.map(_.sizeInBytes)).sum
+    }
   }
 }
 

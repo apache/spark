@@ -110,10 +110,10 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("analyze Hive serde tables") {
-    def queryTotalSize(tableName: String): BigInt =
-      spark.table(tableName).queryExecution.analyzed.stats.sizeInBytes
+  def queryTotalSize(tableName: String): BigInt =
+    spark.table(tableName).queryExecution.analyzed.stats.sizeInBytes
 
+  test("analyze Hive serde tables") {
     // Non-partitioned table
     val nonPartTable = "non_part_table"
     withTable(nonPartTable) {
@@ -134,7 +134,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       sql(s"INSERT INTO TABLE $partTable PARTITION (ds='2010-01-02') SELECT * FROM src")
       sql(s"INSERT INTO TABLE $partTable PARTITION (ds='2010-01-03') SELECT * FROM src")
 
-      assert(queryTotalSize(partTable) === spark.sessionState.conf.defaultSizeInBytes)
+      assert(queryTotalSize(partTable) === BigInt(17436))
 
       sql(s"ANALYZE TABLE $partTable COMPUTE STATISTICS noscan")
 
@@ -147,6 +147,88 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       intercept[AnalysisException] {
         sql("ANALYZE TABLE tempTable COMPUTE STATISTICS")
       }
+    }
+  }
+
+  test("compute table statistics from partition statistics") {
+    // Non-partitioned table
+    val nonPartTable = "non_part_table"
+    withTable(nonPartTable) {
+      sql(s"CREATE TABLE $nonPartTable (key STRING, value STRING)")
+
+      // For Non-partitioned table, there's no partition statistics to compute table
+      // statistics before a insertion
+      assert(queryTotalSize(nonPartTable) === spark.sessionState.conf.defaultSizeInBytes)
+
+      sql(s"INSERT INTO TABLE $nonPartTable SELECT * FROM src")
+      sql(s"INSERT INTO TABLE $nonPartTable SELECT * FROM src")
+      val totalSizeFromPartitionStats = queryTotalSize(nonPartTable)
+
+      sql(s"ANALYZE TABLE $nonPartTable COMPUTE STATISTICS noscan")
+      val totalSizeAfterAnalyze = queryTotalSize(nonPartTable)
+
+      // After the insertion command, non-partitioned table get statistics too.
+      assert(totalSizeFromPartitionStats === totalSizeAfterAnalyze)
+      assert(totalSizeFromPartitionStats === BigInt(11624))
+    }
+
+    // Partitioned table
+    val partTable = "part_table"
+    withTable(partTable) {
+      sql(s"CREATE TABLE $partTable (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+
+      // For partitioned table, if there's no partition, it can be seen as no data.
+      assert(queryTotalSize(partTable) === 0)
+
+      sql(s"INSERT INTO TABLE $partTable PARTITION (ds='2010-01-01') SELECT * FROM src")
+      sql(s"INSERT INTO TABLE $partTable PARTITION (ds='2010-01-02') SELECT * FROM src")
+      sql(s"INSERT INTO TABLE $partTable PARTITION (ds='2010-01-03') SELECT * FROM src")
+      val totalSizeBeforeAnalyze = queryTotalSize(partTable)
+
+      sql(s"ANALYZE TABLE $partTable COMPUTE STATISTICS noscan")
+      val totalSizeAfterAnalyze = queryTotalSize(partTable)
+
+      assert(totalSizeBeforeAnalyze === totalSizeAfterAnalyze)
+      assert(totalSizeBeforeAnalyze === BigInt(17436))
+
+      sql(s"ALTER TABLE $partTable ADD IF NOT EXISTS PARTITION (ds='2010-01-04')")
+
+      // If there is any partition without partition statistics, the table statistics
+      // should not be estimated, use spark.sql.defaultSizeInBytes instead.
+      assert(queryTotalSize(partTable) === spark.sessionState.conf.defaultSizeInBytes)
+
+      sql(s"ANALYZE TABLE $partTable COMPUTE STATISTICS noscan")
+
+      assert(queryTotalSize(partTable) === BigInt(17436))
+    }
+
+    withView("tempTable") {
+      sql("""SELECT * FROM src""").createOrReplaceTempView("tempTable")
+
+      assert(queryTotalSize("tempTable") === BigInt(5812))
+    }
+  }
+
+  test("compute table statistics with partition pruning") {
+    def getSelectionSize(sql: String): BigInt =
+      spark.sql(sql).queryExecution.analyzed.stats.sizeInBytes
+
+    val partTable = "part_table"
+    withTable(partTable) {
+      sql(s"CREATE TABLE $partTable (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+      sql(s"INSERT INTO TABLE $partTable PARTITION (ds='2010-01-01') SELECT * FROM src")
+
+      assert(queryTotalSize(partTable) === BigInt(5812))
+      assert(getSelectionSize(s"select * from $partTable") === BigInt(5812))
+
+      sql(s"ALTER TABLE $partTable ADD IF NOT EXISTS PARTITION (ds='2010-01-02')")
+
+      assert(queryTotalSize(partTable) === spark.sessionState.conf.defaultSizeInBytes)
+      assert(getSelectionSize(s"select * from $partTable")
+        === spark.sessionState.conf.defaultSizeInBytes)
+
+      // Unused partition(s) should be pruned.
+      assert(getSelectionSize(s"select * from $partTable where ds='2010-01-01'") === BigInt(5812))
     }
   }
 
