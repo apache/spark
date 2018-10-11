@@ -90,7 +90,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     )
 
     val csvData2 = "2016-01-01T00:00:00"
-    for (tz <- Random.shuffle(DateTimeTestUtils.ALL_TIMEZONES).take(50)) {
+    for (tz <- outstandingTimezones) {
       c = Calendar.getInstance(tz)
       c.set(2016, 0, 1, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)

@@ -19,6 +19,7 @@ package org.apache.spark
 
 // scalastyle:off
 import java.io.File
+import java.util.TimeZone
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Outcome}
 
@@ -106,4 +107,13 @@ abstract class SparkFunSuite
     }
   }
 
+  lazy val outstandingTimezones = Seq(
+    TimeZone.getTimeZone("UTC"),
+    TimeZone.getTimeZone("PST"),
+    TimeZone.getTimeZone("CET"),
+    TimeZone.getTimeZone("Africa/Dakar"),
+    TimeZone.getTimeZone("America/Los_Angeles"),
+    TimeZone.getTimeZone("Antarctica/Vostok"),
+    TimeZone.getTimeZone("Asia/Hong_Kong"),
+    TimeZone.getTimeZone("Europe/Amsterdam"))
 }
