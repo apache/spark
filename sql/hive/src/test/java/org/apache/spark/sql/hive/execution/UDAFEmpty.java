@@ -14,23 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.hive.execution;
 
-package org.apache.spark.network.shuffle;
-
-import java.io.File;
+import org.apache.hadoop.hive.ql.parse.SemanticException;
+import org.apache.hadoop.hive.ql.udf.generic.AbstractGenericUDAFResolver;
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 
 /**
- * A manager to create temp block files to reduce the memory usage and also clean temp
- * files when they won't be used any more.
+ * An empty UDAF that throws a semantic exception
  */
-public interface TempFileManager {
-
-  /** Create a temp block file. */
-  File createTempFile();
-
-  /**
-   * Register a temp file to clean up when it won't be used any more. Return whether the
-   * file is registered successfully. If `false`, the caller should clean up the file by itself.
-   */
-  boolean registerTempFileToClean(File file);
+public class UDAFEmpty extends AbstractGenericUDAFResolver {
+    @Override
+    public GenericUDAFEvaluator getEvaluator(TypeInfo[] info) throws SemanticException {
+        throw new SemanticException("Can not get an evaluator of the empty UDAF");
+    }
 }

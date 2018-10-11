@@ -396,8 +396,7 @@ To use a custom metrics.properties for the application master and executors, upd
   and those log files will be aggregated in a rolling fashion.
   This will be used with YARN's rolling log aggregation, to enable this feature in YARN side
   <code>yarn.nodemanager.log-aggregation.roll-monitoring-interval-seconds</code> should be
-  configured in yarn-site.xml.
-  This feature can only be used with Hadoop 2.6.4+. The Spark log4j appender needs be changed to use
+  configured in yarn-site.xml. The Spark log4j appender needs be changed to use
   FileAppender or another appender that can handle the files being removed while it is running. Based
   on the file name configured in the log4j configuration (like spark.log), the user should set the
   regex (spark*) to include all the log files that need to be aggregated.
@@ -465,7 +464,7 @@ providers can be disabled individually by setting `spark.security.credentials.{s
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.yarn.keytab</code></td>
+  <td><code>spark.kerberos.keytab</code></td>
   <td>(none)</td>
   <td>
   The full path to the file that contains the keytab for the principal specified above. This keytab
@@ -477,7 +476,7 @@ providers can be disabled individually by setting `spark.security.credentials.{s
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.principal</code></td>
+  <td><code>spark.kerberos.principal</code></td>
   <td>(none)</td>
   <td>
   Principal to be used to login to KDC, while running on secure clusters. Equivalent to the

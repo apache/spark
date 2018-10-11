@@ -26,6 +26,7 @@ import scala.util.Random
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -735,6 +736,56 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_contains(array(1, null), array(1, null)[0])"),
       Seq(Row(true), Row(true))
     )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(1), 1.23D)"),
+      Seq(Row(false))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(1), 1.0D)"),
+      Seq(Row(true))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(1.0D), 1)"),
+      Seq(Row(true))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(1.23D), 1)"),
+      Seq(Row(false))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(array(1)), array(1.0D))"),
+      Seq(Row(true))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(array(1)), array(1.23D))"),
+      Seq(Row(false))
+    )
+
+    val e1 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("array_contains(array(1), .01234567890123456790123456780)")
+    }
+    val errorMsg1 =
+      s"""
+         |Input to function array_contains should have been array followed by a
+         |value with same element type, but it's [array<int>, decimal(29,29)].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e1.message.contains(errorMsg1))
+
+    val e2 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("array_contains(array(1), 'foo')")
+    }
+    val errorMsg2 =
+      s"""
+         |Input to function array_contains should have been array followed by a
+         |value with same element type, but it's [array<int>, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e2.message.contains(errorMsg2))
   }
 
   test("arrays_overlap function") {
@@ -1046,18 +1097,63 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
 
     checkAnswer(
-      df.selectExpr("array_position(array(array(1), null)[0], 1)"),
-      Seq(Row(1L), Row(1L))
-    )
-    checkAnswer(
-      df.selectExpr("array_position(array(1, null), array(1, null)[0])"),
-      Seq(Row(1L), Row(1L))
+      OneRowRelation().selectExpr("array_position(array(1), 1.23D)"),
+      Seq(Row(0L))
     )
 
-    val e = intercept[AnalysisException] {
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(1), 1.0D)"),
+      Seq(Row(1L))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(1.D), 1)"),
+      Seq(Row(1L))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(1.23D), 1)"),
+      Seq(Row(0L))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(array(1)), array(1.0D))"),
+      Seq(Row(1L))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(array(1)), array(1.23D))"),
+      Seq(Row(0L))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(array(1), null)[0], 1)"),
+      Seq(Row(1L))
+    )
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(1, null), array(1, null)[0])"),
+      Seq(Row(1L))
+    )
+
+    val e1 = intercept[AnalysisException] {
       Seq(("a string element", "a")).toDF().selectExpr("array_position(_1, _2)")
     }
-    assert(e.message.contains("argument 1 requires array type, however, '`_1`' is of string type"))
+    val errorMsg1 =
+      s"""
+         |Input to function array_position should have been array followed by a
+         |value with same element type, but it's [string, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e1.message.contains(errorMsg1))
+
+    val e2 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("array_position(array(1), '1')")
+    }
+    val errorMsg2 =
+      s"""
+         |Input to function array_position should have been array followed by a
+         |value with same element type, but it's [array<int>, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e2.message.contains(errorMsg2))
   }
 
   test("element_at function") {
@@ -1115,11 +1211,80 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row("3"), Row(""), Row(null))
     )
 
-    val e = intercept[AnalysisException] {
+    val e1 = intercept[AnalysisException] {
       Seq(("a string element", 1)).toDF().selectExpr("element_at(_1, _2)")
     }
-    assert(e.message.contains(
-      "argument 1 requires (array or map) type, however, '`_1`' is of string type"))
+    val errorMsg1 =
+      s"""
+         |The first argument to function element_at should have been array or map type, but
+         |its string type.
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e1.message.contains(errorMsg1))
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(array(2, 1), 2S)"),
+      Seq(Row(1))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(array('a', 'b'), 1Y)"),
+      Seq(Row("a"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(array(1, 2, 3), 3)"),
+      Seq(Row(3))
+    )
+
+    val e2 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("element_at(array('a', 'b'), 1L)")
+    }
+    val errorMsg2 =
+      s"""
+         |Input to function element_at should have been array followed by a int, but it's
+         |[array<string>, bigint].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e2.message.contains(errorMsg2))
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 2Y)"),
+      Seq(Row("b"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 1S)"),
+      Seq(Row("a"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 2)"),
+      Seq(Row("b"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 2L)"),
+      Seq(Row("b"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 1.0D)"),
+      Seq(Row("a"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 1.23D)"),
+      Seq(Row(null))
+    )
+
+    val e3 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), '1')")
+    }
+    val errorMsg3 =
+      s"""
+         |Input to function element_at should have been map followed by a value of same
+         |key type, but it's [map<int,string>, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e3.message.contains(errorMsg3))
   }
 
   test("array_union functions") {
@@ -1479,6 +1644,34 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
 
     checkAnswer(
+      OneRowRelation().selectExpr("array_remove(array(1, 2), 1.23D)"),
+      Seq(
+        Row(Seq(1.0, 2.0))
+      )
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_remove(array(1, 2), 1.0D)"),
+      Seq(
+        Row(Seq(2.0))
+      )
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_remove(array(1.0D, 2.0D), 2)"),
+      Seq(
+        Row(Seq(1.0))
+      )
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_remove(array(1.1D, 1.2D), 1)"),
+      Seq(
+        Row(Seq(1.1, 1.2))
+      )
+    )
+
+    checkAnswer(
       df.selectExpr("array_remove(a, 2)", "array_remove(b, \"a\")",
         "array_remove(c, \"\")"),
       Seq(
@@ -1487,10 +1680,26 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(null, null, null))
     )
 
-    val e = intercept[AnalysisException] {
+    val e1 = intercept[AnalysisException] {
       Seq(("a string element", "a")).toDF().selectExpr("array_remove(_1, _2)")
     }
-    assert(e.message.contains("argument 1 requires array type, however, '`_1`' is of string type"))
+    val errorMsg1 =
+      s"""
+         |Input to function array_remove should have been array followed by a
+         |value with same element type, but it's [string, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e1.message.contains(errorMsg1))
+
+    val e2 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("array_remove(array(1, 2), '1')")
+    }
+
+    val errorMsg2 =
+      s"""
+         |Input to function array_remove should have been array followed by a
+         |value with same element type, but it's [array<int>, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e2.message.contains(errorMsg2))
   }
 
   test("array_distinct functions") {
@@ -2677,8 +2886,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val funcsMustHaveAtLeastOneArg =
       ("coalesce", (df: DataFrame) => df.select(coalesce())) ::
       ("coalesce", (df: DataFrame) => df.selectExpr("coalesce()")) ::
-      ("named_struct", (df: DataFrame) => df.select(struct())) ::
-      ("named_struct", (df: DataFrame) => df.selectExpr("named_struct()")) ::
       ("hash", (df: DataFrame) => df.select(hash())) ::
       ("hash", (df: DataFrame) => df.selectExpr("hash()")) :: Nil
     funcsMustHaveAtLeastOneArg.foreach { case (name, func) =>

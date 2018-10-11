@@ -22,7 +22,6 @@ import org.scalatest.Suite
 import org.scalatest.Tag
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
@@ -57,7 +56,7 @@ trait CodegenInterpretedPlanTest extends PlanTest {
  * Provides helper methods for comparing plans, but without the overhead of
  * mandating a FunSuite.
  */
-trait PlanTestBase extends PredicateHelper { self: Suite =>
+trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
 
   // TODO(gatorsmile): remove this from PlanTest and all the analyzer rules
   protected def conf = SQLConf.get
@@ -172,34 +171,6 @@ trait PlanTestBase extends PredicateHelper { self: Suite =>
         p1.projectList == p2.projectList && sameJoinPlan(p1.child, p2.child)
       case _ =>
         plan1 == plan2
-    }
-  }
-
-  /**
-   * Sets all SQL configurations specified in `pairs`, calls `f`, and then restores all SQL
-   * configurations.
-   */
-  protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    val conf = SQLConf.get
-    val (keys, values) = pairs.unzip
-    val currentValues = keys.map { key =>
-      if (conf.contains(key)) {
-        Some(conf.getConfString(key))
-      } else {
-        None
-      }
-    }
-    (keys, values).zipped.foreach { (k, v) =>
-      if (SQLConf.staticConfKeys.contains(k)) {
-        throw new AnalysisException(s"Cannot modify the value of a static config: $k")
-      }
-      conf.setConfString(k, v)
-    }
-    try f finally {
-      keys.zip(currentValues).foreach {
-        case (key, Some(value)) => conf.setConfString(key, value)
-        case (key, None) => conf.unsetConf(key)
-      }
     }
   }
 }
