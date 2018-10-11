@@ -132,6 +132,7 @@ private[sql] class ExecutionListenerBus(session: SparkSession)
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case e: SparkListenerSQLExecutionEnd => postToAll(e)
+    case _ =>
   }
 
   override protected def doPostEvent(
