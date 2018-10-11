@@ -279,7 +279,7 @@ To run tests with Jenkins:
 
     ./dev/run-tests-jenkins
 
-If you use an individual repository or an enterprise GitHub, you should export below environment variables before running above command.
+If use an individual repository or an enterprise GitHub, export below environment variables before running above command.
 
 ### Related environment variables
 
