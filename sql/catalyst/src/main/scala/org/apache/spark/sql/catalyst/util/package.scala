@@ -179,7 +179,7 @@ package object util extends Logging {
    * Format a sequence with semantics similar to calling .mkString(). Any elements beyond
    * maxFields will be dropped and replaced by a "... N more fields" placeholder.
    * If maxFields is set to `None`, maximum number of fields is defined by the SQL config
-   * `spark.sql.debug.maxToStringFields`
+   * `spark.sql.debug.maxToStringFields`.
    *
    * @return the trimmed and formatted string.
    */
