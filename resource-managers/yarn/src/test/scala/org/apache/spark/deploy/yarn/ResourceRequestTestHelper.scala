@@ -35,7 +35,7 @@ object ResourceRequestTestHelper {
     val defaultResourceTypes = List(
       createResourceTypeInfo("memory-mb"),
       createResourceTypeInfo("vcores"))
-    val customResourceTypes = resourceTypes.map(rt => createResourceTypeInfo(rt))
+    val customResourceTypes = resourceTypes.map(createResourceTypeInfo)
     allResourceTypes ++= defaultResourceTypes
     allResourceTypes ++= customResourceTypes
 

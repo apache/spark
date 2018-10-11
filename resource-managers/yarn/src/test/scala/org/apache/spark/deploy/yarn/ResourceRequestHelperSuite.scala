@@ -152,20 +152,20 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
     ResourceRequestTestHelper.initializeResourceTypes(definedResourceTypes)
 
-    val resource = createResource
+    val resource = createResource()
     ResourceRequestHelper.setResourceRequests(resourceRequests, resource)
 
     expectedResources.foreach { case (name, ri) =>
-      val resourceInfo: ResourceInformation = ResourceRequestTestHelper
-          .getResourceInformationByName(resource, name)
+      val resourceInfo = ResourceRequestTestHelper.getResourceInformationByName(resource, name)
       assert(resourceInfo === ri)
     }
   }
 
   private def verifySetResourceRequestsException(
       definedResourceTypes: List[String],
-      resourceRequests: Map[String, String], message: String): Unit = {
-    val resource = createResource
+      resourceRequests: Map[String, String],
+      message: String): Unit = {
+    val resource = createResource()
     verifySetResourceRequestsException(definedResourceTypes, resource, resourceRequests, message)
   }
 
@@ -191,7 +191,7 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
     thrown.getMessage should include (message)
   }
 
-  private def createResource: Resource = {
+  private def createResource(): Resource = {
     val resource = Records.newRecord(classOf[Resource])
     resource.setMemory(512)
     resource.setVirtualCores(2)
