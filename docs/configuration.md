@@ -2017,7 +2017,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
   <td>
     Maximum rate (number of records per second) at which data will be read from each Kafka
     partition when using the new Kafka direct stream API. See the
-    <a href="streaming-kafka-integration.html">Kafka Integration guide</a>
+    <a href="streaming-kafka-0-10-integration.html">Kafka Integration guide</a>
     for more details.
   </td>
 </tr>
