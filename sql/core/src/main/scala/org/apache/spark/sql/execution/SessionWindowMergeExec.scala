@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
 
 /**
  * The physical plan for streaming query, merge session window after restore from state store.
@@ -50,6 +50,10 @@ case class SessionWindowMergeExec(
       windowExpressions.toAttribute, Ascending))
 
   override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   /**
    * Produces the result of the query as an `RDD[InternalRow]`
