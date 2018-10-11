@@ -296,7 +296,7 @@ If use an individual repository or an GitHub Enterprise, export below environmen
   <td><code>SPARK_PROJECT_URL</code></td>
   <td>https://github.com/apache/spark</td>
   <td>
-    The Spark project URL of (enterprise) GitHub.
+    The Spark project URL of GitHub Enterprise.
   </td>
 </tr>
 </table>
