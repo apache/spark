@@ -528,7 +528,7 @@ class RelationalGroupedDataset protected[sql](
     builder.append("RelationalGroupedDataset: [grouping expressions: [")
     val kFields = groupingExprs.collect {
       case expr: NamedExpression if expr.resolved =>
-        s"${expr.name}: ${expr.dataType.simpleString(2)}"
+        s"${expr.name}: ${expr.dataType.simpleString(Some(2))}"
       case expr: NamedExpression => expr.name
       case o => o.toString
     }

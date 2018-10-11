@@ -75,8 +75,14 @@ abstract class DataType extends AbstractDataType {
   /** String representation for the type saved in external catalogs. */
   def catalogString: String = simpleString
 
-  /** Readable string representation for the type with truncation */
-  private[sql] def simpleString(maxNumberFields: Int): String = simpleString
+  /**
+   * Readable string representation for the type with truncation.
+   * @param maxFields Maximum number of fields that will be converted to strings.
+   *                  Any elements beyond the limit will be dropped.
+   *                  `None` means the limit is defined by the SQL config
+   *                  `spark.sql.debug.maxToStringFields`.
+   */
+  private[sql] def simpleString(maxFields: Option[Int]): String = simpleString
 
   def sql: String = simpleString.toUpperCase(Locale.ROOT)
 

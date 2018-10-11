@@ -160,7 +160,7 @@ private[sql] object JDBCRelation extends Logging {
       resolver(f.name, columnName) || resolver(dialect.quoteIdentifier(f.name), columnName)
     }.getOrElse {
       throw new AnalysisException(s"User-defined partition column $columnName not " +
-        s"found in the JDBC relation: ${schema.simpleString(SQLConf.get.maxToStringFields)}")
+        s"found in the JDBC relation: ${schema.simpleString(maxFields = None)}")
     }
     column.dataType match {
       case _: NumericType | DateType | TimestampType =>

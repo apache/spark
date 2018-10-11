@@ -28,6 +28,7 @@ import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, truncatedString}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A [[StructType]] object can be constructed by
@@ -369,10 +370,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   def toDDL: String = fields.map(_.toDDL).mkString(",")
 
-  private[sql] override def simpleString(maxNumberFields: Int): String = {
+  private[sql] override def simpleString(maxFields: Option[Int]): String = {
     val builder = new StringBuilder
+    val maxNumberFields = maxFields.getOrElse(SQLConf.get.maxToStringFields)
     val fieldTypes = fields.take(maxNumberFields).map {
-      f => s"${f.name}: ${f.dataType.simpleString(maxNumberFields)}"
+      f => s"${f.name}: ${f.dataType.simpleString(maxFields)}"
     }
     builder.append("struct<")
     builder.append(fieldTypes.mkString(", "))

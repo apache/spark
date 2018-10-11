@@ -194,7 +194,7 @@ object FileSourceStrategy extends Strategy with Logging {
           .filter(requiredAttributes.contains)
           .filterNot(partitionColumns.contains)
       val outputSchema = readDataColumns.toStructType
-      logInfo(s"Output Data Schema: ${outputSchema.simpleString(5)}")
+      logInfo(s"Output Data Schema: ${outputSchema.simpleString(Some(5))}")
 
       val outputAttributes = readDataColumns ++ partitionColumns
 
