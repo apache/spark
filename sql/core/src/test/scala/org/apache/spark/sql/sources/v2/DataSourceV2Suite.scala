@@ -351,6 +351,22 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-25700: do not read schema when writing in other modes") {
+    withTempPath { file =>
+      val cls = classOf[SimpleWriteOnlyDataSource]
+      val path = file.getCanonicalPath
+      val df = spark.range(5).select('id as 'i, -'id as 'j)
+      try {
+        df.write.format(cls.getName).option("path", path).mode("error").save()
+        df.write.format(cls.getName).option("path", path).mode("overwrite").save()
+        df.write.format(cls.getName).option("path", path).mode("ignore").save()
+        df.write.format(cls.getName).option("path", path).mode("append").save()
+      } catch {
+        case e: SchemaReadAttemptException => fail("Schema read was attempted.", e)
+      }
+    }
+  }
 }
 
 
@@ -638,5 +654,16 @@ object SpecificReaderFactory extends PartitionReaderFactory {
 
       override def close(): Unit = {}
     }
+  }
+}
+
+class SchemaReadAttemptException(m: String) extends RuntimeException(m)
+
+class SimpleWriteOnlyDataSource extends SimpleWritableDataSource {
+  override def fullSchema(): StructType = {
+    // This is a bit hacky since this source implements read support but throws
+    // during schema retrieval. Might have to rewrite but it's done
+    // such so for minimised changes.
+    throw new SchemaReadAttemptException("read is not supported")
   }
 }
