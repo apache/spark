@@ -284,7 +284,7 @@ If use an individual repository or an enterprise GitHub, export below environmen
 ### Related environment variables
 
 <table class="table">
-<tr><th>variable Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Variable Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>GITHUB_API_BASE</code></td>
   <td>https://api.github.com/repos/apache/spark</td>
