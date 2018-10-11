@@ -69,8 +69,8 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
 
   /**
    * Check the equality between result of expression and expected value, it will handle
-   * Array[Byte], Spread[Double], MapData and Row. Also check whether exprNullable is true
-   * if result of expression is null
+   * Array[Byte], Spread[Double], MapData and Row. Also check whether nullable in expression is
+   * true if result is null
    */
   protected def checkResult(result: Any, expected: Any, expression: Expression): Boolean = {
     checkResult(result, expected, expression.dataType, expression.nullable)
@@ -84,7 +84,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
     val dataType = UserDefinedType.sqlType(exprDataType)
 
     // The result is null for a non-nullable expression
-    assert(result != null || exprNullable)
+    assert(result != null || exprNullable, "exprNullable should be true if result is null")
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)
