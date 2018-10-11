@@ -364,6 +364,9 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
       } catch {
         case e: SchemaReadAttemptException => fail("Schema read was attempted.", e)
       }
+      intercept[SchemaReadAttemptException] {
+        df.write.format(cls.getName).option("path", path).mode("append").save()
+      }
     }
   }
 }
