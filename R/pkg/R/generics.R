@@ -1262,7 +1262,7 @@ setGeneric("sort_array", function(x, asc = TRUE) { standardGeneric("sort_array")
 
 #' @rdname column_string_functions
 #' @name NULL
-setGeneric("split_string", function(x, pattern) { standardGeneric("split_string") })
+setGeneric("split_string", function(x, pattern, ...) { standardGeneric("split_string") })
 
 #' @rdname column_string_functions
 #' @name NULL

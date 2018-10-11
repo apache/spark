@@ -46,4 +46,8 @@ FROM (
     encode(string(id + 2), 'utf-8') col3,
     encode(string(id + 3), 'utf-8') col4
   FROM range(10)
-)
+);
+
+-- split function
+SELECT split('aa1cc2ee3', '[1-9]+');
+SELECT split('aa1cc2ee3', '[1-9]+', 2);
