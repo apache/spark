@@ -23,7 +23,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 /**
- * Benchmark to measure performance for aggregate primitives.
+ * Benchmark to measure performance for joins.
  * To run this benchmark:
  * {{{
  *   1. without sbt:
@@ -165,15 +165,17 @@ object JoinBenchmark extends SqlBasedBenchmark {
   }
 
   override def runBenchmarkSuite(): Unit = {
-    broadcastHashJoinLongKey()
-    broadcastHashJoinLongKeyWithDuplicates()
-    broadcastHashJoinTwoIntKey()
-    broadcastHashJoinTwoLongKey()
-    broadcastHashJoinTwoLongKeyWithDuplicates()
-    broadcastHashJoinOuterJoinLongKey()
-    broadcastHashJoinSemiJoinLongKey()
-    sortMergeJoin()
-    sortMergeJoinWithDuplicates()
-    shuffleHashJoin()
+    runBenchmark("Join Benchmark") {
+      broadcastHashJoinLongKey()
+      broadcastHashJoinLongKeyWithDuplicates()
+      broadcastHashJoinTwoIntKey()
+      broadcastHashJoinTwoLongKey()
+      broadcastHashJoinTwoLongKeyWithDuplicates()
+      broadcastHashJoinOuterJoinLongKey()
+      broadcastHashJoinSemiJoinLongKey()
+      sortMergeJoin()
+      sortMergeJoinWithDuplicates()
+      shuffleHashJoin()
+    }
   }
 }

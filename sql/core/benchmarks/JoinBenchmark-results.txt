@@ -1,80 +1,85 @@
+================================================================================================
+Join Benchmark
+================================================================================================
+
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Join w long:                             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Join w long wholestage off                    3200 / 3226          6.6         152.6       1.0X
-Join w long wholestage on                      223 /  261         94.2          10.6      14.4X
+Join w long wholestage off                    3292 / 3308          6.4         157.0       1.0X
+Join w long wholestage on                      163 /  169        128.5           7.8      20.2X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Join w long duplicated:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Join w long duplicated wholestage off         3727 / 3745          5.6         177.7       1.0X
-Join w long duplicated wholestage on           212 /  233         98.8          10.1      17.6X
+Join w long duplicated wholestage off         3842 / 3854          5.5         183.2       1.0X
+Join w long duplicated wholestage on           212 /  228         99.0          10.1      18.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Join w 2 ints:                           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Join w 2 ints wholestage off              151556 / 152313          0.1        7226.8       1.0X
-Join w 2 ints wholestage on               131599 / 138817          0.2        6275.1       1.2X
+Join w 2 ints wholestage off              157742 / 158892          0.1        7521.7       1.0X
+Join w 2 ints wholestage on               134290 / 152917          0.2        6403.4       1.2X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Join w 2 longs:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Join w 2 longs wholestage off                 5608 / 6035          3.7         267.4       1.0X
-Join w 2 longs wholestage on                  2256 / 2504          9.3         107.6       2.5X
+Join w 2 longs wholestage off                 5578 / 6507          3.8         266.0       1.0X
+Join w 2 longs wholestage on                  2198 / 2638          9.5         104.8       2.5X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 Join w 2 longs duplicated:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Join w 2 longs duplicated wholestage off    10976 / 11120          1.9         523.4       1.0X
-Join w 2 longs duplicated wholestage on       1781 / 1849         11.8          84.9       6.2X
+Join w 2 longs duplicated wholestage off    11109 / 11125          1.9         529.7       1.0X
+Join w 2 longs duplicated wholestage on       1743 / 1946         12.0          83.1       6.4X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 outer join w long:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-outer join w long wholestage off              2436 / 2453          8.6         116.1       1.0X
-outer join w long wholestage on                140 /  144        149.4           6.7      17.3X
+outer join w long wholestage off              2508 / 2527          8.4         119.6       1.0X
+outer join w long wholestage on                148 /  159        141.3           7.1      16.9X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 semi join w long:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-semi join w long wholestage off               1610 / 1625         13.0          76.8       1.0X
-semi join w long wholestage on                 142 /  148        148.0           6.8      11.4X
+semi join w long wholestage off               1662 / 1719         12.6          79.3       1.0X
+semi join w long wholestage on                 150 /  168        140.2           7.1      11.1X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 merge join:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-merge join wholestage off                      864 /  910          2.4         412.0       1.0X
-merge join wholestage on                       611 /  617          3.4         291.4       1.4X
+merge join wholestage off                      819 /  833          2.6         390.5       1.0X
+merge join wholestage on                       591 /  619          3.5         281.7       1.4X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 sort merge join with duplicates:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-sort merge join with duplicates wholestage off      1481 / 1597          1.4         706.2       1.0X
-sort merge join with duplicates wholestage on      1192 / 1300          1.8         568.4       1.2X
+sort merge join with duplicates wholestage off      1458 / 1497          1.4         695.3       1.0X
+sort merge join with duplicates wholestage on      1129 / 1164          1.9         538.1       1.3X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
 shuffle hash join:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-shuffle hash join wholestage off              1012 / 1034          4.1         241.2       1.0X
-shuffle hash join wholestage on                799 /  861          5.2         190.5       1.3X
+shuffle hash join wholestage off               959 /  970          4.4         228.7       1.0X
+shuffle hash join wholestage on                817 /  850          5.1         194.9       1.2X
+
 
