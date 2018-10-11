@@ -72,6 +72,10 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
    * Array[Byte], Spread[Double], MapData and Row. Also check whether exprNullable is true
    * if result of expression is null
    */
+  protected def checkResult(result: Any, expected: Any, expression: Expression): Boolean = {
+    checkResult(result, expected, expression.dataType, expression.nullable)
+  }
+
   protected def checkResult(
       result: Any,
       expected: Any,
@@ -79,6 +83,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
       exprNullable: Boolean): Boolean = {
     val dataType = UserDefinedType.sqlType(exprDataType)
 
+    // The result is null for a non-nullable expression
     assert(result != null || exprNullable)
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
@@ -181,7 +186,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
     val actual = try evaluateWithoutCodegen(expression, inputRow) catch {
       case e: Exception => fail(s"Exception evaluating $expression", e)
     }
-    if (!checkResult(actual, expected, expression.dataType, expression.nullable)) {
+    if (!checkResult(actual, expected, expression)) {
       val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect evaluation (codegen off): $expression, " +
         s"actual: $actual, " +
@@ -197,7 +202,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
     for (fallbackMode <- modes) {
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
         val actual = evaluateWithMutableProjection(expression, inputRow)
-        if (!checkResult(actual, expected, expression.dataType, expression.nullable)) {
+        if (!checkResult(actual, expected, expression)) {
           val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
           fail(s"Incorrect evaluation (fallback mode = $fallbackMode): $expression, " +
             s"actual: $actual, expected: $expected$input")
@@ -291,7 +296,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
       expression)
     plan.initialize(0)
     var actual = plan(inputRow).get(0, expression.dataType)
-    assert(checkResult(actual, expected, expression.dataType, expression.nullable))
+    assert(checkResult(actual, expected, expression))
 
     plan = generateProject(
       GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
@@ -299,7 +304,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
     plan.initialize(0)
     actual = FromUnsafeProjection(expression.dataType :: Nil)(
       plan(inputRow)).get(0, expression.dataType)
-    assert(checkResult(actual, expected, expression.dataType, expression.nullable))
+    assert(checkResult(actual, expected, expression))
   }
 
   /**
