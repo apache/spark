@@ -272,3 +272,31 @@ For SBT, specify a complete scala version using (e.g. 2.12.6):
     ./build/sbt -Dscala.version=2.12.6
 
 Otherwise, the sbt-pom-reader plugin will use the `scala.version` specified in the spark-parent pom.
+
+## Running Jenkins tests with enterprise Github
+
+To run tests with Jenkins:
+
+    ./dev/run-tests-jenkins
+
+If you use an individual repository or an enterprise GitHub, you should export below environment variables before running above command.
+
+### Related environment variables
+
+<table class="table">
+<tr><th>variable Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>GITHUB_API_BASE</code></td>
+  <td>https://api.github.com/repos/apache/spark</td>
+  <td>
+    The GitHub server API URL. It could be pointed to an enterprise GitHub.
+  </td>
+</tr>
+<tr>
+  <td><code>SPARK_PROJECT_URL</code></td>
+  <td>https://github.com/apache/spark</td>
+  <td>
+    The Spark project URL of (enterprise) GitHub.
+  </td>
+</tr>
+</table>
