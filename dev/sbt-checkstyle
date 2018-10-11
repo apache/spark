@@ -26,7 +26,6 @@ ERRORS=$(echo -e "q\n" \
         -Pkafka-0-8 \
         -Pkubernetes \
         -Pyarn \
-        -Pflume \
         -Phive \
         -Phive-thriftserver \
         checkstyle test:checkstyle \

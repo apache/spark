@@ -283,56 +283,6 @@ streaming_kafka_0_10 = Module(
     ]
 )
 
-streaming_flume_sink = Module(
-    name="streaming-flume-sink",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/flume-sink",
-    ],
-    build_profile_flags=[
-        "-Pflume",
-    ],
-    environ={
-        "ENABLE_FLUME_TESTS": "1"
-    },
-    sbt_test_goals=[
-        "streaming-flume-sink/test",
-    ]
-)
-
-
-streaming_flume = Module(
-    name="streaming-flume",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/flume",
-    ],
-    build_profile_flags=[
-        "-Pflume",
-    ],
-    environ={
-        "ENABLE_FLUME_TESTS": "1"
-    },
-    sbt_test_goals=[
-        "streaming-flume/test",
-    ]
-)
-
-
-streaming_flume_assembly = Module(
-    name="streaming-flume-assembly",
-    dependencies=[streaming_flume, streaming_flume_sink],
-    source_file_regexes=[
-        "external/flume-assembly",
-    ],
-    build_profile_flags=[
-        "-Pflume",
-    ],
-    environ={
-        "ENABLE_FLUME_TESTS": "1"
-    }
-)
-
 
 mllib_local = Module(
     name="mllib-local",
@@ -425,14 +375,12 @@ pyspark_streaming = Module(
         pyspark_core,
         streaming,
         streaming_kafka,
-        streaming_flume_assembly,
         streaming_kinesis_asl
     ],
     source_file_regexes=[
         "python/pyspark/streaming"
     ],
     environ={
-        "ENABLE_FLUME_TESTS": "1",
         "ENABLE_KAFKA_0_8_TESTS": "1"
     },
     python_test_goals=[
