@@ -192,8 +192,12 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       """.stripMargin.trim
   }
 
-  private def writeOrError(writer: Writer)(f: Writer => Unit): Unit =
-    try f(writer) catch { case e: AnalysisException => writer.write(e.toString) }
+  private def writeOrError(writer: Writer)(f: Writer => Unit): Unit = {
+    try f(writer)
+    catch {
+      case e: AnalysisException => writer.write(e.toString)
+    }
+  }
 
   private def writePlans(writer: Writer, maxFields: Option[Int]): Unit = {
     val (verbose, addSuffix) = (true, false)
