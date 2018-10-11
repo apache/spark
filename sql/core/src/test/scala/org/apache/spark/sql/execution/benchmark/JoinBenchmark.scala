@@ -48,13 +48,11 @@ object JoinBenchmark extends SqlBasedBenchmark {
     }
   }
 
-
   def broadcastHashJoinLongKeyWithDuplicates(): Unit = {
     val N = 20 << 20
     val M = 1 << 16
-
+    val dim = broadcast(spark.range(M).selectExpr("cast(id/10 as long) as k"))
     codegenBenchmark("Join w long duplicated", N) {
-      val dim = broadcast(spark.range(M).selectExpr("cast(id/10 as long) as k"))
       val df = spark.range(N).join(dim, (col("id") % M) === col("k"))
       assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[BroadcastHashJoinExec]).isDefined)
       df.count()
@@ -104,7 +102,6 @@ object JoinBenchmark extends SqlBasedBenchmark {
     }
   }
 
-
   def broadcastHashJoinOuterJoinLongKey(): Unit = {
     val N = 20 << 20
     val M = 1 << 16
@@ -115,7 +112,6 @@ object JoinBenchmark extends SqlBasedBenchmark {
       df.count()
     }
   }
-
 
   def broadcastHashJoinSemiJoinLongKey(): Unit = {
     val N = 20 << 20
