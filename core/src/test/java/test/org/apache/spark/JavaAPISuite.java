@@ -476,10 +476,10 @@ public class JavaAPISuite implements Serializable {
       new Tuple2<>(2, 'z'),
       new Tuple2<>(4, 'w')
     ));
-    List<Tuple2<Integer,Tuple2<Integer, Optional<Character>>>> joined =
+    List<Tuple2<Integer,Tuple2<Integer,Optional<Character>>>> joined =
       rdd1.leftOuterJoin(rdd2).collect();
     assertEquals(5, joined.size());
-    Tuple2<Integer,Tuple2<Integer, Optional<Character>>> firstUnmatched =
+    Tuple2<Integer,Tuple2<Integer,Optional<Character>>> firstUnmatched =
       rdd1.leftOuterJoin(rdd2).filter(tup -> !tup._2()._2().isPresent()).first();
     assertEquals(3, firstUnmatched._1().intValue());
   }
