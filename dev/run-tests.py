@@ -305,7 +305,6 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop2.6": ["-Phadoop-2.6"],
         "hadoop2.7": ["-Phadoop-2.7"],
     }
 
@@ -369,15 +368,7 @@ def build_spark_assembly_sbt(hadoop_version, checkstyle=False):
     if checkstyle:
         run_java_style_checks()
 
-    # Note that we skip Unidoc build only if Hadoop 2.6 is explicitly set in this SBT build.
-    # Due to a different dependency resolution in SBT & Unidoc by an unknown reason, the
-    # documentation build fails on a specific machine & environment in Jenkins but it was unable
-    # to reproduce. Please see SPARK-20343. This is a band-aid fix that should be removed in
-    # the future.
-    is_hadoop_version_2_6 = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE") == "hadoop2.6"
-    if not is_hadoop_version_2_6:
-        # Make sure that Java and Scala API documentation can be generated
-        build_spark_unidoc_sbt(hadoop_version)
+    build_spark_unidoc_sbt(hadoop_version)
 
 
 def build_apache_spark(build_tool, hadoop_version):
@@ -528,14 +519,14 @@ def main():
         # if we're on the Amplab Jenkins build servers setup variables
         # to reflect the environment settings
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
-        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.6")
+        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
         os.environ["PATH"] = "/home/anaconda/envs/py3k/bin:" + os.environ.get("PATH")
     else:
         # else we're running locally and can use local settings
         build_tool = "sbt"
-        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.6")
+        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.7")
         test_env = "local"
 
     print("[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
