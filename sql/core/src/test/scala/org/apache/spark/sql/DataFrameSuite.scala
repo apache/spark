@@ -25,6 +25,7 @@ import java.util.UUID
 import scala.util.Random
 
 import org.scalatest.Matchers._
+
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
