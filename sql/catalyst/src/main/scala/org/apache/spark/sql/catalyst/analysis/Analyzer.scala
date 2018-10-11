@@ -2150,8 +2150,10 @@ class Analyzer(
 
             // TODO: skip null handling for not-nullable primitive inputs after we can completely
             // trust the `nullable` information.
+            val needsNullCheck = (nullable: Boolean, expr: Expression) =>
+              nullable && !expr.isInstanceOf[KnownNotNull]
             val inputsNullCheck = nullableTypes.zip(inputs)
-              .filter { case (nullable, expr) => !nullable && !expr.isInstanceOf[KnownNotNull] }
+              .filter { case (nullableType, expr) => needsNullCheck(!nullableType, expr) }
               .map { case (_, expr) => IsNull(expr) }
               .reduceLeftOption[Expression]((e1, e2) => Or(e1, e2))
             // Once we add an `If` check above the udf, it is safe to mark those checked inputs
