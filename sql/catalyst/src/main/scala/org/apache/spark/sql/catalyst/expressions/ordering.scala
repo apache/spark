@@ -53,6 +53,10 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow
             a.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
           case a: ArrayType if order.direction == Descending =>
             a.interpretedOrdering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
+          case m: MapType if m.isOrdered && order.direction == Ascending =>
+            m.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
+          case m: MapType if m.isOrdered && order.direction == Descending =>
+            m.interpretedOrdering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
           case s: StructType if order.direction == Ascending =>
             s.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
           case s: StructType if order.direction == Descending =>
