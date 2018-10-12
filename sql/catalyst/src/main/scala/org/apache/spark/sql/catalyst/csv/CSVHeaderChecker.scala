@@ -107,7 +107,7 @@ class CSVHeaderChecker(
   }
 
   // This is currently only used to parse CSV with multiLine mode.
-  private[csv] def checkHeaderColumnNames(tokenizer: CsvParser): Unit = {
+  private[sql] def checkHeaderColumnNames(tokenizer: CsvParser): Unit = {
     assert(options.multiLine, "This method should be executed with multiLine.")
     if (options.headerFlag) {
       val firstRecord = tokenizer.parseNext()
@@ -116,7 +116,7 @@ class CSVHeaderChecker(
   }
 
   // This is currently only used to parse CSV with non-multiLine mode.
-  private[csv] def checkHeaderColumnNames(lines: Iterator[String], tokenizer: CsvParser): Unit = {
+  private[sql] def checkHeaderColumnNames(lines: Iterator[String], tokenizer: CsvParser): Unit = {
     assert(!options.multiLine, "This method should not be executed with multiline.")
     // Checking that column names in the header are matched to field names of the schema.
     // The header will be removed from lines.

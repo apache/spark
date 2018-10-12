@@ -18,6 +18,30 @@
 package org.apache.spark.sql.catalyst.csv
 
 object CSVUtils {
+
+  def skipComments(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
+    if (options.isCommentSet) {
+      val commentPrefix = options.comment.toString
+      iter.dropWhile { line =>
+        line.trim.isEmpty || line.trim.startsWith(commentPrefix)
+      }
+    } else {
+      iter.dropWhile(_.trim.isEmpty)
+    }
+  }
+
+  /**
+   * Extracts header and moves iterator forward so that only data remains in it
+   */
+  def extractHeader(iter: Iterator[String], options: CSVOptions): Option[String] = {
+    val nonEmptyLines = skipComments(iter, options)
+    if (nonEmptyLines.hasNext) {
+      Some(nonEmptyLines.next())
+    } else {
+      None
+    }
+  }
+
   /**
    * Helper method that converts string representation of a character to actual character.
    * It handles some Java escaped strings and throws exception if given string is longer than one
