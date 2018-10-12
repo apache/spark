@@ -46,8 +46,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private val df = ds.toDF()
 
   /**
-   * <ul>
    * Specifies the behavior when data or table already exists. Options include:
+   * <ul>
    * <li>`SaveMode.Overwrite`: overwrite the existing data.</li>
    * <li>`SaveMode.Append`: append the data.</li>
    * <li>`SaveMode.Ignore`: ignore the operation (i.e. no-op).</li>
@@ -167,7 +167,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Partitions the output by the given columns on the file system. If specified, the output is
    * laid out on the file system similar to Hive's partitioning scheme. As an example, when we
    * partition a dataset by year and then month, the directory layout would look like:
-   *
    * <ul>
    * <li>year=2016/month=01/</li>
    * <li>year=2016/month=02/</li>
