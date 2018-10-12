@@ -250,17 +250,10 @@ private[parquet] class ParquetFilters(
         FilterApi.lt(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
     case ParquetSchemaType(logicalType, _class, INT64, _) if pushDownTimestamp &&
       _class == classOf[TimestampLogicalTypeAnnotation] =>
-        if (logicalType.asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MICROS) {
-          (n: String, v: Any) =>
-            FilterApi.lt(
-              longColumn(n),
-              DateTimeUtils.fromJavaTimestamp(v.asInstanceOf[Timestamp]).asInstanceOf[JLong])
-        } else {
-          (n: String, v: Any) =>
-            FilterApi.lt(
-              longColumn(n),
-              v.asInstanceOf[Timestamp].getTime.asInstanceOf[JLong])
-        }
+      (n: String, v: Any) =>
+        FilterApi.lt(
+          longColumn(n),
+          timestampValue(logicalType.asInstanceOf[TimestampLogicalTypeAnnotation], v))
 
     case ParquetSchemaType(_, _class, INT32, _) if pushDownDecimal &&
       _class == classOf[DecimalLogicalTypeAnnotation] =>
@@ -298,17 +291,10 @@ private[parquet] class ParquetFilters(
         FilterApi.ltEq(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
     case ParquetSchemaType(logicalType, _class, INT64, _) if pushDownTimestamp &&
       _class == classOf[TimestampLogicalTypeAnnotation] =>
-        if (logicalType.asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MICROS) {
-          (n: String, v: Any) =>
-            FilterApi.ltEq(
-              longColumn(n),
-              DateTimeUtils.fromJavaTimestamp(v.asInstanceOf[Timestamp]).asInstanceOf[JLong])
-        } else {
-          (n: String, v: Any) =>
-            FilterApi.ltEq(
-              longColumn(n),
-              v.asInstanceOf[Timestamp].getTime.asInstanceOf[JLong])
-        }
+      (n: String, v: Any) =>
+        FilterApi.ltEq(
+          longColumn(n),
+          timestampValue(logicalType.asInstanceOf[TimestampLogicalTypeAnnotation], v))
     case ParquetSchemaType(_, _class, INT32, _) if pushDownDecimal &&
       _class == classOf[DecimalLogicalTypeAnnotation] =>
       (n: String, v: Any) =>

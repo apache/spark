@@ -18,15 +18,14 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+import java.util.TimeZone
 
 import scala.language.existentials
-
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
-
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -290,27 +289,31 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
     withTempPath { tableDir =>
       FileUtils.copyFile(new File(timestampPath), new File(tableDir, "part-00001.parq"))
 
-      Seq(false, true).foreach { vectorized =>
-        withSQLConf(
-          (SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized.toString())
-        ) {
-          val losAngeles = spark.read.parquet(tableDir.getAbsolutePath).select("inLosAngeles")
-            .collect.map(_.getString(0))
-          val utc = spark.read.parquet(tableDir.getAbsolutePath).select("inUtc")
-            .collect.map(_.getString(0))
-          val singapore = spark.read.parquet(tableDir.getAbsolutePath).select("inPerth")
-            .collect.map(_.getString(0))
-          Seq(losAngeles, utc, singapore).foreach(values => values.foreach(item =>
-            Seq("millisUtc", "millisNonUtc", "microsUtc", "microsNonUtc").foreach(column => {
-              val dataFrame = spark.read.parquet(tableDir.getAbsolutePath).select(column)
-              verifyPredicate(dataFrame, column, item, "=", vectorized)
-              verifyPredicate(dataFrame, column, item, "!=", vectorized)
-              verifyPredicate(dataFrame, column, item, ">", vectorized)
-              verifyPredicate(dataFrame, column, item, ">=", vectorized)
-            })
-          ))
+      Seq("America/Los_Angeles", "Australia/Perth").foreach({ timeZone =>
+        TimeZone.setDefault(TimeZone.getTimeZone(timeZone))
+        Seq(false, true).foreach { vectorized =>
+          withSQLConf(
+            (SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized.toString())
+          ) {
+            val losAngeles = spark.read.parquet(tableDir.getAbsolutePath).select("inLosAngeles")
+              .collect.map(_.getString(0))
+            val utc = spark.read.parquet(tableDir.getAbsolutePath).select("inUtc")
+              .collect.map(_.getString(0))
+            val singapore = spark.read.parquet(tableDir.getAbsolutePath).select("inPerth")
+              .collect.map(_.getString(0))
+            Seq(losAngeles, utc, singapore).foreach(values => values.foreach(item =>
+              Seq("millisUtc", "millisNonUtc", "microsUtc", "microsNonUtc").foreach(column => {
+                val dataFrame = spark.read.parquet(tableDir.getAbsolutePath).select(column)
+                verifyPredicate(dataFrame, column, item, "=", vectorized)
+                verifyPredicate(dataFrame, column, item, "!=", vectorized)
+                verifyPredicate(dataFrame, column, item, ">", vectorized)
+                verifyPredicate(dataFrame, column, item, ">=", vectorized)
+                verifyPredicate(dataFrame, column, item, "<", vectorized)
+                verifyPredicate(dataFrame, column, item, "<=", vectorized)
+              })
+            ))
+          }
         }
-      }
-    }
+    })}
   }
 }
