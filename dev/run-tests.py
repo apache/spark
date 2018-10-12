@@ -333,7 +333,6 @@ def build_spark_sbt(hadoop_version):
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
     sbt_goals = ["test:package",  # Build test jars as some tests depend on them
                  "streaming-kafka-0-8-assembly/assembly",
-                 "streaming-flume-assembly/assembly",
                  "streaming-kinesis-asl-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 

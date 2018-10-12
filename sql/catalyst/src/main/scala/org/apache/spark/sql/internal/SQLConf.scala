@@ -1568,6 +1568,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE =
+    buildConf("spark.sql.legacy.parser.havingWithoutGroupByAsWhere")
+      .internal()
+      .doc("If it is set to true, the parser will treat HAVING without GROUP BY as a normal " +
+        "WHERE, which does not follow SQL standard.")
+      .booleanConf
+      .createWithDefault(false)
+
   val MAX_TO_STRING_FIELDS = buildConf("spark.sql.debug.maxToStringFields")
     .internal()
     .doc("Maximum number of fields of a tree node that can be converted to strings " +
