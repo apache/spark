@@ -391,12 +391,12 @@ case class PartitioningAttribute(name: String)
   override def dataType: DataType = throw new UnsupportedOperationException
   override def nullable: Boolean = false
 
-  override def qualifier: Option[String] = throw new UnsupportedOperationException
+  override def qualifier: Seq[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
   override def withNullability(newNullability: Boolean): Attribute =
     throw new UnsupportedOperationException
   override def newInstance(): Attribute = throw new UnsupportedOperationException
-  override def withQualifier(newQualifier: Option[String]): Attribute =
+  override def withQualifier(newQualifier: Seq[String]): Attribute =
     throw new UnsupportedOperationException
   override def withName(newName: String): Attribute = throw new UnsupportedOperationException
   override def withMetadata(newMetadata: Metadata): Attribute =
