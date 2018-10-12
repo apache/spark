@@ -99,8 +99,8 @@ function getStandAloneAppId(cb) {
     cb(appId);
     return;
   }
-  //Looks like Web UI is running in standalone mode
-  //Let's get application-id using REST End Point
+  // Looks like Web UI is running in standalone mode
+  // Let's get application-id using REST End Point
   $.getJSON(location.origin + "/api/v1/applications", function(response, status, jqXHR) {
     if (response && response.length > 0) {
       var appId = response[0].id;

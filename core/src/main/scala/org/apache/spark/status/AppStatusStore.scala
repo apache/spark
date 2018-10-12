@@ -350,21 +350,7 @@ private[spark] class AppStatusStore(
     val stageKey = Array(stageId, stageAttemptId)
     store.view(classOf[TaskDataWrapper]).index("stage").first(stageKey).last(stageKey).reverse()
       .max(maxTasks).asScala.map { taskDataWrapper =>
-      val taskDataOld: v1.TaskData = taskDataWrapper.toApi
-      val executorLogs: Option[Map[String, String]] = try {
-        Some(executorSummary(taskDataOld.executorId).executorLogs)
-      } catch {
-        case e: NoSuchElementException => e.getMessage
-          None
-      }
-      new v1.TaskData(taskDataOld.taskId, taskDataOld.index,
-        taskDataOld.attempt, taskDataOld.launchTime, taskDataOld.resultFetchStart,
-        taskDataOld.duration, taskDataOld.executorId, taskDataOld.host, taskDataOld.status,
-        taskDataOld.taskLocality, taskDataOld.speculative, taskDataOld.accumulatorUpdates,
-        taskDataOld.errorMessage, taskDataOld.taskMetrics,
-        executorLogs.getOrElse(Map[String, String]()),
-        AppStatusUtils.schedulerDelay(taskDataOld),
-        AppStatusUtils.gettingResultTime(taskDataOld))
+      interceptAndModifyTaskData(taskDataWrapper)
     }.toSeq.reverse
   }
 
@@ -405,21 +391,7 @@ private[spark] class AppStatusStore(
 
     val ordered = if (ascending) indexed else indexed.reverse()
     ordered.skip(offset).max(length).asScala.map { taskDataWrapper =>
-      val taskDataOld: v1.TaskData = taskDataWrapper.toApi
-      val executorLogs: Option[Map[String, String]] = try {
-        Some(executorSummary(taskDataOld.executorId).executorLogs)
-      } catch {
-        case e: NoSuchElementException => e.getMessage
-          None
-      }
-      new v1.TaskData(taskDataOld.taskId, taskDataOld.index,
-        taskDataOld.attempt, taskDataOld.launchTime, taskDataOld.resultFetchStart,
-        taskDataOld.duration, taskDataOld.executorId, taskDataOld.host, taskDataOld.status,
-        taskDataOld.taskLocality, taskDataOld.speculative, taskDataOld.accumulatorUpdates,
-        taskDataOld.errorMessage, taskDataOld.taskMetrics,
-        executorLogs.getOrElse(Map[String, String]()),
-        AppStatusUtils.schedulerDelay(taskDataOld),
-        AppStatusUtils.gettingResultTime(taskDataOld))
+      interceptAndModifyTaskData(taskDataWrapper)
     }.toSeq
   }
 
@@ -545,6 +517,24 @@ private[spark] class AppStatusStore(
 
   def close(): Unit = {
     store.close()
+  }
+
+  def interceptAndModifyTaskData(taskDataWrapper: TaskDataWrapper) : v1.TaskData = {
+    val taskDataOld: v1.TaskData = taskDataWrapper.toApi
+    val executorLogs: Option[Map[String, String]] = try {
+      Some(executorSummary(taskDataOld.executorId).executorLogs)
+    } catch {
+      case e: NoSuchElementException => e.getMessage
+        None
+    }
+    new v1.TaskData(taskDataOld.taskId, taskDataOld.index,
+      taskDataOld.attempt, taskDataOld.launchTime, taskDataOld.resultFetchStart,
+      taskDataOld.duration, taskDataOld.executorId, taskDataOld.host, taskDataOld.status,
+      taskDataOld.taskLocality, taskDataOld.speculative, taskDataOld.accumulatorUpdates,
+      taskDataOld.errorMessage, taskDataOld.taskMetrics,
+      executorLogs.getOrElse(Map[String, String]()),
+      AppStatusUtils.schedulerDelay(taskDataOld),
+      AppStatusUtils.gettingResultTime(taskDataOld))
   }
 
 }

@@ -210,7 +210,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         desc = taskSortDesc,
         store = parent.store
       )
-      _taskTable.table(page)
       _taskTable
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
@@ -237,8 +236,10 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       dagViz ++ <div id="showAdditionalMetrics"></div> ++
       makeTimeline(
         // Only show the tasks in the table
-        Option(taskTable).map(_.dataSource.tasks).getOrElse(Nil),
-        currentTime) ++
+        Option(taskTable).map({ taskPagedTable =>
+          val from = (page - 1) * taskPageSize
+          val to = taskPagedTable.dataSource.dataSize.min(page * taskPageSize)
+          taskPagedTable.dataSource.sliceData(from, to)}).getOrElse(Nil), currentTime) ++
         <div id="parent-container">
           <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
           <script src={UIUtils.prependBaseUri(request, "/static/stagepage.js")}></script>

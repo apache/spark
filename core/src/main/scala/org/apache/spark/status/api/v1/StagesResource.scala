@@ -120,6 +120,10 @@ private[v1] class StagesResource extends BaseAppResource {
       var searchValue: String = null
       var filteredRecords = totalRecords
       var _tasksToShow: Seq[TaskData] = null
+      // The datatables client API sends a list of query parameters to the server which contain
+      // information like the columns to be sorted, search value typed by the user in the search
+      // box, pagination index etc. For more information on these query parameters,
+      // refer https://datatables.net/manual/server-side.
       if (uriQueryParameters.getFirst("search[value]") != null &&
         uriQueryParameters.getFirst("search[value]").length > 0) {
         _tasksToShow = doPagination(uriQueryParameters, stageId, stageAttemptId, true,
@@ -159,14 +163,9 @@ private[v1] class StagesResource extends BaseAppResource {
   def doPagination(queryParameters: MultivaluedMap[String, String], stageId: Int,
     stageAttemptId: Int, isSearch: Boolean, totalRecords: Int): Seq[TaskData] = {
     val queryParams = queryParameters.keySet()
-    var columnToSort = 0
-    if (queryParams.contains("order[0][column]")) {
-      columnToSort = queryParameters.getFirst("order[0][column]").toInt
-    }
-    var columnNameToSort = queryParameters.getFirst("columns[" + columnToSort + "][name]")
+    var columnNameToSort = queryParameters.getFirst("columnNameToSort")
     if (columnNameToSort.equalsIgnoreCase("Logs")) {
       columnNameToSort = "Index"
-      columnToSort = 0
     }
     val isAscendingStr = queryParameters.getFirst("order[0][dir]")
     var pageStartIndex = 0
@@ -184,14 +183,29 @@ private[v1] class StagesResource extends BaseAppResource {
     taskDataList: Seq[TaskData],
     searchValue: String): Seq[TaskData] = {
     val defaultOptionString: String = "d"
-    // The task metrics dummy object below has been added to avoid throwing exception in cases
-    // when task metrics for a particular task do not exist as of yet
-    val dummyTaskMetrics: TaskMetrics = new TaskMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-      new InputMetrics(0, 0), new OutputMetrics(0, 0),
-      new ShuffleReadMetrics(0, 0, 0, 0, 0, 0, 0), new ShuffleWriteMetrics(0, 0, 0))
     val searchValueLowerCase = searchValue.toLowerCase(Locale.ROOT)
     val containsValue = (taskDataParams: Any) => taskDataParams.toString.toLowerCase(
       Locale.ROOT).contains(searchValueLowerCase)
+    val taskMetricsContainsValue = (task: TaskData) => task.taskMetrics match {
+      case None => false
+      case Some(metrics) =>
+        (containsValue(task.taskMetrics.get.executorDeserializeTime)
+        || containsValue(task.taskMetrics.get.executorRunTime)
+        || containsValue(task.taskMetrics.get.jvmGcTime)
+        || containsValue(task.taskMetrics.get.resultSerializationTime)
+        || containsValue(task.taskMetrics.get.memoryBytesSpilled)
+        || containsValue(task.taskMetrics.get.diskBytesSpilled)
+        || containsValue(task.taskMetrics.get.peakExecutionMemory)
+        || containsValue(task.taskMetrics.get.inputMetrics.bytesRead)
+        || containsValue(task.taskMetrics.get.inputMetrics.recordsRead)
+        || containsValue(task.taskMetrics.get.outputMetrics.bytesWritten)
+        || containsValue(task.taskMetrics.get.outputMetrics.recordsWritten)
+        || containsValue(task.taskMetrics.get.shuffleReadMetrics.fetchWaitTime)
+        || containsValue(task.taskMetrics.get.shuffleReadMetrics.recordsRead)
+        || containsValue(task.taskMetrics.get.shuffleWriteMetrics.bytesWritten)
+        || containsValue(task.taskMetrics.get.shuffleWriteMetrics.recordsWritten)
+        || containsValue(task.taskMetrics.get.shuffleWriteMetrics.writeTime))
+    }
     val filteredTaskDataSequence: Seq[TaskData] = taskDataList.filter(f =>
       (containsValue(f.taskId) || containsValue(f.index) || containsValue(f.attempt)
         || containsValue(f.launchTime)
@@ -200,25 +214,7 @@ private[v1] class StagesResource extends BaseAppResource {
         || containsValue(f.executorId) || containsValue(f.host) || containsValue(f.status)
         || containsValue(f.taskLocality) || containsValue(f.speculative)
         || containsValue(f.errorMessage.getOrElse(defaultOptionString))
-        || containsValue(f.taskMetrics.getOrElse(dummyTaskMetrics).executorDeserializeTime)
-        || containsValue(f.taskMetrics.getOrElse(dummyTaskMetrics).executorRunTime)
-        || containsValue(f.taskMetrics.getOrElse(dummyTaskMetrics).jvmGcTime)
-        || containsValue(f.taskMetrics.getOrElse(dummyTaskMetrics).resultSerializationTime)
-        || containsValue(f.taskMetrics.getOrElse(dummyTaskMetrics).memoryBytesSpilled)
-        || containsValue(f.taskMetrics.getOrElse(dummyTaskMetrics).diskBytesSpilled)
-        || containsValue(f.taskMetrics.getOrElse(dummyTaskMetrics).peakExecutionMemory)
-        || containsValue(f.taskMetrics.getOrElse(dummyTaskMetrics).inputMetrics.bytesRead)
-        || containsValue(f.taskMetrics.getOrElse(dummyTaskMetrics).inputMetrics.recordsRead)
-        || containsValue(f.taskMetrics.getOrElse(dummyTaskMetrics).outputMetrics.bytesWritten)
-        || containsValue(f.taskMetrics.getOrElse(dummyTaskMetrics).outputMetrics.recordsWritten)
-        || containsValue(f.taskMetrics.getOrElse(
-        dummyTaskMetrics).shuffleReadMetrics.fetchWaitTime)
-        || containsValue(f.taskMetrics.getOrElse(dummyTaskMetrics).shuffleReadMetrics.recordsRead)
-        || containsValue(f.taskMetrics.getOrElse(
-        dummyTaskMetrics).shuffleWriteMetrics.bytesWritten)
-        || containsValue(f.taskMetrics.getOrElse(
-        dummyTaskMetrics).shuffleWriteMetrics.recordsWritten)
-        || containsValue(f.taskMetrics.getOrElse(dummyTaskMetrics).shuffleWriteMetrics.writeTime)
+        || taskMetricsContainsValue(f)
         || containsValue(f.schedulerDelay) || containsValue(f.gettingResultTime)))
     filteredTaskDataSequence
   }

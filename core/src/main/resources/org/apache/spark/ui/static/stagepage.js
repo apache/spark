@@ -52,22 +52,20 @@ $.extend( $.fn.dataTable.ext.type.order, {
 function stageEndPoint(appId) {
     var urlRegex = /https\:\/\/[^\/]+\/([^\/]+)\/([^\/]+)\/([^\/]+)?\/?([^\/]+)?\/?([^\/]+)?\/?([^\/]+)?/gm;
     var urlArray = urlRegex.exec(document.baseURI);
-    var ind = urlArray.indexOf("proxy");
+    var indexOfProxy = urlArray.indexOf("proxy");
     var queryString = document.baseURI.split('?');
     var words = document.baseURI.split('/');
     var stageId = queryString[1].split("&").filter(word => word.includes("id="))[0].split("=")[1];
-    if (ind > 0) {
+    if (indexOfProxy > 0) {
         var appId = urlArray[2];
-        var indexOfProxy = words.indexOf("proxy");
-        var newBaseURI = words.slice(0, indexOfProxy + 2).join('/');
+        var newBaseURI = words.slice(0, words.indexOf("proxy") + 2).join('/');
         return newBaseURI + "/api/v1/applications/" + appId + "/stages/" + stageId;
     }
-    ind = urlArray.indexOf("history");
-    if (ind > 0) {
+    var indexOfHistory = urlArray.indexOf("history");
+    if (indexOfHistory > 0) {
         var appId = urlArray[2];
-        var appAttemptId = urlArray[ind + 2];
-        var indexOfHistory = words.indexOf("history");
-        var newBaseURI = words.slice(0, indexOfHistory).join('/');
+        var appAttemptId = urlArray[indexOfHistory + 2];
+        var newBaseURI = words.slice(0, words.indexOf("history")).join('/');
         if (isNaN(appAttemptId) || appAttemptId == "0") {
             return newBaseURI + "/api/v1/applications/" + appId + "/stages/" + stageId;
         } else {
@@ -174,7 +172,8 @@ function displayRowsForSummaryMetricsTable(row, type, columnIndex) {
 
         default:
             return (row.metric == 'Peak Execution Memory' || row.metric == 'Shuffle spill (memory)'
-                    || row.metric == 'Shuffle spill (disk)') ? formatBytes(row.data[columnIndex], type) : (formatDuration(row.data[columnIndex]));
+                    || row.metric == 'Shuffle spill (disk)') ? formatBytes(
+                    row.data[columnIndex], type) : (formatDuration(row.data[columnIndex]));
 
     }
 }
@@ -246,9 +245,31 @@ function createRowMetadataForColumn(columnName, data, checkboxId) {
   return row;
 }
 
+function reselectCheckboxesBasedOnTaskTableState() {
+    var allChecked = true;
+    var task_summary_metrics_table_current_filtered_array = task_summary_metrics_table_current_state_array.slice();
+    if (typeof taskTableSelector !== 'undefined' && task_summary_metrics_table_current_state_array.length > 0) {
+        for(k = 0; k < optionalColumns.length; k++) {
+            if (taskTableSelector.column(optionalColumns[k]).visible()) {
+                $("#box-"+optionalColumns[k]).prop('checked', true);
+                task_summary_metrics_table_current_state_array.push(task_summary_metrics_table_array.filter(row => (row.checkboxId).toString() == optionalColumns[k])[0]);
+                task_summary_metrics_table_current_filtered_array = task_summary_metrics_table_current_state_array.slice();
+            } else {
+                allChecked = false;
+            }
+        }
+        if (allChecked) {
+            $("#box-0").prop('checked', true);
+        }
+        createDataTableForTaskSummaryMetricsTable(task_summary_metrics_table_current_filtered_array);
+    }
+}
+
 var task_summary_metrics_table_array = [];
 var task_summary_metrics_table_current_state_array = [];
 var taskSummaryMetricsDataTable;
+var optionalColumns = [11, 12, 13, 14, 15, 16, 17];
+var taskTableSelector;
 
 $(document).ready(function () {
     setDataTableDefaults();
@@ -338,15 +359,21 @@ $(document).ready(function () {
                 $("#additionalMetrics").click(function(){
                     $("#arrowtoggle1").toggleClass("arrow-open arrow-closed");
                     $("#toggle-metrics").toggle();
+                    if (window.localStorage) {
+                        window.localStorage.setItem("arrowtoggle1class", $("#arrowtoggle1").attr('class'));
+                    }
                 });
 
                 $("#aggregatedMetrics").click(function(){
                     $("#arrowtoggle2").toggleClass("arrow-open arrow-closed");
                     $("#toggle-aggregatedMetrics").toggle();
+                    if (window.localStorage) {
+                        window.localStorage.setItem("arrowtoggle2class", $("#arrowtoggle2").attr('class'));
+                    }
                 });
 
                 var quantiles = "0,0.25,0.5,0.75,1.0";
-                $.getJSON(stageEndPoint(appId) + "/"+stageAttemptId+"/taskSummary?quantiles="+quantiles,
+                $.getJSON(stageEndPoint(appId) + "/" + stageAttemptId + "/taskSummary?quantiles=" + quantiles,
                   function(taskMetricsResponse, status, jqXHR) {
                     var taskMetricKeys = Object.keys(taskMetricsResponse);
                     taskMetricKeys.forEach(function (columnKey) {
@@ -431,7 +458,8 @@ $(document).ready(function () {
                     });
                     var task_summary_metrics_table_filtered_array =
                         task_summary_metrics_table_array.filter(row => row.checkboxId < 11);
-                    createDataTableForTaskSummaryMetricsTable(task_summary_metrics_table_filtered_array);
+                    task_summary_metrics_table_current_state_array = task_summary_metrics_table_filtered_array.slice();
+                    reselectCheckboxesBasedOnTaskTableState();
                 });
 
                 // building task aggregated metrics by executor table
@@ -518,10 +546,20 @@ $(document).ready(function () {
                     "info": true,
                     "processing": true,
                     "lengthMenu": [[20, 40, 60, 100, totalTasksToShow], [20, 40, 60, 100, "All"]],
+                    "orderMulti": false,
                     "ajax": {
                         "url": stageEndPoint(appId) + "/" + stageAttemptId + "/taskTable",
-                        "data": {
-                            "numTasks": totalTasksToShow
+                        "data": function (data) {
+                            var columnIndexToSort = 0;
+                            var columnNameToSort = "Index";
+                            if (data.order[0].column && data.order[0].column != "") {
+                                columnIndexToSort = parseInt(data.order[0].column);
+                                columnNameToSort = data.columns[columnIndexToSort].name;
+                            }
+                            delete data.columns;
+                            data.numTasks = totalTasksToShow;
+                            data.columnIndexToSort = columnIndexToSort;
+                            data.columnNameToSort = columnNameToSort;
                         },
                         "dataSrc": function ( jsons ) {
                             var jsonStr = JSON.stringify(jsons);
@@ -757,7 +795,7 @@ $(document).ready(function () {
                         { "visible": false, "targets": 18 }
                     ],
                 };
-                var taskTableSelector = $(taskTable).DataTable(task_conf);
+                taskTableSelector = $(taskTable).DataTable(task_conf);
                 $('#active-tasks-table_filter input').unbind();
                 var searchEvent;
                 $('#active-tasks-table_filter input').bind('keyup', function(e) {
@@ -766,21 +804,9 @@ $(document).ready(function () {
                   }
                   var value = this.value;
                   searchEvent = window.setTimeout(function(){
-                    taskTableSelector.search( value ).draw();}, 2500);
+                    taskTableSelector.search( value ).draw();}, 500);
                 });
-
-                var optionalColumns = [11, 12, 13, 14, 15, 16, 17];
-                var allChecked = true;
-                for(k = 0; k < optionalColumns.length; k++) {
-                    if (taskTableSelector.column(optionalColumns[k]).visible()) {
-                        $("#box-"+optionalColumns[k]).prop('checked', true);
-                    } else {
-                        allChecked = false;
-                    }
-                }
-                if (allChecked) {
-                    $("#box-0").prop('checked', true);
-                }
+                reselectCheckboxesBasedOnTaskTableState();
 
                 // hide or show columns dynamically event
                 $('input.toggle-vis').on('click', function(e){
@@ -866,6 +892,19 @@ $(document).ready(function () {
                 }
                 executorSummaryTableSelector.column(13).visible(dataToShow.showBytesSpilledData);
                 executorSummaryTableSelector.column(14).visible(dataToShow.showBytesSpilledData);
+
+                if (window.localStorage) {
+                    if (window.localStorage.getItem("arrowtoggle1class") !== null &&
+                        window.localStorage.getItem("arrowtoggle1class").includes("arrow-open")) {
+                        $("#arrowtoggle1").toggleClass("arrow-open arrow-closed");
+                        $("#toggle-metrics").toggle();
+                    }
+                    if (window.localStorage.getItem("arrowtoggle2class") !== null &&
+                        window.localStorage.getItem("arrowtoggle2class").includes("arrow-open")) {
+                        $("#arrowtoggle2").toggleClass("arrow-open arrow-closed");
+                        $("#toggle-aggregatedMetrics").toggle();
+                    }
+                }
             });
         });
     });
