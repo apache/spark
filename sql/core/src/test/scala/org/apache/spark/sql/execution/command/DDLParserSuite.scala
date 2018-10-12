@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
-import org.apache.spark.sql.catalyst.expressions.{Expression, JsonTuple}
+import org.apache.spark.sql.catalyst.expressions.{Expression, JsonTuple, PartitioningAttribute}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, InsertIntoDir, LogicalPlan}
@@ -885,11 +885,13 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       ("<>", (a: Expression, b: Expression) => a =!= b),
       ("!=", (a: Expression, b: Expression) => a =!= b)).foreach { case (op, predicateGen) =>
         val genPlan = parser.parsePlan(sql1_table.replace("=", op))
+        val dtAttr = PartitioningAttribute("dt")
+        val countryAttr = PartitioningAttribute("country")
         val expectedPlan = AlterTableDropPartitionCommand(
           tableIdent,
           Seq(
-            Seq(predicateGen('dt.string, "2008-08-08"), predicateGen('country.string, "us")),
-            Seq(predicateGen('dt.string, "2009-09-09"), predicateGen('country.string, "uk"))),
+            Seq(predicateGen(dtAttr, "2008-08-08"), predicateGen(countryAttr, "us")),
+            Seq(predicateGen(dtAttr, "2009-09-09"), predicateGen(countryAttr, "uk"))),
           ifExists = true,
           purge = false,
           retainData = false)
