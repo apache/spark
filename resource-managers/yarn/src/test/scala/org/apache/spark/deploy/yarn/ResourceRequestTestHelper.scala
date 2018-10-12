@@ -32,6 +32,12 @@ object ResourceRequestTestHelper {
     }
 
     val allResourceTypes = new ListBuffer[AnyRef]
+    // ResourceUtils.reinitializeResources() is the YARN-way
+    // to specify resources for the execution of the tests.
+    // This method should receive standard resources with names of memory-mb and vcores.
+    // Without specifying the standard resources or specifying them
+    // with different names e.g. memory, YARN would throw various exceptions
+    // because it relies on that standard resources are always specified.
     val defaultResourceTypes = List(
       createResourceTypeInfo("memory-mb"),
       createResourceTypeInfo("vcores"))

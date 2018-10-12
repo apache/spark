@@ -42,6 +42,10 @@ private object ResourceRequestHelper extends Logging {
   /**
    * Validates sparkConf and throws a SparkException if any of standard resources (memory or cores)
    * is defined with the property spark.yarn.x.resource.y
+   * Need to reject all combinations of AM / Driver / Executor and memory / CPU cores resources, as
+   * Spark has its own names for them (memory, cores),
+   * but YARN have its names too: (memory, memory-mb, mb) and (cores, vcores, cpu-vcores).
+   * We need to disable every possible way YARN could receive the resource definitions above.
    */
   def validateResources(sparkConf: SparkConf): Unit = {
     val resourceDefinitions = Seq[(String, String)](
