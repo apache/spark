@@ -133,8 +133,6 @@ private[spark] class BlockManager(
 
   private[spark] val externalShuffleServiceEnabled =
     conf.get(config.SHUFFLE_SERVICE_ENABLED)
-  private val chunkSize =
-    conf.getSizeAsBytes("spark.storage.memoryMapLimitForTests", Int.MaxValue.toString).toInt
   private val remoteReadNioBufferConversion =
     conf.getBoolean("spark.network.remoteReadNioBufferConversion", false)
 
@@ -451,7 +449,7 @@ private[spark] class BlockManager(
             new EncryptedBlockData(tmpFile, blockSize, conf, key).toChunkedByteBuffer(allocator)
 
           case None =>
-            ChunkedByteBuffer.fromFile(tmpFile, conf.get(config.MEMORY_MAP_LIMIT_FOR_TESTS).toInt)
+            ChunkedByteBuffer.fromFile(tmpFile)
         }
         putBytes(blockId, buffer, level)(classTag)
         tmpFile.delete()
@@ -797,7 +795,7 @@ private[spark] class BlockManager(
         if (remoteReadNioBufferConversion) {
           return Some(new ChunkedByteBuffer(data.nioByteBuffer()))
         } else {
-          return Some(ChunkedByteBuffer.fromManagedBuffer(data, chunkSize))
+          return Some(ChunkedByteBuffer.fromManagedBuffer(data))
         }
       }
       logDebug(s"The value of block $blockId is null")
