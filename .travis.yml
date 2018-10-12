@@ -67,7 +67,7 @@ jobs:
     - stage: unsafe
       script: ./build/sbt -mem 4096 -Phadoop-2.7 unsafe/test
     - stage: yarn
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 yarn/test
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 -Pyarn yarn/test
     - stage: repl
       script: ./build/sbt -mem 4096 -Phadoop-2.7 repl/test
     - stage: launcher
