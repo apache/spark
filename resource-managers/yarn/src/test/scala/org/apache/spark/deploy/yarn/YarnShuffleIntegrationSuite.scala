@@ -39,6 +39,8 @@ import org.apache.spark.tags.ExtendedYarnTest
 @ExtendedYarnTest
 class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
 
+  val x = 7
+
   override def newYarnConfig(): YarnConfiguration = {
     val yarnConfig = new YarnConfiguration()
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
