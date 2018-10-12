@@ -996,20 +996,14 @@ head(predict(fpm, df))
 
 #### PrefixSpan
 
-`spark.prefixSpan` executes PrefixSpan algorithm to mine frequent itemsets on a `SparkDataFrame`.
+`spark.findFrequentSequentialPatterns` method can be used to find the complete set of frequent sequential patterns in the input sequences of itemsets.
 
 ```{r}
 df <- createDataFrame(list(list(list(list(1L, 2L), list(3L))),
                       list(list(list(1L), list(3L, 2L), list(1L, 2L))),
                       list(list(list(1L, 2L), list(5L))),
                       list(list(list(6L)))), schema = c("sequence"))
-prefix_Span <- spark.prefixSpan(minSupport = 0.5, maxPatternLength = 5L)
-```
-
-`spark.findFrequentSequentialPatterns` method can be used to find the complete set of frequent sequential patterns in the input sequences of itemsets.
-
-```{r}
-head(spark.findFrequentSequentialPatterns(prefix_Span, df))
+head(spark.findFrequentSequentialPatterns(df, minSupport = 0.5, maxPatternLength = 5L))
 ```
 
 #### Kolmogorov-Smirnov Test

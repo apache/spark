@@ -1416,11 +1416,8 @@ setGeneric("spark.freqItemsets", function(object) { standardGeneric("spark.freqI
 setGeneric("spark.associationRules", function(object) { standardGeneric("spark.associationRules") })
 
 #' @rdname spark.prefixSpan
-setGeneric("spark.prefixSpan", function(...) { standardGeneric("spark.prefixSpan") })
-
-#' @rdname spark.prefixSpan
 setGeneric("spark.findFrequentSequentialPatterns",
-            function(object, data) { standardGeneric("spark.findFrequentSequentialPatterns") })
+            function(data, ...) { standardGeneric("spark.findFrequentSequentialPatterns") })
 
 #' @param object a fitted ML model object.
 #' @param path the directory where the model is saved.

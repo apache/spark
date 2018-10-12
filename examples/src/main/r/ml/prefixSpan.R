@@ -32,11 +32,9 @@ df <- createDataFrame(list(list(list(list(1L, 2L), list(3L))),
                       list(list(list(1L, 2L), list(5L))),
                       list(list(list(6L)))), schema = c("sequence"))
 
-prefix_Span <- spark.prefixSpan(minSupport = 0.5, maxPatternLength = 5L,
-                                maxLocalProjDBSize = 32000000L)
-
 # Finding frequent sequential patterns
-frequency <- spark.findFrequentSequentialPatterns(prefix_Span, df)
+frequency <- spark.findFrequentSequentialPatterns(df, minSupport = 0.5, maxPatternLength = 5L,
+                                                  maxLocalProjDBSize = 32000000L)
 showDF(frequency)
 
 # $example off$

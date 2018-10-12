@@ -71,7 +71,6 @@ exportMethods("glm",
               "spark.fpGrowth",
               "spark.freqItemsets",
               "spark.associationRules",
-              "spark.prefixSpan",
               "spark.findFrequentSequentialPatterns")
 
 # Job group lifecycle management methods
