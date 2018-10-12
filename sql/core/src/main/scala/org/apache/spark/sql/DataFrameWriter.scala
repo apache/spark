@@ -47,10 +47,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Specifies the behavior when data or table already exists. Options include:
-   *   - `SaveMode.Overwrite`: overwrite the existing data.
-   *   - `SaveMode.Append`: append the data.
-   *   - `SaveMode.Ignore`: ignore the operation (i.e. no-op).
-   *   - `SaveMode.ErrorIfExists`: default option, throw an exception at runtime.
+   * <ul>
+   * <li>`SaveMode.Overwrite`: overwrite the existing data.</li>
+   * <li>`SaveMode.Append`: append the data.</li>
+   * <li>`SaveMode.Ignore`: ignore the operation (i.e. no-op).</li>
+   * <li>`SaveMode.ErrorIfExists`: default option, throw an exception at runtime.</li>
+   * </ul>
    *
    * @since 1.4.0
    */
@@ -61,10 +63,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Specifies the behavior when data or table already exists. Options include:
-   *   - `overwrite`: overwrite the existing data.
-   *   - `append`: append the data.
-   *   - `ignore`: ignore the operation (i.e. no-op).
-   *   - `error` or `errorifexists`: default option, throw an exception at runtime.
+   * <ul>
+   * <li>`overwrite`: overwrite the existing data.</li>
+   * <li>`append`: append the data.</li>
+   * <li>`ignore`: ignore the operation (i.e. no-op).</li>
+   * <li>`error` or `errorifexists`: default option, throw an exception at runtime.</li>
+   * </ul>
    *
    * @since 1.4.0
    */
@@ -163,9 +167,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Partitions the output by the given columns on the file system. If specified, the output is
    * laid out on the file system similar to Hive's partitioning scheme. As an example, when we
    * partition a dataset by year and then month, the directory layout would look like:
-   *
-   *   - year=2016/month=01/
-   *   - year=2016/month=02/
+   * <ul>
+   * <li>year=2016/month=01/</li>
+   * <li>year=2016/month=02/</li>
+   * </ul>
    *
    * Partitioning is one of the most widely used techniques to optimize physical data layout.
    * It provides a coarse-grained index for skipping unnecessary data reads when queries have
