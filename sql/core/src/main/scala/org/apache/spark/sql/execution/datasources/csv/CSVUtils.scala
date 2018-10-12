@@ -99,6 +99,9 @@ object CSVUtils {
   def toChar(str: String): Char = {
     (str: Seq[Char]) match {
       case Seq() => throw new IllegalArgumentException("Delimiter cannot be empty string")
+      case Seq('\\') => throw new IllegalArgumentException("Single backslash is prohibited." +
+        " It has special meaning as beginning of an escape sequence." +
+        " To get the backslash character, pass a string with two backslashes as the delimiter.")
       case Seq(c) => c
       case Seq('\\', 't') => '\t'
       case Seq('\\', 'r') => '\r'
