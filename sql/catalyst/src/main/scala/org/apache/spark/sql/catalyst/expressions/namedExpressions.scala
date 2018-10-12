@@ -388,11 +388,14 @@ case class OuterReference(e: NamedExpression)
  */
 case class PartitioningAttribute(name: String)
   extends Attribute with Unevaluable {
-  override def dataType: DataType = throw new UnsupportedOperationException
+  override val exprId: ExprId = NamedExpression.newExprId
+  // Not really needed and used. We just need a dataType to be used during analysis for resolving
+  // the expressions. The String type is used because all the literals in PARTITION operations are
+  // parsed as strings and eventually casted later.
+  override def dataType: DataType = StringType
   override def nullable: Boolean = false
 
   override def qualifier: Seq[String] = throw new UnsupportedOperationException
-  override def exprId: ExprId = throw new UnsupportedOperationException
   override def withNullability(newNullability: Boolean): Attribute =
     throw new UnsupportedOperationException
   override def newInstance(): Attribute = throw new UnsupportedOperationException
