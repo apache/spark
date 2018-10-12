@@ -18,43 +18,36 @@ package org.apache.spark.deploy.k8s.integrationtest
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{Pod, SecretBuilder}
-import org.apache.commons.codec.binary.Base64
-import org.apache.commons.io.output.ByteArrayOutputStream
-import org.scalatest.concurrent.Eventually
-
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite._
+import org.apache.spark.deploy.k8s.integrationtest.TestConfig.{getTestImageRepo, getTestImageTag}
 
 private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
 
+  import DecommissionSuite._
+
+  private val pySparkDockerImage =
+    s"${getTestImageRepo}/spark-py:${getTestImageTag}"
+
   test("Run SparkPi with env and mount secrets.", k8sTestTag) {
-    createTestSecret()
     sparkAppConf
       .set("spark.worker.decommission.enabled", "true")
       .set("spark.kubernetes.container.image", pySparkDockerImage)
       .set("spark.kubernetes.pyspark.pythonVersion", "2")
-    // We should be able to run Spark PI now
-    runSparkPiAndVerifyCompletion()
-    // Now we manually trigger decomissioning
+
     runSparkApplicationAndVerifyCompletion(
-      appResource = PYSPARK_FILES,
+      appResource = PYSPARK_DECOMISSIONING,
       mainClass = "",
-      expectedLogOnCompletion = Seq(
-        "Spark is working before decommissioning: True",
-        "Called decommissionWorker on on success: True",
-        "Spark decommissioned worker is not scheduled: True"),
+      expectedLogOnCompletion = Seq("Decommissioning worker"),
       appArgs = Array("python"),
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
       appLocator = appLocator,
       isJVM = false,
-      pyFiles = Some(PYSPARK_CONTAINER_TESTS))
-    // Now we expect this to fail
-    runSparkPiAndVerifyCompletion()
+      decomissioningTest = true)
   }
 }
 
-prviate[spark] object DecommissionSuite {
+private[spark] object DecommissionSuite {
   val TEST_LOCAL_PYSPARK: String = "local:///opt/spark/tests/"
-  val PYSPARK_DECOMISSIONING: String = TEST_LOCAL_PYSPARK + "trigger_decomissioning.py"
+  val PYSPARK_DECOMISSIONING: String = TEST_LOCAL_PYSPARK + "decomissioning_waiter.py"
 }

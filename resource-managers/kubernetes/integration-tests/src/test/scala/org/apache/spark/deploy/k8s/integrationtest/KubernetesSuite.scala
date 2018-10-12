@@ -207,7 +207,8 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       executorPodChecker: Pod => Unit,
       appLocator: String,
       isJVM: Boolean,
-      pyFiles: Option[String] = None): Unit = {
+      pyFiles: Option[String] = None,
+      decomissioningTest: Boolean = false): Unit = {
     val appArguments = SparkAppArguments(
       mainAppResource = appResource,
       mainClass = mainClass,
@@ -242,12 +243,19 @@ private[spark] class KubernetesSuite extends SparkFunSuite
           action match {
             case Action.ADDED | Action.MODIFIED =>
               execPods(name) = resource
+              // If testing decomissioning delete the node 10 seconds after
+              if (decomissioningTest) {
+                Thread.sleep(1000)
+                kubernetesTestComponents.kubernetesClient.pods().withName(name).delete()
+              }
             case Action.DELETED | Action.ERROR =>
               execPods.remove(name)
           }
         }
       })
-    Eventually.eventually(TIMEOUT, INTERVAL) { execPods.values.nonEmpty should be (true) }
+    // If we're testing decomissioning we delete all the executors
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      execPods.values.nonEmpty || decomissioningTest should be (true) }
     execWatcher.close()
     execPods.values.foreach(executorPodChecker(_))
     Eventually.eventually(TIMEOUT, INTERVAL) {
