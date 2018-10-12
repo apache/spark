@@ -16,8 +16,6 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite._
 import org.apache.spark.deploy.k8s.integrationtest.TestConfig.{getTestImageRepo, getTestImageTag}
 
