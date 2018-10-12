@@ -113,7 +113,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual.length == 1)
     val expected = UTF8String.fromString("abc")
 
-    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
+    if (!checkResult(actual.head, expected, expressions.head)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -126,7 +126,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual.length == 1)
     val expected = UnsafeArrayData.fromPrimitiveArray(Array.fill(length)(true))
 
-    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
+    if (!checkResult(actual.head, expected, expressions.head)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -142,7 +142,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual.length == 1)
     val expected = ArrayBasedMapData((0 until length).toArray, Array.fill(length)(true))
 
-    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
+    if (!checkResult(actual.head, expected, expressions.head)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -154,7 +154,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
     val expected = Seq(InternalRow(Seq.fill(length)(true): _*))
 
-    if (!checkResult(actual, expected, expressions.head.dataType)) {
+    if (!checkResult(actual, expected, expressions.head)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -170,7 +170,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual.length == 1)
     val expected = InternalRow(Seq.fill(length)(true): _*)
 
-    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
+    if (!checkResult(actual.head, expected, expressions.head)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -375,7 +375,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actualOr.length == 1)
     val expectedOr = false
 
-    if (!checkResult(actualOr.head, expectedOr, exprOr.dataType)) {
+    if (!checkResult(actualOr.head, expectedOr, exprOr)) {
       fail(s"Incorrect Evaluation: expressions: $exprOr, actual: $actualOr, expected: $expectedOr")
     }
 
@@ -389,7 +389,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actualAnd.length == 1)
     val expectedAnd = false
 
-    if (!checkResult(actualAnd.head, expectedAnd, exprAnd.dataType)) {
+    if (!checkResult(actualAnd.head, expectedAnd, exprAnd)) {
       fail(
         s"Incorrect Evaluation: expressions: $exprAnd, actual: $actualAnd, expected: $expectedAnd")
     }

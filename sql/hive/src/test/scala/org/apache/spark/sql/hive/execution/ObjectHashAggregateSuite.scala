@@ -416,7 +416,7 @@ class ObjectHashAggregateSuite
     actual.zip(expected).foreach { case (lhs: Row, rhs: Row) =>
       assert(lhs.length == rhs.length)
       lhs.toSeq.zip(rhs.toSeq).foreach {
-        case (a: Double, b: Double) => checkResult(a, b +- tolerance, DoubleType)
+        case (a: Double, b: Double) => checkResult(a, b +- tolerance, DoubleType, false)
         case (a, b) => a == b
       }
     }
