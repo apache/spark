@@ -46,11 +46,23 @@ private object ResourceRequestHelper extends Logging {
   def validateResources(sparkConf: SparkConf): Unit = {
     val resourceDefinitions = Seq[(String, String)](
       (AM_MEMORY.key, YARN_AM_RESOURCE_TYPES_PREFIX + "memory"),
-      (AM_CORES.key, YARN_AM_RESOURCE_TYPES_PREFIX + "cores"),
       (DRIVER_MEMORY.key, YARN_DRIVER_RESOURCE_TYPES_PREFIX + "memory"),
-      (DRIVER_CORES.key, YARN_DRIVER_RESOURCE_TYPES_PREFIX + "cores"),
       (EXECUTOR_MEMORY.key, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "memory"),
-      (EXECUTOR_CORES.key, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "cores"))
+      (AM_MEMORY.key, YARN_AM_RESOURCE_TYPES_PREFIX + "mb"),
+      (DRIVER_MEMORY.key, YARN_DRIVER_RESOURCE_TYPES_PREFIX + "mb"),
+      (EXECUTOR_MEMORY.key, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "mb"),
+      (AM_MEMORY.key, YARN_AM_RESOURCE_TYPES_PREFIX + "memory-mb"),
+      (DRIVER_MEMORY.key, YARN_DRIVER_RESOURCE_TYPES_PREFIX + "memory-mb"),
+      (EXECUTOR_MEMORY.key, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "memory-mb"),
+      (AM_CORES.key, YARN_AM_RESOURCE_TYPES_PREFIX + "cores"),
+      (DRIVER_CORES.key, YARN_DRIVER_RESOURCE_TYPES_PREFIX + "cores"),
+      (EXECUTOR_CORES.key, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "cores"),
+      (AM_CORES.key, YARN_AM_RESOURCE_TYPES_PREFIX + "vcores"),
+      (DRIVER_CORES.key, YARN_DRIVER_RESOURCE_TYPES_PREFIX + "vcores"),
+      (EXECUTOR_CORES.key, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "vcores"),
+      (AM_CORES.key, YARN_AM_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
+      (DRIVER_CORES.key, YARN_DRIVER_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
+      (EXECUTOR_CORES.key, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "cpu-vcores"))
     val errorMessage = new mutable.StringBuilder()
 
     resourceDefinitions.foreach { case (sparkName, resourceRequest) =>

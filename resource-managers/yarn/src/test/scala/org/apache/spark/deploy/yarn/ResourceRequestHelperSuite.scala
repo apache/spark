@@ -95,10 +95,28 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
     verifyValidateResourcesException(sparkConf, NEW_CONFIG_EXECUTOR_MEMORY)
   }
 
+  test("memory defined with new config for executor 2") {
+    val sparkConf = new SparkConf()
+    sparkConf.set(YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "memory-mb", "30G")
+    verifyValidateResourcesException(sparkConf, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "memory-mb")
+  }
+
+  test("memory defined with new config for executor 3") {
+    val sparkConf = new SparkConf()
+    sparkConf.set(YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "mb", "30G")
+    verifyValidateResourcesException(sparkConf, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "mb")
+  }
+
   test("cores defined with new config for executor") {
     val sparkConf = new SparkConf()
     sparkConf.set(NEW_CONFIG_EXECUTOR_CORES, "5")
     verifyValidateResourcesException(sparkConf, NEW_CONFIG_EXECUTOR_CORES)
+  }
+
+  test("cores defined with new config for executor 2") {
+    val sparkConf = new SparkConf()
+    sparkConf.set(YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "vcores", "5")
+    verifyValidateResourcesException(sparkConf, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "vcores")
   }
 
   test("memory defined with new config, client mode") {
