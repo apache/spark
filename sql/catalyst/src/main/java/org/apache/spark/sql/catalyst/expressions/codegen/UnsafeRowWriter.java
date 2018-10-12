@@ -185,13 +185,13 @@ public final class UnsafeRowWriter extends UnsafeWriter {
       // grow the global buffer before writing data.
       holder.grow(16);
 
+      // always zero-out the 16-byte buffer
+      Platform.putLong(getBuffer(), cursor(), 0L);
+      Platform.putLong(getBuffer(), cursor() + 8, 0L);
+
       // Make sure Decimal object has the same scale as DecimalType.
       // Note that we may pass in null Decimal object to set null for it.
       if (input == null || !input.changePrecision(precision, scale)) {
-        // zero-out the bytes
-        Platform.putLong(getBuffer(), cursor(), 0L);
-        Platform.putLong(getBuffer(), cursor() + 8, 0L);
-
         BitSetMethods.set(getBuffer(), startingOffset, ordinal);
         // keep the offset for future update
         setOffsetAndSize(ordinal, 0);
@@ -199,8 +199,6 @@ public final class UnsafeRowWriter extends UnsafeWriter {
         final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
         final int numBytes = bytes.length;
         assert numBytes <= 16;
-
-        zeroOutPaddingBytes(numBytes);
 
         // Write the bytes to the variable length portion.
         Platform.copyMemory(

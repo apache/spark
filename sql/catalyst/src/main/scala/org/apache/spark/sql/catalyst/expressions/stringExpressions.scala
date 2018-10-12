@@ -330,7 +330,9 @@ trait String2StringExpression extends ImplicitCastInputTypes {
 case class Upper(child: Expression)
   extends UnaryExpression with String2StringExpression {
 
+  // scalastyle:off caselocale
   override def convert(v: UTF8String): UTF8String = v.toUpperCase
+  // scalastyle:on caselocale
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).toUpperCase()")
@@ -349,7 +351,9 @@ case class Upper(child: Expression)
   """)
 case class Lower(child: Expression) extends UnaryExpression with String2StringExpression {
 
+  // scalastyle:off caselocale
   override def convert(v: UTF8String): UTF8String = v.toLowerCase
+  // scalastyle:on caselocale
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).toLowerCase()")
@@ -1389,7 +1393,9 @@ case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastI
   override def dataType: DataType = StringType
 
   override def nullSafeEval(string: Any): Any = {
+    // scalastyle:off caselocale
     string.asInstanceOf[UTF8String].toLowerCase.toTitleCase
+    // scalastyle:on caselocale
   }
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, str => s"$str.toLowerCase().toTitleCase()")

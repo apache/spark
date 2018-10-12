@@ -19,7 +19,6 @@ package org.apache.spark.deploy.history
 
 import java.io.{File, FileNotFoundException, IOException}
 import java.nio.file.Files
-import java.nio.file.attribute.PosixFilePermissions
 import java.util.{Date, ServiceLoader}
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
@@ -133,9 +132,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
-    val perms = PosixFilePermissions.fromString("rwx------")
-    val dbPath = Files.createDirectories(new File(path, "listing.ldb").toPath(),
-      PosixFilePermissions.asFileAttribute(perms)).toFile()
+    val dbPath = Files.createDirectories(new File(path, "listing.ldb").toPath()).toFile()
+    Utils.chmod700(dbPath)
 
     val metadata = new FsHistoryProviderMetadata(CURRENT_LISTING_VERSION,
       AppStatusStore.CURRENT_VERSION, logDir.toString())

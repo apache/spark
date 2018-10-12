@@ -192,9 +192,7 @@ class SparkContext(object):
         # If encryption is enabled, we need to setup a server in the jvm to read broadcast
         # data via a socket.
         # scala's mangled names w/ $ in them require special treatment.
-        encryption_conf = self._jvm.org.apache.spark.internal.config.__getattr__("package$")\
-            .__getattr__("MODULE$").IO_ENCRYPTION_ENABLED()
-        self._encryption_enabled = self._jsc.sc().conf().get(encryption_conf)
+        self._encryption_enabled = self._jvm.PythonUtils.getEncryptionEnabled(self._jsc)
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
@@ -539,8 +537,10 @@ class SparkContext(object):
             # parallelize from there.
             tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
             try:
-                serializer.dump_stream(data, tempFile)
-                tempFile.close()
+                try:
+                    serializer.dump_stream(data, tempFile)
+                finally:
+                    tempFile.close()
                 return reader_func(tempFile.name)
             finally:
                 # we eagerily reads the file so we can delete right after.

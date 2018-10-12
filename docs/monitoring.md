@@ -186,10 +186,35 @@ Security options for the Spark History Server are covered more detail in the
     </td>
   </tr>
   <tr>
+    <td>spark.history.fs.endEventReparseChunkSize</td>
+    <td>1m</td>
+    <td>
+      How many bytes to parse at the end of log files looking for the end event. 
+      This is used to speed up generation of application listings by skipping unnecessary
+      parts of event log files. It can be disabled by setting this config to 0.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.inProgressOptimization.enabled</td>
+    <td>true</td>
+    <td>
+      Enable optimized handling of in-progress logs. This option may leave finished
+      applications that fail to rename their event logs listed as in-progress.
+    </td>
+  </tr>
+  <tr>
     <td>spark.history.fs.numReplayThreads</td>
     <td>25% of available cores</td>
     <td>
       Number of threads that will be used by history server to process event logs.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.store.maxDiskUsage</td>
+    <td>10g</td>
+    <td>
+      Maximum disk usage for the local directory where the cache application history information
+      are stored.
     </td>
   </tr>
   <tr>
