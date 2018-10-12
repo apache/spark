@@ -273,7 +273,10 @@ private[csv] object UnivocityParser {
       inputStream: InputStream,
       shouldDropHeader: Boolean,
       tokenizer: CsvParser): Iterator[Array[String]] = {
-    convertStream(inputStream, shouldDropHeader, tokenizer)(tokens => tokens)
+    val handleHeader: () => Unit =
+      () => if (shouldDropHeader) tokenizer.parseNext
+
+    convertStream(inputStream, tokenizer, handleHeader)(tokens => tokens)
   }
 
   /**
@@ -281,10 +284,9 @@ private[csv] object UnivocityParser {
    */
   def parseStream(
       inputStream: InputStream,
-      shouldDropHeader: Boolean,
       parser: UnivocityParser,
-      schema: StructType,
-      checkHeader: Array[String] => Unit): Iterator[InternalRow] = {
+      headerChecker: CSVHeaderChecker,
+      schema: StructType): Iterator[InternalRow] = {
     val tokenizer = parser.tokenizer
     val safeParser = new FailureSafeParser[Array[String]](
       input => Seq(parser.convert(input)),
@@ -292,25 +294,26 @@ private[csv] object UnivocityParser {
       schema,
       parser.options.columnNameOfCorruptRecord,
       parser.options.multiLine)
-    convertStream(inputStream, shouldDropHeader, tokenizer, checkHeader) { tokens =>
+
+    val handleHeader: () => Unit =
+      () => headerChecker.checkHeaderColumnNames(tokenizer)
+
+    convertStream(inputStream, tokenizer, handleHeader) { tokens =>
       safeParser.parse(tokens)
     }.flatten
   }
 
   private def convertStream[T](
       inputStream: InputStream,
-      shouldDropHeader: Boolean,
       tokenizer: CsvParser,
-      checkHeader: Array[String] => Unit = _ => ())(
+      handleHeader: () => Unit)(
       convert: Array[String] => T) = new Iterator[T] {
     tokenizer.beginParsing(inputStream)
-    private var nextRecord = {
-      if (shouldDropHeader) {
-        val firstRecord = tokenizer.parseNext()
-        checkHeader(firstRecord)
-      }
-      tokenizer.parseNext()
-    }
+
+    // We can handle header here since here the stream is open.
+    handleHeader()
+
+    private var nextRecord = tokenizer.parseNext()
 
     override def hasNext: Boolean = nextRecord != null
 
@@ -330,7 +333,10 @@ private[csv] object UnivocityParser {
   def parseIterator(
       lines: Iterator[String],
       parser: UnivocityParser,
+      headerChecker: CSVHeaderChecker,
       schema: StructType): Iterator[InternalRow] = {
+    headerChecker.checkHeaderColumnNames(lines, parser.tokenizer)
+
     val options = parser.options
 
     val filteredLines: Iterator[String] = CSVUtils.filterCommentAndEmpty(lines, options)
