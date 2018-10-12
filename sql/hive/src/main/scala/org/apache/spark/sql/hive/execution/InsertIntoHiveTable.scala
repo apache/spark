@@ -24,7 +24,7 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, ExternalCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, ExternalCatalog, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
@@ -227,18 +227,22 @@ case class InsertIntoHiveTable(
           // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
           // version and we may not want to catch up new Hive version every time. We delete the
           // Hive partition first and then load data file into the Hive partition.
-          if (oldPart.nonEmpty && overwrite) {
-            oldPart.get.storage.locationUri.foreach { uri =>
-              val partitionPath = new Path(uri)
-              val fs = partitionPath.getFileSystem(hadoopConf)
-              if (fs.exists(partitionPath)) {
-                if (!fs.delete(partitionPath, true)) {
-                  throw new RuntimeException(
-                    "Cannot remove partition directory '" + partitionPath.toString)
-                }
-                // Don't let Hive do overwrite operation since it is slower.
-                doHiveOverwrite = false
+          if (overwrite) {
+            val oldPartitionPath = oldPart.flatMap(_.storage.locationUri.map(new Path(_)))
+              .getOrElse {
+                ExternalCatalogUtils.generatePartitionPath(
+                  partitionSpec,
+                  partitionColumnNames,
+                  HiveClientImpl.toHiveTable(table).getDataLocation)
               }
+            val fs = oldPartitionPath.getFileSystem(hadoopConf)
+            if (fs.exists(oldPartitionPath)) {
+              if (!fs.delete(oldPartitionPath, true)) {
+                throw new RuntimeException(
+                  "Cannot remove partition directory '" + oldPartitionPath.toString)
+              }
+              // Don't let Hive do overwrite operation since it is slower.
+              doHiveOverwrite = false
             }
           }
 
