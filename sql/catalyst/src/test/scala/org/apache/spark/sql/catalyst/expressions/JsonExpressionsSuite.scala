@@ -23,7 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeTestUtils, DateTimeUtils, GenericArrayData, PermissiveMode}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -242,6 +242,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     checkEvaluation(
       GetJsonObject(NonFoldableLiteral(json), NonFoldableLiteral("$.fb:testid")),
       "1234")
+  }
+
+  test("some big value") {
+    val value = "x" * 3000
+    checkEvaluation(
+      GetJsonObject(NonFoldableLiteral((s"""{"big": "$value"}""")),
+      NonFoldableLiteral("$.big")), value)
   }
 
   val jsonTupleQuery = Literal("f1") ::
@@ -503,7 +510,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     )
 
     val jsonData2 = """{"t": "2016-01-01T00:00:00"}"""
-    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
+    for (tz <- DateTimeTestUtils.outstandingTimezones) {
       c = Calendar.getInstance(tz)
       c.set(2016, 0, 1, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)

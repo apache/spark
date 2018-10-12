@@ -28,6 +28,7 @@ class CSVUtilsSuite extends SparkFunSuite {
     assert(CSVUtils.toChar("""\"""") === '\"')
     assert(CSVUtils.toChar("""\'""") === '\'')
     assert(CSVUtils.toChar("""\u0000""") === '\u0000')
+    assert(CSVUtils.toChar("""\\""") === '\\')
   }
 
   test("Does not accept delimiter larger than one character") {
@@ -44,4 +45,17 @@ class CSVUtilsSuite extends SparkFunSuite {
     assert(exception.getMessage.contains("Unsupported special character for delimiter"))
   }
 
+  test("string with one backward slash is prohibited") {
+    val exception = intercept[IllegalArgumentException]{
+      CSVUtils.toChar("""\""")
+    }
+    assert(exception.getMessage.contains("Single backslash is prohibited"))
+  }
+
+  test("output proper error message for empty string") {
+    val exception = intercept[IllegalArgumentException]{
+      CSVUtils.toChar("")
+    }
+    assert(exception.getMessage.contains("Delimiter cannot be empty string"))
+  }
 }
