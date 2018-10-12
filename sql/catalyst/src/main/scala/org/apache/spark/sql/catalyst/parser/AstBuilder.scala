@@ -304,9 +304,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           throw new ParseException(s"Invalid partition spec: ${pFilter.getText}", ctx)
         }
         // We cannot use UnresolvedAttribute because resolution is performed after Analysis, when
-        // running the command. The type is not relevant, it is replaced during the real resolution
-        val partition =
-          AttributeReference(pFilter.identifier().getText, StringType)()
+        // running the command.
+        val partition = PartitioningAttribute(pFilter.identifier().getText)
         val value = Literal(visitStringConstant(pFilter.constant()))
         val operator = pFilter.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
         val comparison = buildComparison(partition, value, operator)

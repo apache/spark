@@ -584,7 +584,7 @@ case class AlterTableDropPartitionCommand(
     val filters = partitionFilterSpec.map { pFilter =>
       pFilter.transform {
         // Resolve the partition attributes
-        case partitionCol: Attribute =>
+        case partitionCol: PartitioningAttribute =>
           val normalizedPartition = PartitioningUtils.normalizePartitionColumn(
             partitionCol.name,
             partitionColumns,
@@ -626,7 +626,7 @@ object AlterTableDropPartitionCommand {
 
   def tablePartitionToPartitionFilters(spec: TablePartitionSpec): Seq[Expression] = {
     spec.map {
-      case (key, value) => EqualTo(AttributeReference(key, StringType)(), Literal(value))
+      case (key, value) => EqualTo(PartitioningAttribute(key), Literal(value))
     }.toSeq
   }
 }
