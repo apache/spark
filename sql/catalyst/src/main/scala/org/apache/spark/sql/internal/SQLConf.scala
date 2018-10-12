@@ -1539,6 +1539,14 @@ object SQLConf {
         "are performed before any UNION, EXCEPT and MINUS operations.")
       .booleanConf
       .createWithDefault(false)
+
+  val LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE =
+    buildConf("spark.sql.legacy.parser.havingWithoutGroupByAsWhere")
+      .internal()
+      .doc("If it is set to true, the parser will treat HAVING without GROUP BY as a normal " +
+        "WHERE, which does not follow SQL standard.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
