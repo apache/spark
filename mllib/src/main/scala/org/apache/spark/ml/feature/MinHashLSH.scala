@@ -51,19 +51,25 @@ class MinHashLSHModel private[ml](
     private[ml] val randCoefficients: Array[(Int, Int)])
   extends LSHModel[MinHashLSHModel] {
 
+  /** @group setParam */
+  @Since("2.4.0")
+  override def setInputCol(value: String): this.type = super.set(inputCol, value)
+
+  /** @group setParam */
+  @Since("2.4.0")
+  override def setOutputCol(value: String): this.type = super.set(outputCol, value)
+
   @Since("2.1.0")
-  override protected[ml] val hashFunction: Vector => Array[Vector] = {
-    elems: Vector => {
-      require(elems.numNonzeros > 0, "Must have at least 1 non zero entry.")
-      val elemsList = elems.toSparse.indices.toList
-      val hashValues = randCoefficients.map { case (a, b) =>
-        elemsList.map { elem: Int =>
-          ((1 + elem) * a + b) % MinHashLSH.HASH_PRIME
-        }.min.toDouble
-      }
-      // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
-      hashValues.map(Vectors.dense(_))
+  override protected[ml] def hashFunction(elems: Vector): Array[Vector] = {
+    require(elems.numNonzeros > 0, "Must have at least 1 non zero entry.")
+    val elemsList = elems.toSparse.indices.toList
+    val hashValues = randCoefficients.map { case (a, b) =>
+      elemsList.map { elem: Int =>
+        ((1L + elem) * a + b) % MinHashLSH.HASH_PRIME
+      }.min.toDouble
     }
+    // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
+    hashValues.map(Vectors.dense(_))
   }
 
   @Since("2.1.0")
@@ -197,7 +203,7 @@ object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
         .map(tuple => (tuple(0), tuple(1))).toArray
       val model = new MinHashLSHModel(metadata.uid, randCoefficients)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

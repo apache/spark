@@ -79,22 +79,8 @@ class StreamingContext(object):
         java_import(gw.jvm, "org.apache.spark.streaming.api.java.*")
         java_import(gw.jvm, "org.apache.spark.streaming.api.python.*")
 
-        # start callback server
-        # getattr will fallback to JVM, so we cannot test by hasattr()
-        if "_callback_server" not in gw.__dict__ or gw._callback_server is None:
-            gw.callback_server_parameters.eager_load = True
-            gw.callback_server_parameters.daemonize = True
-            gw.callback_server_parameters.daemonize_connections = True
-            gw.callback_server_parameters.port = 0
-            gw.start_callback_server(gw.callback_server_parameters)
-            cbport = gw._callback_server.server_socket.getsockname()[1]
-            gw._callback_server.port = cbport
-            # gateway with real port
-            gw._python_proxy_port = gw._callback_server.port
-            # get the GatewayServer object in JVM by ID
-            jgws = JavaObject("GATEWAY_SERVER", gw._gateway_client)
-            # update the port of CallbackClient with real port
-            jgws.resetCallbackClient(jgws.getCallbackClient().getAddress(), gw._python_proxy_port)
+        from pyspark.java_gateway import ensure_callback_server_started
+        ensure_callback_server_started(gw)
 
         # register serializer for TransformFunction
         # it happens before creating SparkContext when loading from checkpointing
@@ -236,7 +222,7 @@ class StreamingContext(object):
         Set each DStreams in this context to remember RDDs it generated
         in the last given duration. DStreams remember RDDs only for a
         limited duration of time and releases them for garbage collection.
-        This method allows the developer to specify how to long to remember
+        This method allows the developer to specify how long to remember
         the RDDs (if the developer wishes to query old data outside the
         DStream computation).
 
@@ -301,7 +287,7 @@ class StreamingContext(object):
 
     def queueStream(self, rdds, oneAtATime=True, default=None):
         """
-        Create an input stream from an queue of RDDs or list. In each batch,
+        Create an input stream from a queue of RDDs or list. In each batch,
         it will process either one or all of the RDDs returned by the queue.
 
         .. note:: Changes to the queue after the stream is created will not be recognized.
@@ -338,7 +324,7 @@ class StreamingContext(object):
         jdstreams = [d._jdstream for d in dstreams]
         # change the final serializer to sc.serializer
         func = TransformFunction(self._sc,
-                                 lambda t, *rdds: transformFunc(rdds).map(lambda x: x),
+                                 lambda t, *rdds: transformFunc(rdds),
                                  *[d._jrdd_deserializer for d in dstreams])
         jfunc = self._jvm.TransformFunction(func)
         jdstream = self._jssc.transform(jdstreams, jfunc)

@@ -402,7 +402,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     growPointerArrayIfNecessary();
     int uaoSize = UnsafeAlignedOffset.getUaoSize();
-    // Need 4 bytes to store the record length.
+    // Need 4 or 8 bytes to store the record length.
     final int required = length + uaoSize;
     acquireNewPageIfNecessary(required);
 

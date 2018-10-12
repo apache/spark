@@ -33,8 +33,8 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   private def visitUnaryNode(p: UnaryNode): Statistics = {
     // There should be some overhead in Row object, the size should not be zero when there is
     // no columns, this help to prevent divide-by-zero error.
-    val childRowSize = p.child.output.map(_.dataType.defaultSize).sum + 8
-    val outputRowSize = p.output.map(_.dataType.defaultSize).sum + 8
+    val childRowSize = EstimationUtils.getSizePerRow(p.child.output)
+    val outputRowSize = EstimationUtils.getSizePerRow(p.output)
     // Assume there will be the same number of rows as child has.
     var sizeInBytes = (p.child.stats.sizeInBytes * outputRowSize) / childRowSize
     if (sizeInBytes == 0) {

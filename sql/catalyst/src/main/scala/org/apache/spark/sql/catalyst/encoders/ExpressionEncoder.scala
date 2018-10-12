@@ -128,7 +128,7 @@ object ExpressionEncoder {
         case b: BoundReference if b == originalInputObject => newInputObject
       })
 
-      if (enc.flat) {
+      val serializerExpr = if (enc.flat) {
         newSerializer.head
       } else {
         // For non-flat encoder, the input object is not top level anymore after being combined to
@@ -146,6 +146,7 @@ object ExpressionEncoder {
           Invoke(Literal.fromObject(None), "equals", BooleanType, newInputObject :: Nil))
         If(nullCheck, Literal.create(null, struct.dataType), struct)
       }
+      Alias(serializerExpr, s"_${index + 1}")()
     }
 
     val childrenDeserializers = encoders.zipWithIndex.map { case (enc, index) =>

@@ -21,6 +21,7 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
 
 /**
  * A field inside a StructType.
@@ -73,5 +74,19 @@ case class StructField(
    */
   def getComment(): Option[String] = {
     if (metadata.contains("comment")) Option(metadata.getString("comment")) else None
+  }
+
+  /**
+   * Returns a string containing a schema in DDL format. For example, the following value:
+   * `StructField("eventId", IntegerType)` will be converted to `eventId` INT.
+   *
+   * @since 2.4.0
+   */
+  def toDDL: String = {
+    val comment = getComment()
+      .map(escapeSingleQuotedString)
+      .map(" COMMENT '" + _ + "'")
+
+    s"${quoteIdentifier(name)} ${dataType.sql}${comment.getOrElse("")}"
   }
 }

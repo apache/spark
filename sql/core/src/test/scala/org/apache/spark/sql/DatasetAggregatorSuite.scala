@@ -148,6 +148,41 @@ object VeryComplexResultAgg extends Aggregator[Row, String, ComplexAggData] {
 }
 
 
+case class OptionBooleanData(name: String, isGood: Option[Boolean])
+
+case class OptionBooleanAggregator(colName: String)
+    extends Aggregator[Row, Option[Boolean], Option[Boolean]] {
+
+  override def zero: Option[Boolean] = None
+
+  override def reduce(buffer: Option[Boolean], row: Row): Option[Boolean] = {
+    val index = row.fieldIndex(colName)
+    val value = if (row.isNullAt(index)) {
+      Option.empty[Boolean]
+    } else {
+      Some(row.getBoolean(index))
+    }
+    merge(buffer, value)
+  }
+
+  override def merge(b1: Option[Boolean], b2: Option[Boolean]): Option[Boolean] = {
+    if ((b1.isDefined && b1.get) || (b2.isDefined && b2.get)) {
+      Some(true)
+    } else if (b1.isDefined) {
+      b1
+    } else {
+      b2
+    }
+  }
+
+  override def finish(reduction: Option[Boolean]): Option[Boolean] = reduction
+
+  override def bufferEncoder: Encoder[Option[Boolean]] = OptionalBoolEncoder
+  override def outputEncoder: Encoder[Option[Boolean]] = OptionalBoolEncoder
+
+  def OptionalBoolEncoder: Encoder[Option[Boolean]] = ExpressionEncoder()
+}
+
 class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
@@ -332,5 +367,30 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.groupBy($"i").agg(VeryComplexResultAgg.toColumn),
       Row(1, Row(Row(1, "a"), Row(1, "a"))) :: Row(2, Row(Row(2, "bc"), Row(2, "bc"))) :: Nil)
+  }
+
+  test("SPARK-24569: Aggregator with output type Option[Boolean] creates column of type Row") {
+    val df = Seq(
+      OptionBooleanData("bob", Some(true)),
+      OptionBooleanData("bob", Some(false)),
+      OptionBooleanData("bob", None)).toDF()
+    val group = df
+      .groupBy("name")
+      .agg(OptionBooleanAggregator("isGood").toColumn.alias("isGood"))
+    assert(df.schema == group.schema)
+    checkAnswer(group, Row("bob", true) :: Nil)
+    checkDataset(group.as[OptionBooleanData], OptionBooleanData("bob", Some(true)))
+  }
+
+  test("SPARK-24569: groupByKey with Aggregator of output type Option[Boolean]") {
+    val df = Seq(
+      OptionBooleanData("bob", Some(true)),
+      OptionBooleanData("bob", Some(false)),
+      OptionBooleanData("bob", None)).toDF()
+    val grouped = df.groupByKey((r: Row) => r.getString(0))
+      .agg(OptionBooleanAggregator("isGood").toColumn).toDF("name", "isGood")
+
+    assert(grouped.schema == df.schema)
+    checkDataset(grouped.as[OptionBooleanData], OptionBooleanData("bob", Some(true)))
   }
 }

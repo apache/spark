@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types._
 
 object CSVUtils {
   /**
@@ -67,12 +67,8 @@ object CSVUtils {
     }
   }
 
-  /**
-   * Drop header line so that only data can remain.
-   * This is similar with `filterHeaderLine` above and currently being used in CSV reading path.
-   */
-  def dropHeaderLine(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
-    val nonEmptyLines = if (options.isCommentSet) {
+  def skipComments(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
+    if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
       iter.dropWhile { line =>
         line.trim.isEmpty || line.trim.startsWith(commentPrefix)
@@ -80,9 +76,60 @@ object CSVUtils {
     } else {
       iter.dropWhile(_.trim.isEmpty)
     }
+  }
 
-    if (nonEmptyLines.hasNext) nonEmptyLines.drop(1)
-    iter
+  /**
+   * Extracts header and moves iterator forward so that only data remains in it
+   */
+  def extractHeader(iter: Iterator[String], options: CSVOptions): Option[String] = {
+    val nonEmptyLines = skipComments(iter, options)
+    if (nonEmptyLines.hasNext) {
+      Some(nonEmptyLines.next())
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Generates a header from the given row which is null-safe and duplicate-safe.
+   */
+  def makeSafeHeader(
+      row: Array[String],
+      caseSensitive: Boolean,
+      options: CSVOptions): Array[String] = {
+    if (options.headerFlag) {
+      val duplicates = {
+        val headerNames = row.filter(_ != null)
+          // scalastyle:off caselocale
+          .map(name => if (caseSensitive) name else name.toLowerCase)
+        // scalastyle:on caselocale
+        headerNames.diff(headerNames.distinct).distinct
+      }
+
+      row.zipWithIndex.map { case (value, index) =>
+        if (value == null || value.isEmpty || value == options.nullValue) {
+          // When there are empty strings or the values set in `nullValue`, put the
+          // index as the suffix.
+          s"_c$index"
+          // scalastyle:off caselocale
+        } else if (!caseSensitive && duplicates.contains(value.toLowerCase)) {
+          // scalastyle:on caselocale
+          // When there are case-insensitive duplicates, put the index as the suffix.
+          s"$value$index"
+        } else if (duplicates.contains(value)) {
+          // When there are duplicates, put the index as the suffix.
+          s"$value$index"
+        } else {
+          value
+        }
+      }
+    } else {
+      row.zipWithIndex.map { case (_, index) =>
+        // Uses default column names, "_c#" where # is its position of fields
+        // when header option is disabled.
+        s"_c$index"
+      }
+    }
   }
 
   /**
@@ -113,22 +160,28 @@ object CSVUtils {
   }
 
   /**
-   * Verify if the schema is supported in CSV datasource.
+   * Sample CSV dataset as configured by `samplingRatio`.
    */
-  def verifySchema(schema: StructType): Unit = {
-    def verifyType(dataType: DataType): Unit = dataType match {
-      case ByteType | ShortType | IntegerType | LongType | FloatType |
-           DoubleType | BooleanType | _: DecimalType | TimestampType |
-           DateType | StringType =>
-
-      case udt: UserDefinedType[_] => verifyType(udt.sqlType)
-
-      case _ =>
-        throw new UnsupportedOperationException(
-          s"CSV data source does not support ${dataType.simpleString} data type.")
+  def sample(csv: Dataset[String], options: CSVOptions): Dataset[String] = {
+    require(options.samplingRatio > 0,
+      s"samplingRatio (${options.samplingRatio}) should be greater than 0")
+    if (options.samplingRatio > 0.99) {
+      csv
+    } else {
+      csv.sample(withReplacement = false, options.samplingRatio, 1)
     }
-
-    schema.foreach(field => verifyType(field.dataType))
   }
 
+  /**
+   * Sample CSV RDD as configured by `samplingRatio`.
+   */
+  def sample(csv: RDD[Array[String]], options: CSVOptions): RDD[Array[String]] = {
+    require(options.samplingRatio > 0,
+      s"samplingRatio (${options.samplingRatio}) should be greater than 0")
+    if (options.samplingRatio > 0.99) {
+      csv
+    } else {
+      csv.sample(withReplacement = false, options.samplingRatio, 1)
+    }
+  }
 }

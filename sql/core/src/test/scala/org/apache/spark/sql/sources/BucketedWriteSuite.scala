@@ -18,9 +18,10 @@
 package org.apache.spark.sql.sources
 
 import java.io.File
-import java.net.URI
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.BucketingUtils
@@ -48,19 +49,46 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
     intercept[AnalysisException](df.write.bucketBy(2, "k").saveAsTable("tt"))
   }
 
-  test("numBuckets be greater than 0 but less than 100000") {
+  test("numBuckets be greater than 0 but less/eq than default bucketing.maxBuckets (100000)") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
 
-    Seq(-1, 0, 100000).foreach(numBuckets => {
+    Seq(-1, 0, 100001).foreach(numBuckets => {
       val e = intercept[AnalysisException](df.write.bucketBy(numBuckets, "i").saveAsTable("tt"))
       assert(
-        e.getMessage.contains("Number of buckets should be greater than 0 but less than 100000"))
+        e.getMessage.contains("Number of buckets should be greater than 0 but less than"))
     })
+  }
+
+  test("numBuckets be greater than 0 but less/eq than overridden bucketing.maxBuckets (200000)") {
+    val maxNrBuckets: Int = 200000
+    val catalog = spark.sessionState.catalog
+
+    withSQLConf("spark.sql.sources.bucketing.maxBuckets" -> maxNrBuckets.toString) {
+      // within the new limit
+      Seq(100001, maxNrBuckets).foreach(numBuckets => {
+        withTable("t") {
+          df.write.bucketBy(numBuckets, "i").saveAsTable("t")
+          val table = catalog.getTableMetadata(TableIdentifier("t"))
+          assert(table.bucketSpec == Option(BucketSpec(numBuckets, Seq("i"), Seq())))
+        }
+      })
+
+      // over the new limit
+      withTable("t") {
+        val e = intercept[AnalysisException](
+          df.write.bucketBy(maxNrBuckets + 1, "i").saveAsTable("t"))
+        assert(
+          e.getMessage.contains("Number of buckets should be greater than 0 but less than"))
+      }
+    }
   }
 
   test("specify sorting columns without bucketing columns") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
-    intercept[IllegalArgumentException](df.write.sortBy("j").saveAsTable("tt"))
+    val e = intercept[AnalysisException] {
+      df.write.sortBy("j").saveAsTable("tt")
+    }
+    assert(e.getMessage == "sortBy must be used together with bucketBy;")
   }
 
   test("sorting by non-orderable column") {
@@ -74,7 +102,16 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       df.write.bucketBy(2, "i").parquet("/tmp/path")
     }
-    assert(e.getMessage == "'save' does not support bucketing right now;")
+    assert(e.getMessage == "'save' does not support bucketBy right now;")
+  }
+
+  test("write bucketed and sorted data using save()") {
+    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+
+    val e = intercept[AnalysisException] {
+      df.write.bucketBy(2, "i").sortBy("i").parquet("/tmp/path")
+    }
+    assert(e.getMessage == "'save' does not support bucketBy and sortBy right now;")
   }
 
   test("write bucketed data using insertInto()") {
@@ -83,7 +120,16 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       df.write.bucketBy(2, "i").insertInto("tt")
     }
-    assert(e.getMessage == "'insertInto' does not support bucketing right now;")
+    assert(e.getMessage == "'insertInto' does not support bucketBy right now;")
+  }
+
+  test("write bucketed and sorted data using insertInto()") {
+    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+
+    val e = intercept[AnalysisException] {
+      df.write.bucketBy(2, "i").sortBy("i").insertInto("tt")
+    }
+    assert(e.getMessage == "'insertInto' does not support bucketBy and sortBy right now;")
   }
 
   private lazy val df = {

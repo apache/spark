@@ -42,6 +42,7 @@ import org.apache.spark.deploy.SparkSubmit._
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.scheduler.EventLoggingListener
 import org.apache.spark.util.{CommandLineUtils, ResetSystemProperties, Utils}
 
@@ -73,20 +74,25 @@ trait TestPrematureExit {
     @volatile var exitedCleanly = false
     mainObject.exitFn = (_) => exitedCleanly = true
 
+    @volatile var exception: Exception = null
     val thread = new Thread {
       override def run() = try {
         mainObject.main(input)
       } catch {
-        // If exceptions occur after the "exit" has happened, fine to ignore them.
-        // These represent code paths not reachable during normal execution.
-        case e: Exception => if (!exitedCleanly) throw e
+        // Capture the exception to check whether the exception contains searchString or not
+        case e: Exception => exception = e
       }
     }
     thread.start()
     thread.join()
-    val joined = printStream.lineBuffer.mkString("\n")
-    if (!joined.contains(searchString)) {
-      fail(s"Search string '$searchString' not found in $joined")
+    if (exitedCleanly) {
+      val joined = printStream.lineBuffer.mkString("\n")
+      assert(joined.contains(searchString))
+    } else {
+      assert(exception != null)
+      if (!exception.getMessage.contains(searchString)) {
+        throw exception
+      }
     }
   }
 }
@@ -109,6 +115,8 @@ class SparkSubmitSuite
   private val emptyIvySettings = File.createTempFile("ivy", ".xml")
   FileUtils.write(emptyIvySettings, "<ivysettings />", StandardCharsets.UTF_8)
 
+  private val submit = new SparkSubmit()
+
   override def beforeEach() {
     super.beforeEach()
   }
@@ -128,13 +136,16 @@ class SparkSubmitSuite
   }
 
   test("handle binary specified but not class") {
-    testPrematureExit(Array("foo.jar"), "No main class")
+    val jar = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
+    testPrematureExit(Array(jar.toString()), "No main class")
   }
 
   test("handles arguments with --key=val") {
     val clArgs = Seq(
       "--jars=one.jar,two.jar,three.jar",
-      "--name=myApp")
+      "--name=myApp",
+      "--class=org.FooBar",
+      SparkLauncher.NO_RESOURCE)
     val appArgs = new SparkSubmitArguments(clArgs)
     appArgs.jars should include regex (".*one.jar,.*two.jar,.*three.jar")
     appArgs.name should be ("myApp")
@@ -174,6 +185,26 @@ class SparkSubmitSuite
     appArgs.toString should include ("thequeue")
   }
 
+  test("SPARK-24241: do not fail fast if executor num is 0 when dynamic allocation is enabled") {
+    val clArgs1 = Seq(
+      "--name", "myApp",
+      "--class", "Foo",
+      "--num-executors", "0",
+      "--conf", "spark.dynamicAllocation.enabled=true",
+      "thejar.jar")
+    new SparkSubmitArguments(clArgs1)
+
+    val clArgs2 = Seq(
+      "--name", "myApp",
+      "--class", "Foo",
+      "--num-executors", "0",
+      "--conf", "spark.dynamicAllocation.enabled=false",
+      "thejar.jar")
+
+    val e = intercept[SparkException](new SparkSubmitArguments(clArgs2))
+    assert(e.getMessage.contains("Number of executors must be a positive number"))
+  }
+
   test("specify deploy mode through configuration") {
     val clArgs = Seq(
       "--master", "yarn",
@@ -182,7 +213,7 @@ class SparkSubmitSuite
       "thejar.jar"
     )
     val appArgs = new SparkSubmitArguments(clArgs)
-    val (_, _, conf, _) = prepareSubmitEnvironment(appArgs)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
 
     appArgs.deployMode should be ("client")
     conf.get("spark.submit.deployMode") should be ("client")
@@ -192,11 +223,11 @@ class SparkSubmitSuite
       "--master", "yarn",
       "--deploy-mode", "cluster",
       "--conf", "spark.submit.deployMode=client",
-      "-class", "org.SomeClass",
+      "--class", "org.SomeClass",
       "thejar.jar"
     )
     val appArgs1 = new SparkSubmitArguments(clArgs1)
-    val (_, _, conf1, _) = prepareSubmitEnvironment(appArgs1)
+    val (_, _, conf1, _) = submit.prepareSubmitEnvironment(appArgs1)
 
     appArgs1.deployMode should be ("cluster")
     conf1.get("spark.submit.deployMode") should be ("cluster")
@@ -210,7 +241,7 @@ class SparkSubmitSuite
     val appArgs2 = new SparkSubmitArguments(clArgs2)
     appArgs2.deployMode should be (null)
 
-    val (_, _, conf2, _) = prepareSubmitEnvironment(appArgs2)
+    val (_, _, conf2, _) = submit.prepareSubmitEnvironment(appArgs2)
     appArgs2.deployMode should be ("client")
     conf2.get("spark.submit.deployMode") should be ("client")
   }
@@ -233,7 +264,7 @@ class SparkSubmitSuite
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
-    val (childArgs, classpath, conf, mainClass) = prepareSubmitEnvironment(appArgs)
+    val (childArgs, classpath, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
     val childArgsStr = childArgs.mkString(" ")
     childArgsStr should include ("--class org.SomeClass")
     childArgsStr should include ("--arg arg1 --arg arg2")
@@ -276,7 +307,7 @@ class SparkSubmitSuite
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
-    val (childArgs, classpath, conf, mainClass) = prepareSubmitEnvironment(appArgs)
+    val (childArgs, classpath, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
     mainClass should be ("org.SomeClass")
     classpath should have length (4)
@@ -322,7 +353,7 @@ class SparkSubmitSuite
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     appArgs.useRest = useRest
-    val (childArgs, classpath, conf, mainClass) = prepareSubmitEnvironment(appArgs)
+    val (childArgs, classpath, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
     val childArgsStr = childArgs.mkString(" ")
     if (useRest) {
       childArgsStr should endWith ("thejar.jar org.SomeClass arg1 arg2")
@@ -359,7 +390,7 @@ class SparkSubmitSuite
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
-    val (childArgs, classpath, conf, mainClass) = prepareSubmitEnvironment(appArgs)
+    val (childArgs, classpath, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
     mainClass should be ("org.SomeClass")
     classpath should have length (1)
@@ -381,7 +412,7 @@ class SparkSubmitSuite
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
-    val (childArgs, classpath, conf, mainClass) = prepareSubmitEnvironment(appArgs)
+    val (childArgs, classpath, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
     mainClass should be ("org.SomeClass")
     classpath should have length (1)
@@ -403,7 +434,7 @@ class SparkSubmitSuite
       "/home/thejar.jar",
       "arg1")
     val appArgs = new SparkSubmitArguments(clArgs)
-    val (childArgs, classpath, conf, mainClass) = prepareSubmitEnvironment(appArgs)
+    val (childArgs, classpath, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
 
     val childArgsMap = childArgs.grouped(2).map(a => a(0) -> a(1)).toMap
     childArgsMap.get("--primary-java-resource") should be (Some("file:/home/thejar.jar"))
@@ -428,7 +459,7 @@ class SparkSubmitSuite
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
-    val (_, _, conf, mainClass) = prepareSubmitEnvironment(appArgs)
+    val (_, _, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
     conf.get("spark.executor.memory") should be ("5g")
     conf.get("spark.master") should be ("yarn")
     conf.get("spark.submit.deployMode") should be ("cluster")
@@ -441,12 +472,12 @@ class SparkSubmitSuite
 
     val clArgs1 = Seq("--class", "org.apache.spark.repl.Main", "spark-shell")
     val appArgs1 = new SparkSubmitArguments(clArgs1)
-    val (_, _, conf1, _) = prepareSubmitEnvironment(appArgs1)
+    val (_, _, conf1, _) = submit.prepareSubmitEnvironment(appArgs1)
     conf1.get(UI_SHOW_CONSOLE_PROGRESS) should be (true)
 
     val clArgs2 = Seq("--class", "org.SomeClass", "thejar.jar")
     val appArgs2 = new SparkSubmitArguments(clArgs2)
-    val (_, _, conf2, _) = prepareSubmitEnvironment(appArgs2)
+    val (_, _, conf2, _) = submit.prepareSubmitEnvironment(appArgs2)
     assert(!conf2.contains(UI_SHOW_CONSOLE_PROGRESS))
   }
 
@@ -625,7 +656,7 @@ class SparkSubmitSuite
       "--files", files,
       "thejar.jar")
     val appArgs = new SparkSubmitArguments(clArgs)
-    val (_, _, conf, _) = SparkSubmit.prepareSubmitEnvironment(appArgs)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
     appArgs.jars should be (Utils.resolveURIs(jars))
     appArgs.files should be (Utils.resolveURIs(files))
     conf.get("spark.jars") should be (Utils.resolveURIs(jars + ",thejar.jar"))
@@ -640,7 +671,7 @@ class SparkSubmitSuite
       "thejar.jar"
     )
     val appArgs2 = new SparkSubmitArguments(clArgs2)
-    val (_, _, conf2, _) = SparkSubmit.prepareSubmitEnvironment(appArgs2)
+    val (_, _, conf2, _) = submit.prepareSubmitEnvironment(appArgs2)
     appArgs2.files should be (Utils.resolveURIs(files))
     appArgs2.archives should fullyMatch regex ("file:/archive1,file:.*#archive3")
     conf2.get("spark.yarn.dist.files") should be (Utils.resolveURIs(files))
@@ -656,7 +687,7 @@ class SparkSubmitSuite
       "mister.py"
     )
     val appArgs3 = new SparkSubmitArguments(clArgs3)
-    val (_, _, conf3, _) = SparkSubmit.prepareSubmitEnvironment(appArgs3)
+    val (_, _, conf3, _) = submit.prepareSubmitEnvironment(appArgs3)
     appArgs3.pyFiles should be (Utils.resolveURIs(pyFiles))
     conf3.get("spark.submit.pyFiles") should be (
       PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
@@ -708,7 +739,7 @@ class SparkSubmitSuite
       "thejar.jar"
     )
     val appArgs = new SparkSubmitArguments(clArgs)
-    val (_, _, conf, _) = SparkSubmit.prepareSubmitEnvironment(appArgs)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
     conf.get("spark.jars") should be(Utils.resolveURIs(jars + ",thejar.jar"))
     conf.get("spark.files") should be(Utils.resolveURIs(files))
 
@@ -725,7 +756,7 @@ class SparkSubmitSuite
       "thejar.jar"
     )
     val appArgs2 = new SparkSubmitArguments(clArgs2)
-    val (_, _, conf2, _) = SparkSubmit.prepareSubmitEnvironment(appArgs2)
+    val (_, _, conf2, _) = submit.prepareSubmitEnvironment(appArgs2)
     conf2.get("spark.yarn.dist.files") should be(Utils.resolveURIs(files))
     conf2.get("spark.yarn.dist.archives") should be(Utils.resolveURIs(archives))
 
@@ -740,14 +771,18 @@ class SparkSubmitSuite
       "mister.py"
     )
     val appArgs3 = new SparkSubmitArguments(clArgs3)
-    val (_, _, conf3, _) = SparkSubmit.prepareSubmitEnvironment(appArgs3)
+    val (_, _, conf3, _) = submit.prepareSubmitEnvironment(appArgs3)
     conf3.get("spark.submit.pyFiles") should be(
       PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
 
     // Test remote python files
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
     val f4 = File.createTempFile("test-submit-remote-python-files", "", tmpDir)
+    val pyFile1 = File.createTempFile("file1", ".py", tmpDir)
+    val pyFile2 = File.createTempFile("file2", ".py", tmpDir)
     val writer4 = new PrintWriter(f4)
-    val remotePyFiles = "hdfs:///tmp/file1.py,hdfs:///tmp/file2.py"
+    val remotePyFiles = s"s3a://${pyFile1.getAbsolutePath},s3a://${pyFile2.getAbsolutePath}"
     writer4.println("spark.submit.pyFiles " + remotePyFiles)
     writer4.close()
     val clArgs4 = Seq(
@@ -757,7 +792,7 @@ class SparkSubmitSuite
       "hdfs:///tmp/mister.py"
     )
     val appArgs4 = new SparkSubmitArguments(clArgs4)
-    val (_, _, conf4, _) = SparkSubmit.prepareSubmitEnvironment(appArgs4)
+    val (_, _, conf4, _) = submit.prepareSubmitEnvironment(appArgs4, conf = Some(hadoopConf))
     // Should not format python path for yarn cluster mode
     conf4.get("spark.submit.pyFiles") should be(Utils.resolveURIs(remotePyFiles))
   }
@@ -778,17 +813,17 @@ class SparkSubmitSuite
   }
 
   test("SPARK_CONF_DIR overrides spark-defaults.conf") {
-    forConfDir(Map("spark.executor.memory" -> "2.3g")) { path =>
+    forConfDir(Map("spark.executor.memory" -> "3g")) { path =>
       val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
       val args = Seq(
         "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
         "--name", "testApp",
         "--master", "local",
         unusedJar.toString)
-      val appArgs = new SparkSubmitArguments(args, Map("SPARK_CONF_DIR" -> path))
+      val appArgs = new SparkSubmitArguments(args, env = Map("SPARK_CONF_DIR" -> path))
       assert(appArgs.propertiesFile != null)
       assert(appArgs.propertiesFile.startsWith(path))
-      appArgs.executorMemory should be ("2.3g")
+      appArgs.executorMemory should be ("3g")
     }
   }
 
@@ -809,6 +844,9 @@ class SparkSubmitSuite
     val archive1 = File.createTempFile("archive1", ".zip", tmpArchiveDir)
     val archive2 = File.createTempFile("archive2", ".zip", tmpArchiveDir)
 
+    val tempPyFile = File.createTempFile("tmpApp", ".py")
+    tempPyFile.deleteOnExit()
+
     val args = Seq(
       "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
       "--name", "testApp",
@@ -818,10 +856,10 @@ class SparkSubmitSuite
       "--files", s"${tmpFileDir.getAbsolutePath}/tmpFile*",
       "--py-files", s"${tmpPyFileDir.getAbsolutePath}/tmpPy*",
       "--archives", s"${tmpArchiveDir.getAbsolutePath}/*.zip",
-      jar2.toString)
+      tempPyFile.toURI().toString())
 
     val appArgs = new SparkSubmitArguments(args)
-    val (_, _, conf, _) = SparkSubmit.prepareSubmitEnvironment(appArgs)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
     conf.get("spark.yarn.dist.jars").split(",").toSet should be
       (Set(jar1.toURI.toString, jar2.toURI.toString))
     conf.get("spark.yarn.dist.files").split(",").toSet should be
@@ -947,7 +985,7 @@ class SparkSubmitSuite
       )
 
     val appArgs = new SparkSubmitArguments(args)
-    val (_, _, conf, _) = SparkSubmit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, conf = Some(hadoopConf))
 
     // All the resources should still be remote paths, so that YARN client will not upload again.
     conf.get("spark.yarn.dist.jars") should be (tmpJarPath)
@@ -962,20 +1000,24 @@ class SparkSubmitSuite
   }
 
   test("download remote resource if it is not supported by yarn service") {
-    testRemoteResources(enableHttpFs = false, blacklistHttpFs = false)
+    testRemoteResources(enableHttpFs = false)
   }
 
   test("avoid downloading remote resource if it is supported by yarn service") {
-    testRemoteResources(enableHttpFs = true, blacklistHttpFs = false)
+    testRemoteResources(enableHttpFs = true)
   }
 
   test("force download from blacklisted schemes") {
-    testRemoteResources(enableHttpFs = true, blacklistHttpFs = true)
+    testRemoteResources(enableHttpFs = true, blacklistSchemes = Seq("http"))
+  }
+
+  test("force download for all the schemes") {
+    testRemoteResources(enableHttpFs = true, blacklistSchemes = Seq("*"))
   }
 
   private def testRemoteResources(
       enableHttpFs: Boolean,
-      blacklistHttpFs: Boolean): Unit = {
+      blacklistSchemes: Seq[String] = Nil): Unit = {
     val hadoopConf = new Configuration()
     updateConfWithFakeS3Fs(hadoopConf)
     if (enableHttpFs) {
@@ -992,8 +1034,8 @@ class SparkSubmitSuite
     val tmpHttpJar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"), tmpDir)
     val tmpHttpJarPath = s"http://${new File(tmpHttpJar.toURI).getAbsolutePath}"
 
-    val forceDownloadArgs = if (blacklistHttpFs) {
-      Seq("--conf", "spark.yarn.dist.forceDownloadSchemes=http")
+    val forceDownloadArgs = if (blacklistSchemes.nonEmpty) {
+      Seq("--conf", s"spark.yarn.dist.forceDownloadSchemes=${blacklistSchemes.mkString(",")}")
     } else {
       Nil
     }
@@ -1007,18 +1049,23 @@ class SparkSubmitSuite
     ) ++ forceDownloadArgs ++ Seq(s"s3a://$mainResource")
 
     val appArgs = new SparkSubmitArguments(args)
-    val (_, _, conf, _) = SparkSubmit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, conf = Some(hadoopConf))
 
     val jars = conf.get("spark.yarn.dist.jars").split(",").toSet
 
-    // The URI of remote S3 resource should still be remote.
-    assert(jars.contains(tmpS3JarPath))
+    def isSchemeBlacklisted(scheme: String) = {
+      blacklistSchemes.contains("*") || blacklistSchemes.contains(scheme)
+    }
 
-    if (enableHttpFs && !blacklistHttpFs) {
+    if (!isSchemeBlacklisted("s3")) {
+      assert(jars.contains(tmpS3JarPath))
+    }
+
+    if (enableHttpFs && blacklistSchemes.isEmpty) {
       // If Http FS is supported by yarn service, the URI of remote http resource should
       // still be remote.
       assert(jars.contains(tmpHttpJarPath))
-    } else {
+    } else if (!enableHttpFs || isSchemeBlacklisted("http")) {
       // If Http FS is not supported by yarn service, or http scheme is configured to be force
       // downloading, the URI of remote http resource should be changed to a local one.
       val jarName = new File(tmpHttpJar.toURI).getName
@@ -1058,12 +1105,97 @@ class SparkSubmitSuite
       "hello")
 
     val exception = intercept[SparkException] {
-      SparkSubmit.main(args)
+      submit.doSubmit(args)
     }
 
     assert(exception.getMessage() === "hello")
   }
 
+  test("support --py-files/spark.submit.pyFiles in non pyspark application") {
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
+
+    val tmpDir = Utils.createTempDir()
+    val pyFile = File.createTempFile("tmpPy", ".egg", tmpDir)
+
+    val args = Seq(
+      "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
+      "--name", "testApp",
+      "--master", "yarn",
+      "--deploy-mode", "client",
+      "--py-files", s"s3a://${pyFile.getAbsolutePath}",
+      "spark-internal"
+    )
+
+    val appArgs = new SparkSubmitArguments(args)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, conf = Some(hadoopConf))
+
+    conf.get(PY_FILES.key) should be (s"s3a://${pyFile.getAbsolutePath}")
+    conf.get("spark.submit.pyFiles") should (startWith("/"))
+
+    // Verify "spark.submit.pyFiles"
+    val args1 = Seq(
+      "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
+      "--name", "testApp",
+      "--master", "yarn",
+      "--deploy-mode", "client",
+      "--conf", s"spark.submit.pyFiles=s3a://${pyFile.getAbsolutePath}",
+      "spark-internal"
+    )
+
+    val appArgs1 = new SparkSubmitArguments(args1)
+    val (_, _, conf1, _) = submit.prepareSubmitEnvironment(appArgs1, conf = Some(hadoopConf))
+
+    conf1.get(PY_FILES.key) should be (s"s3a://${pyFile.getAbsolutePath}")
+    conf1.get("spark.submit.pyFiles") should (startWith("/"))
+  }
+
+  test("handles natural line delimiters in --properties-file and --conf uniformly") {
+    val delimKey = "spark.my.delimiter."
+    val LF = "\n"
+    val CR = "\r"
+
+    val lineFeedFromCommandLine = s"${delimKey}lineFeedFromCommandLine" -> LF
+    val leadingDelimKeyFromFile = s"${delimKey}leadingDelimKeyFromFile" -> s"${LF}blah"
+    val trailingDelimKeyFromFile = s"${delimKey}trailingDelimKeyFromFile" -> s"blah${CR}"
+    val infixDelimFromFile = s"${delimKey}infixDelimFromFile" -> s"${CR}blah${LF}"
+    val nonDelimSpaceFromFile = s"${delimKey}nonDelimSpaceFromFile" -> " blah\f"
+
+    val testProps = Seq(leadingDelimKeyFromFile, trailingDelimKeyFromFile, infixDelimFromFile,
+      nonDelimSpaceFromFile)
+
+    val props = new java.util.Properties()
+    val propsFile = File.createTempFile("test-spark-conf", ".properties",
+      Utils.createTempDir())
+    val propsOutputStream = new FileOutputStream(propsFile)
+    try {
+      testProps.foreach { case (k, v) => props.put(k, v) }
+      props.store(propsOutputStream, "test whitespace")
+    } finally {
+      propsOutputStream.close()
+    }
+
+    val clArgs = Seq(
+      "--class", "org.SomeClass",
+      "--conf", s"${lineFeedFromCommandLine._1}=${lineFeedFromCommandLine._2}",
+      "--conf", "spark.master=yarn",
+      "--properties-file", propsFile.getPath,
+      "thejar.jar")
+
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
+
+    Seq(
+      lineFeedFromCommandLine,
+      leadingDelimKeyFromFile,
+      trailingDelimKeyFromFile,
+      infixDelimFromFile
+    ).foreach { case (k, v) =>
+      conf.get(k) should be (v)
+    }
+
+    conf.get(nonDelimSpaceFromFile._1) should be ("blah")
+  }
 }
 
 object SparkSubmitSuite extends SparkFunSuite with TimeLimits {

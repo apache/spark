@@ -112,10 +112,12 @@ private[spark] class AppStatusStore(
     }
   }
 
-  def stageAttempt(stageId: Int, stageAttemptId: Int, details: Boolean = false): v1.StageData = {
+  def stageAttempt(stageId: Int, stageAttemptId: Int,
+      details: Boolean = false): (v1.StageData, Seq[Int]) = {
     val stageKey = Array(stageId, stageAttemptId)
-    val stage = store.read(classOf[StageDataWrapper], stageKey).info
-    if (details) stageWithDetails(stage) else stage
+    val stageDataWrapper = store.read(classOf[StageDataWrapper], stageKey)
+    val stage = if (details) stageWithDetails(stageDataWrapper.info) else stageDataWrapper.info
+    (stage, stageDataWrapper.jobIds.toSeq)
   }
 
   def taskCount(stageId: Int, stageAttemptId: Int): Long = {
@@ -471,7 +473,7 @@ private[spark] class AppStatusStore(
 
   def operationGraphForJob(jobId: Int): Seq[RDDOperationGraph] = {
     val job = store.read(classOf[JobDataWrapper], jobId)
-    val stages = job.info.stageIds
+    val stages = job.info.stageIds.sorted
 
     stages.map { id =>
       val g = store.read(classOf[RDDOperationGraphWrapper], id).toRDDOperationGraph()

@@ -105,7 +105,7 @@ p(w_i | w_j ) = \frac{\exp(u_{w_i}^{\top}v_{w_j})}{\sum_{l=1}^{V} \exp(u_l^{\top
 \]`
 where $V$ is the vocabulary size. 
 
-The skip-gram model with softmax is expensive because the cost of computing $\log p(w_i | w_j)$ 
+The skip-gram model with softmax is expensive because the cost of computing $\log p(w_i | w_j)$
 is proportional to $V$, which can be easily in order of millions. To speed up training of Word2Vec, 
 we used hierarchical softmax, which reduced the complexity of computing of $\log p(w_i | w_j)$ to
 $O(\log(V))$

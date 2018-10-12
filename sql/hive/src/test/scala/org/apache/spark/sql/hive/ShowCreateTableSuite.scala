@@ -288,8 +288,24 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
     }
   }
 
+  test("SPARK-24911: keep quotes for nested fields") {
+    withTable("t1") {
+      val createTable = "CREATE TABLE `t1`(`a` STRUCT<`b`: STRING>)"
+      sql(createTable)
+      val shownDDL = sql(s"SHOW CREATE TABLE t1")
+        .head()
+        .getString(0)
+        .split("\n")
+        .head
+      assert(shownDDL == createTable)
+
+      checkCreateTable("t1")
+    }
+  }
+
   private def createRawHiveTable(ddl: String): Unit = {
-    hiveContext.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client.runSqlHive(ddl)
+    hiveContext.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
+      .client.runSqlHive(ddl)
   }
 
   private def checkCreateTable(table: String): Unit = {

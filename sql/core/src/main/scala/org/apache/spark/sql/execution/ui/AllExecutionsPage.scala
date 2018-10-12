@@ -55,24 +55,57 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
       val _content = mutable.ListBuffer[Node]()
 
       if (running.nonEmpty) {
+        val runningPageTable = new RunningExecutionTable(
+          parent, currentTime, running.sortBy(_.submissionTime).reverse).toNodeSeq(request)
+
         _content ++=
-          new RunningExecutionTable(
-            parent, s"Running Queries (${running.size})", currentTime,
-            running.sortBy(_.submissionTime).reverse).toNodeSeq
+          <span id="running" class="collapse-aggregated-runningExecutions collapse-table"
+                onClick="collapseTable('collapse-aggregated-runningExecutions',
+                'aggregated-runningExecutions')">
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a>Running Queries ({running.size})</a>
+            </h4>
+          </span> ++
+            <div class="aggregated-runningExecutions collapsible-table">
+              {runningPageTable}
+            </div>
       }
 
       if (completed.nonEmpty) {
+        val completedPageTable = new CompletedExecutionTable(
+          parent, currentTime, completed.sortBy(_.submissionTime).reverse).toNodeSeq(request)
+
         _content ++=
-          new CompletedExecutionTable(
-            parent, s"Completed Queries (${completed.size})", currentTime,
-            completed.sortBy(_.submissionTime).reverse).toNodeSeq
+          <span id="completed" class="collapse-aggregated-completedExecutions collapse-table"
+                onClick="collapseTable('collapse-aggregated-completedExecutions',
+                'aggregated-completedExecutions')">
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a>Completed Queries ({completed.size})</a>
+            </h4>
+          </span> ++
+            <div class="aggregated-completedExecutions collapsible-table">
+              {completedPageTable}
+            </div>
       }
 
       if (failed.nonEmpty) {
+        val failedPageTable = new FailedExecutionTable(
+          parent, currentTime, failed.sortBy(_.submissionTime).reverse).toNodeSeq(request)
+
         _content ++=
-          new FailedExecutionTable(
-            parent, s"Failed Queries (${failed.size})", currentTime,
-            failed.sortBy(_.submissionTime).reverse).toNodeSeq
+          <span id="failed" class="collapse-aggregated-failedExecutions collapse-table"
+                onClick="collapseTable('collapse-aggregated-failedExecutions',
+                'aggregated-failedExecutions')">
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a>Failed Queries ({failed.size})</a>
+            </h4>
+          </span> ++
+            <div class="aggregated-failedExecutions collapsible-table">
+              {failedPageTable}
+            </div>
       }
       _content
     }
@@ -111,14 +144,13 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
           }
         </ul>
       </div>
-    UIUtils.headerSparkPage("SQL", summary ++ content, parent, Some(5000))
+    UIUtils.headerSparkPage(request, "SQL", summary ++ content, parent, Some(5000))
   }
 }
 
 private[ui] abstract class ExecutionTable(
     parent: SQLTab,
     tableId: String,
-    tableName: String,
     currentTime: Long,
     executionUIDatas: Seq[SQLExecutionUIData],
     showRunningJobs: Boolean,
@@ -133,7 +165,10 @@ private[ui] abstract class ExecutionTable(
 
   protected def header: Seq[String]
 
-  protected def row(currentTime: Long, executionUIData: SQLExecutionUIData): Seq[Node] = {
+  protected def row(
+      request: HttpServletRequest,
+      currentTime: Long,
+      executionUIData: SQLExecutionUIData): Seq[Node] = {
     val submissionTime = executionUIData.submissionTime
     val duration = executionUIData.completionTime.map(_.getTime()).getOrElse(currentTime) -
       submissionTime
@@ -141,7 +176,7 @@ private[ui] abstract class ExecutionTable(
     def jobLinks(status: JobExecutionStatus): Seq[Node] = {
       executionUIData.jobs.flatMap { case (jobId, jobStatus) =>
         if (jobStatus == status) {
-          <a href={jobURL(jobId)}>[{jobId.toString}]</a>
+          <a href={jobURL(request, jobId)}>[{jobId.toString}]</a>
         } else {
           None
         }
@@ -153,7 +188,7 @@ private[ui] abstract class ExecutionTable(
         {executionUIData.executionId.toString}
       </td>
       <td>
-        {descriptionCell(executionUIData)}
+        {descriptionCell(request, executionUIData)}
       </td>
       <td sorttable_customkey={submissionTime.toString}>
         {UIUtils.formatDate(submissionTime)}
@@ -179,7 +214,9 @@ private[ui] abstract class ExecutionTable(
     </tr>
   }
 
-  private def descriptionCell(execution: SQLExecutionUIData): Seq[Node] = {
+  private def descriptionCell(
+      request: HttpServletRequest,
+      execution: SQLExecutionUIData): Seq[Node] = {
     val details = if (execution.details != null && execution.details.nonEmpty) {
       <span onclick="clickDetail(this)" class="expand-details">
         +details
@@ -192,38 +229,34 @@ private[ui] abstract class ExecutionTable(
     }
 
     val desc = if (execution.description != null && execution.description.nonEmpty) {
-      <a href={executionURL(execution.executionId)}>{execution.description}</a>
+      <a href={executionURL(request, execution.executionId)}>{execution.description}</a>
     } else {
-      <a href={executionURL(execution.executionId)}>{execution.executionId}</a>
+      <a href={executionURL(request, execution.executionId)}>{execution.executionId}</a>
     }
 
     <div>{desc} {details}</div>
   }
 
-  def toNodeSeq: Seq[Node] = {
-    <div>
-      <h4>{tableName}</h4>
-      {UIUtils.listingTable[SQLExecutionUIData](
-        header, row(currentTime, _), executionUIDatas, id = Some(tableId))}
-    </div>
+  def toNodeSeq(request: HttpServletRequest): Seq[Node] = {
+    UIUtils.listingTable[SQLExecutionUIData](
+      header, row(request, currentTime, _), executionUIDatas, id = Some(tableId))
   }
 
-  private def jobURL(jobId: Long): String =
-    "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), jobId)
+  private def jobURL(request: HttpServletRequest, jobId: Long): String =
+    "%s/jobs/job/?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
 
-  private def executionURL(executionID: Long): String =
-    s"${UIUtils.prependBaseUri(parent.basePath)}/${parent.prefix}/execution?id=$executionID"
+  private def executionURL(request: HttpServletRequest, executionID: Long): String =
+    s"${UIUtils.prependBaseUri(
+      request, parent.basePath)}/${parent.prefix}/execution/?id=$executionID"
 }
 
 private[ui] class RunningExecutionTable(
     parent: SQLTab,
-    tableName: String,
     currentTime: Long,
     executionUIDatas: Seq[SQLExecutionUIData])
   extends ExecutionTable(
     parent,
     "running-execution-table",
-    tableName,
     currentTime,
     executionUIDatas,
     showRunningJobs = true,
@@ -236,13 +269,11 @@ private[ui] class RunningExecutionTable(
 
 private[ui] class CompletedExecutionTable(
     parent: SQLTab,
-    tableName: String,
     currentTime: Long,
     executionUIDatas: Seq[SQLExecutionUIData])
   extends ExecutionTable(
     parent,
     "completed-execution-table",
-    tableName,
     currentTime,
     executionUIDatas,
     showRunningJobs = false,
@@ -254,13 +285,11 @@ private[ui] class CompletedExecutionTable(
 
 private[ui] class FailedExecutionTable(
     parent: SQLTab,
-    tableName: String,
     currentTime: Long,
     executionUIDatas: Seq[SQLExecutionUIData])
   extends ExecutionTable(
     parent,
     "failed-execution-table",
-    tableName,
     currentTime,
     executionUIDatas,
     showRunningJobs = false,

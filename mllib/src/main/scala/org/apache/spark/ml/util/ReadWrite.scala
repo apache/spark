@@ -39,7 +39,7 @@ import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
 import org.apache.spark.sql.{SparkSession, SQLContext}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils, VersionUtils}
 
 /**
  * Trait for `MLWriter` and `MLReader`.
@@ -421,6 +421,7 @@ private[ml] object DefaultParamsWriter {
    *  - timestamp
    *  - sparkVersion
    *  - uid
+   *  - defaultParamMap
    *  - paramMap
    *  - (optionally, extra metadata)
    *
@@ -453,15 +454,20 @@ private[ml] object DefaultParamsWriter {
       paramMap: Option[JValue] = None): String = {
     val uid = instance.uid
     val cls = instance.getClass.getName
-    val params = instance.extractParamMap().toSeq.asInstanceOf[Seq[ParamPair[Any]]]
+    val params = instance.paramMap.toSeq
+    val defaultParams = instance.defaultParamMap.toSeq
     val jsonParams = paramMap.getOrElse(render(params.map { case ParamPair(p, v) =>
       p.name -> parse(p.jsonEncode(v))
     }.toList))
+    val jsonDefaultParams = render(defaultParams.map { case ParamPair(p, v) =>
+      p.name -> parse(p.jsonEncode(v))
+    }.toList)
     val basicMetadata = ("class" -> cls) ~
       ("timestamp" -> System.currentTimeMillis()) ~
       ("sparkVersion" -> sc.version) ~
       ("uid" -> uid) ~
-      ("paramMap" -> jsonParams)
+      ("paramMap" -> jsonParams) ~
+      ("defaultParamMap" -> jsonDefaultParams)
     val metadata = extraMetadata match {
       case Some(jObject) =>
         basicMetadata ~ jObject
@@ -488,7 +494,7 @@ private[ml] class DefaultParamsReader[T] extends MLReader[T] {
     val cls = Utils.classForName(metadata.className)
     val instance =
       cls.getConstructor(classOf[String]).newInstance(metadata.uid).asInstanceOf[Params]
-    DefaultParamsReader.getAndSetParams(instance, metadata)
+    metadata.getAndSetParams(instance)
     instance.asInstanceOf[T]
   }
 }
@@ -499,6 +505,8 @@ private[ml] object DefaultParamsReader {
    * All info from metadata file.
    *
    * @param params  paramMap, as a `JValue`
+   * @param defaultParams defaultParamMap, as a `JValue`. For metadata file prior to Spark 2.4,
+   *                      this is `JNothing`.
    * @param metadata  All metadata, including the other fields
    * @param metadataJson  Full metadata file String (for debugging)
    */
@@ -508,27 +516,90 @@ private[ml] object DefaultParamsReader {
       timestamp: Long,
       sparkVersion: String,
       params: JValue,
+      defaultParams: JValue,
       metadata: JValue,
       metadataJson: String) {
+
+
+    private def getValueFromParams(params: JValue): Seq[(String, JValue)] = {
+      params match {
+        case JObject(pairs) => pairs
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Cannot recognize JSON metadata: $metadataJson.")
+      }
+    }
 
     /**
      * Get the JSON value of the [[org.apache.spark.ml.param.Param]] of the given name.
      * This can be useful for getting a Param value before an instance of `Params`
-     * is available.
+     * is available. This will look up `params` first, if not existing then looking up
+     * `defaultParams`.
      */
     def getParamValue(paramName: String): JValue = {
       implicit val format = DefaultFormats
-      params match {
+
+      // Looking up for `params` first.
+      var pairs = getValueFromParams(params)
+      var foundPairs = pairs.filter { case (pName, jsonValue) =>
+        pName == paramName
+      }
+      if (foundPairs.length == 0) {
+        // Looking up for `defaultParams` then.
+        pairs = getValueFromParams(defaultParams)
+        foundPairs = pairs.filter { case (pName, jsonValue) =>
+          pName == paramName
+        }
+      }
+      assert(foundPairs.length == 1, s"Expected one instance of Param '$paramName' but found" +
+        s" ${foundPairs.length} in JSON Params: " + pairs.map(_.toString).mkString(", "))
+
+      foundPairs.map(_._2).head
+    }
+
+    /**
+     * Extract Params from metadata, and set them in the instance.
+     * This works if all Params (except params included by `skipParams` list) implement
+     * [[org.apache.spark.ml.param.Param.jsonDecode()]].
+     *
+     * @param skipParams The params included in `skipParams` won't be set. This is useful if some
+     *                   params don't implement [[org.apache.spark.ml.param.Param.jsonDecode()]]
+     *                   and need special handling.
+     */
+    def getAndSetParams(
+        instance: Params,
+        skipParams: Option[List[String]] = None): Unit = {
+      setParams(instance, skipParams, isDefault = false)
+
+      // For metadata file prior to Spark 2.4, there is no default section.
+      val (major, minor) = VersionUtils.majorMinorVersion(sparkVersion)
+      if (major > 2 || (major == 2 && minor >= 4)) {
+        setParams(instance, skipParams, isDefault = true)
+      }
+    }
+
+    private def setParams(
+        instance: Params,
+        skipParams: Option[List[String]],
+        isDefault: Boolean): Unit = {
+      implicit val format = DefaultFormats
+      val paramsToSet = if (isDefault) defaultParams else params
+      paramsToSet match {
         case JObject(pairs) =>
-          val values = pairs.filter { case (pName, jsonValue) =>
-            pName == paramName
-          }.map(_._2)
-          assert(values.length == 1, s"Expected one instance of Param '$paramName' but found" +
-            s" ${values.length} in JSON Params: " + pairs.map(_.toString).mkString(", "))
-          values.head
+          pairs.foreach { case (paramName, jsonValue) =>
+            if (skipParams == None || !skipParams.get.contains(paramName)) {
+              val param = instance.getParam(paramName)
+              val value = param.jsonDecode(compact(render(jsonValue)))
+              if (isDefault) {
+                Params.setDefault(instance, param, value)
+              } else {
+                instance.set(param, value)
+              }
+            }
+          }
         case _ =>
           throw new IllegalArgumentException(
-            s"Cannot recognize JSON metadata: $metadataJson.")
+            s"Cannot recognize JSON metadata: ${metadataJson}.")
       }
     }
   }
@@ -561,43 +632,14 @@ private[ml] object DefaultParamsReader {
     val uid = (metadata \ "uid").extract[String]
     val timestamp = (metadata \ "timestamp").extract[Long]
     val sparkVersion = (metadata \ "sparkVersion").extract[String]
+    val defaultParams = metadata \ "defaultParamMap"
     val params = metadata \ "paramMap"
     if (expectedClassName.nonEmpty) {
       require(className == expectedClassName, s"Error loading metadata: Expected class name" +
         s" $expectedClassName but found class name $className")
     }
 
-    Metadata(className, uid, timestamp, sparkVersion, params, metadata, metadataStr)
-  }
-
-  /**
-   * Extract Params from metadata, and set them in the instance.
-   * This works if all Params (except params included by `skipParams` list) implement
-   * [[org.apache.spark.ml.param.Param.jsonDecode()]].
-   *
-   * @param skipParams The params included in `skipParams` won't be set. This is useful if some
-   *                   params don't implement [[org.apache.spark.ml.param.Param.jsonDecode()]]
-   *                   and need special handling.
-   * TODO: Move to [[Metadata]] method
-   */
-  def getAndSetParams(
-      instance: Params,
-      metadata: Metadata,
-      skipParams: Option[List[String]] = None): Unit = {
-    implicit val format = DefaultFormats
-    metadata.params match {
-      case JObject(pairs) =>
-        pairs.foreach { case (paramName, jsonValue) =>
-          if (skipParams == None || !skipParams.get.contains(paramName)) {
-            val param = instance.getParam(paramName)
-            val value = param.jsonDecode(compact(render(jsonValue)))
-            instance.set(param, value)
-          }
-        }
-      case _ =>
-        throw new IllegalArgumentException(
-          s"Cannot recognize JSON metadata: ${metadata.metadataJson}.")
-    }
+    Metadata(className, uid, timestamp, sparkVersion, params, defaultParams, metadata, metadataStr)
   }
 
   /**

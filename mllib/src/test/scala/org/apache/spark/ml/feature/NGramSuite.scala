@@ -84,7 +84,7 @@ class NGramSuite extends MLTest with DefaultReadWriteTest {
 
   def testNGram(t: NGram, dataFrame: DataFrame): Unit = {
     testTransformer[(Seq[String], Seq[String])](dataFrame, t, "nGrams", "wantedNGrams") {
-      case Row(actualNGrams : Seq[String], wantedNGrams: Seq[String]) =>
+      case Row(actualNGrams : Seq[_], wantedNGrams: Seq[_]) =>
         assert(actualNGrams === wantedNGrams)
     }
   }

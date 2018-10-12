@@ -91,6 +91,13 @@ private[spark] class Client(
   private val executorMemoryOverhead = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toLong, MEMORY_OVERHEAD_MIN)).toInt
 
+  private val isPython = sparkConf.get(IS_PYTHON_APP)
+  private val pysparkWorkerMemory: Int = if (isPython) {
+    sparkConf.get(PYSPARK_EXECUTOR_MEMORY).map(_.toInt).getOrElse(0)
+  } else {
+    0
+  }
+
   private val distCacheMgr = new ClientDistributedCacheManager()
 
   private val principal = sparkConf.get(PRINCIPAL).orNull
@@ -266,19 +273,10 @@ private[spark] class Client(
     sparkConf.get(ROLLED_LOG_INCLUDE_PATTERN).foreach { includePattern =>
       try {
         val logAggregationContext = Records.newRecord(classOf[LogAggregationContext])
-
-        // These two methods were added in Hadoop 2.6.4, so we still need to use reflection to
-        // avoid compile error when building against Hadoop 2.6.0 ~ 2.6.3.
-        val setRolledLogsIncludePatternMethod =
-          logAggregationContext.getClass.getMethod("setRolledLogsIncludePattern", classOf[String])
-        setRolledLogsIncludePatternMethod.invoke(logAggregationContext, includePattern)
-
+        logAggregationContext.setRolledLogsIncludePattern(includePattern)
         sparkConf.get(ROLLED_LOG_EXCLUDE_PATTERN).foreach { excludePattern =>
-          val setRolledLogsExcludePatternMethod =
-            logAggregationContext.getClass.getMethod("setRolledLogsExcludePattern", classOf[String])
-          setRolledLogsExcludePatternMethod.invoke(logAggregationContext, excludePattern)
+          logAggregationContext.setRolledLogsExcludePattern(excludePattern)
         }
-
         appContext.setLogAggregationContext(logAggregationContext)
       } catch {
         case NonFatal(e) =>
@@ -333,18 +331,19 @@ private[spark] class Client(
     val maxMem = newAppResponse.getMaximumResourceCapability().getMemory()
     logInfo("Verifying our application has not requested more than the maximum " +
       s"memory capability of the cluster ($maxMem MB per container)")
-    val executorMem = executorMemory + executorMemoryOverhead
+    val executorMem = executorMemory + executorMemoryOverhead + pysparkWorkerMemory
     if (executorMem > maxMem) {
-      throw new IllegalArgumentException(s"Required executor memory ($executorMemory" +
-        s"+$executorMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster! " +
-        "Please check the values of 'yarn.scheduler.maximum-allocation-mb' and/or " +
-        "'yarn.nodemanager.resource.memory-mb'.")
+      throw new IllegalArgumentException(s"Required executor memory ($executorMemory), overhead " +
+        s"($executorMemoryOverhead MB), and PySpark memory ($pysparkWorkerMemory MB) is above " +
+        s"the max threshold ($maxMem MB) of this cluster! Please check the values of " +
+        s"'yarn.scheduler.maximum-allocation-mb' and/or 'yarn.nodemanager.resource.memory-mb'.")
     }
     val amMem = amMemory + amMemoryOverhead
     if (amMem > maxMem) {
       throw new IllegalArgumentException(s"Required AM memory ($amMemory" +
         s"+$amMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster! " +
-        "Please increase the value of 'yarn.scheduler.maximum-allocation-mb'.")
+        "Please check the values of 'yarn.scheduler.maximum-allocation-mb' and/or " +
+        "'yarn.nodemanager.resource.memory-mb'.")
     }
     logInfo("Will allocate AM container, with %d MB memory including %d MB overhead".format(
       amMem,
@@ -437,7 +436,7 @@ private[spark] class Client(
       }
     }
 
-    /**
+    /*
      * Distribute a file to the cluster.
      *
      * If the file's path is a "local:" URI, it's actually not distributed. Other files are copied
@@ -811,10 +810,12 @@ private[spark] class Client(
 
     // Finally, update the Spark config to propagate PYTHONPATH to the AM and executors.
     if (pythonPath.nonEmpty) {
-      val pythonPathStr = (sys.env.get("PYTHONPATH") ++ pythonPath)
+      val pythonPathList = (sys.env.get("PYTHONPATH") ++ pythonPath)
+      env("PYTHONPATH") = (env.get("PYTHONPATH") ++ pythonPathList)
         .mkString(ApplicationConstants.CLASS_PATH_SEPARATOR)
-      env("PYTHONPATH") = pythonPathStr
-      sparkConf.setExecutorEnv("PYTHONPATH", pythonPathStr)
+      val pythonPathExecutorEnv = (sparkConf.getExecutorEnv.toMap.get("PYTHONPATH") ++
+        pythonPathList).mkString(ApplicationConstants.CLASS_PATH_SEPARATOR)
+      sparkConf.setExecutorEnv("PYTHONPATH", pythonPathExecutorEnv)
     }
 
     if (isClusterMode) {
@@ -892,12 +893,15 @@ private[spark] class Client(
     // Include driver-specific java options if we are launching a driver
     if (isClusterMode) {
       sparkConf.get(DRIVER_JAVA_OPTIONS).foreach { opts =>
-        javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
+        javaOpts ++= Utils.splitCommandString(opts)
+          .map(Utils.substituteAppId(_, appId.toString))
+          .map(YarnSparkHadoopUtil.escapeForShell)
       }
       val libraryPaths = Seq(sparkConf.get(DRIVER_LIBRARY_PATH),
         sys.props.get("spark.driver.libraryPath")).flatten
       if (libraryPaths.nonEmpty) {
-        prefixEnv = Some(getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(libraryPaths)))
+        prefixEnv = Some(createLibraryPathPrefix(libraryPaths.mkString(File.pathSeparator),
+          sparkConf))
       }
       if (sparkConf.get(AM_JAVA_OPTIONS).isDefined) {
         logWarning(s"${AM_JAVA_OPTIONS.key} will not take effect in cluster mode")
@@ -914,10 +918,12 @@ private[spark] class Client(
             s"(was '$opts'). Use spark.yarn.am.memory instead."
           throw new SparkException(msg)
         }
-        javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
+        javaOpts ++= Utils.splitCommandString(opts)
+          .map(Utils.substituteAppId(_, appId.toString))
+          .map(YarnSparkHadoopUtil.escapeForShell)
       }
       sparkConf.get(AM_LIBRARY_PATH).foreach { paths =>
-        prefixEnv = Some(getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(paths))))
+        prefixEnv = Some(createLibraryPathPrefix(paths, sparkConf))
       }
     }
 
@@ -1015,8 +1021,7 @@ private[spark] class Client(
       appId: ApplicationId,
       returnOnRunning: Boolean = false,
       logApplicationReport: Boolean = true,
-      interval: Long = sparkConf.get(REPORT_INTERVAL)):
-      (YarnApplicationState, FinalApplicationStatus) = {
+      interval: Long = sparkConf.get(REPORT_INTERVAL)): YarnAppReport = {
     var lastState: YarnApplicationState = null
     while (true) {
       Thread.sleep(interval)
@@ -1027,11 +1032,13 @@ private[spark] class Client(
           case e: ApplicationNotFoundException =>
             logError(s"Application $appId not found.")
             cleanupStagingDir(appId)
-            return (YarnApplicationState.KILLED, FinalApplicationStatus.KILLED)
+            return YarnAppReport(YarnApplicationState.KILLED, FinalApplicationStatus.KILLED, None)
           case NonFatal(e) =>
-            logError(s"Failed to contact YARN for application $appId.", e)
+            val msg = s"Failed to contact YARN for application $appId."
+            logError(msg, e)
             // Don't necessarily clean up staging dir because status is unknown
-            return (YarnApplicationState.FAILED, FinalApplicationStatus.FAILED)
+            return YarnAppReport(YarnApplicationState.FAILED, FinalApplicationStatus.FAILED,
+              Some(msg))
         }
       val state = report.getYarnApplicationState
 
@@ -1069,14 +1076,14 @@ private[spark] class Client(
       }
 
       if (state == YarnApplicationState.FINISHED ||
-        state == YarnApplicationState.FAILED ||
-        state == YarnApplicationState.KILLED) {
+          state == YarnApplicationState.FAILED ||
+          state == YarnApplicationState.KILLED) {
         cleanupStagingDir(appId)
-        return (state, report.getFinalApplicationStatus)
+        return createAppReport(report)
       }
 
       if (returnOnRunning && state == YarnApplicationState.RUNNING) {
-        return (state, report.getFinalApplicationStatus)
+        return createAppReport(report)
       }
 
       lastState = state
@@ -1125,16 +1132,17 @@ private[spark] class Client(
         throw new SparkException(s"Application $appId finished with status: $state")
       }
     } else {
-      val (yarnApplicationState, finalApplicationStatus) = monitorApplication(appId)
-      if (yarnApplicationState == YarnApplicationState.FAILED ||
-        finalApplicationStatus == FinalApplicationStatus.FAILED) {
+      val YarnAppReport(appState, finalState, diags) = monitorApplication(appId)
+      if (appState == YarnApplicationState.FAILED || finalState == FinalApplicationStatus.FAILED) {
+        diags.foreach { err =>
+          logError(s"Application diagnostics message: $err")
+        }
         throw new SparkException(s"Application $appId finished with failed status")
       }
-      if (yarnApplicationState == YarnApplicationState.KILLED ||
-        finalApplicationStatus == FinalApplicationStatus.KILLED) {
+      if (appState == YarnApplicationState.KILLED || finalState == FinalApplicationStatus.KILLED) {
         throw new SparkException(s"Application $appId is killed")
       }
-      if (finalApplicationStatus == FinalApplicationStatus.UNDEFINED) {
+      if (finalState == FinalApplicationStatus.UNDEFINED) {
         throw new SparkException(s"The final status of application $appId is undefined")
       }
     }
@@ -1148,7 +1156,7 @@ private[spark] class Client(
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
           s"$pyArchivesFile not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, "py4j-0.10.6-src.zip")
+        val py4jFile = new File(pyLibPath, "py4j-0.10.7-src.zip")
         require(py4jFile.exists(),
           s"$py4jFile not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())
@@ -1473,6 +1481,29 @@ private object Client extends Logging {
     uri.startsWith(s"$LOCAL_SCHEME:")
   }
 
+  def createAppReport(report: ApplicationReport): YarnAppReport = {
+    val diags = report.getDiagnostics()
+    val diagsOpt = if (diags != null && diags.nonEmpty) Some(diags) else None
+    YarnAppReport(report.getYarnApplicationState(), report.getFinalApplicationStatus(), diagsOpt)
+  }
+
+  /**
+   * Create a properly quoted and escaped library path string to be added as a prefix to the command
+   * executed by YARN. This is different from normal quoting / escaping due to YARN executing the
+   * command through "bash -c".
+   */
+  def createLibraryPathPrefix(libpath: String, conf: SparkConf): String = {
+    val cmdPrefix = if (Utils.isWindows) {
+      Utils.libraryPathEnvPrefix(Seq(libpath))
+    } else {
+      val envName = Utils.libraryPathEnvName
+      // For quotes, escape both the quote and the escape character when encoding in the command
+      // string.
+      val quoted = libpath.replace("\"", "\\\\\\\"")
+      envName + "=\\\"" + quoted + File.pathSeparator + "$" + envName + "\\\""
+    }
+    getClusterPath(conf, cmdPrefix)
+  }
 }
 
 private[spark] class YarnClusterApplication extends SparkApplication {
@@ -1487,3 +1518,8 @@ private[spark] class YarnClusterApplication extends SparkApplication {
   }
 
 }
+
+private[spark] case class YarnAppReport(
+    appState: YarnApplicationState,
+    finalState: FinalApplicationStatus,
+    diagnostics: Option[String])

@@ -72,11 +72,12 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
       .setClassifier(new LogisticRegression)
     assert(ova.getLabelCol === "label")
     assert(ova.getPredictionCol === "prediction")
+    assert(ova.getRawPredictionCol === "rawPrediction")
     val ovaModel = ova.fit(dataset)
 
     MLTestingUtils.checkCopyAndUids(ova, ovaModel)
 
-    assert(ovaModel.models.length === numClasses)
+    assert(ovaModel.numClasses === numClasses)
     val transformedDataset = ovaModel.transform(dataset)
 
     // check for label metadata in prediction col
@@ -179,6 +180,7 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
     val dataset2 = dataset.select(col("label").as("y"), col("features").as("fea"))
     ovaModel.setFeaturesCol("fea")
     ovaModel.setPredictionCol("pred")
+    ovaModel.setRawPredictionCol("")
     val transformedDataset = ovaModel.transform(dataset2)
     val outputFields = transformedDataset.schema.fieldNames.toSet
     assert(outputFields === Set("y", "fea", "pred"))
@@ -190,7 +192,8 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
     val ovr = new OneVsRest()
       .setClassifier(logReg)
     val output = ovr.fit(dataset).transform(dataset)
-    assert(output.schema.fieldNames.toSet === Set("label", "features", "prediction"))
+    assert(output.schema.fieldNames.toSet
+      === Set("label", "features", "prediction", "rawPrediction"))
   }
 
   test("SPARK-21306: OneVsRest should support setWeightCol") {

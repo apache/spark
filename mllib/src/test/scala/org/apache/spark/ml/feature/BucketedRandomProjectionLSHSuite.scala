@@ -48,6 +48,14 @@ class BucketedRandomProjectionLSHSuite extends MLTest with DefaultReadWriteTest 
     ParamsSuite.checkParams(model)
   }
 
+  test("setters") {
+    val model = new BucketedRandomProjectionLSHModel("brp", Array(Vectors.dense(0.0, 1.0)))
+      .setInputCol("testkeys")
+      .setOutputCol("testvalues")
+    assert(model.getInputCol  === "testkeys")
+    assert(model.getOutputCol === "testvalues")
+  }
+
   test("BucketedRandomProjectionLSH: default params") {
     val brp = new BucketedRandomProjectionLSH
     assert(brp.getNumHashTables === 1.0)

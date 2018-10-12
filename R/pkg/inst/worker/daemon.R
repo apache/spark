@@ -28,7 +28,9 @@ suppressPackageStartupMessages(library(SparkR))
 
 port <- as.integer(Sys.getenv("SPARKR_WORKER_PORT"))
 inputCon <- socketConnection(
-    port = port, open = "rb", blocking = TRUE, timeout = connectionTimeout)
+    port = port, open = "wb", blocking = TRUE, timeout = connectionTimeout)
+
+SparkR:::doServerAuth(inputCon, Sys.getenv("SPARKR_WORKER_SECRET"))
 
 # Waits indefinitely for a socket connecion by default.
 selectTimeout <- NULL

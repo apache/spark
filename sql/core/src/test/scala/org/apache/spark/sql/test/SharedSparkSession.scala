@@ -24,6 +24,7 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -39,6 +40,11 @@ trait SharedSparkSession
       .set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName)
       .set("spark.unsafe.exceptionOnMemoryLeak", "true")
       .set(SQLConf.CODEGEN_FALLBACK.key, "false")
+      // Disable ConvertToLocalRelation for better test coverage. Test cases built on
+      // LocalRelation will exercise the optimization rules better by disabling it as
+      // this rule may potentially block testing of other optimization rules such as
+      // ConstantPropagation etc.
+      .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)
   }
 
   /**
@@ -60,6 +66,7 @@ trait SharedSparkSession
   protected implicit def sqlContext: SQLContext = _spark.sqlContext
 
   protected def createSparkSession: TestSparkSession = {
+    SparkSession.cleanupAnyExistingSession()
     new TestSparkSession(sparkConf)
   }
 
@@ -92,11 +99,22 @@ trait SharedSparkSession
    * Stop the underlying [[org.apache.spark.SparkContext]], if any.
    */
   protected override def afterAll(): Unit = {
-    super.afterAll()
-    if (_spark != null) {
-      _spark.sessionState.catalog.reset()
-      _spark.stop()
-      _spark = null
+    try {
+      super.afterAll()
+    } finally {
+      try {
+        if (_spark != null) {
+          try {
+            _spark.sessionState.catalog.reset()
+          } finally {
+            _spark.stop()
+            _spark = null
+          }
+        }
+      } finally {
+        SparkSession.clearActiveSession()
+        SparkSession.clearDefaultSession()
+      }
     }
   }
 

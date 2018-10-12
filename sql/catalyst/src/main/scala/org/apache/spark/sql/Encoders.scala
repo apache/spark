@@ -132,7 +132,7 @@ object Encoders {
    *  - primitive types: boolean, int, double, etc.
    *  - boxed types: Boolean, Integer, Double, etc.
    *  - String
-   *  - java.math.BigDecimal
+   *  - java.math.BigDecimal, java.math.BigInteger
    *  - time related: java.sql.Date, java.sql.Timestamp
    *  - collection types: only array and java.util.List currently, map support is in progress
    *  - nested java bean.

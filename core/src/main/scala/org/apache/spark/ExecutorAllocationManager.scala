@@ -25,8 +25,8 @@ import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{DYN_ALLOCATION_MAX_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS}
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config._
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMaster
@@ -68,6 +68,10 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  *   spark.dynamicAllocation.minExecutors - Lower bound on the number of executors
  *   spark.dynamicAllocation.maxExecutors - Upper bound on the number of executors
  *   spark.dynamicAllocation.initialExecutors - Number of executors to start with
+ *
+ *   spark.dynamicAllocation.executorAllocationRatio -
+ *     This is used to reduce the parallelism of the dynamic allocation that can waste
+ *     resources when tasks are small
  *
  *   spark.dynamicAllocation.schedulerBacklogTimeout (M) -
  *     If there are backlogged tasks for this duration, add new executors
@@ -116,8 +120,11 @@ private[spark] class ExecutorAllocationManager(
   // TODO: The default value of 1 for spark.executor.cores works right now because dynamic
   // allocation is only supported for YARN and the default number of cores per executor in YARN is
   // 1, but it might need to be attained differently for different cluster managers
-  private val tasksPerExecutor =
+  private val tasksPerExecutorForFullParallelism =
     conf.getInt("spark.executor.cores", 1) / conf.getInt("spark.task.cpus", 1)
+
+  private val executorAllocationRatio =
+    conf.get(DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO)
 
   validateSettings()
 
@@ -205,12 +212,17 @@ private[spark] class ExecutorAllocationManager(
     }
     // Require external shuffle service for dynamic allocation
     // Otherwise, we may lose shuffle files when killing executors
-    if (!conf.getBoolean("spark.shuffle.service.enabled", false) && !testing) {
+    if (!conf.get(config.SHUFFLE_SERVICE_ENABLED) && !testing) {
       throw new SparkException("Dynamic allocation of executors requires the external " +
         "shuffle service. You may enable this through spark.shuffle.service.enabled.")
     }
-    if (tasksPerExecutor == 0) {
-      throw new SparkException("spark.executor.cores must not be less than spark.task.cpus.")
+    if (tasksPerExecutorForFullParallelism == 0) {
+      throw new SparkException("spark.executor.cores must not be < spark.task.cpus.")
+    }
+
+    if (executorAllocationRatio > 1.0 || executorAllocationRatio <= 0.0) {
+      throw new SparkException(
+        "spark.dynamicAllocation.executorAllocationRatio must be > 0 and <= 1.0")
     }
   }
 
@@ -273,7 +285,9 @@ private[spark] class ExecutorAllocationManager(
    */
   private def maxNumExecutorsNeeded(): Int = {
     val numRunningOrPendingTasks = listener.totalPendingTasks + listener.totalRunningTasks
-    (numRunningOrPendingTasks + tasksPerExecutor - 1) / tasksPerExecutor
+    math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
+              tasksPerExecutorForFullParallelism)
+      .toInt
   }
 
   private def totalRunningTasks(): Int = synchronized {
@@ -474,9 +488,15 @@ private[spark] class ExecutorAllocationManager(
     newExecutorTotal = numExistingExecutors
     if (testing || executorsRemoved.nonEmpty) {
       executorsRemoved.foreach { removedExecutorId =>
+        // If it is a cached block, it uses cachedExecutorIdleTimeoutS for timeout
+        val idleTimeout = if (blockManagerMaster.hasCachedBlocks(removedExecutorId)) {
+          cachedExecutorIdleTimeoutS
+        } else {
+          executorIdleTimeoutS
+        }
         newExecutorTotal -= 1
         logInfo(s"Removing executor $removedExecutorId because it has been idle for " +
-          s"$executorIdleTimeoutS seconds (new desired total will be $newExecutorTotal)")
+          s"$idleTimeout seconds (new desired total will be $newExecutorTotal)")
         executorsPendingToRemove.add(removedExecutorId)
       }
       executorsRemoved

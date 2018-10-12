@@ -21,11 +21,14 @@ import java.io.{FileNotFoundException, IOException}
 
 import scala.collection.mutable
 
+import org.apache.parquet.io.ParquetDecodingException
+
 import org.apache.spark.{Partition => RDDPartition, TaskContext, TaskKilledException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.NextIterator
 
@@ -86,14 +89,6 @@ class FileScanRDD(
         inputMetrics.setBytesRead(existingBytesRead + getBytesReadCallback())
       }
 
-      // If we can't get the bytes read from the FS stats, fall back to the file size,
-      // which may be inaccurate.
-      private def updateBytesReadWithFileSize(): Unit = {
-        if (currentFile != null) {
-          inputMetrics.incBytesRead(currentFile.length)
-        }
-      }
-
       private[this] val files = split.asInstanceOf[FilePartition].files.toIterator
       private[this] var currentFile: PartitionedFile = null
       private[this] var currentIterator: Iterator[Object] = null
@@ -109,12 +104,15 @@ class FileScanRDD(
         val nextElement = currentIterator.next()
         // TODO: we should have a better separation of row based and batch based scan, so that we
         // don't need to run this `if` for every record.
+        val preNumRecordsRead = inputMetrics.recordsRead
         if (nextElement.isInstanceOf[ColumnarBatch]) {
           inputMetrics.incRecordsRead(nextElement.asInstanceOf[ColumnarBatch].numRows())
         } else {
           inputMetrics.incRecordsRead(1)
         }
-        if (inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
+        // The records may be incremented by more than 1 at a time.
+        if (preNumRecordsRead / SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS !=
+          inputMetrics.recordsRead / SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS) {
           updateBytesRead()
         }
         nextElement
@@ -136,7 +134,6 @@ class FileScanRDD(
 
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */
       private def nextIterator(): Boolean = {
-        updateBytesReadWithFileSize()
         if (files.hasNext) {
           currentFile = files.next()
           logInfo(s"Reading File $currentFile")
@@ -179,7 +176,23 @@ class FileScanRDD(
             currentIterator = readCurrentFile()
           }
 
-          hasNext
+          try {
+            hasNext
+          } catch {
+            case e: SchemaColumnConvertNotSupportedException =>
+              val message = "Parquet column cannot be converted in " +
+                s"file ${currentFile.filePath}. Column: ${e.getColumn}, " +
+                s"Expected: ${e.getLogicalType}, Found: ${e.getPhysicalType}"
+              throw new QueryExecutionException(message, e)
+            case e: ParquetDecodingException =>
+              if (e.getMessage.contains("Can not read value at")) {
+                val message = "Encounter error while reading parquet files. " +
+                  "One possible cause: Parquet column cannot be converted in the " +
+                  "corresponding files. Details: "
+                throw new QueryExecutionException(message, e)
+              }
+              throw e
+          }
         } else {
           currentFile = null
           InputFileBlockHolder.unset()
@@ -189,13 +202,12 @@ class FileScanRDD(
 
       override def close(): Unit = {
         updateBytesRead()
-        updateBytesReadWithFileSize()
         InputFileBlockHolder.unset()
       }
     }
 
     // Register an on-task-completion callback to close the input stream.
-    context.addTaskCompletionListener(_ => iterator.close())
+    context.addTaskCompletionListener[Unit](_ => iterator.close())
 
     iterator.asInstanceOf[Iterator[InternalRow]] // This is an erasure hack.
   }

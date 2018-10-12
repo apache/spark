@@ -20,8 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -84,7 +85,7 @@ abstract class Expression extends TreeNode[Expression] {
 
   def nullable: Boolean
 
-  def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
+  def references: AttributeSet = AttributeSet.fromAttributeSets(children.map(_.references))
 
   /** Returns the result of evaluating this expression on a given input Row */
   def eval(input: InternalRow = null): Any
@@ -104,11 +105,13 @@ abstract class Expression extends TreeNode[Expression] {
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
-      val eval = doGenCode(ctx, ExprCode("", isNull, value))
+      val eval = doGenCode(ctx, ExprCode(
+        JavaCode.isNullVariable(isNull),
+        JavaCode.variable(value, dataType)))
       reduceCodeSize(ctx, eval)
-      if (eval.code.nonEmpty) {
+      if (eval.code.toString.nonEmpty) {
         // Add `this` in the comment.
-        eval.copy(code = s"${ctx.registerComment(this.toString)}\n" + eval.code.trim)
+        eval.copy(code = ctx.registerComment(this.toString) + eval.code)
       } else {
         eval
       }
@@ -117,11 +120,11 @@ abstract class Expression extends TreeNode[Expression] {
 
   private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
     // TODO: support whole stage codegen too
-    if (eval.code.trim.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
-      val setIsNull = if (eval.isNull != "false" && eval.isNull != "true") {
+    if (eval.code.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
+      val setIsNull = if (!eval.isNull.isInstanceOf[LiteralValue]) {
         val globalIsNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "globalIsNull")
         val localIsNull = eval.isNull
-        eval.isNull = globalIsNull
+        eval.isNull = JavaCode.isNullGlobal(globalIsNull)
         s"$globalIsNull = $localIsNull;"
       } else {
         ""
@@ -134,14 +137,14 @@ abstract class Expression extends TreeNode[Expression] {
       val funcFullName = ctx.addNewFunction(funcName,
         s"""
            |private $javaType $funcName(InternalRow ${ctx.INPUT_ROW}) {
-           |  ${eval.code.trim}
+           |  ${eval.code}
            |  $setIsNull
            |  return ${eval.value};
            |}
            """.stripMargin)
 
-      eval.value = newValue
-      eval.code = s"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
+      eval.value = JavaCode.variable(newValue, dataType)
+      eval.code = code"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
     }
   }
 
@@ -435,18 +438,17 @@ abstract class UnaryExpression extends Expression {
 
     if (nullable) {
       val nullSafeEval = ctx.nullSafeExec(child.nullable, childGen.isNull)(resultCode)
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${childGen.code}
         boolean ${ev.isNull} = ${childGen.isNull};
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval
       """)
     } else {
-      ev.copy(code = s"""
-        boolean ${ev.isNull} = false;
+      ev.copy(code = code"""
         ${childGen.code}
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $resultCode""", isNull = "false")
+        $resultCode""", isNull = FalseLiteral)
     }
   }
 }
@@ -535,18 +537,17 @@ abstract class BinaryExpression extends Expression {
           }
       }
 
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         boolean ${ev.isNull} = true;
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval
       """)
     } else {
-      ev.copy(code = s"""
-        boolean ${ev.isNull} = false;
+      ev.copy(code = code"""
         ${leftGen.code}
         ${rightGen.code}
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $resultCode""", isNull = "false")
+        $resultCode""", isNull = FalseLiteral)
     }
   }
 }
@@ -579,10 +580,10 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
     // First check whether left and right have the same type, then check if the type is acceptable.
     if (!left.dataType.sameType(right.dataType)) {
       TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
-        s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
+        s"(${left.dataType.catalogString} and ${right.dataType.catalogString}).")
     } else if (!inputType.acceptsType(left.dataType)) {
       TypeCheckResult.TypeCheckFailure(s"'$sql' requires ${inputType.simpleString} type," +
-        s" not ${left.dataType.simpleString}")
+        s" not ${left.dataType.catalogString}")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -679,19 +680,48 @@ abstract class TernaryExpression extends Expression {
           }
       }
 
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         boolean ${ev.isNull} = true;
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval""")
     } else {
-      ev.copy(code = s"""
-        boolean ${ev.isNull} = false;
+      ev.copy(code = code"""
         ${leftGen.code}
         ${midGen.code}
         ${rightGen.code}
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $resultCode""", isNull = "false")
+        $resultCode""", isNull = FalseLiteral)
     }
+  }
+}
+
+/**
+ * A trait resolving nullable, containsNull, valueContainsNull flags of the output date type.
+ * This logic is usually utilized by expressions combining data from multiple child expressions
+ * of non-primitive types (e.g. [[CaseWhen]]).
+ */
+trait ComplexTypeMergingExpression extends Expression {
+
+  /**
+   * A collection of data types used for resolution the output type of the expression. By default,
+   * data types of all child expressions. The collection must not be empty.
+   */
+  @transient
+  lazy val inputTypesForMerging: Seq[DataType] = children.map(_.dataType)
+
+  def dataTypeCheck: Unit = {
+    require(
+      inputTypesForMerging.nonEmpty,
+      "The collection of input data types must not be empty.")
+    require(
+      TypeCoercion.haveSameType(inputTypesForMerging),
+      "All input types must be the same except nullable, containsNull, valueContainsNull flags." +
+        s" The input types found are\n\t${inputTypesForMerging.mkString("\n\t")}")
+  }
+
+  override def dataType: DataType = {
+    dataTypeCheck
+    inputTypesForMerging.reduceLeft(TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(_, _).get)
   }
 }
 

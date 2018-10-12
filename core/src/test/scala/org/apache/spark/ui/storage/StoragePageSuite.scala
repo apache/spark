@@ -17,6 +17,8 @@
 
 package org.apache.spark.ui.storage
 
+import javax.servlet.http.HttpServletRequest
+
 import org.mockito.Mockito._
 
 import org.apache.spark.SparkFunSuite
@@ -29,6 +31,7 @@ class StoragePageSuite extends SparkFunSuite {
   val storageTab = mock(classOf[StorageTab])
   when(storageTab.basePath).thenReturn("http://localhost:4040")
   val storagePage = new StoragePage(storageTab, null)
+  val request = mock(classOf[HttpServletRequest])
 
   test("rddTable") {
     val rdd1 = new RDDStorageInfo(1,
@@ -61,7 +64,7 @@ class StoragePageSuite extends SparkFunSuite {
       None,
       None)
 
-    val xmlNodes = storagePage.rddTable(Seq(rdd1, rdd2, rdd3))
+    val xmlNodes = storagePage.rddTable(request, Seq(rdd1, rdd2, rdd3))
 
     val headers = Seq(
       "ID",
@@ -94,7 +97,7 @@ class StoragePageSuite extends SparkFunSuite {
   }
 
   test("empty rddTable") {
-    assert(storagePage.rddTable(Seq.empty).isEmpty)
+    assert(storagePage.rddTable(request, Seq.empty).isEmpty)
   }
 
   test("streamBlockStorageLevelDescriptionAndSize") {

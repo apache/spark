@@ -244,6 +244,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       "1234")
   }
 
+  test("some big value") {
+    val value = "x" * 3000
+    checkEvaluation(
+      GetJsonObject(NonFoldableLiteral((s"""{"big": "$value"}""")),
+      NonFoldableLiteral("$.big")), value)
+  }
+
   val jsonTupleQuery = Literal("f1") ::
     Literal("f2") ::
     Literal("f3") ::
@@ -688,24 +695,36 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       withSQLConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA.key -> forceJsonNullableSchema.toString) {
         val input =
           """{
-            |  "a": 1,
-            |  "c": "foo"
-            |}
-            |""".stripMargin
+          |  "a": 1,
+          |  "c": "foo"
+          |}
+          |""".stripMargin
         val jsonSchema = new StructType()
           .add("a", LongType, nullable = false)
-          .add("b", StringType, nullable = false)
+          .add("b", StringType, nullable = !forceJsonNullableSchema)
           .add("c", StringType, nullable = false)
         val output = InternalRow(1L, null, UTF8String.fromString("foo"))
-        checkEvaluation(
-          JsonToStructs(jsonSchema, Map.empty, Literal.create(input, StringType), gmtId),
-          output
-        )
-        val schema = JsonToStructs(jsonSchema, Map.empty, Literal.create(input, StringType), gmtId)
-          .dataType
+        val expr = JsonToStructs(jsonSchema, Map.empty, Literal.create(input, StringType), gmtId)
+        checkEvaluation(expr, output)
+        val schema = expr.dataType
         val schemaToCompare = if (forceJsonNullableSchema) jsonSchema.asNullable else jsonSchema
         assert(schemaToCompare == schema)
       }
     }
+  }
+
+  test("SPARK-24709: infer schema of json strings") {
+    checkEvaluation(new SchemaOfJson(Literal.create("""{"col":0}""")),
+      "struct<col:bigint>")
+    checkEvaluation(
+      new SchemaOfJson(Literal.create("""{"col0":["a"], "col1": {"col2": "b"}}""")),
+      "struct<col0:array<string>,col1:struct<col2:string>>")
+  }
+
+  test("infer schema of JSON strings by using options") {
+    checkEvaluation(
+      new SchemaOfJson(Literal.create("""{"col":01}"""),
+        CreateMap(Seq(Literal.create("allowNumericLeadingZeros"), Literal.create("true")))),
+      "struct<col:bigint>")
   }
 }

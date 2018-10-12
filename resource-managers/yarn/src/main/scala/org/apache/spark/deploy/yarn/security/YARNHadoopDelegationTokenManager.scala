@@ -44,6 +44,10 @@ private[yarn] class YARNHadoopDelegationTokenManager(
 
   // public for testing
   val credentialProviders = getCredentialProviders
+  if (credentialProviders.nonEmpty) {
+    logDebug("Using the following YARN-specific credential providers: " +
+      s"${credentialProviders.keys.mkString(", ")}.")
+  }
 
   /**
    * Writes delegation tokens to creds.  Delegation tokens are fetched from all registered

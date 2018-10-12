@@ -51,8 +51,8 @@ public class UTF8StringSuite {
 
     assertTrue(s1.contains(s2));
     assertTrue(s2.contains(s1));
-    assertTrue(s1.startsWith(s1));
-    assertTrue(s1.endsWith(s1));
+    assertTrue(s1.startsWith(s2));
+    assertTrue(s1.endsWith(s2));
   }
 
   @Test
@@ -393,12 +393,14 @@ public class UTF8StringSuite {
 
   @Test
   public void split() {
-    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), -1),
-      new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi")}));
-    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
-      new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
-    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
-      new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
+    UTF8String[] negativeAndZeroLimitCase =
+      new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi"), fromString("")};
+    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 0),
+      negativeAndZeroLimitCase));
+    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), -1),
+      negativeAndZeroLimitCase));
+    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 2),
+      new UTF8String[]{fromString("ab"), fromString("def,ghi,")}));
   }
 
   @Test

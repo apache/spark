@@ -18,6 +18,12 @@ grammar SqlBase;
 
 @members {
   /**
+   * When false, INTERSECT is given the greater precedence over the other set
+   * operations (UNION, EXCEPT and MINUS) as per the SQL standard.
+   */
+  public boolean legacy_setops_precedence_enbled = false;
+
+  /**
    * Verify whether current token is a valid decimal token (which contains dot).
    * Returns true if the character that follows the token is not a digit or letter or underscore.
    *
@@ -93,7 +99,7 @@ statement
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier locationSpec?                      #createTableLike
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
-        (identifier | FOR COLUMNS identifierSeq)?                      #analyze
+        (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
     | ALTER TABLE tableIdentifier
         ADD COLUMNS '(' columns=colTypeList ')'                        #addTableColumns
     | ALTER (TABLE | VIEW) from=tableIdentifier
@@ -360,8 +366,13 @@ multiInsertQueryBody
     ;
 
 queryTerm
-    : queryPrimary                                                                         #queryTermDefault
-    | left=queryTerm operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
+    : queryPrimary                                                                       #queryTermDefault
+    | left=queryTerm {legacy_setops_precedence_enbled}?
+        operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
+    | left=queryTerm {!legacy_setops_precedence_enbled}?
+        operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
+    | left=queryTerm {!legacy_setops_precedence_enbled}?
+        operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
     ;
 
 queryPrimary
@@ -406,7 +417,7 @@ hintStatement
     ;
 
 fromClause
-    : FROM relation (',' relation)* lateralView*
+    : FROM relation (',' relation)* lateralView* pivotClause?
     ;
 
 aggregation
@@ -414,11 +425,25 @@ aggregation
       WITH kind=ROLLUP
     | WITH kind=CUBE
     | kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')')?
+    | GROUP BY kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')'
     ;
 
 groupingSet
     : '(' (expression (',' expression)*)? ')'
     | expression
+    ;
+
+pivotClause
+    : PIVOT '(' aggregates=namedExpressionSeq FOR pivotColumn IN '(' pivotValues+=pivotValue (',' pivotValues+=pivotValue)* ')' ')'
+    ;
+
+pivotColumn
+    : identifiers+=identifier
+    | '(' identifiers+=identifier (',' identifiers+=identifier)* ')'
+    ;
+
+pivotValue
+    : expression (AS? identifier)?
     ;
 
 lateralView
@@ -451,7 +476,7 @@ joinType
 
 joinCriteria
     : ON booleanExpression
-    | USING '(' identifier (',' identifier)* ')'
+    | USING identifierList
     ;
 
 sample
@@ -543,16 +568,9 @@ expression
 booleanExpression
     : NOT booleanExpression                                        #logicalNot
     | EXISTS '(' query ')'                                         #exists
-    | predicated                                                   #booleanDefault
+    | valueExpression predicate?                                   #predicated
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary
     | left=booleanExpression operator=OR right=booleanExpression   #logicalBinary
-    ;
-
-// workaround for:
-//  https://github.com/antlr/antlr4/issues/780
-//  https://github.com/antlr/antlr4/issues/781
-predicated
-    : valueExpression predicate?
     ;
 
 predicate
@@ -592,10 +610,13 @@ primaryExpression
        (OVER windowSpec)?                                                                      #functionCall
     | qualifiedName '(' trimOption=(BOTH | LEADING | TRAILING) argument+=expression
       FROM argument+=expression ')'                                                            #functionCall
+    | IDENTIFIER '->' expression                                                               #lambda
+    | '(' IDENTIFIER (',' IDENTIFIER)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
     | '(' expression ')'                                                                       #parenthesizedExpression
+    | EXTRACT '(' field=identifier FROM source=valueExpression ')'                             #extract
     ;
 
 constant
@@ -733,7 +754,7 @@ nonReserved
     | ADD
     | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | LAST | FIRST | AFTER
     | MAP | ARRAY | STRUCT
-    | LATERAL | WINDOW | REDUCE | TRANSFORM | SERDE | SERDEPROPERTIES | RECORDREADER
+    | PIVOT | LATERAL | WINDOW | REDUCE | TRANSFORM | SERDE | SERDEPROPERTIES | RECORDREADER
     | DELIMITED | FIELDS | TERMINATED | COLLECTION | ITEMS | KEYS | ESCAPED | LINES | SEPARATED
     | EXTENDED | REFRESH | CLEAR | CACHE | UNCACHE | LAZY | GLOBAL | TEMPORARY | OPTIONS
     | GROUPING | CUBE | ROLLUP
@@ -743,6 +764,7 @@ nonReserved
     | VIEW | REPLACE
     | IF
     | POSITION
+    | EXTRACT
     | NO | DATA
     | START | TRANSACTION | COMMIT | ROLLBACK | IGNORE
     | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
@@ -753,7 +775,7 @@ nonReserved
     | REVOKE | GRANT | LOCK | UNLOCK | MSCK | REPAIR | RECOVER | EXPORT | IMPORT | LOAD | VALUES | COMMENT | ROLE
     | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEX | INDEXES | LOCKS | OPTION | LOCAL | INPATH
     | ASC | DESC | LIMIT | RENAME | SETS
-    | AT | NULLS | OVERWRITE | ALL | ALTER | AS | BETWEEN | BY | CREATE | DELETE
+    | AT | NULLS | OVERWRITE | ALL | ANY | ALTER | AS | BETWEEN | BY | CREATE | DELETE
     | DESCRIBE | DROP | EXISTS | FALSE | FOR | GROUP | IN | INSERT | INTO | IS |LIKE
     | NULL | ORDER | OUTER | TABLE | TRUE | WITH | RLIKE
     | AND | CASE | CAST | DISTINCT | DIV | ELSE | END | FUNCTION | INTERVAL | MACRO | OR | STRATIFY | THEN
@@ -768,6 +790,7 @@ FROM: 'FROM';
 ADD: 'ADD';
 AS: 'AS';
 ALL: 'ALL';
+ANY: 'ANY';
 DISTINCT: 'DISTINCT';
 WHERE: 'WHERE';
 GROUP: 'GROUP';
@@ -813,6 +836,7 @@ RIGHT: 'RIGHT';
 FULL: 'FULL';
 NATURAL: 'NATURAL';
 ON: 'ON';
+PIVOT: 'PIVOT';
 LATERAL: 'LATERAL';
 WINDOW: 'WINDOW';
 OVER: 'OVER';
@@ -880,6 +904,7 @@ TRAILING: 'TRAILING';
 
 IF: 'IF';
 POSITION: 'POSITION';
+EXTRACT: 'EXTRACT';
 
 EQ  : '=' | '==';
 NSEQ: '<=>';

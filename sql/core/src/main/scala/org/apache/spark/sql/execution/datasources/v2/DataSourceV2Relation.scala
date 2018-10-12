@@ -17,89 +17,59 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.UUID
+
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
-import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
-import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, ReadSupport, ReadSupportWithSchema}
-import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, SupportsPushDownCatalystFilters, SupportsPushDownFilters, SupportsPushDownRequiredColumns, SupportsReportStatistics}
+import org.apache.spark.sql.sources.DataSourceRegister
+import org.apache.spark.sql.sources.v2.{BatchReadSupportProvider, BatchWriteSupportProvider, DataSourceOptions, DataSourceV2}
+import org.apache.spark.sql.sources.v2.reader.{BatchReadSupport, ReadSupport, ScanConfigBuilder, SupportsReportStatistics}
+import org.apache.spark.sql.sources.v2.writer.BatchWriteSupport
 import org.apache.spark.sql.types.StructType
 
+/**
+ * A logical plan representing a data source v2 scan.
+ *
+ * @param source An instance of a [[DataSourceV2]] implementation.
+ * @param options The options for this scan. Used to create fresh [[BatchWriteSupport]].
+ * @param userSpecifiedSchema The user-specified schema for this scan.
+ */
 case class DataSourceV2Relation(
     source: DataSourceV2,
+    readSupport: BatchReadSupport,
+    output: Seq[AttributeReference],
     options: Map[String, String],
-    projection: Seq[AttributeReference],
-    filters: Option[Seq[Expression]] = None,
+    tableIdent: Option[TableIdentifier] = None,
     userSpecifiedSchema: Option[StructType] = None)
-  extends LeafNode with MultiInstanceRelation with DataSourceV2StringFormat {
+  extends LeafNode with MultiInstanceRelation with NamedRelation with DataSourceV2StringFormat {
 
   import DataSourceV2Relation._
 
+  override def name: String = {
+    tableIdent.map(_.unquotedString).getOrElse(s"${source.name}:unknown")
+  }
+
+  override def pushedFilters: Seq[Expression] = Seq.empty
+
   override def simpleString: String = "RelationV2 " + metadataString
 
-  override lazy val schema: StructType = reader.readSchema()
+  def newWriteSupport(): BatchWriteSupport = source.createWriteSupport(options, schema)
 
-  override lazy val output: Seq[AttributeReference] = {
-    // use the projection attributes to avoid assigning new ids. fields that are not projected
-    // will be assigned new ids, which is okay because they are not projected.
-    val attrMap = projection.map(a => a.name -> a).toMap
-    schema.map(f => attrMap.getOrElse(f.name,
-      AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()))
-  }
-
-  private lazy val v2Options: DataSourceOptions = makeV2Options(options)
-
-  lazy val (
-      reader: DataSourceReader,
-      unsupportedFilters: Seq[Expression],
-      pushedFilters: Seq[Expression]) = {
-    val newReader = userSpecifiedSchema match {
-      case Some(s) =>
-        source.asReadSupportWithSchema.createReader(s, v2Options)
-      case _ =>
-        source.asReadSupport.createReader(v2Options)
-    }
-
-    DataSourceV2Relation.pushRequiredColumns(newReader, projection.toStructType)
-
-    val (remainingFilters, pushedFilters) = filters match {
-      case Some(filterSeq) =>
-        DataSourceV2Relation.pushFilters(newReader, filterSeq)
-      case _ =>
-        (Nil, Nil)
-    }
-
-    (newReader, remainingFilters, pushedFilters)
-  }
-
-  override def doCanonicalize(): LogicalPlan = {
-    val c = super.doCanonicalize().asInstanceOf[DataSourceV2Relation]
-
-    // override output with canonicalized output to avoid attempting to configure a reader
-    val canonicalOutput: Seq[AttributeReference] = this.output
-        .map(a => QueryPlan.normalizeExprId(a, projection))
-
-    new DataSourceV2Relation(c.source, c.options, c.projection) {
-      override lazy val output: Seq[AttributeReference] = canonicalOutput
-    }
-  }
-
-  override def computeStats(): Statistics = reader match {
+  override def computeStats(): Statistics = readSupport match {
     case r: SupportsReportStatistics =>
-      Statistics(sizeInBytes = r.getStatistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
+      val statistics = r.estimateStatistics(readSupport.newScanConfigBuilder().build())
+      Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
 
   override def newInstance(): DataSourceV2Relation = {
-    // projection is used to maintain id assignment.
-    // if projection is not set, use output so the copy is not equal to the original
-    copy(projection = projection.map(_.newInstance()))
+    copy(output = output.map(_.newInstance()))
   }
 }
 
@@ -114,19 +84,23 @@ case class StreamingDataSourceV2Relation(
     output: Seq[AttributeReference],
     source: DataSourceV2,
     options: Map[String, String],
-    reader: DataSourceReader)
+    readSupport: ReadSupport,
+    scanConfigBuilder: ScanConfigBuilder)
   extends LeafNode with MultiInstanceRelation with DataSourceV2StringFormat {
 
   override def isStreaming: Boolean = true
 
   override def simpleString: String = "Streaming RelationV2 " + metadataString
 
+  override def pushedFilters: Seq[Expression] = Nil
+
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
     case other: StreamingDataSourceV2Relation =>
-      output == other.output && reader.getClass == other.reader.getClass && options == other.options
+      output == other.output && readSupport.getClass == other.readSupport.getClass &&
+        options == other.options
     case _ => false
   }
 
@@ -134,9 +108,10 @@ case class StreamingDataSourceV2Relation(
     Seq(output, source, options).hashCode()
   }
 
-  override def computeStats(): Statistics = reader match {
+  override def computeStats(): Statistics = readSupport match {
     case r: SupportsReportStatistics =>
-      Statistics(sizeInBytes = r.getStatistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
+      val statistics = r.estimateStatistics(scanConfigBuilder.build())
+      Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
@@ -144,28 +119,21 @@ case class StreamingDataSourceV2Relation(
 
 object DataSourceV2Relation {
   private implicit class SourceHelpers(source: DataSourceV2) {
-    def asReadSupport: ReadSupport = {
+    def asReadSupportProvider: BatchReadSupportProvider = {
       source match {
-        case support: ReadSupport =>
-          support
-        case _: ReadSupportWithSchema =>
-          // this method is only called if there is no user-supplied schema. if there is no
-          // user-supplied schema and ReadSupport was not implemented, throw a helpful exception.
-          throw new AnalysisException(s"Data source requires a user-supplied schema: $name")
+        case provider: BatchReadSupportProvider =>
+          provider
         case _ =>
           throw new AnalysisException(s"Data source is not readable: $name")
       }
     }
 
-    def asReadSupportWithSchema: ReadSupportWithSchema = {
+    def asWriteSupportProvider: BatchWriteSupportProvider = {
       source match {
-        case support: ReadSupportWithSchema =>
-          support
-        case _: ReadSupport =>
-          throw new AnalysisException(
-            s"Data source does not support user-supplied schema: $name")
+        case provider: BatchWriteSupportProvider =>
+          provider
         case _ =>
-          throw new AnalysisException(s"Data source is not readable: $name")
+          throw new AnalysisException(s"Data source is not writable: $name")
       }
     }
 
@@ -177,73 +145,45 @@ object DataSourceV2Relation {
           source.getClass.getSimpleName
       }
     }
-  }
 
-  private def makeV2Options(options: Map[String, String]): DataSourceOptions = {
-    new DataSourceOptions(options.asJava)
-  }
-
-  private def schema(
-      source: DataSourceV2,
-      v2Options: DataSourceOptions,
-      userSchema: Option[StructType]): StructType = {
-    val reader = userSchema match {
-      case Some(s) =>
-        source.asReadSupportWithSchema.createReader(s, v2Options)
-      case _ =>
-        source.asReadSupport.createReader(v2Options)
+    def createReadSupport(
+        options: Map[String, String],
+        userSpecifiedSchema: Option[StructType]): BatchReadSupport = {
+      val v2Options = new DataSourceOptions(options.asJava)
+      userSpecifiedSchema match {
+        case Some(s) =>
+          asReadSupportProvider.createBatchReadSupport(s, v2Options)
+        case _ =>
+          asReadSupportProvider.createBatchReadSupport(v2Options)
+      }
     }
-    reader.readSchema()
+
+    def createWriteSupport(
+        options: Map[String, String],
+        schema: StructType): BatchWriteSupport = {
+      asWriteSupportProvider.createBatchWriteSupport(
+        UUID.randomUUID().toString,
+        schema,
+        SaveMode.Append,
+        new DataSourceOptions(options.asJava)).get
+    }
   }
 
   def create(
       source: DataSourceV2,
       options: Map[String, String],
-      filters: Option[Seq[Expression]] = None,
+      tableIdent: Option[TableIdentifier] = None,
       userSpecifiedSchema: Option[StructType] = None): DataSourceV2Relation = {
-    val projection = schema(source, makeV2Options(options), userSpecifiedSchema).toAttributes
-    DataSourceV2Relation(source, options, projection, filters, userSpecifiedSchema)
+    val readSupport = source.createReadSupport(options, userSpecifiedSchema)
+    val output = readSupport.fullSchema().toAttributes
+    val ident = tableIdent.orElse(tableFromOptions(options))
+    DataSourceV2Relation(
+      source, readSupport, output, options, ident, userSpecifiedSchema)
   }
 
-  private def pushRequiredColumns(reader: DataSourceReader, struct: StructType): Unit = {
-    reader match {
-      case projectionSupport: SupportsPushDownRequiredColumns =>
-        projectionSupport.pruneColumns(struct)
-      case _ =>
-    }
-  }
-
-  private def pushFilters(
-      reader: DataSourceReader,
-      filters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
-    reader match {
-      case catalystFilterSupport: SupportsPushDownCatalystFilters =>
-        (
-            catalystFilterSupport.pushCatalystFilters(filters.toArray),
-            catalystFilterSupport.pushedCatalystFilters()
-        )
-
-      case filterSupport: SupportsPushDownFilters =>
-        // A map from original Catalyst expressions to corresponding translated data source
-        // filters. If a predicate is not in this map, it means it cannot be pushed down.
-        val translatedMap: Map[Expression, Filter] = filters.flatMap { p =>
-          DataSourceStrategy.translateFilter(p).map(f => p -> f)
-        }.toMap
-
-        // Catalyst predicate expressions that cannot be converted to data source filters.
-        val nonConvertiblePredicates = filters.filterNot(translatedMap.contains)
-
-        // Data source filters that cannot be pushed down. An unhandled filter means
-        // the data source cannot guarantee the rows returned can pass the filter.
-        // As a result we must return it so Spark can plan an extra filter operator.
-        val unhandledFilters = filterSupport.pushFilters(translatedMap.values.toArray).toSet
-        val (unhandledPredicates, pushedPredicates) = translatedMap.partition { case (_, f) =>
-          unhandledFilters.contains(f)
-        }
-
-        (nonConvertiblePredicates ++ unhandledPredicates.keys, pushedPredicates.keys.toSeq)
-
-      case _ => (filters, Nil)
-    }
+  private def tableFromOptions(options: Map[String, String]): Option[TableIdentifier] = {
+    options
+      .get(DataSourceOptions.TABLE_KEY)
+      .map(TableIdentifier(_, options.get(DataSourceOptions.DATABASE_KEY)))
   }
 }

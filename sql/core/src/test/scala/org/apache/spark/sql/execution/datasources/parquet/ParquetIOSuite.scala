@@ -543,7 +543,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
 
-      withSQLConf(ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true") {
+      withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
         withTempPath { dir =>
           val path = s"${dir.getCanonicalPath}/part-r-0.parquet"
           spark.range(1 << 16).selectExpr("(id % 4) AS i")

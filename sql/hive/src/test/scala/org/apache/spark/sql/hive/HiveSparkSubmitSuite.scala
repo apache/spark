@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.{BufferedWriter, File, FileWriter}
 
-import scala.tools.nsc.Properties
+import scala.util.Properties
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfterEach, Matchers}
@@ -33,11 +33,13 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.types.{DecimalType, StructType}
+import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 /**
  * This suite tests spark-submit with applications using HiveContext.
  */
+@ExtendedHiveTest
 class HiveSparkSubmitSuite
   extends SparkSubmitTestUtils
   with Matchers
@@ -45,8 +47,6 @@ class HiveSparkSubmitSuite
   with ResetSystemProperties {
 
   override protected val enableAutoThreadAudit = false
-
-  // TODO: rewrite these or mark them as slow tests to be run sparingly
 
   override def beforeEach() {
     super.beforeEach()
@@ -354,7 +354,7 @@ object SetMetastoreURLTest extends Logging {
 
     // HiveExternalCatalog is used when Hive support is enabled.
     val actualMetastoreURL =
-      spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
         .getConf("javax.jdo.option.ConnectionURL", "this_is_a_wrong_URL")
     logInfo(s"javax.jdo.option.ConnectionURL is $actualMetastoreURL")
 
@@ -780,7 +780,8 @@ object SPARK_18360 {
     val defaultDbLocation = spark.catalog.getDatabase("default").locationUri
     assert(new Path(defaultDbLocation) == new Path(spark.sharedState.warehousePath))
 
-    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+    val hiveClient =
+      spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
 
     try {
       val tableMeta = CatalogTable(

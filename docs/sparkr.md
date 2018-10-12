@@ -70,12 +70,12 @@ The following Spark driver properties can be set in `sparkConfig` with `sparkR.s
     <td><code>--master</code></td>
   </tr>
   <tr>
-    <td><code>spark.yarn.keytab</code></td>
+    <td><code>spark.kerberos.keytab</code></td>
     <td>Application Properties</td>
     <td><code>--keytab</code></td>
   </tr>
   <tr>
-    <td><code>spark.yarn.principal</code></td>
+    <td><code>spark.kerberos.principal</code></td>
     <td>Application Properties</td>
     <td><code>--principal</code></td>
   </tr>
@@ -107,7 +107,7 @@ The following Spark driver properties can be set in `sparkConfig` with `sparkR.s
 With a `SparkSession`, applications can create `SparkDataFrame`s from a local R data frame, from a [Hive table](sql-programming-guide.html#hive-tables), or from other [data sources](sql-programming-guide.html#data-sources).
 
 ### From local data frames
-The simplest way to create a data frame is to convert a local R data frame into a SparkDataFrame. Specifically we can use `as.DataFrame` or `createDataFrame` and pass in the local R data frame to create a SparkDataFrame. As an example, the following creates a `SparkDataFrame` based using the `faithful` dataset from R.
+The simplest way to create a data frame is to convert a local R data frame into a SparkDataFrame. Specifically, we can use `as.DataFrame` or `createDataFrame` and pass in the local R data frame to create a SparkDataFrame. As an example, the following creates a `SparkDataFrame` based using the `faithful` dataset from R.
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
@@ -128,7 +128,7 @@ head(df)
 SparkR supports operating on a variety of data sources through the `SparkDataFrame` interface. This section describes the general methods for loading and saving data using Data Sources. You can check the Spark SQL programming guide for more [specific options](sql-programming-guide.html#manually-specifying-options) that are available for the built-in data sources.
 
 The general method for creating SparkDataFrames from data sources is `read.df`. This method takes in the path for the file to load and the type of data source, and the currently active SparkSession will be used automatically.
-SparkR supports reading JSON, CSV and Parquet files natively, and through packages available from sources like [Third Party Projects](http://spark.apache.org/third-party-projects.html), you can find data source connectors for popular file formats like Avro. These packages can either be added by
+SparkR supports reading JSON, CSV and Parquet files natively, and through packages available from sources like [Third Party Projects](https://spark.apache.org/third-party-projects.html), you can find data source connectors for popular file formats like Avro. These packages can either be added by
 specifying `--packages` with `spark-submit` or `sparkR` commands, or if initializing SparkSession with `sparkPackages` parameter when in an interactive R shell or from RStudio.
 
 <div data-lang="r" markdown="1">
@@ -169,7 +169,7 @@ df <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.strings 
 {% endhighlight %}
 </div>
 
-The data sources API can also be used to save out SparkDataFrames into multiple file formats. For example we can save the SparkDataFrame from the previous example
+The data sources API can also be used to save out SparkDataFrames into multiple file formats. For example, we can save the SparkDataFrame from the previous example
 to a Parquet file using `write.df`.
 
 <div data-lang="r"  markdown="1">
@@ -241,7 +241,7 @@ head(filter(df, df$waiting < 50))
 
 ### Grouping, Aggregation
 
-SparkR data frames support a number of commonly used functions to aggregate data after grouping. For example we can compute a histogram of the `waiting` time in the `faithful` dataset as shown below
+SparkR data frames support a number of commonly used functions to aggregate data after grouping. For example, we can compute a histogram of the `waiting` time in the `faithful` dataset as shown below
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
@@ -664,6 +664,10 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
  - For `summary`, option for statistics to compute has been added. Its output is changed from that from `describe`.
  - A warning can be raised if versions of SparkR package and the Spark JVM do not match.
 
-## Upgrading to Spark 2.4.0
+## Upgrading to SparkR 2.3.1 and above
 
- - The `start` parameter of `substr` method was wrongly subtracted by one, previously. In other words, the index specified by `start` parameter was considered as 0-base. This can lead to inconsistent substring results and also does not match with the behaviour with `substr` in R. It has been fixed so the `start` parameter of `substr` method is now 1-base, e.g., therefore to get the same result as `substr(df$a, 2, 5)`, it should be changed to `substr(df$a, 1, 4)`.
+ - In SparkR 2.3.0 and earlier, the `start` parameter of `substr` method was wrongly subtracted by one and considered as 0-based. This can lead to inconsistent substring results and also does not match with the behaviour with `substr` in R. In version 2.3.1 and later, it has been fixed so the `start` parameter of `substr` method is now 1-base. As an example, `substr(lit('abcdef'), 2, 4))` would result to `abc` in SparkR 2.3.0, and the result would be `bcd` in SparkR 2.3.1.
+
+## Upgrading to SparkR 2.4.0
+
+ - Previously, we don't check the validity of the size of the last layer in `spark.mlp`. For example, if the training data only has two labels, a `layers` param like `c(1, 3)` doesn't cause an error previously, now it does.

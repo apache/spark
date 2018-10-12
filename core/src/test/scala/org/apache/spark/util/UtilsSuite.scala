@@ -1168,6 +1168,71 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       Utils.checkAndGetK8sMasterUrl("k8s://foo://host:port")
     }
   }
+
+  object MalformedClassObject {
+    class MalformedClass
+  }
+
+  test("Safe getSimpleName") {
+    // getSimpleName on class of MalformedClass will result in error: Malformed class name
+    // Utils.getSimpleName works
+    val err = intercept[java.lang.InternalError] {
+      classOf[MalformedClassObject.MalformedClass].getSimpleName
+    }
+    assert(err.getMessage === "Malformed class name")
+
+    assert(Utils.getSimpleName(classOf[MalformedClassObject.MalformedClass]) ===
+      "UtilsSuite$MalformedClassObject$MalformedClass")
+  }
+
+  test("stringHalfWidth") {
+    // scalastyle:off nonascii
+    assert(Utils.stringHalfWidth(null) == 0)
+    assert(Utils.stringHalfWidth("") == 0)
+    assert(Utils.stringHalfWidth("ab c") == 4)
+    assert(Utils.stringHalfWidth("1098") == 4)
+    assert(Utils.stringHalfWidth("mø") == 2)
+    assert(Utils.stringHalfWidth("γύρ") == 3)
+    assert(Utils.stringHalfWidth("pê") == 2)
+    assert(Utils.stringHalfWidth("ー") == 2)
+    assert(Utils.stringHalfWidth("测") == 2)
+    assert(Utils.stringHalfWidth("か") == 2)
+    assert(Utils.stringHalfWidth("걸") == 2)
+    assert(Utils.stringHalfWidth("à") == 1)
+    assert(Utils.stringHalfWidth("焼") == 2)
+    assert(Utils.stringHalfWidth("羍む") == 4)
+    assert(Utils.stringHalfWidth("뺭ᾘ") == 3)
+    assert(Utils.stringHalfWidth("\u0967\u0968\u0969") == 3)
+    // scalastyle:on nonascii
+  }
+
+  test("trimExceptCRLF standalone") {
+    val crlfSet = Set("\r", "\n")
+    val nonPrintableButCRLF = (0 to 32).map(_.toChar.toString).toSet -- crlfSet
+
+    // identity for CRLF
+    crlfSet.foreach { s => Utils.trimExceptCRLF(s) === s }
+
+    // empty for other non-printables
+    nonPrintableButCRLF.foreach { s => assert(Utils.trimExceptCRLF(s) === "") }
+
+    // identity for a printable string
+    assert(Utils.trimExceptCRLF("a") === "a")
+
+    // identity for strings with CRLF
+    crlfSet.foreach { s =>
+      assert(Utils.trimExceptCRLF(s"${s}a") === s"${s}a")
+      assert(Utils.trimExceptCRLF(s"a${s}") === s"a${s}")
+      assert(Utils.trimExceptCRLF(s"b${s}b") === s"b${s}b")
+    }
+
+    // trim nonPrintableButCRLF except when inside a string
+    nonPrintableButCRLF.foreach { s =>
+      assert(Utils.trimExceptCRLF(s"${s}a") === "a")
+      assert(Utils.trimExceptCRLF(s"a${s}") === "a")
+      assert(Utils.trimExceptCRLF(s"b${s}b") === s"b${s}b")
+    }
+  }
 }
 
 private class SimpleExtension

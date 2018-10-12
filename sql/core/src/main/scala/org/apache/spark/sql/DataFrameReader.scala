@@ -21,6 +21,9 @@ import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.univocity.parsers.csv.CsvParser
+
 import org.apache.spark.Partition
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.api.java.JavaRDD
@@ -34,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.sources.v2.{DataSourceV2, ReadSupport, ReadSupportWithSchema}
+import org.apache.spark.sql.sources.v2.{BatchReadSupportProvider, DataSourceOptions, DataSourceV2}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -171,7 +174,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def load(path: String): DataFrame = {
-    option("path", path).load(Seq.empty: _*) // force invocation of `load(...varargs...)`
+    // force invocation of `load(...varargs...)`
+    option(DataSourceOptions.PATH_KEY, path).load(Seq.empty: _*)
   }
 
   /**
@@ -190,13 +194,16 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
       val ds = cls.newInstance().asInstanceOf[DataSourceV2]
-      if (ds.isInstanceOf[ReadSupport] || ds.isInstanceOf[ReadSupportWithSchema]) {
+      if (ds.isInstanceOf[BatchReadSupportProvider]) {
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           ds = ds, conf = sparkSession.sessionState.conf)
+        val pathsOption = {
+          val objectMapper = new ObjectMapper()
+          DataSourceOptions.PATHS_KEY -> objectMapper.writeValueAsString(paths.toArray)
+        }
         Dataset.ofRows(sparkSession, DataSourceV2Relation.create(
-          ds, extraOptions.toMap ++ sessionOptions,
+          ds, sessionOptions ++ extraOptions.toMap + pathsOption,
           userSpecifiedSchema = userSpecifiedSchema))
-
       } else {
         loadV1Source(paths: _*)
       }
@@ -251,7 +258,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included. "fetchsize" can be used to control the
-   *                             number of rows per fetch.
+   *                             number of rows per fetch and "queryTimeout" can be used to wait
+   *                             for a Statement object to execute to the given number of seconds.
    * @since 1.4.0
    */
   def jdbc(
@@ -366,8 +374,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
    * per file</li>
+   * <li>`encoding` (by default it is not set): allows to forcibly set one of standard basic
+   * or extended encoding for the JSON files. For example UTF-16BE, UTF-32LE. If the encoding
+   * is not specified and `multiLine` is set to `true`, it will be detected automatically.</li>
    * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
    * that should be used for parsing.</li>
+   * <li>`samplingRatio` (default is 1.0): defines fraction of input JSON objects used
+   * for schema inferring.</li>
+   * <li>`dropFieldIfAllNull` (default `false`): whether to ignore column of all null values or
+   * empty array/struct during schema inference.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -435,7 +450,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         input => rawParser.parse(input, createParser, UTF8String.fromString),
         parsedOptions.parseMode,
         schema,
-        parsedOptions.columnNameOfCorruptRecord)
+        parsedOptions.columnNameOfCorruptRecord,
+        parsedOptions.multiLine)
       iter.flatMap(parser.parse)
     }
     sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = jsonDataset.isStreaming)
@@ -462,12 +478,16 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * it determines the columns as string types and it reads only the first line to determine the
    * names and the number of fields.
    *
+   * If the enforceSchema is set to `false`, only the CSV header in the first line is checked
+   * to conform specified or inferred schema.
+   *
    * @param csvDataset input Dataset with one CSV row per record
    * @since 2.2.0
    */
   def csv(csvDataset: Dataset[String]): DataFrame = {
     val parsedOptions: CSVOptions = new CSVOptions(
       extraOptions.toMap,
+      sparkSession.sessionState.conf.csvColumnPruning,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
     val filteredLines: Dataset[String] =
       CSVUtils.filterCommentAndEmpty(csvDataset, parsedOptions)
@@ -486,6 +506,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
 
     val linesWithoutHeader: RDD[String] = maybeFirstLine.map { firstLine =>
+      val headerChecker = new CSVHeaderChecker(
+        actualSchema,
+        parsedOptions,
+        source = s"CSV source: $csvDataset")
+      headerChecker.checkHeaderColumnNames(firstLine)
       filteredLines.rdd.mapPartitions(CSVUtils.filterHeaderLine(_, firstLine, parsedOptions))
     }.getOrElse(filteredLines.rdd)
 
@@ -495,7 +520,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         input => Seq(rawParser.parse(input)),
         parsedOptions.parseMode,
         schema,
-        parsedOptions.columnNameOfCorruptRecord)
+        parsedOptions.columnNameOfCorruptRecord,
+        parsedOptions.multiLine)
       iter.flatMap(parser.parse)
     }
     sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = csvDataset.isStreaming)
@@ -526,14 +552,23 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`comment` (default empty string): sets a single character used for skipping lines
    * beginning with this character. By default, it is disabled.</li>
    * <li>`header` (default `false`): uses the first line as names of columns.</li>
+   * <li>`enforceSchema` (default `true`): If it is set to `true`, the specified or inferred schema
+   * will be forcibly applied to datasource files, and headers in CSV files will be ignored.
+   * If the option is set to `false`, the schema will be validated against all headers in CSV files
+   * in the case when the `header` option is set to `true`. Field names in the schema
+   * and column names in CSV headers are checked by their positions taking into account
+   * `spark.sql.caseSensitive`. Though the default value is true, it is recommended to disable
+   * the `enforceSchema` option to avoid incorrect results.</li>
    * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It
    * requires one extra pass over the data.</li>
+   * <li>`samplingRatio` (default is 1.0): defines fraction of rows used for schema inferring.</li>
    * <li>`ignoreLeadingWhiteSpace` (default `false`): a flag indicating whether or not leading
    * whitespaces from values being read should be skipped.</li>
    * <li>`ignoreTrailingWhiteSpace` (default `false`): a flag indicating whether or not trailing
    * whitespaces from values being read should be skipped.</li>
    * <li>`nullValue` (default empty string): sets the string representation of a null value. Since
    * 2.0.1, this applies to all supported types including the string type.</li>
+   * <li>`emptyValue` (default empty string): sets the string representation of an empty value.</li>
    * <li>`nanValue` (default `NaN`): sets the string representation of a non-number" value.</li>
    * <li>`positiveInf` (default `Inf`): sets the string representation of a positive infinity
    * value.</li>
@@ -569,6 +604,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines.</li>
    * </ul>
+   *
    * @since 2.0.0
    */
   @scala.annotation.varargs

@@ -71,12 +71,12 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    */
   @Since("2.4.0")
   override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
-    """Param for how to handle invalid data (NULL values). Options are 'skip' (filter out rows with
-      |invalid data), 'error' (throw an error), or 'keep' (return relevant number of NaN in the
-      |output). Column lengths are taken from the size of ML Attribute Group, which can be set using
-      |`VectorSizeHint` in a pipeline before `VectorAssembler`. Column lengths can also be inferred
-      |from first rows of the data since it is safe to do so but only in case of 'error' or 'skip'.
-      |""".stripMargin.replaceAll("\n", " "),
+    """Param for how to handle invalid data (NULL and NaN values). Options are 'skip' (filter out
+      |rows with invalid data), 'error' (throw an error), or 'keep' (return relevant number of NaN
+      |in the output). Column lengths are taken from the size of ML Attribute Group, which can be
+      |set using `VectorSizeHint` in a pipeline before `VectorAssembler`. Column lengths can also
+      |be inferred from first rows of the data since it is safe to do so but only in case of 'error'
+      |or 'skip'.""".stripMargin.replaceAll("\n", " "),
     ParamValidators.inArray(VectorAssembler.supportedHandleInvalids))
 
   setDefault(handleInvalid, VectorAssembler.ERROR_INVALID)
@@ -162,7 +162,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       schema(name).dataType match {
         case _: NumericType | BooleanType => None
         case t if t.isInstanceOf[VectorUDT] => None
-        case other => Some(s"Data type $other of column $name is not supported.")
+        case other => Some(s"Data type ${other.catalogString} of column $name is not supported.")
       }
     }
     if (incorrectColumns.nonEmpty) {

@@ -207,8 +207,8 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     distance space. The output will be vectors of configurable dimension. Hash values in the same
     dimension are calculated by the same hash function.
 
-    .. seealso:: `Stable Distributions \
-    <https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions>`_
+    .. seealso:: `Stable Distributions
+        <https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions>`_
     .. seealso:: `Hashing for Similarity Search: A Survey <https://arxiv.org/abs/1408.2927>`_
 
     >>> from pyspark.ml.linalg import Vectors
@@ -303,7 +303,7 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
 
 
 class BucketedRandomProjectionLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
-    """
+    r"""
     .. note:: Experimental
 
     Model fitted by :py:class:`BucketedRandomProjectionLSH`, where multiple random vectors are
@@ -653,8 +653,8 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWrit
     The return vector is scaled such that the transform matrix is
     unitary (aka scaled DCT-II).
 
-    .. seealso:: `More information on Wikipedia \
-    <https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia>`_.
+    .. seealso:: `More information on Wikipedia
+        <https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia>`_.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df1 = spark.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
@@ -1294,14 +1294,14 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     >>> mh = MinHashLSH(inputCol="features", outputCol="hashes", seed=12345)
     >>> model = mh.fit(df)
     >>> model.transform(df).head()
-    Row(id=0, features=SparseVector(6, {0: 1.0, 1: 1.0, 2: 1.0}), hashes=[DenseVector([-1638925...
+    Row(id=0, features=SparseVector(6, {0: 1.0, 1: 1.0, 2: 1.0}), hashes=[DenseVector([6179668...
     >>> data2 = [(3, Vectors.sparse(6, [1, 3, 5], [1.0, 1.0, 1.0]),),
     ...          (4, Vectors.sparse(6, [2, 3, 5], [1.0, 1.0, 1.0]),),
     ...          (5, Vectors.sparse(6, [1, 2, 4], [1.0, 1.0, 1.0]),)]
     >>> df2 = spark.createDataFrame(data2, ["id", "features"])
     >>> key = Vectors.sparse(6, [1, 2], [1.0, 1.0])
     >>> model.approxNearestNeighbors(df2, key, 1).collect()
-    [Row(id=5, features=SparseVector(6, {1: 1.0, 2: 1.0, 4: 1.0}), hashes=[DenseVector([-163892...
+    [Row(id=5, features=SparseVector(6, {1: 1.0, 2: 1.0, 4: 1.0}), hashes=[DenseVector([6179668...
     >>> model.approxSimilarityJoin(df, df2, 0.6, distCol="JaccardDistance").select(
     ...     col("datasetA.id").alias("idA"),
     ...     col("datasetB.id").alias("idB"),
@@ -1309,8 +1309,8 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     +---+---+---------------+
     |idA|idB|JaccardDistance|
     +---+---+---------------+
-    |  1|  4|            0.5|
     |  0|  5|            0.5|
+    |  1|  4|            0.5|
     +---+---+---------------+
     ...
     >>> mhPath = temp_path + "/mh"
@@ -1353,7 +1353,7 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
 
 
 class MinHashLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
-    """
+    r"""
     .. note:: Experimental
 
     Model produced by :py:class:`MinHashLSH`, where where multiple hash functions are stored. Each
@@ -1362,8 +1362,8 @@ class MinHashLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
     :math:`h_i(x) = ((x \cdot a_i + b_i) \mod prime)` This hash family is approximately min-wise
     independent according to the reference.
 
-    .. seealso:: Tom Bohman, Colin Cooper, and Alan Frieze. "Min-wise independent linear \
-    permutations." Electronic Journal of Combinatorics 7 (2000): R26.
+    .. seealso:: Tom Bohman, Colin Cooper, and Alan Frieze. "Min-wise independent linear
+        permutations." Electronic Journal of Combinatorics 7 (2000): R26.
 
     .. versionadded:: 2.2.0
     """
@@ -2342,9 +2342,38 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
         return self._call_java("mean")
 
 
+class _StringIndexerParams(JavaParams, HasHandleInvalid, HasInputCol, HasOutputCol):
+    """
+    Params for :py:attr:`StringIndexer` and :py:attr:`StringIndexerModel`.
+    """
+
+    stringOrderType = Param(Params._dummy(), "stringOrderType",
+                            "How to order labels of string column. The first label after " +
+                            "ordering is assigned an index of 0. Supported options: " +
+                            "frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc.",
+                            typeConverter=TypeConverters.toString)
+
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid data (unseen " +
+                          "or NULL values) in features and label column of string type. " +
+                          "Options are 'skip' (filter out rows with invalid data), " +
+                          "error (throw an error), or 'keep' (put invalid data " +
+                          "in a special additional bucket, at index numLabels).",
+                          typeConverter=TypeConverters.toString)
+
+    def __init__(self, *args):
+        super(_StringIndexerParams, self).__init__(*args)
+        self._setDefault(handleInvalid="error", stringOrderType="frequencyDesc")
+
+    @since("2.3.0")
+    def getStringOrderType(self):
+        """
+        Gets the value of :py:attr:`stringOrderType` or its default value 'frequencyDesc'.
+        """
+        return self.getOrDefault(self.stringOrderType)
+
+
 @inherit_doc
-class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, JavaMLReadable,
-                    JavaMLWritable):
+class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLWritable):
     """
     A label indexer that maps a string column of labels to an ML column of label indices.
     If the input column is numeric, we cast it to string and index the string values.
@@ -2388,22 +2417,15 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
     ...     key=lambda x: x[0])
     [(0, 2.0), (1, 1.0), (2, 0.0), (3, 2.0), (4, 2.0), (5, 0.0)]
+    >>> fromlabelsModel = StringIndexerModel.from_labels(["a", "b", "c"],
+    ...     inputCol="label", outputCol="indexed", handleInvalid="error")
+    >>> result = fromlabelsModel.transform(stringIndDf)
+    >>> sorted(set([(i[0], i[1]) for i in result.select(result.id, result.indexed).collect()]),
+    ...     key=lambda x: x[0])
+    [(0, 0.0), (1, 1.0), (2, 2.0), (3, 0.0), (4, 0.0), (5, 2.0)]
 
     .. versionadded:: 1.4.0
     """
-
-    stringOrderType = Param(Params._dummy(), "stringOrderType",
-                            "How to order labels of string column. The first label after " +
-                            "ordering is assigned an index of 0. Supported options: " +
-                            "frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc.",
-                            typeConverter=TypeConverters.toString)
-
-    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid data (unseen " +
-                          "or NULL values) in features and label column of string type. " +
-                          "Options are 'skip' (filter out rows with invalid data), " +
-                          "error (throw an error), or 'keep' (put invalid data " +
-                          "in a special additional bucket, at index numLabels).",
-                          typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, handleInvalid="error",
@@ -2414,7 +2436,6 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
         """
         super(StringIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexer", self.uid)
-        self._setDefault(handleInvalid="error", stringOrderType="frequencyDesc")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -2440,20 +2461,32 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
         """
         return self._set(stringOrderType=value)
 
-    @since("2.3.0")
-    def getStringOrderType(self):
-        """
-        Gets the value of :py:attr:`stringOrderType` or its default value 'frequencyDesc'.
-        """
-        return self.getOrDefault(self.stringOrderType)
 
-
-class StringIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`StringIndexer`.
 
     .. versionadded:: 1.4.0
     """
+
+    @classmethod
+    @since("2.4.0")
+    def from_labels(cls, labels, inputCol, outputCol=None, handleInvalid=None):
+        """
+        Construct the model directly from an array of label strings,
+        requires an active SparkContext.
+        """
+        sc = SparkContext._active_spark_context
+        java_class = sc._gateway.jvm.java.lang.String
+        jlabels = StringIndexerModel._new_java_array(labels, java_class)
+        model = StringIndexerModel._create_from_java_class(
+            "org.apache.spark.ml.feature.StringIndexerModel", jlabels)
+        model.setInputCol(inputCol)
+        if outputCol is not None:
+            model.setOutputCol(outputCol)
+        if handleInvalid is not None:
+            model.setHandleInvalid(handleInvalid)
+        return model
 
     @property
     @since("1.5.0")
@@ -2462,6 +2495,13 @@ class StringIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
         Ordered list of labels, corresponding to indices to be assigned.
         """
         return self._call_java("labels")
+
+    @since("2.4.0")
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
 
 
 @inherit_doc
@@ -2542,25 +2582,31 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
                       typeConverter=TypeConverters.toListString)
     caseSensitive = Param(Params._dummy(), "caseSensitive", "whether to do a case sensitive " +
                           "comparison over the stop words", typeConverter=TypeConverters.toBoolean)
+    locale = Param(Params._dummy(), "locale", "locale of the input. ignored when case sensitive " +
+                   "is true", typeConverter=TypeConverters.toString)
 
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False):
+    def __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False,
+                 locale=None):
         """
-        __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false)
+        __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, \
+        locale=None)
         """
         super(StopWordsRemover, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
                                             self.uid)
         self._setDefault(stopWords=StopWordsRemover.loadDefaultStopWords("english"),
-                         caseSensitive=False)
+                         caseSensitive=False, locale=self._java_obj.getLocale())
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.6.0")
-    def setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False):
+    def setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False,
+                  locale=None):
         """
-        setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false)
+        setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, \
+        locale=None)
         Sets params for this StopWordRemover.
         """
         kwargs = self._input_kwargs
@@ -2593,6 +2639,20 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
         Gets the value of :py:attr:`caseSensitive` or its default value.
         """
         return self.getOrDefault(self.caseSensitive)
+
+    @since("2.4.0")
+    def setLocale(self, value):
+        """
+        Sets the value of :py:attr:`locale`.
+        """
+        return self._set(locale=value)
+
+    @since("2.4.0")
+    def getLocale(self):
+        """
+        Gets the value of :py:attr:`locale`.
+        """
+        return self.getOrDefault(self.locale)
 
     @staticmethod
     @since("2.0.0")
@@ -2661,7 +2721,8 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
 
 
 @inherit_doc
-class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, HasHandleInvalid, JavaMLReadable,
+                      JavaMLWritable):
     """
     A feature transformer that merges multiple columns into a vector column.
 
@@ -2679,25 +2740,56 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadabl
     >>> loadedAssembler = VectorAssembler.load(vectorAssemblerPath)
     >>> loadedAssembler.transform(df).head().freqs == vecAssembler.transform(df).head().freqs
     True
+    >>> dfWithNullsAndNaNs = spark.createDataFrame(
+    ...    [(1.0, 2.0, None), (3.0, float("nan"), 4.0), (5.0, 6.0, 7.0)], ["a", "b", "c"])
+    >>> vecAssembler2 = VectorAssembler(inputCols=["a", "b", "c"], outputCol="features",
+    ...    handleInvalid="keep")
+    >>> vecAssembler2.transform(dfWithNullsAndNaNs).show()
+    +---+---+----+-------------+
+    |  a|  b|   c|     features|
+    +---+---+----+-------------+
+    |1.0|2.0|null|[1.0,2.0,NaN]|
+    |3.0|NaN| 4.0|[3.0,NaN,4.0]|
+    |5.0|6.0| 7.0|[5.0,6.0,7.0]|
+    +---+---+----+-------------+
+    ...
+    >>> vecAssembler2.setParams(handleInvalid="skip").transform(dfWithNullsAndNaNs).show()
+    +---+---+---+-------------+
+    |  a|  b|  c|     features|
+    +---+---+---+-------------+
+    |5.0|6.0|7.0|[5.0,6.0,7.0]|
+    +---+---+---+-------------+
+    ...
 
     .. versionadded:: 1.4.0
     """
 
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "How to handle invalid data (NULL " +
+                          "and NaN values). Options are 'skip' (filter out rows with invalid " +
+                          "data), 'error' (throw an error), or 'keep' (return relevant number " +
+                          "of NaN in the output). Column lengths are taken from the size of ML " +
+                          "Attribute Group, which can be set using `VectorSizeHint` in a " +
+                          "pipeline before `VectorAssembler`. Column lengths can also be " +
+                          "inferred from first rows of the data since it is safe to do so but " +
+                          "only in case of 'error' or 'skip').",
+                          typeConverter=TypeConverters.toString)
+
     @keyword_only
-    def __init__(self, inputCols=None, outputCol=None):
+    def __init__(self, inputCols=None, outputCol=None, handleInvalid="error"):
         """
-        __init__(self, inputCols=None, outputCol=None)
+        __init__(self, inputCols=None, outputCol=None, handleInvalid="error")
         """
         super(VectorAssembler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorAssembler", self.uid)
+        self._setDefault(handleInvalid="error")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, inputCols=None, outputCol=None):
+    def setParams(self, inputCols=None, outputCol=None, handleInvalid="error"):
         """
-        setParams(self, inputCols=None, outputCol=None)
+        setParams(self, inputCols=None, outputCol=None, handleInvalid="error")
         Sets params for this VectorAssembler.
         """
         kwargs = self._input_kwargs
@@ -3751,12 +3843,12 @@ class VectorSizeHint(JavaTransformer, HasInputCol, HasHandleInvalid, JavaMLReada
     @since("2.3.0")
     def getSize(self):
         """ Gets size param, the size of vectors in `inputCol`."""
-        self.getOrDefault(self.size)
+        return self.getOrDefault(self.size)
 
     @since("2.3.0")
     def setSize(self, value):
         """ Sets size param, the size of vectors in `inputCol`."""
-        self._set(size=value)
+        return self._set(size=value)
 
 
 if __name__ == "__main__":

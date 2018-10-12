@@ -19,10 +19,13 @@ package org.apache.spark
 
 import java.io._
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import java.util.zip.GZIPOutputStream
 
 import scala.io.Source
 
+import com.google.common.io.Files
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io._
 import org.apache.hadoop.io.compress.DefaultCodec
@@ -32,7 +35,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileSplit => NewFileSplit, TextInp
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 
 import org.apache.spark.internal.config._
-import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
+import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -295,6 +298,25 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     assert(copyArr.length == numOfCopies)
     for (i <- copyArr.indices) {
       assert(copyArr(i).toArray === testOutput)
+    }
+  }
+
+  test("SPARK-22357 test binaryFiles minPartitions") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local")
+      .set("spark.files.openCostInBytes", "0")
+      .set("spark.default.parallelism", "1"))
+
+    val tempDir = Utils.createTempDir()
+    val tempDirPath = tempDir.getAbsolutePath
+
+    for (i <- 0 until 8) {
+      val tempFile = new File(tempDir, s"part-0000$i")
+      Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", tempFile,
+        StandardCharsets.UTF_8)
+    }
+
+    for (p <- Seq(1, 2, 8)) {
+      assert(sc.binaryFiles(tempDirPath, minPartitions = p).getNumPartitions === p)
     }
   }
 
@@ -595,5 +617,71 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       data = Array(("1", "a"), ("2", "b")),
       actualPartitionNum = 5,
       expectedPartitionNum = 2)
+  }
+
+  test("spark.files.ignoreMissingFiles should work both HadoopRDD and NewHadoopRDD") {
+    // "file not found" can happen both when getPartitions or compute in HadoopRDD/NewHadoopRDD,
+    // We test both cases here.
+
+    val deletedPath = new Path(tempDir.getAbsolutePath, "test-data-1")
+    val fs = deletedPath.getFileSystem(new Configuration())
+    fs.delete(deletedPath, true)
+    intercept[FileNotFoundException](fs.open(deletedPath))
+
+    def collectRDDAndDeleteFileBeforeCompute(newApi: Boolean): Array[_] = {
+      val dataPath = new Path(tempDir.getAbsolutePath, "test-data-2")
+      val writer = new OutputStreamWriter(new FileOutputStream(new File(dataPath.toString)))
+      writer.write("hello\n")
+      writer.write("world\n")
+      writer.close()
+      val rdd = if (newApi) {
+        sc.newAPIHadoopFile(dataPath.toString, classOf[NewTextInputFormat],
+          classOf[LongWritable], classOf[Text])
+      } else {
+        sc.textFile(dataPath.toString)
+      }
+      rdd.partitions
+      fs.delete(dataPath, true)
+      // Exception happens when initialize record reader in HadoopRDD/NewHadoopRDD.compute
+      // because partitions' info already cached.
+      rdd.collect()
+    }
+
+    // collect HadoopRDD and NewHadoopRDD when spark.files.ignoreMissingFiles=false by default.
+    sc = new SparkContext("local", "test")
+    intercept[org.apache.hadoop.mapred.InvalidInputException] {
+      // Exception happens when HadoopRDD.getPartitions
+      sc.textFile(deletedPath.toString).collect()
+    }
+
+    var e = intercept[SparkException] {
+      collectRDDAndDeleteFileBeforeCompute(false)
+    }
+    assert(e.getCause.isInstanceOf[java.io.FileNotFoundException])
+
+    intercept[org.apache.hadoop.mapreduce.lib.input.InvalidInputException] {
+      // Exception happens when NewHadoopRDD.getPartitions
+      sc.newAPIHadoopFile(deletedPath.toString, classOf[NewTextInputFormat],
+        classOf[LongWritable], classOf[Text]).collect
+    }
+
+    e = intercept[SparkException] {
+      collectRDDAndDeleteFileBeforeCompute(true)
+    }
+    assert(e.getCause.isInstanceOf[java.io.FileNotFoundException])
+
+    sc.stop()
+
+    // collect HadoopRDD and NewHadoopRDD when spark.files.ignoreMissingFiles=true.
+    val conf = new SparkConf().set(IGNORE_MISSING_FILES, true)
+    sc = new SparkContext("local", "test", conf)
+    assert(sc.textFile(deletedPath.toString).collect().isEmpty)
+
+    assert(collectRDDAndDeleteFileBeforeCompute(false).isEmpty)
+
+    assert(sc.newAPIHadoopFile(deletedPath.toString, classOf[NewTextInputFormat],
+      classOf[LongWritable], classOf[Text]).collect().isEmpty)
+
+    assert(collectRDDAndDeleteFileBeforeCompute(true).isEmpty)
   }
 }

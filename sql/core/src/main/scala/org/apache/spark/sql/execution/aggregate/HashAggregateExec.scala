@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -44,7 +45,7 @@ case class HashAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryExecNode with CodegenSupport {
+  extends UnaryExecNode with BlockingOperatorWithCodegen {
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -150,14 +151,6 @@ case class HashAggregateExec(
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
-  // The result rows come from the aggregate buffer, or a single row(no grouping keys), so this
-  // operator doesn't need to copy its result even if its child does.
-  override def needCopyResult: Boolean = false
-
-  // Aggregate operator always consumes all the input rows before outputting any result, so we
-  // don't need a stop check before aggregating.
-  override def needStopCheck: Boolean = false
-
   protected override def doProduce(ctx: CodegenContext): String = {
     if (groupingExpressions.isEmpty) {
       doProduceWithoutKeys(ctx)
@@ -190,11 +183,14 @@ case class HashAggregateExec(
       val value = ctx.addMutableState(CodeGenerator.javaType(e.dataType), "bufValue")
       // The initial expression should not access any column
       val ev = e.genCode(ctx)
-      val initVars = s"""
+      val initVars = code"""
          | $isNull = ${ev.isNull};
          | $value = ${ev.value};
        """.stripMargin
-      ExprCode(ev.code + initVars, isNull, value)
+      ExprCode(
+        ev.code + initVars,
+        JavaCode.isNullGlobal(isNull),
+        JavaCode.global(value, e.dataType))
     }
     val initBufVar = evaluateVariables(bufVars)
 
@@ -324,7 +320,7 @@ case class HashAggregateExec(
       initialBuffer,
       bufferSchema,
       groupingKeySchema,
-      TaskContext.get().taskMemoryManager(),
+      TaskContext.get(),
       1024 * 16, // initial capacity
       TaskContext.get().taskMemoryManager().pageSizeBytes
     )
@@ -575,6 +571,7 @@ case class HashAggregateExec(
         case _ =>
       }
     }
+    val bitMaxCapacity = sqlContext.conf.fastHashAggregateRowMaxCapacityBit
 
     val thisPlan = ctx.addReferenceObj("plan", this)
 
@@ -584,7 +581,7 @@ case class HashAggregateExec(
       val fastHashMapClassName = ctx.freshName("FastHashMap")
       if (isVectorizedHashMapEnabled) {
         val generatedMap = new VectorizedHashMapGenerator(ctx, aggregateExpressions,
-          fastHashMapClassName, groupingKeySchema, bufferSchema).generate()
+          fastHashMapClassName, groupingKeySchema, bufferSchema, bitMaxCapacity).generate()
         ctx.addInnerClass(generatedMap)
 
         // Inline mutable state since not many aggregation operations in a task
@@ -594,7 +591,7 @@ case class HashAggregateExec(
           forceInline = true)
       } else {
         val generatedMap = new RowBasedHashMapGenerator(ctx, aggregateExpressions,
-          fastHashMapClassName, groupingKeySchema, bufferSchema).generate()
+          fastHashMapClassName, groupingKeySchema, bufferSchema, bitMaxCapacity).generate()
         ctx.addInnerClass(generatedMap)
 
         // Inline mutable state since not many aggregation operations in a task
@@ -700,12 +697,15 @@ case class HashAggregateExec(
 
     def outputFromRegularHashMap: String = {
       s"""
-         |while ($iterTerm.next()) {
+         |while ($limitNotReachedCond $iterTerm.next()) {
          |  UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
          |  UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getValue();
          |  $outputFunc($keyTerm, $bufferTerm);
-         |
          |  if (shouldStop()) return;
+         |}
+         |$iterTerm.close();
+         |if ($sorterTerm == null) {
+         |  $hashMapTerm.free();
          |}
        """.stripMargin
     }
@@ -723,11 +723,6 @@ case class HashAggregateExec(
      // output the result
      $outputFromFastHashMap
      $outputFromRegularHashMap
-
-     $iterTerm.close();
-     if ($sorterTerm == null) {
-       $hashMapTerm.free();
-     }
      """
   }
 
@@ -752,7 +747,10 @@ case class HashAggregateExec(
     }
 
     // generate hash code for key
-    val hashExpr = Murmur3Hash(groupingExpressions, 42)
+    // SPARK-24076: HashAggregate uses the same hash algorithm on the same expressions
+    // as ShuffleExchange, it may lead to bad hash conflict when shuffle.partitions=8192*n,
+    // pick a different seed to avoid this conflict
+    val hashExpr = Murmur3Hash(groupingExpressions, 48)
     val hashEval = BindReferences.bindReference(hashExpr, child.output).genCode(ctx)
 
     val (checkFallbackForGeneratedHashMap, checkFallbackForBytesToBytesMap, resetCounter,
@@ -767,8 +765,8 @@ case class HashAggregateExec(
     val findOrInsertRegularHashMap: String =
       s"""
          |// generate grouping key
-         |${unsafeRowKeyCode.code.trim}
-         |${hashEval.code.trim}
+         |${unsafeRowKeyCode.code}
+         |${hashEval.code}
          |if ($checkFallbackForBytesToBytesMap) {
          |  // try to get the buffer from hash map
          |  $unsafeRowBuffer =

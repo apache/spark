@@ -27,17 +27,20 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
 
 class CSVOptions(
-    @transient private val parameters: CaseInsensitiveMap[String],
+    @transient val parameters: CaseInsensitiveMap[String],
+    val columnPruning: Boolean,
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
   extends Logging with Serializable {
 
   def this(
     parameters: Map[String, String],
+    columnPruning: Boolean,
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String = "") = {
       this(
         CaseInsensitiveMap(parameters),
+        columnPruning,
         defaultTimeZoneId,
         defaultColumnNameOfCorruptRecord)
   }
@@ -150,6 +153,30 @@ class CSVOptions(
 
   val isCommentSet = this.comment != '\u0000'
 
+  val samplingRatio =
+    parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
+
+  /**
+   * Forcibly apply the specified or inferred schema to datasource files.
+   * If the option is enabled, headers of CSV files will be ignored.
+   */
+  val enforceSchema = getBool("enforceSchema", default = true)
+
+
+  /**
+   * String representation of an empty value in read and in write.
+   */
+  val emptyValue = parameters.get("emptyValue")
+  /**
+   * The string is returned when CSV reader doesn't have any characters for input value,
+   * or an empty quoted string `""`. Default value is empty string.
+   */
+  val emptyValueInRead = emptyValue.getOrElse("")
+  /**
+   * The value is used instead of an empty string in write. Default value is `""`
+   */
+  val emptyValueInWrite = emptyValue.getOrElse("\"\"")
+
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
     val format = writerSettings.getFormat
@@ -161,7 +188,7 @@ class CSVOptions(
     writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
     writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
     writerSettings.setNullValue(nullValue)
-    writerSettings.setEmptyValue(nullValue)
+    writerSettings.setEmptyValue(emptyValueInWrite)
     writerSettings.setSkipEmptyLines(true)
     writerSettings.setQuoteAllFields(quoteAll)
     writerSettings.setQuoteEscapingEnabled(escapeQuotes)
@@ -182,6 +209,7 @@ class CSVOptions(
     settings.setInputBufferSize(inputBufferSize)
     settings.setMaxColumns(maxColumns)
     settings.setNullValue(nullValue)
+    settings.setEmptyValue(emptyValueInRead)
     settings.setMaxCharsPerColumn(maxCharsPerColumn)
     settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
     settings
