@@ -126,7 +126,7 @@ object JoinBenchmark extends SqlBasedBenchmark {
 
   def sortMergeJoin(): Unit = {
     val N = 2 << 20
-    codegenBenchmark("merge join", N) {
+    codegenBenchmark("sort merge join", N) {
       val df1 = spark.range(N).selectExpr(s"id * 2 as k1")
       val df2 = spark.range(N).selectExpr(s"id * 3 as k2")
       val df = df1.join(df2, col("k1") === col("k2"))
