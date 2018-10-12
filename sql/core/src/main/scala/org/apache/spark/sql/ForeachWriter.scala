@@ -130,8 +130,11 @@ abstract class ForeachWriter[T] extends Serializable {
    * Called when stopping to process one partition of new data in the executor side. This is
    * guaranteed to be called either `open` returns `true` or `false`. However,
    * `close` won't be called in the following cases:
-   *  - JVM crashes without throwing a `Throwable`
-   *  - `open` throws a `Throwable`.
+   *
+   * <ul>
+   * <li>JVM crashes without throwing a `Throwable`</li>
+   * <li>`open` throws a `Throwable`.</li>
+   * </ul>
    *
    * @param errorOrNull the error thrown during processing data or null if there was no error.
    */
