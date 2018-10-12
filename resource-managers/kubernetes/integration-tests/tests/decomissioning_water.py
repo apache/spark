@@ -35,4 +35,3 @@ if __name__ == "__main__":
     rdd.collect()
     time.sleep(15)
     sys.exit(0)
-
