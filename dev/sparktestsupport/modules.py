@@ -356,7 +356,6 @@ pyspark_streaming = Module(
     dependencies=[
         pyspark_core,
         streaming,
-        streaming_kafka,
         streaming_kinesis_asl
     ],
     source_file_regexes=[
