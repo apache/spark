@@ -130,10 +130,9 @@ private[parquet] class ParquetFilters(
     case ParquetBooleanType =>
       (n: String, v: Any) => FilterApi.eq(booleanColumn(n), v.asInstanceOf[JBoolean])
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
-      (n: String, v: Any) =>
-        FilterApi.eq(
-          intColumn(n),
-          Option(v).map(_.asInstanceOf[Number].intValue.asInstanceOf[Integer]).orNull)
+      (n: String, v: Any) => FilterApi.eq(
+        intColumn(n),
+        Option(v).map(_.asInstanceOf[Number].intValue.asInstanceOf[Integer]).orNull)
     case ParquetLongType =>
       (n: String, v: Any) => FilterApi.eq(longColumn(n), v.asInstanceOf[JLong])
     case ParquetFloatType =>
@@ -143,20 +142,17 @@ private[parquet] class ParquetFilters(
 
     // Binary.fromString and Binary.fromByteArray don't accept null values
     case ParquetStringType =>
-      (n: String, v: Any) =>
-        FilterApi.eq(
-          binaryColumn(n),
-          Option(v).map(s => Binary.fromString(s.asInstanceOf[String])).orNull)
+      (n: String, v: Any) => FilterApi.eq(
+        binaryColumn(n),
+        Option(v).map(s => Binary.fromString(s.asInstanceOf[String])).orNull)
     case ParquetBinaryType =>
-      (n: String, v: Any) =>
-        FilterApi.eq(
-          binaryColumn(n),
-          Option(v).map(b => Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]])).orNull)
+      (n: String, v: Any) => FilterApi.eq(
+        binaryColumn(n),
+        Option(v).map(b => Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]])).orNull)
     case ParquetDateType if pushDownDate =>
-      (n: String, v: Any) =>
-        FilterApi.eq(
-          intColumn(n),
-          Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
+      (n: String, v: Any) => FilterApi.eq(
+        intColumn(n),
+        Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
     case ParquetSchemaType(logicalType, _class, INT64, _) if pushDownTimestamp &&
       _class == classOf[TimestampLogicalTypeAnnotation] =>
       (n: String, v: Any) => FilterApi.eq(
@@ -207,8 +203,7 @@ private[parquet] class ParquetFilters(
         Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
     case ParquetSchemaType(logicalType, _class, INT64, _) if pushDownTimestamp &&
       _class == classOf[TimestampLogicalTypeAnnotation] =>
-      (n: String, v: Any) =>
-        FilterApi.notEq(
+      (n: String, v: Any) => FilterApi.notEq(
           longColumn(n),
           timestampValue(logicalType.asInstanceOf[TimestampLogicalTypeAnnotation], v))
     case ParquetSchemaType(_, _class, INT32, _) if pushDownDecimal &&
@@ -250,8 +245,7 @@ private[parquet] class ParquetFilters(
         FilterApi.lt(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
     case ParquetSchemaType(logicalType, _class, INT64, _) if pushDownTimestamp &&
       _class == classOf[TimestampLogicalTypeAnnotation] =>
-      (n: String, v: Any) =>
-        FilterApi.lt(
+      (n: String, v: Any) => FilterApi.lt(
           longColumn(n),
           timestampValue(logicalType.asInstanceOf[TimestampLogicalTypeAnnotation], v))
 
@@ -291,10 +285,9 @@ private[parquet] class ParquetFilters(
         FilterApi.ltEq(intColumn(n), dateToDays(v.asInstanceOf[Date]).asInstanceOf[Integer])
     case ParquetSchemaType(logicalType, _class, INT64, _) if pushDownTimestamp &&
       _class == classOf[TimestampLogicalTypeAnnotation] =>
-      (n: String, v: Any) =>
-        FilterApi.ltEq(
-          longColumn(n),
-          timestampValue(logicalType.asInstanceOf[TimestampLogicalTypeAnnotation], v))
+      (n: String, v: Any) => FilterApi.ltEq(
+        longColumn(n),
+        timestampValue(logicalType.asInstanceOf[TimestampLogicalTypeAnnotation], v))
     case ParquetSchemaType(_, _class, INT32, _) if pushDownDecimal &&
       _class == classOf[DecimalLogicalTypeAnnotation] =>
       (n: String, v: Any) =>
