@@ -129,7 +129,8 @@ object ScalaReflection extends ScalaReflection {
   }
 
   def isValueClass(tpe: `Type`): Boolean = {
-    definedByConstructorParams(tpe) && tpe <:< localTypeOf[AnyVal]
+    val notNull = !(tpe <:< localTypeOf[Null])
+    notNull && definedByConstructorParams(tpe) && tpe <:< localTypeOf[AnyVal]
   }
 
   /** Returns the underlying type of value class `cls`. */
