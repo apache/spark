@@ -276,31 +276,37 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case a And b if a.semanticEquals(b) => a
       case a Or b if a.semanticEquals(b) => a
 
-      // The following optimization is applicable only when the operands are not nullable,
+      // The following optimizations are applicable only when the operands are not nullable,
       // since the three-value logic of AND and OR are different in NULL handling.
       // See the chart:
       // +---------+---------+---------+---------+
-      // |    p    |    q    | p OR q  | p AND q |
+      // | operand | operand |   OR    |   AND   |
       // +---------+---------+---------+---------+
       // | TRUE    | TRUE    | TRUE    | TRUE    |
       // | TRUE    | FALSE   | TRUE    | FALSE   |
-      // | TRUE    | UNKNOWN | TRUE    | UNKNOWN |
-      // | FALSE   | TRUE    | TRUE    | FALSE   |
       // | FALSE   | FALSE   | FALSE   | FALSE   |
-      // | FALSE   | UNKNOWN | UNKNOWN | FALSE   |
       // | UNKNOWN | TRUE    | TRUE    | UNKNOWN |
       // | UNKNOWN | FALSE   | UNKNOWN | FALSE   |
       // | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
       // +---------+---------+---------+---------+
-      case a And (b Or c) if !a.nullable && Not(a).semanticEquals(b) => And(a, c)
-      case a And (b Or c) if !a.nullable && Not(a).semanticEquals(c) => And(a, b)
-      case (a Or b) And c if !a.nullable && a.semanticEquals(Not(c)) => And(b, c)
-      case (a Or b) And c if !b.nullable && b.semanticEquals(Not(c)) => And(a, c)
 
+      // This can break if a is null and c is false, so a can't be nullable.
+      case a And (b Or c) if !a.nullable && Not(a).semanticEquals(b) => And(a, c)
+      // This can break if a is null and b is false, so a can't be nullable.
+      case a And (b Or c) if !a.nullable && Not(a).semanticEquals(c) => And(a, b)
+      // This can break if c is null and b is false, so c can't be nullable.
+      case (a Or b) And c if !c.nullable && a.semanticEquals(Not(c)) => And(b, c)
+      // This can break if c is null and a is false, so c can't be nullable.
+      case (a Or b) And c if !c.nullable && b.semanticEquals(Not(c)) => And(a, c)
+
+      // This can break if a is null and c is true, so a can't be nullable.
       case a Or (b And c) if !a.nullable && Not(a).semanticEquals(b) => Or(a, c)
+      // This can break if a is null and b is true, so a can't be nullable.
       case a Or (b And c) if !a.nullable && Not(a).semanticEquals(c) => Or(a, b)
-      case (a And b) Or c if !a.nullable && a.semanticEquals(Not(c)) => Or(b, c)
-      case (a And b) Or c if !b.nullable && b.semanticEquals(Not(c)) => Or(a, c)
+      // This can break if c is null and b is true, so c can't be nullable.
+      case (a And b) Or c if !c.nullable && a.semanticEquals(Not(c)) => Or(b, c)
+      // This can break if c is null and a is true, so c can't be nullable.
+      case (a And b) Or c if !c.nullable && b.semanticEquals(Not(c)) => Or(a, c)
 
       // Common factor elimination for conjunction
       case and @ (left And right) =>
