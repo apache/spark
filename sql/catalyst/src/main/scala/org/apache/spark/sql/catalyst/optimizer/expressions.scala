@@ -290,22 +290,22 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       // | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
       // +---------+---------+---------+---------+
 
-      // This can break if a is null and c is false, so a can't be nullable.
+      // (NULL And (NULL Or FALSE)) = NULL, but (NULL And FALSE) = FALSE. Thus, a can't be nullable.
       case a And (b Or c) if !a.nullable && Not(a).semanticEquals(b) => And(a, c)
-      // This can break if a is null and b is false, so a can't be nullable.
+      // (NULL And (FALSE Or NULL)) = NULL, but (NULL And FALSE) = FALSE. Thus, a can't be nullable.
       case a And (b Or c) if !a.nullable && Not(a).semanticEquals(c) => And(a, b)
-      // This can break if c is null and b is false, so c can't be nullable.
+      // ((NULL Or FALSE) And NULL) = NULL, but (FALSE And NULL) = FALSE. Thus, c can't be nullable.
       case (a Or b) And c if !c.nullable && a.semanticEquals(Not(c)) => And(b, c)
-      // This can break if c is null and a is false, so c can't be nullable.
+      // ((FALSE Or NULL) And NULL) = NULL, but (FALSE And NULL) = FALSE. Thus, c can't be nullable.
       case (a Or b) And c if !c.nullable && b.semanticEquals(Not(c)) => And(a, c)
 
-      // This can break if a is null and c is true, so a can't be nullable.
+      // (NULL Or (NULL And TRUE)) = NULL, but (NULL Or TRUE) = TRUE. Thus, a can't be nullable.
       case a Or (b And c) if !a.nullable && Not(a).semanticEquals(b) => Or(a, c)
-      // This can break if a is null and b is true, so a can't be nullable.
+      // (NULL Or (TRUE And NULL)) = NULL, but (NULL Or TRUE) = TRUE. Thus, a can't be nullable.
       case a Or (b And c) if !a.nullable && Not(a).semanticEquals(c) => Or(a, b)
-      // This can break if c is null and b is true, so c can't be nullable.
+      // ((NULL And TRUE) Or NULL) = NULL, but (TRUE Or NULL) = TRUE. Thus, c can't be nullable.
       case (a And b) Or c if !c.nullable && a.semanticEquals(Not(c)) => Or(b, c)
-      // This can break if c is null and a is true, so c can't be nullable.
+      // ((TRUE And NULL) Or NULL) = NULL, but (TRUE Or NULL) = TRUE. Thus, c can't be nullable.
       case (a And b) Or c if !c.nullable && b.semanticEquals(Not(c)) => Or(a, c)
 
       // Common factor elimination for conjunction
