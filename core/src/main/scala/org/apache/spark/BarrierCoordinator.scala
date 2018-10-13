@@ -32,7 +32,7 @@ import org.apache.spark.scheduler.{LiveListenerBus, SparkListener, SparkListener
  * we can use (stageId, stageAttemptId) to identify the stage attempt where the barrier() call is
  * from.
  */
-private case class ContextBarrierId(stageId: Int, stageAttemptId: Int) {
+private[spark] case class ContextBarrierId(stageId: Int, stageAttemptId: Int) {
   override def toString: String = s"Stage $stageId (Attempt $stageAttemptId)"
 }
 
@@ -63,13 +63,9 @@ private[spark] class BarrierCoordinator(
     }
   }
 
-  /**
-   * Record all active stage attempts that make barrier() call(s), and the corresponding internal
-   * state.
-   *
-   * Visible for testing.
-   */
-  private[spark] val states = new ConcurrentHashMap[ContextBarrierId, ContextBarrierState]
+  // Record all active stage attempts that make barrier() call(s), and the corresponding internal
+  // state.
+  private val states = new ConcurrentHashMap[ContextBarrierId, ContextBarrierState]
 
   override def onStart(): Unit = {
     super.onStart()
@@ -225,7 +221,7 @@ private[spark] class BarrierCoordinator(
   }
 }
 
-private[spark] sealed trait BarrierCoordinatorMessage extends Serializable
+private sealed trait BarrierCoordinatorMessage extends Serializable
 
 /**
  * A global sync request message from BarrierTaskContext, by `barrier()` call. Each request is

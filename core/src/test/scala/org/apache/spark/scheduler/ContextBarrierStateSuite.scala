@@ -26,20 +26,9 @@ import org.mockito.Mockito._
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
-import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
+import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
 
-class BarrierCoordinatorSuite extends SparkFunSuite with LocalSparkContext with Eventually {
-
-  /**
-   * Get the current ContextBarrierState from barrierCoordinator.states by ContextBarrierId.
-   */
-  private def getBarrierState(
-      stageId: Int,
-      stageAttemptId: Int,
-      barrierCoordinator: BarrierCoordinator) = {
-    val barrierId = ContextBarrierId(stageId, stageAttemptId)
-    barrierCoordinator.states.get(barrierId)
-  }
+class ContextBarrierStateSuite extends SparkFunSuite with LocalSparkContext with Eventually {
 
   private def mockRpcCallContext() = {
     val rpcAddress = mock(classOf[RpcAddress])
@@ -49,11 +38,14 @@ class BarrierCoordinatorSuite extends SparkFunSuite with LocalSparkContext with 
   }
 
   test("normal test for single task") {
-    sc = new SparkContext("local", "test")
-    val barrierCoordinator = new BarrierCoordinator(5, sc.listenerBus, sc.env.rpcEnv)
+    val barrierCoordinator = new BarrierCoordinator(
+      5, mock(classOf[LiveListenerBus]), mock(classOf[RpcEnv]))
     val stageId = 0
     val stageAttemptNumber = 0
-    barrierCoordinator.receiveAndReply(mockRpcCallContext())(
+    val state = new barrierCoordinator.ContextBarrierState(
+      ContextBarrierId(stageId, stageAttemptNumber), numTasks = 1)
+    state.handleRequest(
+      mockRpcCallContext(),
       RequestToSync(
         numTasks = 1,
         stageId,
@@ -61,42 +53,43 @@ class BarrierCoordinatorSuite extends SparkFunSuite with LocalSparkContext with 
         taskAttemptId = 0,
         barrierEpoch = 0))
     // Ensure barrierEpoch value have been changed.
-    val barrierState = getBarrierState(stageId, stageAttemptNumber, barrierCoordinator)
-    assert(barrierState.getBarrierEpoch() == 1)
-    assert(barrierState.isInternalStateClear())
+    assert(state.getBarrierEpoch() == 1)
+    assert(state.isInternalStateClear())
   }
 
   test("normal test for multi tasks") {
-    sc = new SparkContext("local", "test")
-    val barrierCoordinator = new BarrierCoordinator(5, sc.listenerBus, sc.env.rpcEnv)
+    val barrierCoordinator = new BarrierCoordinator(
+      5, mock(classOf[LiveListenerBus]), mock(classOf[RpcEnv]))
     val numTasks = 3
     val stageId = 0
     val stageAttemptNumber = 0
+    val state = new barrierCoordinator.ContextBarrierState(
+      ContextBarrierId(stageId, stageAttemptNumber), numTasks)
     // request from 3 tasks
     (0 until numTasks).foreach { taskId =>
-      barrierCoordinator.receiveAndReply(mockRpcCallContext())(
-        RequestToSync(
-          numTasks,
-          stageId,
-          stageAttemptNumber,
-          taskAttemptId = taskId,
-          barrierEpoch = 0))
+      state.handleRequest(mockRpcCallContext(), RequestToSync(
+        numTasks,
+        stageId,
+        stageAttemptNumber,
+        taskAttemptId = taskId,
+        barrierEpoch = 0))
     }
     // Ensure barrierEpoch value have been changed.
-    val barrierState = getBarrierState(stageId, stageAttemptNumber, barrierCoordinator)
-    assert(barrierState.getBarrierEpoch() == 1)
-    assert(barrierState.isInternalStateClear())
+    assert(state.getBarrierEpoch() == 1)
+    assert(state.isInternalStateClear())
   }
 
   test("abnormal test for syncing with illegal barrierId") {
-    sc = new SparkContext("local", "test")
-    val barrierCoordinator = new BarrierCoordinator(5, sc.listenerBus, sc.env.rpcEnv)
+    val barrierCoordinator = new BarrierCoordinator(
+      5, mock(classOf[LiveListenerBus]), mock(classOf[RpcEnv]))
     val numTasks = 3
     val stageId = 0
     val stageAttemptNumber = 0
     val rpcCallContext = mockRpcCallContext()
-    barrierCoordinator.receiveAndReply(rpcCallContext)(
-      // illegal barrierId = -1
+    val state = new barrierCoordinator.ContextBarrierState(
+      ContextBarrierId(stageId, stageAttemptNumber), numTasks)
+    state.handleRequest(
+      rpcCallContext,
       RequestToSync(
         numTasks,
         stageId,
@@ -114,15 +107,18 @@ class BarrierCoordinatorSuite extends SparkFunSuite with LocalSparkContext with 
   }
 
   test("abnormal test for syncing with old barrierId") {
-    sc = new SparkContext("local", "test")
-    val barrierCoordinator = new BarrierCoordinator(5, sc.listenerBus, sc.env.rpcEnv)
+    val barrierCoordinator = new BarrierCoordinator(
+      5, mock(classOf[LiveListenerBus]), mock(classOf[RpcEnv]))
     val numTasks = 3
     val stageId = 0
     val stageAttemptNumber = 0
     val rpcCallContext = mockRpcCallContext()
+    val state = new barrierCoordinator.ContextBarrierState(
+      ContextBarrierId(stageId, stageAttemptNumber), numTasks)
     // request from 3 tasks
     (0 until numTasks).foreach { taskId =>
-      barrierCoordinator.receiveAndReply(mockRpcCallContext())(
+      state.handleRequest(
+        rpcCallContext,
         RequestToSync(
           numTasks,
           stageId,
@@ -131,10 +127,10 @@ class BarrierCoordinatorSuite extends SparkFunSuite with LocalSparkContext with 
           barrierEpoch = 0))
     }
     // Ensure barrierEpoch value have been changed.
-    val barrierState = getBarrierState(stageId, stageAttemptNumber, barrierCoordinator)
-    assert(barrierState.getBarrierEpoch() == 1)
-    assert(barrierState.isInternalStateClear())
-    barrierCoordinator.receiveAndReply(rpcCallContext)(
+    assert(state.getBarrierEpoch() == 1)
+    assert(state.isInternalStateClear())
+    state.handleRequest(
+      rpcCallContext,
       RequestToSync(
         numTasks,
         stageId,
@@ -151,20 +147,20 @@ class BarrierCoordinatorSuite extends SparkFunSuite with LocalSparkContext with 
   }
 
   test("abnormal test for timeout when rpcTimeOut > barrierTimeOut") {
-    sc = new SparkContext("local", "test")
-    val barrierCoordinator = new BarrierCoordinator(2, sc.listenerBus, sc.env.rpcEnv)
+    val barrierCoordinator = new BarrierCoordinator(
+      2, mock(classOf[LiveListenerBus]), mock(classOf[RpcEnv]))
     val numTasks = 3
     val stageId = 0
     val stageAttemptNumber = 0
     val rpcCallContext = mockRpcCallContext()
-    barrierCoordinator.receiveAndReply(rpcCallContext)(
-      // illegal barrierId = -1
-      RequestToSync(
-        numTasks,
-        stageId,
-        stageAttemptNumber,
-        taskAttemptId = 0,
-        barrierEpoch = 0))
+    val state = new barrierCoordinator.ContextBarrierState(
+      ContextBarrierId(stageId, stageAttemptNumber), numTasks)
+    state.handleRequest(rpcCallContext, RequestToSync(
+      numTasks,
+      stageId,
+      stageAttemptNumber,
+      taskAttemptId = 0,
+      barrierEpoch = 0))
     eventually(timeout(5.seconds)) {
       verify(rpcCallContext, times(1))
         .sendFailure(argThat(new ArgumentMatcher[SparkException] {
