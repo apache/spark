@@ -154,6 +154,8 @@ private[spark] class Client(
    * available in the alpha API.
    */
   def submitApplication(): ApplicationId = {
+    ResourceRequestHelper.validateResources(sparkConf)
+
     var appId: ApplicationId = null
     try {
       launcherBackend.connect()
@@ -234,6 +236,13 @@ private[spark] class Client(
   def createApplicationSubmissionContext(
       newApp: YarnClientApplication,
       containerContext: ContainerLaunchContext): ApplicationSubmissionContext = {
+    val amResources =
+      if (isClusterMode) {
+        sparkConf.getAllWithPrefix(config.YARN_DRIVER_RESOURCE_TYPES_PREFIX).toMap
+      } else {
+        sparkConf.getAllWithPrefix(config.YARN_AM_RESOURCE_TYPES_PREFIX).toMap
+      }
+    logDebug(s"AM resources: $amResources")
     val appContext = newApp.getApplicationSubmissionContext
     appContext.setApplicationName(sparkConf.get("spark.app.name", "Spark"))
     appContext.setQueue(sparkConf.get(QUEUE_NAME))
@@ -256,6 +265,10 @@ private[spark] class Client(
     val capability = Records.newRecord(classOf[Resource])
     capability.setMemory(amMemory + amMemoryOverhead)
     capability.setVirtualCores(amCores)
+    if (amResources.nonEmpty) {
+      ResourceRequestHelper.setResourceRequests(amResources, capability)
+    }
+    logDebug(s"Created resource capability for AM request: $capability")
 
     sparkConf.get(AM_NODE_LABEL_EXPRESSION) match {
       case Some(expr) =>
