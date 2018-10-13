@@ -276,7 +276,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case a And b if a.semanticEquals(b) => a
       case a Or b if a.semanticEquals(b) => a
 
-      // The following optimization is applicable only when the operands are nullable,
+      // The following optimization is applicable only when the operands are not nullable,
       // since the three-value logic of AND and OR are different in NULL handling.
       // See the chart:
       // +---------+---------+---------+---------+
