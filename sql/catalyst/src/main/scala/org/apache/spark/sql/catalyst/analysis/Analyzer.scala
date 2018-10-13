@@ -1179,7 +1179,7 @@ class Analyzer(
           if (!s.resolved || s.missingInput.nonEmpty) && child.resolved =>
         val (newOrder, newChild) = resolveExprsAndAddMissingAttrs(order, child)
         val ordering = newOrder.map(_.asInstanceOf[SortOrder])
-        if (child.output == newChild.output) {
+        if (child.sameOutput(newChild)) {
           s.copy(order = ordering)
         } else {
           // Add missing attributes and then project them away.
@@ -1189,7 +1189,7 @@ class Analyzer(
 
       case f @ Filter(cond, child) if (!f.resolved || f.missingInput.nonEmpty) && child.resolved =>
         val (newCond, newChild) = resolveExprsAndAddMissingAttrs(Seq(cond), child)
-        if (child.output == newChild.output) {
+        if (child.sameOutput(newChild)) {
           f.copy(condition = newCond.head)
         } else {
           // Add missing attributes and then project them away.
@@ -2087,7 +2087,7 @@ class Analyzer(
       // todo: It's hard to write a general rule to pull out nondeterministic expressions
       // from LogicalPlan, currently we only do it for UnaryNode which has same output
       // schema with its child.
-      case p: UnaryNode if p.output == p.child.output && p.expressions.exists(!_.deterministic) =>
+      case p: UnaryNode if p.sameOutput(p.child) && p.expressions.exists(!_.deterministic) =>
         val nondeterToAttr = getNondeterToAttr(p.expressions)
         val newPlan = p.transformExpressions { case e =>
           nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
