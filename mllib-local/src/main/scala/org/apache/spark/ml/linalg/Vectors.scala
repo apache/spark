@@ -35,7 +35,7 @@ import org.apache.spark.annotation.Since
 @Since("2.0.0")
 sealed trait Vector extends Serializable {
 
-  val x = 7
+  private val x = 7
 
   /**
    * Size of the vector.
