@@ -115,9 +115,9 @@ object TestingValueClass {
 
   case class ValueClassData(
     intField: Int,
-    wrappedInt: IntWrapper,
+    wrappedInt: IntWrapper, // an int column
     strField: String,
-    wrappedStr: StrWrapper)
+    wrappedStr: StrWrapper) // a string column
 }
 
 class ScalaReflectionSuite extends SparkFunSuite {

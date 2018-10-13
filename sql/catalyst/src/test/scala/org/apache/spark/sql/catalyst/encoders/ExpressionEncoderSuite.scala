@@ -113,7 +113,9 @@ object ReferenceValueClass {
 }
 
 case class StringWrapper(s: String) extends AnyVal
-case class ValueContainer(a: Int, b: StringWrapper)
+case class ValueContainer(
+  a: Int,
+  b: StringWrapper) // a string column
 case class ComplexValueClassContainer(a: Int, b: ValueContainer)
 
 class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest {
