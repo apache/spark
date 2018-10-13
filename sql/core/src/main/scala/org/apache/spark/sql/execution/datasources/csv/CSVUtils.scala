@@ -101,35 +101,6 @@ object CSVUtils {
   }
 
   /**
-   * Helper method that converts string representation of a character to actual character.
-   * It handles some Java escaped strings and throws exception if given string is longer than one
-   * character.
-   */
-  @throws[IllegalArgumentException]
-  def toChar(str: String): Char = {
-    (str: Seq[Char]) match {
-      case Seq() => throw new IllegalArgumentException("Delimiter cannot be empty string")
-      case Seq('\\') => throw new IllegalArgumentException("Single backslash is prohibited." +
-        " It has special meaning as beginning of an escape sequence." +
-        " To get the backslash character, pass a string with two backslashes as the delimiter.")
-      case Seq(c) => c
-      case Seq('\\', 't') => '\t'
-      case Seq('\\', 'r') => '\r'
-      case Seq('\\', 'b') => '\b'
-      case Seq('\\', 'f') => '\f'
-      // In case user changes quote char and uses \" as delimiter in options
-      case Seq('\\', '\"') => '\"'
-      case Seq('\\', '\'') => '\''
-      case Seq('\\', '\\') => '\\'
-      case _ if str == """\u0000""" => '\u0000'
-      case Seq('\\', _) =>
-        throw new IllegalArgumentException(s"Unsupported special character for delimiter: $str")
-      case _ =>
-        throw new IllegalArgumentException(s"Delimiter cannot be more than one character: $str")
-    }
-  }
-
-  /**
    * Sample CSV dataset as configured by `samplingRatio`.
    */
   def sample(csv: Dataset[String], options: CSVOptions): Dataset[String] = {
