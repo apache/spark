@@ -240,6 +240,8 @@ private[spark] object UIUtils extends Logging {
         <link rel="shortcut icon"
               href={prependBaseUri(request, "/static/spark-logo-77x50px-hd.png")}></link>
         <title>{appName} - {title}</title>
+        {if (refreshInterval.isDefined) {
+          <meta http-equiv="refresh" content={(refreshInterval.get / 1000).toString}/>}}
       </head>
       <body>
         <div class="navbar navbar-static-top">
