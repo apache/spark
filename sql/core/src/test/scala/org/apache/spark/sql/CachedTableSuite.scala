@@ -352,6 +352,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assert(
       isMaterialized(rddId),
       "Lazily cached in-memory table should have been materialized")
+    assert(isExpectStorageLevel(rddId, Disk))
 
     spark.catalog.uncacheTable("testData")
     eventually(timeout(10 seconds)) {
