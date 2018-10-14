@@ -401,6 +401,9 @@ package object dsl {
       def analyze: LogicalPlan =
         EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(logicalPlan))
 
+      def analyzeCaseInsensitive: LogicalPlan =
+        EliminateSubqueryAliases(analysis.SimpleCaseInsensitiveAnalyzer.execute(logicalPlan))
+
       def hint(name: String, parameters: Any*): LogicalPlan =
         UnresolvedHint(name, parameters, logicalPlan)
     }

@@ -40,18 +40,28 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
- * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
+ * Trivial [[Analyzer]]s with a dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
  * Used for testing when all relations are already filled in and the analyzer needs only
  * to resolve attribute references.
  */
-object SimpleAnalyzer extends Analyzer(
+sealed class BaseSimpleAnalyzer(caseSensitive: Boolean) extends Analyzer(
   new SessionCatalog(
     new InMemoryCatalog,
     EmptyFunctionRegistry,
-    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)) {
+    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)) {
     override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
   },
-  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
+  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive))
+
+/**
+ * A trivial analyzer which use case sensitive resolution.
+ */
+object SimpleAnalyzer extends BaseSimpleAnalyzer(true)
+
+/**
+ * A trivial analyzer which use case insensitive resolution.
+ */
+object SimpleCaseInsensitiveAnalyzer extends BaseSimpleAnalyzer(false)
 
 /**
  * Provides a way to keep state during the analysis, this enables us to decouple the concerns
@@ -1189,7 +1199,7 @@ class Analyzer(
 
       case f @ Filter(cond, child) if (!f.resolved || f.missingInput.nonEmpty) && child.resolved =>
         val (newCond, newChild) = resolveExprsAndAddMissingAttrs(Seq(cond), child)
-        if (child.sameOutput(newChild)) {
+        if (child.output == newChild.output) {
           f.copy(condition = newCond.head)
         } else {
           // Add missing attributes and then project them away.
@@ -2087,7 +2097,7 @@ class Analyzer(
       // todo: It's hard to write a general rule to pull out nondeterministic expressions
       // from LogicalPlan, currently we only do it for UnaryNode which has same output
       // schema with its child.
-      case p: UnaryNode if p.sameOutput(p.child) && p.expressions.exists(!_.deterministic) =>
+      case p: UnaryNode if p.output == p.child.output && p.expressions.exists(!_.deterministic) =>
         val nondeterToAttr = getNondeterToAttr(p.expressions)
         val newPlan = p.transformExpressions { case e =>
           nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
