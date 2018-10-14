@@ -1,0 +1,45 @@
+================================================================================================
+Hive UDAF vs Spark AF
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
+hive udaf vs spark af:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+hive udaf w/o group by                        4895 / 5020          0.0       74685.5       1.0X
+spark af w/o group by                           38 /   46          1.7         580.3     128.7X
+hive udaf w/ group by                         3309 / 3331          0.0       50491.1       1.5X
+spark af w/ group by w/o fallback               41 /   46          1.6         626.4     119.2X
+spark af w/ group by w/ fallback               111 /  115          0.6        1690.9      44.2X
+
+
+================================================================================================
+ObjectHashAggregateExec vs SortAggregateExec - typed_count
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
+object agg v.s. sort agg:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+sort agg w/ group by                        33760 / 34049          3.1         322.0       1.0X
+object agg w/ group by w/o fallback           7625 / 7877         13.8          72.7       4.4X
+object agg w/ group by w/ fallback          22695 / 22749          4.6         216.4       1.5X
+sort agg w/o group by                         4861 / 6473         21.6          46.4       6.9X
+object agg w/o group by w/o fallback          4143 / 4272         25.3          39.5       8.1X
+
+
+================================================================================================
+ObjectHashAggregateExec vs SortAggregateExec - percentile_approx
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
+object agg v.s. sort agg:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+sort agg w/ group by                           745 /  786          2.8         355.2       1.0X
+object agg w/ group by w/o fallback            596 /  626          3.5         284.3       1.2X
+object agg w/ group by w/ fallback             769 /  810          2.7         366.6       1.0X
+sort agg w/o group by                          564 /  589          3.7         268.7       1.3X
+object agg w/o group by w/o fallback           573 /  598          3.7         273.3       1.3X
+
+
