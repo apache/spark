@@ -488,6 +488,12 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-25727 - otherCopyArgs in InMemoryRelation does not include outputOrdering") {
+    val data = Seq(100).toDF("count").cache()
+    val json = data.queryExecution.optimizedPlan.toJSON
+    assert(json.contains("outputOrdering") && json.contains("statsOfPlanToCache"))
+  }
+
   test("SPARK-22673: InMemoryRelation should utilize existing stats of the plan to be cached") {
     // This test case depends on the size of parquet in statistics.
     withSQLConf(
