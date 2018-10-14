@@ -192,7 +192,7 @@ class JDBCOptions(
     parameters.get(JDBC_CONNECTION_FACTORY_PROVIDER).map { className => try {
         Utils.classForName(className).newInstance.asInstanceOf[ConnectionFactoryProvider]
       } catch {
-        case _ =>
+        case _ : Throwable =>
           throw new IllegalArgumentException(s"$className is not a valid ConnectionFactoryProvider")
       }
     }.getOrElse(DefaultConnectionFactoryProvider)
