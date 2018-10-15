@@ -40,28 +40,18 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
- * Trivial [[Analyzer]]s with a dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
+ * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
  * Used for testing when all relations are already filled in and the analyzer needs only
  * to resolve attribute references.
  */
-sealed class BaseSimpleAnalyzer(caseSensitive: Boolean) extends Analyzer(
+object SimpleAnalyzer extends Analyzer(
   new SessionCatalog(
     new InMemoryCatalog,
     EmptyFunctionRegistry,
-    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)) {
+    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)) {
     override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
   },
-  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive))
-
-/**
- * A trivial analyzer which use case sensitive resolution.
- */
-object SimpleAnalyzer extends BaseSimpleAnalyzer(true)
-
-/**
- * A trivial analyzer which use case insensitive resolution.
- */
-object SimpleCaseInsensitiveAnalyzer extends BaseSimpleAnalyzer(false)
+  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
 
 /**
  * Provides a way to keep state during the analysis, this enables us to decouple the concerns
@@ -1189,7 +1179,7 @@ class Analyzer(
           if (!s.resolved || s.missingInput.nonEmpty) && child.resolved =>
         val (newOrder, newChild) = resolveExprsAndAddMissingAttrs(order, child)
         val ordering = newOrder.map(_.asInstanceOf[SortOrder])
-        if (child.sameOutput(newChild)) {
+        if (child.output == newChild.output) {
           s.copy(order = ordering)
         } else {
           // Add missing attributes and then project them away.

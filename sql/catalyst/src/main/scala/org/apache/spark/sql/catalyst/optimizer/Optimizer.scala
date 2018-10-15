@@ -405,7 +405,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
  */
 object RemoveRedundantProject extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case p @ Project(_, child) if p.sameOutput(child) => child
+    case p @ Project(_, child) if p.output == child.output => child
   }
 }
 

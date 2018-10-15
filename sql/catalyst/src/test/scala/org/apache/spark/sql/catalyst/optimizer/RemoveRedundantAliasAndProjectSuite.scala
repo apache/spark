@@ -124,11 +124,4 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper 
     val expected = Subquery(relation.select('a as "a", 'b).where('b < 10).select('a).analyze)
     comparePlans(optimized, expected)
   }
-
-  test("SPARK-25691: RemoveRedundantProject works also with different cases") {
-    val relation = LocalRelation('a.int, 'b.int)
-    val query = relation.select('A, 'b).analyzeCaseInsensitive
-    val optimized = Optimize.execute(query)
-    comparePlans(optimized, relation)
-  }
 }
