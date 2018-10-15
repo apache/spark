@@ -40,20 +40,19 @@ private[kafka010] object TokenUtil extends Logging {
     override def getKind: Text = TOKEN_KIND;
   }
 
-  private def printToken(token: DelegationToken): Unit = {
-    if (log.isDebugEnabled) {
-      val dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm")
-      logDebug("%-15s %-30s %-15s %-25s %-15s %-15s %-15s".format(
-        "TOKENID", "HMAC", "OWNER", "RENEWERS", "ISSUEDATE", "EXPIRYDATE", "MAXDATE"))
-      val tokenInfo = token.tokenInfo
-      logDebug("%-15s [hidden] %-15s %-25s %-15s %-15s %-15s".format(
-        tokenInfo.tokenId,
-        tokenInfo.owner,
-        tokenInfo.renewersAsString,
-        dateFormat.format(tokenInfo.issueTimestamp),
-        dateFormat.format(tokenInfo.expiryTimestamp),
-        dateFormat.format(tokenInfo.maxTimestamp)))
-    }
+  def obtainToken(sparkConf: SparkConf): (Token[_ <: TokenIdentifier], Long) = {
+    val adminClient = AdminClient.create(createAdminClientProperties(sparkConf))
+    val createDelegationTokenOptions = new CreateDelegationTokenOptions()
+    val createResult = adminClient.createDelegationToken(createDelegationTokenOptions)
+    val token = createResult.delegationToken().get()
+    printToken(token)
+
+    new Token[KafkaDelegationTokenIdentifier](
+      token.tokenInfo.tokenId.getBytes,
+      token.hmacAsBase64String.getBytes,
+      TOKEN_KIND,
+      TOKEN_SERVICE
+    )
   }
 
   private[kafka010] def createAdminClientProperties(sparkConf: SparkConf): Properties = {
@@ -94,18 +93,19 @@ private[kafka010] object TokenUtil extends Logging {
     adminClientProperties
   }
 
-  def obtainToken(sparkConf: SparkConf): Token[_ <: TokenIdentifier] = {
-    val adminClient = AdminClient.create(createAdminClientProperties(sparkConf))
-    val createDelegationTokenOptions = new CreateDelegationTokenOptions()
-    val createResult = adminClient.createDelegationToken(createDelegationTokenOptions)
-    val token = createResult.delegationToken().get()
-    printToken(token)
-
-    new Token[KafkaDelegationTokenIdentifier](
-      token.tokenInfo.tokenId.getBytes,
-      token.hmacAsBase64String.getBytes,
-      TOKEN_KIND,
-      TOKEN_SERVICE
-    )
+  private def printToken(token: DelegationToken): Unit = {
+    if (log.isDebugEnabled) {
+      val dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm")
+      logDebug("%-15s %-30s %-15s %-25s %-15s %-15s %-15s".format(
+        "TOKENID", "HMAC", "OWNER", "RENEWERS", "ISSUEDATE", "EXPIRYDATE", "MAXDATE"))
+      val tokenInfo = token.tokenInfo
+      logDebug("%-15s [hidden] %-15s %-25s %-15s %-15s %-15s".format(
+        tokenInfo.tokenId,
+        tokenInfo.owner,
+        tokenInfo.renewersAsString,
+        dateFormat.format(tokenInfo.issueTimestamp),
+        dateFormat.format(tokenInfo.expiryTimestamp),
+        dateFormat.format(tokenInfo.maxTimestamp)))
+    }
   }
 }
