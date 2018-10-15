@@ -23,7 +23,6 @@ cp ${TMP_KRB_LOC} /etc/krb5.conf
 cp ${TMP_CORE_LOC} /opt/spark/hconf/core-site.xml
 cp ${TMP_HDFS_LOC} /opt/spark/hconf/hdfs-site.xml
 mkdir -p /etc/krb5.conf.d
-until /usr/bin/kinit -kt /var/keytabs/hdfs.keytab hdfs/nn.${NAMESPACE}.svc.cluster.local; do sleep 15; done
 /opt/spark/bin/spark-submit \
       --deploy-mode cluster \
       --class ${CLASS_NAME} \
@@ -33,7 +32,7 @@ until /usr/bin/kinit -kt /var/keytabs/hdfs.keytab hdfs/nn.${NAMESPACE}.svc.clust
       --conf spark.app.name=spark-hdfs \
       --conf spark.driver.extraClassPath=/opt/spark/hconf/core-site.xml:/opt/spark/hconf/hdfs-site.xml:/opt/spark/hconf/yarn-site.xml:/etc/krb5.conf \
       --conf spark.kubernetes.container.image=${BASE_SPARK_IMAGE} \
-      --conf spark.kubernetes.kerberos.krb5location=/etc/krb5.conf \
+      --conf spark.kubernetes.kerberos.krb5.path=/etc/krb5.conf \
       --conf spark.kerberos.keytab=/var/keytabs/hdfs.keytab \
       --conf spark.kerberos.principal=hdfs/nn.${NAMESPACE}.svc.cluster.local@CLUSTER.LOCAL \
       --conf spark.kubernetes.driver.label.spark-app-locator=${APP_LOCATOR_LABEL} \

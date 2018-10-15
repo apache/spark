@@ -42,8 +42,8 @@ private[spark] trait KerberosTestSuite { k8sSuite: KubernetesSuite =>
     driverWatcherCache.stopWatch()
 
     val expectedLogOnCompletion = Seq(
-      "File contents: [Michael, 29],[Andy, 30],[Justin, 19]",
-      "Returned length(s) of: 1,1,1")
+      "File contents: [Michael,",
+      "Returned length(s) of: 3")
     val driverPod = kubernetesClient
       .pods()
       .inNamespace(kubernetesTestComponents.namespace)

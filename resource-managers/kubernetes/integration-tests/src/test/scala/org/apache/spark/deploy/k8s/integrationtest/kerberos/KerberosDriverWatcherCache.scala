@@ -27,48 +27,52 @@ import scala.collection.JavaConverters._
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, TIMEOUT}
 import org.apache.spark.internal.Logging
 
- /**
-  * This class is responsible for ensuring that the driver-pod launched by the KerberosTestPod
-  * is running before trying to grab its logs for the sake of monitoring success of completition.
-  */
+/**
+ * This class is responsible for ensuring that the driver-pod launched by the KerberosTestPod
+ * is running before trying to grab its logs for the sake of monitoring success of completition.
+ */
 private[spark] class KerberosDriverWatcherCache(
-   kerberosUtils: KerberosUtils,
-   labels: Map[String, String])
-   extends WatcherCacheConfiguration[DeploymentStorage] with Logging with Eventually with Matchers {
-   private val kubernetesClient = kerberosUtils.getClient
-   private val namespace = kerberosUtils.getNamespace
-   private var driverName: String = ""
-   private val podCache =
-     scala.collection.mutable.Map[String, String]()
-   private val watcher: Watch = kubernetesClient
-     .pods()
-     .withLabels(labels.asJava)
-     .watch(new Watcher[Pod] {
-       override def onClose(cause: KubernetesClientException): Unit =
-         logInfo("Ending the watch of Driver pod")
-       override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
-         val name = resource.getMetadata.getName
-         action match {
-           case Action.DELETED | Action.ERROR =>
-             logInfo(s"$name either deleted or error")
-             podCache.remove(name)
-           case Action.ADDED | Action.MODIFIED =>
-             val phase = resource.getStatus.getPhase
-             logInfo(s"$name is as $phase")
-             podCache(name) = phase
-             if (name.contains("driver")) { driverName = name }
-          }}})
+    kerberosUtils: KerberosUtils,
+    labels: Map[String, String])
+  extends WatcherCacheConfiguration[DeploymentStorage] with Logging with Eventually with Matchers {
+  private val kubernetesClient = kerberosUtils.getClient
+  private val namespace = kerberosUtils.getNamespace
+  private var driverName: String = ""
+  private val podCache = scala.collection.mutable.Map[String, String]()
+  private val watcher: Watch = kubernetesClient
+    .pods()
+    .withLabels(labels.asJava)
+    .watch(new Watcher[Pod] {
+      override def onClose(cause: KubernetesClientException): Unit =
+        logInfo("Ending the watch of Driver pod")
+      override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
+        val name = resource.getMetadata.getName
+        action match {
+        case Action.DELETED | Action.ERROR =>
+          logInfo(s"$name either deleted or error")
+          podCache.remove(name)
+        case Action.ADDED | Action.MODIFIED =>
+          val phase = resource.getStatus.getPhase
+          logInfo(s"$name is as $phase")
+          podCache(name) = phase
+          if (name.contains("driver")) {
+            driverName = name
+          }
+        }
+      }
+    })
 
-   override def check(name: String): Boolean = podCache.get(name).contains("Running")
+  override def check(name: String): Boolean = podCache.get(name).contains("Running")
 
-   override def deploy(storage: DeploymentStorage) : Unit = {
-     kubernetesClient.extensions().deployments()
-       .inNamespace(namespace).create(storage.resource)
-     Eventually.eventually(TIMEOUT, INTERVAL) { check(driverName) should be (true) }
-   }
+  override def deploy(storage: DeploymentStorage) : Unit = {
+    kubernetesClient.extensions().deployments().inNamespace(namespace).create(storage.resource)
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      check(driverName) should be (true)
+    }
+  }
 
-   override def stopWatch(): Unit = {
-     // Closing Watch
-     watcher.close()
-   }
+  override def stopWatch(): Unit = {
+    // Closing Watch
+    watcher.close()
+  }
 }

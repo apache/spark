@@ -27,95 +27,100 @@ import scala.collection.JavaConverters._
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, TIMEOUT}
 import org.apache.spark.internal.Logging
 
- /**
-  * This class is used to ensure that the Hadoop cluster that is launched is executed
-  * in this order: KDC --> NN --> DN --> Data-Populator and that each one of these nodes
-  * is running before launching the Kerberos test.
-  */
+/**
+ * This class is used to ensure that the Hadoop cluster that is launched is executed
+ * in this order: KDC --> NN --> DN --> Data-Populator and that each one of these nodes
+ * is running before launching the Kerberos test.
+ */
 private[spark] class KerberosPodWatcherCache(
-   kerberosUtils: KerberosUtils,
-   labels: Map[String, String])
-   extends WatcherCacheConfiguration[ServiceStorage] with Logging with Eventually with Matchers {
+    kerberosUtils: KerberosUtils,
+    labels: Map[String, String])
+  extends WatcherCacheConfiguration[ServiceStorage] with Logging with Eventually with Matchers {
 
-   private val kubernetesClient = kerberosUtils.getClient
-   private val namespace = kerberosUtils.getNamespace
-   private val podCache = scala.collection.mutable.Map[String, String]()
-   private val serviceCache = scala.collection.mutable.Map[String, String]()
-   private var kdcName: String = _
-   private var nnName: String = _
-   private var dnName: String = _
-   private var dpName: String = _
-   private val podWatcher: Watch = kubernetesClient
-     .pods()
-     .withLabels(labels.asJava)
-     .watch(new Watcher[Pod] {
-       override def onClose(cause: KubernetesClientException): Unit =
-         logInfo("Ending the watch of Pods")
-       override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
-         val name = resource.getMetadata.getName
-         val keyName = podNameParse(name)
-         action match {
-           case Action.DELETED | Action.ERROR =>
-             logInfo(s"$name either deleted or error")
-             podCache.remove(keyName)
-           case Action.ADDED | Action.MODIFIED =>
-             val phase = resource.getStatus.getPhase
-             logInfo(s"$name is as $phase")
-             if (keyName == "kerberos") { kdcName = name }
-             if (keyName == "nn") { nnName = name }
-             if (keyName == "dn1") { dnName = name }
-             if (keyName == "data-populator") { dpName = name }
-             podCache(keyName) = phase }}})
+  private val kubernetesClient = kerberosUtils.getClient
+  private val namespace = kerberosUtils.getNamespace
+  private val podCache = scala.collection.mutable.Map[String, String]()
+  private val serviceCache = scala.collection.mutable.Map[String, String]()
+  private var kdcName: String = _
+  private var nnName: String = _
+  private var dnName: String = _
+  private var dpName: String = _
+  private val podWatcher: Watch = kubernetesClient
+    .pods()
+    .withLabels(labels.asJava)
+    .watch(new Watcher[Pod] {
+      override def onClose(cause: KubernetesClientException): Unit =
+        logInfo("Ending the watch of Pods")
+      override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
+        val name = resource.getMetadata.getName
+        val keyName = podNameParse(name)
+        action match {
+          case Action.DELETED | Action.ERROR =>
+            logInfo(s"$name either deleted or error")
+            podCache.remove(keyName)
+          case Action.ADDED | Action.MODIFIED =>
+            val phase = resource.getStatus.getPhase
+            logInfo(s"$name is as $phase")
+            if (keyName == "kerberos") { kdcName = name }
+            if (keyName == "nn") { nnName = name }
+            if (keyName == "dn1") { dnName = name }
+            if (keyName == "data-populator") { dpName = name }
+            podCache(keyName) = phase
+        }
+      }
+    })
 
-   private val serviceWatcher: Watch = kubernetesClient
-     .services()
-     .withLabels(labels.asJava)
-     .watch(new Watcher[Service] {
-       override def onClose(cause: KubernetesClientException): Unit =
-         logInfo("Ending the watch of Services")
-       override def eventReceived(action: Watcher.Action, resource: Service): Unit = {
-         val name = resource.getMetadata.getName
-         action match {
-           case Action.DELETED | Action.ERROR =>
-             logInfo(s"$name either deleted or error")
-             serviceCache.remove(name)
-           case Action.ADDED | Action.MODIFIED =>
-             val bound = resource.getSpec.getSelector.get("kerberosService")
-             logInfo(s"$name is bounded to $bound")
-             serviceCache(name) = bound }}})
+  private val serviceWatcher: Watch = kubernetesClient
+    .services()
+    .withLabels(labels.asJava)
+    .watch(new Watcher[Service] {
+      override def onClose(cause: KubernetesClientException): Unit =
+        logInfo("Ending the watch of Services")
+      override def eventReceived(action: Watcher.Action, resource: Service): Unit = {
+        val name = resource.getMetadata.getName
+        action match {
+          case Action.DELETED | Action.ERROR =>
+            logInfo(s"$name either deleted or error")
+            serviceCache.remove(name)
+          case Action.ADDED | Action.MODIFIED =>
+            val bound = resource.getSpec.getSelector.get("kerberosService")
+            logInfo(s"$name is bounded to $bound")
+            serviceCache(name) = bound }}})
 
-   private def additionalCheck(name: String): Boolean = {
-     name match {
-       case "kerberos" => hasInLogs(kdcName, "krb5kdc: starting")
-       case "nn" => hasInLogs(nnName, "createNameNode")
-       case "dn1" => hasInLogs(dnName, "Got finalize command for block pool")
-       case "data-populator" => hasInLogs(dpName, "Entered Krb5Context.initSecContext")
-     }
-   }
-
-   override def check(name: String): Boolean = {
-     podCache.get(name).contains("Running") &&
-     serviceCache.get(name).contains(name) &&
-     additionalCheck(name)
+  private def additionalCheck(name: String): Boolean = {
+    name match {
+      case "kerberos" => hasInLogs(kdcName, "krb5kdc: starting")
+      case "nn" => hasInLogs(nnName, "createNameNode")
+      case "dn1" => hasInLogs(dnName, "Got finalize command for block pool")
+      case "data-populator" => hasInLogs(dpName, "Entered Krb5Context.initSecContext")
     }
-
-   override def deploy(srvc: ServiceStorage) : Unit = {
-     logInfo("Launching the Deployment")
-     kubernetesClient
-       .extensions().deployments().inNamespace(namespace).create(srvc.podDeployment)
-     // Making sure Pod is running
-     Eventually.eventually(TIMEOUT, INTERVAL) {
-       (podCache(srvc.name) == "Running") should be (true) }
-     kubernetesClient
-       .services().inNamespace(namespace).create(srvc.service)
-     Eventually.eventually(TIMEOUT, INTERVAL) { check(srvc.name) should be (true) }
   }
 
-   override def stopWatch(): Unit = {
-     // Closing Watchers
-     podWatcher.close()
-     serviceWatcher.close()
-   }
+  override def check(name: String): Boolean = {
+    podCache.get(name).contains("Running") &&
+      serviceCache.get(name).contains(name) &&
+      additionalCheck(name)
+  }
+
+  override def deploy(srvc: ServiceStorage) : Unit = {
+    logInfo("Launching the Deployment")
+    kubernetesClient
+      .extensions().deployments().inNamespace(namespace).create(srvc.podDeployment)
+    // Making sure Pod is running
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      (podCache(srvc.name) == "Running") should be (true)
+    }
+    kubernetesClient.services().inNamespace(namespace).create(srvc.service)
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      check(srvc.name) should be (true)
+    }
+  }
+
+  override def stopWatch(): Unit = {
+    // Closing Watchers
+    podWatcher.close()
+    serviceWatcher.close()
+  }
 
   private def podNameParse(name: String) : String = {
     name match {
@@ -127,9 +132,6 @@ private[spark] class KerberosPodWatcherCache(
   }
 
   def hasInLogs(name: String, expectation: String): Boolean = {
-    kubernetesClient
-      .pods()
-      .withName(name)
-      .getLog().contains(expectation)
+    kubernetesClient.pods().withName(name).getLog().contains(expectation)
   }
 }

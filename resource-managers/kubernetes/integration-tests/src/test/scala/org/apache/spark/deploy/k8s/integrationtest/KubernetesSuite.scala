@@ -110,6 +110,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     kerberosUtils = new KerberosUtils(
       image,
       kImage,
+      kubernetesTestComponents.serviceAccountName,
       kubernetesTestComponents.kubernetesClient,
       kubernetesTestComponents.namespace)
   }

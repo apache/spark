@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.csv
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types._
 
 object CSVUtils {
   /**
@@ -90,6 +89,49 @@ object CSVUtils {
       None
     }
   }
+
+  /**
+   * Generates a header from the given row which is null-safe and duplicate-safe.
+   */
+  def makeSafeHeader(
+      row: Array[String],
+      caseSensitive: Boolean,
+      options: CSVOptions): Array[String] = {
+    if (options.headerFlag) {
+      val duplicates = {
+        val headerNames = row.filter(_ != null)
+          // scalastyle:off caselocale
+          .map(name => if (caseSensitive) name else name.toLowerCase)
+        // scalastyle:on caselocale
+        headerNames.diff(headerNames.distinct).distinct
+      }
+
+      row.zipWithIndex.map { case (value, index) =>
+        if (value == null || value.isEmpty || value == options.nullValue) {
+          // When there are empty strings or the values set in `nullValue`, put the
+          // index as the suffix.
+          s"_c$index"
+          // scalastyle:off caselocale
+        } else if (!caseSensitive && duplicates.contains(value.toLowerCase)) {
+          // scalastyle:on caselocale
+          // When there are case-insensitive duplicates, put the index as the suffix.
+          s"$value$index"
+        } else if (duplicates.contains(value)) {
+          // When there are duplicates, put the index as the suffix.
+          s"$value$index"
+        } else {
+          value
+        }
+      }
+    } else {
+      row.zipWithIndex.map { case (_, index) =>
+        // Uses default column names, "_c#" where # is its position of fields
+        // when header option is disabled.
+        s"_c$index"
+      }
+    }
+  }
+
   /**
    * Helper method that converts string representation of a character to actual character.
    * It handles some Java escaped strings and throws exception if given string is longer than one
@@ -97,23 +139,25 @@ object CSVUtils {
    */
   @throws[IllegalArgumentException]
   def toChar(str: String): Char = {
-    if (str.charAt(0) == '\\') {
-      str.charAt(1)
-      match {
-        case 't' => '\t'
-        case 'r' => '\r'
-        case 'b' => '\b'
-        case 'f' => '\f'
-        case '\"' => '\"' // In case user changes quote char and uses \" as delimiter in options
-        case '\'' => '\''
-        case 'u' if str == """\u0000""" => '\u0000'
-        case _ =>
-          throw new IllegalArgumentException(s"Unsupported special character for delimiter: $str")
-      }
-    } else if (str.length == 1) {
-      str.charAt(0)
-    } else {
-      throw new IllegalArgumentException(s"Delimiter cannot be more than one character: $str")
+    (str: Seq[Char]) match {
+      case Seq() => throw new IllegalArgumentException("Delimiter cannot be empty string")
+      case Seq('\\') => throw new IllegalArgumentException("Single backslash is prohibited." +
+        " It has special meaning as beginning of an escape sequence." +
+        " To get the backslash character, pass a string with two backslashes as the delimiter.")
+      case Seq(c) => c
+      case Seq('\\', 't') => '\t'
+      case Seq('\\', 'r') => '\r'
+      case Seq('\\', 'b') => '\b'
+      case Seq('\\', 'f') => '\f'
+      // In case user changes quote char and uses \" as delimiter in options
+      case Seq('\\', '\"') => '\"'
+      case Seq('\\', '\'') => '\''
+      case Seq('\\', '\\') => '\\'
+      case _ if str == """\u0000""" => '\u0000'
+      case Seq('\\', _) =>
+        throw new IllegalArgumentException(s"Unsupported special character for delimiter: $str")
+      case _ =>
+        throw new IllegalArgumentException(s"Delimiter cannot be more than one character: $str")
     }
   }
 

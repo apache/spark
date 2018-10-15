@@ -27,84 +27,93 @@ import scala.collection.JavaConverters._
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, TIMEOUT}
 import org.apache.spark.internal.Logging
 
- /**
-  * This class is responsible for ensuring that the persistent volume claims are bounded
-  * to the correct persistent volume and that they are both created before launching the
-  * pods which expect to use them.
-  */
+/**
+ * This class is responsible for ensuring that the persistent volume claims are bounded
+ * to the correct persistent volume and that they are both created before launching the
+ * pods which expect to use them.
+ */
 private[spark] class KerberosPVWatcherCache(
     kerberosUtils: KerberosUtils,
     labels: Map[String, String])
-    extends WatcherCacheConfiguration[PVStorage] with Logging with Eventually with Matchers {
-    private val kubernetesClient = kerberosUtils.getClient
-    private val namespace = kerberosUtils.getNamespace
+  extends WatcherCacheConfiguration[PVStorage] with Logging with Eventually with Matchers {
+  private val kubernetesClient = kerberosUtils.getClient
+  private val namespace = kerberosUtils.getNamespace
 
-    // Cache for PVs and PVCs
-    private val pvCache = scala.collection.mutable.Map[String, String]()
-    private val pvcCache = scala.collection.mutable.Map[String, String]()
+  // Cache for PVs and PVCs
+  private val pvCache = scala.collection.mutable.Map[String, String]()
+  private val pvcCache = scala.collection.mutable.Map[String, String]()
 
-    // Watching PVs
-    logInfo("Beginning the watch of Persistent Volumes")
-    private val pvWatcher: Watch = kubernetesClient
-      .persistentVolumes()
-      .withLabels(labels.asJava)
-      .watch(new Watcher[PersistentVolume] {
-        override def onClose(cause: KubernetesClientException): Unit =
-          logInfo("Ending the watch of Persistent Volumes", cause)
-        override def eventReceived(action: Watcher.Action, resource: PersistentVolume): Unit = {
-          val name = resource.getMetadata.getName
-          action match {
-            case Action.DELETED | Action.ERROR =>
-              logInfo(s"$name either deleted or error")
-              pvCache.remove(name)
-            case Action.ADDED | Action.MODIFIED =>
-              val phase = resource.getStatus.getPhase
-              logInfo(s"$name is at stage: $phase")
-              pvCache(name) = phase }}})
+  // Watching PVs
+  logInfo("Beginning the watch of Persistent Volumes")
+  private val pvWatcher: Watch = kubernetesClient
+    .persistentVolumes()
+    .withLabels(labels.asJava)
+    .watch(new Watcher[PersistentVolume] {
+      override def onClose(cause: KubernetesClientException): Unit =
+        logInfo("Ending the watch of Persistent Volumes", cause)
+      override def eventReceived(action: Watcher.Action, resource: PersistentVolume): Unit = {
+        val name = resource.getMetadata.getName
+        action match {
+          case Action.DELETED | Action.ERROR =>
+            logInfo(s"$name either deleted or error")
+            pvCache.remove(name)
+          case Action.ADDED | Action.MODIFIED =>
+            val phase = resource.getStatus.getPhase
+            logInfo(s"$name is at stage: $phase")
+            pvCache(name) = phase
+        }
+      }
+    })
 
-    // Watching PVCs
-    logInfo("Beginning the watch of Persistent Volume Claims")
-    private val pvcWatcher: Watch = kubernetesClient
-      .persistentVolumeClaims()
-      .withLabels(labels.asJava)
-      .watch(new Watcher[PersistentVolumeClaim] {
-        override def onClose(cause: KubernetesClientException): Unit =
-          logInfo("Ending the watch of Persistent Volume Claims")
-        override def eventReceived(
-          action: Watcher.Action,
-          resource: PersistentVolumeClaim): Unit = {
-          val name = resource.getMetadata.getName
-          action match {
-            case Action.DELETED | Action.ERROR =>
-              logInfo(s"$name either deleted or error")
-              pvcCache.remove(name)
-            case Action.ADDED | Action.MODIFIED =>
-              val volumeName = resource.getSpec.getVolumeName
-              val state = resource.getStatus.getPhase
-              logInfo(s"$name claims itself to $volumeName and is $state")
-              pvcCache(name) = s"$volumeName $state"}}})
+  // Watching PVCs
+  logInfo("Beginning the watch of Persistent Volume Claims")
+  private val pvcWatcher: Watch = kubernetesClient
+    .persistentVolumeClaims()
+    .withLabels(labels.asJava)
+    .watch(new Watcher[PersistentVolumeClaim] {
+      override def onClose(cause: KubernetesClientException): Unit =
+        logInfo("Ending the watch of Persistent Volume Claims")
+      override def eventReceived(
+        action: Watcher.Action,
+        resource: PersistentVolumeClaim): Unit = {
+        val name = resource.getMetadata.getName
+        action match {
+          case Action.DELETED | Action.ERROR =>
+            logInfo(s"$name either deleted or error")
+            pvcCache.remove(name)
+          case Action.ADDED | Action.MODIFIED =>
+            val volumeName = resource.getSpec.getVolumeName
+            val state = resource.getStatus.getPhase
+            logInfo(s"$name claims itself to $volumeName and is $state")
+            pvcCache(name) = s"$volumeName $state"
+        }
+      }
+    })
 
-    // Check for PVC being bounded to correct PV
-    override def check(name: String): Boolean = {
-      pvCache.get(name).contains("Bound") &&
-      pvcCache.get(name).contains(s"$name Bound")
+  // Check for PVC being bounded to correct PV
+  override def check(name: String): Boolean = {
+    pvCache.get(name).contains("Bound") &&
+    pvcCache.get(name).contains(s"$name Bound")
+  }
+
+  override def deploy(pv: PVStorage) : Unit = {
+    logInfo("Launching the Persistent Storage")
+    kubernetesClient
+      .persistentVolumes().create(pv.persistentVolume)
+    // Making sure PV is Available for creation of PVC
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      (pvCache(pv.name) == "Available") should be (true)
     }
-
-    override def deploy(pv: PVStorage) : Unit = {
-      logInfo("Launching the Persistent Storage")
-      kubernetesClient
-        .persistentVolumes().create(pv.persistentVolume)
-      // Making sure PV is Available for creation of PVC
-      Eventually.eventually(TIMEOUT, INTERVAL) {
-        (pvCache(pv.name) == "Available") should be (true) }
-      kubernetesClient
-        .persistentVolumeClaims().inNamespace(namespace).create(pv.persistentVolumeClaim)
-      Eventually.eventually(TIMEOUT, INTERVAL) { check(pv.name) should be (true) }
+    kubernetesClient
+      .persistentVolumeClaims().inNamespace(namespace).create(pv.persistentVolumeClaim)
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      check(pv.name) should be (true)
     }
+  }
 
-     override def stopWatch(): Unit = {
-       // Closing Watchers
-       pvWatcher.close()
-       pvcWatcher.close()
-     }
+   override def stopWatch(): Unit = {
+     // Closing Watchers
+     pvWatcher.close()
+     pvcWatcher.close()
+   }
 }

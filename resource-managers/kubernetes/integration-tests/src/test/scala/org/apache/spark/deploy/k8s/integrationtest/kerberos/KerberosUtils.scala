@@ -32,10 +32,11 @@ import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.KERBEROS_LABE
     * This class is responsible for handling all Utils and Constants necessary for testing
   */
 private[spark] class KerberosUtils(
-  sparkImage: String,
-  kerberosImage: String,
-  kubernetesClient: KubernetesClient,
-  namespace: String) {
+    sparkImage: String,
+    kerberosImage: String,
+    serviceAccountName: String,
+    kubernetesClient: KubernetesClient,
+    namespace: String) {
   def getClient: KubernetesClient = kubernetesClient
   def getNamespace: String = namespace
   def yamlLocation(loc: String): String = s"kerberos-yml/$loc.yml"
@@ -55,11 +56,12 @@ private[spark] class KerberosUtils(
   private val KRB_FILE_DIR = "/mnt"
   private val KRB_CONFIG_MAP_NAME = "krb-config-map"
   private val keyPaths: Seq[KeyToPath] = (kerberosFiles ++ Seq("krb5-dp.conf"))
-    .map(file =>
-    new KeyToPathBuilder()
-      .withKey(file)
-      .withPath(file)
-      .build()).toList
+    .map { file =>
+      new KeyToPathBuilder()
+        .withKey(file)
+        .withPath(file)
+        .build()
+    }.toList
   private def createPVTemplate(name: String, pathType: String) : PersistentVolume =
     new PersistentVolumeBuilder()
       .withNewMetadata()
@@ -98,10 +100,8 @@ private[spark] class KerberosUtils(
      pvNN -> createPVTemplate(pvNN, "nn"),
      pvKT -> createPVTemplate(pvKT, "keytab"))
     private def buildKerberosPV(pvType: String) = {
-      PVStorage(
-        pvType,
-        createPVCTemplate(pvType),
-      persistentVolumeMap(pvType)) }
+      PVStorage(pvType, createPVCTemplate(pvType), persistentVolumeMap(pvType))
+    }
     def getNNStorage: PVStorage = buildKerberosPV(pvNN)
     def getKTStorage: PVStorage = buildKerberosPV(pvKT)
     def getLabels: Map[String, String] = KERBEROS_LABEL
@@ -172,29 +172,13 @@ private[spark] class KerberosUtils(
     def getDN: ServiceStorage = buildKerberosDeployment("dn1", dnNode)
     def getDP: ServiceStorage = buildKerberosDeployment("data-populator", dataPopulator)
     private val HADOOP_CONF_DIR_PATH = "/opt/spark/hconf"
-    private val krb5TestkeyPaths = kerberosFiles.map(file =>
+    private val krb5TestkeyPaths =
+      kerberosFiles.map { file =>
       new KeyToPathBuilder()
         .withKey(file)
         .withPath(file)
-        .build()).toList
-    // RoleBinding in the case of RBAC problems
-    def getKerberosRoleBinding: ClusterRoleBinding =
-      new ClusterRoleBindingBuilder()
-        .withNewMetadata()
-        .withName(s"default-admin-$namespace")
-        .withLabels(getLabels.asJava)
-        .endMetadata()
-        .withNewRoleRef()
-        .withKind("ClusterRole")
-        .withName("cluster-admin")
-        .endRoleRef()
-        .withSubjects(
-          new ObjectReferenceBuilder()
-            .withKind("ServiceAccount")
-            .withName("default")
-            .withNamespace(namespace)
-            .build())
         .build()
+      }.toList
     def getKerberosTest(
       resource: String,
       className: String,
@@ -204,7 +188,6 @@ private[spark] class KerberosUtils(
         .get().get(0) match {
         case deployment: Deployment =>
           DeploymentStorage(
-            getKerberosRoleBinding,
             new DeploymentBuilder(deployment)
               .editSpec()
                 .editTemplate()
@@ -212,6 +195,7 @@ private[spark] class KerberosUtils(
                     .addToLabels(Map("name" -> "kerberos-test").asJava)
                     .endMetadata()
                   .editSpec()
+                    .withServiceAccountName(serviceAccountName)
                     .addNewVolume()
                     .withName(KRB_VOLUME)
                     .withNewConfigMap()
@@ -275,6 +259,6 @@ private[spark] class KerberosUtils(
                   .endTemplate()
                 .endSpec()
               .build())
-      }}
-
+      }
+    }
 }

@@ -27,52 +27,55 @@ import scala.collection.JavaConverters._
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, TIMEOUT}
 import org.apache.spark.internal.Logging
 
- /**
-  * This class is responsible for ensuring that no logic progresses in the cluster launcher
-  * until a configmap with the HADOOP_CONF_DIR specifications has been created.
-  */
+/**
+ * This class is responsible for ensuring that no logic progresses in the cluster launcher
+ * until a configmap with the HADOOP_CONF_DIR specifications has been created.
+ */
 private[spark] class KerberosCMWatcherCache(kerberosUtils: KerberosUtils)
-   extends WatcherCacheConfiguration[ConfigMapStorage] with Logging with Eventually with Matchers {
-   private val kubernetesClient = kerberosUtils.getClient
-   private val namespace = kerberosUtils.getNamespace
-   private val requiredFiles = Seq("core-site.xml", "hdfs-site.xml", "krb5.conf")
-   private val cmCache = scala.collection.mutable.Map[String, Map[String, String]]()
-   private val configMapName = kerberosUtils.getConfigMap.resource.getMetadata.getName
-   // Watching ConfigMaps
-   logInfo("Beginning the watch of the Kerberos Config Map")
-   private val watcher: Watch = kubernetesClient
-     .configMaps()
-     .withName(configMapName)
-     .watch(new Watcher[ConfigMap] {
-       override def onClose(cause: KubernetesClientException): Unit =
-         logInfo("Ending the watch of Kerberos Config Map")
-       override def eventReceived(action: Watcher.Action, resource: ConfigMap): Unit = {
-         val name = resource.getMetadata.getName
-         action match {
-           case Action.DELETED | Action.ERROR =>
-             logInfo(s"$name either deleted or error")
-             cmCache.remove(name)
-           case Action.ADDED | Action.MODIFIED =>
-             val data = resource.getData.asScala.toMap
-             logInfo(s"$name includes ${data.keys.mkString(",")}")
-             cmCache(name) = data
-         }}})
-   // Check for CM to have proper files
-   override def check(name: String): Boolean = {
-     cmCache.get(name).exists{ data => requiredFiles.forall(data.keys.toSeq.contains)}
-   }
+  extends WatcherCacheConfiguration[ConfigMapStorage] with Logging with Eventually with Matchers {
+  private val kubernetesClient = kerberosUtils.getClient
+  private val namespace = kerberosUtils.getNamespace
+  private val requiredFiles = Seq("core-site.xml", "hdfs-site.xml", "krb5.conf")
+  private val cmCache = scala.collection.mutable.Map[String, Map[String, String]]()
+  private val configMapName = kerberosUtils.getConfigMap.resource.getMetadata.getName
+  // Watching ConfigMaps
+  logInfo("Beginning the watch of the Kerberos Config Map")
+  private val watcher: Watch = kubernetesClient
+    .configMaps()
+    .withName(configMapName)
+    .watch(new Watcher[ConfigMap] {
+      override def onClose(cause: KubernetesClientException): Unit =
+        logInfo("Ending the watch of Kerberos Config Map")
+      override def eventReceived(action: Watcher.Action, resource: ConfigMap): Unit = {
+        val name = resource.getMetadata.getName
+        action match {
+          case Action.DELETED | Action.ERROR =>
+            logInfo(s"$name either deleted or error")
+            cmCache.remove(name)
+          case Action.ADDED | Action.MODIFIED =>
+            val data = resource.getData.asScala.toMap
+            logInfo(s"$name includes ${data.keys.mkString(",")}")
+            cmCache(name) = data
+        }
+      }
+    })
+  // Check for CM to have proper files
+  override def check(name: String): Boolean = {
+    cmCache.get(name).exists { data => requiredFiles.forall(data.keys.toSeq.contains)}
+  }
 
-   def deploy(storage: ConfigMapStorage): Unit = {
-     logInfo("Launching the ConfigMap")
-     kerberosUtils.getClient.configMaps()
-       .inNamespace(namespace).createOrReplace(storage.resource)
-     // Making sure CM has correct files
-     Eventually.eventually(TIMEOUT, INTERVAL) {
-       check(configMapName) should be (true) }
-   }
+  override def deploy(storage: ConfigMapStorage): Unit = {
+    logInfo("Launching the ConfigMap")
+    kerberosUtils.getClient.configMaps()
+      .inNamespace(namespace).createOrReplace(storage.resource)
+    // Making sure CM has correct files
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      check(configMapName) should be (true)
+    }
+  }
 
-   override def stopWatch() : Unit = {
-     // Closing Watcher
-     watcher.close()
-   }
+  override def stopWatch() : Unit = {
+    // Closing Watcher
+    watcher.close()
+  }
 }
