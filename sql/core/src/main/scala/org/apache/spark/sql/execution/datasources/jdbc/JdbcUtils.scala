@@ -40,7 +40,7 @@ import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
 
-trait ConnectionFactoryProvider {
+trait ConnectionFactoryProvider extends Serializable {
   def createConnectionFactory(options: JDBCOptions): () => Connection
 }
 
