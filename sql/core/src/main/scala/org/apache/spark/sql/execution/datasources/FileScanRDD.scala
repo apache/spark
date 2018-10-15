@@ -106,8 +106,8 @@ class FileScanRDD(
         // don't need to run this `if` for every record.
         val preNumRecordsRead = inputMetrics.recordsRead
         if (nextElement.isInstanceOf[ColumnarBatch]) {
-          inputMetrics.incRecordsRead(nextElement.asInstanceOf[ColumnarBatch].numRows())
           incTaskInputMetricsBytesRead()
+          inputMetrics.incRecordsRead(nextElement.asInstanceOf[ColumnarBatch].numRows())
         } else {
           // too costly to update every record
           if (inputMetrics.recordsRead %
