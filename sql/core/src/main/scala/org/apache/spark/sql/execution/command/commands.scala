@@ -80,11 +80,8 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
 
   override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 
-  override private[spark] def executeCollectSeqView(): (Long,
-    SeqView[InternalRow, Array[InternalRow]]) = {
-    val result = executeCollect()
-    (result.length, result.view)
-  }
+  override private[spark] def executeCollectSeqView(): SeqView[InternalRow, Array[InternalRow]] =
+    executeCollect().view
 
   override def executeToIterator: Iterator[InternalRow] = sideEffectResult.toIterator
 
@@ -123,11 +120,8 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
 
   override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 
-  override private[spark] def executeCollectSeqView(): (Long,
-    SeqView[InternalRow, Array[InternalRow]]) = {
-    val result = executeCollect()
-    (result.length, result.view)
-  }
+  override private[spark] def executeCollectSeqView(): SeqView[InternalRow, Array[InternalRow]] =
+    executeCollect().view
 
   override def executeToIterator: Iterator[InternalRow] = sideEffectResult.toIterator
 

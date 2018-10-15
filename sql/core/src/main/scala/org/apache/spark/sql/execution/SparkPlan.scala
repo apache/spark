@@ -310,11 +310,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     (total, rows)
   }
 
-  private[spark] def executeCollectSeqView(): (Long, SeqView[InternalRow, Array[InternalRow]]) = {
+  private[spark] def executeCollectSeqView(): SeqView[InternalRow, Array[InternalRow]] = {
     val countsAndBytes = getByteArrayRdd().collect()
-    val total = countsAndBytes.map(_._1).sum
-    val rows = countsAndBytes.view.flatMap(countAndBytes => decodeUnsafeRows(countAndBytes._2))
-    (total, rows)
+    countsAndBytes.view.flatMap(countAndBytes => decodeUnsafeRows(countAndBytes._2))
   }
 
   /**
@@ -339,18 +337,61 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    *
    * This is modeled after `RDD.take` but never runs any job locally on the driver.
    */
-  def executeTake(n: Int): Array[InternalRow] = executeTakeSeqView(n)._2.force
+  def executeTake(n: Int): Array[InternalRow] = {
+    if (n == 0) {
+      return new Array[InternalRow](0)
+    }
+
+    val childRDD = getByteArrayRdd(n).map(_._2)
+
+    val buf = new ArrayBuffer[InternalRow]
+    val totalParts = childRDD.partitions.length
+    var partsScanned = 0
+    while (buf.size < n && partsScanned < totalParts) {
+      // The number of partitions to try in this iteration. It is ok for this number to be
+      // greater than totalParts because we actually cap it at totalParts in runJob.
+      var numPartsToTry = 1L
+      if (partsScanned > 0) {
+        // If we didn't find any rows after the previous iteration, quadruple and retry.
+        // Otherwise, interpolate the number of partitions we need to try, but overestimate
+        // it by 50%. We also cap the estimation in the end.
+        val limitScaleUpFactor = Math.max(sqlContext.conf.limitScaleUpFactor, 2)
+        if (buf.isEmpty) {
+          numPartsToTry = partsScanned * limitScaleUpFactor
+        } else {
+          val left = n - buf.size
+          // As left > 0, numPartsToTry is always >= 1
+          numPartsToTry = Math.ceil(1.5 * left * partsScanned / buf.size).toInt
+          numPartsToTry = Math.min(numPartsToTry, partsScanned * limitScaleUpFactor)
+        }
+      }
+
+      val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
+      val sc = sqlContext.sparkContext
+      val res = sc.runJob(childRDD,
+        (it: Iterator[Array[Byte]]) => if (it.hasNext) it.next() else Array.empty[Byte], p)
+
+      buf ++= res.flatMap(decodeUnsafeRows)
+
+      partsScanned += p.size
+    }
+
+    if (buf.size > n) {
+      buf.take(n).toArray
+    } else {
+      buf.toArray
+    }
+  }
 
   /**
-   * Runs this query returning the tuple of the row count and the SeqView of first `n` rows.
+   * Runs this query returning SeqView of first `n` rows.
    *
    * This is modeled to execute decodeUnsafeRows lazily to reduce peak memory usage of
    * decoding rows. Only compressed byte arrays consume memory after return.
    */
-  private[spark] def executeTakeSeqView(
-    n: Int): (Long, SeqView[InternalRow, Array[InternalRow]]) = {
+  private[spark] def executeTakeSeqView(n: Int): SeqView[InternalRow, Array[InternalRow]] = {
     if (n == 0) {
-      return (0, Array.empty[InternalRow].view)
+      return Array.empty[InternalRow].view
     }
 
     val childRDD = getByteArrayRdd(n)
@@ -361,20 +402,21 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     while (scannedRowCount < n && partsScanned < totalParts) {
       // The number of partitions to try in this iteration. It is ok for this number to be
       // greater than totalParts because we actually cap it at totalParts in runJob.
-      var numPartsToTry = 1L
-      if (partsScanned > 0) {
+      val numPartsToTry = if (partsScanned > 0) {
         // If we didn't find any rows after the previous iteration, quadruple and retry.
         // Otherwise, interpolate the number of partitions we need to try, but overestimate
         // it by 50%. We also cap the estimation in the end.
         val limitScaleUpFactor = Math.max(sqlContext.conf.limitScaleUpFactor, 2)
         if (scannedRowCount == 0) {
-          numPartsToTry = partsScanned * limitScaleUpFactor
+          partsScanned * limitScaleUpFactor
         } else {
           val left = n - scannedRowCount
           // As left > 0, numPartsToTry is always >= 1
-          numPartsToTry = Math.ceil(1.5 * left * partsScanned / scannedRowCount).toInt
-          numPartsToTry = Math.min(numPartsToTry, partsScanned * limitScaleUpFactor)
+          Math.min(Math.ceil(1.5 * left * partsScanned / scannedRowCount).toInt,
+            partsScanned * limitScaleUpFactor)
         }
+      } else {
+        1L
       }
 
       val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
@@ -388,9 +430,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
 
     if (scannedRowCount > n) {
-      (n, encodedBuf.toArray.view.flatMap(decodeUnsafeRows).take(n))
+      encodedBuf.toArray.view.flatMap(decodeUnsafeRows).take(n)
     } else {
-      (scannedRowCount, encodedBuf.toArray.view.flatMap(decodeUnsafeRows))
+      encodedBuf.toArray.view.flatMap(decodeUnsafeRows)
     }
   }
 

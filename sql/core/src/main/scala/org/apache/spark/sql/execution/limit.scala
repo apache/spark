@@ -39,8 +39,8 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode 
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
-  override private[spark] def executeCollectSeqView(): (Long,
-    SeqView[InternalRow, Array[InternalRow]]) = child.executeTakeSeqView(limit)
+  override private[spark] def executeCollectSeqView(): SeqView[InternalRow, Array[InternalRow]] =
+    child.executeTakeSeqView(limit)
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
   private lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)

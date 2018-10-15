@@ -23,6 +23,7 @@ import java.util.{Arrays, Map => JMap, UUID}
 import java.util.concurrent.RejectedExecutionException
 
 import scala.collection.JavaConverters._
+import scala.collection.SeqView
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
@@ -35,6 +36,7 @@ import org.apache.hive.service.cli.session.HiveSession
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
 import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.execution.command.SetCommand
 import org.apache.spark.sql.internal.SQLConf
@@ -121,11 +123,15 @@ private[hive] class SparkExecuteStatementOperation(
         resultList = None
         result.toLocalIterator.asScala
       } else {
-        if (resultList.isDefined) {
-          resultList.get.iterator
-        } else {
-          getResultIterator()
+        if (resultList.isEmpty) {
+          resultList = if (sqlContext.getConf(
+            SQLConf.THRIFTSERVER_INCREMENTAL_DESERIALIZE.key).toBoolean) {
+            Some(collectResultAsSeqView())
+          } else {
+            Some(result.collect())
+          }
         }
+        resultList.get.iterator
       }
     }
 
@@ -246,7 +252,13 @@ private[hive] class SparkExecuteStatementOperation(
           resultList = None
           result.toLocalIterator.asScala
         } else {
-          getResultIterator()
+          resultList = if (sqlContext.getConf(
+            SQLConf.THRIFTSERVER_INCREMENTAL_DESERIALIZE.key).toBoolean) {
+            Some(collectResultAsSeqView())
+          } else {
+            Some(result.collect())
+          }
+          resultList.get.iterator
         }
       }
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
@@ -292,13 +304,20 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  private def getResultIterator(): Iterator[SparkRow] = {
-    val (totalRowCount, resultView) = result.collectCountAndSeqView()
-    val batchCollectLimit =
-      sqlContext.getConf(SQLConf.THRIFTSERVER_BATCH_DESERIALIZE_LIMIT.key).toLong
-    resultList = Some(if (totalRowCount < batchCollectLimit) resultView.force else resultView)
-    resultList.get.iterator
-  }
+  /**
+   * Returns a SeqView that contains all rows in this Dataset.
+   *
+   * The SeqView will consume as much memory as the total size of serialized results which can be
+   * limited with the config 'spark.driver.maxResultSize'. Rows are deserialized when iterating rows
+   * with iterator of returned SeqView.
+   */
+  private def collectResultAsSeqView(): SeqView[SparkRow, Array[SparkRow]] =
+    result.withAction("collectResultAsSeqView", result.queryExecution) { plan =>
+      val objProj = GenerateSafeProjection.generate(result.deserializer :: Nil)
+      plan.executeCollectSeqView().map(row =>
+        objProj(row).get(0, null).asInstanceOf[SparkRow]
+      ).asInstanceOf[SeqView[SparkRow, Array[SparkRow]]]
+    }
 }
 
 object SparkExecuteStatementOperation {

@@ -21,7 +21,6 @@ import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.SeqView
 import scala.language.implicitConversions
 import scala.util.control.NonFatal
 
@@ -219,7 +218,7 @@ class Dataset[T] private[sql](
 
   // The deserializer expression which can be used to build a projection and turn rows to objects
   // of type T, after collecting rows to the driver side.
-  private lazy val deserializer =
+  private[sql] lazy val deserializer =
     exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer).deserializer
 
   private implicit def classTag = exprEnc.clsTag
@@ -3163,29 +3162,6 @@ class Dataset[T] private[sql](
     }.flatten
     files.toSet.toArray
   }
-
-  /**
-   * Returns the tuple of the row count and an SeqView that contains all rows in this Dataset.
-   *
-   * The SeqView` will consume as much memory as the total size of serialized results which can be
-   * limited with the config 'spark.driver.maxResultSize'. Rows are deserialized when iterating rows
-   * with iterator of returned SeqView. Whether to collect all deserialized rows or to iterate them
-   * incrementally can be decided with considering total rows count and driver memory.
-   */
-  private[sql] def collectCountAndSeqView(): (Long, SeqView[T, Array[T]]) =
-    withAction("collectCountAndSeqView", queryExecution) { plan =>
-      // This projection writes output to a `InternalRow`, which means applying this projection is
-      // not thread-safe. Here we create the projection inside this method to make `Dataset`
-      // thread-safe.
-      val objProj = GenerateSafeProjection.generate(deserializer :: Nil)
-      val (totalRowCount, internalRowsView) = plan.executeCollectSeqView()
-      (totalRowCount, internalRowsView.map { row =>
-        // The row returned by SafeProjection is `SpecificInternalRow`, which ignore the data type
-        // parameter of its `get` method, so it's safe to use null here.
-        objProj(row).get(0, null).asInstanceOf[T]
-      }.asInstanceOf[SeqView[T, Array[T]]])
-    }
-
   ////////////////////////////////////////////////////////////////////////////
   // For Python API
   ////////////////////////////////////////////////////////////////////////////
@@ -3365,7 +3341,7 @@ class Dataset[T] private[sql](
    * Wrap a Dataset action to track the QueryExecution and time cost, then report to the
    * user-registered callback functions.
    */
-  private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
+  private[sql] def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
     SQLExecution.withNewExecutionId(sparkSession, qe, Some(name)) {
       qe.executedPlan.foreach { plan =>
         plan.resetMetrics()
