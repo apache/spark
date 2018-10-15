@@ -447,6 +447,11 @@ case class SessionWindowStateStoreRestoreExec(
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { case (stateManager, iter) =>
 
+      val keyWithoutSessionProjection = GenerateUnsafeProjection.generate(
+        keyWithoutSessionExpressions, child.output)
+      val sessionProjection = GenerateUnsafeProjection.generate(Seq(sessionExpression),
+        child.output)
+
       // We need to filter out outdated inputs
       val filteredIterator = watermarkPredicateForData match {
         case Some(predicate) => iter.filter((row: InternalRow) => !predicate.eval(row))
@@ -458,6 +463,8 @@ case class SessionWindowStateStoreRestoreExec(
         stateManager,
         keyWithoutSessionExpressions,
         sessionExpression,
+        keyWithoutSessionProjection,
+        sessionProjection,
         child.output).map { row =>
         numOutputRows += 1
         row
@@ -528,11 +535,11 @@ case class SessionWindowStateStoreSaveExec(
       val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
       val commitTimeMs = longMetric("commitTimeMs")
 
-      val keyProjection = GenerateUnsafeProjection.generate(keyWithoutSessionExpressions,
-        child.output)
-
       var currentKey: UnsafeRow = null
       var previousSessions: List[UnsafeRow] = null
+
+      val keyProjection = GenerateUnsafeProjection.generate(keyWithoutSessionExpressions,
+        child.output)
 
       val keyOrdering = TypeUtils.getInterpretedOrdering(keyWithoutSessionExpressions.toStructType)
       val valueOrdering = TypeUtils.getInterpretedOrdering(child.output.toStructType)

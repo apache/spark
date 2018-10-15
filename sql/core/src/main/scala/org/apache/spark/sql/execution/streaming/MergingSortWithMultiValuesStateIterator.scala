@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, Predicate}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.streaming.state.MultiValuesStateManager
 
 // FIXME: javadoc!!
@@ -28,11 +28,21 @@ class MergingSortWithMultiValuesStateIterator(
     stateManager: MultiValuesStateManager,
     groupWithoutSessionExpressions: Seq[Expression],
     sessionExpression: Expression,
+    keysProjection: UnsafeProjection,
+    sessionProjection: UnsafeProjection,
     inputSchema: Seq[Attribute]) extends Iterator[InternalRow] {
 
-  val keysProjection = GenerateUnsafeProjection.generate(groupWithoutSessionExpressions,
-    inputSchema)
-  val sessionProjection = GenerateUnsafeProjection.generate(Seq(sessionExpression), inputSchema)
+  def this(
+      iter: Iterator[InternalRow],
+      stateManager: MultiValuesStateManager,
+      groupWithoutSessionExpressions: Seq[Expression],
+      sessionExpression: Expression,
+      inputSchema: Seq[Attribute]) {
+    this(iter, stateManager, groupWithoutSessionExpressions, sessionExpression,
+      GenerateUnsafeProjection.generate(groupWithoutSessionExpressions, inputSchema),
+      GenerateUnsafeProjection.generate(Seq(sessionExpression), inputSchema),
+      inputSchema)
+  }
 
   private case class SessionRowInformation(keys: UnsafeRow, sessionStart: Long, sessionEnd: Long,
                                            row: InternalRow)
@@ -123,10 +133,14 @@ class MergingSortWithMultiValuesStateIterator(
         // so sorting it here doesn't hurt.
         val unsortedIter = stateManager.get(currentRow.keys)
         currentStateIter = unsortedIter.map(_.copy()).toList.sortWith((row1, row2) => {
-          val rowInfo1 = SessionRowInformation.of(row1)
-          val rowInfo2 = SessionRowInformation.of(row2)
+          def getSessionStart(r: InternalRow): Long = {
+            val session = sessionProjection(r)
+            val sessionRow = session.getStruct(0, 2)
+            sessionRow.getLong(0)
+          }
+
           // here sorting is based on the fact that keys are same
-          rowInfo1.sessionStart.compareTo(rowInfo2.sessionStart) < 0
+          getSessionStart(row1).compareTo(getSessionStart(row2)) < 0
         }).iterator
 
         currentStateFetchedKey = currentRow.keys
