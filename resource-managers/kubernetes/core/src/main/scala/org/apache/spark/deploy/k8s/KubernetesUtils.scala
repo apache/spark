@@ -24,6 +24,38 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.util.Utils
 
 private[spark] object KubernetesUtils {
+  def parseKeyValuePairs(
+      maybeKeyValues: Option[String],
+      configKey: String,
+      keyValueType: String): Map[String, String] = {
+
+    maybeKeyValues.map(keyValues => {
+      keyValues.split(",").map(_.trim).filterNot(_.isEmpty).map(keyValue => {
+        keyValue.split("=", 2).toSeq match {
+          case Seq(k, v) =>
+            (k, v)
+          case _ =>
+            throw new SparkException(s"Custom $keyValueType set by $configKey must be a" +
+              s" comma-separated list of key-value pairs, with format <key>=<value>." +
+              s" Got value: $keyValue. All values: $keyValues")
+        }
+      }).toMap
+    }).getOrElse(Map.empty[String, String])
+  }
+
+  def parsePrefixedKeyValuePairs(
+      sparkConf: SparkConf,
+      prefix: String,
+      configType: String): Map[String, String] = {
+    val fromPrefix = sparkConf.getAllWithPrefix(prefix)
+    fromPrefix.groupBy(_._1).foreach {
+      case (key, values) =>
+        require(values.size == 1,
+          s"Cannot have multiple values for a given $configType key, got key $key with" +
+            s" values $values")
+    }
+    fromPrefix.toMap
+  }
 
   /**
    * Extract and parse Spark configuration properties with a given name prefix and

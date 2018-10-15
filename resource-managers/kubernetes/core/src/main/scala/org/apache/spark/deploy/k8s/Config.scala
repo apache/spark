@@ -29,6 +29,30 @@ private[spark] object Config extends Logging {
       .stringConf
       .createWithDefault("default")
 
+  val KUBERNETES_SHUFFLE_NAMESPACE =
+    ConfigBuilder("spark.kubernetes.shuffle.namespace")
+      .doc("Namespace of the shuffle service")
+      .stringConf
+      .createWithDefault("default")
+
+  val KUBERNETES_SHUFFLE_LABELS =
+    ConfigBuilder("spark.kubernetes.shuffle.labels")
+      .doc("Labels to identify the shuffle service")
+      .stringConf
+      .createOptional
+
+  val SPARK_SHUFFLE_SERVICE_HOST =
+    ConfigBuilder("spark.shuffle.service.host")
+      .doc("Host for Spark Shuffle Service")
+      .internal()
+      .stringConf
+      .createOptional
+
+  val SHUFFLE_CLEANER_INTERVAL_S =
+    ConfigBuilder("spark.shuffle.cleaner.interval")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefaultString("30s")
+
   val CONTAINER_IMAGE =
     ConfigBuilder("spark.kubernetes.container.image")
       .doc("Container image to use for Spark containers. Individual container types " +

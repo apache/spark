@@ -156,6 +156,40 @@ exits.
 
 Use the exact prefix `spark.kubernetes.authenticate` for Kubernetes authentication parameters in client mode.
 
+## Dynamic Executor Scaling
+
+To enable dynamic resource allocation, you need to first launch our external shuffle service on the nodes that spark executors will
+be created on. This is typically a [DaemonSet](https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/) with a provisioned
+[hostpath](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath) volume. This shuffle service may be shared by executors
+belonging to different SparkJobs. Using Spark with dynamic allocation on Kubernetes assumes that a cluster administrator has set up one
+or more shuffle-service DaemonSets in the cluster.
+
+A sample configuration file is provided in `conf\k8s-shuffle-service.yaml.template` which can be customized as needed for a particular cluster.
+It is important to note that `spec.template.metadata.labels` are setup appropriately for the shuffle service because there may be multiple
+shuffle service instances running in a cluster. The labels give Spark applications a way to target a particular shuffle service.
+
+Please note that when enabling dynamic resource allocation, the executor's shuffle files should be visible to the shuffle service that
+located on the same node, which means the volume mount configuration of shuffle service should be identical to spark executors'.
+
+For example, if the shuffle service we want to use is in the 'spark' namespace, and has pods with labels app=spark-shuffle-service, we can use
+those tags to target that particular shuffle service at job launch time. In order to run a job with dynamic allocation enabled,
+the command may then look like the following:
+
+```bash
+$ bin/spark-submit \
+    --master k8s://https://<k8s-apiserver-host>:<k8s-apiserver-port> \
+    --deploy-mode cluster \
+    --name spark-groupby \
+    --class org.apache.spark.examples.GroupByTest \
+    --conf spark.local.dir=/tmp/spark-local \
+    --conf spark.dynamicAllocation.enabled=true \
+    --conf spark.shuffle.service.enabled=true \
+    --conf spark.kubernetes.shuffle.namespace=spark \
+    --conf spark.kubernetes.shuffle.labels="app=spark-shuffle-service" \
+    --conf spark.kubernetes.container.image=<spark-image> \
+    local:///path/to/examples.jar 10 400000 2
+```
+
 ## Dependency Management
 
 If your application's dependencies are all hosted in remote locations like HDFS or HTTP servers, they may be referred to

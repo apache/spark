@@ -100,6 +100,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   }
 
   def stop() {
+    blockHandler.close()
     if (server != null) {
       server.close()
       server = null

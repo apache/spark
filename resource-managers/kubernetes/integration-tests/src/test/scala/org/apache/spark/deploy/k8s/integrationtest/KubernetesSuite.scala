@@ -38,12 +38,12 @@ import org.apache.spark.internal.Logging
 
 private[spark] class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
-  with PythonTestsSuite with ClientModeTestsSuite
+  with PythonTestsSuite with ClientModeTestsSuite with DynamicAllocationTestSuite
   with Logging with Eventually with Matchers {
 
   import KubernetesSuite._
 
-  private var sparkHomeDir: Path = _
+  protected var sparkHomeDir: Path = _
   private var pyImage: String = _
   private var rImage: String = _
 

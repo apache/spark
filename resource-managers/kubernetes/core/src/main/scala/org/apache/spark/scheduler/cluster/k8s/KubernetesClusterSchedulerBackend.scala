@@ -19,12 +19,15 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.util.concurrent.ExecutorService
 
 import io.fabric8.kubernetes.client.KubernetesClient
+import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.rpc.{RpcAddress, RpcEnv}
+import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RetrieveSparkAppConfig, SparkAppConfig}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark] class KubernetesClusterSchedulerBackend(
@@ -36,7 +39,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
     podAllocator: ExecutorPodsAllocator,
     lifecycleEventHandler: ExecutorPodsLifecycleManager,
     watchEvents: ExecutorPodsWatchSnapshotSource,
-    pollEvents: ExecutorPodsPollingSnapshotSource)
+    pollEvents: ExecutorPodsPollingSnapshotSource,
+    kubernetesShuffleManager: Option[KubernetesExternalShuffleManager])
   extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
 
   private implicit val requestExecutorContext = ExecutionContext.fromExecutorService(
@@ -61,6 +65,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     if (!Utils.isDynamicAllocationEnabled(conf)) {
       podAllocator.setTotalExpectedExecutors(initialExecutors)
     }
+    kubernetesShuffleManager.foreach(_.start(applicationId()))
     lifecycleEventHandler.start(this)
     podAllocator.start(applicationId())
     watchEvents.start(applicationId())
@@ -91,6 +96,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
     Utils.tryLogNonFatalError {
       ThreadUtils.shutdown(requestExecutorsService)
+    }
+
+    Utils.tryLogNonFatalError {
+      kubernetesShuffleManager.foreach(_.stop())
     }
 
     Utils.tryLogNonFatalError {
@@ -135,6 +144,46 @@ private[spark] class KubernetesClusterSchedulerBackend(
       // TODO what if we disconnect from a networking issue? Probably want to mark the executor
       // to be deleted eventually.
       addressToExecutorId.get(rpcAddress).foreach(disableExecutor)
+    }
+
+    override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+      new PartialFunction[Any, Unit]() {
+        override def isDefinedAt(msg: Any): Boolean = {
+          msg match {
+            case RetrieveSparkAppConfig =>
+              kubernetesShuffleManager.isDefined
+            case _ => false
+          }
+        }
+
+        override def apply(msg: Any): Unit = {
+          msg match {
+            case RetrieveSparkAppConfig if kubernetesShuffleManager.isDefined =>
+              val senderAddress = context.senderAddress
+              val allExecutorPods = kubernetesClient
+                .pods()
+                .withLabel(SPARK_APP_ID_LABEL, applicationId())
+                .list()
+                .getItems
+                .asScala
+              val executor = allExecutorPods.find(pod =>
+                pod.getStatus.getPodIP.equals(senderAddress.host) ||
+                  pod.getSpec.getHostname.equals(senderAddress.host))
+              if (executor.isDefined) {
+                val shuffleSpecificProperties = kubernetesShuffleManager.get
+                  .getShuffleServiceConfigurationForExecutor(executor.get)
+                val reply = SparkAppConfig(
+                  sparkProperties ++ shuffleSpecificProperties,
+                  SparkEnv.get.securityManager.getIOEncryptionKey(),
+                  fetchHadoopDelegationTokens())
+                context.reply(reply)
+              } else {
+                logError(s"Got RetrieveSparkAppConfig message from unknown executor" +
+                  s" address $senderAddress")
+              }
+          }
+        }
+      }.orElse(super.receiveAndReply(context))
     }
   }
 

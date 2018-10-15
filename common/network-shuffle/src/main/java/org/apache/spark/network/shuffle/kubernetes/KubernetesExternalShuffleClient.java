@@ -15,7 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.shuffle.mesos;
+package org.apache.spark.network.shuffle.kubernetes;
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.sasl.SecretKeyHolder;
+import org.apache.spark.network.shuffle.ExternalShuffleClient;
+import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient;
+import org.apache.spark.network.shuffle.protocol.RegisterDriver;
+import org.apache.spark.network.shuffle.protocol.ShuffleServiceHeartbeat;
+import org.apache.spark.network.util.TransportConf;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -23,46 +35,34 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import org.apache.spark.network.shuffle.protocol.ShuffleServiceHeartbeat;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import org.apache.spark.network.client.RpcResponseCallback;
-import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.sasl.SecretKeyHolder;
-import org.apache.spark.network.shuffle.ExternalShuffleClient;
-import org.apache.spark.network.shuffle.protocol.RegisterDriver;
-import org.apache.spark.network.util.TransportConf;
-
 /**
- * A client for talking to the external shuffle service in Mesos coarse-grained mode.
+ * A client for talking to the external shuffle service in Kubernetes cluster mode.
  *
- * This is used by the Spark driver to register with each external shuffle service on the cluster.
- * The reason why the driver has to talk to the service is for cleaning up shuffle files reliably
- * after the application exits. Mesos does not provide a great alternative to do this, so Spark
- * has to detect this itself.
+ * This is used by the each Spark executor to register with a corresponding external
+ * shuffle service on the cluster. The purpose is for cleaning up shuffle files
+ * reliably if the application exits unexpectedly.
  */
-public class MesosExternalShuffleClient extends ExternalShuffleClient {
-  private static final Logger logger = LoggerFactory.getLogger(MesosExternalShuffleClient.class);
+public class KubernetesExternalShuffleClient extends ExternalShuffleClient {
+  private static final Logger logger = LoggerFactory
+    .getLogger(KubernetesExternalShuffleClient.class);
 
   private final ScheduledExecutorService heartbeaterThread =
-      Executors.newSingleThreadScheduledExecutor(
-        new ThreadFactoryBuilder()
-          .setDaemon(true)
-          .setNameFormat("mesos-external-shuffle-client-heartbeater")
-          .build());
+    Executors.newSingleThreadScheduledExecutor(
+      new ThreadFactoryBuilder()
+        .setDaemon(true)
+        .setNameFormat("kubernetes-external-shuffle-client-heartbeater")
+        .build());
 
   /**
-   * Creates an Mesos external shuffle client that wraps the {@link ExternalShuffleClient}.
+   * Creates a Kubernetes external shuffle client that wraps the {@link ExternalShuffleClient}.
    * Please refer to docs on {@link ExternalShuffleClient} for more information.
    */
-  public MesosExternalShuffleClient(
+  public KubernetesExternalShuffleClient(
       TransportConf conf,
       SecretKeyHolder secretKeyHolder,
-      boolean authEnabled,
+      boolean saslEnabled,
       long registrationTimeoutMs) {
-    super(conf, secretKeyHolder, authEnabled, registrationTimeoutMs);
+    super(conf, secretKeyHolder, saslEnabled, registrationTimeoutMs);
   }
 
   public void registerDriverWithShuffleService(
@@ -70,11 +70,16 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
       int port,
       long heartbeatTimeoutMs,
       long heartbeatIntervalMs) throws IOException, InterruptedException {
-
     checkInit();
     ByteBuffer registerDriver = new RegisterDriver(appId, heartbeatTimeoutMs).toByteBuffer();
     TransportClient client = clientFactory.createClient(host, port);
     client.sendRpc(registerDriver, new RegisterDriverCallback(client, heartbeatIntervalMs));
+  }
+
+  @Override
+  public void close() {
+    heartbeaterThread.shutdownNow();
+    super.close();
   }
 
   private class RegisterDriverCallback implements RpcResponseCallback {
@@ -89,21 +94,15 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
     @Override
     public void onSuccess(ByteBuffer response) {
       heartbeaterThread.scheduleAtFixedRate(
-          new Heartbeater(client), 0, heartbeatIntervalMs, TimeUnit.MILLISECONDS);
+        new Heartbeater(client), 0, heartbeatIntervalMs, TimeUnit.MILLISECONDS);
       logger.info("Successfully registered app " + appId + " with external shuffle service.");
     }
 
     @Override
     public void onFailure(Throwable e) {
       logger.warn("Unable to register app " + appId + " with external shuffle service. " +
-          "Please manually remove shuffle data after driver exit. Error: " + e);
+        "Please manually remove shuffle data after driver exit. Error: " + e);
     }
-  }
-
-  @Override
-  public void close() {
-    heartbeaterThread.shutdownNow();
-    super.close();
   }
 
   private class Heartbeater implements Runnable {

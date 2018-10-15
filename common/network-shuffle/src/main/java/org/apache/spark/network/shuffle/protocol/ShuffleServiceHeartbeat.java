@@ -15,17 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.shuffle.protocol.mesos;
+package org.apache.spark.network.shuffle.protocol;
 
 import io.netty.buffer.ByteBuf;
 import org.apache.spark.network.protocol.Encoders;
-import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 
 // Needed by ScalaDoc. See SPARK-7726
 import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
 
 /**
- * A heartbeat sent from the driver to the MesosExternalShuffleService.
+ * A heartbeat sent from the driver to the MesosExternalShuffleService and KubernetesExternalShuffleService.
  */
 public class ShuffleServiceHeartbeat extends BlockTransferMessage {
   private final String appId;

@@ -1,0 +1,34 @@
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  labels:
+  #  key1: value1
+  #  key2: value2
+  namespace: spark   # change namespace according to your cluster configuration.
+  name: spark-shuffle-service
+spec:
+  template:
+    metadata:
+      labels:
+        #  key1: value1
+        #  key2: value2
+    spec:
+      # nodeSelector:
+      #  key: "value"     # change this launch the shuffle service on some specific nodes
+      volumes:
+        - name: shuffle-volume
+          hostPath:
+            path: '/tmp/spark-local'  # change this path according to your cluster configuration.
+      containers:
+        - name: shuffle-service
+          args: ["shuffle-service"]
+          image: kubespark/spark:spark-241   # change the image according to your cluster configuration.
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: '/tmp/spark-local'   # change this path according to your cluster configuration.
+              name: shuffle-volume
+          resources:
+             requests:
+               cpu: "1"
+             limits:
+               cpu: "1"

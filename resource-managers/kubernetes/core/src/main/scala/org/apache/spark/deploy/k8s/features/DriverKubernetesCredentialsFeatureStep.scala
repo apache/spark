@@ -174,17 +174,17 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
    *         which may be empty if the user-specified credential is empty.
    */
   private def resolveSecretData(
-    userSpecifiedCredential: Option[String],
-    secretName: String): Map[String, String] = {
+      userSpecifiedCredential: Option[String],
+      secretName: String): Map[String, String] = {
     userSpecifiedCredential.map { valueBase64 =>
       Map(secretName -> valueBase64)
     }.getOrElse(Map.empty[String, String])
   }
 
   private def resolveSecretLocation(
-    mountedUserSpecified: Option[String],
-    valueMountedFromSubmitter: Option[String],
-    mountedCanonicalLocation: String): Option[String] = {
+      mountedUserSpecified: Option[String],
+      valueMountedFromSubmitter: Option[String],
+      mountedCanonicalLocation: String): Option[String] = {
     mountedUserSpecified.orElse(valueMountedFromSubmitter.map { _ =>
       mountedCanonicalLocation
     })

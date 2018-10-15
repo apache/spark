@@ -14,8 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-package org.apache.spark.deploy.mesos
+package org.apache.spark.deploy.k8s
 
 import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
@@ -24,7 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.ExternalShuffleService
-import org.apache.spark.deploy.mesos.config._
+import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
@@ -32,11 +31,13 @@ import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, Register
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.util.ThreadUtils
 
+// Todo: handle duplicated code with Mesos
+
 /**
- * An RPC endpoint that receives registration requests from Spark drivers running on Mesos.
+ * An RPC endpoint that receives registration requests from Spark drivers running on Kubernetes.
  * It detects driver termination and calls the cleanup callback to [[ExternalShuffleService]].
  */
-private[mesos] class MesosExternalShuffleBlockHandler(
+private[spark] class KubernetesShuffleBlockHandler(
     transportConf: TransportConf,
     cleanerIntervalS: Long)
   extends ExternalShuffleBlockHandler(transportConf, null) with Logging {
@@ -57,7 +58,7 @@ private[mesos] class MesosExternalShuffleBlockHandler(
         val timeout = appState.heartbeatTimeout
         logInfo(s"Received registration request from app $appId (remote address $address, " +
           s"heartbeat timeout $timeout ms).")
-        if (connectedApps.containsKey(appId)) {
+        if (connectedApps.contains(appId)) {
           logWarning(s"Received a registration request from app $appId, but it was already " +
             s"registered")
         }
@@ -78,17 +79,17 @@ private[mesos] class MesosExternalShuffleBlockHandler(
     }
   }
 
-  /** An extractor object for matching [[RegisterDriver]] message. */
-  private object RegisterDriverParam {
-    def unapply(r: RegisterDriver): Option[(String, AppState)] =
-      Some((r.getAppId, new AppState(r.getHeartbeatTimeoutMs, System.nanoTime())))
-  }
-
   private object Heartbeat {
     def unapply(h: ShuffleServiceHeartbeat): Option[String] = Some(h.getAppId)
   }
 
   private class AppState(val heartbeatTimeout: Long, @volatile var lastHeartbeat: Long)
+
+  /** An extractor object for matching [[RegisterDriver]] message. */
+  private object RegisterDriverParam {
+    def unapply(r: RegisterDriver): Option[(String, AppState)] =
+      Some((r.getAppId, new AppState(r.getHeartbeatTimeoutMs, System.nanoTime())))
+  }
 
   private class CleanerThread extends Runnable {
     override def run(): Unit = {
@@ -104,27 +105,20 @@ private[mesos] class MesosExternalShuffleBlockHandler(
   }
 }
 
-/**
- * A wrapper of [[ExternalShuffleService]] that provides an additional endpoint for drivers
- * to associate with. This allows the shuffle service to detect when a driver is terminated
- * and can clean up the associated shuffle files.
- */
-private[mesos] class MesosExternalShuffleService(conf: SparkConf, securityManager: SecurityManager)
+private[spark] class KubernetesExternalShuffleService(conf: SparkConf,
+    securityManager: SecurityManager)
   extends ExternalShuffleService(conf, securityManager) {
 
   protected override def newShuffleBlockHandler(
-      conf: TransportConf): ExternalShuffleBlockHandler = {
+      tConf: TransportConf): ExternalShuffleBlockHandler = {
     val cleanerIntervalS = this.conf.get(SHUFFLE_CLEANER_INTERVAL_S)
-    new MesosExternalShuffleBlockHandler(conf, cleanerIntervalS)
+    new KubernetesShuffleBlockHandler(tConf, cleanerIntervalS)
   }
 }
 
-private[spark] object MesosExternalShuffleService extends Logging {
-
+private[spark] object KubernetesExternalShuffleService extends Logging {
   def main(args: Array[String]): Unit = {
     ExternalShuffleService.main(args,
-      (conf: SparkConf, sm: SecurityManager) => new MesosExternalShuffleService(conf, sm))
+      (conf: SparkConf, sm: SecurityManager) => new KubernetesExternalShuffleService(conf, sm))
   }
 }
-
-

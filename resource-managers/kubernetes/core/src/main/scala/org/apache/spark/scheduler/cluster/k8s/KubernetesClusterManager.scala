@@ -23,10 +23,13 @@ import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.client.Config
 
 import org.apache.spark.SparkContext
-import org.apache.spark.deploy.k8s.{KubernetesUtils, SparkKubernetesClientFactory}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesRoleSpecificConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.internal.Logging
+import org.apache.spark.deploy.k8s.features.{ExternalShuffleLocalDirsFeatureStep, LocalDirsFeatureStep}
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.network.shuffle.kubernetes.KubernetesExternalShuffleClient
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 import org.apache.spark.util.{SystemClock, ThreadUtils}
 
@@ -79,15 +82,38 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val removedExecutorsCache = CacheBuilder.newBuilder()
       .expireAfterWrite(3, TimeUnit.MINUTES)
       .build[java.lang.Long, java.lang.Long]()
+
+    val kubernetesShuffleManager = if (sc.conf.get(
+        org.apache.spark.internal.config.SHUFFLE_SERVICE_ENABLED)) {
+      val kubernetesExternalShuffleClient = new KubernetesExternalShuffleClient(
+        SparkTransportConf.fromSparkConf(sc.conf, "shuffle"),
+        sc.env.securityManager,
+        sc.env.securityManager.isAuthenticationEnabled(),
+        sc.conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT))
+      Some(new KubernetesExternalShuffleManagerImpl(
+        sc.conf,
+        kubernetesClient,
+        kubernetesExternalShuffleClient))
+    } else None
+
+    val localDirsFeatureStepFactory: KubernetesConf[_ <: KubernetesRoleSpecificConf]
+        => LocalDirsFeatureStep = if (kubernetesShuffleManager.isDefined) {
+      new ExternalShuffleLocalDirsFeatureStep(_)
+    } else {
+      new LocalDirsFeatureStep(_)
+    }
+
+    val kubernetesExecutorBuilder = new KubernetesExecutorBuilder(
+      provideLocalDirsStep = localDirsFeatureStepFactory)
     val executorPodsLifecycleEventHandler = new ExecutorPodsLifecycleManager(
       sc.conf,
-      new KubernetesExecutorBuilder(),
+      kubernetesExecutorBuilder,
       kubernetesClient,
       snapshotsStore,
       removedExecutorsCache)
 
     val executorPodsAllocator = new ExecutorPodsAllocator(
-      sc.conf, new KubernetesExecutorBuilder(), kubernetesClient, snapshotsStore, new SystemClock())
+      sc.conf, kubernetesExecutorBuilder, kubernetesClient, snapshotsStore, new SystemClock())
 
     val podsWatchEventSource = new ExecutorPodsWatchSnapshotSource(
       snapshotsStore,
@@ -107,7 +133,8 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       executorPodsAllocator,
       executorPodsLifecycleEventHandler,
       podsWatchEventSource,
-      podsPollingEventSource)
+      podsPollingEventSource,
+      kubernetesShuffleManager)
   }
 
   override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {

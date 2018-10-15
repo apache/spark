@@ -85,6 +85,7 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
         break;
       case "org.apache.spark.deploy.ExternalShuffleService":
       case "org.apache.spark.deploy.mesos.MesosExternalShuffleService":
+      case "org.apache.spark.deploy.k8s.KubernetesExternalShuffleService":
         javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
         javaOptsKeys.add("SPARK_SHUFFLE_OPTS");
         extraClassPath = getenv("SPARK_DAEMON_CLASSPATH");

@@ -16,12 +16,11 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import java.nio.file.Paths
 import java.util.UUID
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilder, VolumeBuilder, VolumeMountBuilder}
+import io.fabric8.kubernetes.api.model._
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesRoleSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 
 private[spark] class LocalDirsFeatureStep(
@@ -40,10 +39,10 @@ private[spark] class LocalDirsFeatureStep(
     .split(",")
   private val useLocalDirTmpFs = conf.get(KUBERNETES_LOCAL_DIRS_TMPFS)
 
-  override def configurePod(pod: SparkPod): SparkPod = {
+  def getDirVolumesWithMounts(): Seq[(Volume, VolumeMount)] = {
     val localDirVolumes = resolvedLocalDirs
       .zipWithIndex
-      .map { case (localDir, index) =>
+      .map { case (_, index) =>
         new VolumeBuilder()
           .withName(s"spark-local-dir-${index + 1}")
           .withNewEmptyDir()
@@ -59,9 +58,14 @@ private[spark] class LocalDirsFeatureStep(
           .withMountPath(localDirPath)
           .build()
       }
+    localDirVolumes.zip(localDirVolumeMounts)
+  }
+
+  override def configurePod(pod: SparkPod): SparkPod = {
+    val volumesWithMounts = getDirVolumesWithMounts()
     val podWithLocalDirVolumes = new PodBuilder(pod.pod)
       .editSpec()
-        .addToVolumes(localDirVolumes: _*)
+        .addToVolumes(volumesWithMounts.map(_._1): _*)
         .endSpec()
       .build()
     val containerWithLocalDirVolumeMounts = new ContainerBuilder(pod.container)
@@ -69,7 +73,7 @@ private[spark] class LocalDirsFeatureStep(
         .withName("SPARK_LOCAL_DIRS")
         .withValue(resolvedLocalDirs.mkString(","))
         .endEnv()
-      .addToVolumeMounts(localDirVolumeMounts: _*)
+      .addToVolumeMounts(volumesWithMounts.map(_._2): _*)
       .build()
     SparkPod(podWithLocalDirVolumes, containerWithLocalDirVolumeMounts)
   }

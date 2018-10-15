@@ -38,7 +38,7 @@ fi
 
 SPARK_K8S_CMD="$1"
 case "$SPARK_K8S_CMD" in
-    driver | driver-py | driver-r | executor)
+    driver | driver-py | driver-r | executor | shuffle-service)
       shift 1
       ;;
     "")
@@ -123,7 +123,13 @@ case "$SPARK_K8S_CMD" in
       --hostname $SPARK_EXECUTOR_POD_IP
     )
     ;;
-
+  shuffle-service)
+    CMD=(
+      ${JAVA_HOME}/bin/java
+      -cp "$SPARK_CLASSPATH"
+      org.apache.spark.deploy.k8s.KubernetesExternalShuffleService
+    )
+    ;;
   *)
     echo "Unknown command: $SPARK_K8S_CMD" 1>&2
     exit 1

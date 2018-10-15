@@ -95,7 +95,8 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       podAllocator,
       lifecycleEventHandler,
       watchEvents,
-      pollEvents) {
+      pollEvents,
+      None) {
       override def applicationId(): String = TEST_SPARK_APP_ID
     }
   }
