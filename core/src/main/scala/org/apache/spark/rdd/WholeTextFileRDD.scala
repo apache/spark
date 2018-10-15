@@ -30,7 +30,7 @@ import org.apache.spark.input.WholeTextFileInputFormat
  * An RDD that reads a bunch of text files in, and each text file becomes one record.
  */
 private[spark] class WholeTextFileRDD(
-    sc : SparkContext,
+    @transient private val sc: SparkContext,
     inputFormatClass: Class[_ <: WholeTextFileInputFormat],
     keyClass: Class[Text],
     valueClass: Class[Text],
@@ -51,7 +51,7 @@ private[spark] class WholeTextFileRDD(
       case _ =>
     }
     val jobContext = new JobContextImpl(conf, jobId)
-    inputFormat.setMinPartitions(jobContext, minPartitions)
+    inputFormat.setMinPartitions(sc.defaultParallelism, jobContext, minPartitions)
     val rawSplits = inputFormat.getSplits(jobContext).toArray
     val result = new Array[Partition](rawSplits.size)
     for (i <- 0 until rawSplits.size) {

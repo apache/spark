@@ -46,13 +46,15 @@ private[spark] class WholeTextFileInputFormat
 
   /**
    * Allow minPartitions set by end-user in order to keep compatibility with old Hadoop API,
-   * which is set through setMaxSplitSize
+   * which is set through setMaxSplitSize. But when minPartitions is less than defaultParallelism,
+   * it is better to replace minPartitions with defaultParallelism, because this can improve
+   * parallelism.
    */
-  def setMinPartitions(context: JobContext, minPartitions: Int) {
+  def setMinPartitions(defaultParallelism: Int, context: JobContext, minPartitions: Int) {
     val files = listStatus(context).asScala
     val totalLen = files.map(file => if (file.isDirectory) 0L else file.getLen).sum
-    val maxSplitSize = Math.ceil(totalLen * 1.0 /
-      (if (minPartitions == 0) 1 else minPartitions)).toLong
+    val minPartNum = Math.max(defaultParallelism, minPartitions)
+    val maxSplitSize = Math.ceil(totalLen * 1.0 / minPartNum).toLong
 
     // For small files we need to ensure the min split size per node & rack <= maxSplitSize
     val config = context.getConfiguration

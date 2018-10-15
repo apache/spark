@@ -38,7 +38,7 @@ class WholeTextFileInputFormatSuite extends SparkFunSuite with BeforeAndAfterAll
   override def beforeAll() {
     super.beforeAll()
     val conf = new SparkConf()
-    sc = new SparkContext("local", "test", conf)
+    sc = new SparkContext("local[2]", "test", conf)
   }
 
   override def afterAll() {
@@ -79,6 +79,22 @@ class WholeTextFileInputFormatSuite extends SparkFunSuite with BeforeAndAfterAll
       Utils.deleteRecursively(dir)
     }
   }
+
+  test("Test the number of partitions for WholeTextFileRDD") {
+    var dir: File = null
+    try {
+      dir = Utils.createTempDir()
+      WholeTextFileInputFormatSuite.files.foreach { case (filename, contents) =>
+        createNativeFile(dir, filename, contents, true)
+      }
+      // set `minPartitions = 1`
+      val rdd = sc.wholeTextFiles(dir.toString, 1)
+      // The number of partitions is equal to 2, not equal to 1, because the defaultParallelism is 2
+      assert(rdd.getNumPartitions === 2)
+    } finally {
+      Utils.deleteRecursively(dir)
+    }
+  }
 }
 
 /**
@@ -88,7 +104,7 @@ object WholeTextFileInputFormatSuite {
   private val testWords: IndexedSeq[Byte] = "Spark is easy to use.\n".map(_.toByte)
 
   private val fileNames = Array("part-00000", "part-00001", "part-00002")
-  private val fileLengths = Array(10, 100, 1000)
+  private val fileLengths = Array(10, 100, 100)
 
   private val files = fileLengths.zip(fileNames).map { case (upperBound, filename) =>
     filename -> Stream.continually(testWords.toList.toStream).flatten.take(upperBound).toArray
