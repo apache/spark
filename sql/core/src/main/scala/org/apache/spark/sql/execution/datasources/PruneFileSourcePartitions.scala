@@ -55,12 +55,12 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
             a.withName(logicalRelation.output.find(_.semanticEquals(a)).get.name)
           // Replace the nonPartitionOps field with true in the And(partitionOps, nonPartitionOps)
           // to make the partition can be pruned
-          case and @And(left, right) =>
+          case and @ And(left, right) =>
             val leftPartition = left.references.filter(partitionSet.contains(_))
             val rightPartition = right.references.filter(partitionSet.contains(_))
-            if (leftPartition.size == left.references.size && rightPartition.size == 0) {
+            if (leftPartition.size == left.references.size && rightPartition.isEmpty) {
               and.withNewChildren(Seq(left, Literal(true, BooleanType)))
-            } else if (leftPartition.size == 0 && rightPartition.size == right.references.size) {
+            } else if (leftPartition.isEmpty && rightPartition.size == right.references.size) {
               and.withNewChildren(Seq(Literal(true, BooleanType), right))
             } else and
         }
