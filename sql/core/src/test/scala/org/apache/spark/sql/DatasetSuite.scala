@@ -1302,6 +1302,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(dsString, arrayString)
   }
 
+  test("SPARK-18251: the type of Dataset can't be Option of Product type") {
+    checkDataset(Seq(Some(1), None).toDS(), Some(1), None)
+
+    val e = intercept[UnsupportedOperationException] {
+      Seq(Some(1 -> "a"), None).toDS()
+    }
+    assert(e.getMessage.contains("Cannot create encoder for Option of Product type"))
+  }
+
   test ("SPARK-17460: the sizeInBytes in Statistics shouldn't overflow to a negative number") {
     // Since the sizeInBytes in Statistics could exceed the limit of an Int, we should use BigInt
     // instead of Int for avoiding possible overflow.
@@ -1537,41 +1546,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.where($"city".contains(new java.lang.Character('A'))),
       Seq(Row("Amsterdam")))
-  }
-
-  test("SPARK-24762: Enable top-level Option of Product encoders") {
-    val data = Seq(Some((1, "a")), Some((2, "b")), None)
-    val ds = data.toDS()
-
-    checkDataset(
-      ds,
-      data: _*)
-
-    val schema = StructType(Seq(
-      StructField("value", StructType(Seq(
-        StructField("_1", IntegerType, nullable = false),
-        StructField("_2", StringType, nullable = true)
-      )), nullable = true)
-    ))
-
-    assert(ds.schema == schema)
-
-    val nestedOptData = Seq(Some((Some((1, "a")), 2.0)), Some((Some((2, "b")), 3.0)))
-    val nestedDs = nestedOptData.toDS()
-
-    checkDataset(
-      nestedDs,
-      nestedOptData: _*)
-
-    val nestedSchema = StructType(Seq(
-      StructField("value", StructType(Seq(
-        StructField("_1", StructType(Seq(
-          StructField("_1", IntegerType, nullable = false),
-          StructField("_2", StringType, nullable = true)))),
-        StructField("_2", DoubleType, nullable = false)
-      )), nullable = true)
-    ))
-    assert(nestedDs.schema == nestedSchema)
   }
 }
 

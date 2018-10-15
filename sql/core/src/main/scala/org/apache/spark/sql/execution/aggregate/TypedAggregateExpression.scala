@@ -19,103 +19,35 @@ package org.apache.spark.sql.execution.aggregate
 
 import scala.language.existentials
 
-import org.apache.spark.sql.{AnalysisException, Encoder}
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedDeserializer}
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
+import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
-import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, Invoke, NewInstance, WrapOption}
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 object TypedAggregateExpression {
 
-  // Checks if given encoder is for `Option[Product]`.
-  def isOptProductEncoder(encoder: ExpressionEncoder[_]): Boolean = {
-    // For all Option[_] classes, only Option[Product] is reported as not flat.
-    encoder.clsTag.runtimeClass == classOf[Option[_]] && !encoder.flat
-  }
-
-  /**
-   * Flattens serializers and deserializer of given encoder. We only flatten encoder
-   * of `Option[Product]` class.
-   */
-  def flattenOptProductEncoder[T](encoder: ExpressionEncoder[T]): ExpressionEncoder[T] = {
-    val serializer = encoder.serializer
-    val deserializer = encoder.deserializer
-
-    // This is just a sanity check. Encoders of Option[Product] has only one `CreateNamedStruct`
-    // serializer expression.
-    assert(serializer.length == 1,
-      "We only flatten encoder of Option[Product] class which has single serializer.")
-
-    val flattenSerializers = serializer(0).collect {
-      case c: CreateNamedStruct => c.flatten
-    }.head
-
-    val flattenDeserializer = deserializer match {
-      case w @ WrapOption(If(_, _, child: NewInstance), optType) =>
-        val newInstance = child match {
-          case oldNewInstance: NewInstance =>
-            val newArguments = oldNewInstance.arguments.zipWithIndex.map { case (arg, idx) =>
-              arg match {
-                case a @ AssertNotNull(
-                    UpCast(GetStructField(
-                      child @ GetColumnByOrdinal(0, _), _, _), dt, walkedTypePath), _) =>
-                  a.copy(child = UpCast(GetColumnByOrdinal(idx, dt), dt, walkedTypePath.tail))
-              }
-            }
-            oldNewInstance.copy(arguments = newArguments)
-        }
-        w.copy(child = newInstance)
-      case _ =>
-        throw new AnalysisException(
-          "On top of deserializer of Option[Product] should be `WrapOption`.")
-    }
-
-    val newSchema = encoder.schema.fields(0)
-      .dataType.asInstanceOf[StructType]
-    encoder.copy(serializer = flattenSerializers, deserializer = flattenDeserializer,
-      schema = newSchema)
-  }
-
   def apply[BUF : Encoder, OUT : Encoder](
       aggregator: Aggregator[_, BUF, OUT]): TypedAggregateExpression = {
-    val rawBufferEncoder = encoderFor[BUF]
-
-    // When `BUF` or `OUT` is an Option[Product], we need to flatten serializers and deserializer
-    // of original encoder. It is because we wrap serializers of Option[Product] inside an extra
-    // struct in order to support encoding of Option[Product] at top-level row. But here we use
-    // the encoder to encode Option[Product] for a column, we need to get rid of this extra
-    // struct.
-    val bufferEncoder = if (isOptProductEncoder(rawBufferEncoder)) {
-      flattenOptProductEncoder(rawBufferEncoder)
-    } else {
-      rawBufferEncoder
-    }
+    val bufferEncoder = encoderFor[BUF]
     val bufferSerializer = bufferEncoder.namedExpressions
 
-    val rawOutputEncoder = encoderFor[OUT]
-    val outputEncoder = if (isOptProductEncoder(rawOutputEncoder)) {
-      flattenOptProductEncoder(rawOutputEncoder)
-    } else {
-      rawOutputEncoder
-    }
-    val outputType = if (outputEncoder.flat) {
-      outputEncoder.schema.head.dataType
-    } else {
-      outputEncoder.schema
-    }
+    val outputEncoder = encoderFor[OUT]
+    val outputType = outputEncoder.objSerializer.dataType
 
     // Checks if the buffer object is simple, i.e. the buffer encoder is flat and the serializer
     // expression is an alias of `BoundReference`, which means the buffer object doesn't need
     // serialization.
     val isSimpleBuffer = {
       bufferSerializer.head match {
-        case Alias(_: BoundReference, _) if bufferEncoder.flat => true
+        case Alias(_: BoundReference, _)
+          if !bufferEncoder.objSerializer.dataType.isInstanceOf[StructType] => true
         case _ => false
       }
     }
@@ -137,7 +69,7 @@ object TypedAggregateExpression {
         outputEncoder.serializer,
         outputEncoder.deserializer.dataType,
         outputType,
-        !outputEncoder.flat || outputEncoder.schema.head.nullable)
+        outputEncoder.objSerializer.nullable)
     } else {
       ComplexTypedAggregateExpression(
         aggregator.asInstanceOf[Aggregator[Any, Any, Any]],
@@ -148,7 +80,7 @@ object TypedAggregateExpression {
         bufferEncoder.resolveAndBind().deserializer,
         outputEncoder.serializer,
         outputType,
-        !outputEncoder.flat || outputEncoder.schema.head.nullable)
+        outputEncoder.objSerializer.nullable)
     }
   }
 }
