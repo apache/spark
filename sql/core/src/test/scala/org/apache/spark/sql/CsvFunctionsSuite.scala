@@ -31,7 +31,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
     val schema = "a int"
 
     checkAnswer(
-      df.select(from_csv($"value", schema, Map[String, String]().asJava)),
+      df.select(from_csv($"value", lit(schema), Map[String, String]().asJava)),
       Row(Row(1)) :: Nil)
   }
 

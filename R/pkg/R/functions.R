@@ -2223,12 +2223,19 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructType")
 #' schema <- "city STRING, year INT"
 #' head(select(df, from_csv(df$csv, schema)))}
 #' @note from_csv since 3.0.0
-setMethod("from_csv", signature(x = "Column", schema = "character"),
+setMethod("from_csv", signature(x = "Column", schema = "characterOrColumn"),
           function(x, schema, ...) {
+            if (class(schema) == "Column") {
+              jschema <- schema@jc
+            } else if (is.character(schema)) {
+              jschema <- callJStatic("org.apache.spark.sql.functions", "lit", schema)
+            } else {
+              stop("schema argument should be a column or character")
+            }
             options <- varargsToStrEnv(...)
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "from_csv",
-                              x@jc, schema, options)
+                              x@jc, jschema, options)
             column(jc)
           })
 

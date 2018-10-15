@@ -3882,8 +3882,8 @@ object functions {
    * @group collection_funcs
    * @since 3.0.0
    */
-  def from_csv(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
-    withExpr(new CsvToStructs(e.expr, lit(schema).expr, options.asScala.toMap))
+  def from_csv(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
+    withExpr(new CsvToStructs(e.expr, schema.expr, options.asScala.toMap))
   }
 
   // scalastyle:off line.size.limit

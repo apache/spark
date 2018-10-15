@@ -123,7 +123,7 @@ class CSVHeaderChecker(
     // Note: if there are only comments in the first block, the header would probably
     // be not extracted.
     if (options.headerFlag && isStartOfFile) {
-      CSVUtils.extractHeader(lines, options).foreach { header =>
+      CSVExpressionUtils.extractHeader(lines, options).foreach { header =>
         checkHeaderColumnNames(tokenizer.parseLine(header))
       }
     }
