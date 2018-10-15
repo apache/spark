@@ -37,6 +37,8 @@ object MimaExcludes {
   // Exclude rules for 3.0.x
   lazy val v30excludes = v24excludes ++ Seq(
     // [SPARK-16775] Remove deprecated accumulator v1 APIs
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.Accumulable"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.AccumulatorParam"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.Accumulator"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.Accumulator$"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.AccumulableParam"),
