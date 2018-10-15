@@ -383,7 +383,7 @@ object ScalaReflection extends ScalaReflection {
           dataType = ObjectType(udt.getClass))
         Invoke(obj, "deserialize", ObjectType(udt.userClass), path :: Nil)
 
-      case t if definedByConstructorParams(t) && isValueClass(t) =>
+      case t if isValueClass(t) =>
         // nested value class is treated as its underlying type
         // top level value class must be treated as a product
         val underlyingType = getUnderlyingTypeOf(t)
@@ -644,7 +644,7 @@ object ScalaReflection extends ScalaReflection {
           dataType = ObjectType(udt.getClass))
         Invoke(obj, "serialize", udt, inputObject :: Nil)
 
-      case t if definedByConstructorParams(t) && isValueClass(t) =>
+      case t if isValueClass(t) =>
         val (name, underlyingType) = getConstructorParameters(t).head
         val underlyingClsName = getClassNameFromType(underlyingType)
         val clsName = getUnerasedClassNameFromType(t)
@@ -812,18 +812,14 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< definitions.ShortTpe => Schema(ShortType, nullable = false)
       case t if t <:< definitions.ByteTpe => Schema(ByteType, nullable = false)
       case t if t <:< definitions.BooleanTpe => Schema(BooleanType, nullable = false)
+      case t if isValueClass(t) => schemaFor(getUnderlyingTypeOf(t))
       case t if definedByConstructorParams(t) =>
-        if (isValueClass(t)) {
-          schemaFor(getUnderlyingTypeOf(t))
-        }
-        else {
-          val params = getConstructorParameters(t)
-          Schema(StructType(
-            params.map { case (fieldName, fieldType) =>
-              val Schema(dataType, nullable) = schemaFor(fieldType)
-              StructField(fieldName, dataType, nullable)
-            }), nullable = true)
-        }
+        val params = getConstructorParameters(t)
+        Schema(StructType(
+          params.map { case (fieldName, fieldType) =>
+            val Schema(dataType, nullable) = schemaFor(fieldType)
+            StructField(fieldName, dataType, nullable)
+          }), nullable = true)
       case other =>
         throw new UnsupportedOperationException(s"Schema for type $other is not supported")
     }

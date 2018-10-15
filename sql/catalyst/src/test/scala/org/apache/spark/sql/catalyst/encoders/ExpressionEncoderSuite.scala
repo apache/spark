@@ -116,7 +116,11 @@ case class StringWrapper(s: String) extends AnyVal
 case class ValueContainer(
   a: Int,
   b: StringWrapper) // a string column
-case class ComplexValueClassContainer(a: Int, b: ValueContainer)
+class IntWrapper(val i: Int) extends AnyVal // child column doesn't need to be case class
+case class ComplexValueClassContainer(
+  a: Int,
+  b: ValueContainer,
+  c: IntWrapper) // an int column
 
 class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest {
   OuterScopes.addOuterScope(this)
@@ -311,7 +315,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(StringWrapper("a"), "value class string")
   encodeDecodeTest(ValueContainer(1, StringWrapper("b")), "value class nested")
   encodeDecodeTest(
-    ComplexValueClassContainer(1, ValueContainer(2, StringWrapper("b"))),
+    ComplexValueClassContainer(1, ValueContainer(2, StringWrapper("b")), new IntWrapper(3)),
     "value class complex")
 
   encodeDecodeTest(Option(31), "option of int")

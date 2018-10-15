@@ -110,7 +110,7 @@ object TestingUDT {
 }
 
 object TestingValueClass {
-  case class IntWrapper(i: Int) extends AnyVal
+  class IntWrapper(val i: Int) extends AnyVal
   case class StrWrapper(s: String) extends AnyVal
 
   case class ValueClassData(
