@@ -149,30 +149,30 @@ object InMemoryRelation {
       tableName: Option[String],
       logicalPlan: LogicalPlan): InMemoryRelation = {
     val cacheBuilder = CachedRDDBuilder(useCompression, batchSize, storageLevel, child, tableName)()
-    new InMemoryRelation(child.output, cacheBuilder)(
-      statsOfPlanToCache = logicalPlan.stats, outputOrdering = logicalPlan.outputOrdering)
+    new InMemoryRelation(child.output, cacheBuilder, logicalPlan.outputOrdering)(
+      statsOfPlanToCache = logicalPlan.stats)
   }
 
   def apply(cacheBuilder: CachedRDDBuilder, logicalPlan: LogicalPlan): InMemoryRelation = {
-    new InMemoryRelation(cacheBuilder.cachedPlan.output, cacheBuilder)(
-      statsOfPlanToCache = logicalPlan.stats, outputOrdering = logicalPlan.outputOrdering)
+    new InMemoryRelation(cacheBuilder.cachedPlan.output, cacheBuilder, logicalPlan.outputOrdering)(
+      statsOfPlanToCache = logicalPlan.stats)
   }
 }
 
 case class InMemoryRelation(
     output: Seq[Attribute],
-    @transient cacheBuilder: CachedRDDBuilder)(
-    statsOfPlanToCache: Statistics,
-    override val outputOrdering: Seq[SortOrder])
+    @transient cacheBuilder: CachedRDDBuilder,
+    override val outputOrdering: Seq[SortOrder])(
+    statsOfPlanToCache: Statistics)
   extends logical.LeafNode with MultiInstanceRelation {
 
   override protected def innerChildren: Seq[SparkPlan] = Seq(cachedPlan)
 
   override def doCanonicalize(): logical.LogicalPlan =
     copy(output = output.map(QueryPlan.normalizeExprId(_, cachedPlan.output)),
-      cacheBuilder)(
-      statsOfPlanToCache,
-      outputOrdering)
+      cacheBuilder,
+      outputOrdering)(
+      statsOfPlanToCache)
 
   override def producedAttributes: AttributeSet = outputSet
 
@@ -195,18 +195,18 @@ case class InMemoryRelation(
   }
 
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
-    InMemoryRelation(newOutput, cacheBuilder)(statsOfPlanToCache, outputOrdering)
+    InMemoryRelation(newOutput, cacheBuilder, outputOrdering)(statsOfPlanToCache)
   }
 
   override def newInstance(): this.type = {
     new InMemoryRelation(
       output.map(_.newInstance()),
-      cacheBuilder)(
-        statsOfPlanToCache,
-        outputOrdering).asInstanceOf[this.type]
+      cacheBuilder,
+      outputOrdering)(
+        statsOfPlanToCache).asInstanceOf[this.type]
   }
 
-  override protected def otherCopyArgs: Seq[AnyRef] = Seq(statsOfPlanToCache, outputOrdering)
+  override protected def otherCopyArgs: Seq[AnyRef] = Seq(statsOfPlanToCache)
 
   override def simpleString: String =
     s"InMemoryRelation [${Utils.truncatedString(output, ", ")}], ${cacheBuilder.storageLevel}"
