@@ -30,6 +30,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.util.{ByteArrayWritableChannel, LimitedInputStream}
 import org.apache.spark.storage.StorageUtils
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
 /**
@@ -196,11 +197,7 @@ private[spark] object ChunkedByteBuffer {
     val is = new FileInputStream(file)
     ByteStreams.skipFully(is, offset)
     val in = new LimitedInputStream(is, length)
-    // Though in theory you should be able to index into an array of size Int.MaxValue, in practice
-    // jvms don't let you go up to limit.  It seems you may only need - 2, but we leave a little
-    // extra room.
-    val maxArraySize = Int.MaxValue - 512
-    val chunkSize = math.min(maxArraySize, length).toInt
+    val chunkSize = math.min(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH, length).toInt
     val out = new ChunkedByteBufferOutputStream(chunkSize, ByteBuffer.allocate _)
     Utils.tryWithSafeFinally {
       IOUtils.copy(in, out)
