@@ -340,6 +340,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               sessionWindow,
               aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
               rewrittenResultExpressions,
+              conf.streamingSessionWindowMergeSessionInLocalPartition,
               planLater(child))
 
           case None =>

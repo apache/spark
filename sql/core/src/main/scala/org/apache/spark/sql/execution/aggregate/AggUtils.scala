@@ -350,9 +350,10 @@ object AggUtils {
    *
    *  - Partial Aggregation
    *    - all tuples will have aggregated columns with initial value
-   *  - Sort within partition (sort: all keys)
-   *  - SessionWindowStateStoreRestore (group: keys "without" session)
-   *    - This will play as "Partial Merge" in each partition
+   *  - (If "spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition" is enabled)
+   *    - Sort within partition (sort: all keys)
+   *    - MergingSessionExec
+   *      - calculate session among tuples, and aggregate tuples in session with partial merge
    *  - Shuffle & Sort (distribution: keys "without" session, sort: all keys)
    *  - SessionWindowStateStoreRestore (group: keys "without" session)
    *    - merge input tuples with stored tuples (sessions) respecting sort order
@@ -369,6 +370,7 @@ object AggUtils {
       sessionExpression: NamedExpression,
       functionsWithoutDistinct: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
+      mergeSessionsInLocalPartition: Boolean,
       child: SparkPlan): Seq[SparkPlan] = {
 
     val groupWithoutSessionExpression = groupingExpressions.filterNot { p =>
@@ -394,11 +396,12 @@ object AggUtils {
         child = child)
     }
 
-    // sort happens here to merge sessions on each partition
-    // this is to reduce amount of rows to shuffle
-    val partialMerged1: SparkPlan = {
+    val partialMerged1: SparkPlan = if (mergeSessionsInLocalPartition) {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
+
+      // sort happens here to merge sessions on each partition
+      // this is to reduce amount of rows to shuffle
       MergingSessionsExec(
         requiredChildDistributionExpressions = None,
         requiredChildDistributionOption = None,
@@ -411,6 +414,8 @@ object AggUtils {
           aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
         child = partialAggregate
       )
+    } else {
+      partialAggregate
     }
 
     // shuffle & sort happens here: most of details are also handled in this physical plan

@@ -22,6 +22,7 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions.{count, session_window, sum}
+import org.apache.spark.sql.internal.SQLConf
 
 class StreamingSessionWindowSuite extends StreamTest
   with BeforeAndAfter with Matchers with Logging {
@@ -32,7 +33,21 @@ class StreamingSessionWindowSuite extends StreamTest
     sqlContext.streams.active.foreach(_.stop())
   }
 
-  test("complete mode - session window") {
+  def testWithAllOptionsMergingSessionInLocalPartition(name: String, confPairs: (String, String)*)
+                              (func: => Any): Unit = {
+    val key = SQLConf.STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION.key
+    val availableOptions = Seq(true, false)
+
+    for (enabled <- availableOptions) {
+      test(s"$name - merging sessions in local partition: $enabled") {
+        withSQLConf(confPairs ++ Seq(key -> enabled.toString): _*) {
+          func
+        }
+      }
+    }
+  }
+
+  testWithAllOptionsMergingSessionInLocalPartition("complete mode - session window") {
     // Implements StructuredSessionization.scala leveraging "session" function
     // as a test, to verify the sessionization works with simple example
 
@@ -133,7 +148,7 @@ class StreamingSessionWindowSuite extends StreamTest
     )
   }
 
-  test("complete mode - session window - no key") {
+  testWithAllOptionsMergingSessionInLocalPartition("complete mode - session window - no key") {
     // complete mode doesn't honor watermark: even it is specified, watermark will be
     // always Unix timestamp 0
 
@@ -181,7 +196,7 @@ class StreamingSessionWindowSuite extends StreamTest
     )
   }
 
-  test("append mode - session window") {
+  testWithAllOptionsMergingSessionInLocalPartition("append mode - session window") {
     // Implements StructuredSessionization.scala leveraging "session" function
     // as a test, to verify the sessionization works with simple example
 
@@ -281,7 +296,8 @@ class StreamingSessionWindowSuite extends StreamTest
     )
   }
 
-  test("append mode - session window - storing multiple sessions in given key") {
+  testWithAllOptionsMergingSessionInLocalPartition("append mode - session window - " +
+    "storing multiple sessions in given key") {
     val inputData = MemoryStream[Int]
     val windowedAggregation = inputData.toDF()
       .selectExpr("*", "CAST(MOD(value, 2) AS INT) AS valuegroup")
@@ -324,7 +340,7 @@ class StreamingSessionWindowSuite extends StreamTest
     )
   }
 
-  test("append mode - session window - no key") {
+  testWithAllOptionsMergingSessionInLocalPartition("append mode - session window - no key") {
     val inputData = MemoryStream[Int]
 
     val windowedAggregation = inputData.toDF()
@@ -367,7 +383,7 @@ class StreamingSessionWindowSuite extends StreamTest
     )
   }
 
-  test("update mode - session window") {
+  testWithAllOptionsMergingSessionInLocalPartition("update mode - session window") {
     // Implements StructuredSessionization.scala leveraging "session" function
     // as a test, to verify the sessionization works with simple example
 
@@ -466,7 +482,8 @@ class StreamingSessionWindowSuite extends StreamTest
     )
   }
 
-  test("update mode - session window - storing multiple sessions in given key") {
+  testWithAllOptionsMergingSessionInLocalPartition("update mode - session window - " +
+    "storing multiple sessions in given key") {
     val inputData = MemoryStream[Int]
     val windowedAggregation = inputData.toDF()
       .selectExpr("*", "CAST(MOD(value, 2) AS INT) AS valuegroup")
@@ -513,7 +530,7 @@ class StreamingSessionWindowSuite extends StreamTest
     )
   }
 
-  test("update mode - session window - no key") {
+  testWithAllOptionsMergingSessionInLocalPartition("update mode - session window - no key") {
     val inputData = MemoryStream[Int]
 
     val windowedAggregation = inputData.toDF()
