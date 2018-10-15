@@ -302,16 +302,14 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assertCached(spark.table("testData"))
     val rddId = rddIdOf("testData")
     assert(isExpectStorageLevel(rddId, Disk))
-    assert(!isExpectStorageLevel(rddId, Memory))
     spark.catalog.uncacheTable("testData")
   }
 
   test("SQL interface select from table support storageLevel(DISK_ONLY)") {
-    sql("CACHE TABLE testSelect OPTIONS('storageLevel' 'DISK_ONLY') select * from testData")
+    sql("CACHE TABLE testSelect OPTIONS('storageLevel' 'DISK_ONLY') SELECT * FROM testData")
     assertCached(spark.table("testSelect"))
     val rddId = rddIdOf("testSelect")
     assert(isExpectStorageLevel(rddId, Disk))
-    assert(!isExpectStorageLevel(rddId, Memory))
     spark.catalog.uncacheTable("testSelect")
   }
 
@@ -320,7 +318,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assertCached(spark.table("testData"))
     val rddId = rddIdOf("testData")
     assert(isExpectStorageLevel(rddId, Disk))
-    assert(!isExpectStorageLevel(rddId, Memory))
     spark.catalog.uncacheTable("testData")
   }
 
@@ -328,7 +325,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     sql("CACHE TABLE testData OPTIONS('storageLevel' 'MEMORY_ONLY')")
     assertCached(spark.table("testData"))
     val rddId = rddIdOf("testData")
-    assert(!isExpectStorageLevel(rddId, Disk))
     assert(isExpectStorageLevel(rddId, Memory))
   }
 
