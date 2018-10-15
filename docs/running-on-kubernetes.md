@@ -426,6 +426,23 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.shuffle.namespace</code></td>
+  <td><code>default</code></td>
+  <td>
+    Namespace in which the shuffle service pods are present.
+    The shuffle service must be created in the cluster prior to attempts to use it.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.shuffle.labels</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Labels that will be used to look up shuffle service pods.
+    This should be a comma-separated list of label key-value pairs, where each label is in the format key=value.
+    The labels chosen must be such that they match exactly one shuffle service pod on each node that executors are launched.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.container.image.pullPolicy</code></td>
   <td><code>IfNotPresent</code></td>
   <td>

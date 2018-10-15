@@ -34,13 +34,13 @@ private[spark] trait KubernetesExternalShuffleManager {
   def stop(): Unit
 
   /**
-    * Returns the properties that should be applied for this executor pod, given that
-    * this executor will need to communicate with an external shuffle service.
-    *
-    * In practice, this seq will always have a size of 1, but since this method's semantics are that
-    * the returned values are key-value pairs to apply as properties, it is clearer to express
-    * this as a collection.
-    */
+   * Returns the properties that should be applied for this executor pod, given that
+   * this executor will need to communicate with an external shuffle service.
+   *
+   * In practice, this seq will always have a size of 1, but since this method's semantics are that
+   * the returned values are key-value pairs to apply as properties, it is clearer to express
+   * this as a collection.
+   */
   def getShuffleServiceConfigurationForExecutor(executorPod: Pod): Seq[(String, String)]
 }
 
