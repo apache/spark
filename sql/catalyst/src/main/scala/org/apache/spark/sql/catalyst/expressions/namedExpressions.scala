@@ -405,6 +405,8 @@ case class PartitioningAttribute(
   override def withName(newName: String): Attribute = throw new UnsupportedOperationException
   override def withMetadata(newMetadata: Metadata): Attribute =
     throw new UnsupportedOperationException
+
+  override lazy val canonicalized: Expression = this.copy(exprId = ExprId(0))
 }
 
 object VirtualColumn {

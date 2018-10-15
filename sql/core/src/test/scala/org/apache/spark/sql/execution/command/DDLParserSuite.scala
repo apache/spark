@@ -873,9 +873,9 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     val expected2_table = expected1_table.copy(ifExists = false)
     val expected1_purge = expected1_table.copy(purge = true)
 
-    comparePlans(parsed1_table, expected1_table)
-    comparePlans(parsed2_table, expected2_table)
-    comparePlans(parsed1_purge, expected1_purge)
+    comparePlans(parsed1_table.canonicalized, expected1_table.canonicalized)
+    comparePlans(parsed2_table.canonicalized, expected2_table.canonicalized)
+    comparePlans(parsed1_purge.canonicalized, expected1_purge.canonicalized)
 
     // SPARK-23866: Support any comparison operator in ALTER TABLE ... DROP PARTITION
     Seq((">", (a: Expression, b: Expression) => a > b),
@@ -895,7 +895,7 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
           ifExists = true,
           purge = false,
           retainData = false)
-        comparePlans(genPlan, expectedPlan)
+        comparePlans(genPlan.canonicalized, expectedPlan.canonicalized)
     }
 
     // SPARK-23866: <=> is not supported
