@@ -2696,7 +2696,6 @@ def from_csv(col, schema, options={}):
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(from_csv(df.value, "a INT").alias("csv")).collect()
     [Row(csv=Row(a=1))]
-    >>> data = [(1, '1')]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(from_csv(df.value, lit("a INT")).alias("csv")).collect()
     [Row(csv=Row(a=1))]
