@@ -25,9 +25,12 @@ import warnings
 if sys.version < "3":
     from itertools import imap as map
 
+if sys.version >= '3':
+    basestring = str
+
 from pyspark import since, SparkContext
 from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
-from pyspark.sql.column import Column, _to_java_column, _to_seq
+from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import StringType, DataType
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
@@ -2693,9 +2696,20 @@ def from_csv(col, schema, options={}):
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(from_csv(df.value, "a INT").alias("csv")).collect()
     [Row(csv=Row(a=1))]
+    >>> data = [(1, '1')]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(from_csv(df.value, lit("a INT")).alias("csv")).collect()
+    [Row(csv=Row(a=1))]
     """
 
     sc = SparkContext._active_spark_context
+    if isinstance(schema, basestring):
+        schema = _create_column_from_literal(schema)
+    elif isinstance(schema, Column):
+        schema = _to_java_column(schema)
+    else:
+        raise TypeError("schema argument should be a column or string")
+
     jc = sc._jvm.functions.from_csv(_to_java_column(col), schema, options)
     return Column(jc)
 
