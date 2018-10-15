@@ -386,12 +386,13 @@ case class OuterReference(e: NamedExpression)
  * A place holder used to hold the name of the partition attributes specified when running commands
  * involving partitions, eg. ALTER TABLE ... DROP PARTITIONS.
  */
-case class PartitioningAttribute(name: String)
+case class PartitioningAttribute(
+    name: String,
+    override val exprId: ExprId = NamedExpression.newExprId)
   extends Attribute with Unevaluable {
-  override val exprId: ExprId = NamedExpression.newExprId
-  // Not really needed and used. We just need a dataType to be used during analysis for resolving
-  // the expressions. The String type is used because all the literals in PARTITION operations are
-  // parsed as strings and eventually casted later.
+  // We need a dataType to be used during analysis for resolving the expressions (see
+  // checkInputDataTypes). The String type is used because all the literals in PARTITION operations
+  // are parsed as strings and eventually casted later.
   override def dataType: DataType = StringType
   override def nullable: Boolean = false
 
