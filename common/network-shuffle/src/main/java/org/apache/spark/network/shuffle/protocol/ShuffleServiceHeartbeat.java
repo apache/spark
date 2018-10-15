@@ -24,7 +24,8 @@ import org.apache.spark.network.protocol.Encoders;
 import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
 
 /**
- * A heartbeat sent from the driver to the MesosExternalShuffleService and KubernetesExternalShuffleService.
+ * A heartbeat sent from the driver to the MesosExternalShuffleService and
+ * KubernetesExternalShuffleService.
  */
 public class ShuffleServiceHeartbeat extends BlockTransferMessage {
   private final String appId;
