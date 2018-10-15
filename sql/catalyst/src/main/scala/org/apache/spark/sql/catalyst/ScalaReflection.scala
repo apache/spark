@@ -388,7 +388,7 @@ object ScalaReflection extends ScalaReflection {
         // top level value class must be treated as a product
         val underlyingType = getUnderlyingTypeOf(t)
         val underlyingClsName = getClassNameFromType(underlyingType)
-        val clsName = t.typeSymbol.asClass.fullName
+        val clsName = getUnerasedClassNameFromType(t)
         val newTypePath = s"""- Scala value class: $clsName($underlyingClsName)""" +:
           walkedTypePath
 
@@ -647,7 +647,7 @@ object ScalaReflection extends ScalaReflection {
       case t if definedByConstructorParams(t) && isValueClass(t) =>
         val (name, underlyingType) = getConstructorParameters(t).head
         val underlyingClsName = getClassNameFromType(underlyingType)
-        val clsName = t.typeSymbol.asClass.fullName
+        val clsName = getUnerasedClassNameFromType(t)
         val newPath = s"""- Scala value class: $clsName($underlyingClsName)""" +: walkedTypePath
         val getArg = Invoke(inputObject, name, dataTypeFor(underlyingType))
         serializerFor(getArg, underlyingType, newPath)
@@ -972,6 +972,13 @@ trait ScalaReflection extends Logging {
    */
   def getClassNameFromType(tpe: `Type`): String = {
     tpe.dealias.erasure.typeSymbol.asClass.fullName
+  }
+
+  /**
+   * Same as `getClassNameFromType` but returns the class name before erasure.
+   */
+  def getUnerasedClassNameFromType(tpe: `Type`): String = {
+    tpe.dealias.typeSymbol.asClass.fullName
   }
 
   /**
