@@ -250,22 +250,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
             source,
             df.sparkSession.sessionState.conf)
           val options = sessionOptions ++ extraOptions
-          val relation = DataSourceV2Relation.create(source, options)
 
-          if (mode == SaveMode.Append) {
+          val writer = ws.createWriter(
+            UUID.randomUUID.toString, df.logicalPlan.output.toStructType, mode,
+            new DataSourceOptions(options.asJava))
+
+          if (writer.isPresent) {
             runCommand(df.sparkSession, "save") {
-              AppendData.byName(relation, df.logicalPlan)
-            }
-
-          } else {
-            val writer = ws.createWriter(
-              UUID.randomUUID.toString, df.logicalPlan.output.toStructType, mode,
-              new DataSourceOptions(options.asJava))
-
-            if (writer.isPresent) {
-              runCommand(df.sparkSession, "save") {
-                WriteToDataSourceV2(writer.get, df.logicalPlan)
-              }
+              WriteToDataSourceV2(writer.get, df.logicalPlan)
             }
           }
 

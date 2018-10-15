@@ -43,12 +43,12 @@ class SimpleWritableDataSource extends DataSourceV2
   with WriteSupport
   with SessionConfigSupport {
 
-  private val schema = new StructType().add("i", "long").add("j", "long")
+  protected def fullSchema() = new StructType().add("i", "long").add("j", "long")
 
   override def keyPrefix: String = "simpleWritableDataSource"
 
   class Reader(path: String, conf: Configuration) extends DataSourceReader {
-    override def readSchema(): StructType = schema
+    override def readSchema(): StructType = SimpleWritableDataSource.this.fullSchema()
 
     override def planInputPartitions(): JList[InputPartition[InternalRow]] = {
       val dataPath = new Path(path)
@@ -113,7 +113,6 @@ class SimpleWritableDataSource extends DataSourceV2
       schema: StructType,
       mode: SaveMode,
       options: DataSourceOptions): Optional[DataSourceWriter] = {
-    assert(DataType.equalsStructurally(schema.asNullable, this.schema.asNullable))
     assert(!SparkContext.getActive.get.conf.getBoolean("spark.speculation", false))
 
     val path = new Path(options.get("path").get())
