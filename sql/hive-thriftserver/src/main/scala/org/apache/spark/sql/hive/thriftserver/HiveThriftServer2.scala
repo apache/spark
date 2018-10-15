@@ -74,6 +74,7 @@ object HiveThriftServer2 extends Logging {
     // If the arguments contains "-h" or "--help", print out the usage and exit.
     if (args.contains("-h") || args.contains("--help")) {
       HiveServer2.main(args)
+      // The following code should not be reachable. It is added to ensure the main function exits.
       System.exit(0)
     }
 
