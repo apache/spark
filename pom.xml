@@ -3001,7 +3001,7 @@
     <profile>
       <id>hadoop-palantir</id>
       <properties>
-        <hadoop.version>2.9.1-palantir.6</hadoop.version>
+        <hadoop.version>2.9.1-palantir.11</hadoop.version>
         <curator.version>2.7.1</curator.version>
       </properties>
       <dependencyManagement>
