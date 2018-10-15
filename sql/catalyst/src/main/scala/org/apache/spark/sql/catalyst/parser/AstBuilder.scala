@@ -394,6 +394,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       Filter(expression(ctx), plan)
     }
 
+    def withHaving(ctx: BooleanExpressionContext, plan: LogicalPlan): LogicalPlan = {
+      // Note that we add a cast to non-predicate expressions. If the expression itself is
+      // already boolean, the optimizer will get rid of the unnecessary cast.
+      val predicate = expression(ctx) match {
+        case p: Predicate => p
+        case e => Cast(e, BooleanType)
+      }
+      Filter(predicate, plan)
+    }
+
+
     // Expressions.
     val expressions = Option(namedExpressionSeq).toSeq
       .flatMap(_.namedExpression.asScala)
@@ -446,30 +457,34 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           case e: NamedExpression => e
           case e: Expression => UnresolvedAlias(e)
         }
-        val withProject = if (aggregation != null) {
-          withAggregation(aggregation, namedExpressions, withFilter)
-        } else if (namedExpressions.nonEmpty) {
+
+        def createProject() = if (namedExpressions.nonEmpty) {
           Project(namedExpressions, withFilter)
         } else {
           withFilter
         }
 
-        // Having
-        val withHaving = withProject.optional(having) {
-          // Note that we add a cast to non-predicate expressions. If the expression itself is
-          // already boolean, the optimizer will get rid of the unnecessary cast.
-          val predicate = expression(having) match {
-            case p: Predicate => p
-            case e => Cast(e, BooleanType)
+        val withProject = if (aggregation == null && having != null) {
+          if (conf.getConf(SQLConf.LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE)) {
+            // If the legacy conf is set, treat HAVING without GROUP BY as WHERE.
+            withHaving(having, createProject())
+          } else {
+            // According to SQL standard, HAVING without GROUP BY means global aggregate.
+            withHaving(having, Aggregate(Nil, namedExpressions, withFilter))
           }
-          Filter(predicate, withProject)
+        } else if (aggregation != null) {
+          val aggregate = withAggregation(aggregation, namedExpressions, withFilter)
+          aggregate.optionalMap(having)(withHaving)
+        } else {
+          // When hitting this branch, `having` must be null.
+          createProject()
         }
 
         // Distinct
         val withDistinct = if (setQuantifier() != null && setQuantifier().DISTINCT() != null) {
-          Distinct(withHaving)
+          Distinct(withProject)
         } else {
-          withHaving
+          withProject
         }
 
         // Window
