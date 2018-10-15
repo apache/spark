@@ -110,7 +110,7 @@ private[spark] object AccumulatorSuite {
   }
 
   /**
-   * Make an `AccumulableInfo` out of an [[AccumulatorV2]] with the intent to use the
+   * Make an `AccumulableInfo` out of an `AccumulatorV2` with the intent to use the
    * info as an accumulator update.
    */
   def makeInfo(a: AccumulatorV2[_, _]): AccumulableInfo = a.toInfo(Some(a.value), None)
