@@ -1756,4 +1756,14 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(ArrayIntersect(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(ArrayIntersect(a23, a24).dataType.asInstanceOf[ArrayType].containsNull === true)
   }
+
+  test("Array Intersect") {
+    val empty = Literal.create(Seq.empty[Int], ArrayType(IntegerType, false))
+    val oneNull = Literal.create(Seq(null), ArrayType(IntegerType))
+    val twoNulls = Literal.create(Seq(null, null), ArrayType(IntegerType))
+
+    checkEvaluation(ArrayIntersect(oneNull, oneNull), Seq(null))
+    checkEvaluation(ArrayIntersect(twoNulls, twoNulls), Seq(null))
+
+  }
 }
