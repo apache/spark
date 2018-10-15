@@ -77,7 +77,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       Map.empty,
       DRIVER_ENVS,
       Nil,
-      Seq.empty[String])
+      Seq.empty[String],
+      hadoopConfSpec = None)
 
     val featureStep = new BasicDriverFeatureStep(kubernetesConf)
     val basePod = SparkPod.initialPod()
@@ -139,7 +140,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(CONTAINER_IMAGE, "spark-driver:latest")
     val pythonSparkConf = new SparkConf()
       .set(org.apache.spark.internal.config.DRIVER_MEMORY.key, "4g")
-      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(CONTAINER_IMAGE, "spark-driver-py:latest")
     val javaKubernetesConf = KubernetesConf(
       javaSparkConf,
       KubernetesDriverSpecificConf(
@@ -155,7 +156,9 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       Map.empty,
       DRIVER_ENVS,
       Nil,
-      Seq.empty[String])
+      Seq.empty[String],
+      hadoopConfSpec = None)
+
     val pythonKubernetesConf = KubernetesConf(
       pythonSparkConf,
       KubernetesDriverSpecificConf(
@@ -171,12 +174,15 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       Map.empty,
       DRIVER_ENVS,
       Nil,
-      Seq.empty[String])
+      Seq.empty[String],
+      hadoopConfSpec = None)
     val javaFeatureStep = new BasicDriverFeatureStep(javaKubernetesConf)
     val pythonFeatureStep = new BasicDriverFeatureStep(pythonKubernetesConf)
     val basePod = SparkPod.initialPod()
     val configuredJavaPod = javaFeatureStep.configurePod(basePod)
     val configuredPythonPod = pythonFeatureStep.configurePod(basePod)
+    assert(configuredJavaPod.container.getImage === "spark-driver:latest")
+    assert(configuredPythonPod.container.getImage === "spark-driver-py:latest")
   }
 
   test("Additional system properties resolve jars and set cluster-mode confs.") {
@@ -198,7 +204,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       Map.empty,
       DRIVER_ENVS,
       Nil,
-      allFiles)
+      allFiles,
+      hadoopConfSpec = None)
 
     val step = new BasicDriverFeatureStep(kubernetesConf)
     val additionalProperties = step.getAdditionalPodSystemProperties()
