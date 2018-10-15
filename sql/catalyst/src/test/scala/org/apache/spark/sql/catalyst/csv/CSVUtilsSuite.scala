@@ -21,40 +21,40 @@ import org.apache.spark.SparkFunSuite
 
 class CSVExpressionUtilsSuite extends SparkFunSuite {
   test("Can parse escaped characters") {
-    assert(CSVExpressionUtils.toChar("""\t""") === '\t')
-    assert(CSVExpressionUtils.toChar("""\r""") === '\r')
-    assert(CSVExpressionUtils.toChar("""\b""") === '\b')
-    assert(CSVExpressionUtils.toChar("""\f""") === '\f')
-    assert(CSVExpressionUtils.toChar("""\"""") === '\"')
-    assert(CSVExpressionUtils.toChar("""\'""") === '\'')
-    assert(CSVExpressionUtils.toChar("""\u0000""") === '\u0000')
-    assert(CSVExpressionUtils.toChar("""\\""") === '\\')
+    assert(CSVExprUtils.toChar("""\t""") === '\t')
+    assert(CSVExprUtils.toChar("""\r""") === '\r')
+    assert(CSVExprUtils.toChar("""\b""") === '\b')
+    assert(CSVExprUtils.toChar("""\f""") === '\f')
+    assert(CSVExprUtils.toChar("""\"""") === '\"')
+    assert(CSVExprUtils.toChar("""\'""") === '\'')
+    assert(CSVExprUtils.toChar("""\u0000""") === '\u0000')
+    assert(CSVExprUtils.toChar("""\\""") === '\\')
   }
 
   test("Does not accept delimiter larger than one character") {
     val exception = intercept[IllegalArgumentException]{
-      CSVExpressionUtils.toChar("ab")
+      CSVExprUtils.toChar("ab")
     }
     assert(exception.getMessage.contains("cannot be more than one character"))
   }
 
   test("Throws exception for unsupported escaped characters") {
     val exception = intercept[IllegalArgumentException]{
-      CSVExpressionUtils.toChar("""\1""")
+      CSVExprUtils.toChar("""\1""")
     }
     assert(exception.getMessage.contains("Unsupported special character for delimiter"))
   }
 
   test("string with one backward slash is prohibited") {
     val exception = intercept[IllegalArgumentException]{
-      CSVExpressionUtils.toChar("""\""")
+      CSVExprUtils.toChar("""\""")
     }
     assert(exception.getMessage.contains("Single backslash is prohibited"))
   }
 
   test("output proper error message for empty string") {
     val exception = intercept[IllegalArgumentException]{
-      CSVExpressionUtils.toChar("")
+      CSVExprUtils.toChar("")
     }
     assert(exception.getMessage.contains("Delimiter cannot be empty string"))
   }

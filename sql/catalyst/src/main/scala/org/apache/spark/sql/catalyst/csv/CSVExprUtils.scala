@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.csv
 
-object CSVExpressionUtils {
+object CSVExprUtils {
   /**
    * Filter ignorable rows for CSV iterator (lines empty and starting with `comment`).
    * This is currently being used in CSV reading path and CSV schema inference.

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.catalyst.csv.CSVExpressionUtils
+import org.apache.spark.sql.catalyst.csv.CSVExprUtils
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.functions._
 
@@ -128,5 +128,5 @@ object CSVUtils {
   }
 
   def filterCommentAndEmpty(iter: Iterator[String], options: CSVOptions): Iterator[String] =
-    CSVExpressionUtils.filterCommentAndEmpty(iter, options)
+    CSVExprUtils.filterCommentAndEmpty(iter, options)
 }

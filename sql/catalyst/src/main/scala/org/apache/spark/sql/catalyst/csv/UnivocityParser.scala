@@ -338,7 +338,7 @@ private[sql] object UnivocityParser {
 
     val options = parser.options
 
-    val filteredLines: Iterator[String] = CSVExpressionUtils.filterCommentAndEmpty(lines, options)
+    val filteredLines: Iterator[String] = CSVExprUtils.filterCommentAndEmpty(lines, options)
 
     val safeParser = new FailureSafeParser[String](
       input => Seq(parser.parse(input)),
