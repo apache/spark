@@ -1369,14 +1369,21 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   }
 
   test("SPARK-20144: Keep partition order if allowReordering=false.") {
-    withSQLConf(
-      "spark.sql.files.allowReordering" -> "false"
-    )(withTempPath { path =>
-      val df = spark.range(10).map(_.toString).toDF
-      df.write.csv(path.getAbsolutePath)
-      val readback = spark.read.csv(path.getCanonicalPath)
-      assert(readback.collect.toSeq == df.collect.toSeq)
-    })
+    withTempPath { path =>
+      val data = List("one", "2", "three", "four")
+      data.toDF.write.csv(path.getAbsolutePath)
+      withSQLConf("spark.sql.files.allowReordering" -> "false") {
+        // The original order. Useful for reading data that has been sorted before writing, or where
+        // the order matters for some other reason.
+        val readback = spark.read.csv(path.getCanonicalPath).collect.map(_.getString(0)).toList
+        assert(readback == data)
+      }
+      withSQLConf("spark.sql.files.allowReordering" -> "true") {
+        // Ordered by file size. Better performance for cases where the order does not matter.
+        val readback = spark.read.csv(path.getCanonicalPath).collect.map(_.getString(0)).toList
+        assert(readback == List("three", "four", "one", "2"))
+      }
+    }
   }
 
   test("SPARK-23846: usage of samplingRatio while parsing a dataset of strings") {
