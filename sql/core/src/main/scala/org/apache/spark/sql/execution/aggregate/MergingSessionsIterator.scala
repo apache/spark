@@ -220,6 +220,7 @@ class MergingSessionsIterator(
   }
 
   private def generateGroupingKey(): UnsafeRow = {
+    // FIXME: Convert to JoinRow if possible to reduce codegen for unsafe projection
     val sessionStruct = CreateNamedStruct(
       Literal("start") ::
         PreciseTimestampConversion(

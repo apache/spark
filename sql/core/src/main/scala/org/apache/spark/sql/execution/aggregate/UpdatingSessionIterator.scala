@@ -39,6 +39,10 @@ class UpdatingSessionIterator(
   val valuesExpressions: Seq[Attribute] = inputSchema.diff(groupWithoutSessionExpressions)
     .diff(Seq(sessionExpression))
 
+  val keysProjection = GenerateUnsafeProjection.generate(groupWithoutSessionExpressions,
+    inputSchema)
+  val sessionProjection = GenerateUnsafeProjection.generate(Seq(sessionExpression), inputSchema)
+
   var currentKeys: InternalRow = _
   var currentSessionStart: Long = Long.MaxValue
   var currentSessionEnd: Long = Long.MinValue
@@ -81,12 +85,8 @@ class UpdatingSessionIterator(
       // without this, multiple rows in same key will be returned with same content
       val row = iter.next().copy()
 
-      val keysProjection = GenerateUnsafeProjection.generate(groupWithoutSessionExpressions,
-        inputSchema)
-      val sessionProjection = GenerateUnsafeProjection.generate(Seq(sessionExpression), inputSchema)
-
-      val keys = keysProjection(row)
-      val session = sessionProjection(row)
+      val keys = keysProjection(row).copy()
+      val session = sessionProjection(row).copy()
       val sessionRow = session.getStruct(0, 2)
       val sessionStart = sessionRow.getLong(0)
       val sessionEnd = sessionRow.getLong(1)
@@ -150,6 +150,7 @@ class UpdatingSessionIterator(
   }
 
   private def closeCurrentSession(keyChanged: Boolean): Unit = {
+    // FIXME: Convert to JoinRow if possible to reduce codegen for unsafe projection
     val sessionStruct = CreateNamedStruct(
       Literal("start") ::
         PreciseTimestampConversion(
@@ -176,6 +177,7 @@ class UpdatingSessionIterator(
       inMemoryThreshold, spillThreshold)
 
     val currentRowsIter = returnRows.generateIterator().map { internalRow =>
+      // FIXME: is there any way to change this?
       val proj = UnsafeProjection.create(newSchemaExpressions, inputSchema)
       proj(internalRow)
     }

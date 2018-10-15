@@ -30,17 +30,17 @@ class MergingSortWithMultiValuesStateIterator(
     sessionExpression: Expression,
     inputSchema: Seq[Attribute]) extends Iterator[InternalRow] {
 
+  val keysProjection = GenerateUnsafeProjection.generate(groupWithoutSessionExpressions,
+    inputSchema)
+  val sessionProjection = GenerateUnsafeProjection.generate(Seq(sessionExpression), inputSchema)
+
   private case class SessionRowInformation(keys: UnsafeRow, sessionStart: Long, sessionEnd: Long,
                                            row: InternalRow)
 
   private object SessionRowInformation {
     def of(row: InternalRow): SessionRowInformation = {
-      val keysProjection = GenerateUnsafeProjection.generate(groupWithoutSessionExpressions,
-        inputSchema)
-      val sessionProjection = GenerateUnsafeProjection.generate(Seq(sessionExpression), inputSchema)
-
-      val keys = keysProjection(row)
-      val session = sessionProjection(row)
+      val keys = keysProjection(row).copy()
+      val session = sessionProjection(row).copy()
       val sessionRow = session.getStruct(0, 2)
       val sessionStart = sessionRow.getLong(0)
       val sessionEnd = sessionRow.getLong(1)
