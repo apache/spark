@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BindReferences, CreateNamedStruct, Expression, GenericInternalRow, Literal, MutableProjection, NamedExpression, PreciseTimestampConversion, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BindReferences, CreateNamedStruct, Expression, GenericInternalRow, JoinedRow, Literal, MutableProjection, NamedExpression, PreciseTimestampConversion, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -219,8 +219,12 @@ class MergingSessionsIterator(
     }
   }
 
+  private val join = new JoinedRow
+
+  private val groupingKeyProj = GenerateUnsafeProjection.generate(groupingExpressions,
+    groupingWithoutSessionAttributes :+ sessionExpression.toAttribute)
+
   private def generateGroupingKey(): UnsafeRow = {
-    // FIXME: Convert to JoinRow if possible to reduce codegen for unsafe projection
     val sessionStruct = CreateNamedStruct(
       Literal("start") ::
         PreciseTimestampConversion(
@@ -230,17 +234,10 @@ class MergingSessionsIterator(
           Literal(currentSessionEnd, LongType), LongType, TimestampType) ::
         Nil)
 
-    val convertedGroupingExpressions = groupingExpressions.map { x =>
-      if (x.semanticEquals(sessionExpression)) {
-        sessionStruct
-      } else {
-        BindReferences.bindReference[Expression](x, groupingWithoutSessionAttributes)
-      }
-    }
+    val joined = join(currentGroupingKey,
+      UnsafeProjection.create(sessionStruct).apply(InternalRow.empty))
 
-    val proj = GenerateUnsafeProjection.generate(convertedGroupingExpressions,
-      groupingWithoutSessionAttributes)
-    proj(currentGroupingKey)
+    groupingKeyProj(joined)
   }
 
   def outputForEmptyGroupingKeyWithoutInput(): UnsafeRow = {

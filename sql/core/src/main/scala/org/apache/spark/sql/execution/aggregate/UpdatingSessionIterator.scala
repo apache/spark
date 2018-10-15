@@ -151,6 +151,7 @@ class UpdatingSessionIterator(
 
   private def closeCurrentSession(keyChanged: Boolean): Unit = {
     // FIXME: Convert to JoinRow if possible to reduce codegen for unsafe projection
+    // FIXME: Same approach on MergingSessionsIterator.generateGroupingKey doesn't work here, why?
     val sessionStruct = CreateNamedStruct(
       Literal("start") ::
         PreciseTimestampConversion(
