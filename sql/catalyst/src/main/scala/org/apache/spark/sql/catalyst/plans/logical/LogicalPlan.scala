@@ -152,10 +152,10 @@ abstract class UnaryNode extends LogicalPlan {
   override final def children: Seq[LogicalPlan] = child :: Nil
 
   /**
-   * Generates an additional set of aliased constraints by replacing the original constraint
-   * expressions with the corresponding alias
+   * Generates all valid constraints including an set of aliased constraints by replacing the
+   * original constraint expressions with the corresponding alias
    */
-  protected def getAliasedConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
+  protected def getAllValidConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
     var allConstraints = child.constraints.asInstanceOf[Set[Expression]]
     projectList.foreach {
       case a @ Alias(l: Literal, _) =>
@@ -170,7 +170,7 @@ abstract class UnaryNode extends LogicalPlan {
       case _ => // Don't change.
     }
 
-    allConstraints -- child.constraints
+    allConstraints
   }
 
   override protected def validConstraints: Set[Expression] = child.constraints
