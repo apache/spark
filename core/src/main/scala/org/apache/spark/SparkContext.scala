@@ -206,8 +206,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _applicationId: String = _
   private var _applicationAttemptId: Option[String] = None
   private var _eventLogger: Option[EventLoggingListener] = None
-  // Visible for testing
-  private[spark] var _driverLogger: Option[DriverLogger] = None
+  private var _driverLogger: Option[DriverLogger] = None
   private var _executorAllocationManager: Option[ExecutorAllocationManager] = None
   private var _cleaner: Option[ContextCleaner] = None
   private var _listenerBusStarted: Boolean = false

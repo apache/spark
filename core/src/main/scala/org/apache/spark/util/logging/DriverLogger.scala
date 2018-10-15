@@ -43,8 +43,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 
   private var localLogFile: String = FileUtils.getFile(
     Utils.getLocalDir(conf), "driver_logs", DRIVER_LOG_FILE).getAbsolutePath()
-  // Visible for testing
-  private[spark] var writer: Option[DfsAsyncWriter] = None
+  private var writer: Option[DfsAsyncWriter] = None
 
   addLogAppender()
 
@@ -76,7 +75,9 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 
   def stop(): Unit = {
     try {
+      val fa = LogManager.getRootLogger.getAppender(DriverLogger.APPENDER_NAME)
       LogManager.getRootLogger().removeAppender(DriverLogger.APPENDER_NAME)
+      Utils.tryLogNonFatalError(fa.close())
       writer.foreach(_.closeWriter())
     } catch {
       case e: Exception =>
@@ -94,7 +95,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
     private var streamClosed = false
     private val fileSystem: FileSystem = FileSystem.get(hadoopConf)
     private val dfsLogFile: String = {
-      val rootDir = conf.get(DRIVER_LOG_DFS_DIR).get.split(",").head
+      val rootDir = conf.get(DRIVER_LOG_DFS_DIR).get
       if (!fileSystem.exists(new Path(rootDir))) {
         throw new RuntimeException(s"${rootDir} does not exist." +
           s" Please create this dir in order to sync driver logs")
@@ -140,7 +141,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       }
     }
 
-    def close(): Unit = {
+    private def close(): Unit = {
       if (streamClosed) {
         return
       }
@@ -180,7 +181,7 @@ private[spark] object DriverLogger extends Logging {
 
   def apply(conf: SparkConf): Option[DriverLogger] = {
     if (conf.get(DRIVER_LOG_SYNCTODFS)
-      && conf.get(DRIVER_LOG_DFS_DIR).isDefined
+        && conf.get(DRIVER_LOG_DFS_DIR).isDefined
       && Utils.isClientMode(conf)) {
       Try[DriverLogger] { new DriverLogger(conf) }
         .recoverWith {

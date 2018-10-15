@@ -42,8 +42,12 @@ import org.fusesource.leveldbjni.internal.NativeDB
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+<<<<<<< HEAD
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Status._
+=======
+import org.apache.spark.internal.config.DRIVER_LOG_DFS_DIR
+>>>>>>> Review Comments: Minor refactoring
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
@@ -97,7 +101,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val UPDATE_INTERVAL_S = conf.getTimeAsSeconds("spark.history.fs.update.interval", "10s")
 
   // Interval between each cleaner checks for event logs to delete
-  private val CLEAN_INTERVAL_S = conf.getTimeAsSeconds("spark.history.fs.cleaner.interval", "1d")
+  private val CLEAN_INTERVAL_S = conf.get(CLEANER_INTERVAL_S)
 
   // Number of threads used to replay event logs.
   private val NUM_PROCESSING_THREADS = conf.getInt(SPARK_HISTORY_FS_NUM_REPLAY_THREADS,
@@ -116,8 +120,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   // Visible for testing
   private[history] val fs: FileSystem = new Path(logDir).getFileSystem(hadoopConf)
 
-  private[history] val driverLogFs: Option[FileSystem] =
-    if (conf.getOption("spark.driver.log.dfsDir").isDefined) {
+  private val driverLogFs: Option[FileSystem] =
+    if (conf.get(DRIVER_LOG_DFS_DIR).isDefined) {
       Some(FileSystem.get(hadoopConf))
     } else {
       None
@@ -281,18 +285,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       pool.scheduleWithFixedDelay(
         getRunner(() => checkForLogs()), 0, UPDATE_INTERVAL_S, TimeUnit.SECONDS)
 
-      if (conf.getBoolean("spark.history.fs.cleaner.enabled", false)) {
+      if (conf.get(CLEANER_ENABLED)) {
         // A task that periodically cleans event logs on disk.
         pool.scheduleWithFixedDelay(
           getRunner(() => cleanLogs()), 0, CLEAN_INTERVAL_S, TimeUnit.SECONDS)
       }
 
       driverLogFs.foreach { _ =>
-        if (conf.get(DRIVER_LOG_CLEANER_ENABLED).getOrElse(
-            conf.getBoolean("spark.history.fs.cleaner.enabled", false))) {
+        if (conf.get(DRIVER_LOG_CLEANER_ENABLED)) {
           pool.scheduleWithFixedDelay(getRunner(() => cleanDriverLogs()),
             0,
-            conf.get(DRIVER_LOG_CLEANER_INTERVAL).getOrElse(CLEAN_INTERVAL_S),
+            conf.get(DRIVER_LOG_CLEANER_INTERVAL),
             TimeUnit.SECONDS)
         }
       }
@@ -845,10 +848,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Delete driver logs from the configured spark dfs dir that exceed the configured max age
    */
   private[history] def cleanDriverLogs(): Unit = Utils.tryLog {
-    val driverLogDir = conf.getOption("spark.driver.log.dfsDir")
+    val driverLogDir = conf.get(DRIVER_LOG_DFS_DIR)
     driverLogDir.foreach { dl =>
       val maxTime = clock.getTimeMillis() -
-        conf.get(MAX_DRIVER_LOG_AGE_S).getOrElse(conf.get(MAX_LOG_AGE_S)) * 1000
+        conf.get(MAX_DRIVER_LOG_AGE_S) * 1000
       val appDirs = driverLogFs.get.listLocatedStatus(new Path(dl))
       while (appDirs.hasNext()) {
         val appDirStatus = appDirs.next()

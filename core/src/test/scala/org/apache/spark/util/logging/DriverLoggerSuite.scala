@@ -40,7 +40,7 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
     JavaUtils.deleteRecursively(FileUtils.getFile(DRIVER_LOG_DIR_DEFAULT))
   }
 
-  test("driver logs are persisted") {
+  test("driver logs are persisted locally and synced to hdfs") {
     val sc = getSparkContext()
 
     val app_id = sc.applicationId
@@ -62,48 +62,15 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
     assert(hdfsDir.exists())
     val hdfsFiles = hdfsDir.listFiles()
     assert(hdfsFiles.length > 0)
-    JavaUtils.deleteRecursively(hdfsDir)
-    assert(!hdfsDir.exists())
-  }
-
-  test("driver logs are synced to hdfs continuously") {
-    val sc = getSparkContext()
-
-    val app_id = sc.applicationId
-    // Run a simple spark application
-    sc.parallelize(1 to 1000).count()
-
-    // Assert driver log file exists
-    val rootDir = Utils.getLocalDir(sc.getConf)
-    val driverLogsDir = FileUtils.getFile(rootDir, "driver_logs")
-    assert(driverLogsDir.exists())
-    val files = driverLogsDir.listFiles()
-    assert(files.length === 1)
-    assert(files(0).getName.equals("driver.log"))
-    for (i <- 1 to 1000) {
-      logInfo("Log enough data to log file so that it can be flushed")
-    }
-
-    // Sync the driver logs manually instead of waiting for scheduler
-    sc._driverLogger.foreach(_.writer.foreach(_.run()))
-    val hdfsDir = FileUtils.getFile(sc.getConf.get(DRIVER_LOG_DFS_DIR).get, app_id)
-    assert(hdfsDir.exists())
-    val hdfsFiles = hdfsDir.listFiles()
-    assert(hdfsFiles.length > 0)
     val driverLogFile = hdfsFiles.filter(f => f.getName.equals("driver.log")).head
     val hdfsIS = new BufferedInputStream(new FileInputStream(driverLogFile))
     assert(hdfsIS.available() > 0)
-
-    sc.stop()
-    // Ensure that the local file is deleted on application end
-    assert(!driverLogsDir.exists())
     JavaUtils.deleteRecursively(hdfsDir)
     assert(!hdfsDir.exists())
   }
 
   private def getSparkContext(): SparkContext = {
     val conf = new SparkConf()
-    conf.set("spark.local.dir", "/tmp")
     conf.set(DRIVER_LOG_DFS_DIR, DRIVER_LOG_DIR_DEFAULT)
     conf.set(DRIVER_LOG_SYNCTODFS, true)
     conf.set(SparkLauncher.SPARK_MASTER, "local")
