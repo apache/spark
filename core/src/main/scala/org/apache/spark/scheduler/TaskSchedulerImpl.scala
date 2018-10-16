@@ -119,7 +119,8 @@ private[spark] class TaskSchedulerImpl(
 
   private val abortTimer = new Timer(true)
   private val clock = new SystemClock
-  protected val unschedulableTaskSetToExpiryTime = new HashMap[TaskSetManager, Long]
+  // Exposed for testing
+  val unschedulableTaskSetToExpiryTime = new HashMap[TaskSetManager, Long]
 
   // Listener object to pass upcalls into
   var dagScheduler: DAGScheduler = null
@@ -469,9 +470,13 @@ private[spark] class TaskSchedulerImpl(
             case _ => // Do nothing if no tasks completely blacklisted.
           }
         } else {
-          // If a task was scheduled, we clear the expiry time for the taskSet. The abort timer
-          // checks this entry to decide if we want to abort the taskSet.
-          unschedulableTaskSetToExpiryTime.remove(taskSet)
+          // If a task was scheduled, we clear the expiry time for all the taskSets. This ensures
+          // that we have got atleast a non blacklisted executor and the job can progress. The
+          // abort timer checks this entry to decide if we want to abort the taskSet.
+          if (unschedulableTaskSetToExpiryTime.nonEmpty) {
+            logInfo("Clearing the expiry times for all unschedulable taskSets as")
+            unschedulableTaskSetToExpiryTime.clear()
+          }
         }
 
         if (launchedAnyTask && taskSet.isBarrier) {

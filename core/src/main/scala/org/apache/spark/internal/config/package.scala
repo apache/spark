@@ -597,8 +597,6 @@ package object config {
       .checkValue(v => v > 0, "The value should be a positive time value.")
       .createWithDefaultString("365d")
 
-  // Threshold above which we abort the TaskSet if a task could not be scheduled because of complete
-  // blacklisting.
   private[spark] val UNSCHEDULABLE_TASKSET_TIMEOUT =
     ConfigBuilder("spark.scheduler.blacklist.unschedulableTaskSetTimeout")
       .doc("The timeout in seconds to wait to acquire a new executor and schedule a task " +
