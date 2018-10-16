@@ -32,6 +32,7 @@ import org.apache.mesos.SchedulerDriver
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.config._
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.EXECUTOR_HEARTBEAT_INTERVAL
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
@@ -60,9 +61,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
     with org.apache.mesos.Scheduler with MesosSchedulerUtils {
 
-  private val tokenManager: MesosHadoopDelegationTokenManager = {
+  private val tokenManager: HadoopDelegationTokenManager = {
     if (UserGroupInformation.isSecurityEnabled()) {
-      new MesosHadoopDelegationTokenManager(conf, sc.hadoopConfiguration)
+      new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration)
     } else {
       null
     }
@@ -200,6 +201,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     super.start()
 
     if (tokenManager != null) {
+      require(driverEndpoint != null, "Driver endpoint not initialized!")
       tokenManager.start(Some(driverEndpoint))
     }
 
