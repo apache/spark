@@ -2138,7 +2138,7 @@ class Analyzer(
       case p => p transformExpressionsUp {
 
         case udf @ ScalaUDF(_, _, inputs, handleNullForInputs, _, _, _, _)
-          if !handleNullForInputs.forall(!_) =>
+            if handleNullForInputs.contains(true) =>
           // Otherwise, add special handling of null for fields that can't accept null.
           // The result of operations like this, when passed null, is generally to return null.
           assert(handleNullForInputs.length == inputs.length)

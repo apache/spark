@@ -31,7 +31,9 @@ import org.apache.spark.sql.types.DataType
  *                  null. Use boxed type or [[Option]] if you wanna do the null-handling yourself.
  * @param dataType  Return type of function.
  * @param children  The input expressions of this UDF.
- * @param handleNullForInputs Whether the inputs need null-value handling respectively.
+ * @param handleNullForInputs Whether the inputs need null-value handling, which preserves the null
+ *                            semantics of a null input of a Scala primitive type instead of
+ *                            converting it to the type's default value.
  * @param inputTypes  The expected input types of this UDF, used to perform type coercion. If we do
  *                    not want to perform coercion, simply use "Nil". Note that it would've been
  *                    better to use Option of Seq[DataType] so we can use "None" as the case for no
