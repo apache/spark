@@ -55,14 +55,14 @@ object BuildCommons {
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
-    streamingKafka, sparkGangliaLgpl, streamingKinesisAsl,
+    sparkGangliaLgpl, streamingKinesisAsl,
     dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests) =
     Seq("kubernetes", "mesos", "yarn",
-      "streaming-kafka-0-8", "ganglia-lgpl", "streaming-kinesis-asl",
+      "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests").map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(networkYarn, streamingKafkaAssembly, streamingKafka010Assembly, streamingKinesisAslAssembly) =
-    Seq("network-yarn", "streaming-kafka-0-8-assembly", "streaming-kafka-0-10-assembly", "streaming-kinesis-asl-assembly")
+  val assemblyProjects@Seq(networkYarn, streamingKafka010Assembly, streamingKinesisAslAssembly) =
+    Seq("network-yarn", "streaming-kafka-0-10-assembly", "streaming-kinesis-asl-assembly")
       .map(ProjectRef(buildLocation, _))
 
   val copyJarsProjects@Seq(assembly, examples) = Seq("assembly", "examples")
@@ -580,10 +580,8 @@ object Assembly {
         .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
     jarName in assembly := {
-      if (moduleName.value.contains("streaming-kafka-0-8-assembly")
-        || moduleName.value.contains("streaming-kafka-0-10-assembly")
+      if (moduleName.value.contains("streaming-kafka-0-10-assembly")
         || moduleName.value.contains("streaming-kinesis-asl-assembly")) {
-        // This must match the same name used in maven (see external/kafka-0-8-assembly/pom.xml)
         s"${moduleName.value}-${version.value}.jar"
       } else {
         s"${moduleName.value}-${version.value}-hadoop${hadoopVersion.value}.jar"

@@ -115,7 +115,9 @@ SCALA_2_10_PROFILES="-Pscala-2.10"
 SCALA_2_11_PROFILES=
 if [[ $SPARK_VERSION > "2.3" ]]; then
   BASE_PROFILES="$BASE_PROFILES -Pkubernetes"
-  SCALA_2_11_PROFILES="-Pkafka-0-8"
+  if [[ $SPARK_VERSION < "3.0." ]]; then
+    SCALA_2_11_PROFILES="-Pkafka-0-8"
+  fi
 else
   PUBLISH_SCALA_2_10=1
 fi

@@ -252,24 +252,6 @@ streaming_kinesis_asl = Module(
 )
 
 
-streaming_kafka = Module(
-    name="streaming-kafka-0-8",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/kafka-0-8",
-        "external/kafka-0-8-assembly",
-    ],
-    build_profile_flags=[
-        "-Pkafka-0-8",
-    ],
-    environ={
-        "ENABLE_KAFKA_0_8_TESTS": "1"
-    },
-    sbt_test_goals=[
-        "streaming-kafka-0-8/test",
-    ]
-)
-
 streaming_kafka_0_10 = Module(
     name="streaming-kafka-0-10",
     dependencies=[streaming],
@@ -374,15 +356,11 @@ pyspark_streaming = Module(
     dependencies=[
         pyspark_core,
         streaming,
-        streaming_kafka,
         streaming_kinesis_asl
     ],
     source_file_regexes=[
         "python/pyspark/streaming"
     ],
-    environ={
-        "ENABLE_KAFKA_0_8_TESTS": "1"
-    },
     python_test_goals=[
         "pyspark.streaming.util",
         "pyspark.streaming.tests",
