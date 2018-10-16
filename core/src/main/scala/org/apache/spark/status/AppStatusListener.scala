@@ -44,6 +44,7 @@ private[spark] class AppStatusListener(
     kvstore: ElementTrackingStore,
     conf: SparkConf,
     live: Boolean,
+    appStatusSource: Option[AppStatusSource] = None,
     lastUpdateTime: Option[Long] = None) extends SparkListener with Logging {
 
   import config._
@@ -280,6 +281,11 @@ private[spark] class AppStatusListener(
   private def updateBlackListStatus(execId: String, blacklisted: Boolean): Unit = {
     liveExecutors.get(execId).foreach { exec =>
       exec.isBlacklisted = blacklisted
+      if (blacklisted) {
+        appStatusSource.foreach(_.BLACKLISTED_EXECUTORS.inc())
+      } else {
+        appStatusSource.foreach(_.UNBLACKLISTED_EXECUTORS.inc())
+      }
       liveUpdate(exec, System.nanoTime())
     }
   }
@@ -382,11 +388,34 @@ private[spark] class AppStatusListener(
       }
 
       job.status = event.jobResult match {
-        case JobSucceeded => JobExecutionStatus.SUCCEEDED
-        case JobFailed(_) => JobExecutionStatus.FAILED
+        case JobSucceeded =>
+          appStatusSource.foreach{_.SUCCEEDED_JOBS.inc()}
+          JobExecutionStatus.SUCCEEDED
+        case JobFailed(_) =>
+          appStatusSource.foreach{_.FAILED_JOBS.inc()}
+          JobExecutionStatus.FAILED
       }
 
       job.completionTime = if (event.time > 0) Some(new Date(event.time)) else None
+
+      for {
+        source <- appStatusSource
+        submissionTime <- job.submissionTime
+        completionTime <- job.completionTime
+      } {
+        source.JOB_DURATION.value.set(completionTime.getTime() - submissionTime.getTime())
+      }
+
+      // update global app status counters
+      appStatusSource.foreach { source =>
+        source.COMPLETED_STAGES.inc(job.completedStages.size)
+        source.FAILED_STAGES.inc(job.failedStages)
+        source.COMPLETED_TASKS.inc(job.completedTasks)
+        source.FAILED_TASKS.inc(job.failedTasks)
+        source.KILLED_TASKS.inc(job.killedTasks)
+        source.SKIPPED_TASKS.inc(job.skippedTasks)
+        source.SKIPPED_STAGES.inc(job.skippedStages.size)
+      }
       update(job, now, last = true)
       if (job.status == JobExecutionStatus.SUCCEEDED) {
         appSummary = new AppSummary(appSummary.numCompletedJobs + 1, appSummary.numCompletedStages)
