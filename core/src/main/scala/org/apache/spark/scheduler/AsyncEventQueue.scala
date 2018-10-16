@@ -169,7 +169,7 @@ private class AsyncEventQueue(
           val prevLastReportTimestamp = lastReportTimestamp
           lastReportTimestamp = System.currentTimeMillis()
           val previous = new java.util.Date(prevLastReportTimestamp)
-          logWarning(s"Droped $droppedCount events from $name since " +
+          logWarning(s"Dropped $droppedCount events from $name since " +
             s"${if (prevLastReportTimestamp == 0) "start of the application" else s"$previous"}.")
         }
       }
