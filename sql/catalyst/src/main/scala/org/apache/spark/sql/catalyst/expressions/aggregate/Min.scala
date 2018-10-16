@@ -23,10 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the minimum value of `expr`.")
-case class Min(child: Expression) extends DeclarativeAggregate {
-
+abstract class MinBase(child: Expression) extends DeclarativeAggregate {
   override def children: Seq[Expression] = child :: Nil
 
   override def nullable: Boolean = true
@@ -57,3 +54,23 @@ case class Min(child: Expression) extends DeclarativeAggregate {
 
   override lazy val evaluateExpression: AttributeReference = min
 }
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the minimum value of `expr`.")
+case class Min(child: Expression) extends MinBase(child)
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns true if all values of `expr` are true.")
+case class EveryAgg(child: Expression) extends MinBase(child) with ImplicitCastInputTypes {
+  override def nodeName: String = "Every"
+  override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
+  override def checkInputDataTypes(): TypeCheckResult = {
+    child.dataType match {
+      case dt if dt != BooleanType =>
+        TypeCheckResult.TypeCheckFailure(s"Input to function '$prettyName' should have been " +
+          s"${BooleanType.simpleString}, but it's [${child.dataType.catalogString}].")
+      case _ => TypeCheckResult.TypeCheckSuccess
+    }
+  }
+}
+

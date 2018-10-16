@@ -23,10 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the maximum value of `expr`.")
-case class Max(child: Expression) extends DeclarativeAggregate {
-
+abstract class MaxBase(child: Expression) extends DeclarativeAggregate {
   override def children: Seq[Expression] = child :: Nil
 
   override def nullable: Boolean = true
@@ -56,4 +53,32 @@ case class Max(child: Expression) extends DeclarativeAggregate {
   }
 
   override lazy val evaluateExpression: AttributeReference = max
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the maximum value of `expr`.")
+case class Max(child: Expression) extends MaxBase(child)
+
+abstract class AnyAggBase(child: Expression) extends MaxBase(child) with ImplicitCastInputTypes {
+  override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
+  override def checkInputDataTypes(): TypeCheckResult = {
+    child.dataType match {
+      case dt if dt != BooleanType =>
+        TypeCheckResult.TypeCheckFailure(s"Input to function '$prettyName' should have been " +
+          s"${BooleanType.simpleString}, but it's [${child.dataType.catalogString}].")
+      case _ => TypeCheckResult.TypeCheckSuccess
+    }
+  }
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns true if at least one value of `expr` is true.")
+case class AnyAgg(child: Expression) extends AnyAggBase (child) {
+  override def nodeName: String = "Any"
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns true if at least one value of `expr` is true.")
+case class SomeAgg(child: Expression) extends AnyAggBase(child) {
+  override def nodeName: String = "Some"
 }
