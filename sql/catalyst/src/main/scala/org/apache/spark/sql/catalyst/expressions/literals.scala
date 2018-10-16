@@ -40,7 +40,7 @@ import org.json4s.JsonAST._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.Utils
@@ -219,16 +219,16 @@ object Literal {
           }
         }
       case at: ArrayType =>
-        v.isInstanceOf[GenericArrayData] && {
-          val ar = v.asInstanceOf[GenericArrayData].array
-          ar.isEmpty || doValidate(ar.head, at.elementType)
+        v.isInstanceOf[ArrayData] && {
+          val ar = v.asInstanceOf[ArrayData]
+          ar.numElements() == 0 || doValidate(ar.get(0, at.elementType), at.elementType)
         }
       case mt: MapType =>
-        v.isInstanceOf[ArrayBasedMapData] && {
-          val map = v.asInstanceOf[ArrayBasedMapData]
+        v.isInstanceOf[MapData] && {
+          val map = v.asInstanceOf[MapData]
           map.numElements() == 0 || {
-            doValidate(map.keyArray.array.head, mt.keyType) &&
-              doValidate(map.valueArray.array.head, mt.valueType)
+            doValidate(map.keyArray().get(0, mt.keyType), mt.keyType) &&
+              doValidate(map.valueArray().get(0, mt.keyType), mt.valueType)
           }
         }
       case ObjectType(cls) => cls.isInstance(v)
