@@ -644,6 +644,56 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       assert(resultSet.getString(1) === "4.56")
     }
   }
+
+  test("SPARK-25224 Checks config of incrementalDeserialize.") {
+    import org.apache.spark.sql.internal.SQLConf
+    withCLIServiceClient { client =>
+      val user = System.getProperty("user.name")
+      val sessionHandle = client.openSession(user, "")
+      withJdbcStatement("test_25224") { statement =>
+        statement.execute("CREATE TABLE test_25224(key INT, val STRING)")
+
+        val initQueries = Seq(s"SET ${SQLConf.THRIFTSERVER_INCREMENTAL_DESERIALIZE.key}=true",
+          s"LOAD DATA LOCAL INPATH '${TestData.smallKvWithNull}' OVERWRITE INTO TABLE test_25224")
+        val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+        initQueries.foreach { query =>
+          client.executeStatement(sessionHandle, query, confOverlay)
+        }
+
+        val operationHandle = client.executeStatement(
+          sessionHandle,
+          "SELECT * FROM test_25224 WHERE key IS NULL",
+          confOverlay)
+
+        assertResult(5, "Fetching result first time with fetch_next with row by row") {
+          var totalRowCount = 0
+          var fetchMore = true
+          while (fetchMore) {
+            // FETCH_NEXT with maxRows = 1
+            val rowCount = client.fetchResults(
+              operationHandle,
+              FetchOrientation.FETCH_NEXT,
+              1,
+              FetchType.QUERY_OUTPUT).numRows()
+            if (rowCount <= 0) fetchMore = false
+            else totalRowCount += rowCount
+          }
+          totalRowCount
+        }
+
+        assertResult(5, "Repeat fetching result from fetch_first") {
+          // Repeating FETCH_FIRST with maxRows = 1000
+          val rows_first = client.fetchResults(
+            operationHandle,
+            FetchOrientation.FETCH_FIRST,
+            1000,
+            FetchType.QUERY_OUTPUT)
+
+          rows_first.numRows()
+        }
+      }
+    }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {

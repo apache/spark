@@ -402,21 +402,20 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     while (scannedRowCount < n && partsScanned < totalParts) {
       // The number of partitions to try in this iteration. It is ok for this number to be
       // greater than totalParts because we actually cap it at totalParts in runJob.
-      val numPartsToTry = if (partsScanned > 0) {
+      var numPartsToTry = 1L
+      if (partsScanned > 0) {
         // If we didn't find any rows after the previous iteration, quadruple and retry.
         // Otherwise, interpolate the number of partitions we need to try, but overestimate
         // it by 50%. We also cap the estimation in the end.
         val limitScaleUpFactor = Math.max(sqlContext.conf.limitScaleUpFactor, 2)
         if (scannedRowCount == 0) {
-          partsScanned * limitScaleUpFactor
+          numPartsToTry = partsScanned * limitScaleUpFactor
         } else {
           val left = n - scannedRowCount
           // As left > 0, numPartsToTry is always >= 1
-          Math.min(Math.ceil(1.5 * left * partsScanned / scannedRowCount).toInt,
-            partsScanned * limitScaleUpFactor)
+          numPartsToTry = Math.ceil(1.5 * left * partsScanned / scannedRowCount).toInt
+          numPartsToTry = Math.min(numPartsToTry, partsScanned * limitScaleUpFactor)
         }
-      } else {
-        1L
       }
 
       val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
