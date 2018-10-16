@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
@@ -25,12 +24,11 @@ import scala.collection.JavaConverters._
 
 import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
 
-import org.apache.spark.sql.{Column, DataFrame, Row}
+import org.apache.spark.sql.{Column, DataFrame}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -383,19 +381,6 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
           StringContains("b", "prefix")
         ))
       )).get.toString
-    }
-  }
-
-  test("SPARK-25579 ORC PPD should support column names with dot") {
-    import testImplicits._
-
-    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      withTempDir { dir =>
-        val path = new File(dir, "orc").getCanonicalPath
-        Seq((1, 2), (3, 4)).toDF("col.dot.1", "col.dot.2").write.orc(path)
-        val df = spark.read.orc(path).where("`col.dot.1` = 1 and `col.dot.2` = 2")
-        checkAnswer(stripSparkFilter(df), Row(1, 2))
-      }
     }
   }
 }
