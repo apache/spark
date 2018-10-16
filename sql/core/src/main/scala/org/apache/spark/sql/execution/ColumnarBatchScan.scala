@@ -34,8 +34,6 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
 
   protected def supportsBatch: Boolean = true
 
-  protected def needsUnsafeRowConversion: Boolean = true
-
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
@@ -164,12 +162,11 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val outputVars = output.zipWithIndex.map { case (a, i) =>
       BoundReference(i, a.dataType, a.nullable).genCode(ctx)
     }
-    val inputRow = if (needsUnsafeRowConversion) null else row
     s"""
        |while ($limitNotReachedCond $input.hasNext()) {
        |  InternalRow $row = (InternalRow) $input.next();
        |  $numOutputRows.add(1);
-       |  ${consume(ctx, outputVars, inputRow).trim}
+       |  ${consume(ctx, outputVars, row).trim}
        |  if (shouldStop()) return;
        |}
      """.stripMargin
