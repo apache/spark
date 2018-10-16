@@ -325,6 +325,21 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assert(isExpectStorageLevel(rddId, Memory))
   }
 
+  test("SQL interface support storageLevel(Invalid StorageLevel)") {
+    val message = intercept[IllegalArgumentException] {
+      sql("CACHE TABLE testData OPTIONS('storageLevel' 'invalid_storage_level')")
+    }.getMessage
+    assert(message.contains("Invalid StorageLevel: INVALID_STORAGE_LEVEL"))
+  }
+
+  test("SQL interface support storageLevel(with LAZY)") {
+    sql("CACHE LAZY TABLE testData OPTIONS('storageLevel' 'disk_only')")
+    assertCached(spark.table("testData"))
+    val rddId = rddIdOf("testData")
+    sql("SELECT COUNT(*) FROM testData").collect()
+    assert(isExpectStorageLevel(rddId, Disk))
+  }
+
   test("InMemoryRelation statistics") {
     sql("CACHE TABLE testData")
     spark.table("testData").queryExecution.withCachedData.collect {
