@@ -34,11 +34,13 @@ private[spark] trait KerberosTestSuite { k8sSuite: KubernetesSuite =>
     val driverWatcherCache = new KerberosDriverWatcherCache(
       kerberosUtils,
       Map("spark-app-locator" -> appLocator))
-    driverWatcherCache.deploy(kerberosUtils.getKerberosTest(
-      containerLocalSparkDistroExamplesJar,
-      HDFS_TEST_CLASS,
-      appLocator,
-      KERB_YAML_LOCATION))
+    driverWatcherCache.deploy(
+      kerberosUtils.getKerberosTest(
+        containerLocalSparkDistroExamplesJar,
+        HDFS_TEST_CLASS,
+        appLocator,
+        KERB_YAML_LOCATION)
+    )
     driverWatcherCache.stopWatch()
 
     val expectedLogOnCompletion = Seq(
