@@ -21,6 +21,7 @@ import scala.util.Random
 
 import org.scalatest.Matchers.the
 
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyAgg, EveryAgg}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -726,5 +727,68 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     assert(testData.groupBy(current_date()).toString.contains(
       "grouping expressions: [current_date(None)], value: [key: int, value: string], " +
         "type: GroupBy]"))
+  }
+
+  def getEveryAggColumn(columnName: String): Column = {
+    Column(new EveryAgg(Column(columnName).expr).toAggregateExpression(false))
+  }
+
+  def getAnyAggColumn(columnName: String): Column = {
+    Column(new AnyAgg(Column(columnName).expr).toAggregateExpression(false))
+  }
+
+  test("every") {
+    val df = Seq((1, true), (1, true), (1, false), (2, true), (2, true), (3, false), (3, false))
+      .toDF("a", "b")
+
+    checkAnswer(
+      df.groupBy("a").agg(getEveryAggColumn("b")),
+      Seq(Row(1, false), Row(2, true), Row(3, false)))
+  }
+
+  test("every null values") {
+    val df = Seq[(java.lang.Integer, java.lang.Boolean)](
+      (1, true), (1, false),
+      (2, true),
+      (3, false), (3, null),
+      (4, null), (4, null))
+      .toDF("a", "b")
+    checkAnswer(
+      df.groupBy("a").agg(getEveryAggColumn("b")),
+      Seq(Row(1, false), Row(2, true), Row(3, false), Row(4, null)))
+  }
+
+  test("every empty table") {
+    val df = Seq.empty[(Int, Boolean)].toDF("a", "b")
+    checkAnswer(
+      df.agg(getEveryAggColumn("b")),
+      Seq(Row(null)))
+  }
+
+  test("any") {
+    val df = Seq((1, true), (1, true), (1, false), (2, true), (2, true), (3, false), (3, false))
+      .toDF("a", "b")
+    checkAnswer(
+      df.groupBy("a").agg(getAnyAggColumn("b")),
+      Seq(Row(1, true), Row(2, true), Row(3, false)))
+  }
+
+  test("any empty table") {
+    val df = Seq.empty[(Int, Boolean)].toDF("a", "b")
+    checkAnswer(
+      df.agg(getAnyAggColumn("b")),
+      Seq(Row(null)))
+  }
+
+  test("any null values") {
+    val df = Seq[(java.lang.Integer, java.lang.Boolean)](
+      (1, true), (1, false),
+      (2, true),
+      (3, true), (3, false), (3, null),
+      (4, null), (4, null))
+      .toDF("a", "b")
+    checkAnswer(
+      df.groupBy("a").agg(getAnyAggColumn("b")),
+      Seq(Row(1, true), Row(2, true), Row(3, true), Row(4, null)))
   }
 }
