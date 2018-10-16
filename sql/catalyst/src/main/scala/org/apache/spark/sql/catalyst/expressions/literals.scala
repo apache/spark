@@ -40,7 +40,7 @@ import org.json4s.JsonAST._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.Utils
@@ -198,7 +198,7 @@ object Literal {
       throw new RuntimeException(s"no default for type $dataType")
   }
 
-  private[expressions] def validateLiteralValue(v: Any, dataType: DataType): Unit = {
+  private[expressions] def validateLiteralValue(value: Any, dataType: DataType): Unit = {
     def doValidate(v: Any, dataType: DataType): Boolean = dataType match {
       case BooleanType => v.isInstanceOf[Boolean]
       case ByteType => v.isInstanceOf[Byte]
@@ -211,16 +211,33 @@ object Literal {
       case CalendarIntervalType => v.isInstanceOf[CalendarInterval]
       case BinaryType => v.isInstanceOf[Array[Byte]]
       case StringType => v.isInstanceOf[UTF8String]
-      case _: StructType => v.isInstanceOf[InternalRow]
-      case _: ArrayType => v.isInstanceOf[ArrayData]
-      case _: MapType => v.isInstanceOf[MapData]
+      case st: StructType =>
+        v.isInstanceOf[GenericInternalRow] && {
+          val row = v.asInstanceOf[GenericInternalRow]
+          row.values.zip(st.fields.map(_.dataType)).forall {
+            case (v, dt) => doValidate(v, dt)
+          }
+        }
+      case at: ArrayType =>
+        v.isInstanceOf[GenericArrayData] && {
+          val ar = v.asInstanceOf[GenericArrayData].array
+          ar.isEmpty || doValidate(ar.head, at.elementType)
+        }
+      case mt: MapType =>
+        v.isInstanceOf[ArrayBasedMapData] && {
+          val map = v.asInstanceOf[ArrayBasedMapData]
+          map.numElements() == 0 || {
+            doValidate(map.keyArray.array.head, mt.keyType) &&
+              doValidate(map.valueArray.array.head, mt.valueType)
+          }
+        }
       case ObjectType(cls) => cls.isInstance(v)
       case udt: UserDefinedType[_] => doValidate(v, udt.sqlType)
       case _ => false
     }
-    require(v == null || doValidate(v, dataType),
+    require(value == null || doValidate(value, dataType),
       s"Literal must have a corresponding value to ${dataType.catalogString}, " +
-      s"but ${if (v != null) s"class ${Utils.getSimpleName(v.getClass)}" else "null"} found.")
+      s"but class ${Utils.getSimpleName(value.getClass)} found.")
   }
 }
 
