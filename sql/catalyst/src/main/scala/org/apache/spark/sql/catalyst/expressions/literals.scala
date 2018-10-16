@@ -212,10 +212,10 @@ object Literal {
       case BinaryType => v.isInstanceOf[Array[Byte]]
       case StringType => v.isInstanceOf[UTF8String]
       case st: StructType =>
-        v.isInstanceOf[GenericInternalRow] && {
-          val row = v.asInstanceOf[GenericInternalRow]
-          row.values.zip(st.fields.map(_.dataType)).forall {
-            case (v, dt) => doValidate(v, dt)
+        v.isInstanceOf[InternalRow] && {
+          val row = v.asInstanceOf[InternalRow]
+          st.fields.map(_.dataType).zipWithIndex.forall {
+            case (dt, i) => doValidate(row.get(i, dt), dt)
           }
         }
       case at: ArrayType =>
