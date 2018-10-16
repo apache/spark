@@ -306,7 +306,8 @@ case class LoadDataCommand(
     val loadPath = {
       if (isLocal) {
         val localFS = FileContext.getLocalFSFileContext()
-        makeQualified(FsConstants.LOCAL_FS_URI, localFS.getWorkingDirectory(), new Path(path))
+        LoadDataCommand.makeQualified(FsConstants.LOCAL_FS_URI, localFS.getWorkingDirectory(),
+          new Path(path))
       } else {
         val loadPath = new Path(path)
         // Follow Hive's behavior:
@@ -323,7 +324,7 @@ case class LoadDataCommand(
         // by considering the wild card scenario in mind.as per old logic query param  is
         // been considered while creating URI instance and if path contains wild card char '?'
         // the remaining charecters after '?' will be removed while forming URI instance
-        makeQualified(defaultFS, uriPath, loadPath)
+        LoadDataCommand.makeQualified(defaultFS, uriPath, loadPath)
       }
     }
     val fs = loadPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
@@ -363,7 +364,9 @@ case class LoadDataCommand(
     CommandUtils.updateTableStats(sparkSession, targetTable)
     Seq.empty[Row]
   }
+}
 
+object LoadDataCommand {
   /**
    * Returns a qualified path object. Method ported from org.apache.hadoop.fs.Path class.
    *
@@ -372,7 +375,7 @@ case class LoadDataCommand(
    * @param path       Path instance based on the path string specified by the user.
    * @return qualified path object
    */
-  private def makeQualified(defaultUri: URI, workingDir: Path, path: Path): Path = {
+  private[sql] def makeQualified(defaultUri: URI, workingDir: Path, path: Path): Path = {
     val pathUri = if (path.isAbsolute()) path.toUri() else new Path(workingDir, path).toUri()
     if (pathUri.getScheme == null || pathUri.getAuthority == null &&
         defaultUri.getAuthority != null) {
@@ -383,7 +386,7 @@ case class LoadDataCommand(
         pathUri.getAuthority
       }
       try {
-        val newUri = new URI(scheme, authority, pathUri.getPath, pathUri.getFragment)
+        val newUri = new URI(scheme, authority, pathUri.getPath, null, pathUri.getFragment)
         new Path(newUri)
       } catch {
         case e: URISyntaxException =>
