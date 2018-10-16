@@ -241,7 +241,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         groupByAttrs ++ distinctAggChildAttrs ++ Seq(gid) ++ regularAggChildAttrMap.map(_._2),
         a.child)
 
-      // Construct the first aggregate operator. This de-duplicates the all the children of
+      // Construct the first aggregate operator. This de-duplicates all the children of
       // distinct operators, and applies the regular aggregate operators.
       val firstAggregateGroupBy = groupByAttrs ++ distinctAggChildAttrs :+ gid
       val firstAggregate = Aggregate(
