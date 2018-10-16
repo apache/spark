@@ -3563,7 +3563,7 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
                 "The callback from the query execution listener should be called after 'toPandas'")
 
 
-class SparkExtensionsTest(unittest.TestCase, SQLTestUtils):
+class SparkExtensionsTest(unittest.TestCase):
     # These tests are separate because it uses 'spark.sql.extensions' which is
     # static and immutable. This can't be set or unset, for example, via `spark.conf`.
 

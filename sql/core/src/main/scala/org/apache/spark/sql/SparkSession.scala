@@ -84,9 +84,17 @@ class SparkSession private(
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
+  /**
+   * Constructor used in Pyspark. Contains explicit application of Spark Session Extensions
+   * which otherwise only occurs during getOrCreate. We cannot add this to the default constructor
+   * since that would cause every new session to reinvoke Spark Session Extensions on the currently
+   * running extensions.
+   */
   private[sql] def this(sc: SparkContext) {
     this(sc, None, None, new SparkSessionExtensions)
-    SparkSession.applyExtensionsFromConf(sc.getConf, this.extensions)
+    SparkSession.applyExtensions(
+      sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS),
+      this.extensions)
   }
 
   sparkContext.assertNotStopped()
@@ -936,7 +944,9 @@ object SparkSession extends Logging {
           // Do not update `SparkConf` for existing `SparkContext`, as it's shared by all sessions.
         }
 
-        applyExtensionsFromConf(sparkContext.conf, extensions)
+        applyExtensions(
+          sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS),
+          extensions)
 
         session = new SparkSession(sparkContext, None, None, extensions)
         options.foreach { case (k, v) => session.initialSessionOptions.put(k, v) }
@@ -1123,13 +1133,12 @@ object SparkSession extends Logging {
   }
 
   /**
-   * Initialize extensions if the user has defined a configurator class in their SparkConf.
-   * This class will be applied to the extensions passed into this function.
+   * Initialize extensions for given extension classname. This class will be applied to the
+   * extensions passed into this function.
    */
-  private[sql] def applyExtensionsFromConf(conf: SparkConf, extensions: SparkSessionExtensions) {
-    val extensionConfOption = conf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
-    if (extensionConfOption.isDefined) {
-      val extensionConfClassName = extensionConfOption.get
+  private def applyExtensions(extensionOption: Option[String], extensions: SparkSessionExtensions) {
+    if (extensionOption.isDefined) {
+      val extensionConfClassName = extensionOption.get
       try {
         val extensionConfClass = Utils.classForName(extensionConfClassName)
         val extensionConf = extensionConfClass.newInstance()
