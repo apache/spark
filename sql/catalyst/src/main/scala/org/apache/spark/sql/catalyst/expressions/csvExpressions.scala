@@ -79,6 +79,10 @@ case class CsvToStructs(
   lazy val converter = (rows: Iterator[InternalRow]) => {
     if (rows.hasNext) {
       rows.next()
+      val result = rows.next
+      // CSV's parser produces one record only.
+      assert(!rows.hasNext)
+      result
     } else {
       throw new IllegalArgumentException("Expected one row from CSV parser.")
     }
