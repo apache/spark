@@ -271,7 +271,7 @@ class SparkSession(object):
         [Row(age=1)]
         """
         from pyspark.sql import functions
-        return functions.getActiveSession()
+        return functions._getActiveSession()
 
     @property
     @since(2.0)
@@ -689,6 +689,8 @@ class SparkSession(object):
             ...
         Py4JJavaError: ...
         """
+        SparkSession._activeSession = self
+        self._jvm.SparkSession.setActiveSession(self._jsparkSession)
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
 
