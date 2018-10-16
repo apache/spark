@@ -345,6 +345,61 @@ trait CodegenSupport extends SparkPlan {
    * don't require shouldStop() in the loop of producing rows.
    */
   def needStopCheck: Boolean = parent.needStopCheck
+
+  /**
+   * A sequence of checks which evaluate to true if the downstream Limit operators have not received
+   * enough records and reached the limit. If current node is a data producing node, it can leverage
+   * this information to stop producing data and complete the data flow earlier. Common data
+   * producing nodes are leaf nodes like Range and Scan, and blocking nodes like Sort and Aggregate.
+   * These checks should be put into the loop condition of the data producing loop.
+   */
+  def limitNotReachedChecks: Seq[String] = parent.limitNotReachedChecks
+
+  /**
+   * A helper method to generate the data producing loop condition according to the
+   * limit-not-reached checks.
+   */
+  final def limitNotReachedCond: String = {
+    // InputAdapter is also a leaf node.
+    val isLeafNode = children.isEmpty || this.isInstanceOf[InputAdapter]
+    if (!isLeafNode && !this.isInstanceOf[BlockingOperatorWithCodegen]) {
+      val errMsg = "Only leaf nodes and blocking nodes need to call 'limitNotReachedCond' " +
+        "in its data producing loop."
+      if (Utils.isTesting) {
+        throw new IllegalStateException(errMsg)
+      } else {
+        logWarning(s"[BUG] $errMsg Please open a JIRA ticket to report it.")
+      }
+    }
+    if (parent.limitNotReachedChecks.isEmpty) {
+      ""
+    } else {
+      parent.limitNotReachedChecks.mkString("", " && ", " &&")
+    }
+  }
+}
+
+/**
+ * A special kind of operators which support whole stage codegen. Blocking means these operators
+ * will consume all the inputs first, before producing output. Typical blocking operators are
+ * sort and aggregate.
+ */
+trait BlockingOperatorWithCodegen extends CodegenSupport {
+
+  // Blocking operators usually have some kind of buffer to keep the data before producing them, so
+  // then don't to copy its result even if its child does.
+  override def needCopyResult: Boolean = false
+
+  // Blocking operators always consume all the input first, so its upstream operators don't need a
+  // stop check.
+  override def needStopCheck: Boolean = false
+
+  // Blocking operators need to consume all the inputs before producing any output. This means,
+  // Limit operator after this blocking operator will never reach its limit during the execution of
+  // this blocking operator's upstream operators. Here we override this method to return Nil, so
+  // that upstream operators will not generate useless conditions (which are always evaluated to
+  // false) for the Limit operators after this blocking operator.
+  override def limitNotReachedChecks: Seq[String] = Nil
 }
 
 
@@ -381,7 +436,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       forceInline = true)
     val row = ctx.freshName("row")
     s"""
-       | while ($input.hasNext() && !stopEarly()) {
+       | while ($limitNotReachedCond $input.hasNext()) {
        |   InternalRow $row = (InternalRow) $input.next();
        |   ${consume(ctx, null, row).trim}
        |   if (shouldStop()) return;
@@ -676,6 +731,8 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
   }
 
   override def needStopCheck: Boolean = true
+
+  override def limitNotReachedChecks: Seq[String] = Nil
 
   override protected def otherCopyArgs: Seq[AnyRef] = Seq(codegenStageId.asInstanceOf[Integer])
 }

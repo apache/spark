@@ -1309,4 +1309,69 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       checkCodec(df, path, "xz")
     }
   }
+
+  private def checkSchemaWithRecursiveLoop(avroSchema: String): Unit = {
+    val message = intercept[IncompatibleSchemaException] {
+      SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema))
+    }.getMessage
+
+    assert(message.contains("Found recursive reference in Avro schema"))
+  }
+
+  test("Detect recursive loop") {
+    checkSchemaWithRecursiveLoop("""
+      |{
+      |  "type": "record",
+      |  "name": "LongList",
+      |  "fields" : [
+      |    {"name": "value", "type": "long"},             // each element has a long
+      |    {"name": "next", "type": ["null", "LongList"]} // optional next element
+      |  ]
+      |}
+    """.stripMargin)
+
+    checkSchemaWithRecursiveLoop("""
+      |{
+      |  "type": "record",
+      |  "name": "LongList",
+      |  "fields": [
+      |    {
+      |      "name": "value",
+      |      "type": {
+      |        "type": "record",
+      |        "name": "foo",
+      |        "fields": [
+      |          {
+      |            "name": "parent",
+      |            "type": "LongList"
+      |          }
+      |        ]
+      |      }
+      |    }
+      |  ]
+      |}
+    """.stripMargin)
+
+    checkSchemaWithRecursiveLoop("""
+      |{
+      |  "type": "record",
+      |  "name": "LongList",
+      |  "fields" : [
+      |    {"name": "value", "type": "long"},
+      |    {"name": "array", "type": {"type": "array", "items": "LongList"}}
+      |  ]
+      |}
+    """.stripMargin)
+
+    checkSchemaWithRecursiveLoop("""
+      |{
+      |  "type": "record",
+      |  "name": "LongList",
+      |  "fields" : [
+      |    {"name": "value", "type": "long"},
+      |    {"name": "map", "type": {"type": "map", "values": "LongList"}}
+      |  ]
+      |}
+    """.stripMargin)
+  }
 }
