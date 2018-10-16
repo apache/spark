@@ -163,6 +163,11 @@ public class SparkFirehoseListener implements SparkListenerInterface {
   }
 
   @Override
+  public void onPoolInformationEvent(SparkListenerPoolInformation poolInfo){
+    onEvent(poolInfo);
+  }
+
+  @Override
   public void onOtherEvent(SparkListenerEvent event) {
     onEvent(event);
   }

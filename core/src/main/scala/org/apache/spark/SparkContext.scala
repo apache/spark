@@ -561,6 +561,7 @@ class SparkContext(config: SparkConf) extends Logging {
     setupAndStartListenerBus()
     postEnvironmentUpdate()
     postApplicationStart()
+    postPoolInformation()
 
     // Post init
     _taskScheduler.postStartHook()
@@ -2447,6 +2448,13 @@ class SparkContext(config: SparkConf) extends Logging {
     val accumUpdates = new Array[(Long, Int, Int, Seq[AccumulableInfo])](0)
     listenerBus.post(SparkListenerExecutorMetricsUpdate("driver", accumUpdates,
       Some(driverUpdates)))
+  }
+
+  private def postPoolInformation(): Unit = {
+    // SPARK-25392 pool Information should be stored in the event
+    val poolInformation = getAllPools.map { it => (it.name, it) }
+    val poolDetails = SparkListenerPoolInformation(poolInformation)
+    listenerBus.post(poolDetails)
   }
 
   // In order to prevent multiple SparkContexts from being active at the same time, mark this

@@ -103,6 +103,8 @@ private[spark] object JsonProtocol {
         stageExecutorMetricsToJson(stageExecutorMetrics)
       case blockUpdate: SparkListenerBlockUpdated =>
         blockUpdateToJson(blockUpdate)
+      case poolInfo: SparkListenerPoolInformation =>
+        poolInfoToJson(poolInfo)
       case _ => parse(mapper.writeValueAsString(event))
     }
   }
@@ -529,6 +531,21 @@ private[spark] object JsonProtocol {
     ("Stack Trace" -> stackTraceToJson(exception.getStackTrace))
   }
 
+  def poolInfoToJson(event: SparkListenerPoolInformation): JValue = {
+    val poolInformation = event.poolDetails
+    val jsonFields = poolInformation.map {
+      case (name, poolObj) => JField(name, poolObjToJson(poolObj))
+    }
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.poolInfo) ~
+      ("pool Details" -> JObject(jsonFields.toList))
+  }
+
+  def poolObjToJson(poolObj: Schedulable): JValue = {
+    ("Name" -> poolObj.name) ~
+      ("SchedulingMode" -> poolObj.schedulingMode.toString) ~
+      ("MinimumShare" -> poolObj.minShare) ~
+      ("PoolWeight" -> poolObj.weight)
+  }
 
   /** --------------------------------------------------- *
    * JSON deserialization methods for SparkListenerEvents |
@@ -554,6 +571,7 @@ private[spark] object JsonProtocol {
     val metricsUpdate = Utils.getFormattedClassName(SparkListenerExecutorMetricsUpdate)
     val stageExecutorMetrics = Utils.getFormattedClassName(SparkListenerStageExecutorMetrics)
     val blockUpdate = Utils.getFormattedClassName(SparkListenerBlockUpdated)
+    val poolInfo = Utils.getFormattedClassName(SparkListenerPoolInformation)
   }
 
   def sparkEventFromJson(json: JValue): SparkListenerEvent = {
@@ -579,6 +597,7 @@ private[spark] object JsonProtocol {
       case `metricsUpdate` => executorMetricsUpdateFromJson(json)
       case `stageExecutorMetrics` => stageExecutorMetricsFromJson(json)
       case `blockUpdate` => blockUpdateFromJson(json)
+      case `poolInfo` => poolInfoFromJson(json)
       case other => mapper.readValue(compact(render(json)), Utils.classForName(other))
         .asInstanceOf[SparkListenerEvent]
     }
@@ -1112,6 +1131,22 @@ private[spark] object JsonProtocol {
       case JNothing => None
       case value: JValue => Some(value)
     }
+  }
+
+  def poolInfoFromJson(json: JValue): SparkListenerEvent = {
+    val jsonFields = (json \ "pool Details").asInstanceOf[JObject].obj
+    val poolDetails = jsonFields.map {
+      case JField(poolName, poolObj) => (poolName, poolObjFromJson(poolObj))
+    }
+    SparkListenerPoolInformation(poolDetails)
+  }
+
+  def poolObjFromJson(json: JValue): Schedulable = {
+    val name = (json \ "Name").extract[String]
+    val schedulingMode = (json \ "SchedulingMode").extract[String]
+    val minShare = (json \ "MinimumShare").extract[Int]
+    val weight = (json \ "PoolWeight").extract[Int]
+    new Pool(name, SchedulingMode.withName(schedulingMode), minShare, weight)
   }
 
   private def emptyJson: JObject = JObject(List[JField]())

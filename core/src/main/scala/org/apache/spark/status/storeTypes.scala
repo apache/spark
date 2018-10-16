@@ -23,6 +23,7 @@ import java.util.Date
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 
+import org.apache.spark.scheduler.Schedulable
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1._
 import org.apache.spark.ui.scope._
@@ -46,6 +47,11 @@ private[spark] class ApplicationEnvironmentInfoWrapper(val info: ApplicationEnvi
   @JsonIgnore @KVIndex
   def id: String = classOf[ApplicationEnvironmentInfoWrapper].getName()
 
+}
+
+private[spark] class PoolInformationWrapper(val poolDetails: Seq[(String, Schedulable)]) {
+  @JsonIgnore  @KVIndex
+  def id: String = classOf[PoolInformationWrapper].getName()
 }
 
 private[spark] class ExecutorSummaryWrapper(val info: ExecutorSummary) {

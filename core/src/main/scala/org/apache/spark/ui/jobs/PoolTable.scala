@@ -46,6 +46,14 @@ private[ui] class PoolTable(pools: Map[Schedulable, PoolData], parent: StagesTab
   }
 
   private def poolRow(request: HttpServletRequest, s: Schedulable, p: PoolData): Seq[Node] = {
+    // SPARK-25392 need to get the active tasks from store if sc is not present
+    val runningTasks = if (parent.sc.isDefined) {
+      s.runningTasks
+    } else {
+      p.stageIds.toSeq.map({
+        stageId => parent.store.stageData(stageId).map(_.numActiveTasks).sum
+      }).sum
+    }
     val activeStages = p.stageIds.size
     val href = "%s/stages/pool?poolname=%s"
       .format(UIUtils.prependBaseUri(request, parent.basePath), URLEncoder.encode(p.name, "UTF-8"))
@@ -56,7 +64,7 @@ private[ui] class PoolTable(pools: Map[Schedulable, PoolData], parent: StagesTab
       <td>{s.minShare}</td>
       <td>{s.weight}</td>
       <td>{activeStages}</td>
-      <td>{s.runningTasks}</td>
+      <td>{runningTasks}</td>
       <td>{s.schedulingMode}</td>
     </tr>
   }

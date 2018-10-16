@@ -204,6 +204,13 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
 
 /**
+ *  Class which holds the Pool Information
+ */
+@DeveloperApi
+case class SparkListenerPoolInformation(
+    poolDetails: Seq[(String, Schedulable)]) extends SparkListenerEvent
+
+/**
  * Interface for listening to events from the Spark scheduler. Most applications should probably
  * extend SparkListener or SparkFirehoseListener directly, rather than implementing this class.
  *
@@ -341,6 +348,11 @@ private[spark] trait SparkListenerInterface {
   def onSpeculativeTaskSubmitted(speculativeTask: SparkListenerSpeculativeTaskSubmitted): Unit
 
   /**
+   * Called when the schedular is ready
+   */
+  def onPoolInformationEvent(poolDetails: SparkListenerPoolInformation): Unit
+
+  /**
    * Called when other events like SQL-specific events are posted.
    */
   def onOtherEvent(event: SparkListenerEvent): Unit
@@ -415,6 +427,8 @@ abstract class SparkListener extends SparkListenerInterface {
 
   override def onSpeculativeTaskSubmitted(
       speculativeTask: SparkListenerSpeculativeTaskSubmitted): Unit = { }
+
+  override def onPoolInformationEvent(poolDetails: SparkListenerPoolInformation): Unit = {}
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = { }
 }

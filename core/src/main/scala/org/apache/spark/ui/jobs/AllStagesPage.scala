@@ -33,12 +33,15 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
   private def isFairScheduler = parent.isFairScheduler
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    // For now, pool information is only accessible in live UIs
-    val pools = sc.map(_.getAllPools).getOrElse(Seq.empty[Schedulable]).map { pool =>
-      val uiPool = parent.store.asOption(parent.store.pool(pool.name)).getOrElse(
-        new PoolData(pool.name, Set()))
-      pool -> uiPool
-    }.toMap
+    val pools = if (sc.isDefined) {
+      sc.map(_.getAllPools).getOrElse(Seq.empty[Schedulable]).map { pool =>
+        val uiPool = parent.store.asOption(parent.store.pool(pool.name)).getOrElse(
+          new PoolData(pool.name, Set()))
+        pool -> uiPool
+      }.toMap
+    } else {
+      constructHistoryPools(parent.store.getPoolInfo())
+    }
     val poolTable = new PoolTable(pools, parent)
 
     val allStatuses = Seq(StageStatus.ACTIVE, StageStatus.PENDING, StageStatus.COMPLETE,
@@ -57,7 +60,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
         </ul>
       </div>
 
-    val poolsDescription = if (sc.isDefined && isFairScheduler) {
+    val poolsDescription = if (!pools.isEmpty && isFairScheduler) {
         <span class="collapse-aggregated-poolTable collapse-table"
             onClick="collapseTable('collapse-aggregated-poolTable','aggregated-poolTable')">
           <h4>
@@ -157,5 +160,15 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
       <div class={s"aggregated-all$classSuffix collapsible-table"}>
         {stagesTable.toNodeSeq}
       </div>
+  }
+
+  private def constructHistoryPools (poolInformation: Map[String, Schedulable]): Map[Schedulable,
+    PoolData] = {
+    poolInformation.map { it =>
+      val poolData = it._2
+      val uiPool = parent.store.asOption(parent.store.pool(it._1)).getOrElse(
+        new PoolData(it._1, Set()))
+      poolData -> uiPool
+    }
   }
 }

@@ -279,6 +279,10 @@ private[spark] class EventLoggingListener(
     }
   }
 
+  override def onPoolInformationEvent(event: SparkListenerPoolInformation): Unit = {
+    logEvent(event, true)
+  }
+
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     if (event.logEvent) {
       logEvent(event, flushLogger = true)

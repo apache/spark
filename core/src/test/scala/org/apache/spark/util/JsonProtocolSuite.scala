@@ -106,6 +106,9 @@ class JsonProtocolSuite extends SparkFunSuite {
     val stageExecutorMetrics =
       SparkListenerStageExecutorMetrics("1", 2, 3,
         new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L, 321L, 654L, 765L)))
+    val poolInformation =
+      SparkListenerPoolInformation(Seq(("default",new Pool("default",SchedulingMode.FAIR,2,4)),
+        ("roundrobin",new Pool("roundrobin",SchedulingMode.FAIR,5,6))))
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -132,6 +135,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
     testEvent(blockUpdated, blockUpdatedJsonString)
     testEvent(stageExecutorMetrics, stageExecutorMetricsJsonString)
+    testEvent(poolInformation,poolInformationJsonString)
   }
 
   test("Dependent Classes") {
@@ -603,6 +607,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
         assert(e1.stageId === e2.stageId)
         assert(e1.stageAttemptId === e2.stageAttemptId)
         assertEquals(e1.executorMetrics, e2.executorMetrics)
+        case(e1: SparkListenerPoolInformation, e2: SparkListenerPoolInformation) =>
+          assertEquals(e1.poolDetails, e2.poolDetails)
       case (e1, e2) =>
         assert(e1 === e2)
       case _ => fail("Events don't match in types!")
@@ -757,6 +763,18 @@ private[spark] object JsonProtocolSuite extends Assertions {
     ExecutorMetricType.values.foreach { metricType =>
       assert(metrics1.getMetricValue(metricType) === metrics2.getMetricValue(metricType))
     }
+  }
+
+  private def assertEquals (event1: Seq[(String, Schedulable)],
+      event2: Seq[(String, Schedulable)]): Unit = {
+    event1.zip(event2).foreach({
+      case ((poolName1, poolInfo1), (poolName2, poolInfo2)) =>
+        assert(poolName1 == poolName1)
+        assert(poolInfo1.name == poolInfo2.name)
+        assert(poolInfo1.schedulingMode == poolInfo2.schedulingMode)
+        assert(poolInfo1.minShare == poolInfo2.minShare)
+        assert(poolInfo1.weight == poolInfo2.weight)
+    })
   }
 
   private def assertJsonStringEquals(expected: String, actual: String, metadata: String) {
@@ -2167,4 +2185,24 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  "hostId" : "node1"
       |}
     """.stripMargin
+  private val poolInformationJsonString =
+    s"""
+       |{
+       |  "Event" : "SparkListenerPoolInformation",
+       |  "pool Details" : {
+       |    "default" : {
+       |      "Name" : "default",
+       |      "SchedulingMode" : "FAIR",
+       |      "MinimumShare" : 2,
+       |      "PoolWeight" : 4
+       |  },
+       |  "roundrobin" : {
+       |    "Name" : "roundrobin",
+       |    "SchedulingMode" : "FAIR",
+       |    "MinimumShare" : 5,
+       |    "PoolWeight" : 6
+       |  }
+       | }
+       |}
+     """.stripMargin
 }

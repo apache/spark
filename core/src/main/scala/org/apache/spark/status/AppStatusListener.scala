@@ -250,6 +250,10 @@ private[spark] class AppStatusListener(
     }
   }
 
+  override def onPoolInformationEvent(event: SparkListenerPoolInformation): Unit = {
+    kvstore.write(new PoolInformationWrapper(event.poolDetails))
+  }
+
   private def addBlackListedStageTo(exec: LiveExecutor, stageId: Int, now: Long): Unit = {
     exec.blacklistedInStages += stageId
     liveUpdate(exec, now)

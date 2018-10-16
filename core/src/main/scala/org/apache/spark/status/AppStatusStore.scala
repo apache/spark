@@ -22,6 +22,7 @@ import java.util.{List => JList}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
+import org.apache.spark.scheduler.Schedulable
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui.scope._
 import org.apache.spark.util.{Distribution, Utils}
@@ -488,6 +489,11 @@ private[spark] class AppStatusStore(
 
   def appSummary(): AppSummary = {
     store.read(classOf[AppSummary], classOf[AppSummary].getName())
+  }
+
+  def getPoolInfo(): Map[String, Schedulable] = {
+    val cls = classOf[PoolInformationWrapper]
+    store.read(cls, cls.getName).poolDetails.toMap
   }
 
   def close(): Unit = {
