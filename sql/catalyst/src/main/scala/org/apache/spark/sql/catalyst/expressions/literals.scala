@@ -226,10 +226,8 @@ object Literal {
       case mt: MapType =>
         v.isInstanceOf[MapData] && {
           val map = v.asInstanceOf[MapData]
-          map.numElements() == 0 || {
-            doValidate(map.keyArray().get(0, mt.keyType), mt.keyType) &&
-              doValidate(map.valueArray().get(0, mt.keyType), mt.valueType)
-          }
+          doValidate(map.keyArray(), ArrayType(mt.keyType)) &&
+            doValidate(map.valueArray(), ArrayType(mt.valueType))
         }
       case ObjectType(cls) => cls.isInstance(v)
       case udt: UserDefinedType[_] => doValidate(v, udt.sqlType)
