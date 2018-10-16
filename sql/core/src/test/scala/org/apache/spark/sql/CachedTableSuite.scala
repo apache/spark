@@ -302,7 +302,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assertCached(spark.table("testData"))
     val rddId = rddIdOf("testData")
     assert(isExpectStorageLevel(rddId, Disk))
-    spark.catalog.uncacheTable("testData")
   }
 
   test("SQL interface select from table support storageLevel(DISK_ONLY)") {
@@ -310,7 +309,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assertCached(spark.table("testSelect"))
     val rddId = rddIdOf("testSelect")
     assert(isExpectStorageLevel(rddId, Disk))
-    spark.catalog.uncacheTable("testSelect")
   }
 
   test("SQL interface support storageLevel(DISK_ONLY) with invalid options") {
@@ -318,7 +316,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assertCached(spark.table("testData"))
     val rddId = rddIdOf("testData")
     assert(isExpectStorageLevel(rddId, Disk))
-    spark.catalog.uncacheTable("testData")
   }
 
   test("SQL interface support storageLevel(MEMORY_ONLY)") {
@@ -326,34 +323,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assertCached(spark.table("testData"))
     val rddId = rddIdOf("testData")
     assert(isExpectStorageLevel(rddId, Memory))
-  }
-
-  test("SQL interface support storageLevel(Invalid StorageLevel)") {
-    val message = intercept[IllegalArgumentException] {
-      sql("CACHE TABLE testData OPTIONS('storageLevel' 'invalid_storage_level')")
-    }.getMessage
-    assert(message.contains("Invalid StorageLevel: INVALID_STORAGE_LEVEL"))
-  }
-
-  test("SQL interface support storageLevel(with LAZY)") {
-    sql("CACHE LAZY TABLE testData OPTIONS('storageLevel' 'disk_only')")
-    assertCached(spark.table("testData"))
-
-    val rddId = rddIdOf("testData")
-    assert(
-      !isMaterialized(rddId),
-      "Lazily cached in-memory table shouldn't be materialized eagerly")
-
-    sql("SELECT COUNT(*) FROM testData").collect()
-    assert(
-      isMaterialized(rddId),
-      "Lazily cached in-memory table should have been materialized")
-    assert(isExpectStorageLevel(rddId, Disk))
-
-    spark.catalog.uncacheTable("testData")
-    eventually(timeout(10 seconds)) {
-      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
-    }
   }
 
   test("InMemoryRelation statistics") {
