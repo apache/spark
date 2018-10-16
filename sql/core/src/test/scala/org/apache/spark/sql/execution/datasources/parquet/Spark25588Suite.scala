@@ -23,16 +23,17 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.parquet.avro.{AvroParquetInputFormat, AvroReadSupport}
 import org.apache.parquet.hadoop.ParquetInputFormat
 import org.apache.parquet.hadoop.util.ContextUtil
+
 import org.apache.spark.sql.{QueryTest, SQLContext}
 import org.apache.spark.sql.test.SharedSQLContext
 
-case class Inner(
+private [parquet] case class Inner(
   names: Seq[String] = Seq())
 
-case class Middle(
+private [parquet] case class Middle(
   inners: Seq[Inner] = Seq())
 
-case class Outer(
+private [parquet] case class Outer(
   middle: Option[Middle] = None)
 
 class Spark25588Suite extends QueryTest with SharedSQLContext {
@@ -55,18 +56,43 @@ class Spark25588Suite extends QueryTest with SharedSQLContext {
       assert(roundtrip.first != null)
 
       // read parquet in as RDD fails
-      val job = Job.getInstance(spark.sparkContext.hadoopConfiguration)
+      val job = Job.getInstance(spark.sessionState.newHadoopConf())
       val conf = ContextUtil.getConfiguration(job)
       ParquetInputFormat.setReadSupportClass(job, classOf[AvroReadSupport[Outer]])
 
       val innerSchema = Schema.createRecord("Inner", null, null, false)
-      innerSchema.setFields(Lists.newArrayList(new Schema.Field("names", Schema.createArray(Schema.create(Schema.Type.STRING)), null, null)))
+      innerSchema.setFields(
+        Lists.newArrayList(
+          new Schema.Field("names",
+            Schema.createArray(Schema.create(Schema.Type.STRING)),
+            null,
+            null
+          )
+        )
+      )
 
       val middleSchema = Schema.createRecord("Middle", null, null, false)
-      middleSchema.setFields(Lists.newArrayList(new Schema.Field("inners", Schema.createArray(innerSchema), null, null)))
+      middleSchema.setFields(
+        Lists.newArrayList(
+          new Schema.Field("inners",
+            Schema.createArray(innerSchema),
+            null,
+            null
+          )
+        )
+      )
 
       val outerSchema = Schema.createRecord("Outer", null, null, false)
-      outerSchema.setFields(Lists.newArrayList(new Schema.Field("middle", Schema.createUnion(Lists.newArrayList(Schema.create(Schema.Type.NULL), middleSchema)), null, null)))
+      outerSchema.setFields(
+        Lists.newArrayList(
+          new Schema.Field("middle",
+            Schema.createUnion(
+              Lists.newArrayList(Schema.create(Schema.Type.NULL), middleSchema)),
+            null,
+            null
+          )
+        )
+      )
 
       AvroParquetInputFormat.setAvroReadSchema(job, outerSchema)
 
