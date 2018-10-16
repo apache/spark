@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.csv
 
 import org.apache.spark.SparkFunSuite
 
-class CSVExpressionUtilsSuite extends SparkFunSuite {
+class CSVExprUtilsSuite extends SparkFunSuite {
   test("Can parse escaped characters") {
     assert(CSVExprUtils.toChar("""\t""") === '\t')
     assert(CSVExprUtils.toChar("""\r""") === '\r')
