@@ -85,7 +85,7 @@ class FileScanRDD(
       // If we do a coalesce, however, we are likely to compute multiple partitions in the same
       // task and in the same thread, in which case we need to avoid override values written by
       // previous partitions (SPARK-13071).
-      private def updateBytesRead(): Unit = {
+      private def incTaskInputMetricsBytesRead(): Unit = {
         inputMetrics.setBytesRead(existingBytesRead + getBytesReadCallback())
       }
 
@@ -106,14 +106,15 @@ class FileScanRDD(
         // don't need to run this `if` for every record.
         val preNumRecordsRead = inputMetrics.recordsRead
         if (nextElement.isInstanceOf[ColumnarBatch]) {
+          incTaskInputMetricsBytesRead()
           inputMetrics.incRecordsRead(nextElement.asInstanceOf[ColumnarBatch].numRows())
         } else {
+          // too costly to update every record
+          if (inputMetrics.recordsRead %
+              SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
+            incTaskInputMetricsBytesRead()
+          }
           inputMetrics.incRecordsRead(1)
-        }
-        // The records may be incremented by more than 1 at a time.
-        if (preNumRecordsRead / SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS !=
-          inputMetrics.recordsRead / SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS) {
-          updateBytesRead()
         }
         nextElement
       }
@@ -201,7 +202,7 @@ class FileScanRDD(
       }
 
       override def close(): Unit = {
-        updateBytesRead()
+        incTaskInputMetricsBytesRead()
         InputFileBlockHolder.unset()
       }
     }
