@@ -67,6 +67,16 @@ private[sql] object OrcFilters {
     }
   }
 
+  // Since ORC 1.5.0 (ORC-323), we need to quote for column names with `.` characters
+  // in order to distinguish predicate pushdown for nested columns.
+  private def quoteAttributeNameIfNeeded(name: String) : String = {
+    if (!name.contains("`") && name.contains(".")) {
+      s"`$name`"
+    } else {
+      name
+    }
+  }
+
   /**
    * Create ORC filter as a SearchArgument instance.
    */
@@ -215,38 +225,47 @@ private[sql] object OrcFilters {
       // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
 
       case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startAnd().equals(attribute, getType(attribute), castedValue).end())
+        Some(builder.startAnd().equals(quotedName, getType(attribute), castedValue).end())
 
       case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startAnd().nullSafeEquals(attribute, getType(attribute), castedValue).end())
+        Some(builder.startAnd().nullSafeEquals(quotedName, getType(attribute), castedValue).end())
 
       case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startAnd().lessThan(attribute, getType(attribute), castedValue).end())
+        Some(builder.startAnd().lessThan(quotedName, getType(attribute), castedValue).end())
 
       case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startAnd().lessThanEquals(attribute, getType(attribute), castedValue).end())
+        Some(builder.startAnd().lessThanEquals(quotedName, getType(attribute), castedValue).end())
 
       case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startNot().lessThanEquals(attribute, getType(attribute), castedValue).end())
+        Some(builder.startNot().lessThanEquals(quotedName, getType(attribute), castedValue).end())
 
       case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startNot().lessThan(attribute, getType(attribute), castedValue).end())
+        Some(builder.startNot().lessThan(quotedName, getType(attribute), castedValue).end())
 
       case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().isNull(attribute, getType(attribute)).end())
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        Some(builder.startAnd().isNull(quotedName, getType(attribute)).end())
 
       case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startNot().isNull(attribute, getType(attribute)).end())
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        Some(builder.startNot().isNull(quotedName, getType(attribute)).end())
 
       case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(attribute)))
-        Some(builder.startAnd().in(attribute, getType(attribute),
+        Some(builder.startAnd().in(quotedName, getType(attribute),
           castedValues.map(_.asInstanceOf[AnyRef]): _*).end())
 
       case _ => None

@@ -445,16 +445,7 @@ abstract class OrcQueryTest extends OrcTest {
   test("Support for pushing down filters for decimal types") {
     withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       val data = (0 until 10).map(i => Tuple1(BigDecimal.valueOf(i)))
-      withTempPath { file =>
-        // It needs to repartition data so that we can have several ORC files
-        // in order to skip stripes in ORC.
-        spark.createDataFrame(data).toDF("a").repartition(10)
-          .write.orc(file.getCanonicalPath)
-        val df = spark.read.orc(file.getCanonicalPath).where("a == 2")
-        val actual = stripSparkFilter(df).count()
-
-        assert(actual < 10)
-      }
+      checkPredicatePushDown(spark.createDataFrame(data).toDF("a"), 10, "a == 2")
     }
   }
 
@@ -465,16 +456,7 @@ abstract class OrcQueryTest extends OrcTest {
         val milliseconds = Timestamp.valueOf(timeString).getTime + i * 3600
         Tuple1(new Timestamp(milliseconds))
       }
-      withTempPath { file =>
-        // It needs to repartition data so that we can have several ORC files
-        // in order to skip stripes in ORC.
-        spark.createDataFrame(data).toDF("a").repartition(10)
-          .write.orc(file.getCanonicalPath)
-        val df = spark.read.orc(file.getCanonicalPath).where(s"a == '$timeString'")
-        val actual = stripSparkFilter(df).count()
-
-        assert(actual < 10)
-      }
+      checkPredicatePushDown(spark.createDataFrame(data).toDF("a"), 10, s"a == '$timeString'")
     }
   }
 
@@ -671,6 +653,12 @@ class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
       val path = new File(dir, "orc").getCanonicalPath
       Seq(Some(1), None).toDF("col.dots").write.orc(path)
       assert(spark.read.orc(path).collect().length == 2)
+    }
+  }
+
+  test("SPARK-25579 ORC PPD should support column names with dot") {
+    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      checkPredicatePushDown(spark.range(10).toDF("col.dot"), 10, "`col.dot` == 2")
     }
   }
 
