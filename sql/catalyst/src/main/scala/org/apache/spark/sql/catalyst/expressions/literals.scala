@@ -200,6 +200,7 @@ object Literal {
 
   private[expressions] def validateLiteralValue(value: Any, dataType: DataType): Unit = {
     def doValidate(v: Any, dataType: DataType): Boolean = dataType match {
+      case _ if v == null => true
       case BooleanType => v.isInstanceOf[Boolean]
       case ByteType => v.isInstanceOf[Byte]
       case ShortType => v.isInstanceOf[Short]
@@ -233,7 +234,7 @@ object Literal {
       case udt: UserDefinedType[_] => doValidate(v, udt.sqlType)
       case _ => false
     }
-    require(value == null || doValidate(value, dataType),
+    require(doValidate(value, dataType),
       s"Literal must have a corresponding value to ${dataType.catalogString}, " +
       s"but class ${Utils.getSimpleName(value.getClass)} found.")
   }
