@@ -23,6 +23,7 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap => MutableHashMap}
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -197,6 +198,20 @@ class ClientSuite extends SparkFunSuite with Matchers {
       tags.asScala.count(_.nonEmpty) should be (4)
     }
     appContext.getMaxAppAttempts should be (42)
+  }
+
+  test("resource request (client mode)") {
+    val sparkConf = new SparkConf().set("spark.submit.deployMode", "client")
+      .set(YARN_AM_RESOURCE_TYPES_PREFIX + "fpga", "2")
+      .set(YARN_AM_RESOURCE_TYPES_PREFIX + "gpu", "3")
+    testResourceRequest(sparkConf, List("gpu", "fpga"), Seq(("fpga", 2), ("gpu", 3)))
+  }
+
+  test("resource request (cluster mode)") {
+    val sparkConf = new SparkConf().set("spark.submit.deployMode", "cluster")
+      .set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "fpga", "4")
+      .set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "gpu", "5")
+    testResourceRequest(sparkConf, List("gpu", "fpga"), Seq(("fpga", 4), ("gpu", 5)))
   }
 
   test("spark.yarn.jars with multiple paths and globs") {
@@ -431,6 +446,32 @@ class ClientSuite extends SparkFunSuite with Matchers {
     val env = new MutableHashMap[String, String]()
     populateClasspath(null, new Configuration(), client.sparkConf, env)
     classpath(env)
+  }
+
+  private def testResourceRequest(
+      sparkConf: SparkConf,
+      resources: List[String],
+      expectedResources: Seq[(String, Long)]): Unit = {
+    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+    ResourceRequestTestHelper.initializeResourceTypes(resources)
+
+    val args = new ClientArguments(Array())
+
+    val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
+    val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
+    val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
+
+    val client = new Client(args, sparkConf)
+    client.createApplicationSubmissionContext(
+      new YarnClientApplication(getNewApplicationResponse, appContext),
+      containerLaunchContext)
+
+    appContext.getAMContainerSpec should be (containerLaunchContext)
+    appContext.getApplicationType should be ("SPARK")
+
+    expectedResources.foreach { case (name, value) =>
+      ResourceRequestTestHelper.getResourceTypeValue(appContext.getResource, name) should be (value)
+    }
   }
 
 }

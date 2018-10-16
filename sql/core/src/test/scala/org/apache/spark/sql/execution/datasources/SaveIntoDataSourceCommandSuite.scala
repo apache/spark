@@ -25,7 +25,7 @@ class SaveIntoDataSourceCommandSuite extends SharedSQLContext {
 
   test("simpleString is redacted") {
     val URL = "connection.url"
-    val PASS = "123"
+    val PASS = "mypassword"
     val DRIVER = "mydriver"
 
     val dataSource = DataSource(
