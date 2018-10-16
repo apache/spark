@@ -28,9 +28,9 @@ import org.apache.commons.io.FileUtils.readFileToString
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.KERBEROS_LABEL
 
-  /**
-    * This class is responsible for handling all Utils and Constants necessary for testing
-  */
+/**
+ * This class is responsible for handling all Utils and Constants necessary for testing
+ */
 private[spark] class KerberosUtils(
     sparkImage: String,
     kerberosImage: String,
