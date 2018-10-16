@@ -52,7 +52,7 @@ abstract class CountLike extends DeclarativeAggregate {
   usage = """
     _FUNC_(*) - Returns the total number of retrieved rows, including rows containing null.
 
-    _FUNC_(expr) - Returns the number of rows for which the supplied expression is non-null.
+    _FUNC_(expr[, expr...]) - Returns the number of rows for which the supplied expression(s) are all non-null.
 
     _FUNC_(DISTINCT expr[, expr...]) - Returns the number of rows for which the supplied expression(s) are unique and non-null.
   """)
