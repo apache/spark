@@ -71,6 +71,13 @@ object HiveThriftServer2 extends Logging {
   }
 
   def main(args: Array[String]) {
+    // If the arguments contains "-h" or "--help", print out the usage and exit.
+    if (args.contains("-h") || args.contains("--help")) {
+      HiveServer2.main(args)
+      // The following code should not be reachable. It is added to ensure the main function exits.
+      return
+    }
+
     Utils.initDaemon(log)
     val optionsProcessor = new HiveServer2.ServerOptionsProcessor("HiveThriftServer2")
     optionsProcessor.parse(args)
