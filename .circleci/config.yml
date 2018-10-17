@@ -456,6 +456,7 @@ jobs:
           key: v1-maven-dependency-cache-versioned-{{ checksum "pom.xml" }}
       - *restore-build-binaries-cache
 
+      - run: ./gradlew --info bintrayUpload | tee -a "/tmp/publish_docker_image_generator_plugin.log"
       - run: echo "user=$BINTRAY_USERNAME" > .credentials
       - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
       - run: echo "realm=Bintray API Realm" >> .credentials
@@ -468,6 +469,9 @@ jobs:
       - store_artifacts:
           path: /tmp/publish_artifacts.log
           destination: publish_artifacts.log
+      - store_artifacts:
+          path: /tmp/publish_docker_image_generator_plugin.log
+          destination: publish_docker_image_generator_plugin.log
 
 workflows:
   version: 2
