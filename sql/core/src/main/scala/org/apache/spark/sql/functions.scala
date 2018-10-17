@@ -3854,6 +3854,38 @@ object functions {
   @scala.annotation.varargs
   def map_concat(cols: Column*): Column = withExpr { MapConcat(cols.map(_.expr)) }
 
+  /**
+   * Parses a column containing a CSV string into a `StructType` with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing CSV data.
+   * @param schema the schema to use when parsing the CSV string
+   * @param options options to control how the CSV is parsed. accepts the same options and the
+   *                CSV data source.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def from_csv(e: Column, schema: StructType, options: Map[String, String]): Column = withExpr {
+    CsvToStructs(schema, options, e.expr)
+  }
+
+  /**
+   * (Java-specific) Parses a column containing a CSV string into a `StructType`
+   * with the specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing CSV data.
+   * @param schema the schema to use when parsing the CSV string
+   * @param options options to control how the CSV is parsed. accepts the same options and the
+   *                CSV data source.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def from_csv(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
+    withExpr(new CsvToStructs(e.expr, schema.expr, options.asScala.toMap))
+  }
+
   // scalastyle:off line.size.limit
   // scalastyle:off parameter.number
 

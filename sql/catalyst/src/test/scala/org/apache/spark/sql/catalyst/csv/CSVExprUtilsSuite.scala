@@ -15,46 +15,46 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.csv
+package org.apache.spark.sql.catalyst.csv
 
 import org.apache.spark.SparkFunSuite
 
-class CSVUtilsSuite extends SparkFunSuite {
+class CSVExprUtilsSuite extends SparkFunSuite {
   test("Can parse escaped characters") {
-    assert(CSVUtils.toChar("""\t""") === '\t')
-    assert(CSVUtils.toChar("""\r""") === '\r')
-    assert(CSVUtils.toChar("""\b""") === '\b')
-    assert(CSVUtils.toChar("""\f""") === '\f')
-    assert(CSVUtils.toChar("""\"""") === '\"')
-    assert(CSVUtils.toChar("""\'""") === '\'')
-    assert(CSVUtils.toChar("""\u0000""") === '\u0000')
-    assert(CSVUtils.toChar("""\\""") === '\\')
+    assert(CSVExprUtils.toChar("""\t""") === '\t')
+    assert(CSVExprUtils.toChar("""\r""") === '\r')
+    assert(CSVExprUtils.toChar("""\b""") === '\b')
+    assert(CSVExprUtils.toChar("""\f""") === '\f')
+    assert(CSVExprUtils.toChar("""\"""") === '\"')
+    assert(CSVExprUtils.toChar("""\'""") === '\'')
+    assert(CSVExprUtils.toChar("""\u0000""") === '\u0000')
+    assert(CSVExprUtils.toChar("""\\""") === '\\')
   }
 
   test("Does not accept delimiter larger than one character") {
     val exception = intercept[IllegalArgumentException]{
-      CSVUtils.toChar("ab")
+      CSVExprUtils.toChar("ab")
     }
     assert(exception.getMessage.contains("cannot be more than one character"))
   }
 
   test("Throws exception for unsupported escaped characters") {
     val exception = intercept[IllegalArgumentException]{
-      CSVUtils.toChar("""\1""")
+      CSVExprUtils.toChar("""\1""")
     }
     assert(exception.getMessage.contains("Unsupported special character for delimiter"))
   }
 
   test("string with one backward slash is prohibited") {
     val exception = intercept[IllegalArgumentException]{
-      CSVUtils.toChar("""\""")
+      CSVExprUtils.toChar("""\""")
     }
     assert(exception.getMessage.contains("Single backslash is prohibited"))
   }
 
   test("output proper error message for empty string") {
     val exception = intercept[IllegalArgumentException]{
-      CSVUtils.toChar("")
+      CSVExprUtils.toChar("")
     }
     assert(exception.getMessage.contains("Delimiter cannot be empty string"))
   }

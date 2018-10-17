@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.csv
+package org.apache.spark.sql.catalyst.csv
 
 import java.nio.charset.StandardCharsets
 import java.util.{Locale, TimeZone}
@@ -83,7 +83,7 @@ class CSVOptions(
     }
   }
 
-  val delimiter = CSVUtils.toChar(
+  val delimiter = CSVExprUtils.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   val parseMode: ParseMode =
     parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)

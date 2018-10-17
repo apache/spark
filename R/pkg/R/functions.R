@@ -188,6 +188,7 @@ NULL
 #'          \item \code{to_json}: it is the column containing the struct, array of the structs,
 #'              the map or array of maps.
 #'          \item \code{from_json}: it is the column containing the JSON string.
+#'          \item \code{from_csv}: it is the column containing the CSV string.
 #'          }
 #' @param y Column to compute on.
 #' @param value A value to compute on.
@@ -195,6 +196,13 @@ NULL
 #'          \item \code{array_contains}: a value to be checked if contained in the column.
 #'          \item \code{array_position}: a value to locate in the given array.
 #'          \item \code{array_remove}: a value to remove in the given array.
+#'          }
+#' @param schema
+#'          \itemize{
+#'          \item \code{from_json}: a structType object to use as the schema to use
+#'              when parsing the JSON string. Since Spark 2.3, the DDL-formatted string is
+#'              also supported for the schema.
+#'          \item \code{from_csv}: a DDL-formatted string
 #'          }
 #' @param ... additional argument(s). In \code{to_json} and \code{from_json}, this contains
 #'            additional named properties to control how it is converted, accepts the same
@@ -2165,8 +2173,6 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #' to \code{TRUE}. If the string is unparseable, the Column will contain the value NA.
 #'
 #' @rdname column_collection_functions
-#' @param schema a structType object to use as the schema to use when parsing the JSON string.
-#'               Since Spark 2.3, the DDL-formatted string is also supported for the schema.
 #' @param as.json.array indicating if input string is JSON array of objects or a single object.
 #' @aliases from_json from_json,Column,characterOrstructType-method
 #' @examples
@@ -2199,6 +2205,36 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructType")
             options <- varargsToStrEnv(...)
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "from_json",
+                              x@jc, jschema, options)
+            column(jc)
+          })
+
+#' @details
+#' \code{from_csv}: Parses a column containing a CSV string into a Column of \code{structType}
+#' with the specified \code{schema}.
+#' If the string is unparseable, the Column will contain the value NA.
+#'
+#' @rdname column_collection_functions
+#' @aliases from_csv from_csv,Column,character-method
+#' @examples
+#'
+#' \dontrun{
+#' df <- sql("SELECT 'Amsterdam,2018' as csv")
+#' schema <- "city STRING, year INT"
+#' head(select(df, from_csv(df$csv, schema)))}
+#' @note from_csv since 3.0.0
+setMethod("from_csv", signature(x = "Column", schema = "characterOrColumn"),
+          function(x, schema, ...) {
+            if (class(schema) == "Column") {
+              jschema <- schema@jc
+            } else if (is.character(schema)) {
+              jschema <- callJStatic("org.apache.spark.sql.functions", "lit", schema)
+            } else {
+              stop("schema argument should be a column or character")
+            }
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "from_csv",
                               x@jc, jschema, options)
             column(jc)
           })
