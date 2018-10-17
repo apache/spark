@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.io.IOException
 import java.net.{URL, URLClassLoader}
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
@@ -29,6 +30,7 @@ import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -498,5 +500,28 @@ private[spark] object HiveUtils extends Logging {
       val dataCols = hiveTable.getCols.asScala.map(HiveClientImpl.fromHiveColumn)
       table.copy(schema = StructType(dataCols ++ partCols))
     }
+  }
+
+  /**
+   * Method will return the stats for a particular CatalogTable by considering
+   * session.sessionState.conf.fallBackToHdfsForStatsEnabled proprty, if its not enabled
+   * then return default stats.
+   */
+  def getSizeInBytes(table: CatalogTable, session: SparkSession): Long = {
+    val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
+      try {
+        val hadoopConf = session.sessionState.newHadoopConf()
+        val tablePath = new Path(table.location)
+        val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
+        fs.getContentSummary(tablePath).getLength
+      } catch {
+        case e: IOException =>
+          logWarning("Failed to get table size from hdfs.", e)
+          session.sessionState.conf.defaultSizeInBytes
+      }
+    } else {
+      session.sessionState.conf.defaultSizeInBytes
+    }
+    sizeInBytes
   }
 }

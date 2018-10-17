@@ -193,6 +193,16 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           None)
         val logicalRelation = cached.getOrElse {
           val updatedTable = inferIfNeeded(relation, options, fileFormat)
+          // Intialize the catalogTable stats if its not defined.An intial value has to be defined
+          // so that the hive statistics will be updated after each insert command.
+          val withStats = {
+            if (updatedTable.stats == None) {
+              val sizeInBytes = HiveUtils.getSizeInBytes(updatedTable, sparkSession)
+              updatedTable.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
+            } else {
+              updatedTable
+            }
+          }
           val created =
             LogicalRelation(
               DataSource(
@@ -202,7 +212,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 bucketSpec = None,
                 options = options,
                 className = fileType).resolveRelation(),
-              table = updatedTable)
+              table = withStats)
 
           catalogProxy.cacheTable(tableIdentifier, created)
           created
