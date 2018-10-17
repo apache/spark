@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.csv
+package org.apache.spark.sql.catalyst.csv
 
 import java.io.InputStream
 import java.math.BigDecimal
@@ -28,8 +28,7 @@ import com.univocity.parsers.csv.CsvParser
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.util.{BadRecordException, DateTimeUtils}
-import org.apache.spark.sql.execution.datasources.FailureSafeParser
+import org.apache.spark.sql.catalyst.util.{BadRecordException, DateTimeUtils, FailureSafeParser}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -264,7 +263,7 @@ class UnivocityParser(
   }
 }
 
-private[csv] object UnivocityParser {
+private[sql] object UnivocityParser {
 
   /**
    * Parses a stream that contains CSV strings and turns it into an iterator of tokens.
@@ -339,7 +338,7 @@ private[csv] object UnivocityParser {
 
     val options = parser.options
 
-    val filteredLines: Iterator[String] = CSVUtils.filterCommentAndEmpty(lines, options)
+    val filteredLines: Iterator[String] = CSVExprUtils.filterCommentAndEmpty(lines, options)
 
     val safeParser = new FailureSafeParser[String](
       input => Seq(parser.parse(input)),
