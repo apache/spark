@@ -50,7 +50,7 @@ To use these features, you do not need to have an existing Hive setup.
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 With a `SparkSession`, applications can create DataFrames from an [existing `RDD`](#interoperating-with-rdds),
-from a Hive table, or from [Spark data sources](#data-sources).
+from a Hive table, or from [Spark data sources](sql-data-sources.html).
 
 As an example, the following creates a DataFrame based on the content of a JSON file:
 
@@ -59,7 +59,7 @@ As an example, the following creates a DataFrame based on the content of a JSON 
 
 <div data-lang="java" markdown="1">
 With a `SparkSession`, applications can create DataFrames from an [existing `RDD`](#interoperating-with-rdds),
-from a Hive table, or from [Spark data sources](#data-sources).
+from a Hive table, or from [Spark data sources](sql-data-sources.html).
 
 As an example, the following creates a DataFrame based on the content of a JSON file:
 
@@ -68,7 +68,7 @@ As an example, the following creates a DataFrame based on the content of a JSON 
 
 <div data-lang="python"  markdown="1">
 With a `SparkSession`, applications can create DataFrames from an [existing `RDD`](#interoperating-with-rdds),
-from a Hive table, or from [Spark data sources](#data-sources).
+from a Hive table, or from [Spark data sources](sql-data-sources.html).
 
 As an example, the following creates a DataFrame based on the content of a JSON file:
 
@@ -77,7 +77,7 @@ As an example, the following creates a DataFrame based on the content of a JSON 
 
 <div data-lang="r"  markdown="1">
 With a `SparkSession`, applications can create DataFrames from a local R data.frame,
-from a Hive table, or from [Spark data sources](#data-sources).
+from a Hive table, or from [Spark data sources](sql-data-sources.html).
 
 As an example, the following creates a DataFrame based on the content of a JSON file:
 

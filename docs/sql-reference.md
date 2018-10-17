@@ -12,42 +12,42 @@ displayTitle: Reference
 Spark SQL and DataFrames support the following data types:
 
 * Numeric types
-    - `ByteType`: Represents 1-byte signed integer numbers.
-    The range of numbers is from `-128` to `127`.
-    - `ShortType`: Represents 2-byte signed integer numbers.
-    The range of numbers is from `-32768` to `32767`.
-    - `IntegerType`: Represents 4-byte signed integer numbers.
-    The range of numbers is from `-2147483648` to `2147483647`.
-    - `LongType`: Represents 8-byte signed integer numbers.
-    The range of numbers is from `-9223372036854775808` to `9223372036854775807`.
-    - `FloatType`: Represents 4-byte single-precision floating point numbers.
-    - `DoubleType`: Represents 8-byte double-precision floating point numbers.
-    - `DecimalType`: Represents arbitrary-precision signed decimal numbers. Backed internally by `java.math.BigDecimal`. A `BigDecimal` consists of an arbitrary precision integer unscaled value and a 32-bit integer scale.
+  - `ByteType`: Represents 1-byte signed integer numbers.
+  The range of numbers is from `-128` to `127`.
+  - `ShortType`: Represents 2-byte signed integer numbers.
+  The range of numbers is from `-32768` to `32767`.
+  - `IntegerType`: Represents 4-byte signed integer numbers.
+  The range of numbers is from `-2147483648` to `2147483647`.
+  - `LongType`: Represents 8-byte signed integer numbers.
+  The range of numbers is from `-9223372036854775808` to `9223372036854775807`.
+  - `FloatType`: Represents 4-byte single-precision floating point numbers.
+  - `DoubleType`: Represents 8-byte double-precision floating point numbers.
+  - `DecimalType`: Represents arbitrary-precision signed decimal numbers. Backed internally by `java.math.BigDecimal`. A `BigDecimal` consists of an arbitrary precision integer unscaled value and a 32-bit integer scale.
 * String type
-    - `StringType`: Represents character string values.
+  - `StringType`: Represents character string values.
 * Binary type
-    - `BinaryType`: Represents byte sequence values.
+  - `BinaryType`: Represents byte sequence values.
 * Boolean type
-    - `BooleanType`: Represents boolean values.
+  - `BooleanType`: Represents boolean values.
 * Datetime type
-    - `TimestampType`: Represents values comprising values of fields year, month, day,
-    hour, minute, and second.
-    - `DateType`: Represents values comprising values of fields year, month, day.
+  - `TimestampType`: Represents values comprising values of fields year, month, day,
+  hour, minute, and second.
+  - `DateType`: Represents values comprising values of fields year, month, day.
 * Complex types
-    - `ArrayType(elementType, containsNull)`: Represents values comprising a sequence of
-    elements with the type of `elementType`. `containsNull` is used to indicate if
-    elements in a `ArrayType` value can have `null` values.
-    - `MapType(keyType, valueType, valueContainsNull)`:
-    Represents values comprising a set of key-value pairs. The data type of keys are
-    described by `keyType` and the data type of values are described by `valueType`.
-    For a `MapType` value, keys are not allowed to have `null` values. `valueContainsNull`
-    is used to indicate if values of a `MapType` value can have `null` values.
-    - `StructType(fields)`: Represents values with the structure described by
-    a sequence of `StructField`s (`fields`).
-        * `StructField(name, dataType, nullable)`: Represents a field in a `StructType`.
-        The name of a field is indicated by `name`. The data type of a field is indicated
-        by `dataType`. `nullable` is used to indicate if values of this fields can have
-        `null` values.
+  - `ArrayType(elementType, containsNull)`: Represents values comprising a sequence of
+  elements with the type of `elementType`. `containsNull` is used to indicate if
+  elements in a `ArrayType` value can have `null` values.
+  - `MapType(keyType, valueType, valueContainsNull)`:
+  Represents values comprising a set of key-value pairs. The data type of keys are
+  described by `keyType` and the data type of values are described by `valueType`.
+  For a `MapType` value, keys are not allowed to have `null` values. `valueContainsNull`
+  is used to indicate if values of a `MapType` value can have `null` values.
+  - `StructType(fields)`: Represents values with the structure described by
+  a sequence of `StructField`s (`fields`).
+    * `StructField(name, dataType, nullable)`: Represents a field in a `StructType`.
+    The name of a field is indicated by `name`. The data type of a field is indicated
+    by `dataType`. `nullable` is used to indicate if values of this fields can have
+    `null` values.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
