@@ -464,7 +464,7 @@ private[spark] class TaskSchedulerImpl(
                   }
                 case _ => // Abort Immediately
                   logInfo("Cannot schedule any task because of complete blacklisting. No idle" +
-                  s" executors can be found to kill. Aborting $taskSet." )
+                    s" executors can be found to kill. Aborting $taskSet." )
                   taskSet.abortSinceCompletelyBlacklisted(taskIndex.get)
               }
             case _ => // Do nothing if no tasks completely blacklisted.
