@@ -192,6 +192,7 @@ fi
 if [ -d "$SPARK_HOME"/resource-managers/kubernetes/core/target/ ]; then
   mkdir -p "$DISTDIR/kubernetes/"
   cp -a "$SPARK_HOME"/resource-managers/kubernetes/docker/src "$DISTDIR/kubernetes/"
+  cp -a "$SPARK_HOME"/resource-managers/kubernetes/integration-tests/scripts "$DISTDIR/kubernetes/"
   cp -a "$SPARK_HOME"/resource-managers/kubernetes/integration-tests/tests "$DISTDIR/kubernetes/"
 fi
 

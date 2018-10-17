@@ -83,6 +83,8 @@ then
   else
     # -m option for minikube.
     $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -m -r $IMAGE_REPO -t $IMAGE_TAG build
+    chmod +x $UNPACKED_SPARK_TGZ/kubernetes/scripts/setup-krb-integration-test-env.sh
+    $UNPACKED_SPARK_TGZ/kubernetes/scripts/setup-krb-integration-test-env.sh -r $IMAGE_REPO -t $IMAGE_TAG
   fi
   cd -
 fi

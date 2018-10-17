@@ -17,8 +17,8 @@
 package org.apache.spark.deploy.k8s.integrationtest.kerberos
 
 /**
- * A collection of functions that together represent a WatcherCache. The functin of these
- * WatcherCaches are to watch the KerberosStorage object and insure they are properly created
+ * A collection of functions that together represent a WatcherCache. The function of these
+ * WatcherCaches are to watch the KerberosStorage object and insure it is properly created
  * by blocking with a condition.
  */
 private[spark] trait WatcherCacheConfiguration[T <: KerberosStorage] {

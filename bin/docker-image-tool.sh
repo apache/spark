@@ -73,7 +73,6 @@ function build {
   )
   local BASEDOCKERFILE=${BASEDOCKERFILE:-"$IMG_PATH/main/dockerfiles/spark/Dockerfile"}
   local PYDOCKERFILE=${PYDOCKERFILE:-"$IMG_PATH/main/dockerfiles/spark/bindings/python/Dockerfile"}
-  local KDOCKERFILE=${KDOCKERFILE:-"$IMG_PATH/test/dockerfiles/spark/kerberos/Dockerfile"}
   local RDOCKERFILE=${RDOCKERFILE:-"$IMG_PATH/main/dockerfiles/spark/bindings/R/Dockerfile"}
 
   # Spark Base
@@ -85,13 +84,6 @@ function build {
   docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
     -t $(image_ref spark-py) \
     -f "$PYDOCKERFILE" .
-
-  # The following are optional docker builds for Kerberos Testing
-  docker pull ifilonenko/hadoop-base:latest
-
-  docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
-    -t $(image_ref spark-kerberos) \
-    -f "$KDOCKERFILE" .
 
   # SparkR
   docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
