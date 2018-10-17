@@ -31,9 +31,9 @@ import org.apache.spark.sql.types.DataType
  *                  null. Use boxed type or [[Option]] if you wanna do the null-handling yourself.
  * @param dataType  Return type of function.
  * @param children  The input expressions of this UDF.
- * @param handleNullForInputs Whether the inputs need null-value handling, which preserves the null
- *                            semantics of a null input of a Scala primitive type instead of
- *                            converting it to the type's default value.
+ * @param inputsNullSafe Whether the inputs are of non-primitive types or not nullable. Null values
+ *                       of Scala primitive types will be converted to the type's default value and
+ *                       lead to wrong results, thus need special handling before calling the UDF.
  * @param inputTypes  The expected input types of this UDF, used to perform type coercion. If we do
  *                    not want to perform coercion, simply use "Nil". Note that it would've been
  *                    better to use Option of Seq[DataType] so we can use "None" as the case for no
@@ -47,7 +47,7 @@ case class ScalaUDF(
     function: AnyRef,
     dataType: DataType,
     children: Seq[Expression],
-    handleNullForInputs: Seq[Boolean],
+    inputsNullSafe: Seq[Boolean],
     inputTypes: Seq[DataType] = Nil,
     udfName: Option[String] = None,
     nullable: Boolean = true,
@@ -59,11 +59,11 @@ case class ScalaUDF(
       function: AnyRef,
       dataType: DataType,
       children: Seq[Expression],
-      handleNullForInputs: Seq[Boolean],
+      inputsNullSafe: Seq[Boolean],
       inputTypes: Seq[DataType],
       udfName: Option[String]) = {
     this(
-      function, dataType, children, handleNullForInputs, inputTypes, udfName,
+      function, dataType, children, inputsNullSafe, inputTypes, udfName,
       nullable = true, udfDeterministic = true)
   }
 

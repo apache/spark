@@ -49,7 +49,7 @@ case class UserDefinedFunction protected[sql] (
 
   // This is a `var` instead of in the constructor for backward compatibility of this case class.
   // TODO: revisit this case class in Spark 3.0, and narrow down the public surface.
-  private[sql] var nullableTypes: Option[Seq[Boolean]] = None
+  private[sql] var nullableTypes: Seq[Boolean] = Nil
 
   /**
    * Returns true when the UDF can return a nullable value.
@@ -73,15 +73,17 @@ case class UserDefinedFunction protected[sql] (
    */
   @scala.annotation.varargs
   def apply(exprs: Column*): Column = {
-    if (inputTypes.isDefined && nullableTypes.isDefined) {
-      require(inputTypes.get.length == nullableTypes.get.length)
+    val numOfArgs = ScalaReflection.getParameterCount(f)
+    assert(nullableTypes.length == numOfArgs)
+    if (inputTypes.isDefined) {
+      assert(inputTypes.get.length == numOfArgs)
     }
 
     Column(ScalaUDF(
       f,
       dataType,
       exprs.map(_.expr),
-      nullableTypes.map(_.map(!_)).getOrElse(exprs.map(_ => false)),
+      nullableTypes,
       inputTypes.getOrElse(Nil),
       udfName = _nameOption,
       nullable = _nullable,
@@ -146,9 +148,14 @@ private[sql] object SparkUserDefinedFunction {
   def create(
       f: AnyRef,
       dataType: DataType,
-      inputSchemas: Option[Seq[ScalaReflection.Schema]]): UserDefinedFunction = {
-    val udf = new UserDefinedFunction(f, dataType, inputSchemas.map(_.map(_.dataType)))
-    udf.nullableTypes = inputSchemas.map(_.map(_.nullable))
+      inputSchemas: Seq[Option[ScalaReflection.Schema]]): UserDefinedFunction = {
+    val inputTypes = if (inputSchemas.contains(None)) {
+      None
+    } else {
+      Some(inputSchemas.map(_.get.dataType))
+    }
+    val udf = new UserDefinedFunction(f, dataType, inputTypes)
+    udf.nullableTypes = inputSchemas.map(_.map(_.nullable).getOrElse(true))
     udf
   }
 }

@@ -933,6 +933,15 @@ trait ScalaReflection {
   }
 
   /**
+   * Returns the number of input parameters of scala function object.
+   */
+  def getParameterCount(func: AnyRef): Int = {
+    val methods = func.getClass.getMethods.filter(m => m.getName == "apply" && !m.isBridge)
+    assert(methods.length == 1)
+    methods.head.getParameterCount
+  }
+
+  /**
    * Returns the parameter names and types for the primary constructor of this type.
    *
    * Note that it only works for scala classes with primary constructor, and currently doesn't

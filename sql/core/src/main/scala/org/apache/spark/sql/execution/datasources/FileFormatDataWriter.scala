@@ -180,7 +180,7 @@ class DynamicPartitionDataWriter(
         ExternalCatalogUtils.getPartitionPathString _,
         StringType,
         Seq(Literal(c.name), Cast(c, StringType, Option(description.timeZoneId))),
-        Seq(false, false))
+        Seq(true, true))
       if (i == 0) Seq(partitionName) else Seq(Literal(Path.SEPARATOR), partitionName)
     })
 

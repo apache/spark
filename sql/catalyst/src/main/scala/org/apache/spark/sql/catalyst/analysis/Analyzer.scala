@@ -2137,26 +2137,26 @@ class Analyzer(
 
       case p => p transformExpressionsUp {
 
-        case udf @ ScalaUDF(_, _, inputs, handleNullForInputs, _, _, _, _)
-            if handleNullForInputs.contains(true) =>
+        case udf @ ScalaUDF(_, _, inputs, inputsNullSafe, _, _, _, _)
+            if inputsNullSafe.contains(false) =>
           // Otherwise, add special handling of null for fields that can't accept null.
           // The result of operations like this, when passed null, is generally to return null.
-          assert(handleNullForInputs.length == inputs.length)
+          assert(inputsNullSafe.length == inputs.length)
 
           // TODO: skip null handling for not-nullable primitive inputs after we can completely
           // trust the `nullable` information.
-          val inputsNullCheck = handleNullForInputs.zip(inputs)
-            .filter { case (nullable, _) => nullable }
+          val inputsNullCheck = inputsNullSafe.zip(inputs)
+            .filter { case (nullSafe, _) => !nullSafe }
             .map { case (_, expr) => IsNull(expr) }
             .reduceLeftOption[Expression]((e1, e2) => Or(e1, e2))
           // Once we add an `If` check above the udf, it is safe to mark those checked inputs
-          // as not nullable (i.e., set `inputsNullable` all `false`), because the null-returning
+          // as null-safe (i.e., set `inputsNullSafe` all `true`), because the null-returning
           // branch of `If` will be called if any of these checked inputs is null. Thus we can
           // prevent this rule from being applied repeatedly.
-          val newHandleNullForInputs = handleNullForInputs.map(_ => false)
+          val newInputsNullSafe = inputsNullSafe.map(_ => true)
           inputsNullCheck
             .map(If(_, Literal.create(null, udf.dataType),
-              udf.copy(handleNullForInputs = newHandleNullForInputs)))
+              udf.copy(inputsNullSafe = newInputsNullSafe)))
             .getOrElse(udf)
       }
     }
