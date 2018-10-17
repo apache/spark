@@ -672,17 +672,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   private def runCommand(session: SparkSession, name: String)(command: LogicalPlan): Unit = {
     val qe = session.sessionState.executePlan(command)
-    try {
-      val start = System.nanoTime()
-      // call `QueryExecution.toRDD` to trigger the execution of commands.
-      SQLExecution.withNewExecutionId(session, qe)(qe.toRdd)
-      val end = System.nanoTime()
-      session.listenerManager.onSuccess(name, qe, end - start)
-    } catch {
-      case e: Exception =>
-        session.listenerManager.onFailure(name, qe, e)
-        throw e
-    }
+    // call `QueryExecution.toRDD` to trigger the execution of commands.
+    SQLExecution.withNewExecutionId(session, qe, Some(name))(qe.toRdd)
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////
