@@ -233,7 +233,7 @@ case class InsertIntoHiveTable(
                 ExternalCatalogUtils.generatePartitionPath(
                   partitionSpec,
                   partitionColumnNames,
-                  HiveClientImpl.toHiveTable(table).getDataLocation)
+                  new Path(table.location))
               }
             val fs = oldPartitionPath.getFileSystem(hadoopConf)
             if (fs.exists(oldPartitionPath)) {
