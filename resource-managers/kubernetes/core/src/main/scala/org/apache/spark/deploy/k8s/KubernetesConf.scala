@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.features.hadooputils.{HadoopBootstrapUtil, HadoopKerberosLogin}
 import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.deploy.k8s.submit.KubernetesClientApplication._
@@ -77,6 +78,12 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
   def hadoopConfigMapName: String = s"$appResourceNamePrefix-hadoop-config"
 
   def krbConfigMapName: String = s"$appResourceNamePrefix-krb5-file"
+
+  // For unit-testing purposes
+  def hadoopBootstrapUtil: HadoopBootstrapUtil = new HadoopBootstrapUtil()
+
+  // For unit-testing purposes
+  def hadoopKerberosLogin: HadoopKerberosLogin = new HadoopKerberosLogin()
 
   def tokenManager(conf: SparkConf, hConf: Configuration): KubernetesHadoopDelegationTokenManager =
     new KubernetesHadoopDelegationTokenManager(new HadoopDelegationTokenManager(conf, hConf))

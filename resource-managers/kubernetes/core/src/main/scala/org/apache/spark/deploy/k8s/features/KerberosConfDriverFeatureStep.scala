@@ -50,6 +50,9 @@ private[spark] class KerberosConfDriverFeatureStep(
     (hadoopConfDirSpec.hadoopConfDir.isDefined && kubeTokenManager.isSecurityEnabled) ||
       (hadoopConfDirSpec.hadoopConfigMapName.isDefined &&
         (krb5File.isDefined || krb5CMap.isDefined))
+  private val hadoopBootstrapUtil = kubernetesConf.hadoopBootstrapUtil
+  private val hadoopKerberosLogin = kubernetesConf.hadoopKerberosLogin
+
   require(keytab.isEmpty || isKerberosEnabled,
     "You must enable Kerberos support if you are specifying a Kerberos Keytab")
 
@@ -77,7 +80,7 @@ private[spark] class KerberosConfDriverFeatureStep(
       " specify the item-key where the data is stored")
 
   private val hadoopConfigurationFiles = hadoopConfDirSpec.hadoopConfDir.map { hConfDir =>
-    HadoopBootstrapUtil.getHadoopConfFiles(hConfDir)
+    hadoopBootstrapUtil.getHadoopConfFiles(hConfDir)
   }
   private val newHadoopConfigMapName =
     if (hadoopConfDirSpec.hadoopConfigMapName.isEmpty) {
@@ -98,7 +101,7 @@ private[spark] class KerberosConfDriverFeatureStep(
       jobUserName = kubeTokenManager.getCurrentUser.getShortUserName)
   }).orElse(
     if (isKerberosEnabled) {
-      Some(HadoopKerberosLogin.buildSpec(
+      Some(hadoopKerberosLogin.buildSpec(
         conf,
         kubernetesConf.appResourceNamePrefix,
         kubeTokenManager))
@@ -108,13 +111,13 @@ private[spark] class KerberosConfDriverFeatureStep(
   )
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val hadoopBasedSparkPod = HadoopBootstrapUtil.bootstrapHadoopConfDir(
+    val hadoopBasedSparkPod = hadoopBootstrapUtil.bootstrapHadoopConfDir(
       hadoopConfDirSpec.hadoopConfDir,
       newHadoopConfigMapName,
       hadoopConfDirSpec.hadoopConfigMapName,
       pod)
     kerberosConfSpec.map { hSpec =>
-      HadoopBootstrapUtil.bootstrapKerberosPod(
+      hadoopBootstrapUtil.bootstrapKerberosPod(
         hSpec.dtSecretName,
         hSpec.dtSecretItemKey,
         hSpec.jobUserName,
@@ -123,7 +126,7 @@ private[spark] class KerberosConfDriverFeatureStep(
         krb5CMap,
         hadoopBasedSparkPod)
     }.getOrElse(
-      HadoopBootstrapUtil.bootstrapSparkUserPod(
+      hadoopBootstrapUtil.bootstrapSparkUserPod(
         kubeTokenManager.getCurrentUser.getShortUserName,
         hadoopBasedSparkPod))
   }
@@ -147,11 +150,11 @@ private[spark] class KerberosConfDriverFeatureStep(
       hName <- newHadoopConfigMapName
       hFiles <- hadoopConfigurationFiles
     } yield {
-      HadoopBootstrapUtil.buildHadoopConfigMap(hName, hFiles)
+      hadoopBootstrapUtil.buildHadoopConfigMap(hName, hFiles)
     }
 
     val krb5ConfigMap = krb5File.map { fileLocation =>
-      HadoopBootstrapUtil.buildkrb5ConfigMap(
+      hadoopBootstrapUtil.buildkrb5ConfigMap(
         kubernetesConf.krbConfigMapName,
         fileLocation)
     }

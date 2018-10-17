@@ -39,7 +39,8 @@ private[spark] class HadoopConfExecutorFeatureStep(
       "Ensure that the env `HADOOP_CONF_DIR` is defined either in the client or " +
         " using pre-existing ConfigMaps")
     logInfo("HADOOP_CONF_DIR defined")
-    HadoopBootstrapUtil.bootstrapHadoopConfDir(None, None, hadoopConfDirCMapName, pod)
+    val hadoopBootstrapUtil = kubernetesConf.hadoopBootstrapUtil
+    hadoopBootstrapUtil.bootstrapHadoopConfDir(None, None, hadoopConfDirCMapName, pod)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty

@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{Container, HasMetadata, PodBuilder, SecretBuilder}
+import io.fabric8.kubernetes.api.model.{Container, HasMetadata, Pod, PodBuilder, SecretBuilder}
 import org.mockito.Matchers
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
@@ -63,4 +63,40 @@ object KubernetesFeaturesTestUtils {
   def containerHasEnvVar(container: Container, envVarName: String): Boolean = {
     container.getEnv.asScala.exists(envVar => envVar.getName == envVarName)
   }
+
+  def podHasLabels(pod: Pod, labels: Map[String, String]): Boolean = {
+    labels.toSet.subsetOf(pod.getMetadata.getLabels.asScala.toSet)
+  }
+
+  // Kerberos Specific Test utils
+
+  // Upon use of bootstrapHadoopConfDir
+  def hConfBootPod(inputPod: SparkPod): SparkPod =
+    SparkPod(
+      new PodBuilder(inputPod.pod)
+        .editOrNewMetadata()
+          .addToLabels("bootstrap-hconf", "true")
+          .endMetadata()
+        .build(),
+      inputPod.container)
+
+  // Upon use of bootstrapKerberosPod
+  def krbBootPod(inputPod: SparkPod): SparkPod =
+    SparkPod(
+      new PodBuilder(inputPod.pod)
+        .editOrNewMetadata()
+          .addToLabels("bootstrap-kerberos", "true")
+          .endMetadata()
+        .build(),
+      inputPod.container)
+
+  // Upon use of bootstrapSparkUserPod
+  def userBootPod(inputPod: SparkPod): SparkPod =
+    SparkPod(
+      new PodBuilder(inputPod.pod)
+        .editOrNewMetadata()
+          .addToLabels("bootstrap-user", "true")
+          .endMetadata()
+        .build(),
+      inputPod.container)
 }

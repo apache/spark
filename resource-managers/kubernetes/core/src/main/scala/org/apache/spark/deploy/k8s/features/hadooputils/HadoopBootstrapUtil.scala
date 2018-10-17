@@ -28,7 +28,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.SparkPod
 import org.apache.spark.internal.Logging
 
-private[spark] object HadoopBootstrapUtil extends Logging {
+private[spark] class HadoopBootstrapUtil extends Logging {
 
   /**
    * Mounting the DT secret for both the Driver and the executors

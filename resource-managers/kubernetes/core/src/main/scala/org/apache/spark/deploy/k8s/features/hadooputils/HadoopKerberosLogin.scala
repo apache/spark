@@ -33,7 +33,7 @@ import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManag
  * and store values in DelegationToken. Lastly, the class puts the data into
  * a secret. All this is defined in a KerberosConfigSpec.
  */
-private[spark] object HadoopKerberosLogin {
+private[spark] class HadoopKerberosLogin {
   def buildSpec(
       submissionSparkConf: SparkConf,
       kubernetesResourceNamePrefix: String,
