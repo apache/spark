@@ -207,7 +207,7 @@ case class ExpressionEncoder[T](
    */
   val serializer: Seq[NamedExpression] = {
     val serializedAsStruct = objSerializer.dataType.isInstanceOf[StructType]
-    val clsName = clsTag.runtimeClass.getCanonicalName
+    val clsName = Utils.getSimpleName(clsTag.runtimeClass)
 
     if (serializedAsStruct) {
       val nullSafeSerializer = objSerializer.transformUp {
