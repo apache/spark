@@ -59,28 +59,6 @@ $(document).ajaxStart(function () {
     $.blockUI({message: '<h3>Loading Executors Page...</h3>'});
 });
 
-function createRESTEndPoint(appId) {
-    var words = document.baseURI.split('/');
-    var ind = words.indexOf("proxy");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        var newBaseURI = words.slice(0, ind + 2).join('/');
-        return newBaseURI + "/api/v1/applications/" + appId + "/allexecutors"
-    }
-    ind = words.indexOf("history");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        var attemptId = words[ind + 2];
-        var newBaseURI = words.slice(0, ind).join('/');
-        if (isNaN(attemptId)) {
-            return newBaseURI + "/api/v1/applications/" + appId + "/allexecutors";
-        } else {
-            return newBaseURI + "/api/v1/applications/" + appId + "/" + attemptId + "/allexecutors";
-        }
-    }
-    return location.origin + "/api/v1/applications/" + appId + "/allexecutors";
-}
-
 function logsExist(execs) {
     return execs.some(function(exec) {
         return !($.isEmptyObject(exec["executorLogs"]));
@@ -134,7 +112,7 @@ $(document).ready(function () {
 
     getStandAloneAppId(function (appId) {
 
-        var endPoint = createRESTEndPoint(appId);
+        var endPoint = createRESTEndPointForExecutorsPage(appId);
         $.getJSON(endPoint, function (response, status, jqXHR) {
             var summary = [];
             var allExecCnt = 0;

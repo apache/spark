@@ -76,9 +76,7 @@ class ExecutorStageSummary private[spark](
     val shuffleWriteRecords : Long,
     val memoryBytesSpilled : Long,
     val diskBytesSpilled : Long,
-    val isBlacklistedForStage: Boolean,
-    val executorLogs: Map[String, String],
-    val hostPort: String)
+    val isBlacklistedForStage: Boolean)
 
 class ExecutorSummary private[spark](
     val id: String,

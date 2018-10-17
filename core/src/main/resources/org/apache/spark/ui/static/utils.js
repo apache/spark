@@ -170,3 +170,25 @@ function formatDate(date) {
   if (date <= 0) return "-";
   else return date.split(".")[0].replace("T", " ");
 }
+
+function createRESTEndPointForExecutorsPage(appId) {
+    var words = document.baseURI.split('/');
+    var ind = words.indexOf("proxy");
+    if (ind > 0) {
+        var appId = words[ind + 1];
+        var newBaseURI = words.slice(0, ind + 2).join('/');
+        return newBaseURI + "/api/v1/applications/" + appId + "/allexecutors"
+    }
+    ind = words.indexOf("history");
+    if (ind > 0) {
+        var appId = words[ind + 1];
+        var attemptId = words[ind + 2];
+        var newBaseURI = words.slice(0, ind).join('/');
+        if (isNaN(attemptId)) {
+            return newBaseURI + "/api/v1/applications/" + appId + "/allexecutors";
+        } else {
+            return newBaseURI + "/api/v1/applications/" + appId + "/" + attemptId + "/allexecutors";
+        }
+    }
+    return location.origin + "/api/v1/applications/" + appId + "/allexecutors";
+}

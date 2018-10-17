@@ -398,28 +398,7 @@ private[spark] class AppStatusStore(
   def executorSummary(stageId: Int, attemptId: Int): Map[String, v1.ExecutorStageSummary] = {
     val stageKey = Array(stageId, attemptId)
     store.view(classOf[ExecutorStageSummaryWrapper]).index("stage").first(stageKey).last(stageKey)
-      .asScala.map { exec =>
-        val executorLogs: Option[Map[String, String]] = try {
-          Some(executorSummary(exec.executorId).executorLogs)
-        } catch {
-          case e: NoSuchElementException => e.getMessage
-            None
-        }
-        val hostPort: Option[String] = try {
-          Some(executorSummary(exec.executorId).hostPort)
-        } catch {
-          case e: NoSuchElementException => e.getMessage
-            None
-        }
-        val executorStageSummary = new v1.ExecutorStageSummary(exec.info.taskTime,
-          exec.info.failedTasks, exec.info.succeededTasks, exec.info.killedTasks,
-          exec.info.inputBytes, exec.info.inputRecords, exec.info.outputBytes,
-          exec.info.outputRecords, exec.info.shuffleRead, exec.info.shuffleReadRecords,
-          exec.info.shuffleWrite, exec.info.shuffleWriteRecords, exec.info.memoryBytesSpilled,
-          exec.info.diskBytesSpilled, exec.info.isBlacklistedForStage,
-          executorLogs.getOrElse(Map[String, String]()), hostPort.getOrElse("CANNOT FIND ADDRESS"))
-        (exec.executorId -> executorStageSummary)
-      }.toMap
+      .asScala.map { exec => (exec.executorId -> exec.info) }.toMap
   }
 
   def rddList(cachedOnly: Boolean = true): Seq[v1.RDDStorageInfo] = {
