@@ -745,7 +745,7 @@ and add it to the classpath.
 
 Some of these advanced sources are as follows.
 
-- **Kafka:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Kafka broker versions 0.8.2.1 or higher. See the [Kafka Integration Guide](streaming-kafka-integration.html) for more details.
+- **Kafka:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Kafka broker versions 0.10 or higher. See the [Kafka Integration Guide](streaming-kafka-0-10-integration.html) for more details.
 
 - **Kinesis:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Kinesis Client Library 1.2.1. See the [Kinesis Integration Guide](streaming-kinesis-integration.html) for more details.
 
@@ -2172,7 +2172,7 @@ the input data stream (using `inputStream.repartition(<number of partitions>)`).
 This distributes the received batches of data across the specified number of machines in the cluster
 before further processing.
 
-For direct stream, please refer to [Spark Streaming + Kafka Integration Guide](streaming-kafka-integration.html)
+For direct stream, please refer to [Spark Streaming + Kafka Integration Guide](streaming-kafka-0-10-integration.html)
 
 ### Level of Parallelism in Data Processing
 {:.no_toc}
@@ -2433,7 +2433,7 @@ The following table summarizes the semantics under failures:
 
 ### With Kafka Direct API
 {:.no_toc}
-In Spark 1.3, we have introduced a new Kafka Direct API, which can ensure that all the Kafka data is received by Spark Streaming exactly once. Along with this, if you implement exactly-once output operation, you can achieve end-to-end exactly-once guarantees. This approach is further discussed in the [Kafka Integration Guide](streaming-kafka-integration.html).
+In Spark 1.3, we have introduced a new Kafka Direct API, which can ensure that all the Kafka data is received by Spark Streaming exactly once. Along with this, if you implement exactly-once output operation, you can achieve end-to-end exactly-once guarantees. This approach is further discussed in the [Kafka Integration Guide](streaming-kafka-0-10-integration.html).
 
 ## Semantics of output operations
 {:.no_toc}
@@ -2463,7 +2463,7 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
 
 # Where to Go from Here
 * Additional guides
-    - [Kafka Integration Guide](streaming-kafka-integration.html)
+    - [Kafka Integration Guide](streaming-kafka-0-10-integration.html)
     - [Kinesis Integration Guide](streaming-kinesis-integration.html)
     - [Custom Receiver Guide](streaming-custom-receivers.html)
 * Third-party DStream data sources can be found in [Third Party Projects](https://spark.apache.org/third-party-projects.html)
