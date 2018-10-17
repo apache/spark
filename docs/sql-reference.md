@@ -633,7 +633,7 @@ Specifically:
  - NaN is treated as a normal value in join keys.
  - NaN values go last when in ascending order, larger than any other numeric value.
  
- ## Arithmetic operations
+## Arithmetic operations
  
 Operations performed on numeric types (with the exception of `decimal`) are not checked for overflow.
 This means that in case an operation causes an overflow, the result is the same that the same operation

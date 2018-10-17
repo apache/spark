@@ -5,7 +5,7 @@
       url: sql-getting-started.html#starting-point-sparksession
     - text: Creating DataFrames
       url: sql-getting-started.html#creating-dataframes
-    - text: Untyped Dataset Operations
+    - text: Untyped Dataset Operations (DataFrame operations)
       url: sql-getting-started.html#untyped-dataset-operations-aka-dataframe-operations
     - text: Running SQL Queries Programmatically
       url: sql-getting-started.html#running-sql-queries-programmatically
@@ -77,3 +77,5 @@
       url: sql-reference.html#data-types
     - text: NaN Semantics
       url: sql-reference.html#nan-semantics
+    - text: Arithmetic operations
+      url: sql-reference.html#arithmetic-operations
