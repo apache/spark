@@ -200,20 +200,6 @@ class ClientSuite extends SparkFunSuite with Matchers {
     appContext.getMaxAppAttempts should be (42)
   }
 
-  test("resource request (client mode)") {
-    val sparkConf = new SparkConf().set("spark.submit.deployMode", "client")
-      .set(YARN_AM_RESOURCE_TYPES_PREFIX + "fpga", "2")
-      .set(YARN_AM_RESOURCE_TYPES_PREFIX + "gpu", "3")
-    testResourceRequest(sparkConf, List("gpu", "fpga"), Seq(("fpga", 2), ("gpu", 3)))
-  }
-
-  test("resource request (cluster mode)") {
-    val sparkConf = new SparkConf().set("spark.submit.deployMode", "cluster")
-      .set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "fpga", "4")
-      .set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + "gpu", "5")
-    testResourceRequest(sparkConf, List("gpu", "fpga"), Seq(("fpga", 4), ("gpu", 5)))
-  }
-
   test("spark.yarn.jars with multiple paths and globs") {
     val libs = Utils.createTempDir()
     val single = Utils.createTempDir()
@@ -372,6 +358,35 @@ class ClientSuite extends SparkFunSuite with Matchers {
     sparkConf.get(SECONDARY_JARS) should be (Some(Seq(new File(jar2.toURI).getName)))
   }
 
+  Seq(
+    "client" -> YARN_AM_RESOURCE_TYPES_PREFIX,
+    "cluster" -> YARN_DRIVER_RESOURCE_TYPES_PREFIX
+  ).foreach { case (deployMode, prefix) =>
+    test(s"custom resource request ($deployMode mode)") {
+      assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+      val resources = Map("fpga" -> 2, "gpu" -> 3)
+      ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
+
+      val conf = new SparkConf().set("spark.submit.deployMode", deployMode)
+      resources.foreach { case (name, v) =>
+        conf.set(prefix + name, v.toString)
+      }
+
+      val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
+      val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
+      val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
+
+      val client = new Client(new ClientArguments(Array()), conf)
+      client.createApplicationSubmissionContext(
+        new YarnClientApplication(getNewApplicationResponse, appContext),
+        containerLaunchContext)
+
+      resources.foreach { case (name, value) =>
+        ResourceRequestTestHelper.getRequestedValue(appContext.getResource, name) should be (value)
+      }
+    }
+  }
+
   private val matching = Seq(
     ("files URI match test1", "file:///file1", "file:///file2"),
     ("files URI match test2", "file:///c:file1", "file://c:file2"),
@@ -447,31 +462,4 @@ class ClientSuite extends SparkFunSuite with Matchers {
     populateClasspath(null, new Configuration(), client.sparkConf, env)
     classpath(env)
   }
-
-  private def testResourceRequest(
-      sparkConf: SparkConf,
-      resources: List[String],
-      expectedResources: Seq[(String, Long)]): Unit = {
-    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
-    ResourceRequestTestHelper.initializeResourceTypes(resources)
-
-    val args = new ClientArguments(Array())
-
-    val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
-    val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
-    val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
-
-    val client = new Client(args, sparkConf)
-    client.createApplicationSubmissionContext(
-      new YarnClientApplication(getNewApplicationResponse, appContext),
-      containerLaunchContext)
-
-    appContext.getAMContainerSpec should be (containerLaunchContext)
-    appContext.getApplicationType should be ("SPARK")
-
-    expectedResources.foreach { case (name, value) =>
-      ResourceRequestTestHelper.getResourceTypeValue(appContext.getResource, name) should be (value)
-    }
-  }
-
 }
