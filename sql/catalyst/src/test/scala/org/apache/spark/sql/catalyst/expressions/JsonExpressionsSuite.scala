@@ -623,7 +623,8 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
 
   test("SPARK-21513: to_json support map[string, struct] to json") {
     val schema = MapType(StringType, StructType(StructField("a", IntegerType) :: Nil))
-    val input = Literal.create(ArrayBasedMapData(Map("test" -> InternalRow(1))), schema)
+    val input = Literal(
+      ArrayBasedMapData(Map(UTF8String.fromString("test") -> InternalRow(1))), schema)
     checkEvaluation(
       StructsToJson(Map.empty, input),
       """{"test":{"a":1}}"""
@@ -633,7 +634,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   test("SPARK-21513: to_json support map[struct, struct] to json") {
     val schema = MapType(StructType(StructField("a", IntegerType) :: Nil),
       StructType(StructField("b", IntegerType) :: Nil))
-    val input = Literal.create(ArrayBasedMapData(Map(InternalRow(1) -> InternalRow(2))), schema)
+    val input = Literal(ArrayBasedMapData(Map(InternalRow(1) -> InternalRow(2))), schema)
     checkEvaluation(
       StructsToJson(Map.empty, input),
       """{"[1]":{"b":2}}"""
@@ -642,7 +643,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
 
   test("SPARK-21513: to_json support map[string, integer] to json") {
     val schema = MapType(StringType, IntegerType)
-    val input = Literal.create(ArrayBasedMapData(Map("a" -> 1)), schema)
+    val input = Literal(ArrayBasedMapData(Map(UTF8String.fromString("a") -> 1)), schema)
     checkEvaluation(
       StructsToJson(Map.empty, input),
       """{"a":1}"""
@@ -651,17 +652,18 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
 
   test("to_json - array with maps") {
     val inputSchema = ArrayType(MapType(StringType, IntegerType))
-    val input = new GenericArrayData(ArrayBasedMapData(
-      Map("a" -> 1)) :: ArrayBasedMapData(Map("b" -> 2)) :: Nil)
+    val input = new GenericArrayData(
+      ArrayBasedMapData(Map(UTF8String.fromString("a") -> 1)) ::
+      ArrayBasedMapData(Map(UTF8String.fromString("b") -> 2)) :: Nil)
     val output = """[{"a":1},{"b":2}]"""
     checkEvaluation(
-      StructsToJson(Map.empty, Literal.create(input, inputSchema), gmtId),
+      StructsToJson(Map.empty, Literal(input, inputSchema), gmtId),
       output)
   }
 
   test("to_json - array with single map") {
     val inputSchema = ArrayType(MapType(StringType, IntegerType))
-    val input = new GenericArrayData(ArrayBasedMapData(Map("a" -> 1)) :: Nil)
+    val input = new GenericArrayData(ArrayBasedMapData(Map(UTF8String.fromString("a") -> 1)) :: Nil)
     val output = """[{"a":1}]"""
     checkEvaluation(
       StructsToJson(Map.empty, Literal.create(input, inputSchema), gmtId),
