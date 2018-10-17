@@ -490,9 +490,7 @@
       "shuffleWriteRecords" : 0,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : false,
-      "executorLogs" : { },
-      "hostPort" : "localhost:58610"
+      "isBlacklistedForStage" : false
     }
   },
   "killedTasksSummary" : { }

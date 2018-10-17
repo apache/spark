@@ -684,12 +684,7 @@
       "shuffleWriteRecords" : 0,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : true,
-      "executorLogs" : {
-        "stdout" : "http://172.30.65.138:64279/logPage/?appId=app-20180109111548-0000&executorId=0&logType=stdout",
-        "stderr" : "http://172.30.65.138:64279/logPage/?appId=app-20180109111548-0000&executorId=0&logType=stderr"
-      },
-      "hostPort" : "172.30.65.138:64290"
+      "isBlacklistedForStage" : true
     },
     "1" : {
       "taskTime" : 708,
@@ -706,12 +701,7 @@
       "shuffleWriteRecords" : 10,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : false,
-      "executorLogs" : {
-        "stdout" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stdout",
-        "stderr" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stderr"
-      },
-      "hostPort" : "172.30.65.138:64291"
+      "isBlacklistedForStage" : false
     }
   },
   "killedTasksSummary" : { }

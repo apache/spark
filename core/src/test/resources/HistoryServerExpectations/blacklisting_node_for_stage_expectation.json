@@ -792,12 +792,7 @@
       "shuffleWriteRecords" : 0,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : true,
-      "executorLogs" : {
-        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stdout?start=-4096",
-        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stderr?start=-4096"
-      },
-      "hostPort" : "apiros-2.gce.test.com:33229"
+      "isBlacklistedForStage" : true
     },
     "5" : {
       "taskTime" : 1579,
@@ -814,12 +809,7 @@
       "shuffleWriteRecords" : 0,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : true,
-      "executorLogs" : {
-        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000007/attilapiros/stdout?start=-4096",
-        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000007/attilapiros/stderr?start=-4096"
-      },
-      "hostPort" : "apiros-2.gce.test.com:45147"
+      "isBlacklistedForStage" : true
     },
     "1" : {
       "taskTime" : 2411,
@@ -836,12 +826,7 @@
       "shuffleWriteRecords" : 12,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : false,
-      "executorLogs" : {
-        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096",
-        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096"
-      },
-      "hostPort" : "apiros-3.gce.test.com:34970"
+      "isBlacklistedForStage" : false
     },
     "2" : {
       "taskTime" : 2446,
@@ -858,12 +843,7 @@
       "shuffleWriteRecords" : 15,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : false,
-      "executorLogs" : {
-        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stdout?start=-4096",
-        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stderr?start=-4096"
-      },
-      "hostPort" : "apiros-3.gce.test.com:38670"
+      "isBlacklistedForStage" : false
     },
     "3" : {
       "taskTime" : 1774,
@@ -880,12 +860,7 @@
       "shuffleWriteRecords" : 3,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : true,
-      "executorLogs" : {
-        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000004/attilapiros/stdout?start=-4096",
-        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000004/attilapiros/stderr?start=-4096"
-      },
-      "hostPort" : "apiros-2.gce.test.com:38641"
+      "isBlacklistedForStage" : true
     }
   },
   "killedTasksSummary" : { }
