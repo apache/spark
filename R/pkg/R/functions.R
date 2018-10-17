@@ -188,6 +188,7 @@ NULL
 #'          \item \code{to_json}: it is the column containing the struct, array of the structs,
 #'              the map or array of maps.
 #'          \item \code{from_json}: it is the column containing the JSON string.
+#'          \item \code{from_csv}: it is the column containing the CSV string.
 #'          }
 #' @param y Column to compute on.
 #' @param value A value to compute on.
@@ -196,10 +197,18 @@ NULL
 #'          \item \code{array_position}: a value to locate in the given array.
 #'          \item \code{array_remove}: a value to remove in the given array.
 #'          }
+#' @param schema
+#'          \itemize{
+#'          \item \code{from_json}: a structType object to use as the schema to use
+#'              when parsing the JSON string. Since Spark 2.3, the DDL-formatted string is
+#'              also supported for the schema.
+#'          \item \code{from_csv}: a DDL-formatted string
+#'          }
 #' @param ... additional argument(s). In \code{to_json} and \code{from_json}, this contains
 #'            additional named properties to control how it is converted, accepts the same
-#'            options as the JSON data source.  In \code{arrays_zip}, this contains additional
-#'            Columns of arrays to be merged.
+#'            options as the JSON data source. Additionally \code{to_json} supports the "pretty"
+#'            option which enables pretty JSON generation. In \code{arrays_zip}, this contains
+#'            additional Columns of arrays to be merged.
 #' @name column_collection_functions
 #' @rdname column_collection_functions
 #' @family collection functions
@@ -2164,8 +2173,6 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #' to \code{TRUE}. If the string is unparseable, the Column will contain the value NA.
 #'
 #' @rdname column_collection_functions
-#' @param schema a structType object to use as the schema to use when parsing the JSON string.
-#'               Since Spark 2.3, the DDL-formatted string is also supported for the schema.
 #' @param as.json.array indicating if input string is JSON array of objects or a single object.
 #' @aliases from_json from_json,Column,characterOrstructType-method
 #' @examples
@@ -2203,9 +2210,46 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructType")
           })
 
 #' @details
-#' \code{from_utc_timestamp}: Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a
-#' time in UTC, and renders that time as a timestamp in the given time zone. For example, 'GMT+1'
-#' would yield '2017-07-14 03:40:00.0'.
+#' \code{from_csv}: Parses a column containing a CSV string into a Column of \code{structType}
+#' with the specified \code{schema}.
+#' If the string is unparseable, the Column will contain the value NA.
+#'
+#' @rdname column_collection_functions
+#' @aliases from_csv from_csv,Column,character-method
+#' @examples
+#'
+#' \dontrun{
+#' df <- sql("SELECT 'Amsterdam,2018' as csv")
+#' schema <- "city STRING, year INT"
+#' head(select(df, from_csv(df$csv, schema)))}
+#' @note from_csv since 3.0.0
+setMethod("from_csv", signature(x = "Column", schema = "characterOrColumn"),
+          function(x, schema, ...) {
+            if (class(schema) == "Column") {
+              jschema <- schema@jc
+            } else if (is.character(schema)) {
+              jschema <- callJStatic("org.apache.spark.sql.functions", "lit", schema)
+            } else {
+              stop("schema argument should be a column or character")
+            }
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "from_csv",
+                              x@jc, jschema, options)
+            column(jc)
+          })
+
+#' @details
+#' \code{from_utc_timestamp}: This is a common function for databases supporting TIMESTAMP WITHOUT
+#' TIMEZONE. This function takes a timestamp which is timezone-agnostic, and interprets it as a
+#' timestamp in UTC, and renders that timestamp as a timestamp in the given time zone.
+#' However, timestamp in Spark represents number of microseconds from the Unix epoch, which is not
+#' timezone-agnostic. So in Spark this function just shift the timestamp value from UTC timezone to
+#' the given timezone.
+#' This function may return confusing result if the input is a string with timezone, e.g.
+#' (\code{2018-03-13T06:18:23+00:00}). The reason is that, Spark firstly cast the string to
+#' timestamp according to the timezone in the string, and finally display the result by converting
+#' the timestamp to string according to the session local timezone.
 #'
 #' @rdname column_datetime_diff_functions
 #'
@@ -2261,9 +2305,16 @@ setMethod("next_day", signature(y = "Column", x = "character"),
           })
 
 #' @details
-#' \code{to_utc_timestamp}: Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a
-#' time in the given time zone, and renders that time as a timestamp in UTC. For example, 'GMT+1'
-#' would yield '2017-07-14 01:40:00.0'.
+#' \code{to_utc_timestamp}: This is a common function for databases supporting TIMESTAMP WITHOUT
+#' TIMEZONE. This function takes a timestamp which is timezone-agnostic, and interprets it as a
+#' timestamp in the given timezone, and renders that timestamp as a timestamp in UTC.
+#' However, timestamp in Spark represents number of microseconds from the Unix epoch, which is not
+#' timezone-agnostic. So in Spark this function just shift the timestamp value from the given
+#' timezone to UTC timezone.
+#' This function may return confusing result if the input is a string with timezone, e.g.
+#' (\code{2018-03-13T06:18:23+00:00}). The reason is that, Spark firstly cast the string to
+#' timestamp according to the timezone in the string, and finally display the result by converting
+#' the timestamp to string according to the session local timezone.
 #'
 #' @rdname column_datetime_diff_functions
 #' @aliases to_utc_timestamp to_utc_timestamp,Column,character-method
@@ -3458,13 +3509,21 @@ setMethod("collect_set",
 
 #' @details
 #' \code{split_string}: Splits string on regular expression.
-#' Equivalent to \code{split} SQL function.
+#' Equivalent to \code{split} SQL function. Optionally a
+#' \code{limit} can be specified
 #'
 #' @rdname column_string_functions
+#' @param limit determines the length of the returned array.
+#'              \itemize{
+#'              \item \code{limit > 0}: length of the array will be at most \code{limit}
+#'              \item \code{limit <= 0}: the returned array can have any length
+#'              }
+#'
 #' @aliases split_string split_string,Column-method
 #' @examples
 #'
 #' \dontrun{
+#' head(select(df, split_string(df$Class, "\\d", 2)))
 #' head(select(df, split_string(df$Sex, "a")))
 #' head(select(df, split_string(df$Class, "\\d")))
 #' # This is equivalent to the following SQL expression
@@ -3472,8 +3531,9 @@ setMethod("collect_set",
 #' @note split_string 2.3.0
 setMethod("split_string",
           signature(x = "Column", pattern = "character"),
-          function(x, pattern) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "split", x@jc, pattern)
+          function(x, pattern, limit = -1) {
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "split", x@jc, pattern, as.integer(limit))
             column(jc)
           })
 

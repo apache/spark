@@ -81,9 +81,9 @@ class SQLAppStatusListener(
 
     // Record the accumulator IDs for the stages of this job, so that the code that keeps
     // track of the metrics knows which accumulators to look at.
-    val accumIds = exec.metrics.map(_.accumulatorId).sorted.toList
+    val accumIds = exec.metrics.map(_.accumulatorId).toSet
     event.stageIds.foreach { id =>
-      stageMetrics.put(id, new LiveStageMetrics(id, 0, accumIds.toArray, new ConcurrentHashMap()))
+      stageMetrics.put(id, new LiveStageMetrics(id, 0, accumIds, new ConcurrentHashMap()))
     }
 
     exec.jobs = exec.jobs + (jobId -> JobExecutionStatus.RUNNING)
@@ -382,7 +382,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
 private class LiveStageMetrics(
     val stageId: Int,
     var attemptId: Int,
-    val accumulatorIds: Array[Long],
+    val accumulatorIds: Set[Long],
     val taskMetrics: ConcurrentHashMap[Long, LiveTaskMetrics])
 
 private class LiveTaskMetrics(
