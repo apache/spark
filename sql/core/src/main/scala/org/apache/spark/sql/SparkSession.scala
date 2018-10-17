@@ -91,10 +91,10 @@ class SparkSession private(
    * running extensions.
    */
   private[sql] def this(sc: SparkContext) {
-    this(sc, None, None, new SparkSessionExtensions)
-    SparkSession.applyExtensions(
-      sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS),
-      this.extensions)
+    this(sc, None, None,
+      SparkSession.applyExtensions(
+        sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS),
+        new SparkSessionExtensions))
   }
 
   sparkContext.assertNotStopped()
@@ -1136,7 +1136,9 @@ object SparkSession extends Logging {
    * Initialize extensions for given extension classname. This class will be applied to the
    * extensions passed into this function.
    */
-  private def applyExtensions(extensionOption: Option[String], extensions: SparkSessionExtensions) {
+  private def applyExtensions(
+      extensionOption: Option[String],
+      extensions: SparkSessionExtensions): SparkSessionExtensions = {
     if (extensionOption.isDefined) {
       val extensionConfClassName = extensionOption.get
       try {
@@ -1152,5 +1154,6 @@ object SparkSession extends Logging {
           logWarning(s"Cannot use $extensionConfClassName to configure session extensions.", e)
       }
     }
+    extensions
   }
 }
