@@ -68,4 +68,5 @@ do
  esac
 done
 
+eval $(minikube docker-env)
 build
