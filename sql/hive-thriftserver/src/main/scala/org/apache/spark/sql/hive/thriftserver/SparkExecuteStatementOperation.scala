@@ -126,7 +126,7 @@ private[hive] class SparkExecuteStatementOperation(
         if (resultList.isEmpty) {
           resultList = if (sqlContext.getConf(
             SQLConf.THRIFTSERVER_INCREMENTAL_DESERIALIZE.key).toBoolean) {
-            Some(collectResultAsSeqView())
+            Some(result.collectAsSeqView())
           } else {
             Some(result.collect())
           }
@@ -254,7 +254,7 @@ private[hive] class SparkExecuteStatementOperation(
         } else {
           resultList = if (sqlContext.getConf(
             SQLConf.THRIFTSERVER_INCREMENTAL_DESERIALIZE.key).toBoolean) {
-            Some(collectResultAsSeqView())
+            Some(result.collectAsSeqView())
           } else {
             Some(result.collect())
           }
@@ -304,20 +304,22 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  /**
-   * Returns a SeqView that contains all rows in this Dataset.
-   *
-   * The SeqView will consume as much memory as the total size of serialized results which can be
-   * limited with the config 'spark.driver.maxResultSize'. Rows are deserialized when iterating rows
-   * with iterator of returned SeqView.
-   */
-  private def collectResultAsSeqView(): SeqView[SparkRow, Array[SparkRow]] =
-    result.withAction("collectResultAsSeqView", result.queryExecution) { plan =>
-      val objProj = GenerateSafeProjection.generate(result.deserializer :: Nil)
-      plan.executeCollectSeqView().map(row =>
-        objProj(row).get(0, null).asInstanceOf[SparkRow]
-      ).asInstanceOf[SeqView[SparkRow, Array[SparkRow]]]
-    }
+  private implicit class DataFrameWrapper(df: DataFrame) {
+    /**
+     * Returns a SeqView that contains all rows in this Dataset.
+     *
+     * The SeqView will consume as much memory as the total size of serialized results which can be
+     * limited with the config 'spark.driver.maxResultSize'. Rows are deserialized when iterating
+     * rows with iterator of returned SeqView.
+     */
+    def collectAsSeqView(): SeqView[SparkRow, Array[SparkRow]] =
+      df.withAction("collectAsSeqView", df.queryExecution) { plan =>
+        val objProj = GenerateSafeProjection.generate(df.deserializer :: Nil)
+        plan.executeCollectSeqView().map(row =>
+          objProj(row).get(0, null).asInstanceOf[SparkRow]
+        ).asInstanceOf[SeqView[SparkRow, Array[SparkRow]]]
+      }
+  }
 }
 
 object SparkExecuteStatementOperation {
