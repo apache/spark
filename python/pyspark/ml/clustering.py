@@ -340,6 +340,7 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         Return the K-means cost (sum of squared distances of points to their nearest center)
         for this model on the given data.
+
         ..note:: Deprecated in 2.4.0. It will be removed in 3.0.0. Use ClusteringEvaluator instead.
            You can also get the cost on the training dataset in the summary.
         """
