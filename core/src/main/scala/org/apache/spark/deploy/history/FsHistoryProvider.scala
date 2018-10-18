@@ -129,7 +129,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val storePath = conf.get(LOCAL_STORE_DIR).map(new File(_))
   private val fastInProgressParsing = conf.get(FAST_IN_PROGRESS_PARSING)
-  private val inProgressAbsoluteLengthCheck = conf.get(IN_PROGRESS_ABSOLUTE_LENGTH_CHECK)
 
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
@@ -450,7 +449,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               listing.write(info.copy(lastProcessed = newLastScanTime, fileSize = entry.getLen()))
             }
 
-            if (info.fileSize < entry.getLen() || checkAbsoluteLength(info, entry)) {
+            if (shouldReloadLog(info, entry)) {
               if (info.appId.isDefined && fastInProgressParsing) {
                 // When fast in-progress parsing is on, we don't need to re-parse when the
                 // size changes, but we do need to invalidate any existing UIs.
@@ -542,13 +541,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  private[history] def checkAbsoluteLength(info: LogInfo, entry: FileStatus): Boolean = {
-    var result = false
-    if (inProgressAbsoluteLengthCheck && info.logPath.endsWith(EventLoggingListener.IN_PROGRESS)) {
+  private[history] def shouldReloadLog(info: LogInfo, entry: FileStatus): Boolean = {
+    var result = info.fileSize < entry.getLen
+    if (!result && info.logPath.endsWith(EventLoggingListener.IN_PROGRESS)) {
       try {
         result = Utils.tryWithResource(fs.open(entry.getPath)) { in =>
           in.getWrappedStream match {
-            case dfsIn: DFSInputStream => dfsIn.getFileLength > info.fileSize
+            case dfsIn: DFSInputStream => info.fileSize < dfsIn.getFileLength
+            case _ => false
           }
         }
       } catch {

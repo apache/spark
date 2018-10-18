@@ -64,11 +64,4 @@ private[spark] object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("1m")
 
-  val IN_PROGRESS_ABSOLUTE_LENGTH_CHECK =
-    ConfigBuilder("spark.history.fs.inProgressAbsoluteLengthCheck.enabled")
-      .doc("Enable to check the absolute length of the in-progress" +
-        " logs while considering for re-parsing.")
-      .booleanConf
-      .createWithDefault(false)
-
 }
