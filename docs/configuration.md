@@ -270,13 +270,14 @@ of the most common options to set are:
   <td><code>spark.driver.log.dfsDir</code></td>
   <td>(none)</td>
   <td>
-    Base directory in which Spark driver logs are synced, if spark.driver.log.persistToDfs.enabled is true.
-    Within this base directory, Spark creates a sub-directory for each application, and logs the driver logs
-    specific to the application in this directory. Users may want to set this to a unified location like an
-    HDFS directory so driver log files can be persisted for later usage. This directory should allow any spark
-    user to read/write files and the spark history server user to delete files. Additionally, older logs from
-    this directory are cleaned by Spark History Server if spark.history.fs.driverlog.cleaner.enabled is true.
-    They are cleaned if they are older than max age configured at spark.history.fs.driverlog.cleaner.maxAge.
+    Base directory in which Spark driver logs are synced, if <code>spark.driver.log.persistToDfs.enabled</code>
+    is true. Within this base directory, Spark creates a sub-directory for each application, and logs the driver
+    logs specific to the application in this directory. Users may want to set this to a unified location like an
+    HDFS directory so driver log files can be persisted for later usage. This directory should allow any Spark
+    user to read/write files and the Spark History Server user to delete files. Additionally, older logs from
+    this directory are cleaned by Spark History Server if <code>spark.history.fs.driverlog.cleaner.enabled</code>
+    is true. They are cleaned if they are older than max age configured at
+    <code>spark.history.fs.driverlog.cleaner.maxAge</code>.
   </td>
 </tr>
 <tr>
@@ -284,17 +285,19 @@ of the most common options to set are:
   <td>false</td>
   <td>
     If true, spark application running in client mode will write driver logs to a persistent storage, configured
-    in spark.driver.log.dfsDir. If spark.driver.log.dfsDir is not configured, driver logs will not be persisted.
-    Additionally, enable the cleaner by setting spark.history.fs.driverlog.cleaner.enabled to true.
+    in <code>spark.driver.log.dfsDir</code>. If <code>spark.driver.log.dfsDir</code> is not configured, driver logs
+    will not be persisted. Additionally, enable the cleaner by setting <code>spark.history.fs.driverlog.cleaner.enabled</code>
+    to true.
   </td>
 </tr>
 <tr>
   <td><code>spark.driver.log.layout</code></td>
   <td>%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n</td>
   <td>
-    The layout for the driver logs that are synced to spark.driver.log.dfsDir. If spark.driver.log.persistToDfs.enabled
-    is true and this configuration is used. If this is not configured, it uses the layout for the first appender defined
-    in log4j.properties. If that is also not configured, driver logs use the default layout.
+    The layout for the driver logs that are synced to <code>spark.driver.log.dfsDir</code>. If 
+    <code>spark.driver.log.persistToDfs.enabled</code> is true and this configuration is used. If this is not configured,
+    it uses the layout for the first appender defined in log4j.properties. If that is also not configured, driver logs
+    use the default layout.
   </td>
 </tr>
 </table>

@@ -122,7 +122,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val driverLogFs: Option[FileSystem] =
     if (conf.get(DRIVER_LOG_DFS_DIR).isDefined) {
-      Some(FileSystem.get(hadoopConf))
+      Some(new Path(conf.get(DRIVER_LOG_DFS_DIR).get).getFileSystem(hadoopConf))
     } else {
       None
     }
@@ -848,15 +848,34 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Delete driver logs from the configured spark dfs dir that exceed the configured max age
    */
   private[history] def cleanDriverLogs(): Unit = Utils.tryLog {
-    val driverLogDir = conf.get(DRIVER_LOG_DFS_DIR)
-    driverLogDir.foreach { dl =>
-      val maxTime = clock.getTimeMillis() -
-        conf.get(MAX_DRIVER_LOG_AGE_S) * 1000
-      val appDirs = driverLogFs.get.listLocatedStatus(new Path(dl))
-      while (appDirs.hasNext()) {
-        val appDirStatus = appDirs.next()
-        if (appDirStatus.getModificationTime() < maxTime) {
+    val driverLogDir = conf.get(DRIVER_LOG_DFS_DIR).get
+    val currentTime = clock.getTimeMillis()
+    val maxTime = currentTime - conf.get(MAX_DRIVER_LOG_AGE_S) * 1000
+    val appDirs = driverLogFs.get.listLocatedStatus(new Path(driverLogDir))
+    while (appDirs.hasNext()) {
+      val appDirStatus = appDirs.next()
+      if (appDirStatus.isDirectory()) {
+        val logFiles = driverLogFs.get.listStatus(appDirStatus.getPath())
+        var deleteDir = true
+        logFiles.foreach { f =>
+          try {
+            val info = listing.read(classOf[LogInfo], f.getPath().toString())
+            if (info.fileSize < f.getLen()) {
+              listing.write(info.copy(f.getPath().toString(), currentTime, None, None, f.getLen()))
+              deleteDir = false
+            } else if (info.lastProcessed > maxTime) {
+              deleteDir = false
+            }
+          } catch {
+            case e: NoSuchElementException =>
+              listing.write(LogInfo(f.getPath().toString(), currentTime, None, None,
+                f.getLen()))
+              deleteDir = false
+          }
+        }
+        if (deleteDir) {
           logInfo(s"Deleting expired driver log for: ${appDirStatus.getPath().getName()}")
+          logFiles.foreach { f => listing.delete(classOf[LogInfo], f.getPath().toString()) }
           deleteLog(driverLogFs.get, appDirStatus.getPath())
         }
       }

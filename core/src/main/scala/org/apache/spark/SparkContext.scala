@@ -1871,6 +1871,9 @@ class SparkContext(config: SparkConf) extends Logging {
       postApplicationEnd()
     }
     Utils.tryLogNonFatalError {
+      _driverLogger.foreach(_.stop())
+    }
+    Utils.tryLogNonFatalError {
       _ui.foreach(_.stop())
     }
     if (env != null) {
@@ -2361,7 +2364,6 @@ class SparkContext(config: SparkConf) extends Logging {
   /** Post the application end event */
   private def postApplicationEnd() {
     listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis))
-    _driverLogger.foreach(_.stop())
   }
 
   /** Post the environment update event once the task scheduler is ready */

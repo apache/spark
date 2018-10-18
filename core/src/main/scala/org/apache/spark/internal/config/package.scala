@@ -55,7 +55,7 @@ package object config {
   private[spark] val DRIVER_LOG_LAYOUT =
     ConfigBuilder("spark.driver.log.layout")
       .stringConf
-      .createWithDefault("%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n")
+      .createOptional
 
   private[spark] val DRIVER_LOG_PERSISTTODFS =
     ConfigBuilder("spark.driver.log.persistToDfs.enabled")

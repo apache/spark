@@ -20,8 +20,6 @@ package org.apache.spark.util.logging
 import java.io._
 import java.util.concurrent.TimeUnit
 
-import scala.util.{Failure, Try}
-
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
@@ -38,23 +36,25 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 
   private val UPLOAD_CHUNK_SIZE = 1024 * 1024
   private val UPLOAD_INTERVAL_IN_SECS = 5
-  private val DRIVER_LOG_FILE = "driver.log"
+  private val DEFAULT_LAYOUT = "%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n"
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
   private var localLogFile: String = FileUtils.getFile(
-    Utils.getLocalDir(conf), "driver_logs", DRIVER_LOG_FILE).getAbsolutePath()
+    Utils.getLocalDir(conf),
+    DriverLogger.DRIVER_LOG_DIR,
+    DriverLogger.DRIVER_LOG_FILE).getAbsolutePath()
   private var writer: Option[DfsAsyncWriter] = None
 
   addLogAppender()
 
   private def addLogAppender(): Unit = {
     val appenders = LogManager.getRootLogger().getAllAppenders()
-    val layout = if (conf.contains(DRIVER_LOG_LAYOUT)) {
-      new PatternLayout(conf.get(DRIVER_LOG_LAYOUT))
+    val layout = if (conf.get(DRIVER_LOG_LAYOUT).isDefined) {
+      new PatternLayout(conf.get(DRIVER_LOG_LAYOUT).get)
     } else if (appenders.hasMoreElements()) {
       appenders.nextElement().asInstanceOf[Appender].getLayout()
     } else {
-      new PatternLayout(DRIVER_LOG_LAYOUT.defaultValueString)
+      new PatternLayout(DEFAULT_LAYOUT)
     }
     val fa = new Log4jFileAppender(layout, localLogFile)
     fa.setName(DriverLogger.APPENDER_NAME)
@@ -69,7 +69,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       writer = Some(new DfsAsyncWriter(appId, hadoopConf))
     } catch {
       case e: Exception =>
-        logError(s"Could not persist driver logs to spark dfs", e)
+        logError(s"Could not persist driver logs to dfs", e)
     }
   }
 
@@ -93,14 +93,15 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       with Logging {
 
     private var streamClosed = false
-    private val fileSystem: FileSystem = FileSystem.get(hadoopConf)
+    private var fileSystem: FileSystem = _
     private val dfsLogFile: String = {
       val rootDir = conf.get(DRIVER_LOG_DFS_DIR).get
+      fileSystem = new Path(rootDir).getFileSystem(hadoopConf)
       if (!fileSystem.exists(new Path(rootDir))) {
         throw new RuntimeException(s"${rootDir} does not exist." +
           s" Please create this dir in order to persist driver logs")
       }
-      FileUtils.getFile(rootDir, appId, DRIVER_LOG_FILE).getAbsolutePath()
+      FileUtils.getFile(rootDir, appId, DriverLogger.DRIVER_LOG_FILE).getAbsolutePath()
     }
     private var inStream: InputStream = null
     private var outputStream: FSDataOutputStream = null
@@ -122,7 +123,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
     private val threadpool = ThreadUtils.newDaemonSingleThreadScheduledExecutor("dfsSyncThread")
     threadpool.scheduleWithFixedDelay(this, UPLOAD_INTERVAL_IN_SECS, UPLOAD_INTERVAL_IN_SECS,
       TimeUnit.SECONDS)
-    logInfo(s"The local driver log file is being synced to spark dfs at: ${dfsLogFile}")
+    logInfo(s"Started driver log file sync to: ${dfsLogFile}")
 
     def run(): Unit = {
       if (streamClosed) {
@@ -154,8 +155,8 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
           inStream.close()
           outputStream.close()
         } catch {
-          case t: Throwable =>
-            logError("Error in closing driver log input/output stream", t)
+          case e: Exception =>
+            logError("Error in closing driver log input/output stream", e)
         }
       }
     }
@@ -177,19 +178,20 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 }
 
 private[spark] object DriverLogger extends Logging {
+  val DRIVER_LOG_DIR = "__driver_logs__"
+  val DRIVER_LOG_FILE = "driver.log"
   val APPENDER_NAME = "_DriverLogAppender"
 
   def apply(conf: SparkConf): Option[DriverLogger] = {
     if (conf.get(DRIVER_LOG_PERSISTTODFS) && Utils.isClientMode(conf)) {
       if (conf.get(DRIVER_LOG_DFS_DIR).isDefined) {
-        Try[DriverLogger] {
-          new DriverLogger(conf)
+        try {
+          Some(new DriverLogger(conf))
+        } catch {
+          case e: Exception =>
+            logError("Could not add driver logger", e)
+            None
         }
-          .recoverWith {
-            case t: Throwable =>
-              logError("Could not add driver logger", t)
-              Failure(t)
-          }.toOption
       } else {
         logWarning(s"Driver logs are not persisted because" +
           s" ${DRIVER_LOG_DFS_DIR.key} is not configured")

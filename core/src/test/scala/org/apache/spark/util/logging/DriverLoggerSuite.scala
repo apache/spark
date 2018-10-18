@@ -30,17 +30,19 @@ import org.apache.spark.util.Utils
 
 class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
 
-  private var rootHdfsDir : File = _
+  private var rootDfsDir : File = _
 
   override def beforeAll(): Unit = {
-    rootHdfsDir = Utils.createTempDir(namePrefix = "hdfs_logs")
+    super.beforeAll()
+    rootDfsDir = Utils.createTempDir(namePrefix = "dfs_logs")
   }
 
   override def afterAll(): Unit = {
-    JavaUtils.deleteRecursively(rootHdfsDir)
+    super.afterAll()
+    JavaUtils.deleteRecursively(rootDfsDir)
   }
 
-  test("driver logs are persisted locally and synced to hdfs") {
+  test("driver logs are persisted locally and synced to dfs") {
     val sc = getSparkContext()
 
     val app_id = sc.applicationId
@@ -49,29 +51,23 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
 
     // Assert driver log file exists
     val rootDir = Utils.getLocalDir(sc.getConf)
-    val driverLogsDir = FileUtils.getFile(rootDir, "driver_logs")
+    val driverLogsDir = FileUtils.getFile(rootDir, DriverLogger.DRIVER_LOG_DIR)
     assert(driverLogsDir.exists())
     val files = driverLogsDir.listFiles()
     assert(files.length === 1)
-    assert(files(0).getName.equals("driver.log"))
+    assert(files(0).getName.equals(DriverLogger.DRIVER_LOG_FILE))
 
     sc.stop()
-    // File is continuously synced to Hdfs (which is a local dir for this test)
     assert(!driverLogsDir.exists())
-    val hdfsDir = FileUtils.getFile(sc.getConf.get(DRIVER_LOG_DFS_DIR).get, app_id)
-    assert(hdfsDir.exists())
-    val hdfsFiles = hdfsDir.listFiles()
-    assert(hdfsFiles.length > 0)
-    val driverLogFile = hdfsFiles.filter(f => f.getName.equals("driver.log")).head
-    val hdfsIS = new BufferedInputStream(new FileInputStream(driverLogFile))
-    assert(hdfsIS.available() > 0)
-    JavaUtils.deleteRecursively(hdfsDir)
-    assert(!hdfsDir.exists())
+    val dfsDir = FileUtils.getFile(sc.getConf.get(DRIVER_LOG_DFS_DIR).get, app_id)
+    assert(dfsDir.exists())
+    val dfsFiles = dfsDir.listFiles()
+    dfsFiles.exists{ f => f.getName().equals(DriverLogger.DRIVER_LOG_FILE) && f.length() > 0 }
   }
 
   private def getSparkContext(): SparkContext = {
     val conf = new SparkConf()
-    conf.set(DRIVER_LOG_DFS_DIR, rootHdfsDir.getAbsolutePath())
+    conf.set(DRIVER_LOG_DFS_DIR, rootDfsDir.getAbsolutePath())
     conf.set(DRIVER_LOG_PERSISTTODFS, true)
     conf.set(SparkLauncher.SPARK_MASTER, "local")
     conf.set(SparkLauncher.DEPLOY_MODE, "client")
