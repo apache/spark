@@ -90,7 +90,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 
   // Visible for testing
   private[spark] class DfsAsyncWriter(appId: String, hadoopConf: Configuration) extends Runnable
-    with Logging {
+      with Logging {
 
     private var streamClosed = false
     private val fileSystem: FileSystem = FileSystem.get(hadoopConf)
@@ -137,7 +137,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
         }
         outputStream.hflush()
       } catch {
-        case e: Exception => logError("Failed to write to spark dfs", e)
+        case e: Exception => logError("Failed writing driver logs to dfs", e)
       }
     }
 
@@ -182,7 +182,7 @@ private[spark] object DriverLogger extends Logging {
   def apply(conf: SparkConf): Option[DriverLogger] = {
     if (conf.get(DRIVER_LOG_SYNCTODFS)
         && conf.get(DRIVER_LOG_DFS_DIR).isDefined
-      && Utils.isClientMode(conf)) {
+        && Utils.isClientMode(conf)) {
       Try[DriverLogger] { new DriverLogger(conf) }
         .recoverWith {
           case t: Throwable =>

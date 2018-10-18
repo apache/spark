@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.logging
 
-import java.io.{BufferedInputStream, FileInputStream}
+import java.io.{BufferedInputStream, File, FileInputStream}
 
 import org.apache.commons.io.FileUtils
 
@@ -30,14 +30,14 @@ import org.apache.spark.util.Utils
 
 class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
 
-  private val DRIVER_LOG_DIR_DEFAULT = "/tmp/hdfs_logs"
+  private var rootHdfsDir : File = _
 
   override def beforeAll(): Unit = {
-    FileUtils.forceMkdir(FileUtils.getFile(DRIVER_LOG_DIR_DEFAULT))
+    rootHdfsDir = Utils.createTempDir(namePrefix = "hdfs_logs")
   }
 
   override def afterAll(): Unit = {
-    JavaUtils.deleteRecursively(FileUtils.getFile(DRIVER_LOG_DIR_DEFAULT))
+    JavaUtils.deleteRecursively(rootHdfsDir)
   }
 
   test("driver logs are persisted locally and synced to hdfs") {
@@ -56,7 +56,7 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
     assert(files(0).getName.equals("driver.log"))
 
     sc.stop()
-    // On application end, file is moved to Hdfs (which is a local dir for this test)
+    // File is continuously synced to Hdfs (which is a local dir for this test)
     assert(!driverLogsDir.exists())
     val hdfsDir = FileUtils.getFile(sc.getConf.get(DRIVER_LOG_DFS_DIR).get, app_id)
     assert(hdfsDir.exists())
@@ -71,7 +71,7 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
 
   private def getSparkContext(): SparkContext = {
     val conf = new SparkConf()
-    conf.set(DRIVER_LOG_DFS_DIR, DRIVER_LOG_DIR_DEFAULT)
+    conf.set(DRIVER_LOG_DFS_DIR, rootHdfsDir.getAbsolutePath())
     conf.set(DRIVER_LOG_SYNCTODFS, true)
     conf.set(SparkLauncher.SPARK_MASTER, "local")
     conf.set(SparkLauncher.DEPLOY_MODE, "client")
