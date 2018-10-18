@@ -5,7 +5,7 @@ displayTitle: Data sources
 ---
 
 In this section, we introduce how to use data source in ML to load data.
-Beside some general data sources like Parquet, CSV, JSON, JDBC, we also provide some specific data source for ML.
+Beside some general data sources like Parquet, CSV, JSON and JDBC, we also provide some specific data source for ML.
 
 **Table of Contents**
 
@@ -14,8 +14,16 @@ Beside some general data sources like Parquet, CSV, JSON, JDBC, we also provide 
 
 ## Image data source
 
-This image data source is used to load image files from a directory.
+This image data source is used to load image files from a directory, it can load compressed image (jpeg, png, etc.) into raw image representation via ImageIO in Java library.
 The loaded DataFrame has one StructType column: "image". containing image data stored as image schema.
+The schema of the `image` column is:
+ - origin: String (represents the file path of the image)
+ - height: Int (height of the image)
+ - width: Int (width of the image)
+ - nChannels: Int (number of the image channels)
+ - mode: Int (OpenCV-compatible type)
+ - data: BinaryType (Image bytes in OpenCV-compatible order: row-wise BGR in most cases)
+
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -23,8 +31,19 @@ The loaded DataFrame has one StructType column: "image". containing image data s
 implements a Spark SQL data source API for loading image data as a DataFrame.
 
 {% highlight scala %}
-scala> spark.read.format("image").load("data/mllib/images/origin")
-res1: org.apache.spark.sql.DataFrame = [image: struct<origin: string, height: int ... 4 more fields>]
+scala> val df = spark.read.format("image").load("data/mllib/images/origin/kittens")
+df: org.apache.spark.sql.DataFrame = [image: struct<origin: string, height: int ... 4 more fields>]
+
+scala> df.select("image.origin", "image.width", "image.height").show(truncate=false)
++-----------------------------------------------------------------------+-----+------+
+|origin                                                                 |width|height|
++-----------------------------------------------------------------------+-----+------+
+|file:///spark/data/mllib/images/origin/kittens/54893.jpg               |300  |311   |
+|file:///spark/data/mllib/images/origin/kittens/DP802813.jpg            |199  |313   |
+|file:///spark/data/mllib/images/origin/kittens/29.5.a_b_EGDP022204.jpg |300  |200   |
+|file:///spark/data/mllib/images/origin/kittens/DP153539.jpg            |300  |296   |
+|file:///spark/data/mllib/images/origin/kittens/not-image.txt           |-1   |-1    |
++-----------------------------------------------------------------------+-----+------+
 {% endhighlight %}
 </div>
 
@@ -33,7 +52,20 @@ res1: org.apache.spark.sql.DataFrame = [image: struct<origin: string, height: in
 implements Spark SQL data source API for loading image data as DataFrame.
 
 {% highlight java %}
-Dataset<Row> imagesDF = spark.read().format("image").load("data/mllib/images/origin");
+Dataset<Row> imagesDF = spark.read().format("image").load("data/mllib/images/origin/kittens");
+imageDF.select("image.origin", "image.width", "image.height").show(false);
+/*
+Will output:
++-----------------------------------------------------------------------+-----+------+
+|origin                                                                 |width|height|
++-----------------------------------------------------------------------+-----+------+
+|file:///spark/data/mllib/images/origin/kittens/54893.jpg               |300  |311   |
+|file:///spark/data/mllib/images/origin/kittens/DP802813.jpg            |199  |313   |
+|file:///spark/data/mllib/images/origin/kittens/29.5.a_b_EGDP022204.jpg |300  |200   |
+|file:///spark/data/mllib/images/origin/kittens/DP153539.jpg            |300  |296   |
+|file:///spark/data/mllib/images/origin/kittens/not-image.txt           |-1   |-1    |
++-----------------------------------------------------------------------+-----+------+
+*/
 {% endhighlight %}
 </div>
 
@@ -41,8 +73,17 @@ Dataset<Row> imagesDF = spark.read().format("image").load("data/mllib/images/ori
 In PySpark we provide Spark SQL data source API for loading image data as DataFrame.
 
 {% highlight python %}
->>> spark.read.format("image").load("data/mllib/images/origin")
-DataFrame[image: struct<origin:string,height:int,width:int,nChannels:int,mode:int,data:binary>]
+>>> df = spark.read.format("image").load("data/mllib/images/origin/kittens")
+>>> df.select("image.origin", "image.width", "image.height").show(truncate=False)
++-----------------------------------------------------------------------+-----+------+
+|origin                                                                 |width|height|
++-----------------------------------------------------------------------+-----+------+
+|file:///spark/data/mllib/images/origin/kittens/54893.jpg               |300  |311   |
+|file:///spark/data/mllib/images/origin/kittens/DP802813.jpg            |199  |313   |
+|file:///spark/data/mllib/images/origin/kittens/29.5.a_b_EGDP022204.jpg |300  |200   |
+|file:///spark/data/mllib/images/origin/kittens/DP153539.jpg            |300  |296   |
+|file:///spark/data/mllib/images/origin/kittens/not-image.txt           |-1   |-1    |
++-----------------------------------------------------------------------+-----+------+
 {% endhighlight %}
 </div>
 
