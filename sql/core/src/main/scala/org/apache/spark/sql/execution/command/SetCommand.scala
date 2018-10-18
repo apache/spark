@@ -42,11 +42,6 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     schema.toAttributes
   }
 
-  val isInvalidateAllCachedTablesKeys = Set(
-    SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key,
-    SQLConf.DEFAULT_SIZE_IN_BYTES.key
-  )
-
   private val (_output, runFunc): (Seq[Attribute], SparkSession => Seq[Row]) = kv match {
     // Configures the deprecated "mapred.reduce.tasks" property.
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, Some(value))) =>
@@ -100,9 +95,6 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
             s"prefix spark.hadoop (e.g. spark.hadoop.$key) when starting a Spark application. " +
             "For details, see the link: https://spark.apache.org/docs/latest/configuration.html#" +
             "dynamically-loading-spark-properties.")
-        }
-        if (isInvalidateAllCachedTablesKeys.contains(key)) {
-          sparkSession.sessionState.catalog.invalidateAllCachedTables()
         }
         sparkSession.conf.set(key, value)
         Seq(Row(key, value))
