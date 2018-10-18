@@ -340,7 +340,7 @@ private[hive] case class HiveUDAFFunction(
     resolver.getEvaluator(parameterInfo)
   }
   
-  case class Mode(evaluator: GenericUDAFEvaluator, objectInspector: ObjectInspector)
+  private case class Mode(evaluator: GenericUDAFEvaluator, objectInspector: ObjectInspector)
 
   // The UDAF evaluator used to consume raw input rows and produce partial aggregation results.
   // Hive `ObjectInspector` used to inspect partial aggregation results.

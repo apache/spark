@@ -639,10 +639,9 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
   }
 
-  test("constant argument expecting Hive UDF") {
-    val testData = spark.range(10).toDF()
+  test("SPARK-25768 constant argument expecting Hive UDF") {
     withTempView("inputTable") {
-      testData.createOrReplaceTempView("inputTable")
+      spark.range(10).createOrReplaceTempView("inputTable")
       withUserDefinedFunction("testGenericUDAFPercentileApprox" -> false) {
         val numFunc = spark.catalog.listFunctions().count()
         sql(s"CREATE FUNCTION testGenericUDAFPercentileApprox AS '" +
