@@ -229,8 +229,6 @@ setMethod("showDF",
 #' If eager evaluation is enabled and the Spark object is a SparkDataFrame, evaluate the
 #' SparkDataFrame and print top rows of the SparkDataFrame, otherwise, print the class 
 #' and type information of the Spark object.
-#' If the Spark object is a SparkDataFrame, default \emph{show} method may be replaced by
-#' the function set with \strong{options(sparkr.SparkDataFrame.base_show_func=show_func)}.
 #'
 #' @param object a Spark object. Can be a SparkDataFrame, Column, GroupedData, WindowSpec.
 #'
@@ -248,38 +246,32 @@ setMethod("showDF",
 #' @note show(SparkDataFrame) since 1.4.0
 setMethod("show", "SparkDataFrame",
           function(object) {
-            showFunc <- getOption("sparkr.SparkDataFrame.base_show_func")
-            if (!is.null(showFunc)) {
-              stopifnot(typeof(showFunc) == "closure")
-              showFunc(object)
+            allConf <- sparkR.conf()
+            prop <- allConf[["spark.sql.repl.eagerEval.enabled"]]
+            if (!is.null(prop) && identical(prop, "true")) {
+              argsList <- list()
+              argsList$x <- object
+              prop <- allConf[["spark.sql.repl.eagerEval.maxNumRows"]]
+              if (!is.null(prop)) {
+                numRows <- as.numeric(prop)
+                if (numRows > 0) {
+                  argsList$numRows <- numRows
+                }
+              }
+              prop <- allConf[["spark.sql.repl.eagerEval.truncate"]]
+              if (!is.null(prop)) {
+                truncate <- as.numeric(prop)
+                if (truncate > 0) {
+                  argsList$truncate <- truncate
+                }
+              }
+              do.call(showDF, argsList)
             } else {
-              allConf <- sparkR.conf()
-              prop <- allConf[["spark.sql.repl.eagerEval.enabled"]]
-              if (!is.null(prop) && identical(prop, "true")) {
-                argsList <- list()
-                argsList$x <- object
-                prop <- allConf[["spark.sql.repl.eagerEval.maxNumRows"]]
-                if (!is.null(prop)) {
-                  numRows <- as.numeric(prop)
-                  if (numRows > 0) {
-                    argsList$numRows <- numRows
-                  }
-                }
-                prop <- allConf[["spark.sql.repl.eagerEval.truncate"]]
-                if (!is.null(prop)) {
-                  truncate <- as.numeric(prop)
-                  if (truncate > 0) {
-                    argsList$truncate <- truncate
-                  }
-                }
-                do.call(showDF, argsList)
-              } else {
-                cols <- lapply(dtypes(object), function(l) {
-                  paste(l, collapse = ":")
-                })
-                s <- paste(cols, collapse = ", ")
-                cat(paste(class(object), "[", s, "]\n", sep = ""))
-              }              
+              cols <- lapply(dtypes(object), function(l) {
+                paste(l, collapse = ":")
+              })
+              s <- paste(cols, collapse = ", ")
+              cat(paste(class(object), "[", s, "]\n", sep = ""))
             }
           })
 
